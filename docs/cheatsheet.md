@@ -1133,18 +1133,18 @@ fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
 }
 
 // More than one pack: each is settled by the argument carrying it alone, so a
-// turbofish spells each as its own tuple. `[..A, ..B]` settles neither, so
-// something else must — a sibling parameter, a turbofish, or an annotation.
+// turbofish spells each as its own tuple. `[..A, ..B]` settles neither: a
+// sibling parameter, a turbofish or an annotation does, or else each is empty.
 fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
     return [..a, ..b];
 }
 concat([1, "x"], [true]);                 // A = [i32, String], B = [bool]
 concat::<[i32], [bool, String]>([1], [true, "x"]);
 
-// A pack on either side of a scalar: nothing settles the ends, so spell them.
+// A pack on either side of a scalar: no argument places `K`, so spell them all.
 fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { ... }
 middle::<[i32], String, [bool]>([1, "mid", true]);   // 3
-// middle([1, "mid", true]);              // ERROR: cannot infer `Pre`, `K`, `Post`
+// middle([1, "mid", true]);              // ERROR: cannot infer `K`
 
 // A spread over a non-pack type: a tuple of any length, every element that type
 fn sum(values: [..i32]) -> i32 { ... }

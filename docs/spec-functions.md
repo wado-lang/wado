@@ -1331,9 +1331,10 @@ test {
 ```
 
 A tuple holding two packs (`[..A, ..B]`) settles neither pack, because matching
-it against a concrete tuple admits every split. Such a tuple is legal anywhere,
-and is checked against the arity whatever settles its packs fixes: another
-parameter, a turbofish, an annotation, or the packs' default.
+it against a concrete tuple admits every split. Such a tuple is legal anywhere.
+Something else settles each pack: another parameter, a turbofish, an
+annotation, or else the pack's default. The tuple is then checked against the
+arity they fix.
 
 <!-- {"fixture":"spec_functions_type_packs.wado"} -->
 

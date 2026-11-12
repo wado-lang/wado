@@ -177,10 +177,10 @@ fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] { ... }
 
 A tuple holding two packs (`[..A, ..B]`) settles neither, because every split of a
 concrete tuple satisfies it. The rule therefore keys on settling, not on where the tuple
-is written: such a tuple is legal anywhere, and each pack it names must be settled by
-something else — another parameter, a turbofish, or an annotation. Once they are, the
-tuple is checked against the arity they fix, so a surplus element is a type mismatch
-rather than something a split silently absorbs.
+is written: such a tuple is legal anywhere, and each pack it names is settled by
+something else: another parameter, a turbofish, an annotation, or else the pack's
+default, the empty pack. Once they are, the tuple is checked against the arity they fix,
+so a surplus element is a type mismatch rather than something a split silently absorbs.
 
 ```wado
 fn joined<..A, ..B>(split: [[..A], [..B]], both: [..A, ..B]) -> i32 { ... }
@@ -190,10 +190,10 @@ joined([[1], [true]], [1, true]);                    // `split` settles both
 middle::<[i32], String, [bool]>([1, "mid", true]);   // the turbofish settles them
 ```
 
-A pack nothing settles is reported at the use site, as an uninferred type parameter. That
-is where the answer would come from, and it is the only place that knows whether a
-turbofish supplied one. To settle both packs from one value, each takes a tuple of its own
-(`[[..A], [..B]]`).
+A pack is inferred as a scalar parameter is, so it follows the scalar rules here too: a
+pack nothing settles takes its default, as a scalar with a declared default does. Any rule
+that treated a pack differently from a scalar would be one more exception to learn. To
+settle both packs from one value, each takes a tuple of its own (`[[..A], [..B]]`).
 
 A pack binds from a written type argument as a scalar type parameter does, and not only
 from the positions a value offers. That is what lets a turbofish or an annotation settle
