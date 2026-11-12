@@ -475,6 +475,9 @@ occurred.
   the call, before a type settled after it can answer: `[3, mk(1)]` beside a
   `match` arm typed `[i32, Good, Good]` is refused, where a scalar slot waits
   for that arm.
+- A pack that only a two-pack tuple names is reported as uninferred
+  (`split([])` with `fn split<..A, ..B>(t: [..A, ..B])`), where its default,
+  the empty pack, fills it.
 
 ---
 

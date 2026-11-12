@@ -1331,10 +1331,9 @@ test {
 ```
 
 A tuple holding two packs (`[..A, ..B]`) settles neither pack, because matching
-it against a concrete tuple admits every split. Such a tuple is legal anywhere.
-It just cannot be the only thing naming a pack. Something else must settle each
-one: another parameter, a turbofish, or an annotation. The tuple is then checked
-against the arity they fix.
+it against a concrete tuple admits every split. Such a tuple is legal anywhere,
+and is checked against the arity whatever settles its packs fixes: another
+parameter, a turbofish, an annotation, or the packs' default.
 
 <!-- {"fixture":"spec_functions_type_packs.wado"} -->
 
@@ -1354,19 +1353,16 @@ test {
 }
 ```
 
-Without them, the same functions are rejected:
+A tuple of another arity is rejected:
 
 <!-- {"fixture":"spec_functions_type_packs_unsettled.wado"} -->
 
 ```wado
 joined([[1], [true]], [1, true, "x"]);    // ERROR: expected `[i32, bool]`
-middle([1, "mid", true]);                 // ERROR: cannot infer `Pre`, `K`, `Post`
-split([]);                                // ERROR: cannot infer `A`, `B`
 ```
 
-A pack that only a two-pack tuple names is reported at the use site as an
-uninferred type parameter, even where the tuple is `[]`. To settle both packs
-from one value, give each a tuple of its own (`[[..A], [..B]]`).
+To settle both packs from one value, give each a tuple of its own
+(`[[..A], [..B]]`).
 
 Where such a tuple is produced, its ends still place elements. The elements ahead
 of the first pack and behind the last keep their positions, so `[X, ..A, ..B, Y]`
