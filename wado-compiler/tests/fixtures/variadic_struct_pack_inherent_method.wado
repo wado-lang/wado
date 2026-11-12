@@ -18,6 +18,12 @@ impl<..P> W<[i32, ..P]> {
     }
 }
 
+impl<..P> W<[..P, bool]> {
+    fn last_is_bool(&self) -> i32 {
+        return 3;
+    }
+}
+
 trait Two {
     fn two(&self) -> i32;
 }
@@ -38,4 +44,14 @@ test {
 test "a fixed element ahead of the pack selects the receivers it matches" {
     let w = W { t: [7, true, "x"] };
     assert w.head() == 7;
+}
+
+test "a fixed element after the pack selects the receivers it matches" {
+    let w = W { t: ["x", 1, true] };
+    assert w.last_is_bool() == 3;
+}
+
+test "the pack takes no element where the neighbours take them all" {
+    let w = W { t: [5] };
+    assert w.head() == 5;
 }

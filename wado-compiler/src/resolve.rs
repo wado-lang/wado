@@ -114,6 +114,8 @@ pub struct Resolutions {
     /// Each item-level binder's declaring item: a method's `U` and its impl's
     /// `U` are two parameters, told apart by who declares them.
     binder_owners: IndexMap<AstId, DefId>,
+    /// The packs each item declares, by the item and the pack's name.
+    packs: hashmap::IndexSet<(DefId, String)>,
     /// Each generic associated type's own binder, which its family owns.
     family_binders: IndexMap<AstId, FamilyBinder>,
     /// The spellings each family declares its parameters under, keyed by the
@@ -324,6 +326,7 @@ impl Resolutions {
         let mut effect_binders = hashmap::IndexSet::default();
         let mut fn_bound_binders = IndexMap::default();
         let mut binder_owners = IndexMap::default();
+        let mut packs = hashmap::IndexSet::default();
         let mut family_binders = IndexMap::default();
         let mut family_params = IndexMap::default();
         let mut impl_heads = IndexMap::default();
@@ -345,6 +348,7 @@ impl Resolutions {
                 effect_binders: &mut effect_binders,
                 fn_bound_binders: &mut fn_bound_binders,
                 binder_owners: &mut binder_owners,
+                packs: &mut packs,
                 family_binders: &mut family_binders,
                 family_params: &mut family_params,
                 impl_heads: &mut impl_heads,
@@ -373,6 +377,7 @@ impl Resolutions {
             effect_binders,
             fn_bound_binders,
             binder_owners,
+            packs,
             family_binders,
             family_params,
             impl_heads,
@@ -409,6 +414,12 @@ impl Resolutions {
     #[must_use]
     pub fn binder_owner(&self, binder: AstId) -> Option<DefId> {
         self.binder_owners.get(&binder).copied()
+    }
+
+    /// Whether the item `owner` declares its parameter `name` as a pack.
+    #[must_use]
+    pub fn declares_pack(&self, owner: DefId, name: &str) -> bool {
+        self.packs.contains(&(owner, name.to_string()))
     }
 
     /// The family declaring the generic associated type parameter `binder`:
@@ -800,6 +811,7 @@ struct Resolver<'a> {
     effect_binders: &'a mut hashmap::IndexSet<AstId>,
     fn_bound_binders: &'a mut IndexMap<AstId, ast::FunctionType>,
     binder_owners: &'a mut IndexMap<AstId, DefId>,
+    packs: &'a mut hashmap::IndexSet<(DefId, String)>,
     family_binders: &'a mut IndexMap<AstId, FamilyBinder>,
     family_params: &'a mut IndexMap<(DefId, String), Vec<String>>,
     impl_heads: &'a mut IndexMap<AstId, AstId>,
@@ -985,6 +997,12 @@ impl Resolver<'_> {
             let declared = params.iter().map(|p| p.id).chain(self_binder);
             self.binder_owners
                 .extend(declared.map(|binder| (binder, owner)));
+            self.packs.extend(
+                params
+                    .iter()
+                    .filter(|p| p.is_pack)
+                    .map(|p| (owner, p.name.clone())),
+            );
         }
         for p in params {
             scope.insert(p.name.clone(), p.id);

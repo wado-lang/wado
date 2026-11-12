@@ -4080,8 +4080,27 @@ impl FqTypeName {
         }
         match at(self) {
             Some(replacement) => replacement,
+            // A spread stands for a run of the tuple's elements, so the tuple
+            // it is answered with splices in rather than nesting.
+            None if self.head == TypeHead::Tuple => FqTypeName::tuple(
+                self.args
+                    .iter()
+                    .flat_map(|arg| {
+                        let rewritten = arg.rewrite(at);
+                        if arg.is_pack_spread() && rewritten.is_bare_tuple() {
+                            rewritten.args
+                        } else {
+                            vec![rewritten]
+                        }
+                    })
+                    .collect(),
+            ),
             None => self.descend(&|inner| inner.rewrite(at)),
         }
+    }
+
+    fn is_bare_tuple(&self) -> bool {
+        self.head == TypeHead::Tuple && self.reference.is_empty()
     }
 
     /// The outermost `&` prefix and what it points at, `None` for a name

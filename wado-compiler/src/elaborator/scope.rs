@@ -89,6 +89,9 @@ impl ParamRef {
     /// The parameter as a type name spells it.
     pub(super) fn binder(&self, resolutions: &Resolutions) -> FqTypeName {
         match (self.owner, self.family_decl) {
+            (Some(owner), _) if resolutions.declares_pack(owner, &self.name) => {
+                FqTypeName::pack_spread(resolutions.defs(), owner, &self.name)
+            }
             (Some(owner), _) => FqTypeName::binder_of(resolutions.defs(), owner, &self.name),
             (None, Some(decl)) => written_binder(decl, &self.name, resolutions),
             (None, None) => unreachable!("`{}` names no item's parameter or family's", self.name),

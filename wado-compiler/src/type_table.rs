@@ -7118,6 +7118,16 @@ impl TypeTable {
             return None;
         };
         let at = written.iter().position(|&w| self.is_type_pack(w))?;
+        assert!(
+            matches!(
+                self.get(written[at]),
+                ResolvedType::TypePack {
+                    mapped_elem: None,
+                    ..
+                }
+            ),
+            "a written target spreads a declared pack; a repeat appears only in a signature"
+        );
         let ResolvedType::Tuple(elements) = self.get(concrete) else {
             return Some(false);
         };

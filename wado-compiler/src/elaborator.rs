@@ -1144,10 +1144,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return table.fq_type_name(receiver);
         }
         drop(table);
-        match self.decl_key_or_local(written) {
+        match self.type_decl_key(receiver) {
             Some(def) => FqTypeName::of_head(self.tysys.resolutions.defs(), def),
-            // A name that reaches no declaration at all: it names a shape or
-            // nothing, and the writing module is the only vantage left.
+            // A type that names no declaration: a shape, or nothing, and the
+            // writing module is the only vantage left.
             None => FqTypeName::shape(&self.current_module_source, written),
         }
     }

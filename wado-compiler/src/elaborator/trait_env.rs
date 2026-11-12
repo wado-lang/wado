@@ -2793,11 +2793,10 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
         }
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
         ast::Type::TypePackSpread(spread) => {
-            let pack_of = |pack: ast::AstId, name: &str| {
-                let owner = resolutions
-                    .binder_owner(pack)
-                    .expect("an item declares every pack");
-                name::FqTypeName::pack_spread(resolutions.defs(), owner, name)
+            // A pack no item owns is a family's, rejected where it is declared.
+            let pack_of = |pack: ast::AstId, name: &str| match resolutions.binder_owner(pack) {
+                Some(owner) => name::FqTypeName::pack_spread(resolutions.defs(), owner, name),
+                None => name::FqTypeName::unresolved(&name::type_pack_name(name)),
             };
             // `[..i32]` spreads the pack its signature mints, mapped to `i32`.
             if let Some(pack) = resolutions.repeat_pack(spread.id) {
