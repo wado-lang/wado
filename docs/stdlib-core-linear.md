@@ -136,6 +136,50 @@ decoded with no copy of the bytes before it.
 
 The bytes from `start` to `end` as text, copied once into a `String`.
 
+#### `pub fn of_bytes(bytes: &ByteList, start: i32, len: i32, zeros: i32 = 0) -> LinearArray<u8>`
+
+- `contract 0 <= start && 0 <= len <= bytes.len() - start`
+- `contract 0 <= zeros <= i32::MAX - len`
+
+A copy of `bytes[start..<start + len]`, followed by `zeros` zero bytes.
+
+#### `pub fn to_byte_list(&self, len: i32) -> List<u8>`
+
+- `contract 0 <= len <= self.len()`
+
+The first `len` bytes, copied into a `List`.
+
+#### `pub fn load_at<U: AnyBits>(&self, offset: i32) -> U`
+
+- `contract 0 <= offset <= self.len() - builtin::size_of::<U>()`
+
+The `U` whose bytes begin at `offset`, read little-endian at any
+alignment.
+
+#### `pub fn store_at<U: AnyBits>(&mut self, offset: i32, value: U)`
+
+- `contract 0 <= offset <= self.len() - builtin::size_of::<U>()`
+
+Writes `value` little-endian at `offset`, at any alignment.
+
+#### `pub fn copy_from(&mut self, at: i32, source: &LinearArray<u8>, from: i32, count: i32)`
+
+- `contract 0 <= count`
+- `contract 0 <= at <= self.len() - count`
+- `contract 0 <= from <= source.len() - count`
+
+Copies `source[from..<from + count]` to `self[at..<at + count]`. The two
+ranges may overlap, which reads as if through a buffer.
+
+#### `pub fn lengthen(&mut self, len: i32)`
+
+- `contract self.len() <= len`
+
+Lengthens the array to `len` bytes, the new ones unwritten: the caller
+writes each before reading it. The block at least doubles where it
+grows, so growing a byte at a time copies each byte a bounded number of
+times.
+
 #### `pub fn read_stream(stream: &Stream<u8>, expected: i32 = 0) -> LinearArray<u8>`
 
 - `contract expected >= 0`

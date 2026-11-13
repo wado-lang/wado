@@ -260,7 +260,7 @@ impl LinearArray<u8> {
     }
 
     /// A copy of `bytes[start..<start + len]`, followed by `zeros` zero bytes.
-    internal fn of_bytes(bytes: &ByteList, start: i32, len: i32, zeros: i32 = 0) -> LinearArray<u8>
+    pub fn of_bytes(bytes: &ByteList, start: i32, len: i32, zeros: i32 = 0) -> LinearArray<u8>
         contract 0 <= start && 0 <= len <= bytes.len() - start
         contract 0 <= zeros <= i32::MAX - len
     {
@@ -271,7 +271,7 @@ impl LinearArray<u8> {
     }
 
     /// The first `len` bytes, copied into a `List`.
-    internal fn to_byte_list(&self, len: i32) -> List<u8>
+    pub fn to_byte_list(&self, len: i32) -> List<u8>
         contract 0 <= len <= self.len()
     {
         return memory_to_byte_list(self.block.ptr, len);
@@ -279,14 +279,14 @@ impl LinearArray<u8> {
 
     /// The `U` whose bytes begin at `offset`, read little-endian at any
     /// alignment.
-    internal fn load_at<U: AnyBits>(&self, offset: i32) -> U
+    pub fn load_at<U: AnyBits>(&self, offset: i32) -> U
         contract 0 <= offset <= self.len() - builtin::size_of::<U>()
     {
         return builtin::load::<U>(self.block.ptr + offset);
     }
 
     /// Writes `value` little-endian at `offset`, at any alignment.
-    internal fn store_at<U: AnyBits>(&mut self, offset: i32, value: U)
+    pub fn store_at<U: AnyBits>(&mut self, offset: i32, value: U)
         contract 0 <= offset <= self.len() - builtin::size_of::<U>()
     {
         builtin::store(self.block.ptr + offset, value);
@@ -294,7 +294,7 @@ impl LinearArray<u8> {
 
     /// Copies `source[from..<from + count]` to `self[at..<at + count]`. The two
     /// ranges may overlap, which reads as if through a buffer.
-    internal fn copy_from(&mut self, at: i32, source: &LinearArray<u8>, from: i32, count: i32)
+    pub fn copy_from(&mut self, at: i32, source: &LinearArray<u8>, from: i32, count: i32)
         contract 0 <= count
         contract 0 <= at <= self.len() - count
         contract 0 <= from <= source.len() - count
@@ -306,7 +306,7 @@ impl LinearArray<u8> {
     /// writes each before reading it. The block at least doubles where it
     /// grows, so growing a byte at a time copies each byte a bounded number of
     /// times.
-    internal fn lengthen(&mut self, len: i32)
+    pub fn lengthen(&mut self, len: i32)
         contract self.len() <= len
     {
         if len > self.block.bytes {
