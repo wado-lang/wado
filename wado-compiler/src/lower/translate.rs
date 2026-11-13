@@ -509,7 +509,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         // them — running them is otherwise pure per-function allocation, and most
         // functions (scalar/reference-only) hit this path. What a reference
         // leads to counts, which `*r` hands to a call, and so does what a cell
-        // local holds.
+        // local holds, and a borrowed temporary, whose copy the walk decides.
         let needs_copy_analysis = {
             let tt = base.type_table.borrow();
             func.params
@@ -517,6 +517,10 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 .map(|p| p.type_id)
                 .chain(func.locals.iter().map(|l| l.type_id))
                 .any(|tid| value_copy::needs_value_copy(tt.peel_refs(tid), &tt))
+                || func
+                    .body
+                    .as_ref()
+                    .is_some_and(|b| value_copy::last_use::borrows_temporary(b, &tt))
         };
         // One resolver for the body, shared by every question about what an
         // expression names: the ownership walk and the reference-root table.
@@ -1248,17 +1252,13 @@ impl FunctionTranslator<'_, '_> {
         arity: usize,
         result_type: tir::TypeId,
     ) -> bool {
-        let TirExprKind::Unary {
-            op: TirUnaryOp::Ref,
-            expr: referent,
-        } = &arg.kind
+        let Some(value) =
+            place::borrowed_temporary(arg, self.base.type_table.borrow().compiler_items())
         else {
             return false;
         };
-        let value = place::borrowed_value(referent);
         self.args_checked
             && !arg.marks().written
-            && !self.names_storage(value)
             && self.should_wrap_value_copy(value)
             && !self.call_keeps(callee, arg, position, arity, result_type)
     }

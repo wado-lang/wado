@@ -14,9 +14,10 @@ use super::{is_scalar_type, needs_value_copy};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
+use crate::module_source::ModuleSource;
 use crate::tir;
 use crate::tir::{
-    FunctionRef, LetStorage, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm, TirPattern,
+    BuiltinDeclarations, FunctionRef, LetStorage, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm, TirPattern,
     TirStmt, TirStmtKind, TirUnaryOp, TypeId, capture_source_locals,
 };
 use crate::tir_visitor::{TirRefVisitor, for_each_block_result};
@@ -96,6 +97,7 @@ pub fn analyze_ownership(
         ref_receiver_methods: &plan.ref_receiver_methods,
         returns_receiver_alias: &plan.returns_receiver_alias,
         mod_ref: &plan.mod_ref,
+        builtins: &plan.builtins,
         resolver,
         type_table,
         non_final: IndexSet::default(),
@@ -107,6 +109,7 @@ pub fn analyze_ownership(
         match_sources: Vec::new(),
         pending_writes: Vec::new(),
         handed: Vec::new(),
+        beyond_handed_calls: 0,
         points_to,
         frame: points_to
             .frame(&func.module_source, &func.name)
@@ -224,6 +227,8 @@ enum Storage {
     Local(u32),
     /// Storage the reference in this local points to.
     Referent(u32),
+    /// Storage this global holds.
+    Global(ModuleSource, String),
     /// Storage this frame cannot name, which anyone may write.
     Unnamed,
 }
@@ -234,9 +239,26 @@ struct WriteCheck<'a> {
     root: u32,
     /// The argument, under any newtype casts.
     arg: &'a TirExpr,
-    /// The locations written while the callee holds the argument, beyond
-    /// [`PointsTo::global_reach`].
-    written: Rc<IndexSet<u32>>,
+    written: Rc<CallWrites>,
+}
+
+/// How far the walk's records reached as a call began, so a check reads what
+/// the call's evaluation added after.
+#[derive(Clone, Copy)]
+struct CallStart {
+    mutations: usize,
+    handed: usize,
+    beyond_handed_calls: usize,
+}
+
+/// What may be written while a callee holds an argument.
+struct CallWrites {
+    /// The locations, beyond [`PointsTo::global_reach`] where
+    /// `beyond_handed`.
+    locations: IndexSet<u32>,
+    /// Whether a call that may write beyond what it is handed runs meanwhile,
+    /// so whatever a global reaches is written too.
+    beyond_handed: bool,
 }
 
 /// A binding that may share the storage it was read out of.
@@ -1254,6 +1276,30 @@ pub fn mark_unanalyzed_in_place_assigns(
     scan.visit_block(body);
 }
 
+/// Whether `body` borrows a value of its own that a copy would wrap, which the
+/// walk decides the copy of even where no local needs one.
+pub fn borrows_temporary(body: &TirBlock, type_table: &TypeTable) -> bool {
+    struct Scan<'t> {
+        type_table: &'t TypeTable,
+        found: bool,
+    }
+    impl TirRefVisitor for Scan<'_> {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            self.found |= place::borrowed_temporary(expr, self.type_table.compiler_items())
+                .is_some_and(|value| needs_value_copy(value.type_id, self.type_table));
+            if !self.found {
+                self.walk_expr(expr);
+            }
+        }
+    }
+    let mut s = Scan {
+        type_table,
+        found: false,
+    };
+    s.visit_block(body);
+    s.found
+}
+
 /// Forms that re-enter this frame and read a local twice, so the whole function
 /// falls back to copies. A closure does not: it reaches the frame by capture.
 pub fn has_unsupported_form(body: &TirBlock) -> bool {
@@ -1415,6 +1461,7 @@ struct Analyzer<'a> {
     /// What each callee writes through a `&mut` it is handed, so a read of one
     /// field survives a call that writes another.
     mod_ref: &'a modref::ModRef,
+    builtins: &'a BuiltinDeclarations,
     /// The one answer to what an expression names, shared with `RefTargets` and
     /// the return-path walk rather than re-derived from syntax here.
     resolver: &'a Resolver<'a>,
@@ -1436,6 +1483,9 @@ struct Analyzer<'a> {
     /// What every value handed to a call reaches, in walk order, so a check
     /// reads what the later arguments handed on.
     handed: Vec<Locations<'a>>,
+    /// How many calls walked so far may write beyond what they are handed,
+    /// so a check sees whether one ran while the callee held its argument.
+    beyond_handed_calls: usize,
     points_to: &'a PointsTo,
     /// This body's frame in `points_to`.
     frame: u32,
@@ -2376,8 +2426,8 @@ impl<'a> Analyzer<'a> {
             .filter(|&&l| is_reference_local(func, l, self.type_table))
             .map(|&l| (l, pt.local_targets(frame, l)))
             .collect();
-        // What any call may write, whatever it is handed.
-        let always: IndexSet<u32> = self
+        // What a call writing beyond what it is handed may write.
+        let global_locals: IndexSet<u32> = self
             .all_locals
             .iter()
             .copied()
@@ -2390,17 +2440,22 @@ impl<'a> Analyzer<'a> {
             )
             .collect();
         for check in checks {
+            let CallWrites {
+                locations,
+                beyond_handed,
+            } = &*check.written;
             let written = if is_reference_local(func, check.root, self.type_table) {
-                pt.reaches_written(frame, check.root, &check.written)
+                pt.reaches_written(frame, check.root, locations, *beyond_handed)
             } else {
-                let targets: IndexSet<u32> = always
+                let targets: IndexSet<u32> = global_locals
                     .iter()
                     .copied()
-                    .chain(check.written.iter().filter_map(|&n| pt.local_of(frame, n)))
+                    .filter(|_| *beyond_handed)
+                    .chain(locations.iter().filter_map(|&n| pt.local_of(frame, n)))
                     .chain(
                         references
                             .iter()
-                            .filter(|(_, named)| named.iter().any(|n| check.written.contains(n)))
+                            .filter(|(_, named)| named.iter().any(|n| locations.contains(n)))
                             .map(|(l, _)| *l),
                     )
                     .collect();
@@ -2418,32 +2473,23 @@ impl<'a> Analyzer<'a> {
     /// whatever the values handed to a call since `handed_from` reach, `own`
     /// aside, and the writes recorded since `call_writes`, which the later
     /// arguments make after `arg` is taken.
-    fn defer_write_check(
-        &mut self,
-        arg: &'a TirExpr,
-        call_writes: usize,
-        handed_from: usize,
-        own: usize,
-    ) {
+    fn defer_write_check(&mut self, arg: &'a TirExpr, since: CallStart, own: usize) {
         // A shared borrow of a value naming no place refers to a value of its
         // own, which lowering takes a copy for unless nothing writes the
         // storage it was read out of while the callee holds it.
-        let checked = match &arg.kind {
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref,
-                expr: referent,
-            } if !place::names_storage(
-                place::borrowed_value(referent),
-                self.type_table.compiler_items(),
+        let checked = match place::borrowed_temporary(arg, self.type_table.compiler_items()) {
+            Some(value) => value,
+            None if matches!(
+                arg.kind,
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                    ..
+                }
             ) =>
             {
-                place::borrowed_value(referent)
+                return;
             }
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                ..
-            } => return,
-            _ => arg,
+            None => arg,
         };
         // Only a value a copy would wrap has a copy to keep.
         if !needs_value_copy(checked.type_id, self.type_table) {
@@ -2455,7 +2501,7 @@ impl<'a> Analyzer<'a> {
         if storages.is_empty() {
             return;
         }
-        let written = Rc::new(self.written_since(call_writes, handed_from, own));
+        let written = Rc::new(self.written_since(since, own));
         for storage in storages {
             match storage {
                 Storage::Local(root) => self.pending_writes.push(WriteCheck {
@@ -2464,10 +2510,22 @@ impl<'a> Analyzer<'a> {
                     written: Rc::clone(&written),
                 }),
                 Storage::Referent(reference) => {
-                    if self
-                        .points_to
-                        .reaches_written(self.frame, reference, &written)
-                    {
+                    if self.points_to.reaches_written(
+                        self.frame,
+                        reference,
+                        &written.locations,
+                        written.beyond_handed,
+                    ) {
+                        stripped.mark(|marks| marks.written = true);
+                    }
+                }
+                Storage::Global(module, name) => {
+                    if self.points_to.global_reaches_written(
+                        &module,
+                        &name,
+                        &written.locations,
+                        written.beyond_handed,
+                    ) {
                         stripped.mark(|marks| marks.written = true);
                     }
                 }
@@ -2476,19 +2534,20 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// The locations a call's evaluation may write beyond
-    /// [`PointsTo::global_reach`].
-    fn written_since(&self, call_writes: usize, handed_from: usize, own: usize) -> IndexSet<u32> {
+    /// What a call's evaluation may write from `since` on, the value handed at
+    /// `own` aside.
+    fn written_since(&self, since: CallStart, own: usize) -> CallWrites {
         let frame = self.frame;
         let pt = self.points_to;
         let mut sources: Vec<u32> = Vec::new();
-        for (i, handed) in self.handed[handed_from..].iter().enumerate() {
-            if handed_from + i != own {
+        for (i, handed) in self.handed[since.handed..].iter().enumerate() {
+            if since.handed + i != own {
                 sources.extend(handed.iter());
             }
         }
-        let mut written = pt.reach_beyond_global(sources);
-        for m in &self.mutations[call_writes..] {
+        let beyond_handed = self.beyond_handed_calls > since.beyond_handed_calls;
+        let mut written = pt.reach_written(sources, beyond_handed);
+        for m in &self.mutations[since.mutations..] {
             match m.lands {
                 Lands::Local(local) => {
                     written.insert(
@@ -2499,7 +2558,22 @@ impl<'a> Analyzer<'a> {
                 Lands::Place(set) => written.extend(set.iter()),
             }
         }
-        written
+        CallWrites {
+            locations: written,
+            beyond_handed,
+        }
+    }
+
+    /// Where the walk stands as a call begins, counting the call itself among
+    /// those that may write beyond what they are handed when `beyond_handed`.
+    fn start_call(&mut self, beyond_handed: bool) -> CallStart {
+        let start = CallStart {
+            mutations: self.mutations.len(),
+            handed: self.handed.len(),
+            beyond_handed_calls: self.beyond_handed_calls,
+        };
+        self.beyond_handed_calls += usize::from(beyond_handed);
+        start
     }
 
     /// Note what `args` hand a call.
@@ -2526,6 +2600,9 @@ impl<'a> Analyzer<'a> {
                         for a in args {
                             self.storage_roots(place::unwrap_ref(&a.expr), out);
                         }
+                    }
+                    (None, TirExprKind::GlobalVarGet { module_source, name }) => {
+                        out.push(Storage::Global(module_source.clone(), name.clone()));
                     }
                     (None, _) => out.push(Storage::Unnamed),
                 },
@@ -3157,8 +3234,11 @@ impl<'a> Analyzer<'a> {
                     .map(|r| &r.expr);
                 let mutated_receiver = receiver.filter(|_| self.mutates_receiver(func));
                 let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
-                let call_writes = self.mutations.len();
-                let handed_from = self.handed.len();
+                // A call that never returns writes nothing anyone reads after.
+                let start = self.start_call(
+                    !self.type_table.is_never(expr.type_id)
+                        && self.mod_ref.writes_beyond_handed(func, self.builtins),
+                );
                 self.hold_loans(&exprs, live);
                 if record {
                     self.hand(&exprs);
@@ -3187,12 +3267,7 @@ impl<'a> Analyzer<'a> {
                     // what the other arguments are checked against, not one of
                     // them.
                     if record && !(pos == 0 && mutated_receiver.is_some()) {
-                        self.defer_write_check(
-                            &arg.expr,
-                            call_writes,
-                            handed_from,
-                            handed_from + pos,
-                        );
+                        self.defer_write_check(&arg.expr, start, start.handed + pos);
                     }
                     self.walk_call_arg(
                         &arg.expr,
@@ -3205,6 +3280,7 @@ impl<'a> Analyzer<'a> {
                 }
             }
             TirExprKind::CmRawCall { args, .. } => {
+                self.start_call(true);
                 self.hold_loans(&args.iter().collect::<Vec<_>>(), live);
                 for arg in args.iter().rev() {
                     self.walk_call_arg(arg, None, &Kept::Transient, false, live, record);
@@ -3212,9 +3288,8 @@ impl<'a> Analyzer<'a> {
             }
             TirExprKind::IndirectCall { callee, args } => {
                 let result = self.result_kept.take().unwrap_or(Kept::Frame);
-                let call_writes = self.mutations.len();
                 let exprs: Vec<&TirExpr> = args.iter().collect();
-                let handed_from = self.handed.len();
+                let start = self.start_call(true);
                 self.hold_loans(&exprs, live);
                 let kept = if record {
                     // The closure called hands on what it captured.
@@ -3228,12 +3303,7 @@ impl<'a> Analyzer<'a> {
                 for (pos, arg) in args.iter().enumerate().rev() {
                     if record {
                         // The callee is noted first, then each argument.
-                        self.defer_write_check(
-                            arg,
-                            call_writes,
-                            handed_from,
-                            handed_from + 1 + pos,
-                        );
+                        self.defer_write_check(arg, start, start.handed + 1 + pos);
                     }
                     self.walk_indirect_arg(
                         arg,

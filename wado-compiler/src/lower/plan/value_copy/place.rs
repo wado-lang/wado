@@ -542,6 +542,21 @@ pub fn borrowed_value(referent: &TirExpr) -> &TirExpr {
     }
 }
 
+/// The value a shared borrow `&value` takes when `value` names no storage, so
+/// the reference refers to a value of its own.
+#[must_use]
+pub fn borrowed_temporary<'e>(expr: &'e TirExpr, items: &CompilerItems) -> Option<&'e TirExpr> {
+    let TirExprKind::Unary {
+        op: TirUnaryOp::Ref,
+        expr: referent,
+    } = &expr.kind
+    else {
+        return None;
+    };
+    let value = borrowed_value(referent);
+    (!names_storage(value, items)).then_some(value)
+}
+
 /// Whether `value` is storage a reference to it reaches: a source place,
 /// what a reference reads, or a projection of either. A field of a call's
 /// result is none of them, so `&value` there refers to a value of its own.

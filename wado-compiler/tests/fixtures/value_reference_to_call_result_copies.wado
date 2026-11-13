@@ -122,6 +122,34 @@ test "a write by the callee before it reads the reference" {
     assert checked == "abc";
 }
 
+global mut GLOBAL_ITEMS: Items = Items { items: [Item { text: "abc" }] };
+
+fn append_global_then_read(r: &String) -> String {
+    GLOBAL_ITEMS.items[0].text.push_str("!");
+    return *r;
+}
+
+fn append_global_through_callee_then_read(r: &String) -> String {
+    return append_global_then_read(r);
+}
+
+fn call_then_read(f: fn(), r: &String) -> String {
+    f();
+    return *r;
+}
+
+test "a write by the callee to the global the reference was read from" {
+    let direct = append_global_then_read(&GLOBAL_ITEMS.text(0));
+    let nested = append_global_through_callee_then_read(&GLOBAL_ITEMS.text(0));
+    let through_closure = call_then_read(|| { GLOBAL_ITEMS.items[0].text.push_str("?"); }, &GLOBAL_ITEMS.text(0));
+    let beside_write = read_after(&GLOBAL_ITEMS.text(0), GLOBAL_ITEMS.append("#"));
+    assert direct == "abc";
+    assert nested == "abc!";
+    assert through_closure == "abc!!";
+    assert beside_write == "abc!!?";
+    assert GLOBAL_ITEMS.items[0].text == "abc!!?#";
+}
+
 test "a write before the call reads the reference" {
     let mut n = Items { items: [Item { text: "abc" }] };
     let r = &n.text(0);

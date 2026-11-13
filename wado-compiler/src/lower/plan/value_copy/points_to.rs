@@ -70,7 +70,10 @@ pub struct PointsTo {
     /// The node naming the storage each assigned or referenced place denotes,
     /// keyed as `handed` is.
     written: IndexMap<usize, (u32, Span)>,
-    /// What any call may write: [`Self::global_reach`].
+    /// The location of each global's storage.
+    globals: IndexMap<(ModuleSource, String), u32>,
+    /// What a call writing beyond what it is handed may write:
+    /// [`Self::global_reach`].
     global_reach: IndexSet<u32>,
 }
 
@@ -143,16 +146,42 @@ impl PointsTo {
     }
 
     /// Whether storage the value in `local` reaches, at any depth, may be
-    /// written: it meets `written`, or [`Self::global_reach`].
+    /// written: it meets `written`, or, where `beyond_handed`,
+    /// [`Self::global_reach`].
     #[must_use]
-    pub fn reaches_written(&self, frame: Frame, local: u32, written: &IndexSet<u32>) -> bool {
+    pub fn reaches_written(
+        &self,
+        frame: Frame,
+        local: u32,
+        written: &IndexSet<u32>,
+        beyond_handed: bool,
+    ) -> bool {
         let Some(node) = self.location(frame, local) else {
             return false;
         };
+        self.any_written(self.set(node).iter().collect(), written, beyond_handed)
+    }
+
+    /// Whether the storage of global `module`/`name`, or what it reaches, may
+    /// be written, as [`Self::reaches_written`] asks of a local's value.
+    #[must_use]
+    pub fn global_reaches_written(
+        &self,
+        module: &ModuleSource,
+        name: &str,
+        written: &IndexSet<u32>,
+        beyond_handed: bool,
+    ) -> bool {
+        let node = self.globals[&(module.clone(), name.to_string())];
+        self.any_written(vec![node], written, beyond_handed)
+    }
+
+    /// Whether any of `work`, or what it reaches, meets `written`, or, where
+    /// `beyond_handed`, [`Self::global_reach`].
+    fn any_written(&self, mut work: Vec<u32>, written: &IndexSet<u32>, beyond_handed: bool) -> bool {
         let mut walked: IndexSet<u32> = IndexSet::default();
-        let mut work: Vec<u32> = self.set(node).iter().collect();
         while let Some(loc) = work.pop() {
-            if written.contains(&loc) || self.global_reach.contains(&loc) {
+            if written.contains(&loc) || beyond_handed && self.global_reach.contains(&loc) {
                 return true;
             }
             if walked.insert(self.rep.root(loc)) {
@@ -176,12 +205,20 @@ impl PointsTo {
         self.set(site_of(&self.written, place))
     }
 
-    /// `from` and every location reachable from it, short of
-    /// [`Self::global_reach`]: what a write through any of it may reach that
-    /// every reader of a write set does not already consult.
+    /// `from` and every location reachable from it: what a write through any
+    /// of it may reach. Where `beyond_handed`, a reader of the set consults
+    /// [`Self::global_reach`] as well, so the walk stops short of it.
     #[must_use]
-    pub fn reach_beyond_global(&self, from: impl IntoIterator<Item = u32>) -> IndexSet<u32> {
-        self.reach_until(from, &self.global_reach)
+    pub fn reach_written(
+        &self,
+        from: impl IntoIterator<Item = u32>,
+        beyond_handed: bool,
+    ) -> IndexSet<u32> {
+        if beyond_handed {
+            self.reach_until(from, &self.global_reach)
+        } else {
+            self.reach_until(from, &IndexSet::default())
+        }
     }
 
     /// `from` and every location reachable from it, not walking into `known`.
@@ -202,7 +239,7 @@ impl PointsTo {
         out
     }
 
-    /// What any call may write, whatever it is handed: the storage the
+    /// What a call writing beyond what it is handed may write: the storage the
     /// globals reach, and what escaped to code the analysis cannot see.
     #[must_use]
     pub fn global_reach(&self) -> &IndexSet<u32> {
@@ -1197,8 +1234,9 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
         }
     }
     b.g.solve();
-    // Code the analysis cannot see may run under any call and write what
-    // escaped to it, as any call may write what a global reaches.
+    // Code the analysis cannot see may run under a call writing beyond what
+    // it is handed, and write what escaped to it, as it may what a global
+    // reaches.
     let global_nodes: Vec<u32> = b.globals.values().copied().chain([b.escape]).collect();
     let mut rep = std::mem::take(&mut b.g.rep);
     rep.flatten();
@@ -1213,6 +1251,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
         rep,
         handed: std::mem::take(&mut b.handed),
         written: std::mem::take(&mut b.written),
+        globals: std::mem::take(&mut b.globals),
         global_reach: IndexSet::default(),
     };
     result.global_reach = result.reach_until(global_nodes, &IndexSet::default());

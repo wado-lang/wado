@@ -3198,6 +3198,14 @@ impl DeclarationTable<BuiltinDeclaration> {
             .is_none_or(|d| matches!(d.facts.side_effect, SideEffect::Opaque))
     }
 
+    /// Whether a call to the body-less `call` reaches only what it is handed:
+    /// it is declared and does not suspend. One that leaves for the host
+    /// qualifies too, as a component instance cannot be re-entered while it
+    /// calls out, so only another task could run guest code meanwhile.
+    pub fn stays_within_handed<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into()).is_some_and(|d| !d.facts.suspend)
+    }
+
     /// Whether a call to the body-less `call` may read everything its arguments
     /// reach: nothing declares it, its effects or storage are `opaque` or
     /// `black_box`, or its storage is `copies_args`.

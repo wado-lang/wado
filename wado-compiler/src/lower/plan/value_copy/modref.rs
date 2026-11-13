@@ -6,7 +6,9 @@ use super::place::{Names, Resolver, ReturnPaths, Selector, carries_storage, fiel
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{BuiltinDeclarations, TirExpr, TirExprKind, TirFunction, TirStmt, TypeId};
+use crate::tir::{
+    BuiltinDeclarations, FunctionKind, FunctionRef, TirExpr, TirExprKind, TirFunction, TirStmt, TypeId,
+};
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
 
@@ -50,6 +52,10 @@ pub struct Writes {
     whole: IndexSet<(Origin, TypeId)>,
     /// A write this analysis could not name. Everything is written.
     opaque: bool,
+    /// A write to storage the call was not handed: through a handle no
+    /// parameter accounts for, a function value, a storage-carrying global, or
+    /// a call that suspends.
+    beyond_handed: bool,
 }
 
 impl Writes {
@@ -57,6 +63,13 @@ impl Writes {
     #[must_use]
     pub fn is_opaque(&self) -> bool {
         self.opaque
+    }
+
+    /// Whether a call may write storage other than what its arguments reach,
+    /// such as what a global reaches.
+    #[must_use]
+    pub fn writes_beyond_handed(&self) -> bool {
+        self.opaque || self.beyond_handed
     }
 
     /// Whether the handle at `position` is written through at all. Which of
@@ -110,20 +123,36 @@ impl Writes {
                 .any(|(_, ty, f)| *ty == owner && *f == field)
     }
 
-    /// Absorb a callee's writes, each re-tagged with the handle this caller
-    /// passed in that position.
-    fn absorb_through(&mut self, other: &Writes, handed: &IndexMap<u32, Handed>) {
+    /// Absorb the writes of a call `site`, each re-tagged with the handle this
+    /// caller passed in that position. A call that never returns writes
+    /// nothing a reader after it sees, so it carries no write beyond what it
+    /// was handed.
+    fn absorb_through(&mut self, other: &Writes, site: &CallSite) {
         self.opaque |= other.opaque;
+        self.beyond_handed |= other.beyond_handed && !site.diverges;
         for (origin, ty, field) in &other.fields {
-            if let Some(mapped) = re_tag(*origin, handed) {
-                self.fields.insert((mapped, *ty, *field));
+            if let Some(mapped) = re_tag(*origin, &site.handed) {
+                self.insert_field((mapped, *ty, *field), site.diverges);
             }
         }
         for (origin, ty) in &other.whole {
-            if let Some(mapped) = re_tag(*origin, handed) {
-                self.whole.insert((mapped, *ty));
+            if let Some(mapped) = re_tag(*origin, &site.handed) {
+                self.insert_whole((mapped, *ty), site.diverges);
             }
         }
+    }
+
+    /// Note a field write. One through a handle no parameter accounts for
+    /// writes beyond what the call was handed, unless the call `diverges`.
+    fn insert_field(&mut self, write: (Origin, TypeId, u32), diverges: bool) {
+        self.beyond_handed |= write.0 == Origin::Unknown && !diverges;
+        self.fields.insert(write);
+    }
+
+    /// Note a whole-value write, as [`Self::insert_field`] does a field's.
+    fn insert_whole(&mut self, write: (Origin, TypeId), diverges: bool) {
+        self.beyond_handed |= write.0 == Origin::Unknown && !diverges;
+        self.whole.insert(write);
     }
 }
 
@@ -138,6 +167,17 @@ pub struct ModRef {
 }
 
 impl ModRef {
+    /// Whether calling `func` may write storage other than what its arguments
+    /// reach.
+    #[must_use]
+    pub fn writes_beyond_handed(&self, func: &FunctionRef, builtins: &BuiltinDeclarations) -> bool {
+        if builtins.get(func).is_some() {
+            return !builtins.stays_within_handed(func);
+        }
+        self.writes(&func.module_source, &func.name)
+            .writes_beyond_handed()
+    }
+
     /// What calling `(module, name)` writes. A callee with no entry writes
     /// anything.
     #[must_use]
@@ -188,6 +228,8 @@ fn re_tag(callee_origin: Origin, handed: &IndexMap<u32, Handed>) -> Option<Origi
 struct CallSite {
     callee: (ModuleSource, String),
     handed: IndexMap<u32, Handed>,
+    /// The call never returns.
+    diverges: bool,
 }
 
 /// A known callee's own writes are still unsettled while its body is being
@@ -240,7 +282,7 @@ pub fn compute_mod_ref(
     )> = Vec::new();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
-        let (writes, callees, pending) = scan(
+        let (mut writes, callees, pending) = scan(
             &func,
             &type_table,
             &defined,
@@ -248,6 +290,9 @@ pub fn compute_mod_ref(
             returns_owned,
             builtins,
         );
+        // WIR build replaces a dispatch stub's body with a call through a
+        // closure.
+        writes.beyond_handed |= matches!(func.kind, FunctionKind::FnCanonicalDispatch { .. });
         direct.push((
             func.module_source.clone(),
             func.name.clone(),
@@ -268,7 +313,7 @@ pub fn compute_mod_ref(
             let mut merged = per_func.get(module, name).cloned().unwrap_or_default();
             for site in callees {
                 if let Some(callee) = per_func.get(&site.callee.0, &site.callee.1) {
-                    merged.absorb_through(callee, &site.handed);
+                    merged.absorb_through(callee, site);
                 }
             }
             for p in pending {
@@ -276,9 +321,11 @@ pub fn compute_mod_ref(
                     .get(&p.callee.0, &p.callee.1)
                     .is_some_and(|w| w.writes_through(p.position));
                 if hits {
-                    merged.fields.extend(p.fields.iter().copied());
+                    for field in &p.fields {
+                        merged.insert_field(*field, false);
+                    }
                     if let Some(whole) = p.whole {
-                        merged.whole.insert(whole);
+                        merged.insert_whole(whole, false);
                     }
                 }
             }
@@ -378,6 +425,7 @@ impl Walker<'_> {
             self.writes.opaque |= matches!(names, Names::Unknown);
             return;
         };
+        self.writes.beyond_handed |= self.origin_of(names) == Some(Origin::Unknown);
         // `arr[i].v = …` off a caller's `Array<Cell>` root keys only `Cell`'s
         // field, leaving the array itself unmarked, so a path an index or a
         // variant step reaches through falls to the whole-root write below.
@@ -390,7 +438,7 @@ impl Walker<'_> {
             if let Some(origin) = self.origin_of(names) {
                 for selector in &place.selectors {
                     if let Selector::Field { owner, index } = selector {
-                        self.writes.fields.insert((origin, *owner, *index));
+                        self.writes.insert_field((origin, *owner, *index), false);
                     }
                 }
             }
@@ -411,7 +459,7 @@ impl Walker<'_> {
         if let Some(whole) = whole
             && let Some(origin) = self.origin_of(names)
         {
-            self.writes.whole.insert((origin, whole));
+            self.writes.insert_whole((origin, whole), false);
         }
     }
 
@@ -480,7 +528,7 @@ impl Walker<'_> {
         if let Some(caller_type) = self.resolver.caller_type(place.root)
             && caller_type != handed
         {
-            self.writes.whole.insert((origin, caller_type));
+            self.writes.insert_whole((origin, caller_type), false);
         }
     }
 }
@@ -507,6 +555,10 @@ impl TirRefVisitor for Walker<'_> {
             // any, is charged at whoever uses that reference.
             TirExprKind::Call { func, args, .. } => {
                 let known = self.defined.contains(&func.module_source, &func.name);
+                // A call that never returns writes nothing anyone reads after.
+                let diverges = self.type_table.is_never(expr.type_id);
+                self.writes.beyond_handed |=
+                    !known && !diverges && !self.builtins.stays_within_handed(&**func);
                 if known {
                     // Every position, not just the writable ones: a callee
                     // writing through a `&T` parameter is one `names_caller_storage`
@@ -519,6 +571,7 @@ impl TirRefVisitor for Walker<'_> {
                     self.callees.push(CallSite {
                         callee: (func.module_source.clone(), func.name.clone()),
                         handed,
+                        diverges,
                     });
                 }
                 if !self.builtins.only_aliases(&**func) {
@@ -540,6 +593,7 @@ impl TirRefVisitor for Walker<'_> {
             // A closure reaches a frame only through its captures, which the
             // frame that builds one accounts for.
             TirExprKind::IndirectCall { args, .. } => {
+                self.writes.beyond_handed = true;
                 for arg in args
                     .iter()
                     .filter(|a| self.type_table.is_mut_ref(a.type_id))
@@ -547,6 +601,10 @@ impl TirRefVisitor for Walker<'_> {
                     let names = self.resolver.names(arg);
                     self.record(&names, WholeOf::Handed(arg.type_id));
                 }
+            }
+            TirExprKind::CmRawCall { .. } => self.writes.beyond_handed = true,
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.writes.beyond_handed |= carries_storage(value.type_id, self.type_table);
             }
             TirExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
