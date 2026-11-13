@@ -1,0 +1,52 @@
+// A callee's only site, in a loop, takes it whatever its price: the body moves
+// rather than being copied, and the call it replaces ran every iteration.
+// `mix` is over the payback bound and reaches no safepoint, so `mix_all`
+// splices it.
+
+fn mix(x: u32, k: u32) -> u32 {
+    let mut h = x ^ k;
+    h = (h ^ (h >> 16)) * 0x85EBCA6B;
+    h = (h ^ (h >> 13)) * 0xC2B2AE35;
+    h = h ^ (h >> 16);
+    let mut g = h + k * 0x9E3779B9;
+    g = (g ^ (g >> 15)) * 0x2C1B3C6D;
+    g = (g ^ (g >> 12)) * 0x297A2D39;
+    g = g ^ (g >> 15);
+    let mut f = g ^ (h << 7) ^ (x >> 3);
+    f = (f ^ (f >> 16)) * 0x7FEB352D;
+    f = (f ^ (f >> 15)) * 0x846CA68B;
+    f = f ^ (f >> 16);
+    let mut e = f + (g ^ h) * 0x27D4EB2F;
+    e = (e ^ (e >> 17)) * 0xED5AD4BB;
+    e = (e ^ (e >> 11)) * 0xAC4C1B51;
+    e = (e ^ (e >> 15)) * 0x31848BAB;
+    e = e ^ (e >> 14);
+    let mut d = e ^ (f >> 5) ^ (g << 3) ^ (h >> 9);
+    d = (d ^ (d >> 16)) * 0x21F0AAAD;
+    d = (d ^ (d >> 15)) * 0x735A2D97;
+    let mut c = d ^ (e >> 7) ^ (f << 11);
+    c = (c ^ (c >> 16)) * 0x45D9F3B;
+    c = (c ^ (c >> 16)) * 0x45D9F3B;
+    return c ^ (c >> 16);
+}
+
+#[inline(never)]
+fn mix_all(n: u32) -> u32 {
+    let mut acc: u32 = 0;
+    for let i of 0..<n {
+        acc = mix(acc, i);
+    }
+    return acc;
+}
+
+export fn run() {
+    assert mix_all(builtin::black_box(3)) != 0;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_pass": {"O2": ["nir/inline"]},
+    "wir_scope": "inline_sole_loop_site_over_payback.wado/mix_all",
+    "wir_not_expect:O2": ["\"inline_sole_loop_site_over_payback.wado/mix\"("]
+}
