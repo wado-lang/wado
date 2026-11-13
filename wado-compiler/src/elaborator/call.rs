@@ -2072,7 +2072,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &method_type_args,
                 );
                 let inherited =
-                    self.inherited_static(&receiver_key, suffix, &impl_type_args_inferred);
+                    self.inherited_static(&receiver_key, &owner, &impl_type_args_inferred);
                 self.retype_inherited(inherited, &mut substituted);
                 self.answer_frame_projections_in(&mut substituted);
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
@@ -2301,7 +2301,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // The importing module never names `Type`, so a receiver
                     // the namespace did not resolve has no newtype to retype to.
                     let inherited = ns_key.as_ref().and_then(|key| {
-                        self.inherited_static(key, method_name, &impl_type_args_inferred)
+                        let owner = self.static_owner_key(key, method_name);
+                        self.inherited_static(key, &owner, &impl_type_args_inferred)
                     });
                     let resolved = self.resolve_static_callee(StaticQuery {
                         site: ident.segments.get(1).map(|segment| segment.id),
@@ -4898,18 +4899,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The newtype a static call's receiver is, where it inherits the static
-    /// from a link below it, at the arguments `owner_args` give that link.
-    /// The resolution retypes a newtype declaring no parameters itself; one
-    /// declaring some is solved from `owner_args` here. `None` where the
+    /// from the link `owner` below it, at the arguments `owner_args` give that
+    /// link. The resolution retypes a newtype declaring no parameters itself;
+    /// one declaring some is solved from `owner_args` here. `None` where the
     /// receiver owns the static, or where the arguments leave the newtype
     /// open.
     pub(super) fn inherited_static(
         &mut self,
         receiver: &ImplTargetKey,
-        method_name: &str,
+        owner: &ImplTargetKey,
         owner_args: &[TypeId],
     ) -> Option<InheritedStatic> {
-        let (owner, _) = self.newtype_static_target(receiver, method_name)?;
+        if owner == receiver {
+            return None;
+        }
         let link = owner.decl();
         let (newtype, _) = self.newtype_at_base_args(receiver, link, owner_args)?;
         let table = self.tysys.type_table.borrow();
