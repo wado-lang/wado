@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794530079853,
+  "lastUpdate": 1794537698619,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77013,6 +77013,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/90d34e5af81b64f0a4806ef7dc7eee3d2e2c9f5e"
         },
         "date": 1794530078812,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21773,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434207,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "385017c07aa8322048826089eaaeff79bb8b3aee",
+          "message": "Merge pull request #2616 from wado-lang/compiler/static-plan\n\nfix(compiler): one newtype link answers a static call, decided before its arguments",
+          "timestamp": "2026-11-13T11:21:55+09:00",
+          "tree_id": "4571e760e65822c5d42429c7b09edd7a1431589f",
+          "url": "https://github.com/wado-lang/wado/commit/385017c07aa8322048826089eaaeff79bb8b3aee"
+        },
+        "date": 1794537697590,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
