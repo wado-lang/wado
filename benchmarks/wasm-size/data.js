@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794520370334,
+  "lastUpdate": 1794530079853,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -76969,6 +76969,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a2fc96780f6318cb4e20bbaf7463a6ac3d20e758"
         },
         "date": 1794520369040,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21773,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434207,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "90d34e5af81b64f0a4806ef7dc7eee3d2e2c9f5e",
+          "message": "Merge pull request #2615 from wado-lang/ccr-f08a50fd-c4ooga\n\nperf: cut what Test (packages) compiles and evaluates",
+          "timestamp": "2026-11-13T09:18:38+09:00",
+          "tree_id": "3535b69f0c3a77bcec36a1ef7c9f64436304cb9d",
+          "url": "https://github.com/wado-lang/wado/commit/90d34e5af81b64f0a4806ef7dc7eee3d2e2c9f5e"
+        },
+        "date": 1794530078812,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
