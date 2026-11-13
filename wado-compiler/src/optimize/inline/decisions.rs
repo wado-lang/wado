@@ -220,7 +220,6 @@ fn basis_text(basis: Basis) -> &'static str {
         Basis::Fits => "everywhere: under the threshold",
         Basis::Folds => "everywhere: the callers' constants fold it under the threshold",
         Basis::OverPayback => "nowhere: over the payback bound",
-        Basis::SoleOverPayback => "its one site, in a loop: over the payback bound, and moved",
         Basis::Safepoint {
             sole_and_loop_free: true,
         } => "its one site outside a loop: it reaches a safepoint",

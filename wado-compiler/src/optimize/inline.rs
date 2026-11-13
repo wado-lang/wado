@@ -1706,10 +1706,6 @@ enum Basis {
     Folds,
     /// Its net price is over [`PAYBACK_FACTOR`] times the threshold.
     OverPayback,
-    /// Over the payback bound, with one site and no safepoint: that site in a
-    /// loop, where the body moves rather than being copied and the call it
-    /// replaces ran every iteration.
-    SoleOverPayback,
     /// Under the payback bound, but it reaches a safepoint: one site outside a
     /// loop, where the body holds none, or nowhere.
     Safepoint {
@@ -1738,7 +1734,7 @@ impl Basis {
                 sole_and_loop_free: true,
             } => Reach::SoleOutsideLoops,
             Basis::Payback { sole: true } => Reach::Sole,
-            Basis::Payback { sole: false } | Basis::SoleOverPayback => Reach::Loops,
+            Basis::Payback { sole: false } => Reach::Loops,
         }
     }
 }
@@ -1942,11 +1938,7 @@ fn classify_callee(
     let basis = if folds {
         Basis::Folds
     } else if net_cost(plain, params) > effective_threshold * PAYBACK_FACTOR {
-        if sites == 1 && !has_safepoint(body, type_table, cold, safepoint_calls, written) {
-            Basis::SoleOverPayback
-        } else {
-            Basis::OverPayback
-        }
+        Basis::OverPayback
     } else if has_safepoint(body, type_table, cold, safepoint_calls, written) {
         Basis::Safepoint {
             sole_and_loop_free: sites == 1 && !arena_query::block_contains_loop(body, body.root()),

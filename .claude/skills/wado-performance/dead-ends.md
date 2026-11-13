@@ -579,6 +579,28 @@ two jobs, admitting a callee and pricing a loop body, and a gale-gen-shaped win
 needs the second priced apart from the first. 16 did land later, on the same
 rows; the budget this entry measures against is that, not the 13 above.
 
+## Splicing a callee's only site in a loop at any price (2026-11-13)
+
+A callee with one site moves rather than being copied, and in a loop the call
+it replaces runs every iteration. Exempting such a callee from the payback
+bound, when it reaches no safepoint, spliced zlib's `Matcher::longest_match`
+(price 132, one call per input position).
+
+It also spliced the JSON writer's helpers into the derived serializers:
+`write_plain_key` (80–95) once per field, `write_decimal`,
+`String::utf8_sequence_len` and `peek_after_whitespace_run`. Release A/B,
+three alternating rounds against the same compiler without the rule:
+
+| Row                          | Change    |
+| ---------------------------- | --------- |
+| zlib compress                | +1.8%     |
+| json-catalog ser (no-pgo)    | **−9.0%** |
+| every other json-catalog row | noise     |
+
+So the bound guards more than code size: a serializer's loop body grown by a
+helper per field loses more than the calls it saves. A sole site needs a price
+for what it adds to the loop it lands in, not a pass from the bound.
+
 ## A jump table in place of a compare cascade (gale, 2026-07/08)
 
 Two independent rewrites, both reverted. `_kind_set_*` — a
