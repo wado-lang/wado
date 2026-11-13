@@ -33,6 +33,7 @@
 
 use { gc_array_to_memory } from "core:rt";
 use { LinearArray } from "core:linear";
+use { i16x8 } from "core:simd";
 
 #[synopsis]
 test {
@@ -218,29 +219,79 @@ pub fn adler32(adler: u32, buf: &ByteList, offset: i32, len: i32) -> u32 {
     return s1 | s2 << 16;
 }
 
-// `adler32` over bytes in linear memory.
+// The 16-byte blocks one run of `adler32_linear` sums in i32 lanes before
+// reducing. A lane summing earlier blocks' sums reaches 4 · 255 · n(n − 1) / 2,
+// which stays below 2^31 up to n = 2052.
+global ADLER_BLOCKS: i32 = 2048;
+
+// `adler32` over bytes in linear memory, a 16-byte block at a time. Where a
+// block starts with s1 = S, its byte k adds S + b_0 + … + b_k to s2, so the
+// block adds 16·S + Σ (16 − k)·b_k to it.
 fn adler32_linear(adler: u32, buf: &LinearArray<u8>, offset: i32, len: i32) -> u32
     contract 0 <= offset && 0 <= len <= buf.len() - offset
 {
-    let base: u32 = 65521;
-    let nmax = 5552;
-    let mut s1 = adler & 0xFFFF;
-    let mut s2 = adler >> 16 & 0xFFFF;
+    let base: u64 = 65521;
+    let mut s1 = (adler & 0xFFFF) as u64;
+    let mut s2 = (adler >> 16 & 0xFFFF) as u64;
     let mut pos = offset;
-    let mut remaining = len;
-    while remaining > 0 {
-        let k = i32::min(remaining, nmax);
-        remaining -= k;
-        let stop = pos + k;
-        while pos < stop {
-            s1 += unchecked buf.at(pos) as u32;
-            s2 += s1;
-            pos += 1;
+    let end = offset + len;
+    let weights_low: i16x8 = [16, 15, 14, 13, 12, 11, 10, 9];
+    let weights_high: i16x8 = [8, 7, 6, 5, 4, 3, 2, 1];
+    let zero = builtin::i32x4_splat(0);
+    while end - pos >= 16 {
+        let blocks = i32::min(end - pos >> 4, ADLER_BLOCKS);
+        let mut sums = zero;
+        let mut prefix_sums = zero;
+        let mut weighted = zero;
+        for let _ of 0..<blocks {
+            let bytes = unchecked buf.load_at::<v128>(pos);
+            prefix_sums = builtin::i32x4_add(prefix_sums, sums);
+            let pairs = builtin::i16x8_extadd_pairwise_i8x16_u(bytes);
+            sums = builtin::i32x4_add(sums, builtin::i32x4_extadd_pairwise_i16x8_u(pairs));
+            let low = builtin::i32x4_dot_i16x8_s(builtin::i16x8_extend_low_i8x16_u(bytes), weights_low as v128);
+            let high = builtin::i32x4_dot_i16x8_s(builtin::i16x8_extend_high_i8x16_u(bytes), weights_high as v128);
+            weighted = builtin::i32x4_add(weighted, builtin::i32x4_add(low, high));
+            pos += 16;
         }
-        s1 %= base;
-        s2 %= base;
+        s2 = (s2 + 16 * blocks as u64 * s1 + 16 * lane_sum(prefix_sums) + lane_sum(weighted)) % base;
+        s1 = (s1 + lane_sum(sums)) % base;
     }
-    return s1 | s2 << 16;
+    while pos < end {
+        s1 += unchecked buf.at(pos) as u64;
+        s2 += s1;
+        pos += 1;
+    }
+    return (s1 % base | s2 % base << 16) as u32;
+}
+
+test "adler32_linear agrees with adler32" {
+    let mut mixed: ByteList = [];
+    for let i of 0..<70001 {
+        mixed.push((i * 7 + i / 251) as u8);
+    }
+    let full = ByteList::filled(70001, 0xFF);
+    for let bytes of [mixed, full] {
+        let linear = LinearArray::<u8>::of_bytes(&bytes, 0, bytes.len());
+        for let [offset, len] of [
+            [0, 0],
+            [0, 15],
+            [3, 16],
+            [1, 33],
+            [0, 32768],
+            [5, 32791],
+            [0, 70001],
+        ] as List<[i32, i32]> {
+            assert adler32_linear(7, &linear, offset, len) == adler32(7, &bytes, offset, len);
+        }
+    }
+}
+
+// The four lanes of `v`, each non-negative, added.
+fn lane_sum(v: v128) -> u64 {
+    return builtin::i32x4_extract_lane(0, v) as u64 + builtin::i32x4_extract_lane(1, v) as u64 + builtin::i32x4_extract_lane(
+        2,
+        v,
+    ) as u64 + builtin::i32x4_extract_lane(3, v) as u64;
 }
 
 /// Returns the initial Adler-32 checksum value (1).
