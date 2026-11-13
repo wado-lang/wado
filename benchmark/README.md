@@ -388,54 +388,47 @@ HTTP routing needs `oha` and Bun, and is measured separately
 ## Profile-Guided Optimization
 
 A Wado build applies the profile each benchmark's `#[workload]` recorded into
-its `pgo/`. The table below compares that build with the two the flags give.
-`-f no-pgo` ignores the profile and keeps the source's `cold_path()` markers;
-`-f no-cold-paths` drops every marker but still prices each call site by the
-profile. `+` means the PGO build is faster.
+its `pgo/`. The table below compares that build with `-f no-pgo`, which ignores
+the profile and keeps the source's `cold_path()` markers. `+` means the PGO
+build is faster.
 
 The PGO build's fuel at `-O2` is in [`fuel.json`](./fuel.json), which
 `mise run update-baselines` records. Fuel does not depend on the host, so one
-run per build settles it, and a flag measures the other two:
+run per build settles it, and a flag measures the other:
 
 ```sh
-wado test -O2 --allocator freelist --report-fuel --test-name fuel benchmark                 # PGO
+wado test -O2 --allocator freelist --report-fuel --test-name fuel benchmark            # PGO
 wado test -O2 --allocator freelist --report-fuel --test-name fuel -f no-pgo benchmark
-wado test -O2 --allocator freelist --report-fuel --test-name fuel -f no-cold-paths benchmark
 ```
 
-Wall clock, best of three, with the builds alternated between rounds. The PGO
-and `no-pgo` figures are the tables above, from `mise run benchmark-all`.
-`no-cold-paths` is in ms/iter, from
-`WADO_BENCH_FLAGS="-f no-cold-paths" mise run -C benchmark all-wado`. `gale_html`
-runs neither of those, so its figures come from
-`mise run -C benchmark gale-highlight-html` under the same flags. A comparison
-reads `noise` where the two builds' ranges overlap, as `ab.ts` judges:
+Wall clock, best of three: the PGO and `no-pgo` figures are the tables above,
+from `mise run benchmark-all`. A comparison reads `noise` where the two builds'
+ranges overlap, as `ab.ts` judges:
 
-| Benchmark                      | `no-cold-paths` | PGO vs `no-pgo` | PGO vs `no-cold-paths` |
-| ------------------------------ | --------------: | --------------: | ---------------------: |
-| microgpt / Wado / train        |          93.758 |           +2.3% |                  noise |
-| microgpt / Wado / infer        |          60.619 |          +15.5% |                  -0.8% |
-| mandelbrot / Wado              |         103.373 |           noise |                  noise |
-| sieve / Wado                   |           3.535 |          +30.7% |                  noise |
-| fts / Wado                     |          35.051 |           +0.7% |                  noise |
-| json_twitter / Wado / ser      |           0.539 |           +3.4% |                  +1.3% |
-| json_twitter / Wado / de       |           1.872 |           +4.4% |                  noise |
-| cbor_twitter / Wado / ser      |           0.293 |          +31.0% |                  +8.1% |
-| cbor_twitter / Wado / de       |           0.989 |           +7.7% |                  +3.0% |
-| cbor_canada / Wado / ser       |           1.865 |          +26.5% |                  -2.9% |
-| cbor_canada / Wado / de        |           3.072 |          +32.5% |                  +1.1% |
-| cbor_catalog / Wado / ser      |           0.432 |          +61.3% |                  +6.4% |
-| cbor_catalog / Wado / de       |           1.335 |          +14.5% |                  noise |
-| json_canada / Wado / ser       |           6.547 |           -0.2% |                  +8.5% |
-| json_canada / Wado / de        |           7.928 |          +14.0% |                  +5.0% |
-| json_catalog / Wado / ser      |           0.649 |          +25.0% |                 +14.3% |
-| json_catalog / Wado / de       |           3.198 |           +5.7% |                  -1.0% |
-| zlib_bench / Wado / compress   |           5.067 |          +10.6% |                  +4.1% |
-| zlib_bench / Wado / decompress |           0.695 |           -1.1% |                  -2.0% |
-| sqlite_parse / Wado            |           0.765 |           noise |                 +18.1% |
-| syntax_highlight / Wado        |           1.053 |           noise |                 +15.0% |
-| gale_gen / Wado                |          90.909 |           noise |                  noise |
-| gale_html / Wado               |          25.438 |           noise |                  +7.5% |
+| Benchmark                      | PGO vs `no-pgo` |
+| ------------------------------ | --------------: |
+| microgpt / Wado / train        |           +2.3% |
+| microgpt / Wado / infer        |          +15.5% |
+| mandelbrot / Wado              |           noise |
+| sieve / Wado                   |          +30.7% |
+| fts / Wado                     |           +0.7% |
+| json_twitter / Wado / ser      |           +3.4% |
+| json_twitter / Wado / de       |           +4.4% |
+| cbor_twitter / Wado / ser      |          +31.0% |
+| cbor_twitter / Wado / de       |           +7.7% |
+| cbor_canada / Wado / ser       |          +26.5% |
+| cbor_canada / Wado / de        |          +32.5% |
+| cbor_catalog / Wado / ser      |          +61.3% |
+| cbor_catalog / Wado / de       |          +14.5% |
+| json_canada / Wado / ser       |           -0.2% |
+| json_canada / Wado / de        |          +14.0% |
+| json_catalog / Wado / ser      |          +25.0% |
+| json_catalog / Wado / de       |           +5.7% |
+| zlib_bench / Wado / compress   |          +10.6% |
+| zlib_bench / Wado / decompress |           -1.1% |
+| sqlite_parse / Wado            |           noise |
+| syntax_highlight / Wado        |           noise |
+| gale_gen / Wado                |           noise |
 
 ## Running
 
