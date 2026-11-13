@@ -1270,24 +1270,44 @@ impl FunctionTranslator<'_, '_> {
             && args[position + 1..]
                 .iter()
                 .all(|(later, _)| later.writes_nothing())
-            && !self.call_keeps(callee, position, args.len(), result_type)
+            && !self.call_keeps(callee, args[position].0, position, args.len(), result_type)
     }
 
     /// Whether the call keeps what it is passed at `position` past its return.
     fn call_keeps(
         &self,
         callee: &FunctionRef,
+        arg: &TirExpr,
         position: usize,
         arity: usize,
         result_type: tir::TypeId,
     ) -> bool {
         let position = u32::try_from(position).expect("a call has fewer than 2^32 arguments");
-        let result_holds = !value_copy::is_scalar_type(result_type, &self.base.type_table.borrow());
-        self.base
+        let type_table = self.base.type_table.borrow();
+        let result_holds = !value_copy::is_scalar_type(result_type, &type_table);
+        let retained = self
+            .base
             .value_copy
             .retention
-            .of_call(callee, arity, result_holds)
-            .keeps(position)
+            .of_call(callee, arity, result_holds);
+        if !retained.keeps(position) {
+            return false;
+        }
+        // Kept only in a result that cannot reach the storage the reference
+        // names, the call keeps only what that storage's references lead to,
+        // which a copy of it would share.
+        let into_result_only = retained.destinations(position).is_some_and(|landings| {
+            landings
+                .iter()
+                .all(|&landing| landing == value_copy::retention::RESULT)
+        });
+        !into_result_only
+            || value_copy::reach::StorageReach::new(
+                &type_table,
+                &self.base.struct_fields_map,
+                &self.base.value_copy.closure_captures,
+            )
+            .reaches(result_type, arg.type_id, true)
     }
 
     /// `reference`, a shared borrow nothing keeps past the call reading it,
@@ -1383,6 +1403,7 @@ impl FunctionTranslator<'_, '_> {
                             };
                             if self.translator.call_keeps(
                                 func,
+                                passed,
                                 position,
                                 ordered.len(),
                                 expr.type_id,
