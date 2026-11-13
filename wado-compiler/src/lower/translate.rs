@@ -1213,8 +1213,8 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Whether `value` is storage a reference to it reaches: a source place,
-    /// what a reference reads, a projection of either, or a block ending in
-    /// one. A field of a call's result is none of them.
+    /// what a reference reads, or a projection of either. A field of a call's
+    /// result is none of them.
     fn names_storage(&self, value: &TirExpr) -> bool {
         if place::is_source_place(value, self.base.type_table.borrow().compiler_items()) {
             return true;
@@ -1224,9 +1224,6 @@ impl FunctionTranslator<'_, '_> {
                 op: TirUnaryOp::Deref,
                 ..
             } => true,
-            TirExprKind::Block(block) => block
-                .tail_expr()
-                .is_some_and(|tail| self.names_storage(tail)),
             _ => place::projection_base(value).is_some_and(|base| self.names_storage(base)),
         }
     }
@@ -1353,7 +1350,9 @@ impl FunctionTranslator<'_, '_> {
                                 && let Some((tail, stmts)) = block.stmts.split_last()
                                 && let TirStmtKind::Expr(value) = &tail.kind
                             {
-                                stmts.iter().for_each(|stmt| self.visit_stmt(stmt));
+                                for stmt in stmts {
+                                    self.visit_stmt(stmt);
+                                }
                                 passed = value;
                             }
                             let TirExprKind::Local { index, .. } = &passed.kind else {
