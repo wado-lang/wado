@@ -10,7 +10,7 @@ use std::sync::Mutex;
 
 use indexmap::IndexMap;
 use wado_compiler::compiler_host::{
-    CompilerHost, DependencyIndex, Diagnostic, GeneratorOutputFile, GeneratorRequest,
+    Code, CompilerHost, DependencyIndex, Diagnostic, GeneratorOutputFile, GeneratorRequest,
     GeneratorResponse, GeneratorRunnerError, ModuleDir, SourceError,
 };
 use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
@@ -250,6 +250,62 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
     // `shared_module_across_invocations_calls_provider_once` for the
     // case where a single module covers both invocations.)
     assert_eq!(*provider2.calls.lock().unwrap(), 2);
+}
+
+#[test]
+fn a_cached_output_naming_another_run_warns_as_the_run_that_wrote_it_did() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mismatches = |host: &StubHost| -> Vec<String> {
+        host.take_diagnostics()
+            .into_iter()
+            .filter(|d| d.code == Code::KilnHeaderMismatch)
+            .map(|d| d.message)
+            .collect()
+    };
+    let expected = [
+        "kiln: generated file \"build/kiln/kiln-alpha/alpha.wado\" opens with a header naming \
+         by = \"test\", sources = []; this run is by = \"ns:proto@1.0.0\", \
+         sources = [\"alpha.proto\"]",
+    ];
+
+    let sources: &[(&str, &[u8])] = &[
+        ("alpha.proto", b"alpha-schema"),
+        ("beta.graphql", b"beta-schema"),
+    ];
+    let beta = GeneratorResponse {
+        files: vec![GeneratorOutputFile {
+            path: "beta.wado".to_string(),
+            content: "#![generated(by = \"ns:graphql@1.0.0\", sources = [\"beta.graphql\"])]\n"
+                .to_string(),
+            is_entry: true,
+        }],
+    };
+
+    let cold = StubHost::new(
+        sources,
+        vec![
+            ("alpha.proto", simple_response("alpha.wado")),
+            ("beta.graphql", beta),
+        ],
+    );
+    let outcome = run(
+        tmp.path(),
+        &cold,
+        &StubProvider::new(b"component-bytes".to_vec()),
+        vec![alpha_inv(), beta_inv()],
+    );
+    assert_eq!(outcome.executed, ["kiln-alpha", "kiln-beta"]);
+    assert_eq!(mismatches(&cold), expected);
+
+    let warm = StubHost::new(sources, vec![]);
+    let outcome = run(
+        tmp.path(),
+        &warm,
+        &StubProvider::new(b"component-bytes".to_vec()),
+        vec![alpha_inv(), beta_inv()],
+    );
+    assert_eq!(outcome.cached, ["kiln-alpha", "kiln-beta"]);
+    assert_eq!(mismatches(&warm), expected);
 }
 
 #[test]

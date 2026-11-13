@@ -242,11 +242,6 @@ pub async fn execute<H: CompilerHost>(
             use_type: use_type.cloned(),
         });
     }
-    // What `core:kiln`'s `Request::origin()` gives the generator.
-    let origin = GeneratedHeader {
-        by: invocation.invoked_as.clone(),
-        sources: loaded.iter().map(|f| f.path.clone()).collect(),
-    };
     let mut loaded = loaded.into_iter();
     let request = GeneratorRequest {
         primary: loaded.next().expect("the primary is the first file"),
@@ -273,13 +268,10 @@ pub async fn execute<H: CompilerHost>(
     let mut checked = Vec::with_capacity(response.files.len());
     for file in &response.files {
         let rel = validate_rel_output_path(&file.path)?;
-        let Some(header) = parse_header(&file.content) else {
+        if !has_generated_marker(&file.content) {
             return Err(ExecuteError::MissingHeader {
                 path: file.path.clone(),
             });
-        };
-        if header != origin {
-            emit_header_mismatch_warning(host, &file.path, &header, &origin);
         }
         checked.push((rel, file));
     }
@@ -544,6 +536,35 @@ fn emit_generated_modified_warning<H: CompilerHost>(host: &H, invocation: &str, 
         ),
         span: None,
     });
+}
+
+/// Warn on each of `outputs` whose header names another run than
+/// `invocation`, whether this run wrote it or took it from the cache, so a warm
+/// run reports what the cold one did.
+fn warn_on_foreign_headers<H: CompilerHost>(
+    host: &H,
+    invocation: &Invocation,
+    outputs: &[MetaOutputEntry],
+    manifest_root: &Path,
+) {
+    // What `core:kiln`'s `Request::origin()` gives the generator.
+    let origin = GeneratedHeader {
+        by: invocation.invoked_as.clone(),
+        sources: invocation
+            .files()
+            .map(|(path, _, _)| path.as_str().to_string())
+            .collect(),
+    };
+    for output in outputs {
+        // An unreadable or headerless file is a stale cache or a hand edit,
+        // which the cache check reports.
+        if let Ok(content) = std::fs::read_to_string(manifest_root.join(&output.path))
+            && let Some(header) = parse_header(&content)
+            && header != origin
+        {
+            emit_header_mismatch_warning(host, &output.path, &header, &origin);
+        }
+    }
 }
 
 fn emit_header_mismatch_warning<H: CompilerHost>(
@@ -1330,6 +1351,7 @@ where
             };
 
         if let Some(metadata) = entry {
+            warn_on_foreign_headers(host, invocation, &metadata.outputs, manifest_root);
             if executed {
                 let dir = invocation.output_dir.as_str().to_string();
                 let kept = kept_by_dir.entry(dir).or_default();
@@ -1712,7 +1734,7 @@ mod tests {
         }
 
         #[test]
-        fn warns_on_a_header_naming_another_run_and_writes_it_as_returned() {
+        fn writes_a_header_naming_another_run_as_returned() {
             let tmp = tempfile::tempdir().unwrap();
             let content = "#![generated(by = \"elsewhere\", sources = [\"schema.proto\"])]\n";
             let response = GeneratorResponse {
@@ -1726,49 +1748,9 @@ mod tests {
             runtime()
                 .block_on(async { execute(&sample_invocation(), b"wasm", tmp.path(), &host).await })
                 .unwrap();
-
-            let diagnostics = host.diagnostics.lock().unwrap();
-            let mismatches: Vec<_> = diagnostics
-                .iter()
-                .filter(|d| d.code == Code::KilnHeaderMismatch)
-                .map(|d| d.message.as_str())
-                .collect();
-            assert_eq!(
-                mismatches,
-                [
-                    "kiln: generated file \"lib.wado\" opens with a header naming by = \"elsewhere\", \
-                     sources = [\"schema.proto\"]; this run is by = \"ns:proto@1.0.0\", \
-                     sources = [\"schema.proto\", \"dep.proto\"]"
-                ]
-            );
             let lib =
                 std::fs::read_to_string(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
             assert_eq!(lib, content);
-        }
-
-        #[test]
-        fn a_header_naming_this_run_raises_no_warning() {
-            let tmp = tempfile::tempdir().unwrap();
-            let response = GeneratorResponse {
-                files: vec![GeneratorOutputFile {
-                    path: "lib.wado".to_string(),
-                    content: "#![generated(by = \"ns:proto@1.0.0\", sources = [\"schema.proto\", \"dep.proto\"])]\n"
-                        .to_string(),
-                    is_entry: true,
-                }],
-            };
-            let host = MockHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")], Ok(response));
-            runtime()
-                .block_on(async { execute(&sample_invocation(), b"wasm", tmp.path(), &host).await })
-                .unwrap();
-            assert!(
-                !host
-                    .diagnostics
-                    .lock()
-                    .unwrap()
-                    .iter()
-                    .any(|d| d.code == Code::KilnHeaderMismatch)
-            );
         }
 
         #[test]
