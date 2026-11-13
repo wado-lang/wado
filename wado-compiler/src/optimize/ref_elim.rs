@@ -37,13 +37,13 @@ struct RefInfo {
 /// — the two sub-analyses target disjoint binding shapes (`&pure-read-referent`
 /// vs `&literal`), so a single pristine snapshot of each matches the old
 /// sequential pass. The transforms (drop the binding `Let`, substitute each
-/// `r.field` with the resolved referent, bind each single-use `*r` literal by
-/// value) run through the engine edit API so the worklist re-examines the result.
+/// `r.field` with the resolved referent, bind each `*r` literal by value) run
+/// through the engine edit API so the worklist re-examines the result.
 pub(super) struct RefElimRule {
     /// `let r = &E` bindings (eliminable when every use is `r.field`).
     refs: IndexMap<u32, RefInfo>,
-    /// `let r = &literal` bindings used exactly once as `*r`; value is the
-    /// source literal expression.
+    /// `let r = &literal` bindings read only as `*r`; value is the source
+    /// literal expression.
     deref_sources: IndexMap<u32, ExprId>,
     /// The local each `deref_sources` entry binds its literal to by value,
     /// minted by whichever of its `let` and its `*r` the engine reaches first.
@@ -181,7 +181,7 @@ impl Rule for RefElimRule {
                 engine.replace_expr_kind(inner_e, referent);
                 true
             }
-            // `*r` for a single-use deref-only ref `r` → the literal's binding.
+            // `*r` for a deref-only ref `r` → the literal's binding.
             ExprKind::Unary {
                 op: NirUnaryOp::Deref,
                 expr: inner,

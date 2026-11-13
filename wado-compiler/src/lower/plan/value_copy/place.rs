@@ -507,9 +507,19 @@ pub fn is_source_place(expr: &TirExpr, items: &CompilerItems) -> bool {
 }
 
 /// `{ local = value; local }`, a binding made where the value is evaluated, as
-/// contract checks bind a call's earlier arguments: the local and the value.
+/// contract checks bind a call's earlier arguments.
+pub struct InPlaceBinding<'e> {
+    pub local: u32,
+    /// The assignment's target, the `local` written.
+    pub target: &'e TirExpr,
+    pub value: &'e TirExpr,
+    /// The trailing read of `local`.
+    pub read: &'e TirExpr,
+}
+
+/// `stmts` as an [`InPlaceBinding`], if they are one.
 #[must_use]
-pub fn in_place_binding(stmts: &[TirStmt]) -> Option<(u32, &TirExpr)> {
+pub fn in_place_binding(stmts: &[TirStmt]) -> Option<InPlaceBinding<'_>> {
     let [assign, read] = stmts else {
         return None;
     };
@@ -518,16 +528,23 @@ pub fn in_place_binding(stmts: &[TirStmt]) -> Option<(u32, &TirExpr)> {
             kind: TirExprKind::Assign { target, value },
             ..
         }),
-        TirStmtKind::Expr(TirExpr {
-            kind: TirExprKind::Local { index, .. },
-            ..
-        }),
+        TirStmtKind::Expr(
+            read @ TirExpr {
+                kind: TirExprKind::Local { index, .. },
+                ..
+            },
+        ),
     ) = (&assign.kind, &read.kind)
     else {
         return None;
     };
     matches!(target.kind, TirExprKind::Local { index: assigned, .. } if assigned == *index)
-        .then_some((*index, &**value))
+        .then_some(InPlaceBinding {
+            local: *index,
+            target,
+            value,
+            read,
+        })
 }
 
 /// What `&referent` takes the value of: the value an in-place binding binds
@@ -536,7 +553,7 @@ pub fn in_place_binding(stmts: &[TirStmt]) -> Option<(u32, &TirExpr)> {
 pub fn borrowed_value(referent: &TirExpr) -> &TirExpr {
     match &referent.kind {
         TirExprKind::Block(block) => {
-            in_place_binding(&block.stmts).map_or(referent, |(_, value)| value)
+            in_place_binding(&block.stmts).map_or(referent, |binding| binding.value)
         }
         _ => referent,
     }

@@ -178,7 +178,12 @@ impl PointsTo {
 
     /// Whether any of `work`, or what it reaches, meets `written`, or, where
     /// `beyond_handed`, [`Self::global_reach`].
-    fn any_written(&self, mut work: Vec<u32>, written: &IndexSet<u32>, beyond_handed: bool) -> bool {
+    fn any_written(
+        &self,
+        mut work: Vec<u32>,
+        written: &IndexSet<u32>,
+        beyond_handed: bool,
+    ) -> bool {
         let mut walked: IndexSet<u32> = IndexSet::default();
         while let Some(loc) = work.pop() {
             if written.contains(&loc) || beyond_handed && self.global_reach.contains(&loc) {

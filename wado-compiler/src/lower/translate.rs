@@ -1311,9 +1311,9 @@ impl FunctionTranslator<'_, '_> {
             unreachable!("only a shared borrow is passed uncopied");
         };
         if let TirExprKind::Block(block) = &referent.kind
-            && let Some((_, value)) = place::in_place_binding(&block.stmts)
+            && let Some(binding) = place::in_place_binding(&block.stmts)
         {
-            return self.uncopied_in_place_borrow(reference, block, value);
+            return self.uncopied_in_place_borrow(reference, &binding);
         }
         self.try_boxing_rewrite(reference).unwrap_or_else(|| {
             let kind = ExprKind::Unary {
@@ -1324,37 +1324,23 @@ impl FunctionTranslator<'_, '_> {
         })
     }
 
-    /// `&{ local = value; local }`, the in-place binding `binding`, assigning
-    /// `value` uncopied.
+    /// `&{ local = value; local }`, the in-place `binding`, assigning `value`
+    /// uncopied.
     fn uncopied_in_place_borrow(
         &self,
         reference: &TirExpr,
-        binding: &TirBlock,
-        value: &TirExpr,
+        binding: &place::InPlaceBinding<'_>,
     ) -> ExprId {
         let span = reference.span;
-        let local_type = value.type_id;
-        let [assign, read] = &binding.stmts[..] else {
-            unreachable!("an in-place binding is an assignment and a read");
-        };
-        let (
-            TirStmtKind::Expr(TirExpr {
-                kind: TirExprKind::Assign { target, .. },
-                ..
-            }),
-            TirStmtKind::Expr(read),
-        ) = (&assign.kind, &read.kind)
-        else {
-            unreachable!("an in-place binding is an assignment and a read");
-        };
+        let local_type = binding.value.type_id;
         let assign = ExprKind::Assign {
-            target: self.convert_expr(target),
-            value: self.convert_operand(value),
+            target: self.convert_expr(binding.target),
+            value: self.convert_operand(binding.value),
         };
         let assign = self.alloc_expr(assign, TypeTable::UNIT, span);
         let stmts = vec![
             self.alloc_stmt(StmtKind::Expr(assign.into()), span),
-            self.alloc_stmt(StmtKind::Expr(self.convert_operand(read)), span),
+            self.alloc_stmt(StmtKind::Expr(self.convert_operand(binding.read)), span),
         ];
         let block = self.alloc_block(stmts, span);
         let bound = self.alloc_expr(

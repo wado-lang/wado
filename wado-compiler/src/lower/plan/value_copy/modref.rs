@@ -7,7 +7,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
-    BuiltinDeclarations, FunctionKind, FunctionRef, TirExpr, TirExprKind, TirFunction, TirStmt, TypeId,
+    BuiltinDeclarations, FunctionKind, FunctionRef, TirExpr, TirExprKind, TirFunction, TirStmt,
+    TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
@@ -68,7 +69,7 @@ impl Writes {
     /// Whether a call may write storage other than what its arguments reach,
     /// such as what a global reaches.
     #[must_use]
-    pub fn writes_beyond_handed(&self) -> bool {
+    fn writes_beyond_handed(&self) -> bool {
         self.opaque || self.beyond_handed
     }
 

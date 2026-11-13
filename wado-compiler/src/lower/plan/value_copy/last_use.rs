@@ -17,8 +17,8 @@ use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
 use crate::module_source::ModuleSource;
 use crate::tir;
 use crate::tir::{
-    BuiltinDeclarations, FunctionRef, LetStorage, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm, TirPattern,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId, capture_source_locals,
+    BuiltinDeclarations, FunctionRef, LetStorage, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, capture_source_locals,
 };
 use crate::tir_visitor::{TirRefVisitor, for_each_block_result};
 use crate::type_table::TypeTable;
@@ -2470,9 +2470,9 @@ impl<'a> Analyzer<'a> {
 
     /// Defer the check of call argument `arg` against what the call's
     /// evaluation may write while the callee holds it (wado-lang/wado#1544):
-    /// whatever the values handed to a call since `handed_from` reach, `own`
-    /// aside, and the writes recorded since `call_writes`, which the later
-    /// arguments make after `arg` is taken.
+    /// whatever the values handed to a call `since` it began reach, `own`
+    /// aside, and the writes recorded since, which the later arguments make
+    /// after `arg` is taken.
     fn defer_write_check(&mut self, arg: &'a TirExpr, since: CallStart, own: usize) {
         // A shared borrow of a value naming no place refers to a value of its
         // own, which lowering takes a copy for unless nothing writes the
@@ -2601,7 +2601,13 @@ impl<'a> Analyzer<'a> {
                             self.storage_roots(place::unwrap_ref(&a.expr), out);
                         }
                     }
-                    (None, TirExprKind::GlobalVarGet { module_source, name }) => {
+                    (
+                        None,
+                        TirExprKind::GlobalVarGet {
+                            module_source,
+                            name,
+                        },
+                    ) => {
                         out.push(Storage::Global(module_source.clone(), name.clone()));
                     }
                     (None, _) => out.push(Storage::Unnamed),

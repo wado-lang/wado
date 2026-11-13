@@ -19,7 +19,7 @@ use crate::elaborator::trait_env::TraitEnv;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::{
-    in_place_binding, is_source_place, place_root, source_place_subscripts_mut,
+    in_place_binding, is_source_place, names_storage, place_root, source_place_subscripts_mut,
 };
 use crate::lower::translate::{convert_function_ref, tir_function_key};
 use crate::module_source::ModuleSource;
@@ -904,7 +904,7 @@ impl Expander<'_> {
         else {
             return self.bind(slot, sink);
         };
-        if is_source_place(expr, self.items) {
+        if names_storage(expr, self.items) {
             return self.bind(slot, sink);
         }
         let read = self.bind(expr, sink);
@@ -994,7 +994,7 @@ impl Expander<'_> {
 
     /// Whether `stmts` is a binding [`Self::bind`] made in place.
     fn binds(&self, stmts: &[TirStmt]) -> bool {
-        in_place_binding(stmts).is_some_and(|(local, _)| self.bound.contains(&local))
+        in_place_binding(stmts).is_some_and(|binding| self.bound.contains(&binding.local))
     }
 
     /// `expr` read again: each binding made in place in it is its local.
