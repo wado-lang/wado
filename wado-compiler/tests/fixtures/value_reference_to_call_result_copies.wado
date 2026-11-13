@@ -1,0 +1,40 @@
+// A reference to a call's result refers to a value of its own, as a `let`
+// binding it would hold: neither a write through it reaches the storage the
+// call read the value out of, nor a later write to that storage reaches it.
+struct Names {
+    items: List<String>,
+}
+
+impl Names {
+    fn get(&self, i: i32) -> String {
+        return self.items[i];
+    }
+}
+
+impl IndexValue<i32> for Names {
+    type Output = String;
+
+    fn index_value(&self, i: i32) -> String {
+        return self.items[i];
+    }
+}
+
+fn append(s: &mut String) {
+    s.push_str("!");
+}
+
+test "a write through the reference" {
+    let mut n = Names { items: ["abc"] };
+    let r = &mut n.get(0);
+    r.push_str("!");
+    append(&mut n.get(0));
+    assert *r == "abc!";
+    assert n.items[0] == "abc";
+}
+
+test "a write to the storage" {
+    let mut n = Names { items: ["abc"] };
+    let r = &n.get(0);
+    n.items[0].push_str("!");
+    assert *r == "abc";
+}

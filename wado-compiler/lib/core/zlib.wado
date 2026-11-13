@@ -914,19 +914,24 @@ fn decode_entry(codes: &LinearArray<i32>, table: i32, root_bits: i32, hold: u64)
 // 3.2.5), and the 7 bytes an 8-byte copy writes past its end.
 global SYMBOL_ROOM: i32 = 258 + 7;
 
-// A decode's output, in linear memory: `len` bytes written, of at most `max`.
-// The bytes past `len` are room the next symbol writes into.
+// A decode's output, in linear memory: `len` bytes written, of at most `max`,
+// the stream being decoded from `start` on. The bytes past `len` are room the
+// next symbol writes into.
 affine struct Output {
     bytes: LinearArray<u8>,
+    start: i32,
     len: i32,
     max: i32,
 }
 
 impl Output {
+    // A `max` within SYMBOL_ROOM of `i32::MAX` leaves no room an array can
+    // hold past the last symbol.
     fn new(max: i32) -> Output
         contract max >= 0
     {
-        return Output { bytes: LinearArray::<u8>::filled(0, 0), len: 0, max };
+        let max = i32::min(max, i32::MAX - SYMBOL_ROOM);
+        return Output { bytes: LinearArray::<u8>::filled(0, 0), start: 0, len: 0, max };
     }
 
     // Grows the room past `len` to at least `n` bytes, doubling, so the output
@@ -952,11 +957,11 @@ impl Output {
 
     // Appends the back-reference <length, dist> (RFC 1951 section 3.2.5), and
     // needs SYMBOL_ROOM. The output holds the whole decoded stream, so no
-    // separate window is needed. A distance before the start of the output is
+    // separate window is needed. A distance before the start of the stream is
     // invalid (RFC 1951 section 3.2.3: "a distance cannot refer past the
-    // beginning of the output stream").
+    // beginning of the output stream"), a gzip member's included.
     fn copy_match(&mut self, length: i32, dist: i32) -> Result<(), ZlibError> {
-        if dist > self.len {
+        if dist > self.len - self.start {
             builtin::cold_path();
             return Result::Err(ZlibError::InvalidDeflateData);
         }
@@ -1075,6 +1080,7 @@ fn inflate_raw_ex(
     output: &mut Output,
 ) -> Result<i32, ZlibError> {
     let mut state = InflateState::new(input_offset, input_offset + input_length);
+    output.start = output.len;
 
     loop {
         state.need_bits(input, 3)?;
@@ -2727,8 +2733,8 @@ pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
         }
 
         // A malformed DEFLATE member fails here, before `consumed` locates the trailer.
-        let member_offset = output.len;
         let consumed = inflate_raw_ex(&linear, data_start, input.len() - data_start, &mut output)?;
+        let member_offset = output.start;
         let member_len = output.len - member_offset;
 
         // The gzip trailer (RFC 1952 section 2.3.1) is CRC32 then ISIZE, each a

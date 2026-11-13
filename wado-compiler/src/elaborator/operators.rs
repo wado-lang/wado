@@ -2229,7 +2229,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A subscript read on a bounded container, dispatched through its bounds
     /// as an operator is, falling back as a concrete container does: a value
     /// read to `IndexValue`, else to `IndexRef` and a deref, a shared reference
-    /// to `IndexRef`, and a mutable one to `IndexRefMut`, else to `IndexRef`.
+    /// to `IndexRef`, else to the copy `IndexValue` gives, and a mutable one to
+    /// `IndexRefMut`, else to `IndexRef`.
     /// `None` where `container` is not one; a missing trait is reported as
     /// `ERROR`.
     pub(super) fn dispatch_index_through_bounds(
@@ -2242,7 +2243,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let operand = self.bounded_operand(container)?;
         let candidates: &[CompilerItem] = match access {
             IndexAccess::Value => &[CompilerItem::IndexValue, CompilerItem::IndexRef],
-            IndexAccess::Shared => &[CompilerItem::IndexRef],
+            IndexAccess::Shared => &[CompilerItem::IndexRef, CompilerItem::IndexValue],
             IndexAccess::Mutable => &[CompilerItem::IndexRefMut, CompilerItem::IndexRef],
         };
         for &item in candidates {
@@ -2294,15 +2295,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<Result<WritePlace, ()>> {
         let operand = self.bounded_operand(container)?;
         let item = CompilerItem::IndexAssign;
-        let Some((resolved, _)) =
+        let Some((resolved, key)) =
             self.index_method_through_bounds(&operand, index, container, item, ctx)
         else {
             self.report_index_bound_missing(&operand, index, item, ctx);
             return Some(Err(()));
         };
-        let [_, output_type] = resolved.param_types[..] else {
+        let [key_type, output_type] = resolved.param_types[..] else {
             panic!("`index_assign` takes a key and a value");
         };
+        self.typecheck(key, key_type, index.index.span());
         let function_ref = self.operator_impl_function(&resolved, container);
         self.record_index_assign_dispatch(
             index.id,

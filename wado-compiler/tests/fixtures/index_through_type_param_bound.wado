@@ -3,9 +3,9 @@
 // is held by value or by reference: a read through `IndexValue`, or through
 // `IndexRef` where only that bound is written, and a write through
 // `IndexAssign`. A `&mut` subscript goes through `IndexRefMut`, or through
-// `IndexRef` where only that bound is written, as on a concrete container. The
-// bound's key type types the key, so a literal key takes `i64` where the bound
-// names it.
+// `IndexRef` where only that bound is written, as on a concrete container, and
+// a shared one with only `IndexValue` written refers to a copy. The bound's key
+// type types the key, so a literal key takes `i64` where the bound names it.
 struct Squares {}
 
 impl IndexValue<i64> for Squares {
@@ -32,6 +32,11 @@ fn at_three<B: IndexValue<i64, Output = i64>>(table: &B) -> i64 {
     return table[3];
 }
 
+fn first_copy<B: IndexValue<i32, Output = u8>>(buf: &B) -> u8 {
+    let shared = &buf[0];
+    return *shared;
+}
+
 fn put<B: IndexAssign<i32, Output = u8>>(buf: &mut B) {
     buf[0] = 5;
 }
@@ -54,6 +59,7 @@ test {
     let mut xs: List<u8> = [7, 8, 9];
     assert first(&xs) == 7;
     assert sum(xs, 3) == 24;
+    assert first_copy(&xs) == 7;
     assert at_three(&Squares {}) == 9;
     put(&mut xs);
     assert xs[0] == 5;
@@ -61,5 +67,4 @@ test {
     assert peek(&names) == "a";
     grow(&mut names);
     assert names[0] == "abc";
-    assert first_len(&mut names) == 3;
-}
+    assert first_len(&mut names) == 3;}

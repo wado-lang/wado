@@ -19,7 +19,7 @@ use crate::call_args::CallArgs;
 use crate::compiler_host::{SpanEmitter, in_span};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::place::{self, PlaceRef};
+use crate::lower::plan::value_copy::place::{self, PlaceKind, PlaceRef};
 use crate::lower::plan::value_copy::points_to::PointsTo;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::MethodName;
@@ -1201,6 +1201,49 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Whether `value` is storage a reference to it reaches: a source place, or
+    /// what a reference reads.
+    fn names_storage(&self, value: &TirExpr) -> bool {
+        PlaceKind::of(value) != PlaceKind::Value
+            || place::is_source_place(value, self.base.type_table.borrow().compiler_items())
+    }
+
+    /// What `&mut value` refers to. A value that names no storage, such as a
+    /// call's result, is the reference's own, so it is copied where a `let`
+    /// binding it would be: `&mut n.get(0)` must not write into `n`.
+    fn referent_operand(&self, value: &TirExpr) -> Operand {
+        if self.names_storage(value) {
+            return self.convert_operand(value);
+        }
+        self.assigned_value(value, value.type_id)
+    }
+
+    /// `let local = &value` where `value` names no storage: the reference
+    /// outlives the statement, so a later write to the storage `value` was read
+    /// out of must not reach it. It shares that storage where an immutable
+    /// binding would; a temporary `&value` is read before any such write.
+    fn bound_shared_reference(&self, local_index: u32, value: &TirExpr) -> Option<Operand> {
+        let TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            expr: referent,
+        } = &value.kind
+        else {
+            return None;
+        };
+        if self.names_storage(referent)
+            || self.source_shares_immutable_storage(local_index, referent)
+            || !self.should_wrap_value_copy(referent)
+        {
+            return None;
+        }
+        let copied = self.wrap_value_copy_operand(self.convert_operand(referent), referent.type_id);
+        let reference = ExprKind::Unary {
+            op: nir::NirUnaryOp::Ref,
+            expr: copied,
+        };
+        Some(self.alloc_expr(reference, value.type_id, value.span).into())
+    }
+
     /// Expand `xs[i] = value`, a `List::index_assign` call the ownership walk
     /// marked, so an element in bounds is written field by field into its own
     /// storage, every field of an in-place type into that field's storage
@@ -1707,7 +1750,9 @@ impl FunctionTranslator<'_, '_> {
                     && !shares_value
                     && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))
                     && self.should_wrap_value_copy(value);
-                let value_op = self.convert_operand(value);
+                let value_op = self
+                    .bound_shared_reference(*local_index, value)
+                    .unwrap_or_else(|| self.convert_operand(value));
                 let value_op = if needs_value_copy_wrap {
                     self.wrap_value_copy_operand(value_op, *type_id)
                 } else {
@@ -2235,6 +2280,13 @@ impl FunctionTranslator<'_, '_> {
                 left: self.convert_operand(left),
                 op: convert_binary_op(*op),
                 right: self.convert_operand(right),
+            },
+            TirExprKind::Unary {
+                op: TirUnaryOp::MutRef,
+                expr,
+            } => ExprKind::Unary {
+                op: nir::NirUnaryOp::MutRef,
+                expr: self.referent_operand(expr),
             },
             TirExprKind::Unary { op, expr } => ExprKind::Unary {
                 op: convert_unary_op(*op),
