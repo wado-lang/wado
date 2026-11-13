@@ -983,7 +983,7 @@ fn synthesize_lift_map(
         let mut slot_stmts: Vec<TirStmt> = Vec::new();
         let value = synthesize_lift_inner(
             slot_ty,
-            slot_addr.clone(),
+            slot_addr,
             next_local,
             &mut slot_stmts,
             locals,

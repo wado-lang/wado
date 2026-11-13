@@ -4072,7 +4072,7 @@ impl<'a> Reify<'a> {
             );
             destructure.push(TirStmt::new(
                 TirStmtKind::Let {
-                    name: name.clone(),
+                    name,
                     local_index,
                     is_mut,
                     type_id: elem_type,

@@ -583,7 +583,7 @@ impl FunctionTranslator<'_, '_> {
                 result = bool_if(
                     folded_condition,
                     result_wir_type.clone(),
-                    vec![body.clone()],
+                    vec![body],
                     vec![result],
                 );
             } else {
