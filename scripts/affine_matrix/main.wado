@@ -1,0 +1,80 @@
+//! Writes the `affine_matrix_*` e2e fixtures from the cases in `cases.wado`:
+//! the drop order of every case in one fixture, and each pairing a probe
+//! rejects as a fixture of its own, since a rejection names no case. The
+//! pairings a probe accepts share one fixture per probe.
+//!
+//! Run from the repository root: `mise run gen-affine-matrix`.
+
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { to_string } from "core:json";
+use { Case, expected, in_closure_program, program, read_after_program } from "./cases.wado";
+
+global FIXTURES: String = "wado-compiler/tests/fixtures";
+global PREFIX: String = "affine_matrix_";
+
+global READ_AFTER_MOVE: String = "affine value `t` used after it was moved";
+global MOVE_IN_CLOSURE: String = "a closure captures `t` by reference, so its body cannot move it";
+
+export fn run() with Preopens {
+    for let entry of fs::read_dir(&FIXTURES).unwrap() {
+        if entry.name.starts_with(&PREFIX) {
+            fs::remove_file(fs::join(&FIXTURES, &entry.name)).unwrap();
+        }
+    }
+    let all = Case::all();
+    write("drops", &program(&all), stdout_is(&expected(&all)));
+    let mut readable: List<Case> = [];
+    let mut borrowing: List<Case> = [];
+    for let case of Case::probed() {
+        if case.readable_after() {
+            readable.push(case);
+        } else {
+            write(`read_after_${name_of(&case)}`, &read_after_program(&[case]), rejects(&READ_AFTER_MOVE));
+        }
+        // A closure captures by reference, so a consumer that moves is
+        // rejected inside one, in whatever context, and one that borrows is not.
+        if case.consumer.moves() {
+            write(`in_closure_${name_of(&case)}`, &in_closure_program(&[case]), rejects(&MOVE_IN_CLOSURE));
+        } else {
+            borrowing.push(case);
+        }
+    }
+    write("read_after_accepted", &read_after_program(&readable), "{}");
+    write("in_closure_accepted", &in_closure_program(&borrowing), "{}");
+}
+
+/// `consumer_in_context`, in snake case.
+fn name_of(case: &Case) -> String {
+    return `${snake(`${case.consumer}`)}_in_${snake(`${case.context}`)}`;
+}
+
+fn snake(camel: String) -> String {
+    let mut out = String::new();
+    for let c of camel.chars() {
+        if c.is_ascii_uppercase() && !out.is_empty() {
+            out.push_str("_");
+        }
+        out.push(c.to_ascii_lowercase());
+    }
+    return out;
+}
+
+fn stdout_is(text: &String) -> String {
+    return `{"stdout": ${to_string(text).unwrap()}}`;
+}
+
+fn rejects(message: &String) -> String {
+    return `{"compile_error": ${to_string(message).unwrap()}}`;
+}
+
+fn write(name: String, source: &String, data: String) with Preopens {
+    let text = `#![generated(by = "scripts/affine_matrix/main.wado")]
+// Regenerate with \`mise run gen-affine-matrix\`.
+
+${*source}
+__DATA__
+${data}
+`;
+    fs::write(fs::join(&FIXTURES, `${PREFIX}${name}.wado`), &text).unwrap();
+}
