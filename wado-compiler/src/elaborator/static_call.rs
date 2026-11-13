@@ -19,7 +19,7 @@ use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
 use super::synth::ArgClass;
 use super::trait_env::{ImplHeader, ImplTargetKey};
-use super::trait_query::DerivedAt;
+use super::trait_query::{DerivedAt, NewtypePeel};
 use super::types::{OverloadedCallForm, TraitMethodMatch, TypeError};
 use super::tysys::TypeSystem;
 
@@ -119,6 +119,10 @@ pub(super) enum StaticLookup {
         blocks: Vec<DefId>,
         trait_args: Vec<TypeId>,
     },
+    /// The rules picked this value blanket impl. Its template is written
+    /// against its receiver parameter, so the blanket resolver, not this
+    /// resolution, instantiates it at the receiver.
+    Blanket(DefId),
     NotStatic,
 }
 
@@ -194,6 +198,9 @@ pub(super) struct StaticTraitRef {
     /// The lists this same resolution read, so a site that mangles from
     /// `selected` and records from these cannot describe two declarations.
     pub(super) params: CalleeParams,
+    /// The value blanket the rules picked, which the blanket resolver
+    /// instantiates at the receiver.
+    pub(super) blanket: Option<DefId>,
 }
 
 /// What the rules made of the candidates.
@@ -218,10 +225,10 @@ enum Selection {
 pub(super) enum Selector {
     /// The declaration takes no arguments, so every call reaches it.
     Absent,
-    /// Only an argument can fill one of these parameters — a blanket. Its
-    /// unsubstituted spelling must not be mangled, so the candidate declines
-    /// and the blanket resolver instantiates it instead.
-    Blanket,
+    /// A blanket's value parameters, written against its receiver parameter.
+    /// Its unsubstituted spelling must not be mangled, so the resolution names
+    /// the blanket and the blanket resolver instantiates it.
+    Blanket(Vec<TypeId>),
     /// The declaration's value parameters, as the block resolved them and with
     /// its trait arguments substituted. Compared by `TypeId`: two distinct
     /// types printing one name are two candidates, not one.
@@ -253,8 +260,20 @@ struct Candidate {
     return_type: TypeId,
 }
 
-/// The link of a newtype chain a static call belongs to: the first, from the
-/// spelled head down, whose own impls, cases or derivations answer the name.
+impl Candidate {
+    /// The value blanket impl supplying this candidate, where one does.
+    fn blanket(&self) -> Option<DefId> {
+        (self.origin == CandidateOrigin::Blanket).then(|| {
+            self.supply
+                .as_ref()
+                .expect("a blanket candidate comes through its trait")
+                .impl_def
+        })
+    }
+}
+
+/// The link of a newtype chain a static call belongs to, as
+/// [`Elaborator::static_owner`] finds it.
 struct StaticOwner {
     key: ImplTargetKey,
     name: String,
@@ -266,11 +285,8 @@ struct StaticOwner {
     /// whose impls own the name where the call knows no type.
     declared: Option<TypeId>,
     below_head: bool,
-    /// Whether any link answers the name. Where none does, the walk stops at
-    /// the chain's last link and the call is the head's.
-    owns: bool,
-    /// The nearest link that left traits out of scope, which a report names
-    /// where no link answers.
+    /// Where no link answers the name and the owner is the head: the nearest
+    /// link that left traits out of scope, which the report names.
     nearest: Option<(String, Vec<Candidate>)>,
 }
 
@@ -302,8 +318,7 @@ impl StaticOwner {
         e: &Elaborator<'_, H>,
         out_of_scope: Vec<Candidate>,
     ) -> StaticLookup {
-        let nearest = if self.owns { None } else { self.nearest };
-        let (name, out_of_scope) = nearest.unwrap_or((self.name, out_of_scope));
+        let (name, out_of_scope) = self.nearest.unwrap_or((self.name, out_of_scope));
         e.out_of_scope_lookup(&name, &out_of_scope)
     }
 }
@@ -332,17 +347,31 @@ fn prefer<C>(candidates: &mut Vec<C>, preferred: impl Fn(&C) -> bool) {
 }
 
 impl StaticLookup {
-    /// Whether the spelling names a static at all. An ambiguity does, and so
-    /// does a trait out of scope: the call site reports either, where a
-    /// `NotStatic` would read as a missing function.
+    /// Whether the spelling names a static this resolution builds the callee
+    /// of. An ambiguity does, and so does a trait out of scope: the call site
+    /// reports either, where a `NotStatic` would read as a missing function. A
+    /// blanket is the blanket resolver's to build.
     pub(super) fn resolves(&self) -> bool {
-        !matches!(self, Self::NotStatic)
+        !matches!(self, Self::NotStatic | Self::Blanket(_))
     }
 
     pub(super) fn found(&self) -> Option<&StaticCallee> {
         match self {
             Self::Found(callee) => Some(callee),
             Self::Overloaded { .. }
+            | Self::Ambiguous(_)
+            | Self::OutOfScope { .. }
+            | Self::Tied { .. }
+            | Self::Blanket(_)
+            | Self::NotStatic => None,
+        }
+    }
+
+    pub(super) fn blanket(&self) -> Option<DefId> {
+        match self {
+            Self::Blanket(blanket) => Some(*blanket),
+            Self::Found(_)
+            | Self::Overloaded { .. }
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
             | Self::Tied { .. }
@@ -356,9 +385,11 @@ impl StaticLookup {
         match self {
             Self::Found(callee) => callee.return_type,
             Self::Overloaded { return_type, .. } => *return_type,
-            Self::Ambiguous(_) | Self::OutOfScope { .. } | Self::Tied { .. } | Self::NotStatic => {
-                TypeTable::UNKNOWN
-            }
+            Self::Ambiguous(_)
+            | Self::OutOfScope { .. }
+            | Self::Tied { .. }
+            | Self::Blanket(_)
+            | Self::NotStatic => TypeTable::UNKNOWN,
         }
     }
 
@@ -372,6 +403,7 @@ impl StaticLookup {
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
             | Self::Tied { .. }
+            | Self::Blanket(_)
             | Self::NotStatic => (CalleeParams::default(), false),
         }
     }
@@ -405,13 +437,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 reached,
                 out_of_scope,
                 declaring_args,
-            } => match self.select_at_link(at, &owner.key, reached, &declaring_args) {
-                Some(lookup) => lookup,
-                None => match self.derived_callee(&at, &owner.key) {
-                    Some(callee) => StaticLookup::Found(callee),
-                    None => return owner.out_of_scope_lookup(self, out_of_scope),
-                },
-            },
+            } => {
+                // A blanket the link offers alone owns the call even where the
+                // arguments reject it, as any declaration does: its resolver
+                // reports the arguments.
+                let sole_blanket = match reached.as_slice() {
+                    [only] => only.blanket(),
+                    _ => None,
+                };
+                match self.select_at_link(at, &owner.key, reached, &declaring_args) {
+                    Some(lookup) => lookup,
+                    None => match (self.derived_callee(&at, &owner.key), sole_blanket) {
+                        (Some(callee), _) => StaticLookup::Found(callee),
+                        (None, Some(blanket)) => StaticLookup::Blanket(blanket),
+                        (None, None) => return owner.out_of_scope_lookup(self, out_of_scope),
+                    },
+                }
+            }
             LinkOffer::Nothing { out_of_scope } => {
                 return owner.out_of_scope_lookup(self, out_of_scope);
             }
@@ -424,31 +466,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The link of the newtype chain `query`'s receiver heads that the call
     /// belongs to: the first, from the head down, whose own impls, cases or
-    /// derivations answer the name. Read without the arguments, and at the
-    /// instance the spelling wrote and the chain declares rather than one the
-    /// call infers, so every site asking reads one owner, the one the
-    /// resolution then selects in. An impl on another instance of a link
-    /// answers nothing there. A blanket covers a link through its bound rather
-    /// than as its own declaration, and owns nothing. A link the name reaches
-    /// owns the call even where no declaration there admits the arguments
-    /// (`spec-types`, "Inherited Associated Functions and Traits").
+    /// derivations, or blankets whose bounds hold there, answer the name; else
+    /// the head. Read without the arguments, and at the instance the spelling
+    /// wrote and the chain declares rather than one the call infers, so every
+    /// site asking reads one owner, the one the resolution then selects in. An
+    /// impl on another instance of a link answers nothing there. A link the
+    /// name reaches owns the call even where no declaration there admits the
+    /// arguments (`spec-types`, "Inherited Associated Functions and Traits").
     fn static_owner(&mut self, query: &StaticQuery<'_>) -> StaticOwner {
         // One vantage: the key the caller resolved, else the one its reference
         // site answered for, else the name's own. Deriving a second key when
         // the first misses makes the order a silent tiebreak.
-        let mut owner = StaticOwner {
-            key: match query.receiver_key {
-                Some(key) => key.clone(),
-                None => self.impl_target_at(query.site, query.receiver_name),
-            },
+        let key = match query.receiver_key {
+            Some(key) => key.clone(),
+            None => self.impl_target_at(query.site, query.receiver_name),
+        };
+        let at_head = |key: ImplTargetKey| StaticOwner {
+            key,
             name: query.receiver_name.to_string(),
             ty: query.receiver_type,
             head: None,
             declared: None,
             below_head: false,
-            owns: true,
             nearest: None,
         };
+        let mut owner = at_head(key.clone());
+        let mut nearest = None;
         loop {
             let written = StaticQuery {
                 receiver_type: owner.ty.or(owner.declared),
@@ -472,25 +515,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return owner;
                 }
                 LinkOffer::Nothing { out_of_scope } => out_of_scope,
-                LinkOffer::Candidates {
-                    reached,
-                    out_of_scope,
-                    ..
-                } if reached.iter().all(|c| c.origin == CandidateOrigin::Blanket) => out_of_scope,
                 LinkOffer::NotStatic | LinkOffer::Candidates { .. } | LinkOffer::Derived(_) => {
                     return owner;
                 }
             };
-            if owner.nearest.is_none() && !out_of_scope.is_empty() {
-                owner.nearest = Some((owner.name.clone(), out_of_scope));
+            if nearest.is_none() && !out_of_scope.is_empty() {
+                nearest = Some((owner.name.clone(), out_of_scope));
             }
             // A newtype reaches what it wraps, one link of a chain at a time,
             // so a link's own impls answer before its base's. Read from the
             // alias's declaration, since a namespaced `lib::Q::twice()` leaves
-            // the caller's frame no `Q` to look one up by.
+            // the caller's frame no `Q` to look one up by. With no link owning
+            // the name, the call stays the head's.
             let Some((link_key, link_name, declared)) = self.newtype_link_target(&owner.key) else {
-                owner.owns = false;
-                return owner;
+                return StaticOwner {
+                    nearest,
+                    ..at_head(key)
+                };
             };
             let link_type = owner
                 .ty
@@ -568,7 +609,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return LinkOffer::NotStatic;
         }
-        if !reached.is_empty() {
+        // A derivation is written for the type, so it outranks a blanket
+        // covering it through a bound (`spec-traits`, "The Order").
+        if reached.iter().any(|c| c.origin != CandidateOrigin::Blanket) {
             return LinkOffer::Candidates {
                 reached,
                 out_of_scope,
@@ -577,6 +620,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         match self.derived_callee(query, key) {
             Some(callee) => LinkOffer::Derived(callee),
+            None if !reached.is_empty() => LinkOffer::Candidates {
+                reached,
+                out_of_scope,
+                declaring_args,
+            },
             None => LinkOffer::Nothing { out_of_scope },
         }
     }
@@ -619,14 +667,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // list to check. `i32::from(b)` names one `From` impl per source
             // type, and the call site's own preselect is what reads the
             // argument.
-            Selection::Overloaded(traits) => {
-                // At `!` every blanket reaches the receiver and none answers:
-                // the call traps once monomorphized, so nothing is left to pick.
-                let on_never =
-                    receiver_type.is_some_and(|ty| self.tysys.type_table.borrow().is_never(ty));
-                let traits = if on_never { Vec::new() } else { traits };
-                Some(self.overloaded_callee(key, method_name, traits))
-            }
+            Selection::Overloaded(traits) => Some(self.overloaded_callee(key, method_name, traits)),
             Selection::Tied { blocks, trait_args } => Some(StaticLookup::Tied {
                 receiver: receiver_name.to_string(),
                 blocks,
@@ -700,9 +741,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             required_trait,
             ..StaticQuery::of(&name, method_name)
         });
-        if !owner.owns {
-            return Some((newtype, key));
-        }
         let link = owner.ty.expect("the walk carries the head's type down");
         Some((link, owner.key))
     }
@@ -723,7 +761,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_key: Some(key),
             ..StaticQuery::of(&name, method_name)
         });
-        (owner.owns && owner.key != *key).then_some((owner.key, owner.name))
+        (owner.key != *key).then_some((owner.key, owner.name))
     }
 
     /// The key of the link a static named `method_name` on `key` belongs to:
@@ -977,7 +1015,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // which no name at a call site reaches. The rules have done their
             // part in picking it; instantiating it at the receiver, and
             // mangling it as a blanket, is the blanket resolver's.
-            (CandidateOrigin::Blanket, _) => None,
+            (CandidateOrigin::Blanket, _) => candidate.blanket().map(StaticLookup::Blanket),
             // An inherited method is declared nowhere but the trait, so that is
             // where its signature is read from — in the trait's frame, which
             // the block's arguments fill.
@@ -1102,12 +1140,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return Err(Reported);
         }
+        let blanket = lookup.blanket();
         let (params, _) = lookup.params();
         Ok(StaticTraitRef {
             selected,
             declaration,
             return_type,
             params,
+            blanket,
         })
     }
 
@@ -1144,7 +1184,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.report_blocks_tied(blocks, trait_args, receiver, span);
                 return true;
             }
-            StaticLookup::Found(_) | StaticLookup::Overloaded { .. } | StaticLookup::NotStatic => {
+            StaticLookup::Found(_)
+            | StaticLookup::Overloaded { .. }
+            | StaticLookup::Blanket(_)
+            | StaticLookup::NotStatic => {
                 return false;
             }
         };
@@ -1251,9 +1294,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return tied;
         }
+        // At `!` every blanket reaches the receiver and the call traps once
+        // monomorphized, whichever is instantiated: the first written serves.
+        let on_never = receiver_type.is_some_and(|ty| self.tysys.type_table.borrow().is_never(ty));
         match candidates.len() {
             0 => Selection::None,
             1 => Selection::One(Box::new(candidates.remove(0))),
+            _ if on_never
+                && candidates
+                    .iter()
+                    .all(|c| c.origin == CandidateOrigin::Blanket) =>
+            {
+                Selection::One(Box::new(candidates.remove(0)))
+            }
             // One trait, several impls, and no argument that separated them.
             _ => Selection::Overloaded(
                 candidates
@@ -1287,7 +1340,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let settled_by_args = |c: &Candidate| match &c.selector {
             Selector::Params(params) => params.len() <= c.kind.own_args(arg_types).len(),
             Selector::Absent => true,
-            Selector::Blanket => false,
+            Selector::Blanket(_) => false,
         };
         if !candidates.iter().any(leaves_slot) || !candidates.iter().all(settled_by_args) {
             return None;
@@ -1347,9 +1400,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn selector_admits(&self, selector: &Selector, args: &[TypeId]) -> bool {
         match selector {
             Selector::Absent => true,
-            // Nothing to select on leaves every declaration of the name, and
-            // several of them are the overload the call site settles.
-            Selector::Blanket => args.is_empty(),
+            // A blanket parameter written against the receiver parameter is a
+            // type only once the blanket is instantiated, so it admits here.
+            Selector::Blanket(params) => params.iter().zip(args).all(|(&param, &arg)| {
+                self.tysys.type_table.borrow().contains_type_param(param)
+                    || self.class_admits(param, &ArgClass::Exact(arg))
+            }),
             Selector::Params(params) => params
                 .iter()
                 .zip(args)
@@ -1419,15 +1475,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// Every value blanket (`impl<T: Bound> Trait for T`) whose bound the
-    /// receiver satisfies. Its bucket is keyed by the receiver *parameter*, so
-    /// the receiver's own never holds it and the rungs above miss it entirely.
+    /// Every value blanket (`impl<T: Bound> Trait for T`) whose bounds hold at
+    /// the receiver itself, without a newtype peel: a blanket only a newtype's
+    /// base admits is the base link's. Its bucket is keyed by the receiver
+    /// *parameter*, so the receiver's own never holds it and the rungs above
+    /// miss it entirely.
     ///
     /// Its selector is `Blanket`: the template is written against a parameter,
     /// and instantiating it at the receiver is the blanket resolver's, not a
     /// candidate's. What the candidate is here for is the rules — which trait
-    /// supplies the name, and that anything written for the receiver itself
-    /// outranks a blanket covering it.
+    /// supplies the name, which blanket the arguments select, and that anything
+    /// written for the receiver itself outranks a blanket covering it.
     fn blanket_candidates(
         &mut self,
         method_name: &str,
@@ -1436,12 +1494,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(receiver_type) = receiver_type else {
             return Vec::new();
         };
-        self.applicable_blanket_statics(receiver_type, method_name)
+        self.applicable_blanket_statics(receiver_type, method_name, NewtypePeel::Here)
             .into_iter()
             .filter_map(|blanket| {
                 let header = &self.tysys.trait_env.impl_headers[&blanket.def];
                 let method_id = header.methods.iter().find(|m| m.name == method_name)?.def;
                 let trait_decl = self.tysys.signatures.impl_trait(blanket.def)?;
+                let sig = self
+                    .tysys
+                    .signatures
+                    .method_sig(method_id)
+                    .expect("the decl pass records every impl-declared method's signature");
                 Some(Candidate {
                     supply: Some(TraitSupply {
                         impl_def: blanket.def,
@@ -1451,15 +1514,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_id,
                     kind: CandidateKind::Static,
                     origin: CandidateOrigin::Blanket,
-                    selector: Selector::Blanket,
-                    return_type: self
-                        .tysys
-                        .signatures
-                        .method_sig(method_id)
-                        .expect("the decl pass records every impl-declared method's signature")
-                        .decl
-                        .return_type
-                        .unwrap_or(TypeTable::UNIT),
+                    selector: Selector::Blanket(sig.value_param_types()),
+                    return_type: sig.decl.return_type.unwrap_or(TypeTable::UNIT),
                 })
             })
             .collect()

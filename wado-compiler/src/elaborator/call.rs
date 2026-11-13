@@ -2317,6 +2317,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if self.report_unresolved_static(&resolved, method_name, &args, call.span) {
                         return TypeTable::ERROR;
                     }
+                    if let Some(blanket) = resolved.blanket()
+                        && let Some(receiver) = ns_receiver_type
+                    {
+                        let arg_sites = arg_sites_of(&call.args, args.len(), call.span);
+                        if let Some(return_type) = self.resolve_blanket_static_method(
+                            receiver,
+                            method_name,
+                            blanket,
+                            call.id,
+                            ident.segments.last().map(|segment| segment.id),
+                            &method_type_args,
+                            &call.args,
+                            &args,
+                            &arg_sites,
+                            expected_type,
+                            call.span,
+                            ctx,
+                        ) {
+                            return return_type;
+                        }
+                    }
                     if !resolved.resolves() {
                         let _ = self.emit(TypeError::UnknownFunction {
                             name: effective_name.to_string(),
@@ -5609,15 +5630,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.report_unresolved_static(&ranked, method, args, span) {
             return Some(TypeTable::ERROR);
         }
+        let blanket = ranked.blanket()?;
         // The blanket would key on the argument-less head, which carries no
         // layout (a generic variant never becomes its own declaration, WEP
         // 2026-02-09) and reaches WIR build unregistered.
         if let Some(expected) = self
             .decl_key_or_local(type_name)
             .and_then(|def| self.bare_generic_type_arity(def))
-            && self
-                .find_blanket_static_method(receiver_ty, method)
-                .is_some()
         {
             let _ = self.emit(TypeError::MissingTypeArguments {
                 name: type_name.to_string(),
@@ -5632,6 +5651,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_blanket_static_method(
             receiver_ty,
             method,
+            blanket,
             call_id,
             method_id,
             method_type_args,

@@ -1,0 +1,56 @@
+// Two blankets cover `N` through bounds that hold at `N` itself and not at its
+// base: both sit at `N`'s link, so the call is ambiguous, as it is on a
+// struct, rather than taking the first blanket.
+
+struct Base {
+    v: i32,
+}
+
+type N = Base;
+
+trait B1 {
+    fn b1(&self) -> i32;
+}
+
+trait B2 {
+    fn b2(&self) -> i32;
+}
+
+impl B1 for N {
+    fn b1(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl B2 for N {
+    fn b2(&self) -> i32 {
+        return 2;
+    }
+}
+
+trait T1 {
+    fn mk() -> i32;
+}
+
+trait T2 {
+    fn mk() -> i32;
+}
+
+impl<T: B1> T1 for T {
+    fn mk() -> i32 {
+        return 10;
+    }
+}
+
+impl<T: B2> T2 for T {
+    fn mk() -> i32 {
+        return 20;
+    }
+}
+
+test {
+    assert N::mk() == 10;
+}
+
+__DATA__
+{"compile_error": "ambiguous method 'mk': declared by 'T1' and 'T2'"}

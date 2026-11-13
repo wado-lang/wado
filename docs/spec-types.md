@@ -813,13 +813,14 @@ On a chain of newtypes, one link answers a static: the first, from the spelled
 newtype down, whose own declarations answer its name. Its impls and cases
 count, and so does a trait default its impl leaves to answer. A derived trait
 counts at the type it is derived for, never at a newtype, which inherits it. A
-blanket impl counts at no link. An impl for another instance of a generic link
-does not count either: the instance is the one spelled, or the one the chain
-declares where the newtype is spelled bare. The arguments then select among
-that link's declarations only. A link below it is not asked, even where its
-declaration would take the arguments. Here `Base`
-declares `fn mk(x: i32) -> i32`, so `N::mk(1)` is an argument error, not a call
-of `Base::mk`:
+blanket impl counts at the link where its bounds hold, as for a method call
+([the order](./spec-traits.md#the-order)). An impl for another instance of a
+generic link does not count: the instance is the one spelled, or the one the
+chain declares where the newtype is spelled bare. The arguments then select
+among that link's declarations only. A link below it is not asked, even where
+its declaration would take the arguments. Here `Base` declares
+`fn mk(x: i32) -> i32`, so `N::mk(1)` is an argument error, not a call of
+`Base::mk`:
 
 <!-- {"fixture":"newtype_link_owns_static.wado"} -->
 

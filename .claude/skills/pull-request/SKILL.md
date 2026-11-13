@@ -3,6 +3,12 @@ name: pull-request
 description: The rules for opening a PR you must read before creating or editing any pull request.
 ---
 
+## Prerequisites
+
+- The branch has been through `/cr` at least once. Run it before opening the
+  pull request, not after: a review answered once the PR is up lets a branch
+  that is still changing be merged.
+
 ## First: a question you asked is a stop
 
 If even one question you put to the user is still unanswered, stop here. Do not

@@ -209,12 +209,22 @@ newtype derives nothing itself, so a derivation is offered at the link it is
 written for. The owner is found without the arguments, and the arguments then
 select among that link's candidates only.
 
-A link offers what is written for it, so two kinds of answer do not count. A
-blanket reaches every link alike and so separates none: a link that only a
-blanket answers passes the name down. An impl on another instance of a link
-answers nothing for this one. The instance is the one the call spells, or the
-one the chain declares where the head is spelled bare, never one the arguments
-would infer.
+A blanket offers at the link where its bounds hold, the level the trait
+resolution order gives it (WEP 2026-09-01, rank 1). A newtype inherits its
+base's bounds, so counting a blanket wherever it reaches makes the head own
+every name some blanket supplies, and a blanket only the base admits then
+outranks the base's own declarations and its derivations. Within its link, a
+blanket ranks below what is written for the type, a derivation included (rank
+2).
+
+The rules then pick among the owner's candidates, a blanket included, and the
+blanket resolver instantiates the blanket the rules picked. Instantiating
+whichever applicable blanket comes first instead names a second answer for
+the call.
+
+An impl on another instance of a link answers nothing for this one. The
+instance is the one the call spells, or the one the chain declares where the
+head is spelled bare, never one the arguments would infer.
 
 The arguments cannot decide it, because they are typed against the owner. A
 site that resolves the parameter list first, to give each argument its expected

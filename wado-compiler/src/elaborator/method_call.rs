@@ -35,7 +35,7 @@ use super::sem::types::{CalleeParams, StaticMethodDispatch, impl_self_layers};
 use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
-use super::trait_query::{OnBoundTrait, SelfBinding};
+use super::trait_query::{NewtypePeel, OnBoundTrait, SelfBinding};
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use super::tysys::TypeSystem;
 use super::{AbstractSelection, Elaborator, util};
@@ -2463,9 +2463,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A value blanket indexes statics under its receiver *param* name, so
         // the concrete receiver's own bucket misses.
         if return_type == TypeTable::UNKNOWN
+            && let Some(blanket) = resolution.blanket
             && let Some(resolved) = self.resolve_blanket_static_method(
                 target_type_id,
                 &static_call.method,
+                blanket,
                 static_call.id,
                 Some(static_call.method_id),
                 &method_type_args,
@@ -2620,14 +2622,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a `static` trait method reached through a value blanket impl
     /// (`impl<T: Bound> Trait for T`). The blanket has no per-type home, so its
     /// statics are indexed under the receiver param name (`T`) and the concrete
-    /// receiver's bucket never sees them. Select the blanket whose bounds the
-    /// receiver satisfies and dispatch to its template, the way an instance
-    /// method reached through the same impl already does. `method_id` is the
-    /// segment spelling the method, where the source writes one.
+    /// receiver's bucket never sees them. Dispatch to the template of
+    /// `blanket`, the one the resolution picked, the way an instance method
+    /// reached through the same impl already does. `method_id` is the segment
+    /// spelling the method, where the source writes one.
     pub(super) fn resolve_blanket_static_method(
         &mut self,
         receiver_type_id: TypeId,
         method: &str,
+        blanket: DefId,
         call_id: AstId,
         method_id: Option<AstId>,
         method_type_args: &[TypeId],
@@ -2644,36 +2647,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             binder,
             module: blanket_module,
             def: blanket_def,
-        } = self.find_blanket_static_method(receiver_type_id, method)?;
+        } = self.find_blanket_static_method(receiver_type_id, method, blanket);
 
         let template_name = MethodName::format_local(&binder, Some(&trait_name), method);
         // The blanket's own declaration of the method: its bucket is keyed by
         // the receiver *param*, which no name written at a call site reaches.
-        let method_def = self.tysys.declared_method(blanket_def, method);
+        let method_def = self
+            .tysys
+            .declared_method(blanket_def, method)
+            .expect("a blanket is a candidate only where it declares the method");
         // Conformance refuses an unavailable blanket member, so the edge alone.
-        if let Some(use_id) = method_id
-            && let Some(def) = method_def
-        {
-            let node = self.tysys.resolutions.defs().ast_id(def);
+        if let Some(use_id) = method_id {
+            let node = self.tysys.resolutions.defs().ast_id(method_def);
             self.record_reference_to_def(use_id, node);
         }
+        let sig = self
+            .tysys
+            .signatures
+            .method_sig(method_def)
+            .expect("the decl pass records every impl-declared method's signature");
         // Its defaults come from the template's own signature: no receiver-keyed
         // lookup reaches a blanket, so the call site brings none.
-        let (static_method_defaults, template_defaults_module) = method_def
-            .and_then(|def| self.tysys.signatures.method_sig(def))
-            .map(|sig| {
-                (
-                    Param::named_defaults(&sig.params),
-                    Some(sig.defaults_module.clone()),
-                )
-            })
-            .unwrap_or_default();
+        let static_method_defaults = Param::named_defaults(&sig.params);
+        let defaults_module = sig.defaults_module.clone();
+        let template_params = sig.value_param_types();
+        // The method's own slots are solved as an instance call's are: from
+        // the turbofish, the arguments, and the type expected of the call.
+        let own_params = sig.own_params.clone();
+        let slots = sig.own_type_param_ids();
         let method_ref = StaticMethodRef::new(
             blanket_module.clone(),
             blanket_param.clone(),
             method.to_string(),
             Some(trait_name.clone()),
-            method_def,
+            Some(method_def),
         );
         let template_return = self.lookup_static_method_return_type(&method_ref, &binder);
         if template_return == TypeTable::UNKNOWN {
@@ -2688,18 +2695,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_type = self.answer_frame_projections(return_type);
         let param_types = self.blanket_static_param_types(
             blanket_def,
-            &blanket_module,
+            &template_params,
             &blanket_param,
-            method,
             receiver_type_id,
         );
 
-        // The method's own slots are solved as an instance call's are: from
-        // the turbofish, the arguments, and the type expected of the call.
-        let (own_params, slots) = method_def
-            .and_then(|def| self.tysys.signatures.method_sig(def))
-            .map(|sig| (sig.own_params.clone(), sig.own_type_param_ids()))
-            .unwrap_or_default();
         let mut written = method_type_args.to_vec();
         if self.group_variadic_type_args_of(method, &own_params, &mut written, span) {
             return Some(TypeTable::ERROR);
@@ -2790,8 +2790,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The template is written against the blanket parameter, which the
         // monomorphizer binds to the receiver. A default reads the method's own
         // slots as the call solved them.
-        let defaults_module =
-            template_defaults_module.unwrap_or_else(|| func_ref.module_source.clone());
         let own_bindings = self.own_slot_default_bindings(
             &static_method_defaults,
             &own_params,
@@ -2813,7 +2811,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.types.static_method_dispatch.insert(
             call_id,
             StaticMethodDispatch {
-                method_def,
+                method_def: Some(method_def),
                 defaults_module,
                 function_ref: func_ref,
                 param_is_mut: Vec::new(),
@@ -2833,16 +2831,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn blanket_static_param_types(
         &mut self,
         blanket: DefId,
-        blanket_module: &ModuleSource,
+        template: &[TypeId],
         blanket_param: &str,
-        method: &str,
         receiver_type_id: TypeId,
     ) -> Vec<TypeId> {
-        let key = ImplTargetKey::TypeParam(blanket_module.clone(), blanket_param.to_string());
-        let template = self
-            .lookup_static_method_sig_keyed(blanket_param, method, Some(&key))
-            .map(|sig| sig.value_param_types())
-            .unwrap_or_default();
         let blanket_slot = self.tysys.blanket_param_slot(blanket, blanket_param);
         let mut param_types: Vec<TypeId> = {
             let mut tt = self.tysys.type_table.borrow_mut();
@@ -2913,26 +2905,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         true
     }
 
-    /// The value blanket impl carrying a static `method_name` whose receiver
-    /// bounds `receiver_type_id` satisfies. Where several do, the resolution
-    /// has already ranked them and reported what no rule separates.
-    pub(super) fn find_blanket_static_method(
+    /// The value blanket impl `blanket` the resolution picked for a static
+    /// `method_name`, as it is instantiated at `receiver_type_id`.
+    fn find_blanket_static_method(
         &mut self,
         receiver_type_id: TypeId,
         method_name: &str,
-    ) -> Option<BlanketStatic> {
-        self.applicable_blanket_statics(receiver_type_id, method_name)
+        blanket: DefId,
+    ) -> BlanketStatic {
+        self.applicable_blanket_statics(receiver_type_id, method_name, NewtypePeel::Follow)
             .into_iter()
-            .next()
+            .find(|candidate| candidate.def == blanket)
+            .expect("the resolution picks a blanket whose bounds the receiver's chain meets")
     }
 
     /// Every value blanket supplying a static `method_name` that the receiver's
-    /// bounds admit, in the order the blocks were written. Facts only: which of
-    /// several answers is [`Elaborator::resolve_static_callee`]'s to decide.
+    /// bounds admit, in the order the blocks were written: at the receiver
+    /// itself under `Here`, through its newtype chain under `Follow`. Facts
+    /// only: which of several answers is
+    /// [`Elaborator::resolve_static_callee`]'s to decide.
     pub(super) fn applicable_blanket_statics(
         &mut self,
         receiver_type_id: TypeId,
         method_name: &str,
+        peel: NewtypePeel,
     ) -> Vec<BlanketStatic> {
         let candidates: Vec<(BlanketStatic, Vec<BlanketBound>)> = self
             .tysys
@@ -2978,12 +2974,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(|(_, bounds)| {
                 bounds.iter().all(|bound| {
-                    bound.trait_.as_ref().is_some_and(|bound_trait| {
-                        self.tysys.type_implements_trait(
+                    bound.trait_.as_ref().is_some_and(|bound_trait| match peel {
+                        NewtypePeel::Follow => self.tysys.type_implements_trait(
                             &self.annotate_ctx,
                             receiver_type_id,
                             bound_trait,
-                        )
+                        ),
+                        NewtypePeel::Here => self.tysys.type_implements_trait_here(
+                            &self.annotate_ctx,
+                            &self.type_lookup(),
+                            receiver_type_id,
+                            bound_trait,
+                        ),
                     })
                 })
             })
@@ -3453,7 +3455,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // let the two disagree.
             let params = match offer.selector {
                 Selector::Absent => continue,
-                Selector::Blanket => {
+                Selector::Blanket(_) => {
                     unreachable!("a block offers the body it wrote or inherits, never a blanket's")
                 }
                 Selector::Params(params) => params,

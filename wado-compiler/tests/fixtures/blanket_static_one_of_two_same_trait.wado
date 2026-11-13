@@ -1,0 +1,36 @@
+// Two blankets of one trait, both over `T`, declare the same static. The one
+// whose bound the receiver meets is instantiated with its own parameters, read
+// off its declaration rather than looked up by name.
+
+struct S {
+    v: i32,
+}
+
+trait Small with () {}
+
+trait Large with () {}
+
+impl Small for S {}
+
+trait Mk with () {
+    fn mk(x: i32) -> i32;
+}
+
+impl<T: Small> Mk for T {
+    fn mk(x: i32) -> i32 {
+        return x;
+    }
+}
+
+impl<T: Large> Mk for T {
+    fn mk(x: i32) -> i32 {
+        return 0;
+    }
+}
+
+test {
+    assert S::mk(5) == 5;
+}
+
+__DATA__
+{"test": {}}

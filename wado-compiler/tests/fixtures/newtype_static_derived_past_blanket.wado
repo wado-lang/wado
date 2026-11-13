@@ -1,0 +1,31 @@
+// A blanket whose bound holds only at the base sits at the base's link, beside
+// the base's derived `cmp`. Its `cmp` takes one `i32`, so the two references
+// select the derivation, for the newtype as for the base.
+
+struct Base {
+    v: i32,
+}
+
+type N = Base;
+
+trait Mk with () {
+    fn cmp(x: i32) -> i32;
+}
+
+impl<T: Eq> Mk for T {
+    fn cmp(x: i32) -> i32 {
+        return x;
+    }
+}
+
+test {
+    let a: Base = { v: 1 };
+    let b: Base = { v: 2 };
+    assert Base::cmp(&a, &b) matches { Less };
+    let c: N = { v: 1 };
+    let d: N = { v: 2 };
+    assert N::cmp(&c, &d) matches { Less };
+}
+
+__DATA__
+{"test": {}}

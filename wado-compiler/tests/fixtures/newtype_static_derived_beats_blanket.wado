@@ -1,0 +1,28 @@
+// A derivation is written for the type it is derived for, so at that link it
+// outranks a blanket covering the type through a bound, even one whose
+// parameters would take the arguments. `N::cmp` is `Base`'s derived `cmp`.
+
+struct Base {
+    v: i32,
+}
+
+type N = Base;
+
+trait Mk with () {
+    fn cmp(x: Self, y: Self) -> i32;
+}
+
+impl<T: Eq> Mk for T {
+    fn cmp(x: T, y: T) -> i32 {
+        return 1;
+    }
+}
+
+test {
+    let a: N = { v: 1 };
+    let b: N = { v: 2 };
+    assert N::cmp(&a, &b) matches { Less };
+}
+
+__DATA__
+{"test": {}}

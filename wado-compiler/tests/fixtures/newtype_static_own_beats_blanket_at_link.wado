@@ -1,6 +1,6 @@
-// A blanket covers a newtype through its bound, not as a declaration of its
-// own, so it makes no link of the chain the owner of a static: `N::mk()` is the
-// base's own `Base::mk`.
+// A blanket sits at the link where its bound holds: `Eq` is derived for `Base`,
+// so the blanket covers `N` at `Base`'s link, where `Base`'s own declaration
+// outranks it. `N::mk()` is `Base::mk`.
 
 struct Base {
     v: i32,
