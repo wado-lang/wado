@@ -32,6 +32,7 @@
 //!
 
 use { gc_array_to_memory } from "core:rt";
+use { LinearArray } from "core:linear";
 
 #[synopsis]
 test {
@@ -217,6 +218,31 @@ pub fn adler32(adler: u32, buf: &ByteList, offset: i32, len: i32) -> u32 {
     return s1 | s2 << 16;
 }
 
+// `adler32` over bytes in linear memory.
+fn adler32_linear(adler: u32, buf: &LinearArray<u8>, offset: i32, len: i32) -> u32
+    contract 0 <= offset && 0 <= len <= buf.len() - offset
+{
+    let base: u32 = 65521;
+    let nmax = 5552;
+    let mut s1 = adler & 0xFFFF;
+    let mut s2 = adler >> 16 & 0xFFFF;
+    let mut pos = offset;
+    let mut remaining = len;
+    while remaining > 0 {
+        let k = i32::min(remaining, nmax);
+        remaining -= k;
+        let stop = pos + k;
+        while pos < stop {
+            s1 += unchecked buf.at(pos) as u32;
+            s2 += s1;
+            pos += 1;
+        }
+        s1 %= base;
+        s2 %= base;
+    }
+    return s1 | s2 << 16;
+}
+
 /// Returns the initial Adler-32 checksum value (1).
 pub fn adler32_init() -> u32 {
     return 1;
@@ -278,6 +304,10 @@ fn build_crc_table() -> List<u32> {
 
 /// Computes a CRC-32 checksum over `buf[offset..<offset + len]`, starting from `crc`.
 pub fn crc32(crc: u32, buf: &ByteList, offset: i32, len: i32) -> u32 {
+    return crc32_over(crc, buf, offset, len);
+}
+
+fn crc32_over<affine B: IndexValue<i32, Output = u8>>(crc: u32, buf: &B, offset: i32, len: i32) -> u32 {
     let table = CRC_TABLE;
     let mut c = crc ^ 0xFFFFFFFF;
     for let mut i = 0; i < len; i += 1 {
@@ -442,7 +472,7 @@ fn inflate_table(
     lens: &List<u16>,
     lens_offset: i32,
     codes_count: i32,
-    table: &mut List<i32>,
+    table: &mut LinearArray<i32>,
     table_start: i32,
     bits_in: i32,
     work: &mut List<u16>,
@@ -680,7 +710,7 @@ fn inflate_table(
 // length alphabet given just above, in the order: 16, 17, 18, 0, 8, 7, ...".
 global INFLATE_ORDER: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
 
-struct InflateState {
+affine struct InflateState {
     // input position, and where the input ends
     next: i32,
     end: i32,
@@ -690,7 +720,7 @@ struct InflateState {
     bits: i32,
 
     // code tables
-    codes: List<i32>,
+    codes: LinearArray<i32>,
     lencode_off: i32,  // offset into codes for len/lit table
     distcode_off: i32,  // offset into codes for dist table
     lenbits: i32,
@@ -708,7 +738,7 @@ impl InflateState {
             end,
             hold: 0,
             bits: 0,
-            codes: List::filled(ENOUGH, 0),
+            codes: LinearArray::<i32>::filled(ENOUGH, 0),
             lencode_off: 0,
             distcode_off: 0,
             lenbits: 0,
@@ -759,7 +789,7 @@ impl InflateState {
     // Pulls input bytes until at least `n` bits are held. The whole stream is at
     // hand, so input that ends first is a stream cut short. The buffer holds 64
     // bits, and a pull adds up to 7 past `n`.
-    fn need_bits(&mut self, input: &ByteList, n: i32) -> Result<(), ZlibError>
+    fn need_bits(&mut self, input: &LinearArray<u8>, n: i32) -> Result<(), ZlibError>
         contract n <= 57
     {
         while self.bits < n {
@@ -767,7 +797,7 @@ impl InflateState {
                 builtin::cold_path();
                 return Result::Err(ZlibError::InvalidDeflateData);
             }
-            self.hold |= input[self.next] as u64 << self.bits as u64;
+            self.hold |= unchecked input.at(self.next) as u64 << self.bits as u64;
             self.bits += 8;
             self.next += 1;
         }
@@ -793,7 +823,7 @@ impl InflateState {
     // time until the code's bits are all held. A lookup short of bits may land
     // on another code's entry, but only on one longer than the bits held, since
     // the code is prefix-free.
-    fn decode(&mut self, input: &ByteList, table: i32, root_bits: i32) -> Result<i32, ZlibError> {
+    fn decode(&mut self, input: &LinearArray<u8>, table: i32, root_bits: i32) -> Result<i32, ZlibError> {
         loop {
             let [here, n] = decode_entry(&self.codes, table, root_bits, self.hold);
             if n <= self.bits {
@@ -805,16 +835,8 @@ impl InflateState {
     }
 }
 
-// The input bytes one fast-loop iteration may read: two 4-byte refills.
+// The input bytes one fast-loop iteration may read: one 8-byte refill.
 global FAST_INPUT_MIN: i32 = 8;
-
-fn read_u32_le(input: &ByteList, pos: i32) -> u64 {
-    let b0 = unchecked input[pos] as u64;
-    let b1 = unchecked input[pos + 1] as u64;
-    let b2 = unchecked input[pos + 2] as u64;
-    let b3 = unchecked input[pos + 3] as u64;
-    return b0 | b1 << 8 | b2 << 16 | b3 << 24;
-}
 
 fn low_bits(hold: u64, n: i32) -> i32 {
     return (hold & (1 as u64 << n as u64) - 1) as i32;
@@ -822,59 +844,113 @@ fn low_bits(hold: u64, n: i32) -> i32 {
 
 // The entry for the code at the bottom of `hold`, followed into its sub-table
 // where it has one, and the code's full length in bits.
-fn decode_entry(codes: &List<i32>, table: i32, root_bits: i32, hold: u64) -> [i32, i32] {
-    let here = codes[table + low_bits(hold, root_bits)];
+fn decode_entry(codes: &LinearArray<i32>, table: i32, root_bits: i32, hold: u64) -> [i32, i32] {
+    // inflate_table fills every entry a root index or a sub-table index
+    // reaches, within ENOUGH.
+    let here = unchecked codes.at(table + low_bits(hold, root_bits));
     let op = code_op(here);
     if op != 0 && op & 0xF0 == 0 {
         // A code longer than the root table's bits, which a Huffman code gives
         // only to rare symbols: under 5% of lookups on twitter.json.
         builtin::cold_path();
         let root = code_bits(here);
-        let sub = codes[table + code_val(here) + low_bits(hold >> root as u64, op)];
+        let sub = unchecked codes.at(table + code_val(here) + low_bits(hold >> root as u64, op));
         return [sub, root + code_bits(sub)];
     }
     return [here, code_bits(here)];
 }
 
-fn push_literal(output: &mut ByteList, literal: i32, max_output: i32) -> Result<(), ZlibError> {
-    if output.len() == max_output {
-        builtin::cold_path();
-        return Result::Err(ZlibError::OutputExceedsMax);
-    }
-    output.push(literal as u8);
-    return Result::Ok(());
+// The room one decoded symbol may take: the longest match (RFC 1951 section
+// 3.2.5), and the 7 bytes an 8-byte copy writes past its end.
+global SYMBOL_ROOM: i32 = 258 + 7;
+
+// A decode's output, in linear memory: `len` bytes written, of at most `max`.
+// The bytes past `len` are room the next symbol writes into.
+affine struct Output {
+    bytes: LinearArray<u8>,
+    len: i32,
+    max: i32,
 }
 
-// Appends the back-reference <length, dist> (RFC 1951 section 3.2.5). The
-// output holds the whole decoded stream, so no separate window is needed. A
-// distance before the start of the output is invalid (RFC 1951 section 3.2.3:
-// "a distance cannot refer past the beginning of the output stream").
-fn copy_match(output: &mut ByteList, length: i32, dist: i32, max_output: i32) -> Result<(), ZlibError> {
-    let out_pos = output.len();
-    if dist > out_pos {
-        builtin::cold_path();
-        return Result::Err(ZlibError::InvalidDeflateData);
+impl Output {
+    fn new(max: i32) -> Output
+        contract max >= 0
+    {
+        return Output { bytes: LinearArray::<u8>::filled(0, 0), len: 0, max };
     }
-    if length > max_output - out_pos {
-        builtin::cold_path();
-        return Result::Err(ZlibError::OutputExceedsMax);
+
+    // Grows the room past `len` to at least `n` bytes, doubling, so the output
+    // copies each byte a bounded number of times.
+    fn reserve(&mut self, n: i32) {
+        if self.bytes.len() - self.len < n {
+            builtin::cold_path();
+            let doubled = if self.bytes.len() > i32::MAX / 2 { i32::MAX } else { self.bytes.len() * 2 };
+            self.bytes.resize(i32::max(self.len + n, doubled), 0);
+        }
     }
-    output.copy_within_append(out_pos - dist, length);
-    return Result::Ok(());
+
+    // Needs room for one byte.
+    fn literal(&mut self, literal: i32) -> Result<(), ZlibError> {
+        if self.len == self.max {
+            builtin::cold_path();
+            return Result::Err(ZlibError::OutputExceedsMax);
+        }
+        unchecked self.bytes.set(self.len, literal as u8);
+        self.len += 1;
+        return Result::Ok(());
+    }
+
+    // Appends the back-reference <length, dist> (RFC 1951 section 3.2.5), and
+    // needs SYMBOL_ROOM. The output holds the whole decoded stream, so no
+    // separate window is needed. A distance before the start of the output is
+    // invalid (RFC 1951 section 3.2.3: "a distance cannot refer past the
+    // beginning of the output stream").
+    fn copy_match(&mut self, length: i32, dist: i32) -> Result<(), ZlibError> {
+        if dist > self.len {
+            builtin::cold_path();
+            return Result::Err(ZlibError::InvalidDeflateData);
+        }
+        if length > self.max - self.len {
+            builtin::cold_path();
+            return Result::Err(ZlibError::OutputExceedsMax);
+        }
+        let mut from = self.len - dist;
+        let mut to = self.len;
+        let end = to + length;
+        if dist >= 8 {
+            // Eight bytes at a time: each word read ends where its write
+            // begins or earlier, so it reads only bytes already written.
+            while to < end {
+                unchecked self.bytes.store_at(to, unchecked self.bytes.load_at::<u64>(from));
+                from += 8;
+                to += 8;
+            }
+        } else {
+            // A run shorter than a word repeats bytes this copy writes.
+            while to < end {
+                unchecked self.bytes.set(to, unchecked self.bytes.at(from));
+                from += 1;
+                to += 1;
+            }
+        }
+        self.len = end;
+        return Result::Ok(());
+    }
+
+    fn to_list(&self) -> ByteList {
+        return self.bytes.to_byte_list(self.len) as ByteList;
+    }
 }
 
 // zlib's inflate_fast: decodes whole length/distance pairs and literals in one
 // iteration, with no mode dispatch and no per-byte refill, while at least
-// FAST_INPUT_MIN input bytes remain. A 4-byte refill whenever fewer than 32 bits
-// are held covers a literal/length code with its extra bits (15 + 5), and a
-// second covers a distance code with its extra bits (15 + 13). True where the
-// block ended, false where the input ran low with the block still open.
-fn inflate_fast(
-    state: &mut InflateState,
-    input: &ByteList,
-    output: &mut ByteList,
-    max_output: i32,
-) -> Result<bool, ZlibError> {
+// FAST_INPUT_MIN input bytes remain. One 8-byte refill per iteration holds at
+// least 56 bits, which covers a literal/length code with its extra bits
+// (15 + 5) and a distance code with its extra bits (15 + 13). The refill counts
+// only the whole bytes that fit; the rest of the word lands where the next
+// refill writes the same bytes again. True where the block ended, false where
+// the input ran low with the block still open.
+fn inflate_fast(state: &mut InflateState, input: &LinearArray<u8>, output: &mut Output) -> Result<bool, ZlibError> {
     let codes = &state.codes;
     let lencode_off = state.lencode_off;
     let distcode_off = state.distcode_off;
@@ -887,18 +963,18 @@ fn inflate_fast(
     let mut block_ended = false;
 
     while end - inp >= FAST_INPUT_MIN {
-        if bits < 32 {
-            hold |= read_u32_le(input, inp) << bits as u64;
-            inp += 4;
-            bits += 32;
-        }
+        output.reserve(SYMBOL_ROOM);
+        hold |= unchecked input.load_at::<u64>(inp) << bits as u64;
+        let whole = (63 - bits) >> 3;
+        inp += whole;
+        bits += whole << 3;
         let [here, here_bits] = decode_entry(codes, lencode_off, lenbits, hold);
         hold >>= here_bits as u64;
         bits -= here_bits;
         let op = code_op(here);
 
         if op == 0 {
-            push_literal(output, code_val(here), max_output)?;
+            output.literal(code_val(here))?;
             continue;
         }
         if op & 16 == 0 {
@@ -914,11 +990,6 @@ fn inflate_fast(
         hold >>= length_extra as u64;
         bits -= length_extra;
 
-        if bits < 32 {
-            hold |= read_u32_le(input, inp) << bits as u64;
-            inp += 4;
-            bits += 32;
-        }
         let [dist_here, dist_bits] = decode_entry(codes, distcode_off, distbits, hold);
         hold >>= dist_bits as u64;
         bits -= dist_bits;
@@ -932,7 +1003,7 @@ fn inflate_fast(
         hold >>= dist_extra as u64;
         bits -= dist_extra;
 
-        copy_match(output, length, dist, max_output)?;
+        output.copy_match(length, dist)?;
     }
 
     // Hand back the whole bytes read ahead: the caller reports the input it
@@ -944,18 +1015,16 @@ fn inflate_fast(
     return Result::Ok(block_ended);
 }
 
-/// Raw DEFLATE (RFC 1951 3.2.3) decoded from a slice of `input`, and the input bytes
-/// it consumed. The limit is checked before each write, so a bomb never materializes.
+/// Raw DEFLATE (RFC 1951 3.2.3) decoded from a slice of `input` onto `output`, and
+/// the input bytes it consumed. The limit is checked before each write, so a bomb
+/// never materializes.
 fn inflate_raw_ex(
-    input: &ByteList,
+    input: &LinearArray<u8>,
     input_offset: i32,
     input_length: i32,
-    max_output: i32,
-) -> Result<[ByteList, i32], ZlibError>
-    contract max_output >= 0
-{
+    output: &mut Output,
+) -> Result<i32, ZlibError> {
     let mut state = InflateState::new(input_offset, input_offset + input_length);
-    let mut output: ByteList = [];
 
     loop {
         state.need_bits(input, 3)?;
@@ -965,7 +1034,7 @@ fn inflate_raw_ex(
         // dynamic Huffman, 11 reserved (error).
         let block_type = state.take_bits(2);
         if block_type == 0 {
-            inflate_stored(&mut state, input, &mut output, max_output)?;
+            inflate_stored(&mut state, input, output)?;
         } else {
             if block_type == 1 {
                 state.load_fixed_tables();
@@ -975,24 +1044,19 @@ fn inflate_raw_ex(
                 builtin::cold_path();
                 return Result::Err(ZlibError::InvalidDeflateData);
             }
-            inflate_codes(&mut state, input, &mut output, max_output)?;
+            inflate_codes(&mut state, input, output)?;
         }
         if last_block {
             break;
         }
     }
     state.drop_to_byte_boundary();
-    return Result::Ok([output, state.next - input_offset]);
+    return Result::Ok(state.next - input_offset);
 }
 
 // A stored block (RFC 1951 section 3.2.4): LEN then NLEN, the one's complement
 // of LEN, then LEN bytes copied from the input.
-fn inflate_stored(
-    state: &mut InflateState,
-    input: &ByteList,
-    output: &mut ByteList,
-    max_output: i32,
-) -> Result<(), ZlibError> {
+fn inflate_stored(state: &mut InflateState, input: &LinearArray<u8>, output: &mut Output) -> Result<(), ZlibError> {
     state.drop_to_byte_boundary();
     state.need_bits(input, 32)?;
     let stored_len = state.take_bits(16);
@@ -1004,7 +1068,7 @@ fn inflate_stored(
         return Result::Err(ZlibError::InvalidDeflateData);
     }
     let copy = i32::min(stored_len, state.end - state.next);
-    if copy > max_output - output.len() {
+    if copy > output.max - output.len {
         builtin::cold_path();
         return Result::Err(ZlibError::OutputExceedsMax);
     }
@@ -1012,14 +1076,16 @@ fn inflate_stored(
         builtin::cold_path();
         return Result::Err(ZlibError::InvalidDeflateData);
     }
-    output.extend_from_slice(input[state.next..<state.next + copy]);
+    output.reserve(copy);
+    output.bytes.copy_from(output.len, input, state.next, copy);
+    output.len += copy;
     state.next += copy;
     return Result::Ok(());
 }
 
 // A dynamic block's header (RFC 1951 section 3.2.7), built into the
 // literal/length and distance tables.
-fn read_dynamic_tables(state: &mut InflateState, input: &ByteList) -> Result<(), ZlibError> {
+fn read_dynamic_tables(state: &mut InflateState, input: &LinearArray<u8>) -> Result<(), ZlibError> {
     // HLIT+257 literal/length codes, HDIST+1 distance codes, HCLEN+4 code
     // length codes. 286/30 are the largest valid counts; 286-287 and 30-31
     // are reserved (RFC 1951 sections 3.2.5 and 3.2.7).
@@ -1110,20 +1176,16 @@ fn read_dynamic_tables(state: &mut InflateState, input: &ByteList) -> Result<(),
 // A Huffman-coded block's literals and length/distance pairs, up to its
 // end-of-block code: `inflate_fast` while the input allows, then one code at a
 // time.
-fn inflate_codes(
-    state: &mut InflateState,
-    input: &ByteList,
-    output: &mut ByteList,
-    max_output: i32,
-) -> Result<(), ZlibError> {
+fn inflate_codes(state: &mut InflateState, input: &LinearArray<u8>, output: &mut Output) -> Result<(), ZlibError> {
     loop {
-        if state.end - state.next >= FAST_INPUT_MIN && inflate_fast(state, input, output, max_output)? {
+        if state.end - state.next >= FAST_INPUT_MIN && inflate_fast(state, input, output)? {
             return Result::Ok(());
         }
+        output.reserve(SYMBOL_ROOM);
         let here = state.decode(input, state.lencode_off, state.lenbits)?;
         let op = code_op(here);
         if op == 0 {
-            push_literal(output, code_val(here), max_output)?;
+            output.literal(code_val(here))?;
             continue;
         }
         if op & 32 != 0 {
@@ -1146,15 +1208,17 @@ fn inflate_codes(
         let dist_extra = dist_op & 15;
         state.need_bits(input, dist_extra)?;
         let dist = code_val(dist_here) + state.take_bits(dist_extra);
-        copy_match(output, length, dist, max_output)?;
+        output.copy_match(length, dist)?;
     }
 }
 
 /// Decompresses raw DEFLATE data (no header/checksum), failing with
 /// `ZlibError::OutputExceedsMax` once the output would pass `max_output`.
 pub fn inflate_raw(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError> {
-    let [output, _consumed] = inflate_raw_ex(input, 0, input.len(), max_output)?;
-    return Result::Ok(output);
+    let linear = LinearArray::<u8>::of_bytes(input, 0, input.len());
+    let mut output = Output::new(max_output);
+    inflate_raw_ex(&linear, 0, linear.len(), &mut output)?;
+    return Result::Ok(output.to_list());
 }
 
 /// Decompresses zlib-wrapped data (RFC 1950: 2-byte header + DEFLATE + 4-byte Adler-32),
@@ -1189,18 +1253,20 @@ pub fn inflate_zlib(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
 
     // Decompress directly from input, skipping the 2-byte header and the
     // trailing 4-byte Adler-32 (RFC 1950 section 2.2).
-    let [result, _consumed] = inflate_raw_ex(input, 2, input.len() - 6, max_output)?;
+    let linear = LinearArray::<u8>::of_bytes(input, 2, input.len() - 6);
+    let mut output = Output::new(max_output);
+    inflate_raw_ex(&linear, 0, linear.len(), &mut output)?;
 
     // Verify the ADLER32 trailer over the uncompressed data (RFC 1950 section
     // 2.2, ADLER32; the checksum stores s2 in the high 16 bits, big-endian).
-    let computed = adler32(adler32_init(), &result, 0, result.len());
+    let computed = adler32_linear(adler32_init(), &output.bytes, 0, output.len);
     let stored = input[input.len() - 4] as u32 << 24 | input[input.len() - 3] as u32 << 16 | input[input.len() - 2] as u32 << 8 | input[input.len() - 1] as u32;
     if computed != stored {
         builtin::cold_path();
         return Result::Err(ZlibError::Adler32Mismatch);
     }
 
-    return Result::Ok(result);
+    return Result::Ok(output.to_list());
 }
 
 
@@ -2596,7 +2662,7 @@ fn gzip_parse_header(input: &ByteList, start: i32) -> Result<[GzipHeader, i32], 
     let mut header = GzipHeader::new();
     header.text = flags & GZIP_FTEXT != 0;
     header.hcrc = flags & GZIP_FHCRC != 0;
-    header.time = read_u32_le(input, start + 4) as u32;
+    header.time = u32::from_le_at(input.as_byte_slice(), start + 4);
     header.xflags = input[start + 8] as i32;
     header.os = input[start + 9] as i32;
     let mut pos = start + 10;
@@ -2649,7 +2715,8 @@ fn read_header_string(input: &ByteList, pos: i32) -> [String, i32] {
 /// Decompresses gzip-wrapped data (RFC 1952), concatenating its members and failing
 /// with `ZlibError::OutputExceedsMax` once their output would pass `max_output`.
 pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError> {
-    let mut output: ByteList = [];
+    let linear = LinearArray::<u8>::of_bytes(input, 0, input.len());
+    let mut output = Output::new(max_output);
     let mut member_start = 0;
 
     while member_start < input.len() {
@@ -2669,12 +2736,9 @@ pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
         }
 
         // A malformed DEFLATE member fails here, before `consumed` locates the trailer.
-        let [member_output, consumed] = inflate_raw_ex(
-            input,
-            data_start,
-            input.len() - data_start,
-            max_output - output.len(),
-        )?;
+        let member_offset = output.len;
+        let consumed = inflate_raw_ex(&linear, data_start, input.len() - data_start, &mut output)?;
+        let member_len = output.len - member_offset;
 
         // The gzip trailer (RFC 1952 section 2.3.1) is CRC32 then ISIZE, each a
         // 4-byte little-endian value, immediately after the DEFLATE member.
@@ -2684,31 +2748,28 @@ pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
             return Result::Err(ZlibError::TruncatedTrailer);
         }
 
-        let stored_crc = read_u32_le(input, trailer_pos) as u32;
-        let computed_crc = crc32(crc32_init(), &member_output, 0, member_output.len());
-        if computed_crc != stored_crc {
+        let computed_crc = crc32_over(crc32_init(), &output.bytes, member_offset, member_len);
+        if computed_crc != linear.load_at::<u32>(trailer_pos) {
             builtin::cold_path();
             return Result::Err(ZlibError::Crc32Mismatch);
         }
 
         // ISIZE is the member's size mod 2^32.
-        if read_u32_le(input, trailer_pos + 4) as u32 != member_output.len() as u32 {
+        if linear.load_at::<u32>(trailer_pos + 4) != member_len as u32 {
             builtin::cold_path();
             return Result::Err(ZlibError::IsizeMismatch);
         }
-
-        output.extend(&member_output);
 
         // Move to next member
         member_start = trailer_pos + 8;
     }
 
-    if output.len() == 0 && member_start == 0 {
+    if output.len == 0 && member_start == 0 {
         builtin::cold_path();
         return Result::Err(ZlibError::DataTooShort);
     }
 
-    return Result::Ok(output);
+    return Result::Ok(output.to_list());
 }
 
 
