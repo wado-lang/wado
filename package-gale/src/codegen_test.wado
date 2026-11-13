@@ -6519,8 +6519,19 @@ test "gen prints the parser the Kiln generator builds for the same grammar" {
     let outcome = gale_in(&dir, ["gen", "Expr.g4"]);
     assert outcome.result matches { Ok(_) };
     let built = kiln(["Expr.g4", bytes_of(EXPR)], [], no_options());
-    assert outcome.stdout() == built.source();
+    let [gen_header, gen_body] = split_header(outcome.stdout());
+    let [kiln_header, kiln_body] = split_header(built.source());
+    assert gen_header == "#![generated(by = \"gale\", sources = [\"Expr.g4\"])]";
+    assert kiln_header == "#![generated(by = \"lib:gale\", sources = [\"Expr.g4\"])]";
+    assert gen_body == kiln_body;
     assert outcome.console.stderr() == "";
+}
+
+/// A generated module's `#![generated]` line, and what follows it.
+fn split_header(source: String) -> [String, String] {
+    let view = source.as_str_slice();
+    let end = view.find("\n").unwrap();
+    return [view.slice(0, end).to_string(), view.slice(end, view.len()).to_string()];
 }
 
 test "gen --output writes the parser into the first grant and prints nothing" {
