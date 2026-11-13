@@ -39,20 +39,18 @@ mise run on-task-started
    measures one worker shape per entry in `SHAPES`. Add `HEADROOM_CHECK=1` when
    `CONNECTIONS_PER_WORKER`, `OHA_CORE_COUNT` or `SHAPES` changed, to confirm
    `oha` was not the ceiling.
-3. Measure the three PGO builds for the README's Profile-Guided Optimization
-   section (see [PGO](#pgo)).
-4. Refresh the README Environment line versions: `mise exec -- node --version`,
+3. Refresh the README Environment line versions: `mise exec -- node --version`,
    `mise -C benchmark exec -- bun --version`, `rustc --version`,
    `cc --version | head -1`. `mise -C benchmark ls` names wasi-sdk, and wasmtime's
    version is the `vendor/wasmtime` workspace version.
-5. Update the tables, following README.md's existing layout. http-routing is
+4. Update the tables, following README.md's existing layout. http-routing is
    req/s (higher is better), one table per worker shape. Keep measured figures
    inside tables — prose around them is not re-measured and drifts. An input
    size in the prose comes from the program's own header line, such as
    `gale-gen (Rust): 42786 bytes`, so compare each one with the log.
-6. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
+5. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
    `mise -C wasm-size ls` names Zig, and `moon version` names Moonbit.
-7. Compare every Wado row with the README's previous figure, and attribute each
+6. Compare every Wado row with the README's previous figure, and attribute each
    one that moved (see [PGO](#pgo)). Report those to the user.
 
 ## PGO
@@ -63,14 +61,10 @@ again as its `(no-pgo)` row, which `wado_rows` in `benchmark/wado.sh` prints, an
 the tables list both. http-routing has no such row, and the README says so.
 wasm-size has no profile, so a size change is the compiler's or the program's.
 
-The README's PGO section compares three builds by wall clock, and its commands
-stand beside its table. It records no fuel: `benchmark/fuel.json` is the one
-record of that. The `no-cold-paths` wall clock comes from three more runs, alternated
-with the three of the procedure. `benchmark-all` and `all-wado` leave out the
-table's `gale_html` row, so run `mise run -C benchmark gale-highlight-html` the
-same way.
+The README's PGO section compares the two builds by wall clock. It records no
+fuel: `benchmark/fuel.json` is the one record of that.
 
-Compare two builds with
+Compare them with
 `mise exec -- node benchmark/ab.ts --base <no-pgo logs> --head <PGO logs>`. Its
 verdict gives the table's `noise`. It keys rows by implementation, so split a
 `benchmark-all` log into one log per build first.
