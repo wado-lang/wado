@@ -2918,7 +2918,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The value blanket impl `blanket` the resolution picked for a static
     /// `method_name`, as it is instantiated at `receiver_type_id`.
-    pub(super) fn find_blanket_static_method(
+    fn find_blanket_static_method(
         &mut self,
         receiver_type_id: TypeId,
         method_name: &str,

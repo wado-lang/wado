@@ -1445,16 +1445,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// Every value blanket (`impl<T: Bound> Trait for T`) whose bound the
-    /// receiver satisfies. Its bucket is keyed by the receiver *parameter*, so
-    /// the receiver's own never holds it and the rungs above miss it entirely.
+    /// Every value blanket (`impl<T: Bound> Trait for T`) whose bounds hold at
+    /// the receiver itself, without a newtype peel: a blanket only a newtype's
+    /// base admits is the base link's. Its bucket is keyed by the receiver
+    /// *parameter*, so the receiver's own never holds it and the rungs above
+    /// miss it entirely.
     ///
     /// Its selector is `Blanket`: the template is written against a parameter,
     /// and instantiating it at the receiver is the blanket resolver's, not a
     /// candidate's. What the candidate is here for is the rules — which trait
     /// supplies the name, which blanket the arguments select, and that anything
-    /// written for the receiver itself outranks a blanket covering it. A
-    /// blanket counts at the link of a newtype chain where its bounds hold.
+    /// written for the receiver itself outranks a blanket covering it.
     fn blanket_candidates(
         &mut self,
         method_name: &str,
@@ -1474,7 +1475,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .signatures
                     .method_sig(method_id)
                     .expect("the decl pass records every impl-declared method's signature");
-                let first = sig.first_value_param().min(sig.decl.param_types.len());
                 Some(Candidate {
                     supply: Some(TraitSupply {
                         impl_def: blanket.def,
@@ -1484,7 +1484,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_id,
                     kind: CandidateKind::Static,
                     origin: CandidateOrigin::Blanket,
-                    selector: Selector::Blanket(sig.decl.param_types[first..].to_vec()),
+                    selector: Selector::Blanket(sig.value_param_types()),
                     return_type: sig.decl.return_type.unwrap_or(TypeTable::UNIT),
                 })
             })
