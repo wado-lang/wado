@@ -576,6 +576,9 @@ package root, the primary first:
 #![generated(by = "src/generator.wado", sources = ["tests/grammars/calc_ll.g4"])]
 ```
 
+A header naming another generator or other inputs is written as returned, with
+a warning (`KILN_HEADER_MISMATCH`).
+
 That output was written to a directory the use site chose:
 
 <!-- {"source": "package-gale/tests/driver_cst_calc_test.wado"} -->

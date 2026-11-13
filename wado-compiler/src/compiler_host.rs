@@ -250,6 +250,9 @@ pub enum Code {
     /// but on-disk content does not). The edit is honored — compilation
     /// proceeds against the on-disk content.
     KilnGeneratedModified,
+    /// A generated file's `#![generated]` header names a generator or inputs
+    /// other than the run that wrote it. The file is written as returned.
+    KilnHeaderMismatch,
     /// On a cache miss, the generator produced bytes that differ from the
     /// pre-existing file at the same path. The new bytes overwrite the old.
     KilnGeneratedRegenerated,
@@ -381,6 +384,7 @@ impl std::fmt::Display for Code {
             Code::TestWorldOnlyImport => "TEST_WORLD_ONLY_IMPORT",
             Code::KilnNoGeneratedModule => "KILN_NO_GENERATED_MODULE",
             Code::KilnGeneratedModified => "KILN_GENERATED_MODIFIED",
+            Code::KilnHeaderMismatch => "KILN_HEADER_MISMATCH",
             Code::KilnGeneratedRegenerated => "KILN_GENERATED_REGENERATED",
             Code::KilnRedirectConflict => "KILN_REDIRECT_CONFLICT",
             Code::UnknownAttr => "UNKNOWN_ATTR",

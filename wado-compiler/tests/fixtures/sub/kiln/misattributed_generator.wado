@@ -1,0 +1,14 @@
+// A Kiln generator whose header names a generator and an input other than the
+// run's own.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: "#![generated(by = \"elsewhere\", sources = [\"other.schema\"])]\npub fn hello() -> i32 { return 1; }",
+            is_entry: true,
+        }],
+    });
+}

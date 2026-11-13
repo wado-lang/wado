@@ -37,10 +37,10 @@ use wado_compiler::hashmap::{IndexMap, IndexSet};
 #[cfg(test)]
 use wado_compiler::kiln::DeclSite;
 use wado_compiler::kiln::{
-    FileHash, GENERATOR_WORLD_FQ, GeneratorModule, Invocation, InvocationIndex, InvocationPath,
-    OptionsAnchor, OptionsDescriptor, Plan, PlanError, collect_inline_invocations, content_hash,
-    file_hash, generator_identity, harvest_module_graph, has_generated_marker, hex_digest,
-    validate_options,
+    FileHash, GENERATOR_WORLD_FQ, GeneratedHeader, GeneratorModule, Invocation, InvocationIndex,
+    InvocationPath, OptionsAnchor, OptionsDescriptor, Plan, PlanError, collect_inline_invocations,
+    content_hash, file_hash, generator_identity, harvest_module_graph, has_generated_marker,
+    hex_digest, parse_header, validate_options,
 };
 use wado_compiler::remote::{Integrity, is_remote};
 use wado_compiler::{Code, CompilerOptions, Diagnostic, Lints, OptLevel, Severity};
@@ -242,6 +242,11 @@ pub async fn execute<H: CompilerHost>(
             use_type: use_type.cloned(),
         });
     }
+    // What `core:kiln`'s `Request::origin()` gives the generator.
+    let origin = GeneratedHeader {
+        by: invocation.invoked_as.clone(),
+        sources: loaded.iter().map(|f| f.path.clone()).collect(),
+    };
     let mut loaded = loaded.into_iter();
     let request = GeneratorRequest {
         primary: loaded.next().expect("the primary is the first file"),
@@ -268,10 +273,13 @@ pub async fn execute<H: CompilerHost>(
     let mut checked = Vec::with_capacity(response.files.len());
     for file in &response.files {
         let rel = validate_rel_output_path(&file.path)?;
-        if !has_generated_marker(&file.content) {
+        let Some(header) = parse_header(&file.content) else {
             return Err(ExecuteError::MissingHeader {
                 path: file.path.clone(),
             });
+        };
+        if header != origin {
+            emit_header_mismatch_warning(host, &file.path, &header, &origin);
         }
         checked.push((rel, file));
     }
@@ -303,12 +311,12 @@ pub async fn execute<H: CompilerHost>(
                 normalized.as_str(),
             );
         }
-        write_atomic(&full_path, &bytes).map_err(|source| ExecuteError::Io {
+        write_atomic(&full_path, bytes).map_err(|source| ExecuteError::Io {
             path: full_path.clone(),
             source,
         })?;
 
-        let hash = file_hash(&normalized, &bytes).hash;
+        let hash = file_hash(&normalized, bytes).hash;
         outputs.push(OutputHash {
             path: normalized.as_str().to_string(),
             hash,
@@ -534,6 +542,25 @@ fn emit_generated_modified_warning<H: CompilerHost>(host: &H, invocation: &str, 
             "kiln[{invocation}]: {path} has been modified after generation; \
              the on-disk content is honored, but `wado check` will fail. \
              Delete the file to regenerate it — a build honors the edit too.",
+        ),
+        span: None,
+    });
+}
+
+fn emit_header_mismatch_warning<H: CompilerHost>(
+    host: &H,
+    path: &str,
+    header: &GeneratedHeader,
+    origin: &GeneratedHeader,
+) {
+    use wado_compiler::{Diagnostic, Severity};
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Warning,
+        code: wado_compiler::Code::KilnHeaderMismatch,
+        message: format!(
+            "kiln: generated file {path:?} opens with a header naming by = {:?}, sources = {:?}; \
+             this run is by = {:?}, sources = {:?}",
+            header.by, header.sources, origin.by, origin.sources,
         ),
         span: None,
     });
@@ -1559,6 +1586,7 @@ mod tests {
             sources: IndexMap<String, Vec<u8>>,
             response: Mutex<Option<Result<GeneratorResponse, GeneratorRunnerError>>>,
             requests: Mutex<Vec<GeneratorRequest>>,
+            diagnostics: Mutex<Vec<Diagnostic>>,
         }
 
         impl MockHost {
@@ -1574,6 +1602,7 @@ mod tests {
                     sources,
                     response: Mutex::new(Some(response)),
                     requests: Mutex::new(Vec::new()),
+                    diagnostics: Mutex::new(Vec::new()),
                 }
             }
         }
@@ -1588,7 +1617,9 @@ mod tests {
                     })
             }
 
-            fn emit_diagnostic(&self, _d: Diagnostic) {}
+            fn emit_diagnostic(&self, d: Diagnostic) {
+                self.diagnostics.lock().unwrap().push(d);
+            }
 
             fn stdlib_module_read(&self, _import_path: &str) {}
 
@@ -1684,6 +1715,66 @@ mod tests {
             let lib =
                 std::fs::read_to_string(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
             assert_eq!(lib, format!("{HEADER}pub fn hello() {{}}\n"));
+        }
+
+        #[test]
+        fn warns_on_a_header_naming_another_run_and_writes_it_as_returned() {
+            let tmp = tempfile::tempdir().unwrap();
+            let content = "#![generated(by = \"elsewhere\", sources = [\"schema.proto\"])]\n";
+            let response = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "lib.wado".to_string(),
+                    content: content.to_string(),
+                    is_entry: true,
+                }],
+            };
+            let host = MockHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")], Ok(response));
+            runtime()
+                .block_on(async { execute(&sample_invocation(), b"wasm", tmp.path(), &host).await })
+                .unwrap();
+
+            let diagnostics = host.diagnostics.lock().unwrap();
+            let mismatches: Vec<_> = diagnostics
+                .iter()
+                .filter(|d| d.code == wado_compiler::Code::KilnHeaderMismatch)
+                .map(|d| d.message.as_str())
+                .collect();
+            assert_eq!(
+                mismatches,
+                [
+                    "kiln: generated file \"lib.wado\" opens with a header naming by = \"elsewhere\", \
+                     sources = [\"schema.proto\"]; this run is by = \"ns:proto@1.0.0\", \
+                     sources = [\"schema.proto\", \"dep.proto\"]"
+                ]
+            );
+            let lib =
+                std::fs::read_to_string(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
+            assert_eq!(lib, content);
+        }
+
+        #[test]
+        fn a_header_naming_this_run_raises_no_warning() {
+            let tmp = tempfile::tempdir().unwrap();
+            let response = GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "lib.wado".to_string(),
+                    content: "#![generated(by = \"ns:proto@1.0.0\", sources = [\"schema.proto\", \"dep.proto\"])]\n"
+                        .to_string(),
+                    is_entry: true,
+                }],
+            };
+            let host = MockHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")], Ok(response));
+            runtime()
+                .block_on(async { execute(&sample_invocation(), b"wasm", tmp.path(), &host).await })
+                .unwrap();
+            assert!(
+                !host
+                    .diagnostics
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|d| d.code == wado_compiler::Code::KilnHeaderMismatch)
+            );
         }
 
         #[test]
