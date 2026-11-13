@@ -86,6 +86,26 @@ written, or for a path, that path from the package root.
 
 #### `options: T`
 
+#### `pub fn origin(&self) -> Origin`
+
+What the request's outputs came from. Take it before reading an input,
+which moves the input's content out of the request.
+
+### `pub struct Origin`
+
+What a generated file came from: the generator, as the use site named it,
+and the inputs it read, each from the package root.
+
+#### `by: String`
+
+#### `sources: List<String>`
+
+#### `pub fn header(&self) -> String`
+
+The `#![generated]` line, newline included, that opens every file a
+generator returns. Kiln refuses an output that does not open with one.
+With no source, it names none.
+
 ### `pub affine struct InputFile`
 
 One schema file the compiler opened for the generator. The set of
