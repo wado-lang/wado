@@ -507,7 +507,8 @@ fn "opt_sroa_variant_local.wado/run"() {
     let $v0_6: i64;
     let $v2_8: i64;
     let xs: ref "core:prelude/list.wado//List<i64>";
-    let v_38: ref "core:prelude/list.wado//List<i64>";
+    let $v2_22: ref "core:prelude/list.wado//List<i64>";
+    let v_39: ref "core:prelude/list.wado//List<i64>";
     if @unlikely(local.tee $v1_1("opt_sroa_variant_local.wado/payload_breaks"(local.tee $v0_0(black_box(1)))) != -1) {
         cold_path;
         "opt_sroa_variant_local.wado/run$cold7"($v0_0, $v1_1);
@@ -538,11 +539,11 @@ fn "opt_sroa_variant_local.wado/run"() {
         "opt_sroa_variant_local.wado/run$cold2"($v0_0, $v1_1);
         unreachable;
     }
-    $v0_0 = local.tee v_38(black_box(local.tee xs(struct.new "core:prelude/list.wado//List<i64>" { repr: array.new_fixed<i64>(3_i64, 8_i64, 5_i64, 6_i64, 7_i64), used: 5 }))).used;
-    if @unlikely(local.tee $v0_6("opt_sroa_variant_local.wado/last_even"(local.tee v_38(struct.new "core:prelude/list.wado//List<i64>" { repr: let $array_clone_src_1: ref Array<i64>; $array_clone_src_1 = v_38.repr; let $array_clone_dst_2: ref Array<i64>; builtin::array_copy<i64>(local.tee $array_clone_dst_2(builtin::array_new<i64>($v0_0)), 0, $array_clone_src_1, 0, $v0_0); $array_clone_dst_2, used: $v0_0 }).repr, $v0_0)) != 6_i64) {
+    $v0_0 = local.tee v_39(black_box(local.tee xs(struct.new "core:prelude/list.wado//List<i64>" { repr: array.new_fixed<i64>(3_i64, 8_i64, 5_i64, 6_i64, 7_i64), used: 5 }))).used;
+    if @unlikely(local.tee $v0_6("opt_sroa_variant_local.wado/last_even"(local.tee $v2_22(struct.new "core:prelude/list.wado//List<i64>" { repr: $array_clone_src_1 = local.tee v_39(struct.new "core:prelude/list.wado//List<i64>" { repr: let $array_clone_src_1: ref Array<i64>; $array_clone_src_1 = v_39.repr; let $array_clone_dst_2: ref Array<i64>; builtin::array_copy<i64>(local.tee $array_clone_dst_2(builtin::array_new<i64>($v0_0)), 0, $array_clone_src_1, 0, $v0_0); $array_clone_dst_2, used: $v0_0 }).repr; builtin::array_copy<i64>(local.tee $array_clone_dst_2(builtin::array_new<i64>($v0_0)), 0, $array_clone_src_1, 0, $v0_0); $array_clone_dst_2, used: $v0_0 }).repr, $v0_0)) != 6_i64) {
         cold_path;
-        let $mv_arg_4: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_4("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_sroa_variant_local.wado/$tmpl$fcadd92aac407633,[core:prelude/list.wado/List<i64>,core:prelude/list.wado/List<i64>,&core:prelude/list.wado/List<i64>,i64]>"(struct.new "opt_sroa_variant_local.wado//$tmpl$fcadd92aac407633" { h0: xs, h1: v_38, h2: v_38, h3: $v0_6, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_sroa_variant_local.wado:92
+        let $mv_arg_7: ref "core:prelude/string.wado//String";
+        "core:rt/panic"(local.tee $mv_arg_7("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_sroa_variant_local.wado/$tmpl$fcadd92aac407633,[core:prelude/list.wado/List<i64>,core:prelude/list.wado/List<i64>,&core:prelude/list.wado/List<i64>,i64]>"(struct.new "opt_sroa_variant_local.wado//$tmpl$fcadd92aac407633" { h0: xs, h1: v_39, h2: $v2_22, h3: $v0_6, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_sroa_variant_local.wado:92
 condition: last_even(&builtin::black_box(xs)) == 6
 xs: "), used: 113 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_sroa_variant_local.wado:92
 condition: last_even(&builtin::black_box(xs)) == 6
@@ -552,13 +553,13 @@ builtin::black_box(xs): "), used: 25 }, s2: struct.new "core:prelude/string.wado
 &builtin::black_box(xs): "), used: 26 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 &builtin::black_box(xs): "), used: 26 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 last_even(&builtin::black_box(xs)): "), used: 37 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-last_even(&builtin::black_box(xs)): "), used: 37 }, s4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_4.used);
+last_even(&builtin::black_box(xs)): "), used: 37 }, s4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_7.used);
         unreachable;
     }
-    $v0_0 = local.tee v_38(black_box(local.tee xs(struct.new "core:prelude/list.wado//List<i64>" { repr: array.new_fixed<i64>(1_i64, 3_i64), used: 2 }))).used;
-    if @unlikely(local.tee $v0_6("opt_sroa_variant_local.wado/last_even"(local.tee v_38(struct.new "core:prelude/list.wado//List<i64>" { repr: $array_clone_src_1 = v_38.repr; builtin::array_copy<i64>(local.tee $array_clone_dst_2(builtin::array_new<i64>($v0_0)), 0, $array_clone_src_1, 0, $v0_0); $array_clone_dst_2, used: $v0_0 }).repr, $v0_0)) != -1_i64) {
+    $v0_0 = local.tee v_39(black_box(local.tee xs(struct.new "core:prelude/list.wado//List<i64>" { repr: array.new_fixed<i64>(1_i64, 3_i64), used: 2 }))).used;
+    if @unlikely(local.tee $v0_6("opt_sroa_variant_local.wado/last_even"(local.tee $v2_22(struct.new "core:prelude/list.wado//List<i64>" { repr: $array_clone_src_1 = local.tee v_39(struct.new "core:prelude/list.wado//List<i64>" { repr: $array_clone_src_1 = v_39.repr; builtin::array_copy<i64>(local.tee $array_clone_dst_2(builtin::array_new<i64>($v0_0)), 0, $array_clone_src_1, 0, $v0_0); $array_clone_dst_2, used: $v0_0 }).repr; builtin::array_copy<i64>(local.tee $array_clone_dst_2(builtin::array_new<i64>($v0_0)), 0, $array_clone_src_1, 0, $v0_0); $array_clone_dst_2, used: $v0_0 }).repr, $v0_0)) != -1_i64) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_4("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_sroa_variant_local.wado/$tmpl$fcadd92aac407633,[core:prelude/list.wado/List<i64>,core:prelude/list.wado/List<i64>,&core:prelude/list.wado/List<i64>,i64]>"(struct.new "opt_sroa_variant_local.wado//$tmpl$fcadd92aac407633" { h0: xs, h1: v_38, h2: v_38, h3: $v0_6, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_sroa_variant_local.wado:94
+        "core:rt/panic"(local.tee $mv_arg_7("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_sroa_variant_local.wado/$tmpl$fcadd92aac407633,[core:prelude/list.wado/List<i64>,core:prelude/list.wado/List<i64>,&core:prelude/list.wado/List<i64>,i64]>"(struct.new "opt_sroa_variant_local.wado//$tmpl$fcadd92aac407633" { h0: xs, h1: v_39, h2: $v2_22, h3: $v0_6, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_sroa_variant_local.wado:94
 condition: last_even(&builtin::black_box(odd)) == -1
 odd: "), used: 116 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_sroa_variant_local.wado:94
 condition: last_even(&builtin::black_box(odd)) == -1
@@ -568,7 +569,7 @@ builtin::black_box(odd): "), used: 26 }, s2: struct.new "core:prelude/string.wad
 &builtin::black_box(odd): "), used: 27 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 &builtin::black_box(odd): "), used: 27 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 last_even(&builtin::black_box(odd)): "), used: 38 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-last_even(&builtin::black_box(odd)): "), used: 38 }, s4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_4.used);
+last_even(&builtin::black_box(odd)): "), used: 38 }, s4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_7.used);
         unreachable;
     }
     if @unlikely(local.tee $v2_8("opt_sroa_variant_local.wado/passed_whole"(local.tee $v0_6(black_box(4_i64)))) != 4_i64) {
