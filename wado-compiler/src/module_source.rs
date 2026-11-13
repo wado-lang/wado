@@ -111,7 +111,7 @@ fn well_known_arcs() -> Vec<Arc<str>> {
 static STDLIB_NAME_ARCS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
     let mut arcs: Vec<Arc<str>> = Vec::new();
     for path in CORE_MODULE_PATHS {
-        let name = path.strip_prefix("core:").unwrap_or(path);
+        let name = path.trim_prefix("core:");
         arcs.push(Arc::<str>::from(name));
     }
     for path in BINDING_MODULE_PATHS {

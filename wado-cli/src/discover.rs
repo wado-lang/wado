@@ -450,7 +450,7 @@ pub fn display_path(p: &Path) -> String {
     } else {
         raw
     };
-    let stripped = normalised.strip_prefix("./").unwrap_or(&normalised);
+    let stripped = normalised.trim_prefix("./");
     // Shell completion appends the separator to a directory argument, and a
     // path joined from one already ending in it arrives with several. The root
     // is the one path a separator belongs to.
@@ -600,7 +600,7 @@ fn parse_gitignore(content: &str, base: &Path) -> Vec<GitignoreRule> {
 
         // Anchored if there is any '/' inside the (already-stripped) body.
         let anchored = body.contains('/');
-        let body = body.strip_prefix('/').unwrap_or(body);
+        let body = body.trim_prefix('/');
 
         let pattern_str = if anchored {
             body.to_string()

@@ -463,10 +463,7 @@ fn relative_to_cwd(path: &Path) -> Result<String> {
 }
 
 fn relative_to(path: &Path, base_dir: &Path) -> String {
-    path.strip_prefix(base_dir)
-        .unwrap_or(path)
-        .display()
-        .to_string()
+    path.trim_prefix(base_dir).display().to_string()
 }
 
 fn package_sources(

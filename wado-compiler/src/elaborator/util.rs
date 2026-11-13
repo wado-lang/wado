@@ -1,5 +1,7 @@
 //! Utility functions for the elaborator phase.
 
+use std::mem::DropGuard;
+
 use crate::ast::{AstId, Expr, Literal, Pattern};
 use crate::const_eval::format_float_repr;
 use crate::elaborator::float_literal::{FloatFormat, FloatLiteralError, float_literal_bits};
@@ -1102,27 +1104,11 @@ pub(super) fn replaced<O, T, R>(
     value: T,
     body: impl FnOnce(&mut O) -> R,
 ) -> (R, T) {
-    struct Restore<'r, O, T> {
-        owner: &'r mut O,
-        field: for<'s> fn(&'s mut O) -> &'s mut T,
-        saved: Option<T>,
-    }
-    impl<O, T> Drop for Restore<'_, O, T> {
-        fn drop(&mut self) {
-            if let Some(saved) = self.saved.take() {
-                *(self.field)(self.owner) = saved;
-            }
-        }
-    }
     let saved = std::mem::replace(field(owner), value);
-    let mut guard = Restore {
-        owner,
-        field,
-        saved: Some(saved),
-    };
-    let result = body(guard.owner);
-    let saved = guard.saved.take().expect("enclosing value present");
-    let left = std::mem::replace(field(guard.owner), saved);
+    let mut guard = DropGuard::new((owner, saved), |(owner, saved)| *field(owner) = saved);
+    let result = body(guard.0);
+    let (owner, saved) = DropGuard::dismiss(guard);
+    let left = std::mem::replace(field(owner), saved);
     (result, left)
 }
 

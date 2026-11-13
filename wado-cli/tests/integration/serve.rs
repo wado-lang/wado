@@ -206,7 +206,7 @@ fn decode_chunked(mut wire: &str) -> String {
         }
         let end = size.min(rest.len());
         payload.push_str(&rest[..end]);
-        wire = rest[end..].strip_prefix("\r\n").unwrap_or(&rest[end..]);
+        wire = rest[end..].trim_prefix("\r\n");
     }
     payload
 }

@@ -926,7 +926,7 @@ fn a_component_asset_is_collected_through_its_core_module() {
             memory_import: None,
             keep_export: &|_| true,
             stub_export: &|name| {
-                let lift = name.strip_prefix("cabi_post_").unwrap_or(name);
+                let lift = name.trim_prefix("cabi_post_");
                 lift.starts_with("wado:icu/") && lift != used
             },
             strip_custom_sections: true,

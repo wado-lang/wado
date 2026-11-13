@@ -410,7 +410,7 @@ fn has_exponent(repr: &str) -> bool {
 
 /// Whether a number literal, negated or not, is written in hex.
 pub(crate) fn is_hex_literal(repr: &str) -> bool {
-    let unsigned = repr.strip_prefix('-').unwrap_or(repr);
+    let unsigned = repr.trim_prefix('-');
     unsigned.starts_with("0x") || unsigned.starts_with("0X")
 }
 
@@ -947,7 +947,7 @@ impl<'a> Lexer<'a> {
         let line = &self.input[text_start..self.pos];
         // Only the CR of a CRLF ends the line; a bare one is the comment's text.
         let text = match self.peek_char() {
-            Some('\n') => line.strip_suffix('\r').unwrap_or(line),
+            Some('\n') => line.trim_suffix('\r'),
             _ => line,
         }
         .to_string();

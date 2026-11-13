@@ -69,7 +69,7 @@ fn split_root(path: &str) -> (String, &str) {
     let bytes = path.as_bytes();
     if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
         let root = path[..2].to_string();
-        let rest = path[2..].strip_prefix('/').unwrap_or(&path[2..]);
+        let rest = path[2..].trim_prefix('/');
         return (root, rest);
     }
     (String::new(), path)

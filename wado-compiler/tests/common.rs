@@ -73,20 +73,14 @@ pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>)
         // Map diagnostic code to CompileError variant
         if code == Code::InvalidSyntax && message.starts_with("lexer error:") {
             CompileError::Lexer {
-                message: message
-                    .strip_prefix("lexer error: ")
-                    .unwrap_or(&message)
-                    .to_string(),
+                message: message.trim_prefix("lexer error: ").to_string(),
                 line,
                 column,
                 filename: fname,
             }
         } else if code == Code::InvalidSyntax && message.starts_with("parse error:") {
             CompileError::Parser {
-                message: message
-                    .strip_prefix("parse error: ")
-                    .unwrap_or(&message)
-                    .to_string(),
+                message: message.trim_prefix("parse error: ").to_string(),
                 line,
                 column,
                 filename: fname,
@@ -577,7 +571,7 @@ impl WasiHttpHooks for TestHttpCtx {
                 }
                 let body =
                     http_body_util::Full::new(bytes::Bytes::from(mock_resp.body.into_bytes()))
-                        .map_err(|_: std::convert::Infallible| -> HttpError { unreachable!() })
+                        .map_err(|never: !| -> HttpError { never })
                         .boxed_unsync();
                 let resp = builder.body(body).unwrap();
                 Box::new(async {

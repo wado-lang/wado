@@ -67,7 +67,7 @@ pub fn has_generated_marker(source: &str) -> bool {
 /// can be added without invalidating existing files.
 #[must_use]
 pub fn parse_header(source: &str) -> Option<GeneratedHeader> {
-    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
+    let source = source.trim_prefix('\u{feff}');
     let mut tokens = token_kinds(source).peekable();
     let opener = [
         TokenKind::Hash,

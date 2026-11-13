@@ -866,11 +866,13 @@ fn print_definition_text(result: Option<&DefinitionResult>) {
 
 /// Strip the ```` ```wado ```` code fence from a hover value for terminal output.
 fn hover_plaintext(value: &str) -> String {
-    let v = value.trim();
-    let v = v.strip_prefix("```wado").unwrap_or(v);
-    let v = v.strip_prefix('\n').unwrap_or(v);
-    let v = v.strip_suffix("```").unwrap_or(v);
-    v.trim().to_string()
+    value
+        .trim()
+        .trim_prefix("```wado")
+        .trim_prefix('\n')
+        .trim_suffix("```")
+        .trim()
+        .to_string()
 }
 
 fn print_hover_text(result: Option<&HoverResult>) {

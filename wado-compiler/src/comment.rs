@@ -40,7 +40,7 @@ impl Comment {
             self.kind,
             CommentKind::DocLine | CommentKind::ModuleDoc
         ));
-        self.text.strip_prefix(' ').unwrap_or(&self.text)
+        self.text.trim_prefix(' ')
     }
 }
 

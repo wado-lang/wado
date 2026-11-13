@@ -2,7 +2,6 @@
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
-use std::convert::Infallible;
 
 use wasm_encoder::reencode::{Error as ReencodeError, Reencode};
 use wasmparser::{ElementItems, ElementKind};
@@ -378,7 +377,7 @@ fn lookup(map: &[Option<u32>], index: u32, space: &str) -> u32 {
 }
 
 impl Reencode for Remap {
-    type Error = Infallible;
+    type Error = !;
 
     fn function_index(&mut self, func: u32) -> Result<u32, ReencodeError> {
         Ok(lookup(&self.funcs, func, "function"))
