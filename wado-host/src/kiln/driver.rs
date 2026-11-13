@@ -534,10 +534,9 @@ pub async fn cache_matches<H: CompilerHost>(
 }
 
 fn emit_generated_modified_warning<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
-    use wado_compiler::{Diagnostic, Severity};
     host.emit_diagnostic(Diagnostic {
         severity: Severity::Warning,
-        code: wado_compiler::Code::KilnGeneratedModified,
+        code: Code::KilnGeneratedModified,
         message: format!(
             "kiln[{invocation}]: {path} has been modified after generation; \
              the on-disk content is honored, but `wado check` will fail. \
@@ -553,10 +552,9 @@ fn emit_header_mismatch_warning<H: CompilerHost>(
     header: &GeneratedHeader,
     origin: &GeneratedHeader,
 ) {
-    use wado_compiler::{Diagnostic, Severity};
     host.emit_diagnostic(Diagnostic {
         severity: Severity::Warning,
-        code: wado_compiler::Code::KilnHeaderMismatch,
+        code: Code::KilnHeaderMismatch,
         message: format!(
             "kiln: generated file {path:?} opens with a header naming by = {:?}, sources = {:?}; \
              this run is by = {:?}, sources = {:?}",
@@ -567,13 +565,12 @@ fn emit_header_mismatch_warning<H: CompilerHost>(
 }
 
 fn emit_generated_regenerated_notice<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
-    use wado_compiler::{Diagnostic, Severity};
     // `Debug`, not `Warning`: regenerating cached outputs is the expected
     // state after a generator edit, and one run can touch hundreds of
     // files (issue #1218), so per-file warnings are just noise.
     host.emit_diagnostic(Diagnostic {
         severity: Severity::Debug,
-        code: wado_compiler::Code::KilnGeneratedRegenerated,
+        code: Code::KilnGeneratedRegenerated,
         message: format!(
             "kiln[{invocation}]: regenerating {path} (previous content differed from \
              generator output); local edits to this file have been overwritten.",
@@ -583,7 +580,6 @@ fn emit_generated_regenerated_notice<H: CompilerHost>(host: &H, invocation: &str
 }
 
 fn emit_cache_io_warning<H: CompilerHost>(host: &H, path: &Path, source: &std::io::Error) {
-    use wado_compiler::{Code, Diagnostic, Severity};
     host.emit_diagnostic(Diagnostic {
         severity: Severity::Warning,
         code: Code::Log,
@@ -1397,7 +1393,6 @@ fn is_unsupported(err: &PipelineError) -> bool {
 }
 
 fn emit_stale_warning<H: CompilerHost>(host: &H, invocation: &str) {
-    use wado_compiler::{Code, Diagnostic, Severity};
     host.emit_diagnostic(Diagnostic {
         severity: Severity::Warning,
         code: Code::KilnStaleCache,
@@ -1553,7 +1548,6 @@ fn emit_metadata_load_warning<H: CompilerHost>(
     invocation: &str,
     source: &kiln_metadata::MetadataError,
 ) {
-    use wado_compiler::{Code, Diagnostic, Severity};
     host.emit_diagnostic(Diagnostic {
         severity: Severity::Warning,
         code: Code::Log,
@@ -1736,7 +1730,7 @@ mod tests {
             let diagnostics = host.diagnostics.lock().unwrap();
             let mismatches: Vec<_> = diagnostics
                 .iter()
-                .filter(|d| d.code == wado_compiler::Code::KilnHeaderMismatch)
+                .filter(|d| d.code == Code::KilnHeaderMismatch)
                 .map(|d| d.message.as_str())
                 .collect();
             assert_eq!(
@@ -1773,7 +1767,7 @@ mod tests {
                     .lock()
                     .unwrap()
                     .iter()
-                    .any(|d| d.code == wado_compiler::Code::KilnHeaderMismatch)
+                    .any(|d| d.code == Code::KilnHeaderMismatch)
             );
         }
 
