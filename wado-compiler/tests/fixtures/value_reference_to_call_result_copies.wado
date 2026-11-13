@@ -63,3 +63,36 @@ test "a write to the storage" {
     assert *kept == "abc";
     assert *assigned == "abc";
 }
+
+impl Items {
+    fn append(&mut self, s: String) -> i32 {
+        self.items[0].text.push_str(s);
+        return 0;
+    }
+}
+
+fn read(r: &String) -> String {
+    return *r;
+}
+
+fn read_after(r: &String, _written: i32) -> String {
+    return *r;
+}
+
+fn read_checked(r: &String, written: i32) -> String
+    contract written == 0
+{
+    return *r;
+}
+
+test "a write before the call reads the reference" {
+    let mut n = Items { items: [Item { text: "abc" }] };
+    let r = &n.text(0);
+    n.items[0].text.push_str("!");
+    let read_bound = read(r);
+    let read_beside_write = read_after(&n.text(0), n.append("?"));
+    let read_checked_beside_write = read_checked(&n.text(0), n.append("?"));
+    assert read_bound == "abc";
+    assert read_beside_write == "abc!";
+    assert read_checked_beside_write == "abc!?";
+}

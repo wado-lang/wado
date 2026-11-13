@@ -1248,27 +1248,29 @@ impl FunctionTranslator<'_, '_> {
         self.assigned_value(value, value.type_id)
     }
 
-    /// Whether the shared reference `arg` to a value naming no storage is
-    /// handed to a callee that keeps it nowhere past the call, so that no
-    /// write after the call can reach it and its copy is skipped.
+    /// Whether the argument at `position`, a shared reference to a value naming
+    /// no storage, takes no copy: no later argument writes before the callee
+    /// reads it, and the callee keeps it nowhere past the call.
     fn borrowed_for_call(
         &self,
-        arg: &TirExpr,
         callee: &FunctionRef,
+        args: &[(&TirExpr, bool)],
         position: usize,
-        arity: usize,
         result_type: tir::TypeId,
     ) -> bool {
         let TirExprKind::Unary {
             op: TirUnaryOp::Ref,
             expr: referent,
-        } = &arg.kind
+        } = &args[position].0.kind
         else {
             return false;
         };
         !self.names_storage(referent)
             && self.should_wrap_value_copy(referent)
-            && !self.call_keeps(callee, position, arity, result_type)
+            && args[position + 1..]
+                .iter()
+                .all(|(later, _)| later.writes_nothing())
+            && !self.call_keeps(callee, position, args.len(), result_type)
     }
 
     /// Whether the call keeps what it is passed at `position` past its return.
@@ -1312,35 +1314,55 @@ impl FunctionTranslator<'_, '_> {
     /// keeps it nowhere: the borrow then takes no copy, as one passed
     /// straight to the call takes none. Contract checks bind arguments so.
     fn call_borrow_binding(&self, local_index: u32, value: &TirExpr) -> Option<ExprId> {
-        (self.call_borrowed_locals.contains(&local_index)
-            && matches!(
-                value.kind,
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Ref,
-                    ..
-                }
-            ))
-        .then(|| self.uncopied_borrow(value))
+        (value.marks().call_borrow && self.call_borrowed_locals.contains(&local_index))
+            .then(|| self.uncopied_borrow(value))
     }
 
-    /// The locals whose every read is an argument a direct call keeps nowhere
-    /// past its return ([`Self::call_borrow_binding`]).
+    /// The locals every binding of which is a borrow contract checks bind
+    /// ahead of their call ([`tir::ExprMarks::call_borrow`]), and every read of
+    /// which is an argument a direct call keeps nowhere past its return
+    /// ([`Self::call_borrow_binding`]).
     fn call_borrowed_locals_of(&self, func: &TirFunction) -> IndexSet<u32> {
         struct Reads<'t, 'a, 'p> {
             translator: &'t FunctionTranslator<'a, 'p>,
+            bound: IndexSet<u32>,
             unkept: IndexSet<u32>,
             other: IndexSet<u32>,
         }
+        impl Reads<'_, '_, '_> {
+            fn binding(&mut self, local: u32, value: &TirExpr) {
+                match value.kind {
+                    // A declaration without a value, which an assignment binds.
+                    TirExprKind::Unit => {}
+                    _ if value.marks().call_borrow => {
+                        self.bound.insert(local);
+                    }
+                    _ => {
+                        self.other.insert(local);
+                    }
+                }
+                self.visit_expr(value);
+            }
+        }
         impl TirRefVisitor for Reads<'_, '_, '_> {
+            fn visit_stmt(&mut self, stmt: &TirStmt) {
+                match &stmt.kind {
+                    TirStmtKind::Let {
+                        local_index, value, ..
+                    } => self.binding(*local_index, value),
+                    _ => self.walk_stmt(stmt),
+                }
+            }
+
             fn visit_expr(&mut self, expr: &TirExpr) {
                 match &expr.kind {
                     TirExprKind::Local { index, .. } => {
                         self.other.insert(*index);
                     }
                     TirExprKind::Assign { target, value }
-                        if matches!(target.kind, TirExprKind::Local { .. }) =>
+                        if let TirExprKind::Local { index, .. } = target.kind =>
                     {
-                        self.visit_expr(value);
+                        self.binding(index, value);
                     }
                     TirExprKind::Call { func, args, .. } => {
                         let ordered = self.translator.call_args_in_param_order(func, args);
@@ -1383,11 +1405,14 @@ impl FunctionTranslator<'_, '_> {
         };
         let mut reads = Reads {
             translator: self,
+            bound: IndexSet::default(),
             unkept: IndexSet::default(),
             other: IndexSet::default(),
         };
         reads.visit_block(body);
-        reads.unkept.retain(|local| !reads.other.contains(local));
+        reads
+            .unkept
+            .retain(|local| reads.bound.contains(local) && !reads.other.contains(local));
         reads.unkept
     }
 
@@ -2697,7 +2722,7 @@ impl FunctionTranslator<'_, '_> {
                         expr: self.convert_operand(e),
                         is_mut: *is_mut,
                     }
-                } else if self.borrowed_for_call(e, func, i, ordered.len(), result_type) {
+                } else if self.borrowed_for_call(func, &ordered, i, result_type) {
                     ArenaCallArg {
                         expr: self.uncopied_borrow(e).into(),
                         is_mut: *is_mut,

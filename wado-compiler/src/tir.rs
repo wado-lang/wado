@@ -949,6 +949,10 @@ pub struct ExprMarks {
     /// A temporary a `let` keeps borrowed ([`crate::ownership::Modes::extended`]),
     /// which drops as the `let`'s scope ends rather than its statement.
     pub extended: bool,
+    /// A borrow contract checks bind ahead of the call reading it, where
+    /// nothing evaluated in between writes: the later arguments write nothing
+    /// ([`TirExpr::writes_nothing`]), and a clause never writes.
+    pub call_borrow: bool,
 }
 
 impl TirExpr {
@@ -978,6 +982,56 @@ impl TirExpr {
         let marks = self.marks();
         *self = with;
         self.marks.set(marks);
+    }
+
+    /// Whether evaluating `self` can write no storage: it reads, builds values
+    /// and computes, but calls nothing, assigns nothing and lends nothing
+    /// mutably.
+    #[must_use]
+    pub fn writes_nothing(&self) -> bool {
+        struct Reads {
+            writes_nothing: bool,
+        }
+        impl crate::tir_visitor::TirRefVisitor for Reads {
+            fn visit_expr(&mut self, expr: &TirExpr) {
+                match &expr.kind {
+                    TirExprKind::IntLiteral { .. }
+                    | TirExprKind::FloatLiteral { .. }
+                    | TirExprKind::BoolLiteral(_)
+                    | TirExprKind::CharLiteral(_)
+                    | TirExprKind::StringLiteral(_)
+                    | TirExprKind::BytesLiteral(_)
+                    | TirExprKind::Null
+                    | TirExprKind::Unit
+                    | TirExprKind::Local { .. }
+                    | TirExprKind::Capture { .. }
+                    | TirExprKind::FuncRef { .. }
+                    | TirExprKind::GlobalVarGet { .. }
+                    | TirExprKind::Binary { .. }
+                    | TirExprKind::Cast { .. }
+                    | TirExprKind::Move { .. }
+                    | TirExprKind::FieldAccess { .. }
+                    | TirExprKind::StructLiteral { .. }
+                    | TirExprKind::TupleLiteral { .. }
+                    | TirExprKind::ArrayLiteral { .. }
+                    | TirExprKind::VariantConstruct { .. }
+                    | TirExprKind::EnumConstruct { .. }
+                    | TirExprKind::VariantTag { .. }
+                    | TirExprKind::VariantTest { .. }
+                    | TirExprKind::VariantPayload { .. }
+                    | TirExprKind::Widen { .. } => self.walk_expr(expr),
+                    TirExprKind::Unary { op, .. } if *op != TirUnaryOp::MutRef => {
+                        self.walk_expr(expr);
+                    }
+                    _ => self.writes_nothing = false,
+                }
+            }
+        }
+        let mut reads = Reads {
+            writes_nothing: true,
+        };
+        crate::tir_visitor::TirRefVisitor::visit_expr(&mut reads, self);
+        reads.writes_nothing
     }
 
     /// The place `self` moves out of, or `self` where it moves nothing.
