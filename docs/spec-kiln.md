@@ -577,7 +577,8 @@ package root, the primary first:
 ```
 
 A header naming another generator or other inputs is written as returned, with
-a warning (`KILN_HEADER_MISMATCH`).
+a warning (`KILN_HEADER_MISMATCH`) on every run that uses the file, cached or
+not.
 
 That output was written to a directory the use site chose:
 

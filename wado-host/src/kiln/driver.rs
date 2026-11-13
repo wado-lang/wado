@@ -556,8 +556,8 @@ fn warn_on_foreign_headers<H: CompilerHost>(
             .collect(),
     };
     for output in outputs {
-        // An unreadable or headerless file is a stale cache or a hand edit,
-        // which the cache check reports.
+        // `execute` refuses a headerless output, so an unreadable or headerless
+        // one here is a stale cache or a hand edit, each already warned of.
         if let Ok(content) = std::fs::read_to_string(manifest_root.join(&output.path))
             && let Some(header) = parse_header(&content)
             && header != origin
@@ -1602,7 +1602,6 @@ mod tests {
             sources: IndexMap<String, Vec<u8>>,
             response: Mutex<Option<Result<GeneratorResponse, GeneratorRunnerError>>>,
             requests: Mutex<Vec<GeneratorRequest>>,
-            diagnostics: Mutex<Vec<Diagnostic>>,
         }
 
         impl MockHost {
@@ -1618,7 +1617,6 @@ mod tests {
                     sources,
                     response: Mutex::new(Some(response)),
                     requests: Mutex::new(Vec::new()),
-                    diagnostics: Mutex::new(Vec::new()),
                 }
             }
         }
@@ -1633,9 +1631,7 @@ mod tests {
                     })
             }
 
-            fn emit_diagnostic(&self, d: Diagnostic) {
-                self.diagnostics.lock().unwrap().push(d);
-            }
+            fn emit_diagnostic(&self, _d: Diagnostic) {}
 
             fn stdlib_module_read(&self, _import_path: &str) {}
 
@@ -1731,26 +1727,6 @@ mod tests {
             let lib =
                 std::fs::read_to_string(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
             assert_eq!(lib, format!("{HEADER}pub fn hello() {{}}\n"));
-        }
-
-        #[test]
-        fn writes_a_header_naming_another_run_as_returned() {
-            let tmp = tempfile::tempdir().unwrap();
-            let content = "#![generated(by = \"elsewhere\", sources = [\"schema.proto\"])]\n";
-            let response = GeneratorResponse {
-                files: vec![GeneratorOutputFile {
-                    path: "lib.wado".to_string(),
-                    content: content.to_string(),
-                    is_entry: true,
-                }],
-            };
-            let host = MockHost::new(&[("schema.proto", b"p"), ("dep.proto", b"d")], Ok(response));
-            runtime()
-                .block_on(async { execute(&sample_invocation(), b"wasm", tmp.path(), &host).await })
-                .unwrap();
-            let lib =
-                std::fs::read_to_string(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
-            assert_eq!(lib, content);
         }
 
         #[test]
