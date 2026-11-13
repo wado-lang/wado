@@ -25,6 +25,9 @@ test "an origin's header quotes what it holds" {
     let origin = Origin { by: "./gen.wado", sources: ["a\"b\\c.g4", "d.g4"] };
     assert origin.header() == "#![generated(by = \"./gen.wado\", sources = [\"a\\\"b\\\\c.g4\", \"d.g4\"])]\n";
     assert Origin { by: "lib:x", sources: [] }.header() == "#![generated(by = \"lib:x\")]\n";
+    let long = "d/".repeat(200);
+    assert Origin { by: "lib:x", sources: [`a\nb\r\u{0}c`, long] }.header()
+        == `#![generated(by = "lib:x", sources = ["a\\nb\\r\\u{0}c", "${long}"])]\n`;
 }
 
 test "Error renders its reason" {

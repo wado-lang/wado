@@ -217,6 +217,11 @@ impl CodeWriter {
         return self.indent_level;
     }
 
+    /// Whether nothing has been written.
+    pub fn is_empty(&self) -> bool {
+        return self.buf.is_empty();
+    }
+
     /// Whether the innermost open block is a function body `FnSpec::emit_begin`
     /// opened.
     pub fn innermost_is_fn_body(&self) -> bool {
@@ -1588,7 +1593,7 @@ impl ModuleSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter)
-        contract w.depth() == 0
+        contract w.is_empty(), "the header opens the module"
     {
         w.raw(self.origin.header());
     }

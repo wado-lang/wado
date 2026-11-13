@@ -217,15 +217,11 @@ impl Origin {
     }
 }
 
-/// `text` as a string literal.
+/// `text` as a string literal: its `Inspect`, uncapped.
 fn quoted(text: &String) -> String {
-    let mut out = "\"";
-    for let c of text.chars() {
-        if c == '"' || c == '\\' {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out.push('"');
+    let mut out = String::new();
+    let mut f = Formatter::new(&mut out);
+    f.precision = Formatter::PRECISION_INFINITE;
+    text.inspect(&mut f);
     return out;
 }

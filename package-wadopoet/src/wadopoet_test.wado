@@ -41,6 +41,13 @@ test "ModuleSpec opens a module with the header its origin gives" {
     assert standalone.to_string() == origin.header();
 }
 
+#[expect_trap]
+test "ModuleSpec refuses a writer that already holds text" {
+    let mut w = CodeWriter::new();
+    w.line("use { x } from \"./x.wado\";");
+    ModuleSpec::new("scripts/gen.wado").emit(&mut w);
+}
+
 test "a module ModuleSpec opens compiles" {
     let mut w = CodeWriter::new();
     ModuleSpec::new("scripts/gen.wado", ["a\"b\\c.txt"]).emit(&mut w);
