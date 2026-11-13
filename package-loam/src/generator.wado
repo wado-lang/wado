@@ -4,7 +4,7 @@
 
 use { Request, Response, Error as KilnError, OutputFile, package_of, read_all } from "core:kiln";
 use { NoFields, info } from "core:log";
-use { CodeWriter, ModuleSpec } from "lib:wadopoet";
+use { ModuleSpec } from "lib:wadopoet";
 use { CheckpointFile } from "./safetensors.wado";
 use {
     Spelling,
@@ -13,6 +13,7 @@ use {
     generate_model,
     generate_tokenizer,
     header_extent,
+    opened,
     read_header,
     spelling_of,
     weights_of,
@@ -40,12 +41,9 @@ fn refused(req: Request<Options>, error: KilnError) -> Result<Response, KilnErro
 
 /// The one file a generation writes: `body`, opened by `module`.
 fn entry(path: String, module: &ModuleSpec, body: String) -> Response {
-    let mut w = CodeWriter::with_capacity(body.len() + 128);
-    module.emit(&mut w);
-    w.raw(body);
     return Response {
         files: [
-            OutputFile { path, content: w.to_string(), is_entry: true },
+            OutputFile { path, content: opened(module, body), is_entry: true },
         ],
     };
 }

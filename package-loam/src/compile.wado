@@ -2,6 +2,7 @@
 //! generator and the `loam` command both run it.
 
 use { TreeMap } from "core:collections";
+use { CodeWriter, ModuleSpec } from "lib:wadopoet";
 use { Deserialize } from "core:serde";
 use { Decode, Placement, emit } from "./emit.wado";
 use { emit_tokenizer } from "./emit_tokenizer.wado";
@@ -241,6 +242,14 @@ fn check_left_in_place(vi: &ValueInfo, in_place: &InPlace) -> Result<(), String>
 pub fn generate_tokenizer(path: &String, bytes: ByteList, runtime: &String) -> Result<String, String> {
     let bpe = read_tokenizer(&text_of(path, bytes)?).map_err(|e| at(path, &e))?;
     return Result::Ok(emit_tokenizer(&bpe, path, runtime));
+}
+
+/// The generated module: `body`, opened by `module`'s header.
+pub fn opened(module: &ModuleSpec, body: String) -> String {
+    let mut w = CodeWriter::with_capacity(body.len() + 128);
+    module.emit(&mut w);
+    w.raw(body);
+    return w.to_string();
 }
 
 /// A checkpoint's leading bytes, through the end of its header, of the file, or

@@ -96,15 +96,35 @@ fn kiln(primary: [String, ByteList, String], options: Options) -> String with (S
 
 test "gen prints the module the Kiln generator builds for the same graph and options" {
     let dir = scratch("gen");
-    let printed = on_graph("gen", &dir, []).unwrap();
     let path = `${dir}/g.onnxtext`;
-    assert printed == kiln([path, GRAPH.bytes().collect(), "onnxtext"], Options { embed: true });
+    let [gen_header, gen_body] = split_header(on_graph("gen", &dir, []).unwrap());
+    let [kiln_header, kiln_body] = split_header(
+        kiln([path, GRAPH.bytes().collect(), "onnxtext"], Options { embed: true }),
+    );
+    assert gen_header == `#![generated(by = "loam", sources = ["${path}"])]`;
+    assert kiln_header == `#![generated(by = "lib:loam", sources = ["${path}"])]`;
+    assert gen_body == kiln_body;
 }
 
 test "gen prints the tokenizer the Kiln generator builds" {
     let path = "tests/models/tiny-gpt2/tokenizer.json";
-    let printed = loam(["gen", "--type", "hf-tokenizer", path]).unwrap();
-    assert printed == kiln([path, fs::read(path).unwrap(), "hf-tokenizer"], Options {});
+    let [gen_header, gen_body] = split_header(loam(["gen", "--type", "hf-tokenizer", path]).unwrap());
+    let [kiln_header, kiln_body] = split_header(
+        kiln([path, fs::read(path).unwrap(), "hf-tokenizer"], Options {}),
+    );
+    assert gen_header == `#![generated(by = "loam", sources = ["${path}"])]`;
+    assert kiln_header == `#![generated(by = "lib:loam", sources = ["${path}"])]`;
+    assert gen_body == kiln_body;
+}
+
+/// A generated module's `#![generated]` line, and what follows it.
+fn split_header(source: String) -> [String, String] {
+    let view = source.as_str_slice();
+    let end = view.find("\n").unwrap();
+    return [
+        view.slice(0, end).to_string(),
+        view.slice(end, view.len()).to_string(),
+    ];
 }
 
 test "gen --output writes the module and prints nothing" {
