@@ -407,14 +407,15 @@ fn "namespaced_prelude_array_impl_bound.wado/$template_segment$namespaced_prelud
 }
 
 fn "namespaced_prelude_array_impl_bound.wado/$cm_export__$test_0_a_namespaced_array_impl_satisfies_a_bound"() {
+    let $v2: i32;
     let elements: ref Array<i32>;
     elements = array.new_fixed<i32>(7);
     let $array_clone_dst_2: ref Array<i32>;
     builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(1)), 0, elements, 0, 1);
-    if @unlikely(local.tee $array_clone_len_6(builtin::array_len(local.tee elements(let $array_clone_len_6: i32; builtin::array_copy<i32>(local.tee elements(builtin::array_new<i32>(local.tee $array_clone_len_6(builtin::array_len($array_clone_dst_2)))), 0, $array_clone_dst_2, 0, $array_clone_len_6); elements))) != 1) {
+    if @unlikely(local.tee $v2(builtin::array_len($array_clone_dst_2)) != 1) {
         cold_path;
-        let $mv_arg_7: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_7("core:prelude/string.wado/core:prelude/string.wado/String::format<namespaced_prelude_array_impl_bound.wado/$tmpl$adbb9024600d705e,[Array<i32>,&Array<i32>,i32]>"(struct.new "namespaced_prelude_array_impl_bound.wado//$tmpl$adbb9024600d705e" { h0: $array_clone_dst_2, h1: elements, h2: $array_clone_len_6, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_namespaced_array_impl_satisfies_a_bound at namespaced_prelude_array_impl_bound.wado:21
+        let $mv_arg_4: ref "core:prelude/string.wado//String";
+        "core:rt/panic"(local.tee $mv_arg_4("core:prelude/string.wado/core:prelude/string.wado/String::format<namespaced_prelude_array_impl_bound.wado/$tmpl$adbb9024600d705e,[Array<i32>,&Array<i32>,i32]>"(struct.new "namespaced_prelude_array_impl_bound.wado//$tmpl$adbb9024600d705e" { h0: $array_clone_dst_2, h1: $array_clone_dst_2, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_namespaced_array_impl_satisfies_a_bound at namespaced_prelude_array_impl_bound.wado:21
 condition: first_of(&l.to_array()) == 1
 l.to_array(): "), used: 171 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_namespaced_array_impl_satisfies_a_bound at namespaced_prelude_array_impl_bound.wado:21
 condition: first_of(&l.to_array()) == 1
@@ -422,7 +423,7 @@ l.to_array(): "), used: 171 }, s1: struct.new "core:prelude/string.wado//String"
 &l.to_array(): "), used: 16 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 &l.to_array(): "), used: 16 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 first_of(&l.to_array()): "), used: 26 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-first_of(&l.to_array()): "), used: 26 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_7.used);
+first_of(&l.to_array()): "), used: 26 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_4.used);
         unreachable;
     }
     "wasi/task-return"(0);

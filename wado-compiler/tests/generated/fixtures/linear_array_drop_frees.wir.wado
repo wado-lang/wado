@@ -277,7 +277,7 @@ fn "linear_array_drop_frees.wado/run"() with Stdout {
     let current: i32;
     let out_26: ref "core:prelude/string.wado//String";
     let $sroa_$iter_0_start_123: i32;
-    let array_549: ref null "core:linear//LinearArray<u64>";
+    let array_550: ref null "core:linear//LinearArray<u64>";
     let $drop_spill_2: u64;
     let $v3: i32;
     $v3 = 2147483647 / 8;
@@ -288,18 +288,18 @@ fn "linear_array_drop_frees.wado/run"() with Stdout {
     }
     let $mv_block_1: ref null "core:linear//Block";
     multivalue_bind [$mv_block_1, $v3] = "core:linear/core:linear/LinearArray<u64>::filled$unchecked$dae[len]$spec0$dae[value]"();
-    array_549 = struct.new "core:linear//LinearArray<u64>" { block: $mv_block_1, len: $v3 };
+    array_550 = struct.new "core:linear//LinearArray<u64>" { block: $mv_block_1, len: $v3 };
     if @unlikely(0 >= $v3) {
         cold_path;
         "core:linear/core:linear/LinearArray<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $v3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_drop_frees.wado:9"), used: 30 });
         unreachable;
     }
     $drop_spill_2 = builtin::load_i64($mv_block_1.ptr + (0 * 8));
-    if ref.is_null(array_549) == 0 {
+    if ref.is_null(array_550) == 0 {
         if ref.is_null($mv_block_1) == 0 {
             drop("mem/realloc"($mv_block_1.ptr, $mv_block_1.bytes, 16, 0));
         }
-        array_549.block = ref.null none;
+        array_550.block = ref.null none;
     }
     $v3 = builtin::memory_size();
     $sroa_$iter_0_start_123 = 1;

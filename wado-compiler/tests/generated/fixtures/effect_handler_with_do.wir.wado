@@ -103,7 +103,7 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let start_234: i32;
-    let $sroa_view_repr_546: ref Array<u8>;
+    let $sroa_view_repr_547: ref Array<u8>;
     clock = struct.new "effect_handler_with_do.wado//FixedClock" { mark: 12345_i64 };
     global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clock.wado/MonotonicClock = struct.new "effect_handler_with_do.wado//$Dispatch_wasi:clocks/monotonic_clock.wado/MonotonicClock" { outer: local.tee $save_wasi:clocks/monotonic_clock.wado/MonotonicClock(global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clock.wado/MonotonicClock), op_now: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_with_do.wado//$Closure_1" { $capture_0: clock }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_0" } };
     $local_2 = $inline__effect_dispatch__wasi_clocks_monotonic_clock_wado_MonotonicClock__now_1: block -> u64 {
@@ -121,9 +121,9 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
         unreachable;
     };
     out_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
-    $sroa_view_repr_546 = global:effect_handler_with_do.wado::$const_obj_0;
+    $sroa_view_repr_547 = global:effect_handler_with_do.wado::$const_obj_0;
     out_20.used = local.tee $load_4(6);
-    builtin::array_copy<u8>(local.tee $load_5(out_20.repr), 0, $sroa_view_repr_546, 0, 6);
+    builtin::array_copy<u8>(local.tee $load_5(out_20.repr), 0, $sroa_view_repr_547, 0, 6);
     digit_count_82 = $inline_count_digits_u64_1: block -> i32 {
         if $local_2 <u 100000_i64 {
             if $local_2 <u 100_i64 {
@@ -190,22 +190,22 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     }
     start_234 = out_20.used;
     out_20.used = $load_4;
-    $sroa_view_repr_546 = out_20.repr;
+    $sroa_view_repr_547 = out_20.repr;
     $load_4 = start_234 + digit_count_82;
     b22: block {
         l23: loop {
             break_if b22 ($load_4 - start_234) < 2;
             q = $local_2 /u 100_i64;
             tens = local.tee digit_count_82(builtin::i32_wrap_i64($local_2 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_546, $load_4 - 1, (48 + digit_count_82) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_546, $load_4 - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_547, $load_4 - 1, (48 + digit_count_82) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_547, $load_4 - 2, 48 + tens);
             $load_4 = $load_4 - 2;
             $local_2 = q;
             continue l23;
         };
     };
     if $load_4 > start_234 {
-        builtin::array_set_u8($sroa_view_repr_546, start_234, 48 + builtin::i32_wrap_i64($local_2 %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_547, start_234, 48 + builtin::i32_wrap_i64($local_2 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
@@ -213,11 +213,11 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     $load_4 = builtin::i32_wrap_i64(local.tee $local_2("wasi/stream-new"()));
     digit_count_82 = builtin::i32_wrap_i64($local_2 >> 32_i64);
     $load_4 = "effect_handler_with_do.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_4);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_546(builtin::array_new<u8>(local.tee start_234(out_20.used) + 1)), 0, out_20.repr, 0, start_234);
-    builtin::array_set_u8($sroa_view_repr_546, start_234, 10);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_547(builtin::array_new<u8>(local.tee start_234(out_20.used) + 1)), 0, out_20.repr, 0, start_234);
+    builtin::array_set_u8($sroa_view_repr_547, start_234, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         start_234 = start_234 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(digit_count_82, $sroa_view_repr_546, 0, start_234);
+        "core:rt/cm_stream_write_raw_all_u8"(digit_count_82, $sroa_view_repr_547, 0, start_234);
     });
     "wasi/stream-drop-writable"(digit_count_82);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_4);

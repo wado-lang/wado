@@ -185,9 +185,9 @@ fn "opt_multi_value_one_field.wado/maybe"(v) {
     let x: i64;
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_513: ref Array<u8>;
+    let $sroa_view_repr_514: ref Array<u8>;
     if v > 0 {
-        return out_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; $sroa_view_repr_513 = global:opt_multi_value_one_field.wado::$const_obj_0; out_4.used = local.tee $load_0(1); builtin::array_copy<u8>(local.tee $load_1(out_4.repr), 0, $sroa_view_repr_513, 0, 1); is_negative_66 = v < 0; x = builtin::i64_extend_i32_s(v); x = select i64(x < 0_i64, 0_i64 - x, x); v = $inline_count_digits_u64_0: block -> i32 {
+        return out_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; $sroa_view_repr_514 = global:opt_multi_value_one_field.wado::$const_obj_0; out_4.used = local.tee $load_0(1); builtin::array_copy<u8>(local.tee $load_1(out_4.repr), 0, $sroa_view_repr_514, 0, 1); is_negative_66 = v < 0; x = builtin::i64_extend_i32_s(v); x = select i64(x < 0_i64, 0_i64 - x, x); v = $inline_count_digits_u64_0: block -> i32 {
             if x <u 100000_i64 {
                 if x <u 100_i64 {
                     if x <u 10_i64 {
@@ -258,19 +258,19 @@ fn "opt_multi_value_one_field.wado/maybe"(v) {
         }; if @unlikely(local.tee $load_0(out_4.used + v) > builtin::array_len(out_4.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_4, $load_0);
-        }; is_negative_66 = out_4.used; out_4.used = $load_0; $sroa_view_repr_513 = out_4.repr; v = is_negative_66 + v; b23: block {
+        }; is_negative_66 = out_4.used; out_4.used = $load_0; $sroa_view_repr_514 = out_4.repr; v = is_negative_66 + v; b23: block {
             l24: loop {
                 break_if b23 (v - is_negative_66) < 2;
                 q = x /u 100_i64;
                 tens = local.tee $load_0(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-                builtin::array_set_u8($sroa_view_repr_513, v - 1, (48 + $load_0) - (tens * 10));
-                builtin::array_set_u8($sroa_view_repr_513, v - 2, 48 + tens);
+                builtin::array_set_u8($sroa_view_repr_514, v - 1, (48 + $load_0) - (tens * 10));
+                builtin::array_set_u8($sroa_view_repr_514, v - 2, 48 + tens);
                 v = v - 2;
                 x = q;
                 continue l24;
             };
         }; if v > is_negative_66 {
-            builtin::array_set_u8($sroa_view_repr_513, is_negative_66, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+            builtin::array_set_u8($sroa_view_repr_514, is_negative_66, 48 + builtin::i32_wrap_i64(x %u 10_i64));
         }; $inline_core_prelude_string_wado_String__internal_push_view_40: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_40;
         }; out_4;

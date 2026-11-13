@@ -225,12 +225,12 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let $sroa_view_repr_660: ref Array<u8>;
+    let $sroa_view_repr_661: ref Array<u8>;
     self_8 = local.tee dirs("wasi_filesystem.wado/$cm_binding__wasi:filesystem/preopens@0.3.0#get-directories"()).used;
     out_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 };
-    $sroa_view_repr_660 = global:wasi_filesystem.wado::$const_obj_5;
+    $sroa_view_repr_661 = global:wasi_filesystem.wado::$const_obj_5;
     out_12.used = local.tee $load_1(24);
-    builtin::array_copy<u8>(local.tee $load_2(out_12.repr), 0, $sroa_view_repr_660, 0, 24);
+    builtin::array_copy<u8>(local.tee $load_2(out_12.repr), 0, $sroa_view_repr_661, 0, 24);
     is_negative_74 = self_8 < 0;
     x = builtin::i64_extend_i32_s(self_8);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -310,25 +310,25 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
     }
     is_negative_74 = out_12.used;
     out_12.used = $load_1;
-    $sroa_view_repr_660 = out_12.repr;
+    $sroa_view_repr_661 = out_12.repr;
     digit_count_76 = is_negative_74 + digit_count_76;
     b22: block {
         l23: loop {
             break_if b22 (digit_count_76 - is_negative_74) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_660, digit_count_76 - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_660, digit_count_76 - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_661, digit_count_76 - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_661, digit_count_76 - 2, 48 + tens);
             digit_count_76 = digit_count_76 - 2;
             x = q;
             continue l23;
         };
     };
     if digit_count_76 > is_negative_74 {
-        builtin::array_set_u8($sroa_view_repr_660, is_negative_74, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_661, is_negative_74, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $load_2 = global:wasi_filesystem.wado::$const_obj_4;
-    if @unlikely(local.tee $load_1($load_1 + 12) > builtin::array_len($sroa_view_repr_660)) {
+    if @unlikely(local.tee $load_1($load_1 + 12) > builtin::array_len($sroa_view_repr_661)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, $load_1);
     }
@@ -349,18 +349,18 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
         self_8 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
         $load_1 = builtin::i32_wrap_i64(x >> 32_i64);
         self_8 = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_8);
-        builtin::array_copy<u8>(local.tee $sroa_view_repr_660(builtin::array_new<u8>(34)), 0, global:wasi_filesystem.wado::$const_obj_3, 0, 33);
-        builtin::array_set_u8($sroa_view_repr_660, 33, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($load_1, $sroa_view_repr_660);
+        builtin::array_copy<u8>(local.tee $sroa_view_repr_661(builtin::array_new<u8>(34)), 0, global:wasi_filesystem.wado::$const_obj_3, 0, 33);
+        builtin::array_set_u8($sroa_view_repr_661, 33, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($load_1, $sroa_view_repr_661);
         "wasi/stream-drop-writable"($load_1);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_8);
         if out_12.used >= 0 {
             self_8 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
             $load_1 = builtin::i32_wrap_i64(x >> 32_i64);
             self_8 = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_8);
-            builtin::array_copy<u8>(local.tee $sroa_view_repr_660(builtin::array_new<u8>(37)), 0, global:wasi_filesystem.wado::$const_obj_2, 0, 36);
-            builtin::array_set_u8($sroa_view_repr_660, 36, 10);
-            "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($load_1, $sroa_view_repr_660);
+            builtin::array_copy<u8>(local.tee $sroa_view_repr_661(builtin::array_new<u8>(37)), 0, global:wasi_filesystem.wado::$const_obj_2, 0, 36);
+            builtin::array_set_u8($sroa_view_repr_661, 36, 10);
+            "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($load_1, $sroa_view_repr_661);
             "wasi/stream-drop-writable"($load_1);
             "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_8);
         }
@@ -368,18 +368,18 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
         self_8 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
         $load_1 = builtin::i32_wrap_i64(x >> 32_i64);
         self_8 = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_8);
-        builtin::array_copy<u8>(local.tee $sroa_view_repr_660(builtin::array_new<u8>(57)), 0, global:wasi_filesystem.wado::$const_obj_1, 0, 56);
-        builtin::array_set_u8($sroa_view_repr_660, 56, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]$dae[return]"($load_1, $sroa_view_repr_660);
+        builtin::array_copy<u8>(local.tee $sroa_view_repr_661(builtin::array_new<u8>(57)), 0, global:wasi_filesystem.wado::$const_obj_1, 0, 56);
+        builtin::array_set_u8($sroa_view_repr_661, 56, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]$dae[return]"($load_1, $sroa_view_repr_661);
         "wasi/stream-drop-writable"($load_1);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_8);
     }
     self_8 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $load_1 = builtin::i32_wrap_i64(x >> 32_i64);
     self_8 = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_8);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_660(builtin::array_new<u8>(28)), 0, global:wasi_filesystem.wado::$const_obj_0, 0, 27);
-    builtin::array_set_u8($sroa_view_repr_660, 27, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec3$sroa[data.repr]$dae[return]"($load_1, $sroa_view_repr_660);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_661(builtin::array_new<u8>(28)), 0, global:wasi_filesystem.wado::$const_obj_0, 0, 27);
+    builtin::array_set_u8($sroa_view_repr_661, 27, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec3$sroa[data.repr]$dae[return]"($load_1, $sroa_view_repr_661);
     "wasi/stream-drop-writable"($load_1);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_8);
     if ref.is_null(dirs) == 0 {

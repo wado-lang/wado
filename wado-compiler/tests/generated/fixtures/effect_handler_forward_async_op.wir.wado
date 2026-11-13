@@ -1743,10 +1743,10 @@ fn "effect_handler_forward_async_op.wado/$cm_task_entry__handle"(request) {
     let used_214: i32;
     let is_negative_287: bool;
     let result: ref "core:prelude/list.wado//List<u8>";
-    let $sroa_$pattern_temp_0_1_335: i32;
+    let $sroa_$pattern_temp_0_1_336: i32;
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_764: ref Array<u8>;
+    let $sroa_view_repr_766: ref Array<u8>;
     mock = struct.new "effect_handler_forward_async_op.wado//MockClient" { calls: 0, ends: used_214 = builtin::array_len(local.tee elements_213(array.new_fixed<ref null "core:prelude//$Resource">())); struct.new "core:prelude/list.wado//List<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>" { repr: elements_213, used: used_214 } };
     global:effect_handler_forward_async_op.wado::$effect_wasi:http/client.wado/Client = struct.new "effect_handler_forward_async_op.wado//$Dispatch_wasi:http/client.wado/Client" { outer: local.tee $local_18(global:effect_handler_forward_async_op.wado::$effect_wasi:http/client.wado/Client), op_send: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_async_op.wado//$Closure_3" { $capture_0: ref.as_non_null(mock) }, func: ref.func "closure/effect_handler_forward_async_op.wado/$closure_wrapper_2" } };
     $local_16 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: global:effect_handler_forward_async_op.wado::$effect_wasi:http/client.wado/Client = struct.new "effect_handler_forward_async_op.wado//$Dispatch_wasi:http/client.wado/Client" { outer: local.tee $local_14(global:effect_handler_forward_async_op.wado::$effect_wasi:http/client.wado/Client), op_send: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_async_op.wado//$Closure_4" {}, func: ref.func "closure/effect_handler_forward_async_op.wado/$closure_wrapper_3" } }; $local_16 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: "effect_handler_forward_async_op.wado/fetch_upstream"() }; global:effect_handler_forward_async_op.wado::$effect_wasi:http/client.wado/Client = $local_14; ref.as_non_null(ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"($local_16).payload_0) };
@@ -1771,7 +1771,7 @@ mock.calls: "), used: 109 }, s1: struct.new "core:prelude/string.wado//String" {
     }
     "effect_handler_forward_async_op.wado/effect_handler_forward_async_op.wado/MockClient::end_writes$sroa[&mut(self.ends)]"(mock.ends);
     $cm_handle_3 = builtin::i32_wrap_i64(local.tee $cm_pair_208("wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"()));
-    $sroa_$pattern_temp_0_1_335 = builtin::i32_wrap_i64($cm_pair_208 >> 32_i64);
+    $sroa_$pattern_temp_0_1_336 = builtin::i32_wrap_i64($cm_pair_208 >> 32_i64);
     $moved_28 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_208("wasi/stream-new"())) };
     body_tx = builtin::i32_wrap_i64($cm_pair_208 >> 32_i64);
     $moved_28 = local.tee $local_212("effect_handler_forward_async_op.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("effect_handler_forward_async_op.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: $moved_28 }, $cm_handle_3)).0;
@@ -1780,9 +1780,9 @@ mock.calls: "), used: 109 }, s1: struct.new "core:prelude/string.wado//String" {
     "wasi/task-return:handle"(0, $cm_handle_3, 0, 0_i64, 0, 0, 0, 0);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
-        $sroa_view_repr_764 = global:effect_handler_forward_async_op.wado::$const_obj_2;
+        $sroa_view_repr_766 = global:effect_handler_forward_async_op.wado::$const_obj_2;
         $mv_arg_1.used = local.tee $cm_handle_3(10);
-        builtin::array_copy<u8>(local.tee $load_10($mv_arg_1.repr), 0, $sroa_view_repr_764, 0, 10);
+        builtin::array_copy<u8>(local.tee $load_10($mv_arg_1.repr), 0, $sroa_view_repr_766, 0, 10);
         is_negative_287 = used_214 < 0;
         $cm_pair_208 = builtin::i64_extend_i32_s(used_214);
         $cm_pair_208 = select i64($cm_pair_208 < 0_i64, 0_i64 - $cm_pair_208, $cm_pair_208);
@@ -1862,34 +1862,34 @@ mock.calls: "), used: 109 }, s1: struct.new "core:prelude/string.wado//String" {
         }
         is_negative_287 = $mv_arg_1.used;
         $mv_arg_1.used = $cm_handle_3;
-        $sroa_view_repr_764 = $mv_arg_1.repr;
+        $sroa_view_repr_766 = $mv_arg_1.repr;
         used_214 = is_negative_287 + used_214;
         b196: block {
             l197: loop {
                 break_if b196 (used_214 - is_negative_287) < 2;
                 q = $cm_pair_208 /u 100_i64;
                 tens = local.tee $cm_handle_3(builtin::i32_wrap_i64($cm_pair_208 - (q * 100_i64))) / 10;
-                builtin::array_set_u8($sroa_view_repr_764, used_214 - 1, (48 + $cm_handle_3) - (tens * 10));
-                builtin::array_set_u8($sroa_view_repr_764, used_214 - 2, 48 + tens);
+                builtin::array_set_u8($sroa_view_repr_766, used_214 - 1, (48 + $cm_handle_3) - (tens * 10));
+                builtin::array_set_u8($sroa_view_repr_766, used_214 - 2, 48 + tens);
                 used_214 = used_214 - 2;
                 $cm_pair_208 = q;
                 continue l197;
             };
         };
         if used_214 > is_negative_287 {
-            builtin::array_set_u8($sroa_view_repr_764, is_negative_287, 48 + builtin::i32_wrap_i64($cm_pair_208 %u 10_i64));
+            builtin::array_set_u8($sroa_view_repr_766, is_negative_287, 48 + builtin::i32_wrap_i64($cm_pair_208 %u 10_i64));
         }
         $inline_core_prelude_string_wado_String__internal_push_view_44: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_44;
         };
-        $sroa_view_repr_764 = $mv_arg_1.repr;
+        $sroa_view_repr_766 = $mv_arg_1.repr;
         used_214 = $mv_arg_1.used;
         $cm_handle_3 = 0;
         result = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
         b199: block {
             l200: loop {
                 break_if b199 $cm_handle_3 >= used_214;
-                is_negative_287 = builtin::array_get_value<u8>($sroa_view_repr_764, $cm_handle_3);
+                is_negative_287 = builtin::array_get_value<u8>($sroa_view_repr_766, $cm_handle_3);
                 $cm_handle_3 = $cm_handle_3 + 1;
                 if @unlikely(local.tee tens(result.used) >= builtin::array_len(result.repr)) {
                     cold_path;
@@ -1903,7 +1903,7 @@ mock.calls: "), used: 109 }, s1: struct.new "core:prelude/string.wado//String" {
         "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(body_tx, result.repr, result.used);
     });
     "wasi/stream-drop-writable"(body_tx);
-    drop("effect_handler_forward_async_op.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($sroa_$pattern_temp_0_1_335, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } }));
+    drop("effect_handler_forward_async_op.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($sroa_$pattern_temp_0_1_336, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } }));
     if ref.is_null(_tx_future) == 0 {
         "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(_tx_future.value);
     }

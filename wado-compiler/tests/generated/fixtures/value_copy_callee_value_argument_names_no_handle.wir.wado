@@ -66,7 +66,7 @@ fn "value_copy_callee_value_argument_names_no_handle.wado/run"() with Stdout {
     let is_negative_82: bool;
     let digit_count_84: i32;
     let $sroa_t_h0_181: i64;
-    let start_221: i32;
+    let start_227: i32;
     let q: u64;
     let tens: i32;
     builtin::array_set_u8(local.tee bytes(builtin::array_new<u8>(4)), 0, 5);
@@ -142,22 +142,22 @@ fn "value_copy_callee_value_argument_names_no_handle.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, is_negative_82);
         }
-        start_221 = out_15.used;
+        start_227 = out_15.used;
         out_15.used = is_negative_82;
-        builtin::array_set_u8(out_15.repr, start_221, 45);
+        builtin::array_set_u8(out_15.repr, start_227, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_82(out_15.used + digit_count_84) > builtin::array_len(out_15.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, is_negative_82);
     }
-    start_221 = out_15.used;
+    start_227 = out_15.used;
     out_15.used = is_negative_82;
     bytes = out_15.repr;
-    is_negative_82 = start_221 + digit_count_84;
+    is_negative_82 = start_227 + digit_count_84;
     b22: block {
         l23: loop {
-            break_if b22 (is_negative_82 - start_221) < 2;
+            break_if b22 (is_negative_82 - start_227) < 2;
             q = $sroa_t_h0_181 /u 100_i64;
             tens = local.tee digit_count_84(builtin::i32_wrap_i64($sroa_t_h0_181 - (q * 100_i64))) / 10;
             builtin::array_set_u8(bytes, is_negative_82 - 1, (48 + digit_count_84) - (tens * 10));
@@ -167,8 +167,8 @@ fn "value_copy_callee_value_argument_names_no_handle.wado/run"() with Stdout {
             continue l23;
         };
     };
-    if is_negative_82 > start_221 {
-        builtin::array_set_u8(bytes, start_221, 48 + builtin::i32_wrap_i64($sroa_t_h0_181 %u 10_i64));
+    if is_negative_82 > start_227 {
+        builtin::array_set_u8(bytes, start_227, 48 + builtin::i32_wrap_i64($sroa_t_h0_181 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;
@@ -176,11 +176,11 @@ fn "value_copy_callee_value_argument_names_no_handle.wado/run"() with Stdout {
     is_negative_82 = builtin::i32_wrap_i64(local.tee $sroa_t_h0_181("wasi/stream-new"()));
     digit_count_84 = builtin::i32_wrap_i64($sroa_t_h0_181 >> 32_i64);
     is_negative_82 = "value_copy_callee_value_argument_names_no_handle.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_82);
-    builtin::array_copy<u8>(local.tee bytes(builtin::array_new<u8>(local.tee start_221(out_15.used) + 1)), 0, out_15.repr, 0, start_221);
-    builtin::array_set_u8(bytes, start_221, 10);
+    builtin::array_copy<u8>(local.tee bytes(builtin::array_new<u8>(local.tee start_227(out_15.used) + 1)), 0, out_15.repr, 0, start_227);
+    builtin::array_set_u8(bytes, start_227, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_221 = start_221 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(digit_count_84, bytes, 0, start_221);
+        start_227 = start_227 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(digit_count_84, bytes, 0, start_227);
     });
     "wasi/stream-drop-writable"(digit_count_84);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_82);
