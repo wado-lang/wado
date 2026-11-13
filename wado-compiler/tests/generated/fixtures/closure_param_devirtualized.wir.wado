@@ -119,33 +119,33 @@ fn "closure_param_devirtualized.wado/table$$Closure_1$sroa[at.$capture_0]"(rows,
     let out: ref "core:prelude/list.wado//List<i32>";
     let current_16: i32;
     let current_23: i32;
-    let $sroa_$iter_0_start_48: i32;
-    let $sroa_$iter_1_start_52: i32;
-    let $cse_58: i32;
-    let $cse_59: i32;
+    let $sroa_$iter_0_start_50: i32;
+    let $sroa_$iter_1_start_54: i32;
     let $cse_60: i32;
+    let $cse_61: i32;
+    let $cse_62: i32;
     out = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
-    $sroa_$iter_0_start_48 = 0;
+    $sroa_$iter_0_start_50 = 0;
     b1: block {
         l2: loop {
-            break_if b1 $sroa_$iter_0_start_48 >= rows;
-            $sroa_$iter_0_start_48 = local.tee current_16($sroa_$iter_0_start_48) + 1;
-            $sroa_$iter_1_start_52 = 0;
+            break_if b1 $sroa_$iter_0_start_50 >= rows;
+            $sroa_$iter_0_start_50 = local.tee current_16($sroa_$iter_0_start_50) + 1;
+            $sroa_$iter_1_start_54 = 0;
             current_16 = current_16 * at;
             b3: block {
                 l4: loop {
-                    break_if b3 $sroa_$iter_1_start_52 >= cols;
-                    $sroa_$iter_1_start_52 = local.tee current_23($sroa_$iter_1_start_52) + 1;
-                    $cse_58 = current_23 + 1;
-                    $cse_59 = current_23 + 2;
-                    $cse_60 = current_23 + 3;
-                    current_23 = ((select i32(current_23 < cols, current_16 + current_23, 0) + (select i32($cse_58 < cols, current_16 + $cse_58, 0) * 2)) + (select i32($cse_59 < cols, current_16 + $cse_59, 0) * 3)) + (select i32($cse_60 < cols, current_16 + $cse_60, 0) * 4);
-                    if @unlikely(local.tee $cse_58(out.used) >= builtin::array_len(out.repr)) {
+                    break_if b3 $sroa_$iter_1_start_54 >= cols;
+                    $sroa_$iter_1_start_54 = local.tee current_23($sroa_$iter_1_start_54) + 1;
+                    $cse_60 = current_23 + 1;
+                    $cse_61 = current_23 + 2;
+                    $cse_62 = current_23 + 3;
+                    current_23 = ((select i32(current_23 < cols, current_16 + current_23, 0) + (select i32($cse_60 < cols, current_16 + $cse_60, 0) * 2)) + (select i32($cse_61 < cols, current_16 + $cse_61, 0) * 3)) + (select i32($cse_62 < cols, current_16 + $cse_62, 0) * 4);
+                    if @unlikely(local.tee $cse_60(out.used) >= builtin::array_len(out.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
                     }
-                    builtin::array_set<i32>(out.repr, $cse_58, current_23);
-                    out.used = $cse_58 + 1;
+                    builtin::array_set<i32>(out.repr, $cse_60, current_23);
+                    out.used = $cse_60 + 1;
                     continue l4;
                 };
             };

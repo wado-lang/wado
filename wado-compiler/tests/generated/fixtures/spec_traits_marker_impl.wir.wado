@@ -1206,19 +1206,19 @@ fn "core:json/integral_digits$sroa[return]"($mv$n$neg, $mv$n$int_digits, $mv$n$e
     let significant: i64;
     let k: i64;
     let start_33: i32;
-    let $licm_arith_99: i64;
+    let $licm_arith_100: i64;
     mantissa_len = builtin::i64_extend_i32_s(($mv$n$mantissa_end - $mv$n$mantissa_start) - (($mv$n$mantissa_end - $mv$n$mantissa_start) > $mv$n$int_digits));
     $mv$n$exp = $mv$n$exp - (mantissa_len - builtin::i64_extend_i32_s($mv$n$int_digits));
     kept = select i64($mv$n$exp < 0_i64, mantissa_len + $mv$n$exp, mantissa_len);
     digits = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     significant = 0_i64;
     k = 0_i64;
-    $licm_arith_99 = builtin::i64_extend_i32_s($mv$n$int_digits);
+    $licm_arith_100 = builtin::i64_extend_i32_s($mv$n$int_digits);
     $mv$n$int_digits = $mv$input$end - $mv$input$start;
     b22: block {
         l23: loop {
             break_if b22 k >= mantissa_len;
-            $mv$n$mantissa_end = ($mv$n$mantissa_start + builtin::i32_wrap_i64(k)) + (k >= $licm_arith_99);
+            $mv$n$mantissa_end = ($mv$n$mantissa_start + builtin::i32_wrap_i64(k)) + (k >= $licm_arith_100);
             if @unlikely(((0 <= $mv$n$mantissa_end) & ($mv$n$mantissa_end < $mv$n$int_digits)) == 0) {
                 cold_path;
                 "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv$n$mantissa_end, $mv$n$int_digits, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1145"), used: 14 });
@@ -8765,7 +8765,7 @@ fn "core:serde/spec_traits_marker_impl.wado/User^core:serde/Deserialize::deseria
     let offset: i64;
     let $sroa_$sroa_slots_1_110_0_130: i32;
     let $sroa_$sroa_slots_1_110_1_131: i32;
-    let $sroa_fields_0_132: ref "core:prelude/string.wado//String";
+    let $deref_value_137: ref "core:prelude/string.wado//String";
     $sroa_slots_0_109 = ref.null none;
     $sroa_$sroa_slots_1_110_0_130 = 0;
     $sroa_$sroa_slots_1_110_1_131 = 0;
@@ -8814,7 +8814,8 @@ fn "core:serde/spec_traits_marker_impl.wado/User^core:serde/Deserialize::deseria
                 $mv$$vr_52$0 = 0;
                 if $vr_payload_0_$mv$$vr_52$1 == 0 {
                     if ref.is_null($sroa_slots_0_109) == 0 {
-                        $qm_e_115 = struct.new "core:serde//DeserializeError" { kind: 3, message: "core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>$spec0$spec0$sroa[t.h0]"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 97, 109, 101), used: 4 }), offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
+                        $deref_value_137 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 97, 109, 101), used: 4 };
+                        $qm_e_115 = struct.new "core:serde//DeserializeError" { kind: 3, message: "core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>$spec0$spec0$sroa[t.h0]"($deref_value_137), offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
                         return 1, ref.null none, $qm_e_115;
                     }
                     multivalue_bind [$mv$$vr_52$0, $sroa_slots_0_109, $mv$$vr_52$2] = "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(d);
@@ -8831,7 +8832,8 @@ fn "core:serde/spec_traits_marker_impl.wado/User^core:serde/Deserialize::deseria
                     $mv$$vr_52$0 = 1;
                 } else if $vr_payload_0_$mv$$vr_52$1 == 1 {
                     if $sroa_$sroa_slots_1_110_0_130 == 1 {
-                        $qm_e_115 = struct.new "core:serde//DeserializeError" { kind: 3, message: "core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>$spec0$spec0$sroa[t.h0]"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 }), offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
+                        $deref_value_137 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 };
+                        $qm_e_115 = struct.new "core:serde//DeserializeError" { kind: 3, message: "core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>$spec0$spec0$sroa[t.h0]"($deref_value_137), offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
                         return 1, ref.null none, $qm_e_115;
                     }
                     $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_i32_sroa_return__18: block {
@@ -8884,7 +8886,7 @@ fn "core:serde/spec_traits_marker_impl.wado/User^core:serde/Deserialize::deseria
         d.first_entry = 0;
         break $thread_$inline_core_json_JsonDeserializer__close_container_21;
     };
-    return 0, $sroa_fields_0_132 = (if ref.is_null($sroa_slots_0_109) == 0 -> ref "core:prelude/string.wado//String" {
+    return 0, $deref_value_137 = (if ref.is_null($sroa_slots_0_109) == 0 -> ref "core:prelude/string.wado//String" {
         ref.as_non_null($sroa_slots_0_109);
     } else {
         return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing field: name"), used: 19 }, offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
@@ -8894,7 +8896,7 @@ fn "core:serde/spec_traits_marker_impl.wado/User^core:serde/Deserialize::deseria
         return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing field: age"), used: 18 }, offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     } else {
         unreachable;
-    }); struct.new "spec_traits_marker_impl.wado//User" { name: $sroa_fields_0_132, age: $sroa_$sroa_slots_1_110_0_130 }, ref.null none;
+    }); struct.new "spec_traits_marker_impl.wado//User" { name: $deref_value_137, age: $sroa_$sroa_slots_1_110_0_130 }, ref.null none;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec13"(self, other) {

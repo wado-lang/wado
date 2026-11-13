@@ -154,7 +154,7 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
     let $local_1_215: ref null "affine_drop_impl_drops_field_by_name.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_667: ref Array<u8>;
+    let $sroa_view_repr_669: ref Array<u8>;
     c_0 = struct.new "affine_drop_impl_drops_field_by_name.wado//Counter" { drops: 0 };
     rx_178 = local.tee $local_2_186($inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_2: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
         if ref.is_null(local.tee $local_0_184(global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
@@ -292,9 +292,9 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
     global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = $local_0_184;
     used_17 = c_0.drops;
     out_81 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
-    $sroa_view_repr_667 = global:affine_drop_impl_drops_field_by_name.wado::$const_obj_0;
+    $sroa_view_repr_669 = global:affine_drop_impl_drops_field_by_name.wado::$const_obj_0;
     out_81.used = local.tee $load_72(6);
-    builtin::array_copy<u8>(local.tee $load_73(out_81.repr), 0, $sroa_view_repr_667, 0, 6);
+    builtin::array_copy<u8>(local.tee $load_73(out_81.repr), 0, $sroa_view_repr_669, 0, 6);
     is_negative_143 = used_17 < 0;
     $cm_pair_5_189 = builtin::i64_extend_i32_s(used_17);
     $cm_pair_5_189 = select i64($cm_pair_5_189 < 0_i64, 0_i64 - $cm_pair_5_189, $cm_pair_5_189);
@@ -374,22 +374,22 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
     }
     is_negative_143 = out_81.used;
     out_81.used = $load_72;
-    $sroa_view_repr_667 = out_81.repr;
+    $sroa_view_repr_669 = out_81.repr;
     used_17 = is_negative_143 + used_17;
     b42: block {
         l43: loop {
             break_if b42 (used_17 - is_negative_143) < 2;
             q = $cm_pair_5_189 /u 100_i64;
             tens = local.tee $load_72(builtin::i32_wrap_i64($cm_pair_5_189 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_667, used_17 - 1, (48 + $load_72) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_667, used_17 - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_669, used_17 - 1, (48 + $load_72) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_669, used_17 - 2, 48 + tens);
             used_17 = used_17 - 2;
             $cm_pair_5_189 = q;
             continue l43;
         };
     };
     if used_17 > is_negative_143 {
-        builtin::array_set_u8($sroa_view_repr_667, is_negative_143, 48 + builtin::i32_wrap_i64($cm_pair_5_189 %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_669, is_negative_143, 48 + builtin::i32_wrap_i64($cm_pair_5_189 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_56: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_56;
@@ -409,12 +409,12 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
     }).0;
     rx_190 = $local_2_186.1;
     used_17 = "affine_drop_impl_drops_field_by_name.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_178);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_667(builtin::array_new<u8>(local.tee $load_72(out_81.used) + 1)), 0, out_81.repr, 0, $load_72);
-    builtin::array_set_u8($sroa_view_repr_667, $load_72, 10);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_669(builtin::array_new<u8>(local.tee $load_72(out_81.used) + 1)), 0, out_81.repr, 0, $load_72);
+    builtin::array_set_u8($sroa_view_repr_669, $load_72, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         is_negative_143 = rx_190.value;
         $load_72 = $load_72 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_143, $sroa_view_repr_667, 0, $load_72);
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_143, $sroa_view_repr_669, 0, $load_72);
     });
     "wasi/stream-drop-writable"(rx_190.value);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_17);

@@ -79,22 +79,22 @@ fn "hfs_match_nested_in_block.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let start_179: i32;
-    let $hfs_v_557: i32;
+    let $hfs_v_559: i32;
     b = struct.new "hfs_match_nested_in_block.wado//Buf" { v: 0 };
     i_1 = 0;
-    $hfs_v_557 = 0;
+    $hfs_v_559 = 0;
     b0: block {
         l1: loop {
             break_if b0 i_1 >= 4;
             if (i_1 % 2) == 0 {
-                $hfs_v_557 = $hfs_v_557 + 1;
+                $hfs_v_559 = $hfs_v_559 + 1;
             } else {
-                b.v = $hfs_v_557;
+                b.v = $hfs_v_559;
                 "hfs_match_nested_in_block.wado/external_inc"(b);
-                $hfs_v_557 = b.v;
+                $hfs_v_559 = b.v;
             }
             i_1 = i_1 + 1;
-            b.v = $hfs_v_557;
+            b.v = $hfs_v_559;
             continue l1;
         };
     };
@@ -103,7 +103,7 @@ fn "hfs_match_nested_in_block.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_23: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_23;
     };
-    $hfs_v_557 = i_1 < 0;
+    $hfs_v_559 = i_1 < 0;
     x = builtin::i64_extend_i32_s(i_1);
     x = select i64(x < 0_i64, 0_i64 - x, x);
     i_1 = $inline_count_digits_u64_1: block -> i32 {
@@ -166,30 +166,30 @@ fn "hfs_match_nested_in_block.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if $hfs_v_557 {
-        if @unlikely(local.tee $hfs_v_557(0 + 1) > builtin::array_len(out_16.repr)) {
+    if $hfs_v_559 {
+        if @unlikely(local.tee $hfs_v_559(0 + 1) > builtin::array_len(out_16.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, $hfs_v_557);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, $hfs_v_559);
         }
         start_179 = out_16.used;
-        out_16.used = $hfs_v_557;
+        out_16.used = $hfs_v_559;
         builtin::array_set_u8(out_16.repr, start_179, 45);
     } else {
     }
-    if @unlikely(local.tee $hfs_v_557(out_16.used + i_1) > builtin::array_len(out_16.repr)) {
+    if @unlikely(local.tee $hfs_v_559(out_16.used + i_1) > builtin::array_len(out_16.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, $hfs_v_557);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, $hfs_v_559);
     }
     start_179 = out_16.used;
-    out_16.used = $hfs_v_557;
+    out_16.used = $hfs_v_559;
     arr = out_16.repr;
     i_1 = start_179 + i_1;
     b25: block {
         l26: loop {
             break_if b25 (i_1 - start_179) < 2;
             q = x /u 100_i64;
-            tens = local.tee $hfs_v_557(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, i_1 - 1, (48 + $hfs_v_557) - (tens * 10));
+            tens = local.tee $hfs_v_559(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, i_1 - 1, (48 + $hfs_v_559) - (tens * 10));
             builtin::array_set_u8(arr, i_1 - 2, 48 + tens);
             i_1 = i_1 - 2;
             x = q;
@@ -203,15 +203,15 @@ fn "hfs_match_nested_in_block.wado/run"() with Stdout {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
     };
     i_1 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $hfs_v_557 = builtin::i32_wrap_i64(x >> 32_i64);
+    $hfs_v_559 = builtin::i32_wrap_i64(x >> 32_i64);
     i_1 = "hfs_match_nested_in_block.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_1);
     builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_179(out_16.used) + 1)), 0, out_16.repr, 0, start_179);
     builtin::array_set_u8(arr, start_179, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         start_179 = start_179 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($hfs_v_557, arr, 0, start_179);
+        "core:rt/cm_stream_write_raw_all_u8"($hfs_v_559, arr, 0, start_179);
     });
-    "wasi/stream-drop-writable"($hfs_v_557);
+    "wasi/stream-drop-writable"($hfs_v_559);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i_1);
 }
 

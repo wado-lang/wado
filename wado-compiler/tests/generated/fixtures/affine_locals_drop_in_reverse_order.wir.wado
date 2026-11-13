@@ -167,27 +167,27 @@ fn "affine_locals_drop_in_reverse_order.wado/returns_early"(flag) {
 fn "affine_locals_drop_in_reverse_order.wado/each_iteration"() {
     let a: i32;
     let current: i32;
-    let $sroa_$iter_0_start_18: i32;
-    let message_20: ref "core:prelude/string.wado//String";
-    let $cm_pair_7_27: i64;
-    let $sroa_$pattern_temp_0_1_10_30: i32;
-    $sroa_$iter_0_start_18 = 0;
+    let $sroa_$iter_0_start_19: i32;
+    let message_21: ref "core:prelude/string.wado//String";
+    let $cm_pair_7_28: i64;
+    let $sroa_$pattern_temp_0_1_10_31: i32;
+    $sroa_$iter_0_start_19 = 0;
     b1: block {
         l2: loop {
-            break_if b1 $sroa_$iter_0_start_18 >= 2;
-            $sroa_$iter_0_start_18 = local.tee current($sroa_$iter_0_start_18) + 1;
+            break_if b1 $sroa_$iter_0_start_19 >= 2;
+            $sroa_$iter_0_start_19 = local.tee current($sroa_$iter_0_start_19) + 1;
             a = (current * 10) + 1;
-            message_20 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_locals_drop_in_reverse_order.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"((current * 10) + 2);
-            current = builtin::i32_wrap_i64(local.tee $cm_pair_7_27("wasi/stream-new"()));
-            $sroa_$pattern_temp_0_1_10_30 = builtin::i32_wrap_i64($cm_pair_7_27 >> 32_i64);
+            message_21 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_locals_drop_in_reverse_order.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"((current * 10) + 2);
+            current = builtin::i32_wrap_i64(local.tee $cm_pair_7_28("wasi/stream-new"()));
+            $sroa_$pattern_temp_0_1_10_31 = builtin::i32_wrap_i64($cm_pair_7_28 >> 32_i64);
             current = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(current);
-            "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10_30, message_20.repr, message_20.used);
+            "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10_31, message_21.repr, message_21.used);
             "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(current);
-            message_20 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_locals_drop_in_reverse_order.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(a);
-            current = builtin::i32_wrap_i64(local.tee $cm_pair_7_27("wasi/stream-new"()));
-            a = builtin::i32_wrap_i64($cm_pair_7_27 >> 32_i64);
+            message_21 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_locals_drop_in_reverse_order.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(a);
+            current = builtin::i32_wrap_i64(local.tee $cm_pair_7_28("wasi/stream-new"()));
+            a = builtin::i32_wrap_i64($cm_pair_7_28 >> 32_i64);
             current = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(current);
-            "core:rt/write_string_to_stream$dae[add_newline]"(a, message_20.repr, message_20.used);
+            "core:rt/write_string_to_stream$dae[add_newline]"(a, message_21.repr, message_21.used);
             "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(current);
             continue l2;
         };
@@ -1125,13 +1125,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_loca
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_65: bool;
     let x: i64;
-    let $sroa_view_repr_116: ref Array<u8>;
+    let $sroa_view_repr_118: ref Array<u8>;
     let q: u64;
     let tens: i32;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-    $sroa_view_repr_116 = global:core:prelude/string.wado::$const_obj_31;
+    $sroa_view_repr_118 = global:core:prelude/string.wado::$const_obj_31;
     out_3.used = local.tee $load_0(5);
-    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, $sroa_view_repr_116, 0, 5);
+    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, $sroa_view_repr_118, 0, 5);
     is_negative_65 = t < 0;
     x = builtin::i64_extend_i32_s(t);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -1211,22 +1211,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_loca
     }
     is_negative_65 = out_3.used;
     out_3.used = $load_0;
-    $sroa_view_repr_116 = out_3.repr;
+    $sroa_view_repr_118 = out_3.repr;
     t = is_negative_65 + t;
     b151: block {
         l152: loop {
             break_if b151 (t - is_negative_65) < 2;
             q = x /u 100_i64;
             tens = local.tee $load_0(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_116, t - 1, (48 + $load_0) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_116, t - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_118, t - 1, (48 + $load_0) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_118, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l152;
         };
     };
     if t > is_negative_65 {
-        builtin::array_set_u8($sroa_view_repr_116, is_negative_65, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_118, is_negative_65, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;

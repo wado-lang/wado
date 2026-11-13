@@ -99,18 +99,18 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
     let $sroa_t_h0_129: bool;
     let new_used_159: i32;
     let start_160: i32;
-    let $sroa_view_repr_407: ref Array<u8>;
-    let $sroa_slot_418: ref null Array<u8>;
+    let $sroa_view_repr_409: ref Array<u8>;
+    let $sroa_slot_420: ref null Array<u8>;
     $sroa_t_h0_129 = (local.tee set(struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: global:cm_waitable_set_new.wado::$const_obj_1, ready: global:cm_waitable_set_new.wado::$const_obj_2 }).members.used + set.ready.used) == 0;
     out_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
-    $sroa_view_repr_407 = global:cm_waitable_set_new.wado::$const_obj_0;
+    $sroa_view_repr_409 = global:cm_waitable_set_new.wado::$const_obj_0;
     out_17.used = 7;
-    builtin::array_copy<u8>(out_17.repr, 0, $sroa_view_repr_407, 0, 7);
+    builtin::array_copy<u8>(out_17.repr, 0, $sroa_view_repr_409, 0, 7);
     if $sroa_t_h0_129 {
-        $sroa_slot_418 = array.new_fixed<u8>(116, 114, 117, 101);
+        $sroa_slot_420 = array.new_fixed<u8>(116, 114, 117, 101);
         $sroa_t_h0_129 = 4;
     } else {
-        $sroa_slot_418 = array.new_data<u8>("false");
+        $sroa_slot_420 = array.new_data<u8>("false");
         $sroa_t_h0_129 = 5;
     }
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
@@ -122,7 +122,7 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
             }
             start_160 = out_17.used;
             out_17.used = new_used_159;
-            builtin::array_copy<u8>(out_17.repr, start_160, $sroa_slot_418, 0, $sroa_t_h0_129);
+            builtin::array_copy<u8>(out_17.repr, start_160, $sroa_slot_420, 0, $sroa_t_h0_129);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
     };
@@ -132,11 +132,11 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
     $sroa_t_h0_129 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     new_used_159 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_t_h0_129 = "cm_waitable_set_new.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_129);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_407(builtin::array_new<u8>(local.tee start_160(out_17.used) + 1)), 0, out_17.repr, 0, start_160);
-    builtin::array_set_u8($sroa_view_repr_407, start_160, 10);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_409(builtin::array_new<u8>(local.tee start_160(out_17.used) + 1)), 0, out_17.repr, 0, start_160);
+    builtin::array_set_u8($sroa_view_repr_409, start_160, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         start_160 = start_160 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(new_used_159, $sroa_view_repr_407, 0, start_160);
+        "core:rt/cm_stream_write_raw_all_u8"(new_used_159, $sroa_view_repr_409, 0, start_160);
     });
     "wasi/stream-drop-writable"(new_used_159);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_129);

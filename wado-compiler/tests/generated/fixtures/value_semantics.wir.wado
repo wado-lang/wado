@@ -91,23 +91,23 @@ fn "value_semantics.wado/value_semantics_array"() with Stdout {
     let $sroa_b_repr_71: ref Array<i32>;
     let out_76: ref "core:prelude/string.wado//String";
     let is_negative_138: bool;
-    let new_repr_212: ref Array<u8>;
+    let new_repr_214: ref Array<u8>;
     let q: u64;
     let tens: i32;
     builtin::array_set<i32>(local.tee $sroa_b_repr_71(array.new_fixed<i32>(1, 2, 3)), 0, 99);
     $sroa_$pattern_temp_0_0_13_54 = builtin::i32_wrap_i64(local.tee $cm_pair_7_48("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_55 = builtin::i32_wrap_i64($cm_pair_7_48 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_54 = "value_semantics.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_54);
-    builtin::array_copy<u8>(local.tee new_repr_212(builtin::array_new<u8>(7)), 0, global:value_semantics.wado::$const_obj_1, 0, 6);
-    builtin::array_set_u8(new_repr_212, 6, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_55, new_repr_212);
+    builtin::array_copy<u8>(local.tee new_repr_214(builtin::array_new<u8>(7)), 0, global:value_semantics.wado::$const_obj_1, 0, 6);
+    builtin::array_set_u8(new_repr_214, 6, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_55, new_repr_214);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_55);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_54);
     $sroa_$pattern_temp_0_0_13_54 = builtin::array_get_value<i32>($sroa_b_repr_71, 0);
     out_76 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-    new_repr_212 = global:value_semantics.wado::$const_obj_0;
+    new_repr_214 = global:value_semantics.wado::$const_obj_0;
     out_76.used = local.tee $sroa_$pattern_temp_0_1_14_55(5);
-    builtin::array_copy<u8>(local.tee $load_3(out_76.repr), 0, new_repr_212, 0, 5);
+    builtin::array_copy<u8>(local.tee $load_3(out_76.repr), 0, new_repr_214, 0, 5);
     is_negative_138 = $sroa_$pattern_temp_0_0_13_54 < 0;
     $cm_pair_7_48 = builtin::i64_extend_i32_s($sroa_$pattern_temp_0_0_13_54);
     $cm_pair_7_48 = select i64($cm_pair_7_48 < 0_i64, 0_i64 - $cm_pair_7_48, $cm_pair_7_48);
@@ -187,22 +187,22 @@ fn "value_semantics.wado/value_semantics_array"() with Stdout {
     }
     is_negative_138 = out_76.used;
     out_76.used = $sroa_$pattern_temp_0_1_14_55;
-    new_repr_212 = out_76.repr;
+    new_repr_214 = out_76.repr;
     $sroa_$pattern_temp_0_0_13_54 = is_negative_138 + $sroa_$pattern_temp_0_0_13_54;
     b22: block {
         l23: loop {
             break_if b22 ($sroa_$pattern_temp_0_0_13_54 - is_negative_138) < 2;
             q = $cm_pair_7_48 /u 100_i64;
             tens = local.tee $sroa_$pattern_temp_0_1_14_55(builtin::i32_wrap_i64($cm_pair_7_48 - (q * 100_i64))) / 10;
-            builtin::array_set_u8(new_repr_212, $sroa_$pattern_temp_0_0_13_54 - 1, (48 + $sroa_$pattern_temp_0_1_14_55) - (tens * 10));
-            builtin::array_set_u8(new_repr_212, $sroa_$pattern_temp_0_0_13_54 - 2, 48 + tens);
+            builtin::array_set_u8(new_repr_214, $sroa_$pattern_temp_0_0_13_54 - 1, (48 + $sroa_$pattern_temp_0_1_14_55) - (tens * 10));
+            builtin::array_set_u8(new_repr_214, $sroa_$pattern_temp_0_0_13_54 - 2, 48 + tens);
             $sroa_$pattern_temp_0_0_13_54 = $sroa_$pattern_temp_0_0_13_54 - 2;
             $cm_pair_7_48 = q;
             continue l23;
         };
     };
     if $sroa_$pattern_temp_0_0_13_54 > is_negative_138 {
-        builtin::array_set_u8(new_repr_212, is_negative_138, 48 + builtin::i32_wrap_i64($cm_pair_7_48 %u 10_i64));
+        builtin::array_set_u8(new_repr_214, is_negative_138, 48 + builtin::i32_wrap_i64($cm_pair_7_48 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__format_value_semantics_wado__tmpl_fb51c04d54491732__i32___spec1_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__format_value_semantics_wado__tmpl_fb51c04d54491732__i32___spec1_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39;
@@ -210,11 +210,11 @@ fn "value_semantics.wado/value_semantics_array"() with Stdout {
     $sroa_$pattern_temp_0_0_13_54 = builtin::i32_wrap_i64(local.tee $cm_pair_7_48("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_55 = builtin::i32_wrap_i64($cm_pair_7_48 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_54 = "value_semantics.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_54);
-    builtin::array_copy<u8>(local.tee new_repr_212(builtin::array_new<u8>(local.tee is_negative_138(out_76.used) + 1)), 0, out_76.repr, 0, is_negative_138);
-    builtin::array_set_u8(new_repr_212, is_negative_138, 10);
+    builtin::array_copy<u8>(local.tee new_repr_214(builtin::array_new<u8>(local.tee is_negative_138(out_76.used) + 1)), 0, out_76.repr, 0, is_negative_138);
+    builtin::array_set_u8(new_repr_214, is_negative_138, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         is_negative_138 = is_negative_138 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_55, new_repr_212, 0, is_negative_138);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_55, new_repr_214, 0, is_negative_138);
     });
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_55);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_54);

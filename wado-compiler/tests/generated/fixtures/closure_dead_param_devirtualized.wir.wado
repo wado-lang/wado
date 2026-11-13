@@ -118,28 +118,28 @@ fn "closure_dead_param_devirtualized.wado/$cm_export__run"() {
 fn "closure_dead_param_devirtualized.wado/table$$Closure_1$sroa[at.$capture_0]"(rows, cols, at) {
     let out: ref "core:prelude/list.wado//List<i32>";
     let current_23: i32;
-    let $sroa_$iter_0_start_44: i32;
-    let $sroa_$iter_1_start_48: i32;
-    let $cse_54: i32;
+    let $sroa_$iter_0_start_46: i32;
+    let $sroa_$iter_1_start_50: i32;
+    let $cse_56: i32;
     out = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
-    $sroa_$iter_0_start_44 = 0;
+    $sroa_$iter_0_start_46 = 0;
     b1: block {
         l2: loop {
-            break_if b1 $sroa_$iter_0_start_44 >= rows;
-            $sroa_$iter_0_start_44 = $sroa_$iter_0_start_44 + 1;
-            $sroa_$iter_1_start_48 = 0;
+            break_if b1 $sroa_$iter_0_start_46 >= rows;
+            $sroa_$iter_0_start_46 = $sroa_$iter_0_start_46 + 1;
+            $sroa_$iter_1_start_50 = 0;
             b3: block {
                 l4: loop {
-                    break_if b3 $sroa_$iter_1_start_48 >= cols;
-                    $sroa_$iter_1_start_48 = local.tee current_23($sroa_$iter_1_start_48) + 1;
-                    $cse_54 = current_23 + 1;
-                    current_23 = select i32(current_23 < cols, current_23 * at, 0) + (select i32($cse_54 < cols, $cse_54 * at, 0) * 2);
-                    if @unlikely(local.tee $cse_54(out.used) >= builtin::array_len(out.repr)) {
+                    break_if b3 $sroa_$iter_1_start_50 >= cols;
+                    $sroa_$iter_1_start_50 = local.tee current_23($sroa_$iter_1_start_50) + 1;
+                    $cse_56 = current_23 + 1;
+                    current_23 = select i32(current_23 < cols, current_23 * at, 0) + (select i32($cse_56 < cols, $cse_56 * at, 0) * 2);
+                    if @unlikely(local.tee $cse_56(out.used) >= builtin::array_len(out.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
                     }
-                    builtin::array_set<i32>(out.repr, $cse_54, current_23);
-                    out.used = $cse_54 + 1;
+                    builtin::array_set<i32>(out.repr, $cse_56, current_23);
+                    out.used = $cse_56 + 1;
                     continue l4;
                 };
             };

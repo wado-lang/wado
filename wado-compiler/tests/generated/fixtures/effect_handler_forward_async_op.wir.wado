@@ -1746,7 +1746,7 @@ fn "effect_handler_forward_async_op.wado/$cm_task_entry__handle"(request) {
     let $sroa_$pattern_temp_0_1_335: i32;
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_762: ref Array<u8>;
+    let $sroa_view_repr_764: ref Array<u8>;
     mock = struct.new "effect_handler_forward_async_op.wado//MockClient" { calls: 0, ends: used_214 = builtin::array_len(local.tee elements_213(array.new_fixed<ref null "core:prelude//$Resource">())); struct.new "core:prelude/list.wado//List<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>" { repr: elements_213, used: used_214 } };
     global:effect_handler_forward_async_op.wado::$effect_wasi:http/client.wado/Client = struct.new "effect_handler_forward_async_op.wado//$Dispatch_wasi:http/client.wado/Client" { outer: local.tee $local_18(global:effect_handler_forward_async_op.wado::$effect_wasi:http/client.wado/Client), op_send: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_async_op.wado//$Closure_3" { $capture_0: ref.as_non_null(mock) }, func: ref.func "closure/effect_handler_forward_async_op.wado/$closure_wrapper_2" } };
     $local_16 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: global:effect_handler_forward_async_op.wado::$effect_wasi:http/client.wado/Client = struct.new "effect_handler_forward_async_op.wado//$Dispatch_wasi:http/client.wado/Client" { outer: local.tee $local_14(global:effect_handler_forward_async_op.wado::$effect_wasi:http/client.wado/Client), op_send: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_async_op.wado//$Closure_4" {}, func: ref.func "closure/effect_handler_forward_async_op.wado/$closure_wrapper_3" } }; $local_16 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: "effect_handler_forward_async_op.wado/fetch_upstream"() }; global:effect_handler_forward_async_op.wado::$effect_wasi:http/client.wado/Client = $local_14; ref.as_non_null(ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"($local_16).payload_0) };
@@ -1780,9 +1780,9 @@ mock.calls: "), used: 109 }, s1: struct.new "core:prelude/string.wado//String" {
     "wasi/task-return:handle"(0, $cm_handle_3, 0, 0_i64, 0, 0, 0, 0);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
-        $sroa_view_repr_762 = global:effect_handler_forward_async_op.wado::$const_obj_2;
+        $sroa_view_repr_764 = global:effect_handler_forward_async_op.wado::$const_obj_2;
         $mv_arg_1.used = local.tee $cm_handle_3(10);
-        builtin::array_copy<u8>(local.tee $load_10($mv_arg_1.repr), 0, $sroa_view_repr_762, 0, 10);
+        builtin::array_copy<u8>(local.tee $load_10($mv_arg_1.repr), 0, $sroa_view_repr_764, 0, 10);
         is_negative_287 = used_214 < 0;
         $cm_pair_208 = builtin::i64_extend_i32_s(used_214);
         $cm_pair_208 = select i64($cm_pair_208 < 0_i64, 0_i64 - $cm_pair_208, $cm_pair_208);
@@ -1862,34 +1862,34 @@ mock.calls: "), used: 109 }, s1: struct.new "core:prelude/string.wado//String" {
         }
         is_negative_287 = $mv_arg_1.used;
         $mv_arg_1.used = $cm_handle_3;
-        $sroa_view_repr_762 = $mv_arg_1.repr;
+        $sroa_view_repr_764 = $mv_arg_1.repr;
         used_214 = is_negative_287 + used_214;
         b196: block {
             l197: loop {
                 break_if b196 (used_214 - is_negative_287) < 2;
                 q = $cm_pair_208 /u 100_i64;
                 tens = local.tee $cm_handle_3(builtin::i32_wrap_i64($cm_pair_208 - (q * 100_i64))) / 10;
-                builtin::array_set_u8($sroa_view_repr_762, used_214 - 1, (48 + $cm_handle_3) - (tens * 10));
-                builtin::array_set_u8($sroa_view_repr_762, used_214 - 2, 48 + tens);
+                builtin::array_set_u8($sroa_view_repr_764, used_214 - 1, (48 + $cm_handle_3) - (tens * 10));
+                builtin::array_set_u8($sroa_view_repr_764, used_214 - 2, 48 + tens);
                 used_214 = used_214 - 2;
                 $cm_pair_208 = q;
                 continue l197;
             };
         };
         if used_214 > is_negative_287 {
-            builtin::array_set_u8($sroa_view_repr_762, is_negative_287, 48 + builtin::i32_wrap_i64($cm_pair_208 %u 10_i64));
+            builtin::array_set_u8($sroa_view_repr_764, is_negative_287, 48 + builtin::i32_wrap_i64($cm_pair_208 %u 10_i64));
         }
         $inline_core_prelude_string_wado_String__internal_push_view_44: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_44;
         };
-        $sroa_view_repr_762 = $mv_arg_1.repr;
+        $sroa_view_repr_764 = $mv_arg_1.repr;
         used_214 = $mv_arg_1.used;
         $cm_handle_3 = 0;
         result = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
         b199: block {
             l200: loop {
                 break_if b199 $cm_handle_3 >= used_214;
-                is_negative_287 = builtin::array_get_value<u8>($sroa_view_repr_762, $cm_handle_3);
+                is_negative_287 = builtin::array_get_value<u8>($sroa_view_repr_764, $cm_handle_3);
                 $cm_handle_3 = $cm_handle_3 + 1;
                 if @unlikely(local.tee tens(result.used) >= builtin::array_len(result.repr)) {
                     cold_path;
@@ -3465,19 +3465,19 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     let self_83: ref "core:prelude/list.wado//List<core:prelude/types.wado/Resolution>";
     let self_89: i32;
     let $sroa_id_handle_58: i32;
-    let $sroa_$iter_0_repr_59: ref null "Array<core:prelude/types.wado/Subtask>";
-    let $sroa_$iter_0_index_60: i32;
+    let $sroa_$iter_0_repr_60: ref null "Array<core:prelude/types.wado/Subtask>";
+    let $sroa_$iter_0_index_61: i32;
     at_36 = $inline_core_prelude_types_wado_WaitableSet_core_prelude_types_wado_Subtask___member_at_sroa_self_members__0: block -> i32 {
         self_34 = self.members;
         at_36 = 0;
         end = self_34.used;
-        $sroa_$iter_0_repr_59 = self_34.repr;
-        $sroa_$iter_0_index_60 = 0;
+        $sroa_$iter_0_repr_60 = self_34.repr;
+        $sroa_$iter_0_index_61 = 0;
         b444: block {
             l445: loop {
-                break_if b444 $sroa_$iter_0_index_60 >= end;
-                ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_59, $sroa_$iter_0_index_60);
-                $sroa_$iter_0_index_60 = $sroa_$iter_0_index_60 + 1;
+                break_if b444 $sroa_$iter_0_index_61 >= end;
+                ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_60, $sroa_$iter_0_index_61);
+                $sroa_$iter_0_index_61 = $sroa_$iter_0_index_61 + 1;
                 if $inline_core_prelude_types_wado_WaitableSet_core_prelude_types_wado_Subtask___member_at_sroa_self_members__0__$fused_$inline_core_prelude_types_wado_Subtask_core_prelude_types_wado_Waitable__wait_on_sroa_return__4: block -> bool {
                     $sroa_id_handle_58 = ref_val.value;
                     $inline_core_prelude_types_wado_WaitableSet_core_prelude_types_wado_Subtask___member_at_sroa_self_members__0__$fused_$inline_delivered_at_sroa_return__0: block {
@@ -3554,7 +3554,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::remove$contract_report0"(at_36, $mv$reported$handle, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:1063"), used: 28 });
         unreachable;
-    }; ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee $sroa_$iter_0_repr_59(self_34.repr), at_36); builtin::array_copy<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_59, at_36, $sroa_$iter_0_repr_59, at_36 + 1, ($mv$reported$handle - 1) - at_36); self_34.used = local.tee $mv$reported$handle($mv$reported$handle - 1); builtin::array_set<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_59, $mv$reported$handle, ref.null none); ref_val } };
+    }; ref_val = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee $sroa_$iter_0_repr_60(self_34.repr), at_36); builtin::array_copy<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_60, at_36, $sroa_$iter_0_repr_60, at_36 + 1, ($mv$reported$handle - 1) - at_36); self_34.used = local.tee $mv$reported$handle($mv$reported$handle - 1); builtin::array_set<ref null "core:prelude//$Resource">($sroa_$iter_0_repr_60, $mv$reported$handle, ref.null none); ref_val } };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/types.wado/$tmpl$ac8fec2d6428d13b,[core:prelude/string.wado/String,bool]>"(t) {

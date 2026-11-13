@@ -214,16 +214,16 @@ fn "array_bounds_elim_panic_block_early_exit.wado/run"() with Stdout {
     let used: i32;
     let out_31: ref "core:prelude/string.wado//String";
     let x: i64;
-    let $sroa_$iter_0_start_130: i32;
+    let $sroa_$iter_0_start_131: i32;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     xs = struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(64), used: 0 };
-    $sroa_$iter_0_start_130 = 0;
+    $sroa_$iter_0_start_131 = 0;
     b4: block {
         l5: loop {
-            break_if b4 $sroa_$iter_0_start_130 >= 4;
-            $sroa_$iter_0_start_130 = local.tee current($sroa_$iter_0_start_130) + 1;
+            break_if b4 $sroa_$iter_0_start_131 >= 4;
+            $sroa_$iter_0_start_131 = local.tee current($sroa_$iter_0_start_131) + 1;
             current = black_box(current);
             if @unlikely(local.tee used(xs.used) >= builtin::array_len(xs.repr)) {
                 cold_path;
@@ -234,18 +234,18 @@ fn "array_bounds_elim_panic_block_early_exit.wado/run"() with Stdout {
             continue l5;
         };
     };
-    $sroa_$iter_0_start_130 = block -> i32 {
-        $sroa_$iter_0_start_130 = black_box(1);
-        "array_bounds_elim_panic_block_early_exit.wado/sum"(xs.repr, xs.used, $sroa_$iter_0_start_130);
+    $sroa_$iter_0_start_131 = block -> i32 {
+        $sroa_$iter_0_start_131 = black_box(1);
+        "array_bounds_elim_panic_block_early_exit.wado/sum"(xs.repr, xs.used, $sroa_$iter_0_start_131);
     };
     out_31 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_31: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_31;
     };
-    current = $sroa_$iter_0_start_130 < 0;
-    x = builtin::i64_extend_i32_s($sroa_$iter_0_start_130);
+    current = $sroa_$iter_0_start_131 < 0;
+    x = builtin::i64_extend_i32_s($sroa_$iter_0_start_131);
     x = select i64(x < 0_i64, 0_i64 - x, x);
-    $sroa_$iter_0_start_130 = $inline_count_digits_u64_1: block -> i32 {
+    $sroa_$iter_0_start_131 = $inline_count_digits_u64_1: block -> i32 {
         if x <u 100000_i64 {
             if x <u 100_i64 {
                 if x <u 10_i64 {
@@ -315,37 +315,37 @@ fn "array_bounds_elim_panic_block_early_exit.wado/run"() with Stdout {
         builtin::array_set_u8(out_31.repr, used, 45);
     } else {
     }
-    if @unlikely(local.tee current(out_31.used + $sroa_$iter_0_start_130) > builtin::array_len(out_31.repr)) {
+    if @unlikely(local.tee current(out_31.used + $sroa_$iter_0_start_131) > builtin::array_len(out_31.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_31, current);
     }
     used = out_31.used;
     out_31.used = current;
     arr = out_31.repr;
-    $sroa_$iter_0_start_130 = used + $sroa_$iter_0_start_130;
+    $sroa_$iter_0_start_131 = used + $sroa_$iter_0_start_131;
     b30: block {
         l31: loop {
-            break_if b30 ($sroa_$iter_0_start_130 - used) < 2;
+            break_if b30 ($sroa_$iter_0_start_131 - used) < 2;
             q = x /u 100_i64;
             tens = local.tee current(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, $sroa_$iter_0_start_130 - 1, (48 + current) - (tens * 10));
-            builtin::array_set_u8(arr, $sroa_$iter_0_start_130 - 2, 48 + tens);
-            $sroa_$iter_0_start_130 = $sroa_$iter_0_start_130 - 2;
+            builtin::array_set_u8(arr, $sroa_$iter_0_start_131 - 1, (48 + current) - (tens * 10));
+            builtin::array_set_u8(arr, $sroa_$iter_0_start_131 - 2, 48 + tens);
+            $sroa_$iter_0_start_131 = $sroa_$iter_0_start_131 - 2;
             x = q;
             continue l31;
         };
     };
-    if $sroa_$iter_0_start_130 > used {
+    if $sroa_$iter_0_start_131 > used {
         builtin::array_set_u8(arr, used, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_50: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_50;
     };
-    $sroa_$iter_0_start_130 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    $sroa_$iter_0_start_131 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     current = builtin::i32_wrap_i64(x >> 32_i64);
-    $sroa_$iter_0_start_130 = "array_bounds_elim_panic_block_early_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_130);
+    $sroa_$iter_0_start_131 = "array_bounds_elim_panic_block_early_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_131);
     "core:rt/write_string_to_stream$dae[add_newline]"(current, out_31.repr, out_31.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_start_130);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_start_131);
 }
 
 fn "array_bounds_elim_panic_block_early_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

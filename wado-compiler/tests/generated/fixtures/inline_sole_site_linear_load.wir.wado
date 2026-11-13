@@ -165,20 +165,20 @@ fn "inline_sole_site_linear_load.wado/sum_twice"(at, count) {
 fn "inline_sole_site_linear_load.wado/run"() {
     let p: i32;
     let current: i32;
-    let $sroa_$iter_0_start_18: i32;
+    let $sroa_$iter_0_start_19: i32;
     p = "mem/realloc"(0, 0, 4, 16);
-    $sroa_$iter_0_start_18 = 0;
+    $sroa_$iter_0_start_19 = 0;
     b2: block {
         l3: loop {
-            break_if b2 $sroa_$iter_0_start_18 >= 4;
-            $sroa_$iter_0_start_18 = local.tee current($sroa_$iter_0_start_18) + 1;
+            break_if b2 $sroa_$iter_0_start_19 >= 4;
+            $sroa_$iter_0_start_19 = local.tee current($sroa_$iter_0_start_19) + 1;
             builtin::store_i32(p + (current * 4), current + 1);
             continue l3;
         };
     };
-    if @unlikely(local.tee current("inline_sole_site_linear_load.wado/sum_twice"(p, local.tee $sroa_$iter_0_start_18(black_box(4)))) != 22) {
+    if @unlikely(local.tee current("inline_sole_site_linear_load.wado/sum_twice"(p, local.tee $sroa_$iter_0_start_19(black_box(4)))) != 22) {
         cold_path;
-        "inline_sole_site_linear_load.wado/run$cold0"(p, $sroa_$iter_0_start_18, current);
+        "inline_sole_site_linear_load.wado/run$cold0"(p, $sroa_$iter_0_start_19, current);
         unreachable;
     }
 }

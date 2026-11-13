@@ -444,18 +444,18 @@ fn "core:json/integral_digits$sroa[return]$dae[start]"($mv$n$neg, $mv$n$int_digi
     let significant: i64;
     let k: i64;
     let start_31: i32;
-    let $licm_arith_84: i64;
+    let $licm_arith_85: i64;
     mantissa_len = builtin::i64_extend_i32_s(($mv$n$mantissa_end - $mv$n$mantissa_start) - (($mv$n$mantissa_end - $mv$n$mantissa_start) > $mv$n$int_digits));
     $mv$n$exp = $mv$n$exp - (mantissa_len - builtin::i64_extend_i32_s($mv$n$int_digits));
     kept = select i64($mv$n$exp < 0_i64, mantissa_len + $mv$n$exp, mantissa_len);
     digits = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     significant = 0_i64;
     k = 0_i64;
-    $licm_arith_84 = builtin::i64_extend_i32_s($mv$n$int_digits);
+    $licm_arith_85 = builtin::i64_extend_i32_s($mv$n$int_digits);
     b13: block {
         l14: loop {
             break_if b13 k >= mantissa_len;
-            $mv$n$int_digits = builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + (($mv$n$mantissa_start + builtin::i32_wrap_i64(k)) + (k >= $licm_arith_84)));
+            $mv$n$int_digits = builtin::array_get_value<u8>($mv$input$repr, $mv$input$start + (($mv$n$mantissa_start + builtin::i32_wrap_i64(k)) + (k >= $licm_arith_85)));
             if k >= kept {
                 if @unlikely($mv$n$int_digits != 48) {
                     cold_path;

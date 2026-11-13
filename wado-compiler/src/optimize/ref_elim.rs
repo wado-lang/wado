@@ -4,6 +4,8 @@
 //! analysis; the referent is then stored unresolved and resolved during the
 //! transform, so a transitive `let r2 = &r1.field` survives `r1`'s removal.
 
+use std::cell::RefCell;
+
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
@@ -11,9 +13,7 @@ use crate::nir_engine::{Engine, Rule};
 use crate::tir::TypeId;
 use crate::token::Span;
 
-use super::arena_query::{
-    Place, is_place_prefix, local_written_by, operand_local, place_path, reachable_nodes,
-};
+use super::arena_query::{Place, is_place_prefix, place_path};
 use crate::optimize::arena_query::is_pure_expr;
 use crate::optimize::heap_effect::{LazyHeapFrame, field_path};
 
@@ -37,14 +37,17 @@ struct RefInfo {
 /// — the two sub-analyses target disjoint binding shapes (`&pure-read-referent`
 /// vs `&literal`), so a single pristine snapshot of each matches the old
 /// sequential pass. The transforms (drop the binding `Let`, substitute each
-/// `r.field` with the resolved referent, inline each single-use `*r` literal)
-/// run through the engine edit API so the worklist re-examines the result.
+/// `r.field` with the resolved referent, bind each single-use `*r` literal by
+/// value) run through the engine edit API so the worklist re-examines the result.
 pub(super) struct RefElimRule {
     /// `let r = &E` bindings (eliminable when every use is `r.field`).
     refs: IndexMap<u32, RefInfo>,
     /// `let r = &literal` bindings used exactly once as `*r`; value is the
-    /// source literal expression to inline.
+    /// source literal expression.
     deref_sources: IndexMap<u32, ExprId>,
+    /// The local each `deref_sources` entry binds its literal to by value,
+    /// minted by whichever of its `let` and its `*r` the engine reaches first.
+    deref_values: RefCell<IndexMap<u32, u32>>,
 }
 
 /// Build a [`RefElimRule`] for one function from its pristine body.
@@ -86,46 +89,66 @@ pub(super) fn build_ref_elim(body: &Body, heap: LazyHeapFrame) -> RefElimRule {
     deref_collect_block(body, body.root(), &rebound, &mut deref);
     // Only eliminate refs still eliminable AND used exactly once via `*r`;
     // multi-use elision would duplicate the source literal at every site.
-    let written: IndexSet<u32> = reachable_nodes(body)
-        .into_iter()
-        .filter_map(|node| local_written_by(body, node))
-        .collect();
     let deref_sources = deref
         .into_iter()
-        .filter(|(_, info)| {
-            info.eliminable
-                && info.use_count == 1
-                && evaluates_alike_later(body, Operand::Expr(info.source_e), &written)
-        })
+        .filter(|(_, info)| info.eliminable && info.use_count == 1)
         .map(|(idx, info)| (idx, info.source_e))
         .collect();
 
     RefElimRule {
         refs,
         deref_sources,
+        deref_values: RefCell::default(),
+    }
+}
+
+impl RefElimRule {
+    /// The local `let r = &literal` binds its literal to by value. The literal
+    /// stays where it stands, since moving it to the `*r` would read its
+    /// operands after whatever writes them in between.
+    fn deref_value(&self, engine: &mut Engine, r: u32) -> u32 {
+        *self.deref_values.borrow_mut().entry(r).or_insert_with(|| {
+            let source_type = engine.body.exprs[self.deref_sources[&r]].type_id;
+            engine.alloc_minted_local("deref_value", source_type, false)
+        })
     }
 }
 
 impl Rule for RefElimRule {
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
         let stmts = engine.body.blocks[block].stmts.clone();
-        let kept: Vec<StmtId> = stmts
-            .iter()
-            .copied()
-            .filter(|s| match &engine.body.stmts[*s].kind {
-                StmtKind::Let { local_index, .. } => {
-                    let drop = self.refs.get(local_index).is_some_and(|i| i.eliminable)
-                        || self.deref_sources.contains_key(local_index);
-                    !drop
-                }
-                _ => true,
-            })
-            .collect();
-        if kept.len() == stmts.len() {
-            return false;
+        let mut changed = false;
+        let mut kept: Vec<StmtId> = Vec::with_capacity(stmts.len());
+        for s in stmts {
+            let StmtKind::Let { local_index, .. } = engine.body.stmts[s].kind else {
+                kept.push(s);
+                continue;
+            };
+            if self.refs.get(&local_index).is_some_and(|i| i.eliminable) {
+                changed = true;
+                continue;
+            }
+            let Some(&source_e) = self.deref_sources.get(&local_index) else {
+                kept.push(s);
+                continue;
+            };
+            let value = self.deref_value(engine, local_index);
+            let binding = StmtKind::Let {
+                name: engine.local_name(value),
+                local_index: value,
+                is_mut: false,
+                type_id: engine.body.exprs[source_e].type_id,
+                value: Operand::Expr(source_e),
+                skip_value_copy: true,
+            };
+            let span = engine.body.stmts[s].span;
+            kept.push(engine.alloc_stmt(binding, span));
+            changed = true;
         }
-        engine.set_block_stmts(block, kept);
-        true
+        if changed {
+            engine.set_block_stmts(block, kept);
+        }
+        changed
     }
 
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
@@ -160,7 +183,7 @@ impl Rule for RefElimRule {
                 engine.replace_expr_kind(inner_e, referent);
                 true
             }
-            // `*r` for a single-use deref-only ref `r` → inline the literal.
+            // `*r` for a single-use deref-only ref `r` → the literal's binding.
             ExprKind::Unary {
                 op: NirUnaryOp::Deref,
                 expr: inner,
@@ -173,13 +196,16 @@ impl Rule for RefElimRule {
                 let ExprKind::Local { index, .. } = &engine.body.exprs[inner_e].kind else {
                     return false;
                 };
-                let Some(&source_e) = self.deref_sources.get(index) else {
+                let index = *index;
+                if !self.deref_sources.contains_key(&index) {
                     return false;
+                }
+                let value = self.deref_value(engine, index);
+                let read = ExprKind::Local {
+                    index: value,
+                    name: engine.local_name(value),
                 };
-                // Single-use: move the source literal into this `*r` site,
-                // keeping the deref expr's type_id / span.
-                let kind = std::mem::replace(&mut engine.body.exprs[source_e].kind, ExprKind::Dead);
-                engine.replace_expr_kind(id, kind);
+                engine.replace_expr_kind(id, read);
                 true
             }
             _ => false,
@@ -705,39 +731,13 @@ fn deref_only_source(body: &Body, value_e: ExprId) -> Option<ExprId> {
         } => expr.as_expr()?,
         _ => value_e,
     };
-    is_fresh_aggregate(&body.exprs[candidate].kind).then_some(candidate)
-}
-
-fn is_fresh_aggregate(kind: &ExprKind) -> bool {
     matches!(
-        kind,
+        body.exprs[candidate].kind,
         ExprKind::StructLiteral { .. }
             | ExprKind::TupleLiteral { .. }
             | ExprKind::ArrayLiteral { .. }
     )
-}
-
-/// Whether `op` gives the same value evaluated at a later point of the body as
-/// where it stands: a constant, a local nothing writes, or a literal built of
-/// those. A literal that reads the heap (a `$value_copy` inlined into
-/// `String { repr: array_clone(s.repr), … }`) would read after a write it
-/// predates.
-fn evaluates_alike_later(body: &Body, op: Operand, written: &IndexSet<u32>) -> bool {
-    if let Some(local) = operand_local(body, op) {
-        return !written.contains(&local);
-    }
-    match op {
-        Operand::Value(value) => body.values.kind(value).is_constant(),
-        Operand::Expr(e) => {
-            is_fresh_aggregate(&body.exprs[e].kind) && {
-                let mut alike = true;
-                body.for_each_operand(NodeRef::Expr(e), |child| {
-                    alike &= evaluates_alike_later(body, child, written);
-                });
-                alike
-            }
-        }
-    }
+    .then_some(candidate)
 }
 
 fn deref_collect_node(

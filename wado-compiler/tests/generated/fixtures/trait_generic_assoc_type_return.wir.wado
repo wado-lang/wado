@@ -235,10 +235,10 @@ global global:trait_generic_assoc_type_return.wado::$const_obj_2: ref "core:prel
 fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
     let $load_2: ref Array<u8>;
     let $v1_10: bool;
-    let $contract_arg_0_64: ref "core:prelude/string.wado//StrSlice";
     let out_84: ref "core:prelude/string.wado//String";
     let is_negative_146: bool;
-    let $sroa_view_repr_629: ref Array<u8>;
+    let $deref_value_625: ref "core:prelude/string.wado//StrSlice";
+    let $sroa_view_repr_632: ref Array<u8>;
     if @unlikely((if local.tee $v1_10((builtin::array_get_value<u8>(global:trait_generic_assoc_type_return.wado::$const_obj_2.repr, 3) & 192) != 128) -> i32 {
         (builtin::array_get_value<u8>(global:trait_generic_assoc_type_return.wado::$const_obj_2.repr, 6) & 192) != 128;
     } else {
@@ -248,9 +248,10 @@ fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v1_10, global:trait_generic_assoc_type_return.wado::$const_obj_2, 6, 3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("trait_generic_assoc_type_return.wado:24"), used: 39 });
         unreachable;
     }
+    $deref_value_625 = struct.new "core:prelude/string.wado//StrSlice" { repr: global:trait_generic_assoc_type_return.wado::$const_obj_2.repr, start: 3, end: 6 };
     $inline_i32_core_prelude_traits_wado_FromStr__from_str__core_prelude_string_wado_StrSlice__sroa_return__17: block {
         $v1_10 = 0;
-        $mv$$vr_17$0 = builtin::i32_wrap_i64($contract_arg_0_64 = struct.new "core:prelude/string.wado//StrSlice" { repr: global:trait_generic_assoc_type_return.wado::$const_obj_2.repr, start: 3, end: 6 }; let $mv$$vr_17$0: i32; let $mv$$vr_17$1: i64; let $mv$$vr_17$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$$vr_17$0, $mv$$vr_17$1, $mv$$vr_17$2] = "core:prelude/intparse.wado/parse_i64_radix$unchecked$sroa[return]$dae[radix,max,min_abs]"($contract_arg_0_64.repr, 3, 6); (if @likely($mv$$vr_17$0 == 0) -> i64 {
+        $mv$$vr_17$0 = builtin::i32_wrap_i64(let $mv$$vr_17$0: i32; let $mv$$vr_17$1: i64; let $mv$$vr_17$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$$vr_17$0, $mv$$vr_17$1, $mv$$vr_17$2] = "core:prelude/intparse.wado/parse_i64_radix$unchecked$sroa[return]$dae[radix,max,min_abs]"($deref_value_625.repr, 3, 6); (if @likely($mv$$vr_17$0 == 0) -> i64 {
             $mv$$vr_17$1;
         } else if @likely($mv$$vr_17$0 == 1) -> i64 {
             cold_path;
@@ -265,9 +266,9 @@ fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
     };
     if $v1_10 == 0 {
         out_84 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
-        $sroa_view_repr_629 = global:trait_generic_assoc_type_return.wado::$const_obj_1;
+        $sroa_view_repr_632 = global:trait_generic_assoc_type_return.wado::$const_obj_1;
         out_84.used = local.tee $v1_10(4);
-        builtin::array_copy<u8>(local.tee $load_2(out_84.repr), 0, $sroa_view_repr_629, 0, 4);
+        builtin::array_copy<u8>(local.tee $load_2(out_84.repr), 0, $sroa_view_repr_632, 0, 4);
         is_negative_146 = $mv$$vr_17$0 < 0;
         $mv$$vr_17$0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $mv$$vr_17$1($mv$$vr_17$1 = builtin::i64_extend_i32_s($mv$$vr_17$0); select i64($mv$$vr_17$1 < 0_i64, 0_i64 - $mv$$vr_17$1, $mv$$vr_17$1)));
         if is_negative_146 {
@@ -299,9 +300,9 @@ fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
         $v1_10 = builtin::i32_wrap_i64(local.tee $mv$$vr_17$1("wasi/stream-new"()));
         $mv$$vr_17$0 = builtin::i32_wrap_i64($mv$$vr_17$1 >> 32_i64);
         $v1_10 = "trait_generic_assoc_type_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v1_10);
-        builtin::array_copy<u8>(local.tee $sroa_view_repr_629(builtin::array_new<u8>(4)), 0, global:trait_generic_assoc_type_return.wado::$const_obj_0, 0, 3);
-        builtin::array_set_u8($sroa_view_repr_629, 3, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($mv$$vr_17$0, $sroa_view_repr_629));
+        builtin::array_copy<u8>(local.tee $sroa_view_repr_632(builtin::array_new<u8>(4)), 0, global:trait_generic_assoc_type_return.wado::$const_obj_0, 0, 3);
+        builtin::array_set_u8($sroa_view_repr_632, 3, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($mv$$vr_17$0, $sroa_view_repr_632));
         "wasi/stream-drop-writable"($mv$$vr_17$0);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v1_10);
     }
