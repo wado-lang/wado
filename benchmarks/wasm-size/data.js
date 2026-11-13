@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794549222399,
+  "lastUpdate": 1794551329046,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77101,6 +77101,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c8bfd1b7c4e9588968629b2ea27805514bdde8e6"
         },
         "date": 1794549221647,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21773,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434207,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ad4c08febed627de2d4d2d80e353b6bb36d0fdc1",
+          "message": "Merge pull request #2619 from wado-lang/ccr-1f38bb58-l37e8x\n\nchore: build on Rust 1.100 and adopt what it stabilized",
+          "timestamp": "2026-11-13T15:02:14+09:00",
+          "tree_id": "ba1c8efaa8c31754b01752b0032ec9bc82de7c55",
+          "url": "https://github.com/wado-lang/wado/commit/ad4c08febed627de2d4d2d80e353b6bb36d0fdc1"
+        },
+        "date": 1794551328354,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
