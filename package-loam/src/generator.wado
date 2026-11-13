@@ -4,6 +4,7 @@
 
 use { Request, Response, Error as KilnError, OutputFile, package_of, read_all } from "core:kiln";
 use { NoFields, info } from "core:log";
+use { CodeWriter, ModuleSpec } from "lib:wadopoet";
 use { CheckpointFile } from "./safetensors.wado";
 use {
     Spelling,
@@ -37,11 +38,14 @@ fn refused(req: Request<Options>, error: KilnError) -> Result<Response, KilnErro
     return Result::Err(error);
 }
 
-/// The one file a generation writes.
-fn entry(path: String, content: String) -> Response {
+/// The one file a generation writes: `body`, opened by `module`.
+fn entry(path: String, module: &ModuleSpec, body: String) -> Response {
+    let mut w = CodeWriter::with_capacity(body.len() + 128);
+    module.emit(&mut w);
+    w.raw(body);
     return Response {
         files: [
-            OutputFile { path, content, is_entry: true },
+            OutputFile { path, content: w.to_string(), is_entry: true },
         ],
     };
 }
@@ -60,6 +64,7 @@ export fn probe(content: Stream<u8>, type: Option<String>) -> Result<u64, KilnEr
 // A stream is outside drop elaboration, so every one is consumed or dropped
 // before the first return that could leave it open.
 export fn generate(req: Request<Options>) -> Result<Response, KilnError> {
+    let module = ModuleSpec::from_origin(&req.origin());
     let Some(runtime) = package_of(&req.module) else {
         let reason = `loam: invoked by the path ${req.module}; name it by the package spec its runtime is a dependency under`;
         return refused(req, KilnError::Unsupported(reason));
@@ -73,18 +78,23 @@ export fn generate(req: Request<Options>) -> Result<Response, KilnError> {
         let source = generate_tokenizer(&path, read_all(req.primary.content), &runtime).map_err(
             |e| KilnError::InvalidSchema(e),
         )?;
-        return Result::Ok(entry("tokenizer.wado", source));
+        return Result::Ok(entry("tokenizer.wado", &module, source));
     }
     let Some(spelling) = spelling_of(&req.primary.type) else {
         let reason = `loam: '${req.primary.path}' is given ${given(&req.primary.type)}; a graph is \`type: "onnx"\` or \`type: "onnxtext"\`, and a tokenizer \`type: "hf-tokenizer"\``;
         return refused(req, KilnError::Unsupported(reason));
     };
-    return generate_graph(req, spelling, &runtime);
+    return generate_graph(req, &module, spelling, &runtime);
 }
 
 /// An ONNX graph spelled as `spelling`, checked against the checkpoints in its
 /// inputs, as the module its `compute` runs in.
-fn generate_graph(req: Request<Options>, spelling: Spelling, runtime: &String) -> Result<Response, KilnError> {
+fn generate_graph(
+    req: Request<Options>,
+    module: &ModuleSpec,
+    spelling: Spelling,
+    runtime: &String,
+) -> Result<Response, KilnError> {
     if let Some(input) = req.inputs.iter_ref().find(
         |input| !input.type matches { Some("safetensors") | Some("safetensors-index") },
     ) {
@@ -110,5 +120,5 @@ fn generate_graph(req: Request<Options>, spelling: Spelling, runtime: &String) -
     let model = checked.map_err(|e| KilnError::InvalidSchema(e))?;
     let source = generate_model(&model, &path, weights?, runtime).map_err(|e| KilnError::InvalidSchema(e))?;
     info(`${model.graph.name}: ${model.graph.nodes.len()} operators checked`, NoFields {}, "loam");
-    return Result::Ok(entry("model.wado", source));
+    return Result::Ok(entry("model.wado", module, source));
 }

@@ -21,7 +21,7 @@ use { parse, parse_checked } from "./g4/parser.wado";
 use { count_occurrences } from "../tests/support/text.wado";
 use { lexer_dump } from "../tests/support/fixtures.wado";
 use { eval, EvalHost, Output } from "core:eval";
-use { wado } from "lib:wadopoet";
+use { ModuleSpec, wado } from "lib:wadopoet";
 
 global DEFAULT_OPTIONS: GenerateOptions = GenerateOptions {};
 
@@ -165,9 +165,9 @@ test "generate header" {
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert output.len() > 0;
-    // Grammar was constructed with no source_files, so gen_header emits an
-    // empty sources list rather than fabricating a nonexistent `{name}.g4`.
-    let header = `#![generated(by = "gale", sources = [])]`;
+    // No source file is recorded, so none is named, rather than a nonexistent
+    // `{name}.g4`.
+    let header = "#![generated(by = \"gale\")]\n";
     for let mut i = 0; i < header.len(); i += 1 {
         assert output.byte_at(i) == header.byte_at(i);
     }
@@ -193,9 +193,9 @@ test "generate header with multiple source files" {
     }
 }
 
-test "generate header escapes a source file name" {
+test "generate opens with the module it is given" {
     let mut grammar = Grammar {
-        name: "Odd",
+        name: "Calc",
         kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [],
@@ -204,13 +204,11 @@ test "generate header escapes a source file name" {
         options: [],
         named_actions: [],
         pending_refs: [],
-        source_files: ["a\"b\\c.g4"],
+        source_files: ["Calc.g4"],
     };
-    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let header = "#![generated(by = \"gale\", sources = [\"a\\\"b\\\\c.g4\"])]";
-    for let mut i = 0; i < header.len(); i += 1 {
-        assert output.byte_at(i) == header.byte_at(i);
-    }
+    let module = ModuleSpec::new("wado-lang:gale", ["src/Calc.g4"]);
+    let output = generate(&mut grammar, &GenerateOptions { module: Option::Some(module) }).source;
+    assert output.starts_with("#![generated(by = \"wado-lang:gale\", sources = [\"src/Calc.g4\"])]\n");
 }
 
 test "generate token kind" {

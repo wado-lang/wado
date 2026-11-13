@@ -499,11 +499,12 @@ export fn probe(path: String, mut content: Stream<u8>) -> Result<u64, Error> {
 }
 
 export fn generate(req: Request) -> Result<Response, Error> {
+    let origin = req.origin();
     let head = read_text(req.primary.content).unwrap();
     return Result::Ok(Response {
         files: [OutputFile {
             path: "out.wado",
-            content: `pub fn hello() -> i32 { return ${head.trim()}; }`,
+            content: `${origin.header()}pub fn hello() -> i32 { return ${head.trim()}; }`,
             is_entry: true,
         }],
     });
@@ -893,11 +894,12 @@ fn a_remote_module_clause_resolves_against_the_consumer_build_dependencies() {
         r#"use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {
+    let origin = req.origin();
     let text = read_text(req.primary.content).unwrap();
     return Result::Ok(Response {
         files: [OutputFile {
             path: "greeting.wado",
-            content: `pub fn greeting() -> String { return "${text.trim()}"; }`,
+            content: `${origin.header()}pub fn greeting() -> String { return "${text.trim()}"; }`,
             is_entry: true,
         }],
     });
@@ -951,7 +953,7 @@ export fn generate(req: Request) -> Result<Response, Error> {{
     return Result::Ok(Response {{
         files: [OutputFile {{
             path: "out.wado",
-            content: `pub fn hello() -> String {{ return "${{exclaim("generated")}}"; }}`,
+            content: `${{req.origin().header()}}pub fn hello() -> String {{ return "${{exclaim("generated")}}"; }}`,
             is_entry: true,
         }}],
     }});

@@ -2308,11 +2308,10 @@ fn kiln_consumer_fixture(root: &std::path::Path) -> std::path::PathBuf {
         r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {
-    let _ = req.primary.path;
     return Result::Ok(Response {
         files: [OutputFile {
             path: "greeting.wado",
-            content: "pub fn greeting() -> String { return \"hi\"; }",
+            content: `${req.origin().header()}pub fn greeting() -> String { return "hi"; }`,
             is_entry: true,
         }],
     });

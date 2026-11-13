@@ -10,12 +10,14 @@ use {
     FnSpec,
     GlobalSpec,
     ImplSpec,
+    ModuleSpec,
     Vis,
     wado,
     char_range_pat,
     byte_string_literal,
 } from "./wadopoet.wado";
 use { eval, EvalHost } from "core:eval";
+use { Origin } from "core:kiln";
 
 /// What a command prints when `body` is its `run`, beside `items`.
 fn printed(body: String, items: String = "") -> String with EvalHost {
@@ -26,6 +28,24 @@ ${body}
 }`).unwrap();
     assert out.status matches { Exited(0) };
     return out.stdout;
+}
+
+test "ModuleSpec opens a module with the header its origin gives" {
+    let origin = Origin { by: "lib:gen", sources: ["src/a\"b.txt"] };
+    let mut w = CodeWriter::new();
+    ModuleSpec::from_origin(&origin).emit(&mut w);
+    w.line("pub fn x() -> i32 { return 1; }");
+    assert w.to_string() == `${origin.header()}pub fn x() -> i32 { return 1; }\n`;
+    let mut standalone = CodeWriter::new();
+    ModuleSpec::new("lib:gen", ["src/a\"b.txt"]).emit(&mut standalone);
+    assert standalone.to_string() == origin.header();
+}
+
+test "a module ModuleSpec opens compiles" {
+    let mut w = CodeWriter::new();
+    ModuleSpec::new("scripts/gen.wado", ["a\"b\\c.txt"]).emit(&mut w);
+    w.line("export fn run() {}");
+    assert eval(w.to_string()).unwrap().status matches { Exited(0) };
 }
 
 test "empty writer" {

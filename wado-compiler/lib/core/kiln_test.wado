@@ -1,4 +1,4 @@
-use { Error, KilnLogSink, kiln_line, package_of, read_all, read_text } from "core:kiln";
+use { Error, InputFile, KilnLogSink, NoOptions, Origin, Request, kiln_line, package_of, read_all, read_text } from "core:kiln";
 use { Event, Level, Log, Metadata } from "core:log";
 use { to_value } from "core:value";
 
@@ -7,6 +7,24 @@ test "package_of keeps the package and drops a version or a file path" {
     assert package_of(&"wado-lang:loam@0.1") == Option::Some("wado-lang:loam");
     assert package_of(&"lib:gale/src/generator.wado") == Option::Some("lib:gale");
     assert package_of(&"../package-grog") == null;
+}
+
+test "a request's origin names the generator and every input, primary first" {
+    let req = Request {
+        primary: InputFile { path: "src/a.proto", content: scripted_stream(), type: null },
+        inputs: [InputFile { path: "src/b.proto", content: scripted_stream(), type: null }],
+        module: "lib:grog",
+        options: NoOptions {},
+    };
+    let origin = req.origin();
+    assert origin.by == "lib:grog";
+    assert origin.sources == ["src/a.proto", "src/b.proto"];
+}
+
+test "an origin's header quotes what it holds" {
+    let origin = Origin { by: "./gen.wado", sources: ["a\"b\\c.g4", "d.g4"] };
+    assert origin.header() == "#![generated(by = \"./gen.wado\", sources = [\"a\\\"b\\\\c.g4\", \"d.g4\"])]\n";
+    assert Origin { by: "lib:x", sources: [] }.header() == "#![generated(by = \"lib:x\")]\n";
 }
 
 test "Error renders its reason" {

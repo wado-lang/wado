@@ -1,0 +1,15 @@
+// A generated file opens with its `#![generated]` header, which is how Kiln
+// tells its own outputs from the files beside them. One that does not is
+// refused rather than written.
+
+use { hello } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/headerless_generator.wado" },
+    };
+
+test {
+    assert hello() == 1;
+}
+
+__DATA__
+{"compile_error": "kiln: generated file \"out.wado\" does not open with a `#![generated]` header"}

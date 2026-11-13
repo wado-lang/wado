@@ -153,11 +153,14 @@ fn invocation(
     }
 }
 
+/// What a generator's `req.origin().header()` would open each file with.
+const HEADER: &str = "#![generated(by = \"test\")]\n";
+
 fn simple_response(path: &str) -> GeneratorResponse {
     GeneratorResponse {
         files: vec![GeneratorOutputFile {
             path: path.to_string(),
-            content: format!("pub fn from_{}() {{}}\n", path.replace('.', "_")),
+            content: format!("{HEADER}pub fn from_{}() {{}}\n", path.replace('.', "_")),
             is_entry: true,
         }],
     }
@@ -406,7 +409,7 @@ fn pipeline_invocations_feed_compiler_options_for_use_redirect() {
         options_span: wado_compiler::Span::default(),
     };
 
-    let generated_content = "pub fn greet() {}\n";
+    let generated_content = format!("{HEADER}pub fn greet() {{}}\n");
     let host = StubHost::new(
         &[("schema.proto", b"schema-content")],
         vec![(
@@ -414,7 +417,7 @@ fn pipeline_invocations_feed_compiler_options_for_use_redirect() {
             GeneratorResponse {
                 files: vec![GeneratorOutputFile {
                     path: "schema.wado".to_string(),
-                    content: generated_content.to_string(),
+                    content: generated_content,
                     is_entry: true,
                 }],
             },

@@ -182,3 +182,50 @@ pub affine struct Request<T = NoOptions> {
     pub module: String,
     pub options: T,
 }
+
+impl<T> Request<T> {
+    /// What the request's outputs came from. Take it before reading an input,
+    /// which moves the input's content out of the request.
+    pub fn origin(&self) -> Origin {
+        let mut sources: List<String> = [self.primary.path];
+        for let input of &self.inputs {
+            sources.push(input.path);
+        }
+        return Origin { by: self.module, sources };
+    }
+}
+
+/// What a generated file came from: the generator, as the use site named it,
+/// and the inputs it read, each from the package root.
+pub struct Origin {
+    pub by: String,
+    pub sources: List<String>,
+}
+
+impl Origin {
+    /// The `#![generated]` line, newline included, that opens every file a
+    /// generator returns. Kiln refuses an output that does not open with one.
+    /// With no source, it names none.
+    pub fn header(&self) -> String {
+        let mut out = `#![generated(by = ${quoted(&self.by)}`;
+        if !self.sources.is_empty() {
+            let sources: List<String> = self.sources.iter_ref().map(|s| quoted(s)).collect();
+            out.push_str(`, sources = [${sources.join(", ")}]`);
+        }
+        out.push_str(")]\n");
+        return out;
+    }
+}
+
+/// `text` as a string literal.
+fn quoted(text: &String) -> String {
+    let mut out = "\"";
+    for let c of text.chars() {
+        if c == '"' || c == '\\' {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out.push('"');
+    return out;
+}

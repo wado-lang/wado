@@ -18,11 +18,12 @@ use predicates::prelude::*;
 const FIXED_OUTPUT_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {
+    let origin = req.origin();
     let _ = req.primary.content;
     return Result::Ok(Response {
         files: [OutputFile {
             path: "out.wado",
-            content: "pub fn hello() -> i32 { return 1; }\n",
+            content: `${origin.header()}pub fn hello() -> i32 { return 1; }\n`,
             is_entry: true,
         }],
     });

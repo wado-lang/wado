@@ -1,5 +1,6 @@
 use { ReflectTemplate } from "core:prelude";
 use { HashMap, HashSet } from "core:collections";
+use { Origin } from "core:kiln";
 
 /// What a call does with the callee's result.
 pub variant CallForm {
@@ -1564,6 +1565,32 @@ impl FnSpec {
             sig.push_str(` with (${join_comma(&clauses)})`);
         }
         return sig;
+    }
+}
+
+/// The head of a generated module: the `#![generated]` header that says where
+/// it came from. Emit it before anything else in the file.
+pub struct ModuleSpec {
+    origin: Origin,
+}
+
+impl ModuleSpec {
+    /// The head of a module a Kiln generator writes, from its request's
+    /// `origin()`.
+    pub fn from_origin(origin: &Origin) -> ModuleSpec {
+        return ModuleSpec { origin: *origin };
+    }
+
+    /// The head of a module a script writes outside Kiln: `by` names the
+    /// script, `sources` what it read, each from the repository root.
+    pub fn new<S: AsStrSlice>(by: S, sources: List<String> = []) -> ModuleSpec {
+        return ModuleSpec { origin: Origin { by: by.to_string(), sources } };
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter)
+        contract w.depth() == 0
+    {
+        w.raw(self.origin.header());
     }
 }
 

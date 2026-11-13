@@ -22,10 +22,11 @@ use predicates::prelude::*;
 const PASSTHROUGH_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {
+    let origin = req.origin();
     return Result::Ok(Response {
         files: [OutputFile {
             path: "out.wado",
-            content: read_text(req.primary.content).unwrap(),
+            content: `${origin.header()}${read_text(req.primary.content).unwrap()}`,
             is_entry: true,
         }],
     });

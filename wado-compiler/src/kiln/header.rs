@@ -1,14 +1,13 @@
-//! `#![generated(by = …, sources = […])]` header emission and parsing. Every
-//! file a Kiln generator produces is stamped with it, so tools can show a banner
-//! and the pipeline's stale-output GC can delete a stamped file the current run
-//! did not produce, leaving hand-authored neighbours alone. Parsing reads the
-//! header as the lexer does, so any spelling of it is accepted; emission is
-//! canonical.
+//! `#![generated(by = …, sources = […])]` header parsing. Every file a Kiln
+//! generator produces opens with one, written by the generator from
+//! `core:kiln`'s `Origin`, so tools can show a banner and the pipeline's
+//! stale-output GC can delete a generated file the current run did not produce,
+//! leaving hand-authored neighbours alone. Parsing reads the header as the
+//! lexer does, so any spelling of it is accepted.
 
 use std::iter::Peekable;
 
-use super::invocation::InvocationPath;
-use crate::escape::{quoted, string_value};
+use crate::escape::string_value;
 use crate::lexer::token_kinds;
 use crate::token::TokenKind;
 
@@ -19,38 +18,6 @@ pub struct GeneratedHeader {
     pub by: String,
     /// Source files the generator saw as inputs, in declaration order.
     pub sources: Vec<String>,
-}
-
-impl GeneratedHeader {
-    /// Render the canonical form placed at the top of every generated file.
-    ///
-    /// Output format (exact):
-    /// ```text
-    /// #![generated(by = "<by>", sources = [<src1>, <src2>])]
-    /// ```
-    ///
-    /// Followed by a single newline. Callers prepend this to the generator's
-    /// body before writing to disk.
-    #[must_use]
-    pub fn emit(&self) -> String {
-        let sources: Vec<String> = self.sources.iter().map(|s| quoted(s)).collect();
-        format!(
-            "#![generated(by = {}, sources = [{}])]\n",
-            quoted(&self.by),
-            sources.join(", ")
-        )
-    }
-
-    /// Emit with extra paths; convenience for callers that hold
-    /// `InvocationPath` lists.
-    #[must_use]
-    pub fn emit_with_paths(by: &str, paths: &[InvocationPath]) -> String {
-        Self {
-            by: by.to_string(),
-            sources: paths.iter().map(|p| p.as_str().to_string()).collect(),
-        }
-        .emit()
-    }
 }
 
 /// Detect whether `source` begins with a `#![generated]` attribute, after a
@@ -153,39 +120,17 @@ fn skip_value(tokens: &mut Peekable<impl Iterator<Item = TokenKind>>) -> Option<
 mod tests {
     use super::*;
 
+    /// The form `core:kiln`'s `Origin::header` writes, escapes included.
     #[test]
-    fn emit_roundtrip_single_source() {
-        let h = GeneratedHeader {
-            by: "ns:proto@1.0.0".to_string(),
-            sources: vec!["schema.proto".to_string()],
-        };
-        let text = h.emit();
-        let parsed = parse_header(&text).unwrap();
-        assert_eq!(parsed, h);
-    }
-
-    #[test]
-    fn emit_roundtrip_multiple_sources() {
-        let h = GeneratedHeader {
-            by: "ns:proto@1.0.0".to_string(),
-            sources: vec![
-                "a.proto".to_string(),
-                "b.proto".to_string(),
-                "c.proto".to_string(),
-            ],
-        };
-        assert_eq!(parse_header(&h.emit()).unwrap(), h);
-    }
-
-    #[test]
-    fn emit_escapes_quotes() {
-        let h = GeneratedHeader {
-            by: "weird\"name".to_string(),
-            sources: vec!["with\"quote.proto".to_string()],
-        };
-        let text = h.emit();
-        assert!(text.contains("\\\""));
-        assert_eq!(parse_header(&text).unwrap(), h);
+    fn parse_reads_what_origin_writes() {
+        let src = "#![generated(by = \"weird\\\"name\", sources = [\"a\\\\b.proto\", \"c.proto\"])]\n";
+        assert_eq!(
+            parse_header(src).unwrap(),
+            GeneratedHeader {
+                by: "weird\"name".to_string(),
+                sources: vec!["a\\b.proto".to_string(), "c.proto".to_string()],
+            }
+        );
     }
 
     #[test]
@@ -228,12 +173,5 @@ mod tests {
         assert!(parse_header("").is_none());
         assert!(parse_header("pub fn x() {}").is_none());
         assert!(parse_header("#![other(attr)]").is_none());
-    }
-
-    #[test]
-    fn emit_with_paths_uses_invocation_path_format() {
-        let out =
-            GeneratedHeader::emit_with_paths("gen", &[InvocationPath::normalize("./a/b.proto")]);
-        assert!(out.contains("\"a/b.proto\""));
     }
 }

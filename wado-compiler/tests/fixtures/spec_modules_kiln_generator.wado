@@ -7,12 +7,14 @@ export struct Options {
 }
 
 export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let origin = req.origin();                  // before reading moves an input out
     let Ok(schema) = read_text(req.primary.content) else {
         return Result::Err(Error::InvalidSchema("not UTF-8"));
     };
     let source = emit(&schema, &req.options);   // the generator's own work
+    let content = `${origin.header()}${source}`;
     return Result::Ok(Response {
-        files: [OutputFile { path: `${req.options.namespace}.wado`, content: source, is_entry: true }],
+        files: [OutputFile { path: `${req.options.namespace}.wado`, content, is_entry: true }],
     });
 }
 
