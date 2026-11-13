@@ -1574,7 +1574,7 @@ impl FnSpec {
 }
 
 /// The head of a generated module: the `#![generated]` header that says where
-/// it came from. Emit it before anything else in the file.
+/// it came from.
 pub struct ModuleSpec {
     origin: Origin,
 }
@@ -1589,7 +1589,9 @@ impl ModuleSpec {
     /// The head of a module a script writes outside Kiln: `by` names the
     /// script, `sources` what it read, each from the repository root.
     pub fn new<S: AsStrSlice>(by: S, sources: List<String> = []) -> ModuleSpec {
-        return ModuleSpec { origin: Origin { by: by.to_string(), sources } };
+        return ModuleSpec {
+            origin: Origin { by: by.to_string(), sources },
+        };
     }
 
     pub fn emit(&self, w: &mut CodeWriter)

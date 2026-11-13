@@ -164,13 +164,9 @@ test "generate header" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert output.len() > 0;
     // No source file is recorded, so none is named, rather than a nonexistent
     // `{name}.g4`.
-    let header = "#![generated(by = \"gale\")]\n";
-    for let mut i = 0; i < header.len(); i += 1 {
-        assert output.byte_at(i) == header.byte_at(i);
-    }
+    assert output.starts_with("#![generated(by = \"gale\")]\n");
 }
 
 test "generate header with multiple source files" {
@@ -187,10 +183,7 @@ test "generate header with multiple source files" {
         source_files: ["HtmlLexer.g4", "HtmlParser.g4"],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let header = `#![generated(by = "gale", sources = ["HtmlLexer.g4", "HtmlParser.g4"])]`;
-    for let mut i = 0; i < header.len(); i += 1 {
-        assert output.byte_at(i) == header.byte_at(i);
-    }
+    assert output.starts_with(`#![generated(by = "gale", sources = ["HtmlLexer.g4", "HtmlParser.g4"])]\n`);
 }
 
 test "generate opens with the module it is given" {
@@ -6531,7 +6524,10 @@ test "gen prints the parser the Kiln generator builds for the same grammar" {
 fn split_header(source: String) -> [String, String] {
     let view = source.as_str_slice();
     let end = view.find("\n").unwrap();
-    return [view.slice(0, end).to_string(), view.slice(end, view.len()).to_string()];
+    return [
+        view.slice(0, end).to_string(),
+        view.slice(end, view.len()).to_string(),
+    ];
 }
 
 test "gen --output writes the parser into the first grant and prints nothing" {

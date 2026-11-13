@@ -123,7 +123,8 @@ mod tests {
     /// The form `core:kiln`'s `Origin::header` writes, escapes included.
     #[test]
     fn parse_reads_what_origin_writes() {
-        let src = "#![generated(by = \"weird\\\"name\", sources = [\"a\\\\b.proto\", \"c.proto\"])]\n";
+        let src =
+            "#![generated(by = \"weird\\\"name\", sources = [\"a\\\\b.proto\", \"c.proto\"])]\n";
         assert_eq!(
             parse_header(src).unwrap(),
             GeneratedHeader {

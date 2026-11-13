@@ -37,10 +37,10 @@ use wado_compiler::hashmap::{IndexMap, IndexSet};
 #[cfg(test)]
 use wado_compiler::kiln::DeclSite;
 use wado_compiler::kiln::{
-    FileHash, GENERATOR_WORLD_FQ, GeneratorModule, Invocation, InvocationIndex,
-    InvocationPath, OptionsAnchor, OptionsDescriptor, Plan, PlanError, collect_inline_invocations,
-    content_hash, file_hash, generator_identity, harvest_module_graph, has_generated_marker,
-    hex_digest, validate_options,
+    FileHash, GENERATOR_WORLD_FQ, GeneratorModule, Invocation, InvocationIndex, InvocationPath,
+    OptionsAnchor, OptionsDescriptor, Plan, PlanError, collect_inline_invocations, content_hash,
+    file_hash, generator_identity, harvest_module_graph, has_generated_marker, hex_digest,
+    validate_options,
 };
 use wado_compiler::remote::{Integrity, is_remote};
 use wado_compiler::{Code, CompilerOptions, Diagnostic, Lints, OptLevel, Severity};

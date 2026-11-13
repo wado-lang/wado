@@ -31,7 +31,10 @@ ${body}
 }
 
 test "ModuleSpec opens a module with the header its origin gives" {
-    let origin = Origin { by: "lib:gen", sources: ["src/a\"b.txt"] };
+    let origin = Origin {
+        by: "lib:gen",
+        sources: ["src/a\"b.txt"],
+    };
     let mut w = CodeWriter::new();
     ModuleSpec::from_origin(&origin).emit(&mut w);
     w.line("pub fn x() -> i32 { return 1; }");
