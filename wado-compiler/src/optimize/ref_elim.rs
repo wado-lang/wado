@@ -674,7 +674,7 @@ fn analyze_expr(
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// A local bound to a freshly built aggregate and only ever read back through
-/// `*x`. Freshness is what makes moving the literal to the deref sound.
+/// `*x`. Freshness is what lets a binding by value stand for the reference.
 struct DerefOnlyRef {
     source_e: ExprId,
     eliminable: bool,
