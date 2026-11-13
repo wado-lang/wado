@@ -2554,7 +2554,14 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], yields: Tail, c
             let entry = consume_matched(&arm.pattern, place, cx);
             block.stmts.splice(0..0, entry);
         }
-        arm.body = TirExpr::new(TirExprKind::Block(block), arm.body.type_id, arm.body.span);
+        // An arm whose value is discarded may have dropped it, ending in no
+        // value of its own type.
+        let type_id = if yields == Tail::Discarded {
+            tir::block_result_type(&cx.affine_types.tt.borrow(), &block)
+        } else {
+            arm.body.type_id
+        };
+        arm.body = TirExpr::new(TirExprKind::Block(block), type_id, arm.body.span);
     }
 }
 

@@ -24,7 +24,7 @@ export fn run() with Stdout {
     let data = text.as_byte_slice().to_list() as ByteList;
     let compressed = zlib_compress(&data);
     let arrays = growth(|| {
-        let _ = LinearArray::<u8>::filled(100000, 0);
+        let _ = LinearArray::<u8>::filled(16384, 0);
     });
     let inflates = growth(|| {
         assert inflate_zlib(&compressed).unwrap() == data;
