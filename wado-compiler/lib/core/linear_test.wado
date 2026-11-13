@@ -44,6 +44,14 @@ test "read_stream reads a stream to its end" {
     assert array.to_list() == counting(0, 10000);
 }
 
+test "resize keeps the bytes and fills the new ones, in the block or past it" {
+    // Growing to 3 doubles the 2-byte block to 4, which 4 then fits.
+    let mut array = LinearArray::<u8>::filled(2, 1);
+    array.resize(3, 7);
+    array.resize(4, 9);
+    assert array.to_list() == [1, 1, 7, 9];
+}
+
 test "a buffer of an array holds its bytes and reads no more" {
     let bytes: List<u8> = [1, 2, 3, 4];
     let mut buffer = LinearBuffer::of(LinearArray::from_slice(&bytes));

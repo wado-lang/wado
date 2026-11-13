@@ -935,7 +935,7 @@ impl Output {
     fn reserve(&mut self, n: i32) {
         if self.bytes.len() - self.len < n {
             builtin::cold_path();
-            let doubled = if self.bytes.len() > i32::MAX / 2 { i32::MAX } else { self.bytes.len() * 2 };
+            let doubled = i32::min(self.bytes.len(), i32::MAX / 2) * 2;
             self.bytes.resize(i32::max(self.len + n, doubled), 0);
         }
     }
