@@ -972,10 +972,7 @@ fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<Cal
         .map(|callee| {
             if declarations.leaves_for_host(callee) {
                 CallSafepoint::Always
-            } else if declarations
-                .get(callee)
-                .is_some_and(BuiltinDeclaration::allocates)
-            {
+            } else if declarations.allocates(callee) {
                 CallSafepoint::WhereObject
             } else {
                 CallSafepoint::Never

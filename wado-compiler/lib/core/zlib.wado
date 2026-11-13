@@ -1528,10 +1528,8 @@ affine struct Matcher {
 impl Matcher {
     fn new(input: &ByteList) -> Matcher {
         let len = input.len();
-        let mut bytes = LinearArray::<u8>::of_bytes(input, 0, len);
-        bytes.resize(len + 16, 0);
         return Matcher {
-            bytes,
+            bytes: LinearArray::<u8>::of_bytes(input, 0, len, 16),
             len,
             head: LinearArray::<i32>::filled(WINDOW, -1),
             prev: LinearArray::<i32>::filled(WINDOW, -1),

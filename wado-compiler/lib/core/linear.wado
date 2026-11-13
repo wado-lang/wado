@@ -259,12 +259,14 @@ impl LinearArray<u8> {
         return Result::Ok(text);
     }
 
-    /// A copy of `bytes[start..<start + len]`.
-    internal fn of_bytes(bytes: &ByteList, start: i32, len: i32) -> LinearArray<u8>
+    /// A copy of `bytes[start..<start + len]`, followed by `zeros` zero bytes.
+    internal fn of_bytes(bytes: &ByteList, start: i32, len: i32, zeros: i32 = 0) -> LinearArray<u8>
         contract 0 <= start && 0 <= len <= bytes.len() - start
+        contract 0 <= zeros <= i32::MAX - len
     {
-        let array = unchecked LinearArray::<u8>::unwritten(len);
+        let array = unchecked LinearArray::<u8>::unwritten(len + zeros);
         gc_array_to_memory(bytes.internal_raw_data_ref(), start, array.block.ptr, len);
+        builtin::memory_fill(array.block.ptr + len, 0, zeros);
         return array;
     }
 
