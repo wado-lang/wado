@@ -91,6 +91,37 @@ fn read_checked(r: &String, written: i32) -> String
     return *r;
 }
 
+impl Items {
+    fn append_then_read(&mut self, r: &String) -> String {
+        self.items[0].text.push_str("!");
+        return *r;
+    }
+}
+
+fn append_then_read(n: &mut Items, r: &String) -> String {
+    n.items[0].text.push_str("!");
+    return *r;
+}
+
+fn append_then_read_checked(n: &mut Items, r: &String, written: i32) -> String
+    contract written == 0
+{
+    n.items[0].text.push_str("!");
+    return *r;
+}
+
+test "a write by the callee before it reads the reference" {
+    let mut a = Items { items: [Item { text: "abc" }] };
+    let through_argument = append_then_read(&mut a, &a.text(0));
+    let mut b = Items { items: [Item { text: "abc" }] };
+    let through_receiver = b.append_then_read(&b.text(0));
+    let mut c = Items { items: [Item { text: "abc" }] };
+    let checked = append_then_read_checked(&mut c, &c.text(0), 0);
+    assert through_argument == "abc";
+    assert through_receiver == "abc";
+    assert checked == "abc";
+}
+
 test "a write before the call reads the reference" {
     let mut n = Items { items: [Item { text: "abc" }] };
     let r = &n.text(0);

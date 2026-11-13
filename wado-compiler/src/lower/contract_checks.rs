@@ -19,7 +19,7 @@ use crate::elaborator::trait_env::TraitEnv;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::{
-    is_source_place, place_root, source_place_subscripts_mut,
+    in_place_binding, is_source_place, place_root, source_place_subscripts_mut,
 };
 use crate::lower::translate::{convert_function_ref, tir_function_key};
 use crate::module_source::ModuleSource;
@@ -720,27 +720,20 @@ impl Expander<'_> {
         // clauses after them share; only an earlier argument's are assigned.
         let mut stmts = Vec::new();
         let last_index = args.len().saturating_sub(1);
-        let quiet_after: Vec<bool> = (0..args.len())
-            .map(|i| {
-                args.iter()
-                    .skip(i + 1)
-                    .all(|later| later.expr.writes_nothing())
-            })
-            .collect();
         let substitutes: Vec<TirExpr> = args
             .iter_mut()
             .zip(&contract.params)
             .enumerate()
             .map(|(i, (arg, &param_type))| {
                 if !in_last_arg {
-                    return self.bind_passed(arg, param_type, quiet_after[i], &mut stmts);
+                    return self.bind_passed(arg, param_type, &mut stmts);
                 }
                 let sink = if i < last_index {
                     Sink::InPlace
                 } else {
                     Sink::Ahead(&mut stmts)
                 };
-                self.bind_ahead(arg, param_type, quiet_after[i], sink)
+                self.bind_ahead(arg, param_type, sink)
             })
             .collect();
 
@@ -851,13 +844,7 @@ impl Expander<'_> {
     /// other value is bound and read from there. A place read by value stays
     /// only as the last argument: nothing runs between it and the clauses to
     /// change what it holds.
-    fn bind_ahead(
-        &mut self,
-        arg: &mut CallArg,
-        param_type: TypeId,
-        quiet_after: bool,
-        mut sink: Sink<'_>,
-    ) -> TirExpr {
+    fn bind_ahead(&mut self, arg: &mut CallArg, param_type: TypeId, mut sink: Sink<'_>) -> TirExpr {
         let later_args_run = matches!(sink, Sink::InPlace);
         let borrowed_place = matches!(
             &arg.expr.kind,
@@ -874,8 +861,7 @@ impl Expander<'_> {
         {
             &mut arg.expr
         } else {
-            mark_call_borrow(&arg.expr, quiet_after);
-            return self.bind(&mut arg.expr, sink.reborrow());
+            return self.bind_referent(&mut arg.expr, sink.reborrow());
         };
         let items = self.items;
         for subscript in source_place_subscripts_mut(place, items) {
@@ -897,14 +883,32 @@ impl Expander<'_> {
         &mut self,
         arg: &mut CallArg,
         param_type: TypeId,
-        quiet_after: bool,
         stmts: &mut Vec<TirStmt>,
     ) -> TirExpr {
         if let Some(op) = self.receiver_borrow(&arg.expr, param_type) {
             arg.expr = borrow_of(take(&mut arg.expr), op, param_type);
         }
-        mark_call_borrow(&arg.expr, quiet_after);
-        self.bind(&mut arg.expr, Sink::Ahead(stmts))
+        self.bind_referent(&mut arg.expr, Sink::Ahead(stmts))
+    }
+
+    /// [`Self::bind`], except that a shared borrow of a value naming no place
+    /// binds the value and borrows the binding. Bound whole, the borrow would
+    /// hide from lowering whether anything writes the storage the value was
+    /// read out of before the callee is done with it; the binding asks that
+    /// as any other does.
+    fn bind_referent(&mut self, slot: &mut TirExpr, sink: Sink<'_>) -> TirExpr {
+        let TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            expr,
+        } = &mut slot.kind
+        else {
+            return self.bind(slot, sink);
+        };
+        if is_source_place(expr, self.items) {
+            return self.bind(slot, sink);
+        }
+        let read = self.bind(expr, sink);
+        borrow_of(read, TirUnaryOp::Ref, slot.type_id)
     }
 
     /// The borrow a receiver passed as its place takes, where the parameter
@@ -990,24 +994,7 @@ impl Expander<'_> {
 
     /// Whether `stmts` is a binding [`Self::bind`] made in place.
     fn binds(&self, stmts: &[TirStmt]) -> bool {
-        let [assign, read] = stmts else {
-            return false;
-        };
-        let (
-            TirStmtKind::Expr(TirExpr {
-                kind: TirExprKind::Assign { target, .. },
-                ..
-            }),
-            TirStmtKind::Expr(TirExpr {
-                kind: TirExprKind::Local { index, .. },
-                ..
-            }),
-        ) = (&assign.kind, &read.kind)
-        else {
-            return false;
-        };
-        matches!(target.kind, TirExprKind::Local { index: assigned, .. } if assigned == *index)
-            && self.bound.contains(index)
+        in_place_binding(stmts).is_some_and(|(local, _)| self.bound.contains(&local))
     }
 
     /// `expr` read again: each binding made in place in it is its local.
@@ -1047,23 +1034,6 @@ impl Sink<'_> {
             Sink::Ahead(stmts) => Sink::Ahead(stmts),
             Sink::InPlace => Sink::InPlace,
         }
-    }
-}
-
-/// Mark a shared borrow about to be bound ahead of its call as one nothing
-/// writes before the call reads it ([`tir::ExprMarks::call_borrow`]), where
-/// the arguments after it write nothing.
-fn mark_call_borrow(arg: &TirExpr, quiet_after: bool) {
-    if quiet_after
-        && matches!(
-            arg.kind,
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref,
-                ..
-            }
-        )
-    {
-        arg.mark(|marks| marks.call_borrow = true);
     }
 }
 

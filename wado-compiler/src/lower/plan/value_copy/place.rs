@@ -506,6 +506,59 @@ pub fn is_source_place(expr: &TirExpr, items: &CompilerItems) -> bool {
     place_walk(expr, Some(items))
 }
 
+/// `{ local = value; local }`, a binding made where the value is evaluated, as
+/// contract checks bind a call's earlier arguments: the local and the value.
+#[must_use]
+pub fn in_place_binding(stmts: &[TirStmt]) -> Option<(u32, &TirExpr)> {
+    let [assign, read] = stmts else {
+        return None;
+    };
+    let (
+        TirStmtKind::Expr(TirExpr {
+            kind: TirExprKind::Assign { target, value },
+            ..
+        }),
+        TirStmtKind::Expr(TirExpr {
+            kind: TirExprKind::Local { index, .. },
+            ..
+        }),
+    ) = (&assign.kind, &read.kind)
+    else {
+        return None;
+    };
+    matches!(target.kind, TirExprKind::Local { index: assigned, .. } if assigned == *index)
+        .then_some((*index, &**value))
+}
+
+/// What `&referent` takes the value of: the value an in-place binding binds
+/// ([`in_place_binding`]), or `referent` itself.
+#[must_use]
+pub fn borrowed_value(referent: &TirExpr) -> &TirExpr {
+    match &referent.kind {
+        TirExprKind::Block(block) => {
+            in_place_binding(&block.stmts).map_or(referent, |(_, value)| value)
+        }
+        _ => referent,
+    }
+}
+
+/// Whether `value` is storage a reference to it reaches: a source place,
+/// what a reference reads, or a projection of either. A field of a call's
+/// result is none of them, so `&value` there refers to a value of its own.
+#[must_use]
+pub fn names_storage(value: &TirExpr, items: &CompilerItems) -> bool {
+    if is_source_place(value, items) {
+        return true;
+    }
+    match &value.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            ..
+        } => true,
+        _ => projection_base(value).is_some_and(|base| names_storage(base, items)),
+    }
+}
+
 fn place_walk(expr: &TirExpr, source_forms: Option<&CompilerItems>) -> bool {
     match &expr.kind {
         TirExprKind::Local { .. } => true,

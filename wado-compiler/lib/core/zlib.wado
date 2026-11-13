@@ -1014,6 +1014,7 @@ fn inflate_fast(state: &mut InflateState, input: &LinearArray<u8>, output: &mut 
     let end = state.end;
     let mut hold = state.hold;
     let mut bits = state.bits;
+    assert bits < 64, "a refill shifts by the bits held, which Wasm takes modulo 64";
     let mut inp = state.next;
     let mut block_ended = false;
 

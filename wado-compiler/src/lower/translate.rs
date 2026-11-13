@@ -463,8 +463,6 @@ struct FunctionTranslator<'a, 'p> {
     /// Locals a last-use move can hand to a new owner
     /// ([`value_copy::last_use::MoveEligible::roots`]).
     moved_roots: IndexSet<u32>,
-    /// [`Self::call_borrowed_locals_of`].
-    call_borrowed_locals: IndexSet<u32>,
     /// Whether the ownership walk marked which arguments are written
     /// ([`tir::ExprMarks::written`]). Where it did not run, every argument is
     /// copied.
@@ -589,7 +587,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         // type.
         let hands_out_payload = value_copy::hands_out_payload(func, &base.value_copy.return_paths)
             && value_copy::needs_value_copy(func.return_type, &base.type_table.borrow());
-        let mut translator = Self {
+        Self {
             base,
             enclosing_env,
             specialized,
@@ -604,14 +602,11 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             share_eligible_locals,
             ref_targets,
             moved_roots,
-            call_borrowed_locals: IndexSet::default(),
             args_checked: analyzed,
             guarded_locals,
             assigned_flags: RefCell::new(IndexMap::default()),
             arena: RefCell::new(Body::empty()),
-        };
-        translator.call_borrowed_locals = translator.call_borrowed_locals_of(func);
-        translator
+        }
     }
 
     /// A function context for places where no function is being
@@ -633,7 +628,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             share_eligible_locals: IndexSet::default(),
             ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
-            call_borrowed_locals: IndexSet::default(),
             args_checked: false,
             guarded_locals: IndexSet::default(),
             assigned_flags: RefCell::new(IndexMap::default()),
@@ -1212,20 +1206,9 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Whether `value` is storage a reference to it reaches: a source place,
-    /// what a reference reads, or a projection of either. A field of a call's
-    /// result is none of them.
+    /// [`place::names_storage`].
     fn names_storage(&self, value: &TirExpr) -> bool {
-        if place::is_source_place(value, self.base.type_table.borrow().compiler_items()) {
-            return true;
-        }
-        match &value.kind {
-            TirExprKind::Unary {
-                op: TirUnaryOp::Deref,
-                ..
-            } => true,
-            _ => place::projection_base(value).is_some_and(|base| self.names_storage(base)),
-        }
+        place::names_storage(value, self.base.type_table.borrow().compiler_items())
     }
 
     /// What `&mut value` refers to. A value that names no storage, such as a
@@ -1241,36 +1224,43 @@ impl FunctionTranslator<'_, '_> {
     /// What `&value` refers to. A value that names no storage is the
     /// reference's own as well, since a later write to the storage it was read
     /// out of must not reach it, unless that storage is an immutable binding's.
+    /// An in-place binding copies at its assignment.
     fn shared_referent_operand(&self, value: &TirExpr) -> Operand {
-        if self.names_storage(value) || self.source_is_immutable_storage(value) {
+        if self.names_storage(value)
+            || !std::ptr::eq(place::borrowed_value(value), value)
+            || self.source_is_immutable_storage(value)
+        {
             return self.convert_operand(value);
         }
         self.assigned_value(value, value.type_id)
     }
 
-    /// Whether the argument at `position`, a shared reference to a value naming
-    /// no storage, takes no copy: no later argument writes before the callee
-    /// reads it, and the callee keeps it nowhere past the call.
+    /// Whether `arg`, a shared reference to a value naming no storage, takes
+    /// no copy: the ownership walk found nothing the call evaluates or is
+    /// handed that writes the storage the value was read out of
+    /// ([`tir::ExprMarks::written`]), and the callee keeps it nowhere past
+    /// the call.
     fn borrowed_for_call(
         &self,
+        arg: &TirExpr,
         callee: &FunctionRef,
-        args: &[(&TirExpr, bool)],
         position: usize,
+        arity: usize,
         result_type: tir::TypeId,
     ) -> bool {
         let TirExprKind::Unary {
             op: TirUnaryOp::Ref,
             expr: referent,
-        } = &args[position].0.kind
+        } = &arg.kind
         else {
             return false;
         };
-        !self.names_storage(referent)
-            && self.should_wrap_value_copy(referent)
-            && args[position + 1..]
-                .iter()
-                .all(|(later, _)| later.writes_nothing())
-            && !self.call_keeps(callee, args[position].0, position, args.len(), result_type)
+        let value = place::borrowed_value(referent);
+        self.args_checked
+            && !arg.marks().written
+            && !self.names_storage(value)
+            && self.should_wrap_value_copy(value)
+            && !self.call_keeps(callee, arg, position, arity, result_type)
     }
 
     /// Whether the call keeps what it is passed at `position` past its return.
@@ -1311,7 +1301,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// `reference`, a shared borrow nothing keeps past the call reading it,
-    /// taking no copy of what it borrows.
+    /// taking no copy of what it borrows, an in-place binding's included.
     fn uncopied_borrow(&self, reference: &TirExpr) -> ExprId {
         let TirExprKind::Unary {
             op: TirUnaryOp::Ref,
@@ -1320,6 +1310,11 @@ impl FunctionTranslator<'_, '_> {
         else {
             unreachable!("only a shared borrow is passed uncopied");
         };
+        if let TirExprKind::Block(block) = &referent.kind
+            && let Some((_, value)) = place::in_place_binding(&block.stmts)
+        {
+            return self.uncopied_in_place_borrow(reference, block, value);
+        }
         self.try_boxing_rewrite(reference).unwrap_or_else(|| {
             let kind = ExprKind::Unary {
                 op: nir::NirUnaryOp::Ref,
@@ -1329,112 +1324,49 @@ impl FunctionTranslator<'_, '_> {
         })
     }
 
-    /// What binding `local_index` to `value` stores, where `value` is a
-    /// shared borrow and every read of the local is passed to a call that
-    /// keeps it nowhere: the borrow then takes no copy, as one passed
-    /// straight to the call takes none. Contract checks bind arguments so.
-    fn call_borrow_binding(&self, local_index: u32, value: &TirExpr) -> Option<ExprId> {
-        (value.marks().call_borrow && self.call_borrowed_locals.contains(&local_index))
-            .then(|| self.uncopied_borrow(value))
-    }
-
-    /// The locals every binding of which is a borrow contract checks bind
-    /// ahead of their call ([`tir::ExprMarks::call_borrow`]), and every read of
-    /// which is an argument a direct call keeps nowhere past its return
-    /// ([`Self::call_borrow_binding`]).
-    fn call_borrowed_locals_of(&self, func: &TirFunction) -> IndexSet<u32> {
-        struct Reads<'t, 'a, 'p> {
-            translator: &'t FunctionTranslator<'a, 'p>,
-            bound: IndexSet<u32>,
-            unkept: IndexSet<u32>,
-            other: IndexSet<u32>,
-        }
-        impl Reads<'_, '_, '_> {
-            fn binding(&mut self, local: u32, value: &TirExpr) {
-                match value.kind {
-                    // A declaration without a value, which an assignment binds.
-                    TirExprKind::Unit => {}
-                    _ if value.marks().call_borrow => {
-                        self.bound.insert(local);
-                    }
-                    _ => {
-                        self.other.insert(local);
-                    }
-                }
-                self.visit_expr(value);
-            }
-        }
-        impl TirRefVisitor for Reads<'_, '_, '_> {
-            fn visit_stmt(&mut self, stmt: &TirStmt) {
-                match &stmt.kind {
-                    TirStmtKind::Let {
-                        local_index, value, ..
-                    } => self.binding(*local_index, value),
-                    _ => self.walk_stmt(stmt),
-                }
-            }
-
-            fn visit_expr(&mut self, expr: &TirExpr) {
-                match &expr.kind {
-                    TirExprKind::Local { index, .. } => {
-                        self.other.insert(*index);
-                    }
-                    TirExprKind::Assign { target, value }
-                        if let TirExprKind::Local { index, .. } = target.kind =>
-                    {
-                        self.binding(index, value);
-                    }
-                    TirExprKind::Call { func, args, .. } => {
-                        let ordered = self.translator.call_args_in_param_order(func, args);
-                        for (position, (arg, _)) in ordered.iter().enumerate() {
-                            let mut passed = *arg;
-                            while let TirExprKind::Block(block) = &passed.kind
-                                && let Some((tail, stmts)) = block.stmts.split_last()
-                                && let TirStmtKind::Expr(value) = &tail.kind
-                            {
-                                for stmt in stmts {
-                                    self.visit_stmt(stmt);
-                                }
-                                passed = value;
-                            }
-                            let TirExprKind::Local { index, .. } = &passed.kind else {
-                                self.visit_expr(passed);
-                                continue;
-                            };
-                            if self.translator.call_keeps(
-                                func,
-                                passed,
-                                position,
-                                ordered.len(),
-                                expr.type_id,
-                            ) {
-                                self.other.insert(*index);
-                            } else {
-                                self.unkept.insert(*index);
-                            }
-                        }
-                    }
-                    TirExprKind::Closure { captures, .. } => {
-                        self.other.extend(tir::capture_source_locals(captures));
-                    }
-                    _ => self.walk_expr(expr),
-                }
-            }
-        }
-        let Some(body) = &func.body else {
-            return IndexSet::default();
+    /// `&{ local = value; local }`, the in-place binding `binding`, assigning
+    /// `value` uncopied.
+    fn uncopied_in_place_borrow(
+        &self,
+        reference: &TirExpr,
+        binding: &TirBlock,
+        value: &TirExpr,
+    ) -> ExprId {
+        let span = reference.span;
+        let local_type = value.type_id;
+        let [assign, read] = &binding.stmts[..] else {
+            unreachable!("an in-place binding is an assignment and a read");
         };
-        let mut reads = Reads {
-            translator: self,
-            bound: IndexSet::default(),
-            unkept: IndexSet::default(),
-            other: IndexSet::default(),
+        let (
+            TirStmtKind::Expr(TirExpr {
+                kind: TirExprKind::Assign { target, .. },
+                ..
+            }),
+            TirStmtKind::Expr(read),
+        ) = (&assign.kind, &read.kind)
+        else {
+            unreachable!("an in-place binding is an assignment and a read");
         };
-        reads.visit_block(body);
-        reads
-            .unkept
-            .retain(|local| reads.bound.contains(local) && !reads.other.contains(local));
-        reads.unkept
+        let assign = ExprKind::Assign {
+            target: self.convert_expr(target),
+            value: self.convert_operand(value),
+        };
+        let assign = self.alloc_expr(assign, TypeTable::UNIT, span);
+        let stmts = vec![
+            self.alloc_stmt(StmtKind::Expr(assign.into()), span),
+            self.alloc_stmt(StmtKind::Expr(self.convert_operand(read)), span),
+        ];
+        let block = self.alloc_block(stmts, span);
+        let bound = self.alloc_expr(
+            ExprKind::plain_block(block, local_type, "block"),
+            local_type,
+            span,
+        );
+        let kind = ExprKind::Unary {
+            op: nir::NirUnaryOp::Ref,
+            expr: bound.into(),
+        };
+        self.alloc_expr(kind, reference.type_id, span)
     }
 
     /// Expand `xs[i] = value`, a `List::index_assign` call the ownership walk
@@ -1943,10 +1875,7 @@ impl FunctionTranslator<'_, '_> {
                     && !shares_value
                     && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))
                     && self.should_wrap_value_copy(value);
-                let value_op = match self.call_borrow_binding(*local_index, value) {
-                    Some(borrow) => borrow.into(),
-                    None => self.convert_operand(value),
-                };
+                let value_op = self.convert_operand(value);
                 let value_op = if needs_value_copy_wrap {
                     self.wrap_value_copy_operand(value_op, *type_id)
                 } else {
@@ -2494,14 +2423,7 @@ impl FunctionTranslator<'_, '_> {
                 expr: self.convert_operand(expr),
             },
             TirExprKind::Assign { target, value } => {
-                let call_borrow = match target.kind {
-                    TirExprKind::Local { index, .. } => self.call_borrow_binding(index, value),
-                    _ => None,
-                };
-                let value = match call_borrow {
-                    Some(borrow) => borrow.into(),
-                    None => self.convert_stored_operand(value),
-                };
+                let value = self.convert_stored_operand(value);
                 ExprKind::Assign {
                     target: self.convert_expr(target),
                     value,
@@ -2743,7 +2665,7 @@ impl FunctionTranslator<'_, '_> {
                         expr: self.convert_operand(e),
                         is_mut: *is_mut,
                     }
-                } else if self.borrowed_for_call(func, &ordered, i, result_type) {
+                } else if self.borrowed_for_call(e, func, i, ordered.len(), result_type) {
                     ArenaCallArg {
                         expr: self.uncopied_borrow(e).into(),
                         is_mut: *is_mut,

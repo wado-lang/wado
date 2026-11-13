@@ -2425,20 +2425,33 @@ impl<'a> Analyzer<'a> {
         handed_from: usize,
         own: usize,
     ) {
-        let is_ref = matches!(
-            &arg.kind,
+        // A shared borrow of a value naming no place refers to a value of its
+        // own, which lowering takes a copy for unless nothing writes the
+        // storage it was read out of while the callee holds it.
+        let checked = match &arg.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr: referent,
+            } if !place::names_storage(
+                place::borrowed_value(referent),
+                self.type_table.compiler_items(),
+            ) =>
+            {
+                place::borrowed_value(referent)
+            }
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 ..
-            }
-        );
+            } => return,
+            _ => arg,
+        };
         // Only a value a copy would wrap has a copy to keep.
-        if is_ref || !needs_value_copy(arg.type_id, self.type_table) {
+        if !needs_value_copy(checked.type_id, self.type_table) {
             return;
         }
         let stripped = strip_casts(arg);
         let mut storages = Vec::new();
-        self.storage_roots(arg, &mut storages);
+        self.storage_roots(checked, &mut storages);
         if storages.is_empty() {
             return;
         }

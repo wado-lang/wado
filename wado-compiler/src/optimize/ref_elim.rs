@@ -87,11 +87,9 @@ pub(super) fn build_ref_elim(body: &Body, heap: LazyHeapFrame) -> RefElimRule {
 
     let mut deref: IndexMap<u32, DerefOnlyRef> = IndexMap::default();
     deref_collect_block(body, body.root(), &rebound, &mut deref);
-    // Only eliminate refs still eliminable AND used exactly once via `*r`;
-    // multi-use elision would duplicate the source literal at every site.
     let deref_sources = deref
         .into_iter()
-        .filter(|(_, info)| info.eliminable && info.use_count == 1)
+        .filter(|(_, info)| info.eliminable)
         .map(|(idx, info)| (idx, info.source_e))
         .collect();
 
@@ -670,7 +668,7 @@ fn analyze_expr(
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Deref-only elision: `let r = &StructLit; ... *r ...` → inline the literal.
+// Deref-only elision: `let r = &StructLit; ... *r ...` → bind the literal by value.
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// A local bound to a freshly built aggregate and only ever read back through
@@ -678,7 +676,6 @@ fn analyze_expr(
 struct DerefOnlyRef {
     source_e: ExprId,
     eliminable: bool,
-    use_count: u32,
 }
 
 fn deref_collect_block(
@@ -710,7 +707,6 @@ fn deref_collect_stmt(
             DerefOnlyRef {
                 source_e: src_e,
                 eliminable: true,
-                use_count: 0,
             },
         );
     }
@@ -787,12 +783,9 @@ fn deref_collect_expr(
             // A promoted `Operand::Value` inner names no local candidate.
             if let Some(ie) = inner.as_expr()
                 && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
+                && refs.contains_key(index)
             {
-                let index = *index;
-                if let Some(info) = refs.get_mut(&index) {
-                    info.use_count += 1;
-                    return;
-                }
+                return;
             }
             deref_collect_expr_operand(body, inner, rebound, refs);
         }
