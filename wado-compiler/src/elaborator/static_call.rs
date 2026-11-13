@@ -266,8 +266,8 @@ struct StaticOwner {
     /// whose impls own the name where the call knows no type.
     declared: Option<TypeId>,
     below_head: bool,
-    /// Whether any link answers the name. Where none does, the walk stops at
-    /// the chain's last link and the call is the head's.
+    /// Whether any link answers the name. Where none does, the owner is the
+    /// head.
     owns: bool,
     /// The nearest link that left traits out of scope, which a report names
     /// where no link answers.
@@ -436,11 +436,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // One vantage: the key the caller resolved, else the one its reference
         // site answered for, else the name's own. Deriving a second key when
         // the first misses makes the order a silent tiebreak.
-        let mut owner = StaticOwner {
-            key: match query.receiver_key {
-                Some(key) => key.clone(),
-                None => self.impl_target_at(query.site, query.receiver_name),
-            },
+        let key = match query.receiver_key {
+            Some(key) => key.clone(),
+            None => self.impl_target_at(query.site, query.receiver_name),
+        };
+        let at_head = |key: ImplTargetKey| StaticOwner {
+            key,
             name: query.receiver_name.to_string(),
             ty: query.receiver_type,
             head: None,
@@ -449,6 +450,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             owns: true,
             nearest: None,
         };
+        let mut owner = at_head(key.clone());
         loop {
             let written = StaticQuery {
                 receiver_type: owner.ty.or(owner.declared),
@@ -488,9 +490,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // so a link's own impls answer before its base's. Read from the
             // alias's declaration, since a namespaced `lib::Q::twice()` leaves
             // the caller's frame no `Q` to look one up by.
+            // With no link owning the name, the call is the head's, and so are
+            // the blankets that cover it: they rank there, against each other.
             let Some((link_key, link_name, declared)) = self.newtype_link_target(&owner.key) else {
-                owner.owns = false;
-                return owner;
+                return StaticOwner {
+                    owns: false,
+                    nearest: owner.nearest,
+                    ..at_head(key)
+                };
             };
             let link_type = owner
                 .ty

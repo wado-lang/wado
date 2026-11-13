@@ -813,7 +813,8 @@ On a chain of newtypes, one link answers a static: the first, from the spelled
 newtype down, whose own declarations answer its name. Its impls and cases
 count, and so does a trait default its impl leaves to answer. A derived trait
 counts at the type it is derived for, never at a newtype, which inherits it. A
-blanket impl counts at no link. An impl for another instance of a generic link
+blanket impl counts at no link. Where no link answers, the spelled newtype
+does, and each blanket covering it is a candidate there, as on any type. An impl for another instance of a generic link
 does not count either: the instance is the one spelled, or the one the chain
 declares where the newtype is spelled bare. The arguments then select among
 that link's declarations only. A link below it is not asked, even where its
