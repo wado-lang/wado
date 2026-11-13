@@ -3,7 +3,8 @@
 ## `loam gen` and `loam dump`
 
 `loam gen` runs what the Kiln generator runs, without Kiln, and prints the
-module. It is the entry point for profiling the generator. `loam dump` prints
+module. Only its `#![generated]` header differs, naming `loam` and the files
+it read. It is the entry point for profiling the generator. `loam dump` prints
 the checked graph: how `build` lowers each node (operations of the graph,
 folded by stage 0, an alias of its operand, a branch, a weight's transpose
 viewed by the product reading it, or a part of an attention matched as the
