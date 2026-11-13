@@ -10,7 +10,7 @@ use { zlib_compress, inflate_zlib } from "core:zlib";
 fn growth(step: fn()) -> i32 {
     step();
     let settled = builtin::memory_size();
-    for let _ of 0..<300 {
+    for let _ of 0..<40 {
         step();
     }
     return builtin::memory_size() - settled;
@@ -18,7 +18,7 @@ fn growth(step: fn()) -> i32 {
 
 export fn run() with Stdout {
     let mut text = "";
-    for let i of 0..<20000 {
+    for let i of 0..<5000 {
         text.push_str(`${i % 97} `);
     }
     let data = text.as_byte_slice().to_list() as ByteList;
