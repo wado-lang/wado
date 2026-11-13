@@ -19,7 +19,7 @@ use crate::call_args::CallArgs;
 use crate::compiler_host::{SpanEmitter, in_span};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::place::{self, PlaceKind, PlaceRef};
+use crate::lower::plan::value_copy::place::{self, PlaceRef};
 use crate::lower::plan::value_copy::points_to::PointsTo;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::MethodName;
@@ -1201,11 +1201,20 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Whether `value` is storage a reference to it reaches: a source place, or
-    /// what a reference reads.
+    /// Whether `value` is storage a reference to it reaches: a source place,
+    /// what a reference reads, or a projection of either. A field of a call's
+    /// result is none of them.
     fn names_storage(&self, value: &TirExpr) -> bool {
-        PlaceKind::of(value) != PlaceKind::Value
-            || place::is_source_place(value, self.base.type_table.borrow().compiler_items())
+        if place::is_source_place(value, self.base.type_table.borrow().compiler_items()) {
+            return true;
+        }
+        match &value.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                ..
+            } => true,
+            _ => place::projection_base(value).is_some_and(|base| self.names_storage(base)),
+        }
     }
 
     /// What `&mut value` refers to. A value that names no storage, such as a

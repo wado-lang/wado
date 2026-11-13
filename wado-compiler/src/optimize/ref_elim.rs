@@ -11,7 +11,9 @@ use crate::nir_engine::{Engine, Rule};
 use crate::tir::TypeId;
 use crate::token::Span;
 
-use super::arena_query::{Place, is_place_prefix, place_path};
+use super::arena_query::{
+    Place, is_place_prefix, local_written_by, operand_local, place_path, reachable_nodes,
+};
 use crate::optimize::arena_query::is_pure_expr;
 use crate::optimize::heap_effect::{LazyHeapFrame, field_path};
 
@@ -84,9 +86,17 @@ pub(super) fn build_ref_elim(body: &Body, heap: LazyHeapFrame) -> RefElimRule {
     deref_collect_block(body, body.root(), &rebound, &mut deref);
     // Only eliminate refs still eliminable AND used exactly once via `*r`;
     // multi-use elision would duplicate the source literal at every site.
+    let written: IndexSet<u32> = reachable_nodes(body)
+        .into_iter()
+        .filter_map(|node| local_written_by(body, node))
+        .collect();
     let deref_sources = deref
         .into_iter()
-        .filter(|(_, info)| info.eliminable && info.use_count == 1)
+        .filter(|(_, info)| {
+            info.eliminable
+                && info.use_count == 1
+                && evaluates_alike_later(body, Operand::Expr(info.source_e), &written)
+        })
         .map(|(idx, info)| (idx, info.source_e))
         .collect();
 
@@ -702,6 +712,34 @@ fn deref_only_source(body: &Body, value_e: ExprId) -> Option<ExprId> {
             | ExprKind::ArrayLiteral { .. }
     )
     .then_some(candidate)
+}
+
+/// Whether `op` gives the same value evaluated at a later point of the body as
+/// where it stands: a constant, a local nothing writes, or a literal built of
+/// those. A literal that reads the heap (a `$value_copy` inlined into
+/// `String { repr: array_clone(s.repr), … }`) would read after a write it
+/// predates.
+fn evaluates_alike_later(body: &Body, op: Operand, written: &IndexSet<u32>) -> bool {
+    if let Some(local) = operand_local(body, op) {
+        return !written.contains(&local);
+    }
+    match op {
+        Operand::Value(value) => body.values.kind(value).is_constant(),
+        Operand::Expr(e) => {
+            matches!(
+                body.exprs[e].kind,
+                ExprKind::StructLiteral { .. }
+                    | ExprKind::TupleLiteral { .. }
+                    | ExprKind::ArrayLiteral { .. }
+            ) && {
+                let mut alike = true;
+                body.for_each_operand(NodeRef::Expr(e), |child| {
+                    alike &= evaluates_alike_later(body, child, written);
+                });
+                alike
+            }
+        }
+    }
 }
 
 fn deref_collect_node(

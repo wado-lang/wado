@@ -1,0 +1,19 @@
+// A reference to a literal reads its fields where the literal stands, so a
+// write between the reference and its one deref leaves what it holds alone.
+use { println, Stdout } from "core:cli";
+
+struct Pair {
+    first: i32,
+    second: i32,
+}
+
+export fn run() with Stdout {
+    let mut p = Pair { first: 1, second: 2 };
+    let snapshot = &Pair { first: p.first, second: p.second };
+    p.first = 10;
+    let copy = *snapshot;
+    println(`${copy.first} ${p.first}`);
+}
+
+__DATA__
+{ "stdout": "1 10\n" }

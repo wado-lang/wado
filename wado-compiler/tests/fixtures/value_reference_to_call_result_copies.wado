@@ -1,21 +1,22 @@
-// A reference to a call's result refers to a value of its own, as a `let`
-// binding it would hold: neither a write through it reaches the storage the
-// call read the value out of, nor a later write to that storage reaches it.
-struct Names {
-    items: List<String>,
+// A reference to a call's result, or to a field of one, refers to a value of
+// its own, as a `let` binding it would hold: neither a write through it reaches
+// the storage the call read the value out of, nor a later write to that
+// storage reaches it.
+struct Item {
+    text: String,
 }
 
-impl Names {
-    fn get(&self, i: i32) -> String {
+struct Items {
+    items: List<Item>,
+}
+
+impl Items {
+    fn get(&self, i: i32) -> Item {
         return self.items[i];
     }
-}
 
-impl IndexValue<i32> for Names {
-    type Output = String;
-
-    fn index_value(&self, i: i32) -> String {
-        return self.items[i];
+    fn text(&self, i: i32) -> String {
+        return self.items[i].text;
     }
 }
 
@@ -24,17 +25,23 @@ fn append(s: &mut String) {
 }
 
 test "a write through the reference" {
-    let mut n = Names { items: ["abc"] };
-    let r = &mut n.get(0);
+    let mut n = Items { items: [Item { text: "abc" }] };
+    let r = &mut n.text(0);
     r.push_str("!");
-    append(&mut n.get(0));
+    append(&mut n.text(0));
+    let f = &mut n.get(0).text;
+    f.push_str("!");
+    append(&mut n.get(0).text);
     assert *r == "abc!";
-    assert n.items[0] == "abc";
+    assert *f == "abc!";
+    assert n.items[0].text == "abc";
 }
 
 test "a write to the storage" {
-    let mut n = Names { items: ["abc"] };
-    let r = &n.get(0);
-    n.items[0].push_str("!");
+    let mut n = Items { items: [Item { text: "abc" }] };
+    let r = &n.text(0);
+    let f = &n.get(0).text;
+    n.items[0].text.push_str("!");
     assert *r == "abc";
+    assert *f == "abc";
 }
