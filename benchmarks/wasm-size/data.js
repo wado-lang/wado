@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794537698619,
+  "lastUpdate": 1794549222399,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77057,6 +77057,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/385017c07aa8322048826089eaaeff79bb8b3aee"
         },
         "date": 1794537697590,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21773,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434207,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c8bfd1b7c4e9588968629b2ea27805514bdde8e6",
+          "message": "Merge pull request #2618 from wado-lang/ccr-kiln-generated-origin\n\nfeat(kiln): generators write their own #![generated] header, and Kiln checks it",
+          "timestamp": "2026-11-13T14:39:23+09:00",
+          "tree_id": "98692d48c51259a466eaf321d79ddb1fb02fc5c0",
+          "url": "https://github.com/wado-lang/wado/commit/c8bfd1b7c4e9588968629b2ea27805514bdde8e6"
+        },
+        "date": 1794549221647,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
