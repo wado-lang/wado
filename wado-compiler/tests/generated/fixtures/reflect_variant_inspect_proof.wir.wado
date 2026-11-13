@@ -3457,6 +3457,8 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/
 fn "reflect_variant_inspect_proof.wado/reflect_variant_inspect_proof.wado/Shape^reflect_variant_inspect_proof.wado/LibInspect::lib_inspect$sroa[self.value]"(self) {
     let $load_0: i32;
     let out: ref "core:prelude/string.wado//String";
+    let v_37: ref "tuple//[f64, f64]";
+    let v_50: ref "core:prelude/string.wado//String";
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if local.tee $load_0(self.discriminant) == 0 {
         out = block -> ref "core:prelude/string.wado//String" {
@@ -3475,24 +3477,23 @@ fn "reflect_variant_inspect_proof.wado/reflect_variant_inspect_proof.wado/Shape^
         out = block -> ref "core:prelude/string.wado//String" {
             out = global:reflect_variant_inspect_proof.wado::$const_obj_55;
             $mv_field_2 = global:reflect_variant_inspect_proof.wado::$const_obj_53;
-            let $mv_field_14: ref "tuple//[f64, f64]";
             if @unlikely($load_0 != 1) {
                 unreachable;
             }
-            $mv_field_14 = ref.cast "reflect_variant_inspect_proof.wado//Shape::Rectangle"(self).payload_0;
-            "core:prelude/string.wado/core:prelude/string.wado/String::format<reflect_variant_inspect_proof.wado/$tmpl$180163e3ff62aa72,[core:prelude/string.wado/String,core:prelude/string.wado/String,[f64,f64]]>$spec0$spec0"(out, $mv_field_2, $mv_field_14);
+            v_37 = struct.new "tuple//[f64, f64]" { 0: local.tee v_37(ref.cast "reflect_variant_inspect_proof.wado//Shape::Rectangle"(self).payload_0).0, 1: v_37.1 };
+            "core:prelude/string.wado/core:prelude/string.wado/String::format<reflect_variant_inspect_proof.wado/$tmpl$180163e3ff62aa72,[core:prelude/string.wado/String,core:prelude/string.wado/String,[f64,f64]]>$spec0$spec0"(out, $mv_field_2, v_37);
         };
     }
     if local.tee $load_0(self.discriminant) == 2 {
         out = block -> ref "core:prelude/string.wado//String" {
             out = global:reflect_variant_inspect_proof.wado::$const_obj_55;
             $mv_field_2 = global:reflect_variant_inspect_proof.wado::$const_obj_52;
-            let $mv_field_25: ref "core:prelude/string.wado//String";
             if @unlikely($load_0 != 2) {
                 unreachable;
             }
-            $mv_field_25 = ref.cast "reflect_variant_inspect_proof.wado//Shape::Named"(self).payload_0;
-            "core:prelude/string.wado/core:prelude/string.wado/String::format<reflect_variant_inspect_proof.wado/$tmpl$bb0dd9c521c8d149,[core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String]>$spec0$spec0"(out, $mv_field_2, $mv_field_25);
+            $load_0 = local.tee v_50(ref.cast "reflect_variant_inspect_proof.wado//Shape::Named"(self).payload_0).used;
+            v_50 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_25: ref Array<u8>; $array_clone_src_25 = v_50.repr; let $array_clone_dst_26: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_26(builtin::array_new<u8>($load_0)), 0, $array_clone_src_25, 0, $load_0); $array_clone_dst_26, used: $load_0 };
+            "core:prelude/string.wado/core:prelude/string.wado/String::format<reflect_variant_inspect_proof.wado/$tmpl$bb0dd9c521c8d149,[core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String]>$spec0$spec0"(out, $mv_field_2, v_50);
         };
     }
     if self.discriminant == 3 {

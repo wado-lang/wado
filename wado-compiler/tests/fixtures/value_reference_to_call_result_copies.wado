@@ -1,7 +1,7 @@
 // A reference to a call's result, or to a field of one, refers to a value of
 // its own, as a `let` binding it would hold: neither a write through it reaches
 // the storage the call read the value out of, nor a later write to that
-// storage reaches it.
+// storage reaches it, wherever the reference is kept.
 struct Item {
     text: String,
 }
@@ -37,11 +37,29 @@ test "a write through the reference" {
     assert n.items[0].text == "abc";
 }
 
+struct Holder {
+    held: &String,
+}
+
+fn keep(r: &String) -> &String {
+    return r;
+}
+
 test "a write to the storage" {
     let mut n = Items { items: [Item { text: "abc" }] };
     let r = &n.text(0);
     let f = &n.get(0).text;
+    let tuple = [&n.text(0), 0];
+    let holder = Holder { held: &n.text(0) };
+    let kept = keep(&n.text(0));
+    let other: String = "x";
+    let mut assigned = &other;
+    assigned = &n.text(0);
     n.items[0].text.push_str("!");
     assert *r == "abc";
     assert *f == "abc";
+    assert *tuple.0 == "abc";
+    assert *holder.held == "abc";
+    assert *kept == "abc";
+    assert *assigned == "abc";
 }
