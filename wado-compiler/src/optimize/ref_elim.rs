@@ -705,13 +705,16 @@ fn deref_only_source(body: &Body, value_e: ExprId) -> Option<ExprId> {
         } => expr.as_expr()?,
         _ => value_e,
     };
+    is_fresh_aggregate(&body.exprs[candidate].kind).then_some(candidate)
+}
+
+fn is_fresh_aggregate(kind: &ExprKind) -> bool {
     matches!(
-        body.exprs[candidate].kind,
+        kind,
         ExprKind::StructLiteral { .. }
             | ExprKind::TupleLiteral { .. }
             | ExprKind::ArrayLiteral { .. }
     )
-    .then_some(candidate)
 }
 
 /// Whether `op` gives the same value evaluated at a later point of the body as
@@ -726,12 +729,7 @@ fn evaluates_alike_later(body: &Body, op: Operand, written: &IndexSet<u32>) -> b
     match op {
         Operand::Value(value) => body.values.kind(value).is_constant(),
         Operand::Expr(e) => {
-            matches!(
-                body.exprs[e].kind,
-                ExprKind::StructLiteral { .. }
-                    | ExprKind::TupleLiteral { .. }
-                    | ExprKind::ArrayLiteral { .. }
-            ) && {
+            is_fresh_aggregate(&body.exprs[e].kind) && {
                 let mut alike = true;
                 body.for_each_operand(NodeRef::Expr(e), |child| {
                     alike &= evaluates_alike_later(body, child, written);
