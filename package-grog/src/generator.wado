@@ -46,7 +46,7 @@ fn at(path: &String, e: EmitError) -> Error {
 fn stem(path: &String) -> String {
     let view = path.as_str_slice();
     let name = view.slice(view.rfind("/").map(|i| i + 1).unwrap_or(0), view.len());
-    return name.strip_suffix(".proto").unwrap_or(name).to_string();
+    return name.trim_suffix(".proto").to_string();
 }
 
 test "a runtime named by a path is refused, naming the path" {

@@ -1445,6 +1445,20 @@ test "strip_prefix removes a matching prefix" {
     assert "abc".strip_prefix("abc") matches { Some(s) && s == "" };
 }
 
+test "trim_prefix removes a matching prefix once, and keeps the rest" {
+    assert "--x".trim_prefix("-") == "-x";
+    assert "abc".trim_prefix("x") == "abc";
+    assert "abc".trim_prefix("abc") == "";
+    assert "abc".as_str_slice().trim_prefix("a") == "bc";
+}
+
+test "trim_suffix removes a matching suffix once, and keeps the rest" {
+    assert "a.md.md".trim_suffix(".md") == "a.md";
+    assert "hello.md".trim_suffix(".txt") == "hello.md";
+    assert "".trim_suffix(".md") == "";
+    assert "abc".as_str_slice().trim_suffix("c") == "ab";
+}
+
 test "split_once cuts at the first separator" {
     assert "key=value".split_once("=") matches { Some(p) && p.0 == "key" && p.1 == "value" };
     assert "a=b=c".split_once("=") matches { Some(p) && p.0 == "a" && p.1 == "b=c" };

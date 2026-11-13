@@ -945,6 +945,10 @@ literals stops folding to one.
 
 #### `fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<StrSlice>`
 
+#### `fn trim_prefix<P: AsStrSlice>(&self, prefix: P) -> StrSlice`
+
+#### `fn trim_suffix<P: AsStrSlice>(&self, suffix: P) -> StrSlice`
+
 #### `fn cmp_str<P: AsStrSlice>(&self, other: P) -> Ordering`
 
 #### `fn eq_str<P: AsStrSlice>(&self, other: P) -> bool`
@@ -5507,6 +5511,16 @@ start with `prefix`.
 
 The view with `suffix` removed from the end, or None when it does not
 end with `suffix`.
+
+#### `pub fn trim_prefix<S: AsStrSlice>(&self, prefix: S) -> StrSlice`
+
+The view with `prefix` removed from the front once, or the whole view
+when it does not start with `prefix`.
+
+#### `pub fn trim_suffix<S: AsStrSlice>(&self, suffix: S) -> StrSlice`
+
+The view with `suffix` removed from the end once, or the whole view
+when it does not end with `suffix`.
 
 #### `pub fn cmp_str<S: AsStrSlice>(&self, other: S) -> Ordering`
 
