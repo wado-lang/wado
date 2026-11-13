@@ -1091,7 +1091,11 @@ refers to, so `l[i]` reads the element.
 
 The five traits are independent: a container implements only the ones it
 supports. A subscript names the prelude's declarations, as an operator does, so
-a user trait spelled `IndexValue` does not answer `c[i]`.
+a user trait spelled `IndexValue` does not answer `c[i]`. On a container whose
+type is a type parameter, a subscript reaches these traits through the
+parameter's bounds, as an operator reaches its trait: under
+`B: IndexValue<i32, Output = u8>`, `b[0]` reads a `u8`, and the bound's index
+type types the key.
 
 The traits state no [contract](./spec-assertions.md#contract-checks): what an
 index must satisfy differs by container, so each impl states its own. A

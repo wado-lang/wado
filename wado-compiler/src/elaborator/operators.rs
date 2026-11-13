@@ -2250,8 +2250,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else {
                 continue;
             };
-            let output =
-                self.dispatch_trait_op_method(container, vec![(key, index.index.span())], &resolved, Some(index.id));
+            let output = self.dispatch_trait_op_method(
+                container,
+                vec![(key, index.index.span())],
+                &resolved,
+                Some(index.id),
+            );
             if item == CompilerItem::IndexValue {
                 return Some(output);
             }
@@ -2263,9 +2267,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .needs_deref = true;
             return Some(self.tysys.through_ref(output));
         }
-        self.resolve_expr(&index.index, ctx, None);
-        self.report_operator_bound_missing(&operand.spelled, candidates[0], index.span);
+        self.report_index_bound_missing(&operand, index, candidates[0], ctx);
         Some(TypeTable::ERROR)
+    }
+
+    /// Report that no bound of `operand` declares `item`, the key still checked.
+    fn report_index_bound_missing(
+        &mut self,
+        operand: &BoundedOperand,
+        index: &ast::IndexExpr,
+        item: CompilerItem,
+        ctx: &mut FunctionContext,
+    ) {
+        self.resolve_expr(&index.index, ctx, None);
+        self.report_operator_bound_missing(&operand.spelled, item, index.span);
     }
 
     /// `c[i] = v` on a bounded container, dispatched to `IndexAssign` through
@@ -2278,10 +2293,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<Result<WritePlace, ()>> {
         let operand = self.bounded_operand(container)?;
         let item = CompilerItem::IndexAssign;
-        let Some((resolved, _)) = self.index_method_through_bounds(&operand, index, container, item, ctx)
+        let Some((resolved, _)) =
+            self.index_method_through_bounds(&operand, index, container, item, ctx)
         else {
-            self.resolve_expr(&index.index, ctx, None);
-            self.report_operator_bound_missing(&operand.spelled, item, index.span);
+            self.report_index_bound_missing(&operand, index, item, ctx);
             return Some(Err(()));
         };
         let [_, output_type] = resolved.param_types[..] else {
@@ -2330,8 +2345,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let key = self.resolve_expr(&index.index, ctx, info.param_types.first().copied());
         let return_type = self.operator_output_type(container, &found_trait, info.return_type);
-        let mut resolved =
-            ResolvedTraitMethod::through_bound(operand.receiver.clone(), found_trait, &method_name, info);
+        let mut resolved = ResolvedTraitMethod::through_bound(
+            operand.receiver.clone(),
+            found_trait,
+            &method_name,
+            info,
+        );
         resolved.return_type = return_type;
         Some((resolved, key))
     }
