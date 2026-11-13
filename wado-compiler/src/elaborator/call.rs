@@ -5609,15 +5609,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.report_unresolved_static(&ranked, method, args, span) {
             return Some(TypeTable::ERROR);
         }
+        let blanket = ranked.blanket()?;
         // The blanket would key on the argument-less head, which carries no
         // layout (a generic variant never becomes its own declaration, WEP
         // 2026-02-09) and reaches WIR build unregistered.
         if let Some(expected) = self
             .decl_key_or_local(type_name)
             .and_then(|def| self.bare_generic_type_arity(def))
-            && self
-                .find_blanket_static_method(receiver_ty, method)
-                .is_some()
         {
             let _ = self.emit(TypeError::MissingTypeArguments {
                 name: type_name.to_string(),
@@ -5632,6 +5630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_blanket_static_method(
             receiver_ty,
             method,
+            blanket,
             call_id,
             method_id,
             method_type_args,

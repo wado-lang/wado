@@ -19,7 +19,7 @@ use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
 use super::synth::ArgClass;
 use super::trait_env::{ImplHeader, ImplTargetKey};
-use super::trait_query::DerivedAt;
+use super::trait_query::{DerivedAt, NewtypePeel};
 use super::types::{OverloadedCallForm, TraitMethodMatch, TypeError};
 use super::tysys::TypeSystem;
 
@@ -119,6 +119,10 @@ pub(super) enum StaticLookup {
         blocks: Vec<DefId>,
         trait_args: Vec<TypeId>,
     },
+    /// The rules picked this value blanket impl. Its template is written
+    /// against its receiver parameter, so the blanket resolver, not this
+    /// resolution, instantiates it at the receiver.
+    Blanket(DefId),
     NotStatic,
 }
 
@@ -194,6 +198,9 @@ pub(super) struct StaticTraitRef {
     /// The lists this same resolution read, so a site that mangles from
     /// `selected` and records from these cannot describe two declarations.
     pub(super) params: CalleeParams,
+    /// The value blanket the rules picked, which the blanket resolver
+    /// instantiates at the receiver.
+    pub(super) blanket: Option<DefId>,
 }
 
 /// What the rules made of the candidates.
@@ -218,10 +225,10 @@ enum Selection {
 pub(super) enum Selector {
     /// The declaration takes no arguments, so every call reaches it.
     Absent,
-    /// Only an argument can fill one of these parameters — a blanket. Its
-    /// unsubstituted spelling must not be mangled, so the candidate declines
-    /// and the blanket resolver instantiates it instead.
-    Blanket,
+    /// A blanket's value parameters, written against its receiver parameter.
+    /// Its unsubstituted spelling must not be mangled, so the resolution names
+    /// the blanket and the blanket resolver instantiates it.
+    Blanket(Vec<TypeId>),
     /// The declaration's value parameters, as the block resolved them and with
     /// its trait arguments substituted. Compared by `TypeId`: two distinct
     /// types printing one name are two candidates, not one.
@@ -253,9 +260,8 @@ struct Candidate {
     return_type: TypeId,
 }
 
-/// The link of a newtype chain a static call belongs to: the first, from the
-/// spelled head down, whose own impls, cases or derivations answer the name,
-/// else the head.
+/// The link of a newtype chain a static call belongs to, as
+/// [`Elaborator::static_owner`] finds it.
 struct StaticOwner {
     key: ImplTargetKey,
     name: String,
@@ -329,17 +335,31 @@ fn prefer<C>(candidates: &mut Vec<C>, preferred: impl Fn(&C) -> bool) {
 }
 
 impl StaticLookup {
-    /// Whether the spelling names a static at all. An ambiguity does, and so
-    /// does a trait out of scope: the call site reports either, where a
-    /// `NotStatic` would read as a missing function.
+    /// Whether the spelling names a static this resolution builds the callee
+    /// of. An ambiguity does, and so does a trait out of scope: the call site
+    /// reports either, where a `NotStatic` would read as a missing function. A
+    /// blanket is the blanket resolver's to build.
     pub(super) fn resolves(&self) -> bool {
-        !matches!(self, Self::NotStatic)
+        !matches!(self, Self::NotStatic | Self::Blanket(_))
     }
 
     pub(super) fn found(&self) -> Option<&StaticCallee> {
         match self {
             Self::Found(callee) => Some(callee),
             Self::Overloaded { .. }
+            | Self::Ambiguous(_)
+            | Self::OutOfScope { .. }
+            | Self::Tied { .. }
+            | Self::Blanket(_)
+            | Self::NotStatic => None,
+        }
+    }
+
+    pub(super) fn blanket(&self) -> Option<DefId> {
+        match self {
+            Self::Blanket(blanket) => Some(*blanket),
+            Self::Found(_)
+            | Self::Overloaded { .. }
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
             | Self::Tied { .. }
@@ -353,9 +373,11 @@ impl StaticLookup {
         match self {
             Self::Found(callee) => callee.return_type,
             Self::Overloaded { return_type, .. } => *return_type,
-            Self::Ambiguous(_) | Self::OutOfScope { .. } | Self::Tied { .. } | Self::NotStatic => {
-                TypeTable::UNKNOWN
-            }
+            Self::Ambiguous(_)
+            | Self::OutOfScope { .. }
+            | Self::Tied { .. }
+            | Self::Blanket(_)
+            | Self::NotStatic => TypeTable::UNKNOWN,
         }
     }
 
@@ -369,6 +391,7 @@ impl StaticLookup {
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
             | Self::Tied { .. }
+            | Self::Blanket(_)
             | Self::NotStatic => (CalleeParams::default(), false),
         }
     }
@@ -421,14 +444,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The link of the newtype chain `query`'s receiver heads that the call
     /// belongs to: the first, from the head down, whose own impls, cases or
-    /// derivations answer the name. Read without the arguments, and at the
-    /// instance the spelling wrote and the chain declares rather than one the
-    /// call infers, so every site asking reads one owner, the one the
-    /// resolution then selects in. An impl on another instance of a link
-    /// answers nothing there. A blanket covers a link through its bound rather
-    /// than as its own declaration, and owns nothing. A link the name reaches
-    /// owns the call even where no declaration there admits the arguments
-    /// (`spec-types`, "Inherited Associated Functions and Traits").
+    /// derivations, or blankets whose bounds hold there, answer the name; else
+    /// the head. Read without the arguments, and at the instance the spelling
+    /// wrote and the chain declares rather than one the call infers, so every
+    /// site asking reads one owner, the one the resolution then selects in. An
+    /// impl on another instance of a link answers nothing there. A link the
+    /// name reaches owns the call even where no declaration there admits the
+    /// arguments (`spec-types`, "Inherited Associated Functions and Traits").
     fn static_owner(&mut self, query: &StaticQuery<'_>) -> StaticOwner {
         // One vantage: the key the caller resolved, else the one its reference
         // site answered for, else the name's own. Deriving a second key when
@@ -471,11 +493,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return owner;
                 }
                 LinkOffer::Nothing { out_of_scope } => out_of_scope,
-                LinkOffer::Candidates {
-                    reached,
-                    out_of_scope,
-                    ..
-                } if reached.iter().all(|c| c.origin == CandidateOrigin::Blanket) => out_of_scope,
                 LinkOffer::NotStatic | LinkOffer::Candidates { .. } | LinkOffer::Derived(_) => {
                     return owner;
                 }
@@ -487,8 +504,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // so a link's own impls answer before its base's. Read from the
             // alias's declaration, since a namespaced `lib::Q::twice()` leaves
             // the caller's frame no `Q` to look one up by. With no link owning
-            // the name, the call is the head's, and so are the blankets that
-            // cover it: they rank there, against each other.
+            // the name, the call stays the head's.
             let Some((link_key, link_name, declared)) = self.newtype_link_target(&owner.key) else {
                 return StaticOwner {
                     nearest,
@@ -977,7 +993,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // which no name at a call site reaches. The rules have done their
             // part in picking it; instantiating it at the receiver, and
             // mangling it as a blanket, is the blanket resolver's.
-            (CandidateOrigin::Blanket, _) => None,
+            (CandidateOrigin::Blanket, supply) => supply
+                .as_ref()
+                .map(|supply| StaticLookup::Blanket(supply.impl_def)),
             // An inherited method is declared nowhere but the trait, so that is
             // where its signature is read from — in the trait's frame, which
             // the block's arguments fill.
@@ -1102,12 +1120,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return Err(Reported);
         }
+        let blanket = lookup.blanket();
         let (params, _) = lookup.params();
         Ok(StaticTraitRef {
             selected,
             declaration,
             return_type,
             params,
+            blanket,
         })
     }
 
@@ -1144,7 +1164,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.report_blocks_tied(blocks, trait_args, receiver, span);
                 return true;
             }
-            StaticLookup::Found(_) | StaticLookup::Overloaded { .. } | StaticLookup::NotStatic => {
+            StaticLookup::Found(_)
+            | StaticLookup::Overloaded { .. }
+            | StaticLookup::Blanket(_)
+            | StaticLookup::NotStatic => {
                 return false;
             }
         };
@@ -1287,7 +1310,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let settled_by_args = |c: &Candidate| match &c.selector {
             Selector::Params(params) => params.len() <= c.kind.own_args(arg_types).len(),
             Selector::Absent => true,
-            Selector::Blanket => false,
+            Selector::Blanket(_) => false,
         };
         if !candidates.iter().any(leaves_slot) || !candidates.iter().all(settled_by_args) {
             return None;
@@ -1347,9 +1370,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn selector_admits(&self, selector: &Selector, args: &[TypeId]) -> bool {
         match selector {
             Selector::Absent => true,
-            // Nothing to select on leaves every declaration of the name, and
-            // several of them are the overload the call site settles.
-            Selector::Blanket => args.is_empty(),
+            // A blanket parameter written against the receiver parameter is a
+            // type only once the blanket is instantiated, so it admits here.
+            Selector::Blanket(params) => params.iter().zip(args).all(|(&param, &arg)| {
+                self.tysys.type_table.borrow().contains_type_param(param)
+                    || self.class_admits(param, &ArgClass::Exact(arg))
+            }),
             Selector::Params(params) => params
                 .iter()
                 .zip(args)
@@ -1426,8 +1452,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Its selector is `Blanket`: the template is written against a parameter,
     /// and instantiating it at the receiver is the blanket resolver's, not a
     /// candidate's. What the candidate is here for is the rules — which trait
-    /// supplies the name, and that anything written for the receiver itself
-    /// outranks a blanket covering it.
+    /// supplies the name, which blanket the arguments select, and that anything
+    /// written for the receiver itself outranks a blanket covering it. A
+    /// blanket counts at the link of a newtype chain where its bounds hold.
     fn blanket_candidates(
         &mut self,
         method_name: &str,
@@ -1436,12 +1463,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(receiver_type) = receiver_type else {
             return Vec::new();
         };
-        self.applicable_blanket_statics(receiver_type, method_name)
+        self.applicable_blanket_statics(receiver_type, method_name, NewtypePeel::Here)
             .into_iter()
             .filter_map(|blanket| {
                 let header = &self.tysys.trait_env.impl_headers[&blanket.def];
                 let method_id = header.methods.iter().find(|m| m.name == method_name)?.def;
                 let trait_decl = self.tysys.signatures.impl_trait(blanket.def)?;
+                let sig = self
+                    .tysys
+                    .signatures
+                    .method_sig(method_id)
+                    .expect("the decl pass records every impl-declared method's signature");
+                let first = sig.first_value_param().min(sig.decl.param_types.len());
                 Some(Candidate {
                     supply: Some(TraitSupply {
                         impl_def: blanket.def,
@@ -1451,15 +1484,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_id,
                     kind: CandidateKind::Static,
                     origin: CandidateOrigin::Blanket,
-                    selector: Selector::Blanket,
-                    return_type: self
-                        .tysys
-                        .signatures
-                        .method_sig(method_id)
-                        .expect("the decl pass records every impl-declared method's signature")
-                        .decl
-                        .return_type
-                        .unwrap_or(TypeTable::UNIT),
+                    selector: Selector::Blanket(sig.decl.param_types[first..].to_vec()),
+                    return_type: sig.decl.return_type.unwrap_or(TypeTable::UNIT),
                 })
             })
             .collect()
