@@ -20,7 +20,9 @@ use crate::tir::{
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use super::call::{ArgSite, CaseSite, SigChoice, bind_nearer, turbofish_leaves_slot};
+use super::call::{
+    ArgSite, CaseSite, InheritedStatic, SigChoice, bind_nearer, turbofish_leaves_slot,
+};
 use super::callee::StaticMethodRef;
 use super::coercion::{ExpectedReturn, answers_last};
 use super::expr::IndexAccess;
@@ -1873,17 +1875,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Extract struct name AND canonical decl key for parameter type
-        // lookup (follow newtypes to base). The canonical key disambiguates
-        // two modules' same-named structs whose methods both live in the
-        // global `ImplMethodIndex`.
-        let own_static =
-            self.own_newtype_static(target_type_id, &static_call.method, required_trait);
-        let inherited = own_static.is_none();
-        let declaring_key = own_static.or_else(|| {
-            self.newtype_link_declaring(target_type_id, &static_call.method)
-                .map(|(_, key)| key)
-        });
+        // The name and canonical decl key the parameter types are looked up
+        // at: the link of a newtype chain that owns the static. The canonical
+        // key disambiguates two modules' same-named structs whose methods both
+        // live in the global `ImplMethodIndex`.
+        let owner = self.newtype_static_owner(target_type_id, &static_call.method, required_trait);
+        let inherited = owner
+            .as_ref()
+            .is_none_or(|(link, _)| *link != target_type_id);
+        let declaring_key = owner
+            .filter(|(link, _)| self.is_declaring_link(*link))
+            .map(|(_, key)| key);
         let (struct_name_for_lookup, struct_key_for_lookup) = match declaring_key {
             Some(key) => (
                 key.decl_name(self.tysys.resolutions.defs())
@@ -2137,23 +2139,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or_default();
             // Both answer at the callee's link of a newtype chain, so each is
             // matched against the `_`s as that link spells them.
-            let scope_params = self.scope_type_param_ids();
             let vars: Vec<TypeId> = receiver_holes.iter().map(|&(_, var)| var).collect();
-            let mut infer = InferCtx::new(&self.tysys.type_table, vars);
-            for (j, &spelled) in callee_args.iter().enumerate() {
-                let answer = inferred
-                    .as_ref()
-                    .and_then(|impl_args| impl_args.get(j).copied())
-                    .or_else(|| block_target.get(j).copied())
-                    .filter(|&answer| {
-                        self.tysys.is_usable_answer(answer)
-                            && !self.slot_unanswered(answer, &scope_params)
-                    });
-                if let Some(answer) = answer {
-                    infer.add(spelled, answer);
-                }
-            }
-            for (&(i, var), answer) in receiver_holes.iter().zip(infer.solve()) {
+            let answers: Vec<Option<TypeId>> = (0..callee_args.len())
+                .map(|j| {
+                    inferred
+                        .as_ref()
+                        .and_then(|impl_args| impl_args.get(j).copied())
+                        .or_else(|| block_target.get(j).copied())
+                })
+                .collect();
+            let solved = self.answer_receiver_vars(&vars, &callee_args, &answers);
+            for (&(i, var), answer) in receiver_holes.iter().zip(solved) {
                 let answered = answer != var;
                 if answered {
                     self.solve_infer_var(var, answer);
@@ -2414,12 +2410,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     vec![elem],
                 )
             }
-            ResolvedType::Newtype { base_type, .. } => self.newtype_static_receiver(
-                target_type_id,
-                base_type,
-                &static_call.method,
-                required_trait,
-            ),
+            ResolvedType::Newtype { .. } => {
+                self.newtype_static_receiver(target_type_id, &static_call.method, required_trait)
+            }
             ResolvedType::Flags { .. } => {
                 nominal_receiver(&self.tysys.type_table.borrow(), target_type_id)
             }
@@ -2998,53 +2991,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// The receiver a qualified call on a newtype names: the newtype where it
-    /// declares `method` itself, else the base it inherits the method from.
+    /// The receiver a qualified call on a newtype names: the link of its chain
+    /// that owns `method`.
     fn newtype_static_receiver(
         &mut self,
         newtype: TypeId,
-        base: TypeId,
         method: &str,
         required_trait: Option<DefId>,
     ) -> QualifiedReceiver {
-        let own_static = self.own_newtype_static(newtype, method, required_trait);
+        let (link, _) = self
+            .newtype_static_owner(newtype, method, required_trait)
+            .expect("a newtype's static has an owning link");
+        let declares = self.is_declaring_link(link);
         let type_table = self.tysys.type_table.borrow();
-        let own = nominal_receiver(&type_table, newtype);
-        if own_static.is_some() {
-            return own;
+        if declares || type_table.instance_parts(link).is_some() {
+            return nominal_receiver(&type_table, link);
         }
-        if type_table.instance_parts(base).is_some() {
-            return nominal_receiver(&type_table, base);
-        }
-        match type_table.get(base) {
+        match type_table.get(link) {
             ResolvedType::Primitive(prim) => primitive_receiver(*prim),
-            ResolvedType::Struct { .. } | ResolvedType::Newtype { .. } => {
-                let head = type_table.representation_head(base);
-                if matches!(type_table.get(head), ResolvedType::Struct { .. }) {
-                    nominal_receiver(&type_table, head)
-                } else {
-                    own
-                }
-            }
-            _ => own,
+            ResolvedType::Struct { .. } => nominal_receiver(&type_table, link),
+            _ => nominal_receiver(&type_table, newtype),
         }
     }
 
-    /// The newtype `target`'s own key, where its own impls answer `method`,
-    /// through `required_trait` where the spelling names one: that
-    /// declaration shadows the one its base supplies.
-    fn own_newtype_static(
-        &mut self,
-        target: TypeId,
-        method: &str,
-        required_trait: Option<DefId>,
-    ) -> Option<ImplTargetKey> {
-        let ResolvedType::Newtype { def, .. } = *self.tysys.type_table.borrow().get(target) else {
-            return None;
-        };
-        let key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
-        self.impls_answer(&key, method, required_trait)
-            .then_some(key)
+    /// Whether a static's owning `link` is a newtype or a `flags`, whose
+    /// statics are mangled under the link itself rather than the base it
+    /// represents.
+    fn is_declaring_link(&self, link: TypeId) -> bool {
+        matches!(
+            self.tysys.type_table.borrow().get(link),
+            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
+        )
     }
 
     /// What a qualified call returns, off the declaration it selected where it
@@ -3226,22 +3203,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> bool {
         let struct_name = recv.name;
-        let survey = self.static_arg_survey(recv, method_name);
-        // A newtype offering nothing of its own answers with its base's impls,
-        // as the resolution does, so the survey reads them there.
-        if survey.candidates.is_empty()
-            && let key = self.static_receiver_key(struct_name, recv.key)
-            && let Some((base_key, base_name)) = self.newtype_static_target(&key, method_name)
-        {
-            let (base_type, base_arg_types) = self.at_newtype_base(recv.ty, arg_types);
-            let base_recv = StaticReceiver {
-                name: &base_name,
-                key: Some(&base_key),
-                ty: base_type,
+        // A newtype inheriting the static answers with the impls of the link
+        // that owns it, as the resolution does, so the survey reads them there.
+        let key = self.static_receiver_key(struct_name, recv.key);
+        if let Some((owner_key, owner_name)) = self.newtype_static_target(&key, method_name) {
+            let (owner_type, owner_arg_types) = self.at_owner_link(recv.ty, &owner_key, arg_types);
+            let owner_recv = StaticReceiver {
+                name: &owner_name,
+                key: Some(&owner_key),
+                ty: owner_type,
                 ..recv
             };
-            return self.report_unmatched_static_arg(base_recv, method_name, &base_arg_types, span);
+            return self.report_unmatched_static_arg(
+                owner_recv,
+                method_name,
+                &owner_arg_types,
+                span,
+            );
         }
+        let survey = self.static_arg_survey(recv, method_name);
         let spelled = render_type_list(&self.tysys.type_table.borrow(), arg_types);
         // The trait the first candidate names. Where several traits supply the
         // name the call is an overload, reported before it reaches here.
@@ -3579,6 +3559,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         impl_type_args: &[TypeId],
         method_type_args: &[TypeId],
+        inherited: Option<InheritedStatic>,
         call_id: AstId,
         span: Span,
         expected_type: Option<TypeId>,
@@ -3588,25 +3569,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mangled_func_name_owned =
             MethodName::format_local(&qualified_struct_name, None, method_name);
         let mangled_func_name = mangled_func_name_owned.as_str();
-        // For newtypes, check if the newtype itself has the method first,
-        // then fall back to the base type's static method
+        // A newtype inheriting the static dispatches to the link of its chain
+        // that owns it.
         let mut newtype_dispatch: Option<(TypeId, TypeId, Vec<TypeId>)> = None;
+        // The instance the call settled, where a bare generic newtype spelled
+        // none.
+        let receiver = inherited.map_or(receiver_type, |inherited| inherited.newtype);
+        let owner = self
+            .newtype_static_owner(receiver, method_name, None)
+            .and_then(|(link, _)| (link != receiver).then_some((receiver, link)));
         // The written name keys the impl indices; the fq form names the method.
-        let (actual_struct_name, actual_struct_fq, actual_mangled_name) = if let Some(newtype_id) =
-            self.lookup_newtype(struct_name)
-        {
-            if self
-                .own_newtype_static(newtype_id, method_name, None)
-                .is_some()
-            {
-                (
-                    struct_name.to_string(),
-                    qualified_struct_name,
-                    mangled_func_name.to_string(),
-                )
-            } else if let Some((link, _)) = self.newtype_link_declaring(newtype_id, method_name) {
-                let link_name = self.tysys.type_table.borrow().name(link);
-                let link_fq = self.qualified_receiver_name(&link_name, link);
+        let (actual_struct_name, actual_struct_fq, actual_mangled_name) = match owner {
+            Some((newtype, link)) => {
+                let (link_name, link_fq) = if self.is_declaring_link(link) {
+                    let link_name = self.tysys.type_table.borrow().name(link);
+                    let link_fq = self.qualified_receiver_name(&link_name, link);
+                    (link_name, link_fq)
+                } else {
+                    let link_name = self.tysys.get_ultimate_base_struct_name(link);
+                    (link_name, self.tysys.fq_receiver_head(link))
+                };
                 let mangled = MethodName::format_local(&link_fq, None, method_name);
                 let link_args = self
                     .tysys
@@ -3614,42 +3596,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .nominal_type_args(link)
                     .unwrap_or_default();
-                newtype_dispatch = Some((newtype_id, link, link_args));
+                newtype_dispatch = Some((newtype, link, link_args));
                 (link_name, link_fq, mangled)
-            } else {
-                let resolved = self.tysys.type_table.borrow().get(newtype_id).clone();
-                match resolved {
-                    ResolvedType::Newtype { .. } => {
-                        let base_type_id = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .reflect_structure_head(newtype_id);
-                        let base_args = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .nominal_type_args(base_type_id)
-                            .unwrap_or_default();
-                        newtype_dispatch = Some((newtype_id, base_type_id, base_args));
-                        let base_fq = self.tysys.fq_receiver_head(base_type_id);
-                        let mangled = MethodName::format_local(&base_fq, None, method_name);
-                        let base_name = self.tysys.get_ultimate_base_struct_name(base_type_id);
-                        (base_name, base_fq, mangled)
-                    }
-                    _ => (
-                        struct_name.to_string(),
-                        qualified_struct_name,
-                        mangled_func_name.to_string(),
-                    ),
-                }
             }
-        } else {
-            (
+            None => (
                 struct_name.to_string(),
                 qualified_struct_name,
                 mangled_func_name.to_string(),
-            )
+            ),
         };
 
         let impl_type_args_owned: Vec<TypeId> = match &newtype_dispatch {
@@ -3750,12 +3704,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &mut return_type,
             span,
         );
-        self.retype_static_to_newtype(
-            &self.impl_target(struct_name),
-            block,
-            impl_type_args,
-            std::slice::from_mut(&mut return_type),
-        );
+        self.retype_inherited(inherited, std::slice::from_mut(&mut return_type));
 
         let template = self.tysys.static_template(&method_ref, &receiver_fq);
         let monomorph_info = if instance_args.is_empty() && method_type_args.is_empty() {

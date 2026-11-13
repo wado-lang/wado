@@ -415,10 +415,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Some((lookup.flags_members_at(site, name)?.clone(), None))
     }
 
-    pub(super) fn lookup_newtype(&self, name: &str) -> Option<TypeId> {
-        self.type_lookup().newtype(name)
-    }
-
     pub(super) fn lookup_variant_case_of_decl(&self, def: DefId) -> Option<&VariantInfo> {
         self.type_lookup().variant_cases_of(def)
     }
@@ -690,27 +686,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         });
     }
 
-    /// The type a transparent alias or newtype stands for — `ByteList` for
-    /// `pub type ByteList = List<u8>;` — since the alias declares no method of
-    /// its own. `None` when `name` names no such declaration.
-    pub(super) fn newtype_base(&self, name: &str) -> Option<(tir::TypeId, String)> {
-        self.tysys.peeled_base(self.lookup_newtype(name)?)
-    }
-
-    /// [`Self::newtype_base`] keyed on the alias's own declaration. A caller
-    /// reaching the type only through a namespace (`lib::Q`) has no bare name
-    /// its frame answers for, and the declaration is what it does have.
-    pub(super) fn newtype_base_of(
-        &mut self,
-        key: &trait_env::ImplTargetKey,
-    ) -> Option<(tir::TypeId, String)> {
-        let trait_env::ImplTargetKey::Decl(def) = key else {
-            return None;
-        };
-        let newtype = self.newtype_self_type(*def)?;
-        self.tysys.peeled_base(newtype)
-    }
-
     /// The type the newtype or alias `def` declares, a generic one applied to
     /// its own parameters.
     pub(super) fn newtype_self_type(&mut self, def: DefId) -> Option<tir::TypeId> {
@@ -736,81 +711,56 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Some(self.generic_newtype_instance(def, params))
     }
 
-    /// The base the newtype `key` declares wraps: the key its impls answer at,
-    /// and the name it answers under.
-    pub(super) fn newtype_base_target(
-        &mut self,
-        key: &trait_env::ImplTargetKey,
-    ) -> Option<(trait_env::ImplTargetKey, String)> {
-        let (base, base_name) = self.newtype_base_of(key)?;
-        let base_key = self.impl_target_of(base, &name::DeclName::new(&base_name));
-        Some((base_key, base_name))
+    /// Whether `key` names a newtype's declaration, and not a `flags` one.
+    pub(super) fn is_newtype_key(&self, key: &trait_env::ImplTargetKey) -> bool {
+        key.decl().is_some_and(|def| {
+            self.lookup_generic_newtype_of_decl(def).is_some()
+                || self.lookup_newtype_of_decl(def).is_some_and(|ty| {
+                    matches!(
+                        self.tysys.type_table.borrow().get(ty),
+                        tir::ResolvedType::Newtype { .. }
+                    )
+                })
+        })
     }
 
-    /// [`Self::newtype_base_target`] one link down a chain of newtypes: a
-    /// newtype over another newtype or a `flags` reaches that one first, whose
-    /// own impls answer before its base's.
+    /// The type the newtype `key` declares wraps, one link down its chain: the
+    /// key its impls answer at, the name it answers under, and the type as the
+    /// declaration writes it. Keyed on the declaration: a caller reaching the
+    /// type only through a namespace (`lib::Q`) has no bare name its frame
+    /// answers for.
     pub(super) fn newtype_link_target(
         &mut self,
         key: &trait_env::ImplTargetKey,
-    ) -> Option<(trait_env::ImplTargetKey, String)> {
+    ) -> Option<(trait_env::ImplTargetKey, String, tir::TypeId)> {
         let trait_env::ImplTargetKey::Decl(def) = key else {
             return None;
         };
         let newtype = self.newtype_self_type(*def)?;
-        let link = {
-            let table = self.tysys.type_table.borrow();
-            table
-                .link_below(newtype)
-                .and_then(|below| match table.get(below) {
-                    tir::ResolvedType::Newtype { def, .. } | tir::ResolvedType::Flags { def } => {
-                        Some((below, table.decl_name(*def).to_string()))
-                    }
-                    _ => None,
-                })
-        };
-        let Some((link, link_name)) = link else {
-            return self.newtype_base_target(key);
+        let link = self.tysys.type_table.borrow().get_newtype_base(newtype)?;
+        let link_name = match *self.tysys.type_table.borrow().get(link) {
+            tir::ResolvedType::Newtype { def, .. } | tir::ResolvedType::Flags { def } => {
+                self.tysys.type_table.borrow().decl_name(def).to_string()
+            }
+            _ => self.tysys.get_ultimate_base_struct_name(link),
         };
         let link_key = self.impl_target_of(link, &name::DeclName::new(&link_name));
-        Some((link_key, link_name))
+        Some((link_key, link_name, link))
     }
 
-    /// The link down the newtype `key`'s chain that a static named
-    /// `method_name` is inherited from: the first whose own impls answer it,
-    /// else the chain's last link.
-    pub(super) fn newtype_static_target(
-        &mut self,
-        key: &trait_env::ImplTargetKey,
-        method_name: &str,
-    ) -> Option<(trait_env::ImplTargetKey, String)> {
-        let mut link = self.newtype_link_target(key)?;
-        loop {
-            if self.impls_answer(&link.0, method_name, None) {
-                return Some(link);
-            }
-            match self.newtype_link_target(&link.0) {
-                Some(next) => link = next,
-                None => return Some(link),
-            }
-        }
-    }
-
-    /// The declaration a `Type::method` call resolves to, seeing through a
-    /// transparent alias. Every site that records the use→def edge for such a
-    /// call ends its ladder here, so none of them stops one alias short.
+    /// The declaration a `Type::method` call resolves to, at the link of a
+    /// newtype chain that owns it. Every site that records the use→def edge
+    /// for such a call ends its ladder here, so none of them stops one link
+    /// short.
     pub(super) fn qualified_method_decl_at(
-        &self,
+        &mut self,
         site: Option<AstId>,
         type_name: &str,
         method_name: &str,
     ) -> Option<DefId> {
-        self.qualified_method_decl_id(&self.impl_target_at(site, type_name), method_name)
-            .or_else(|| {
-                let (base, base_name) = self.newtype_base(type_name)?;
-                let receiver = self.impl_target_of(base, &DeclName::new(&base_name));
-                self.qualified_method_decl_id(&receiver, method_name)
-            })
+        let key = self.impl_target_at(site, type_name);
+        let owner = self.static_owner_key(&key, method_name);
+        self.qualified_method_decl_id(&owner, method_name)
     }
 
     /// The declaring node of `receiver::method_name` written qualified.
@@ -2326,14 +2276,6 @@ impl TypeSystem {
     /// The callee identity of the declaration `def`.
     fn callee_of(&self, def: DefId) -> callee::CalleeRef {
         callee::CalleeRef::declared(self.resolutions.defs(), def)
-    }
-
-    /// `type Buf = ByteList;` chains, so this peels to the type that declares
-    /// methods rather than stopping at the first link. It stops at a `flags`,
-    /// which has none of `u32`'s methods. `None` for a type wrapping nothing.
-    fn peeled_base(&self, alias: tir::TypeId) -> Option<(tir::TypeId, String)> {
-        let base = self.type_table.borrow().reflect_structure_head(alias);
-        (base != alias).then(|| (base, self.get_ultimate_base_struct_name(base)))
     }
 
     /// Whether the receiver's own declaration of this name and kind shadows a

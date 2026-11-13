@@ -1,0 +1,12 @@
+// A static whose owning link rejects the arguments is reported against that
+// link. A trait out of scope on a link above it owns nothing, so the report
+// does not ask for that trait's import.
+
+use { N, Conv2 } from "./sub/newtype_static_mismatch_lib.wado";
+
+export fn run() {
+    assert N::mk(true) == 1;
+}
+
+__DATA__
+{"compile_error": "no impl of 'Conv2' for 'Base' takes an argument of type 'bool'"}

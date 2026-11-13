@@ -1,0 +1,43 @@
+// A static on a newtype chain belongs to the first link, from the spelled head
+// down, whose own impls answer its name. That link's impls select by the
+// arguments; the links below it are not asked.
+
+struct Base {
+    v: i32,
+}
+
+impl Base {
+    fn mk(x: i32) -> i32 {
+        return x;
+    }
+}
+
+trait Conv<T> {
+    fn mk(t: T) -> i32;
+}
+
+type N = Base;
+
+impl Conv<String> for N {
+    fn mk(t: String) -> i32 {
+        return t.len();
+    }
+}
+
+impl Conv<bool> for N {
+    fn mk(t: bool) -> i32 {
+        return if t { 1 } else { 0 };
+    }
+}
+
+type Outer = N;
+
+test {
+    assert Base::mk(7) == 7;
+    assert N::mk("abc") == 3;
+    assert N::mk(true) == 1;
+    assert Outer::mk("ab") == 2;
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,38 @@
+// The first link of a newtype chain whose impls answer a static's name owns
+// the call, whatever its arguments: `N`'s impls of `Conv` take a `String` or a
+// `bool`, so `N::mk(1)` is an argument error rather than the base's `Base::mk`.
+
+struct Base {
+    v: i32,
+}
+
+impl Base {
+    fn mk(x: i32) -> i32 {
+        return x;
+    }
+}
+
+trait Conv<T> {
+    fn mk(t: T) -> i32;
+}
+
+type N = Base;
+
+impl Conv<String> for N {
+    fn mk(t: String) -> i32 {
+        return t.len();
+    }
+}
+
+impl Conv<bool> for N {
+    fn mk(t: bool) -> i32 {
+        return if t { 1 } else { 0 };
+    }
+}
+
+export fn run() {
+    assert N::mk(1) == 1;
+}
+
+__DATA__
+{"compile_error": ":34:12: analysis error: no impl of 'Conv' for 'N' takes an argument of type 'i32'; 'N::mk' is available for 'String' and 'bool'"}

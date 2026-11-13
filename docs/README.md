@@ -179,7 +179,7 @@
 - [JSON Web Tokens (`core:jwt`)](./wep-2026-09-02-core-jwt.md)
 - [Total Reflection — `TypeInfo` and `match type`](./wep-2026-09-05-total-reflection.md)
 - [Package File Exports — Assets and Submodules as API](./wep-2026-09-06-package-file-exports.md)
-- [Static Call Resolution — One Walk, Four Answers](./wep-2026-09-06-static-call-resolution.md)
+- [Static Call Resolution — One Walk, One Answer](./wep-2026-09-06-static-call-resolution.md)
 - [Whole-File I/O (`core:fs`)](./wep-2026-09-12-core-fs.md)
 - [Declared Absence](./wep-2026-09-13-declared-absence.md)
 - [Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)

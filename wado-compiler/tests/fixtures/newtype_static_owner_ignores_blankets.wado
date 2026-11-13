@@ -1,0 +1,32 @@
+// A blanket covers a newtype through its bound, not as a declaration of its
+// own, so it makes no link of the chain the owner of a static: `N::mk()` is the
+// base's own `Base::mk`.
+
+struct Base {
+    v: i32,
+}
+
+impl Base {
+    fn mk() -> i32 {
+        return 1;
+    }
+}
+
+trait Mk {
+    fn mk() -> i32;
+}
+
+impl<T: Eq> Mk for T {
+    fn mk() -> i32 {
+        return 2;
+    }
+}
+
+type N = Base;
+
+test {
+    assert N::mk() == 1;
+}
+
+__DATA__
+{"test": {}}
