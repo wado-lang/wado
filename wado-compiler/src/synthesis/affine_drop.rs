@@ -2119,23 +2119,29 @@ fn is_place(expr: &TirExpr, cx: &Cx) -> bool {
     }
 }
 
-/// Whether `expr` is a field of an object a reference points to: a slot that
-/// object owns, though no move can empty it.
-fn is_field_through_reference(expr: &TirExpr, cx: &Cx) -> bool {
-    let TirExprKind::FieldAccess { expr: object, .. } = &expr.kind else {
-        return false;
+/// The reference `expr`, a field of an object that reference points to,
+/// reaches it through: a slot that object owns, though no move can empty it.
+/// `None` where `expr` is no such field.
+fn reference_under_field<'a>(expr: &'a mut TirExpr, cx: &Cx) -> Option<&'a mut TirExpr> {
+    let TirExprKind::FieldAccess { expr: object, .. } = &mut expr.kind else {
+        return None;
     };
-    let mut root: &TirExpr = object;
-    while let TirExprKind::FieldAccess { expr: inner, .. } = &root.kind {
-        root = inner;
+    reference_under_place(object, cx)
+}
+
+/// The reference `object`, or the field chain rooted in it, starts from.
+fn reference_under_place<'a>(object: &'a mut TirExpr, cx: &Cx) -> Option<&'a mut TirExpr> {
+    if cx.affine_types.tt.borrow().is_reference(object.type_id) {
+        return Some(object);
     }
-    matches!(
-        root.kind,
+    match &mut object.kind {
+        TirExprKind::FieldAccess { expr: inner, .. } => reference_under_place(inner, cx),
         TirExprKind::Unary {
             op: TirUnaryOp::Deref,
-            ..
-        }
-    ) || cx.affine_types.tt.borrow().is_reference(root.type_id)
+            expr: reference,
+        } => Some(reference),
+        _ => None,
+    }
 }
 
 /// Replace the place `expr` with its value, emptying the place:
@@ -2345,32 +2351,32 @@ fn elab_store(expr: &mut TirExpr, cx: &mut Cx) {
         unreachable!("`elab_store` takes an assignment");
     };
     let type_id = target.type_id;
+    let field_through_reference = reference_under_field(target, cx).is_some();
     let through = match &target.kind {
         TirExprKind::Unary {
             op: TirUnaryOp::Deref,
             expr: reference,
         } => Some((**reference).clone()),
-        _ if is_place(target, cx) || is_field_through_reference(target, cx) => None,
+        _ if is_place(target, cx) || field_through_reference => None,
         _ => return,
     };
-    let target = (**target).clone();
+    let mut target = (**target).clone();
     let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span);
     let value = std::mem::replace(&mut **value, unit);
     let (local, name) = cx.alloc_local(type_id, "stored");
     let stored = local_ref(local, &name, type_id);
     let mut stmts = vec![let_stmt(&name, local, type_id, value)];
+    // The store reads the place for its drop as well as writing it, so a
+    // reference reaching it is read once, as a store through `*r` reads `r`.
+    if let Some(reference) = reference_under_field(&mut target, cx) {
+        let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span);
+        *reference = read_once(std::mem::replace(reference, unit), &mut stmts, cx);
+    }
     let is_object = cx.affine_types.is_object(type_id);
     match through {
         Some(reference) => {
-            // Read the reference once: dropping a struct reads it per field.
-            let reference = if matches!(reference.kind, TirExprKind::Local { .. }) {
-                reference
-            } else {
-                let ref_ty = reference.type_id;
-                let (local, name) = cx.alloc_local(ref_ty, "store_ref");
-                stmts.push(let_stmt(&name, local, ref_ty, reference));
-                local_ref(local, &name, ref_ty)
-            };
+            // Dropping a struct reads the reference per field.
+            let reference = read_once(reference, &mut stmts, cx);
             let place = common::deref_expr(reference, type_id, span);
             if is_object {
                 stmts.push(refuse_self_store(place.clone(), stored.clone(), cx));
@@ -2395,6 +2401,18 @@ fn elab_store(expr: &mut TirExpr, cx: &mut Cx) {
         TypeTable::UNIT,
         span,
     );
+}
+
+/// `reference` as a local: itself where it is one, else spilled into one by a
+/// statement pushed onto `stmts`.
+fn read_once(reference: TirExpr, stmts: &mut Vec<TirStmt>, cx: &mut Cx) -> TirExpr {
+    if matches!(reference.kind, TirExprKind::Local { .. }) {
+        return reference;
+    }
+    let ref_ty = reference.type_id;
+    let (local, name) = cx.alloc_local(ref_ty, "store_ref");
+    stmts.push(let_stmt(&name, local, ref_ty, reference));
+    local_ref(local, &name, ref_ty)
 }
 
 /// Drop what the object `place` holds and move `stored`'s content into it, so

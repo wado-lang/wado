@@ -2227,8 +2227,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// A subscript read on a bounded container, dispatched through its bounds
-    /// as an operator is: a value read to `IndexValue`, else to `IndexRef` and a
-    /// deref, and a reference to the element to `IndexRef` / `IndexRefMut`.
+    /// as an operator is, falling back as a concrete container does: a value
+    /// read to `IndexValue`, else to `IndexRef` and a deref, a shared reference
+    /// to `IndexRef`, and a mutable one to `IndexRefMut`, else to `IndexRef`.
     /// `None` where `container` is not one; a missing trait is reported as
     /// `ERROR`.
     pub(super) fn dispatch_index_through_bounds(
@@ -2242,7 +2243,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let candidates: &[CompilerItem] = match access {
             IndexAccess::Value => &[CompilerItem::IndexValue, CompilerItem::IndexRef],
             IndexAccess::Shared => &[CompilerItem::IndexRef],
-            IndexAccess::Mutable => &[CompilerItem::IndexRefMut],
+            IndexAccess::Mutable => &[CompilerItem::IndexRefMut, CompilerItem::IndexRef],
         };
         for &item in candidates {
             let Some((resolved, key)) =

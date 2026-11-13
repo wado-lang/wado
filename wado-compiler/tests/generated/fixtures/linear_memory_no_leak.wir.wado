@@ -517,7 +517,7 @@ type "functype//core:linear/core:linear/LinearArray<u8>::copy_from$contract_repo
 
 type "functype//core:linear/core:linear/LinearArray<u8>::copy_from$contract_report2" = fn(i32, i32, i32, i32, ref "core:prelude/string.wado//String");  // TypeId(111)
 
-type "functype//core:linear/core:linear/LinearArray<u8>::resize$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(112)
+type "functype//core:linear/core:linear/LinearArray<u8>::lengthen$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(112)
 
 type "functype//core:prelude/primitive.wado/i32::clamp$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(113)
 
@@ -623,7 +623,7 @@ type "functype//core:zlib/adler32$sroa[buf.repr]$dae[adler,offset]" = fn(ref Arr
 
 type "functype//core:linear/core:linear/Block^core:prelude/traits.wado/Drop::drop" = fn(i32, i32);  // TypeId(164)
 
-type "functype//core:linear/core:linear/LinearArray<u8>::resize$unchecked" = fn(ref null "core:linear//LinearArray<u8>", i32, u8);  // TypeId(165)
+type "functype//core:linear/core:linear/LinearArray<u8>::lengthen$unchecked" = fn(ref null "core:linear//LinearArray<u8>", i32);  // TypeId(165)
 
 type "functype//core:linear/core:linear/$tmpl$59e16269228f9c88^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:linear//$tmpl$59e16269228f9c88") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(166)
 
@@ -2237,20 +2237,20 @@ fn "core:zlib/inflate_fast$sroa[return]"(state, input, output) {
     let bits: i32;
     let inp: i32;
     let block_ended: bool;
-    let op_54: i32;
-    let root_55: i32;
-    let root_90: i32;
-    let $licm_bytes_114: ref null "core:linear//LinearArray<u8>";
-    let $licm_codes_115: ref null "core:linear//LinearArray<i32>";
-    let $licm_max_116: i32;
-    let $licm_block_117: ref null "core:linear//Block";
+    let op_53: i32;
+    let root_54: i32;
+    let root_89: i32;
+    let $licm_bytes_113: ref null "core:linear//LinearArray<u8>";
+    let $licm_codes_114: ref null "core:linear//LinearArray<i32>";
+    let $licm_max_115: i32;
+    let $licm_block_116: ref null "core:linear//Block";
+    let $licm_arith_117: u64;
     let $licm_arith_118: u64;
-    let $licm_arith_119: u64;
-    let $cse_120: u64;
-    let $licm_block_123: ref null "core:linear//Block";
-    let value_149: u8;
-    let $licm_block_172: ref null "core:linear//Block";
-    let $hfs_len_173: i32;
+    let $cse_119: u64;
+    let $licm_block_122: ref null "core:linear//Block";
+    let value_148: u8;
+    let $licm_block_171: ref null "core:linear//Block";
+    let $hfs_len_172: i32;
     lencode_off = state.lencode_off;
     distcode_off = state.distcode_off;
     lenbits = state.lenbits;
@@ -2260,133 +2260,133 @@ fn "core:zlib/inflate_fast$sroa[return]"(state, input, output) {
     bits = state.bits;
     inp = state.next;
     block_ended = 0;
-    $licm_bytes_114 = output.bytes;
-    $licm_codes_115 = state.codes;
-    $licm_max_116 = output.max;
-    $licm_block_117 = $licm_codes_115.block;
-    $licm_arith_118 = (1_i64 << builtin::i64_extend_i32_s(lenbits)) - 1_i64;
-    $licm_arith_119 = (1_i64 << builtin::i64_extend_i32_s(distbits)) - 1_i64;
-    lenbits = $licm_bytes_114.len;
-    $licm_block_123 = input.block;
-    distbits = $licm_block_117.ptr;
-    $licm_block_172 = $licm_bytes_114.block;
-    $hfs_len_173 = output.len;
+    $licm_bytes_113 = output.bytes;
+    $licm_codes_114 = state.codes;
+    $licm_max_115 = output.max;
+    $licm_block_116 = $licm_codes_114.block;
+    $licm_arith_117 = (1_i64 << builtin::i64_extend_i32_s(lenbits)) - 1_i64;
+    $licm_arith_118 = (1_i64 << builtin::i64_extend_i32_s(distbits)) - 1_i64;
+    lenbits = $licm_bytes_113.len;
+    $licm_block_122 = input.block;
+    distbits = $licm_block_116.ptr;
+    $licm_block_171 = $licm_bytes_113.block;
+    $hfs_len_172 = output.len;
     b249: block {
         l250: loop {
             break_if b249 (end_8 - inp) < 8;
-            if @unlikely((lenbits - $hfs_len_173) < 265) {
+            if @unlikely((lenbits - $hfs_len_172) < 265) {
                 cold_path;
                 "core:zlib/core:zlib/Output::reserve$cold0"(output, 265);
-                $licm_block_172 = $licm_bytes_114.block;
-                distbits = $licm_block_117.ptr;
-                lenbits = $licm_bytes_114.len;
-                $licm_block_123 = input.block;
+                $licm_block_171 = $licm_bytes_113.block;
+                distbits = $licm_block_116.ptr;
+                lenbits = $licm_bytes_113.len;
+                $licm_block_122 = input.block;
             } else {
             }
-            hold_9 = hold_9 | (builtin::load_i64($licm_block_123.ptr + inp) << builtin::i64_extend_i32_s(bits));
-            $hfs_len_173 = (63 - bits) >> 3;
-            inp = inp + $hfs_len_173;
-            bits = bits + ($hfs_len_173 << 3);
+            hold_9 = hold_9 | (builtin::load_i64($licm_block_122.ptr + inp) << builtin::i64_extend_i32_s(bits));
+            $hfs_len_172 = (63 - bits) >> 3;
+            inp = inp + $hfs_len_172;
+            bits = bits + ($hfs_len_172 << 3);
             $inline_decode_entry_sroa_codes_block__3: block {
-                if @unlikely((local.tee op_54(local.tee $hfs_len_173(builtin::load_i32(distbits + ((lencode_off + builtin::i32_wrap_i64(hold_9 & $licm_arith_118)) * 4))) & 255) != 0) & ((op_54 & 240) == 0)) {
+                if @unlikely((local.tee op_53(local.tee $hfs_len_172(builtin::load_i32(distbits + ((lencode_off + builtin::i32_wrap_i64(hold_9 & $licm_arith_117)) * 4))) & 255) != 0) & ((op_53 & 240) == 0)) {
                     cold_path;
-                    root_55 = ($hfs_len_173 >> 8) & 255;
-                    op_54 = local.tee $hfs_len_173("core:linear/core:linear/LinearArray<i32>::at$unchecked$sroa[self.block]"($licm_block_117.ptr, $licm_block_117.bytes, (lencode_off + (($hfs_len_173 >> 16) & 65535)) + "core:zlib/low_bits"(hold_9 >>u builtin::i64_extend_i32_s(root_55), op_54)));
-                    $hfs_len_173 = root_55 + (($hfs_len_173 >> 8) & 255);
+                    root_54 = ($hfs_len_172 >> 8) & 255;
+                    op_53 = local.tee $hfs_len_172("core:linear/core:linear/LinearArray<i32>::at$unchecked$sroa[self.block]"($licm_block_116.ptr, $licm_block_116.bytes, (lencode_off + (($hfs_len_172 >> 16) & 65535)) + "core:zlib/low_bits"(hold_9 >>u builtin::i64_extend_i32_s(root_54), op_53)));
+                    $hfs_len_172 = root_54 + (($hfs_len_172 >> 8) & 255);
                     break $inline_decode_entry_sroa_codes_block__3;
                 }
-                op_54 = $hfs_len_173;
-                $hfs_len_173 = ($hfs_len_173 >> 8) & 255;
+                op_53 = $hfs_len_172;
+                $hfs_len_172 = ($hfs_len_172 >> 8) & 255;
                 break $inline_decode_entry_sroa_codes_block__3;
             };
-            hold_9 = hold_9 >>u builtin::i64_extend_i32_s($hfs_len_173);
-            bits = bits - $hfs_len_173;
-            if local.tee $hfs_len_173(op_54 & 255) == 0 {
-                op_54 = (op_54 >> 16) & 65535;
-                if @unlikely(local.tee $hfs_len_173(output.len) == $licm_max_116) {
+            hold_9 = hold_9 >>u builtin::i64_extend_i32_s($hfs_len_172);
+            bits = bits - $hfs_len_172;
+            if local.tee $hfs_len_172(op_53 & 255) == 0 {
+                op_53 = (op_53 >> 16) & 65535;
+                if @unlikely(local.tee $hfs_len_172(output.len) == $licm_max_115) {
                     cold_path;
                     cold_path;
                     return 1, 0, 11;
                 }
-                builtin::store_u8($licm_block_172.ptr + ($hfs_len_173 * 1), op_54 & 255);
-                $hfs_len_173 = $hfs_len_173 + 1;
-                output.len = $hfs_len_173;
+                builtin::store_u8($licm_block_171.ptr + ($hfs_len_172 * 1), op_53 & 255);
+                $hfs_len_172 = $hfs_len_172 + 1;
+                output.len = $hfs_len_172;
                 continue l250;
             }
-            if ($hfs_len_173 & 16) == 0 {
-                if @unlikely(($hfs_len_173 & 32) == 0) {
+            if ($hfs_len_172 & 16) == 0 {
+                if @unlikely(($hfs_len_172 & 32) == 0) {
                     cold_path;
                     return 1, 0, 12;
                 }
                 block_ended = 1;
                 break b249;
             }
-            $cse_120 = builtin::i64_extend_i32_s(local.tee $hfs_len_173($hfs_len_173 & 15));
-            op_54 = ((op_54 >> 16) & 65535) + builtin::i32_wrap_i64(hold_9 & ((1_i64 << $cse_120) - 1_i64));
-            hold_9 = hold_9 >>u $cse_120;
-            bits = bits - $hfs_len_173;
+            $cse_119 = builtin::i64_extend_i32_s(local.tee $hfs_len_172($hfs_len_172 & 15));
+            op_53 = ((op_53 >> 16) & 65535) + builtin::i32_wrap_i64(hold_9 & ((1_i64 << $cse_119) - 1_i64));
+            hold_9 = hold_9 >>u $cse_119;
+            bits = bits - $hfs_len_172;
             $inline_decode_entry_sroa_codes_block__17: block {
-                if @unlikely((local.tee root_55(local.tee $hfs_len_173(builtin::load_i32(distbits + ((distcode_off + builtin::i32_wrap_i64(hold_9 & $licm_arith_119)) * 4))) & 255) != 0) & ((root_55 & 240) == 0)) {
+                if @unlikely((local.tee root_54(local.tee $hfs_len_172(builtin::load_i32(distbits + ((distcode_off + builtin::i32_wrap_i64(hold_9 & $licm_arith_118)) * 4))) & 255) != 0) & ((root_54 & 240) == 0)) {
                     cold_path;
-                    root_90 = ($hfs_len_173 >> 8) & 255;
-                    root_55 = local.tee $hfs_len_173("core:linear/core:linear/LinearArray<i32>::at$unchecked$sroa[self.block]"($licm_block_117.ptr, $licm_block_117.bytes, (distcode_off + (($hfs_len_173 >> 16) & 65535)) + "core:zlib/low_bits"(hold_9 >>u builtin::i64_extend_i32_s(root_90), root_55)));
-                    $hfs_len_173 = root_90 + (($hfs_len_173 >> 8) & 255);
+                    root_89 = ($hfs_len_172 >> 8) & 255;
+                    root_54 = local.tee $hfs_len_172("core:linear/core:linear/LinearArray<i32>::at$unchecked$sroa[self.block]"($licm_block_116.ptr, $licm_block_116.bytes, (distcode_off + (($hfs_len_172 >> 16) & 65535)) + "core:zlib/low_bits"(hold_9 >>u builtin::i64_extend_i32_s(root_89), root_54)));
+                    $hfs_len_172 = root_89 + (($hfs_len_172 >> 8) & 255);
                     break $inline_decode_entry_sroa_codes_block__17;
                 }
-                root_55 = $hfs_len_173;
-                $hfs_len_173 = ($hfs_len_173 >> 8) & 255;
+                root_54 = $hfs_len_172;
+                $hfs_len_172 = ($hfs_len_172 >> 8) & 255;
                 break $inline_decode_entry_sroa_codes_block__17;
             };
-            hold_9 = hold_9 >>u builtin::i64_extend_i32_s($hfs_len_173);
-            bits = bits - $hfs_len_173;
-            if @unlikely((local.tee $hfs_len_173(root_55 & 255) & 64) != 0) {
+            hold_9 = hold_9 >>u builtin::i64_extend_i32_s($hfs_len_172);
+            bits = bits - $hfs_len_172;
+            if @unlikely((local.tee $hfs_len_172(root_54 & 255) & 64) != 0) {
                 cold_path;
                 return 1, 0, 12;
             }
-            $cse_120 = builtin::i64_extend_i32_s(local.tee $hfs_len_173($hfs_len_173 & 15));
-            root_55 = ((root_55 >> 16) & 65535) + builtin::i32_wrap_i64(hold_9 & ((1_i64 << $cse_120) - 1_i64));
-            hold_9 = hold_9 >>u $cse_120;
-            bits = bits - $hfs_len_173;
-            $hfs_len_173 = output.len;
-            if @unlikely(root_55 > $hfs_len_173) {
+            $cse_119 = builtin::i64_extend_i32_s(local.tee $hfs_len_172($hfs_len_172 & 15));
+            root_54 = ((root_54 >> 16) & 65535) + builtin::i32_wrap_i64(hold_9 & ((1_i64 << $cse_119) - 1_i64));
+            hold_9 = hold_9 >>u $cse_119;
+            bits = bits - $hfs_len_172;
+            $hfs_len_172 = output.len;
+            if @unlikely(root_54 > $hfs_len_172) {
                 cold_path;
                 cold_path;
                 return 1, 0, 12;
             }
-            if @unlikely(op_54 > ($licm_max_116 - $hfs_len_173)) {
+            if @unlikely(op_53 > ($licm_max_115 - $hfs_len_172)) {
                 cold_path;
                 cold_path;
                 return 1, 0, 11;
             }
-            root_90 = $hfs_len_173 - root_55;
-            op_54 = $hfs_len_173 + op_54;
-            if root_55 >= 8 {
-                root_55 = $licm_block_172.ptr;
+            root_89 = $hfs_len_172 - root_54;
+            op_53 = $hfs_len_172 + op_53;
+            if root_54 >= 8 {
+                root_54 = $licm_block_171.ptr;
                 b262: block {
                     l263: loop {
-                        break_if b262 $hfs_len_173 >= op_54;
-                        $cse_120 = builtin::load_i64(root_55 + root_90);
-                        builtin::store_i64(root_55 + $hfs_len_173, $cse_120);
-                        root_90 = root_90 + 8;
-                        $hfs_len_173 = $hfs_len_173 + 8;
+                        break_if b262 $hfs_len_172 >= op_53;
+                        $cse_119 = builtin::load_i64(root_54 + root_89);
+                        builtin::store_i64(root_54 + $hfs_len_172, $cse_119);
+                        root_89 = root_89 + 8;
+                        $hfs_len_172 = $hfs_len_172 + 8;
                         continue l263;
                     };
                 };
             } else {
-                root_55 = $licm_block_172.ptr;
+                root_54 = $licm_block_171.ptr;
                 b264: block {
                     l265: loop {
-                        break_if b264 $hfs_len_173 >= op_54;
-                        value_149 = builtin::load_u8(root_55 + (root_90 * 1));
-                        builtin::store_u8(root_55 + ($hfs_len_173 * 1), value_149);
-                        root_90 = root_90 + 1;
-                        $hfs_len_173 = $hfs_len_173 + 1;
+                        break_if b264 $hfs_len_172 >= op_53;
+                        value_148 = builtin::load_u8(root_54 + (root_89 * 1));
+                        builtin::store_u8(root_54 + ($hfs_len_172 * 1), value_148);
+                        root_89 = root_89 + 1;
+                        $hfs_len_172 = $hfs_len_172 + 1;
                         continue l265;
                     };
                 };
             }
-            $hfs_len_173 = op_54;
-            output.len = $hfs_len_173;
+            $hfs_len_172 = op_53;
+            output.len = $hfs_len_172;
             continue l250;
         };
     };
@@ -2575,88 +2575,88 @@ fn "core:zlib/inflate_stored$sroa[return]"(state, input, output) {
     let $load_27: ref null "core:linear//LinearArray<u8>";
     let $v3_18: i32;
     let n_28: i32;
-    let $licm_ptr_84: i32;
-    let $hfs_next_86: i32;
-    let $av_87: i32;
-    let $av_88: u64;
-    n_28 = local.tee $av_87(state.bits) & 7;
+    let $licm_ptr_83: i32;
+    let $hfs_next_85: i32;
+    let $av_86: i32;
+    let $av_87: u64;
+    n_28 = local.tee $av_86(state.bits) & 7;
     state.hold = state.hold >>u builtin::i64_extend_i32_s(n_28);
-    state.bits = local.tee $av_87($av_87 - n_28);
+    state.bits = local.tee $av_86($av_86 - n_28);
     n_28 = state.end;
-    $licm_ptr_84 = input.block.ptr;
-    $hfs_next_86 = state.next;
+    $licm_ptr_83 = input.block.ptr;
+    $hfs_next_85 = state.next;
     b298: block {
         l299: loop {
-            if $av_87 >= 32 {
-                state.bits = $av_87;
-                state.next = $hfs_next_86;
+            if $av_86 >= 32 {
+                state.bits = $av_86;
+                state.next = $hfs_next_85;
                 break b298;
             }
-            if @unlikely($hfs_next_86 == n_28) {
+            if @unlikely($hfs_next_85 == n_28) {
                 cold_path;
                 cold_path;
-                state.bits = $av_87;
-                state.next = $hfs_next_86;
+                state.bits = $av_86;
+                state.next = $hfs_next_85;
                 return 1, 12;
             }
-            state.hold = state.hold | (builtin::i64_extend_i32_u(builtin::load_u8($licm_ptr_84 + ($hfs_next_86 * 1))) << builtin::i64_extend_i32_s($av_87));
-            $av_87 = $av_87 + 8;
-            $hfs_next_86 = $hfs_next_86 + 1;
+            state.hold = state.hold | (builtin::i64_extend_i32_u(builtin::load_u8($licm_ptr_83 + ($hfs_next_85 * 1))) << builtin::i64_extend_i32_s($av_86));
+            $av_86 = $av_86 + 8;
+            $hfs_next_85 = $hfs_next_85 + 1;
             continue l299;
         };
     };
-    $av_87 = builtin::i32_wrap_i64(local.tee $av_88(state.hold) & 65535_i64);
-    $av_88 = $av_88 >>u 16_i64;
-    $licm_ptr_84 = state.bits - 16;
-    $hfs_next_86 = builtin::i32_wrap_i64($av_88 & 65535_i64);
-    state.hold = $av_88 >>u 16_i64;
-    state.bits = local.tee $licm_ptr_84($licm_ptr_84 - 16);
-    if @unlikely(($licm_ptr_84 == 0) == 0) {
+    $av_86 = builtin::i32_wrap_i64(local.tee $av_87(state.hold) & 65535_i64);
+    $av_87 = $av_87 >>u 16_i64;
+    $licm_ptr_83 = state.bits - 16;
+    $hfs_next_85 = builtin::i32_wrap_i64($av_87 & 65535_i64);
+    state.hold = $av_87 >>u 16_i64;
+    state.bits = local.tee $licm_ptr_83($licm_ptr_83 - 16);
+    if @unlikely(($licm_ptr_83 == 0) == 0) {
         cold_path;
-        "core:zlib/inflate_stored$cold0$dae[state,input,output]"($licm_ptr_84);
+        "core:zlib/inflate_stored$cold0$dae[state,input,output]"($licm_ptr_83);
         unreachable;
     }
-    if @unlikely($av_87 != ($hfs_next_86 ^ 65535)) {
+    if @unlikely($av_86 != ($hfs_next_85 ^ 65535)) {
         cold_path;
         return 1, 12;
     }
     n_28 = n_28 - state.next;
-    n_28 = select i32($av_87 < n_28, $av_87, n_28);
-    $licm_ptr_84 = output.len;
-    if @unlikely(n_28 > (output.max - $licm_ptr_84)) {
+    n_28 = select i32($av_86 < n_28, $av_86, n_28);
+    $licm_ptr_83 = output.len;
+    if @unlikely(n_28 > (output.max - $licm_ptr_83)) {
         cold_path;
         return 1, 11;
     }
-    if @unlikely(n_28 < $av_87) {
+    if @unlikely(n_28 < $av_86) {
         cold_path;
         return 1, 12;
     }
-    if @unlikely((output.bytes.len - $licm_ptr_84) < n_28) {
+    if @unlikely((output.bytes.len - $licm_ptr_83) < n_28) {
         cold_path;
         "core:zlib/core:zlib/Output::reserve$cold0"(output, n_28);
     }
-    $av_87 = output.len;
-    $licm_ptr_84 = state.next;
+    $av_86 = output.len;
+    $licm_ptr_83 = state.next;
     if @unlikely(0 > n_28) {
         cold_path;
         "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report0"(n_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1130"), used: 14 });
         unreachable;
     }
-    $v3_18 = local.tee $hfs_next_86(local.tee $load_27(output.bytes).len) - n_28;
-    if @unlikely(((0 <= $av_87) & ($av_87 <= $v3_18)) == 0) {
+    $v3_18 = local.tee $hfs_next_85(local.tee $load_27(output.bytes).len) - n_28;
+    if @unlikely(((0 <= $av_86) & ($av_86 <= $v3_18)) == 0) {
         cold_path;
-        "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report1"($av_87, $v3_18, $hfs_next_86, n_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1130"), used: 14 });
+        "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report1"($av_86, $v3_18, $hfs_next_85, n_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1130"), used: 14 });
         unreachable;
     }
-    $v3_18 = local.tee $hfs_next_86(input.len) - n_28;
-    if @unlikely(((0 <= $licm_ptr_84) & ($licm_ptr_84 <= $v3_18)) == 0) {
+    $v3_18 = local.tee $hfs_next_85(input.len) - n_28;
+    if @unlikely(((0 <= $licm_ptr_83) & ($licm_ptr_83 <= $v3_18)) == 0) {
         cold_path;
-        "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report2"($licm_ptr_84, $v3_18, $hfs_next_86, n_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1130"), used: 14 });
+        "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report2"($licm_ptr_83, $v3_18, $hfs_next_85, n_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1130"), used: 14 });
         unreachable;
     }
-    builtin::memory_copy($load_27.block.ptr + $av_87, input.block.ptr + $licm_ptr_84, n_28);
-    output.len = $av_87 + n_28;
-    state.next = $licm_ptr_84 + n_28;
+    builtin::memory_copy($load_27.block.ptr + $av_86, input.block.ptr + $licm_ptr_83, n_28);
+    output.len = $av_86 + n_28;
+    state.next = $licm_ptr_83 + n_28;
     return 0, 0;
 }
 
@@ -2855,29 +2855,29 @@ fn "core:zlib/read_dynamic_tables$sroa[return]"(state, input) {
 }
 
 fn "core:zlib/inflate_codes$sroa[return]"(state, input, output) {
-    let $licm_end_71: i32;
-    let $licm_bytes_72: ref null "core:linear//LinearArray<u8>";
-    let $licm_lencode_off_73: i32;
-    let $licm_lenbits_74: i32;
-    let $licm_max_75: i32;
-    let $licm_distcode_off_76: i32;
-    let $licm_distbits_77: i32;
-    let $cse_78: u64;
-    let value_105: u8;
-    let $hfs_hold_128: u64;
-    $licm_end_71 = state.end;
-    $licm_bytes_72 = output.bytes;
-    $licm_lencode_off_73 = state.lencode_off;
-    $licm_lenbits_74 = state.lenbits;
-    $licm_max_75 = output.max;
-    $licm_distcode_off_76 = state.distcode_off;
-    $licm_distbits_77 = state.distbits;
+    let $licm_end_70: i32;
+    let $licm_bytes_71: ref null "core:linear//LinearArray<u8>";
+    let $licm_lencode_off_72: i32;
+    let $licm_lenbits_73: i32;
+    let $licm_max_74: i32;
+    let $licm_distcode_off_75: i32;
+    let $licm_distbits_76: i32;
+    let $cse_77: u64;
+    let value_104: u8;
+    let $hfs_hold_127: u64;
+    $licm_end_70 = state.end;
+    $licm_bytes_71 = output.bytes;
+    $licm_lencode_off_72 = state.lencode_off;
+    $licm_lenbits_73 = state.lenbits;
+    $licm_max_74 = output.max;
+    $licm_distcode_off_75 = state.distcode_off;
+    $licm_distbits_76 = state.distbits;
     drop(output.len);
     drop(state.hold);
     drop(state.bits);
     block {
         l344: loop {
-            if ($licm_end_71 - state.next) >= 8 {
+            if ($licm_end_70 - state.next) >= 8 {
                 let $mv$$vr_31$0: i32;
                 let $mv$$vr_31$1: bool;
                 let $mv$$vr_31$2: "core:zlib//enum:ZlibError";
@@ -2895,12 +2895,12 @@ fn "core:zlib/inflate_codes$sroa[return]"(state, input, output) {
                 }
             }
             $mv$$vr_31$0 = output.len;
-            if @unlikely(($licm_bytes_72.len - $mv$$vr_31$0) < 265) {
+            if @unlikely(($licm_bytes_71.len - $mv$$vr_31$0) < 265) {
                 cold_path;
                 "core:zlib/core:zlib/Output::reserve$cold0"(output, 265);
             } else {
             }
-            multivalue_bind [$mv$$vr_31$0, $mv$$vr_31$1, $mv$$vr_31$2] = "core:zlib/core:zlib/InflateState::decode$sroa[return]"(state, input, $licm_lencode_off_73, $licm_lenbits_74);
+            multivalue_bind [$mv$$vr_31$0, $mv$$vr_31$1, $mv$$vr_31$2] = "core:zlib/core:zlib/InflateState::decode$sroa[return]"(state, input, $licm_lencode_off_72, $licm_lenbits_73);
             if local.tee $mv$$vr_31$1(local.tee $mv$$vr_31$0((if @likely($mv$$vr_31$0 == 0) -> i32 {
                 $mv$$vr_31$1;
             } else if @likely($mv$$vr_31$0 == 1) -> i32 {
@@ -2911,12 +2911,12 @@ fn "core:zlib/inflate_codes$sroa[return]"(state, input, output) {
                 unreachable;
             })) & 255) == 0 {
                 $mv$$vr_31$1 = ($mv$$vr_31$0 >> 16) & 65535;
-                if @unlikely(local.tee $mv$$vr_31$0(output.len) == $licm_max_75) {
+                if @unlikely(local.tee $mv$$vr_31$0(output.len) == $licm_max_74) {
                     cold_path;
                     cold_path;
                     return 1, 11;
                 }
-                builtin::store_u8($licm_bytes_72.block.ptr + ($mv$$vr_31$0 * 1), $mv$$vr_31$1 & 255);
+                builtin::store_u8($licm_bytes_71.block.ptr + ($mv$$vr_31$0 * 1), $mv$$vr_31$1 & 255);
                 $mv$$vr_31$0 = $mv$$vr_31$0 + 1;
                 output.len = $mv$$vr_31$0;
                 drop(state.hold);
@@ -2945,11 +2945,11 @@ fn "core:zlib/inflate_codes$sroa[return]"(state, input, output) {
             } else {
                 unreachable;
             }
-            $cse_78 = builtin::i64_extend_i32_s($mv$$vr_31$1);
-            $mv$$vr_31$2 = (($mv$$vr_31$0 >> 16) & 65535) + $mv$$vr_31$0 = builtin::i32_wrap_i64(local.tee $hfs_hold_128(state.hold) & ((1_i64 << $cse_78) - 1_i64)); $hfs_hold_128 = $hfs_hold_128 >>u $cse_78; $mv$$vr_31$1 = state.bits - $mv$$vr_31$1; $mv$$vr_31$0;
-            state.hold = $hfs_hold_128;
+            $cse_77 = builtin::i64_extend_i32_s($mv$$vr_31$1);
+            $mv$$vr_31$2 = (($mv$$vr_31$0 >> 16) & 65535) + $mv$$vr_31$0 = builtin::i32_wrap_i64(local.tee $hfs_hold_127(state.hold) & ((1_i64 << $cse_77) - 1_i64)); $hfs_hold_127 = $hfs_hold_127 >>u $cse_77; $mv$$vr_31$1 = state.bits - $mv$$vr_31$1; $mv$$vr_31$0;
+            state.hold = $hfs_hold_127;
             state.bits = $mv$$vr_31$1;
-            multivalue_bind [$mv$$vr_31$0, $mv$$vr_31$1, $mv$$match_28$1] = "core:zlib/core:zlib/InflateState::decode$sroa[return]"(state, input, $licm_distcode_off_76, $licm_distbits_77);
+            multivalue_bind [$mv$$vr_31$0, $mv$$vr_31$1, $mv$$match_28$1] = "core:zlib/core:zlib/InflateState::decode$sroa[return]"(state, input, $licm_distcode_off_75, $licm_distbits_76);
             if @unlikely((local.tee $mv$$vr_31$1(local.tee $mv$$vr_31$0((if @likely($mv$$vr_31$0 == 0) -> i32 {
                 $mv$$vr_31$1;
             } else if @likely($mv$$vr_31$0 == 1) -> i32 {
@@ -2977,44 +2977,44 @@ fn "core:zlib/inflate_codes$sroa[return]"(state, input, output) {
             } else {
                 unreachable;
             }
-            $cse_78 = builtin::i64_extend_i32_s($mv$$vr_31$1);
-            $mv$$match_28$1 = (($mv$$vr_31$0 >> 16) & 65535) + $mv$$vr_31$0 = builtin::i32_wrap_i64(local.tee $hfs_hold_128(state.hold) & ((1_i64 << $cse_78) - 1_i64)); $hfs_hold_128 = $hfs_hold_128 >>u $cse_78; $mv$$vr_31$1 = state.bits - $mv$$vr_31$1; $mv$$vr_31$0;
+            $cse_77 = builtin::i64_extend_i32_s($mv$$vr_31$1);
+            $mv$$match_28$1 = (($mv$$vr_31$0 >> 16) & 65535) + $mv$$vr_31$0 = builtin::i32_wrap_i64(local.tee $hfs_hold_127(state.hold) & ((1_i64 << $cse_77) - 1_i64)); $hfs_hold_127 = $hfs_hold_127 >>u $cse_77; $mv$$vr_31$1 = state.bits - $mv$$vr_31$1; $mv$$vr_31$0;
             $mv$$vr_31$0 = output.len;
             if @unlikely($mv$$match_28$1 > $mv$$vr_31$0) {
                 cold_path;
                 cold_path;
-                state.hold = $hfs_hold_128;
+                state.hold = $hfs_hold_127;
                 state.bits = $mv$$vr_31$1;
                 return 1, 12;
             }
-            if @unlikely($mv$$vr_31$2 > ($licm_max_75 - $mv$$vr_31$0)) {
+            if @unlikely($mv$$vr_31$2 > ($licm_max_74 - $mv$$vr_31$0)) {
                 cold_path;
                 cold_path;
-                state.hold = $hfs_hold_128;
+                state.hold = $hfs_hold_127;
                 state.bits = $mv$$vr_31$1;
                 return 1, 11;
             }
             $mv$$match_29$1 = $mv$$vr_31$0 - $mv$$match_28$1;
             $mv$$vr_31$2 = $mv$$vr_31$0 + $mv$$vr_31$2;
             if $mv$$match_28$1 >= 8 {
-                $mv$$match_28$1 = $licm_bytes_72.block.ptr;
+                $mv$$match_28$1 = $licm_bytes_71.block.ptr;
                 b368: block {
                     l369: loop {
                         break_if b368 $mv$$vr_31$0 >= $mv$$vr_31$2;
-                        $cse_78 = builtin::load_i64($mv$$match_28$1 + $mv$$match_29$1);
-                        builtin::store_i64($mv$$match_28$1 + $mv$$vr_31$0, $cse_78);
+                        $cse_77 = builtin::load_i64($mv$$match_28$1 + $mv$$match_29$1);
+                        builtin::store_i64($mv$$match_28$1 + $mv$$vr_31$0, $cse_77);
                         $mv$$match_29$1 = $mv$$match_29$1 + 8;
                         $mv$$vr_31$0 = $mv$$vr_31$0 + 8;
                         continue l369;
                     };
                 };
             } else {
-                $mv$$match_28$1 = $licm_bytes_72.block.ptr;
+                $mv$$match_28$1 = $licm_bytes_71.block.ptr;
                 b370: block {
                     l371: loop {
                         break_if b370 $mv$$vr_31$0 >= $mv$$vr_31$2;
-                        value_105 = builtin::load_u8($mv$$match_28$1 + ($mv$$match_29$1 * 1));
-                        builtin::store_u8($mv$$match_28$1 + ($mv$$vr_31$0 * 1), value_105);
+                        value_104 = builtin::load_u8($mv$$match_28$1 + ($mv$$match_29$1 * 1));
+                        builtin::store_u8($mv$$match_28$1 + ($mv$$vr_31$0 * 1), value_104);
                         $mv$$match_29$1 = $mv$$match_29$1 + 1;
                         $mv$$vr_31$0 = $mv$$vr_31$0 + 1;
                         continue l371;
@@ -3023,7 +3023,7 @@ fn "core:zlib/inflate_codes$sroa[return]"(state, input, output) {
             }
             $mv$$vr_31$0 = $mv$$vr_31$2;
             output.len = $mv$$vr_31$0;
-            state.hold = $hfs_hold_128;
+            state.hold = $hfs_hold_127;
             state.bits = $mv$$vr_31$1;
             continue l344;
         };
@@ -6140,8 +6140,8 @@ source.len() - count: "), used: 23 }, s5: struct.new "core:prelude/string.wado//
     unreachable;
 }
 
-fn "core:linear/core:linear/LinearArray<u8>::resize$contract_report0"($v0, len, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:linear//$tmpl$59e16269228f9c88" { h0: $site, h1: $v0, h2: len, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::resize failed at "), used: 42 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::resize failed at "), used: 42 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:linear/core:linear/LinearArray<u8>::lengthen$contract_report0"($v0, len, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:linear//$tmpl$59e16269228f9c88" { h0: $site, h1: $v0, h2: len, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::lengthen failed at "), used: 44 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::lengthen failed at "), used: 44 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: self.len() <= len
 self.len(): "), used: 42 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: self.len() <= len
@@ -6400,11 +6400,11 @@ fn "core:zlib/core:zlib/Output::reserve$cold0"(self, n) {
     let $load_1: i32;
     let doubled: i32;
     doubled = select i32($load_1 < 1073741823, local.tee $load_1(local.tee $load_0(self.bytes).len), 1073741823) * 2;
-    "core:linear/core:linear/LinearArray<u8>::resize$unchecked"($load_0, local.tee n(select i32(n > doubled, local.tee n(self.len + n), doubled)), if @unlikely($load_1 > n) {
+    "core:linear/core:linear/LinearArray<u8>::lengthen$unchecked"($load_0, n = select i32(n > doubled, local.tee n(self.len + n), doubled); if @unlikely($load_1 > n) {
         cold_path;
-        "core:linear/core:linear/LinearArray<u8>::resize$contract_report0"($load_1, n, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:938"), used: 13 });
+        "core:linear/core:linear/LinearArray<u8>::lengthen$contract_report0"($load_1, n, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:938"), used: 13 });
         unreachable;
-    }; 0);
+    }; n);
 }
 
 fn "core:zlib/inflate_stored$cold0$dae[state,input,output]"($v0) {
@@ -8350,14 +8350,14 @@ fn "core:linear/core:linear/Block^core:prelude/traits.wado/Drop::drop"($mv$self$
     drop("mem/realloc"($mv$self$ptr, $mv$self$bytes, 16, 0));
 }
 
-fn "core:linear/core:linear/LinearArray<u8>::resize$unchecked"(self, len, value) {
+fn "core:linear/core:linear/LinearArray<u8>::lengthen$unchecked"(self, len) {
     let $load_0: ref null "core:linear//Block";
     let $load_5: ref null "core:linear//Block";
-    let $av_8: i32;
+    let $av_7: i32;
     if len > local.tee $load_0(self.block).bytes {
-        $av_8 = self.len;
+        $av_7 = self.len;
         $load_0 = block -> ref null "core:linear//Block" {
-            "core:linear/grown"($load_0.ptr, $load_0.bytes, $av_8, len - $av_8);
+            "core:linear/grown"($load_0.ptr, $load_0.bytes, $av_7, len - $av_7);
         };
         if ref.is_null(local.tee $load_5(self.block)) {
             self.block = $load_0;
@@ -8367,8 +8367,6 @@ fn "core:linear/core:linear/LinearArray<u8>::resize$unchecked"(self, len, value)
             $load_5.bytes = $load_0.bytes;
         }
     }
-    $av_8 = self.len;
-    builtin::memory_fill(self.block.ptr + $av_8, value, len - $av_8);
     self.len = len;
 }
 

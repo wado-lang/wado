@@ -302,16 +302,16 @@ impl LinearArray<u8> {
         builtin::memory_copy(self.block.ptr + at, source.block.ptr + from, count);
     }
 
-    /// Lengthens the array to `len` bytes, each new one `value`. The block at
-    /// least doubles where it grows, so growing a byte at a time copies each
-    /// byte a bounded number of times.
-    internal fn resize(&mut self, len: i32, value: u8)
+    /// Lengthens the array to `len` bytes, the new ones unwritten: the caller
+    /// writes each before reading it. The block at least doubles where it
+    /// grows, so growing a byte at a time copies each byte a bounded number of
+    /// times.
+    internal fn lengthen(&mut self, len: i32)
         contract self.len() <= len
     {
         if len > self.block.bytes {
             self.block = grown(&self.block, self.len, len - self.len);
         }
-        builtin::memory_fill(self.block.ptr + self.len, value, len - self.len);
         self.len = len;
     }
 

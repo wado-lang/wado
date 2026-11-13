@@ -935,7 +935,7 @@ impl Output {
         if self.bytes.len() - self.len < n {
             builtin::cold_path();
             let doubled = i32::min(self.bytes.len(), i32::MAX / 2) * 2;
-            self.bytes.resize(i32::max(self.len + n, doubled), 0);
+            self.bytes.lengthen(i32::max(self.len + n, doubled));
         }
     }
 

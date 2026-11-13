@@ -37,7 +37,7 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::primitive::PrimitiveType;
-use crate::tir::{BuiltinDeclaration, ResolvedType, TypeId};
+use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
