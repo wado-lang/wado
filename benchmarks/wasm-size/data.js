@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794551329046,
+  "lastUpdate": 1794553665606,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77145,6 +77145,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ad4c08febed627de2d4d2d80e353b6bb36d0fdc1"
         },
         "date": 1794551328354,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21773,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434207,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "96f1bcef825ee72c20fbe3a10db2aaca2067df29",
+          "message": "Merge pull request #2617 from wado-lang/compiler/newtype-head-blankets\n\nfix(compiler): a newtype's blanket static ranks at the link its bound holds at",
+          "timestamp": "2026-11-13T15:48:27+09:00",
+          "tree_id": "aeda34659ca08cf4951fafa56d77d72c43833458",
+          "url": "https://github.com/wado-lang/wado/commit/96f1bcef825ee72c20fbe3a10db2aaca2067df29"
+        },
+        "date": 1794553665174,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
