@@ -2227,12 +2227,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// A subscript read on a bounded container, dispatched through its bounds
-    /// as an operator is, falling back as a concrete container does: a value
-    /// read to `IndexValue`, else to `IndexRef` and a deref, a shared reference
-    /// to `IndexRef`, else to the copy `IndexValue` gives, and a mutable one to
-    /// `IndexRefMut`, else to `IndexRef`.
-    /// `None` where `container` is not one; a missing trait is reported as
-    /// `ERROR`.
+    /// as an operator is: a value read to `IndexValue`, else to `IndexRef` and
+    /// a deref, a shared reference to `IndexRef`, else to the copy `IndexValue`
+    /// gives, and a mutable one to `IndexRefMut`, else to `IndexRef`. `None`
+    /// where `container` is not one; a missing trait is reported as `ERROR`.
     pub(super) fn dispatch_index_through_bounds(
         &mut self,
         index: &ast::IndexExpr,

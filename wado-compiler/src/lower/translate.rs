@@ -1236,10 +1236,9 @@ impl FunctionTranslator<'_, '_> {
         {
             return None;
         }
-        let copied = self.wrap_value_copy_operand(self.convert_operand(referent), referent.type_id);
         let reference = ExprKind::Unary {
             op: nir::NirUnaryOp::Ref,
-            expr: copied,
+            expr: self.assigned_value(referent, referent.type_id),
         };
         Some(self.alloc_expr(reference, value.type_id, value.span).into())
     }

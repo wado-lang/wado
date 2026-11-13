@@ -2734,8 +2734,7 @@ pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
 
         // A malformed DEFLATE member fails here, before `consumed` locates the trailer.
         let consumed = inflate_raw_ex(&linear, data_start, input.len() - data_start, &mut output)?;
-        let member_offset = output.start;
-        let member_len = output.len - member_offset;
+        let member_len = output.len - output.start;
 
         // The gzip trailer (RFC 1952 section 2.3.1) is CRC32 then ISIZE, each a
         // 4-byte little-endian value, immediately after the DEFLATE member.
@@ -2745,7 +2744,7 @@ pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
             return Result::Err(ZlibError::TruncatedTrailer);
         }
 
-        let computed_crc = crc32_over(crc32_init(), &output.bytes, member_offset, member_len);
+        let computed_crc = crc32_over(crc32_init(), &output.bytes, output.start, member_len);
         if computed_crc != linear.load_at::<u32>(trailer_pos) {
             builtin::cold_path();
             return Result::Err(ZlibError::Crc32Mismatch);
