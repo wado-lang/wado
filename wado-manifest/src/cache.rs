@@ -97,8 +97,7 @@ fn parse_git_url(url: &str) -> Option<String> {
         }
         _ => after_user.to_string(),
     };
-    let trimmed = normalized.trim_end_matches('/');
-    let trimmed = trimmed.strip_suffix(".git").unwrap_or(trimmed);
+    let trimmed = normalized.trim_end_matches('/').trim_suffix(".git");
     let segments: Vec<&str> = trimmed.split('/').filter(|s| !s.is_empty()).collect();
     // A `file://` URL or a bare absolute path (used for local repos and tests)
     // has no `host/owner/repo` prefix, so key it on the trailing three path

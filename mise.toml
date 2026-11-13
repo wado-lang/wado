@@ -197,25 +197,35 @@ set -e -o pipefail
 
 # The wasm-tools family is pinned to wasmtime's generation in
 # [workspace.dependencies], so cargo dedupes instead of compiling parallel 0.x
-# trees. `allow` holds the duplicates from transitive deps we cannot pin:
+# trees. wado-run-webgpu is a workspace of its own with no such pins, so only
+# its Cargo.lock holds it there. `allow` holds the duplicates from transitive
+# deps we cannot pin:
 #   wast 35.0.2                        <- witx <- wasmtime-wasi (wiggle)
 family='wasm-encoder|wasmparser|wasmprinter|wasm-metadata|wat|wast|wit-parser|wit-component'
 allow='wast v35.0.2'
 
-offenders=$(cargo tree -d 2>/dev/null \
-    | awk '{print $1, $2}' \
-    | grep -E "^(${family}) v" \
-    | sort -u \
-    | grep -Ev "^(${allow})$" \
-    | awk '{seen[$1]++; vers[$1]=vers[$1] " " $2} END {for (n in seen) if (seen[n] > 1) print "  " n ":" vers[n]}' \
-    || true)
+failed=0
+for manifest in Cargo.toml wado-run-webgpu/Cargo.toml; do
+    duplicates=$(cargo tree -d --manifest-path "${manifest}")
+    offenders=$(echo "${duplicates}" \
+        | awk '{print $1, $2}' \
+        | grep -E "^(${family}) v" \
+        | sort -u \
+        | grep -Ev "^(${allow})$" \
+        | awk '{seen[$1]++; vers[$1]=vers[$1] " " $2} END {for (n in seen) if (seen[n] > 1) print "  " n ":" vers[n]}' \
+        || true)
+    if [ -n "${offenders}" ]; then
+        echo "error: ${manifest}: wasm-tools crates are not aligned with wasmtime's generation:" >&2
+        echo "${offenders}" >&2
+        failed=1
+    fi
+done
 
-if [ -n "${offenders}" ]; then
-    echo "error: wasm-tools crates are not aligned with wasmtime's generation:" >&2
-    echo "${offenders}" >&2
+if [ "${failed}" -ne 0 ]; then
     echo "" >&2
-    echo "Pin them in [workspace.dependencies] to match wasmtime, or add the exact" >&2
-    echo "version to 'allow' above if it comes from an unpinnable transitive dep." >&2
+    echo "Pin them in [workspace.dependencies] to match wasmtime; in wado-run-webgpu," >&2
+    echo "hold the lock with \\`cargo update -p <crate> --precise <version>\\`. Or add the" >&2
+    echo "exact version to 'allow' above if it comes from an unpinnable transitive dep." >&2
     exit 1
 fi
 echo "ok: wasm-tools crates are deduped on wasmtime's generation"

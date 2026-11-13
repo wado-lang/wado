@@ -88,7 +88,7 @@ impl From<wasm_encoder::reencode::Error> for Error {
             E::UnexpectedNonCoreModuleSection
             | E::UnexpectedNonComponentSection
             | E::UnsupportedCoreTypeInComponent => Error::Unsupported("not a core wasm module"),
-            E::UserError(e) => match e {},
+            E::UserError(never) => never,
         }
     }
 }

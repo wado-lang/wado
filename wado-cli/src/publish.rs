@@ -239,7 +239,7 @@ async fn publish_workspace(
             .map_err(CliExit::error)?
             .ok_or_else(|| CliExit::error(format!("no wado.toml in member {}", dir.display())))?;
         emit_manifest_warnings(&project);
-        let label = dir.strip_prefix(root).unwrap_or(&dir).display().to_string();
+        let label = dir.trim_prefix(root).display().to_string();
         candidates.push((label, project));
     }
 

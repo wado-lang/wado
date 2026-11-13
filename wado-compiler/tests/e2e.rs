@@ -1953,7 +1953,7 @@ fn keep_wasm_artifacts(dir: &str, fixture_name: &str, opt_name: &str, wasm: &[u8
         eprintln!("[{test_id}] WADO_KEEP_WASM_DIR: cannot create '{dir}': {e}");
         return;
     }
-    let stem = fixture_name.strip_suffix(".wado").unwrap_or(fixture_name);
+    let stem = fixture_name.trim_suffix(".wado");
     let wasm_path = dir_path.join(format!("{stem}.{opt_name}.wasm"));
     if let Err(e) = std::fs::write(&wasm_path, wasm) {
         eprintln!(

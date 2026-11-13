@@ -83,7 +83,6 @@ pub(crate) mod stdlib_snapshot;
 pub mod test_names;
 mod write_sites;
 use crate::ast::{Item, Type, UseDecl, attrs_allow, inner_attrs_allow, lint};
-use std::convert::Infallible;
 use std::sync::Arc;
 
 use crate::codegen::EmitFailure;
@@ -1346,7 +1345,7 @@ impl<'a> LibTypeBinder<'a> {
         }
     }
 
-    fn bind_type(&self, ty: &mut ast::Type) -> Result<(), Infallible> {
+    fn bind_type(&self, ty: &mut ast::Type) -> Result<(), !> {
         bind_type_names(ty, self.resolutions, &mut |named, def| {
             if let Some(source) = self.interfaces.get(&def) {
                 self.registry.set_source_interface(named.id, source.clone());

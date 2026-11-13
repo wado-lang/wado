@@ -6,7 +6,6 @@
 //! graph — and keeps yielding it as new opcodes land.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::convert::Infallible;
 
 use wasm_encoder::reencode::{Error as ReencodeError, Reencode};
 use wasmparser::{ElementItems, ElementKind, ExternalKind};
@@ -473,7 +472,7 @@ struct Refs {
 struct Recorder<'a>(&'a mut Refs);
 
 impl Reencode for Recorder<'_> {
-    type Error = Infallible;
+    type Error = !;
 
     /// `call x` and `ref.func x` both reach `function_index`, but only the
     /// second one needs `x` declared, so it is picked out here.

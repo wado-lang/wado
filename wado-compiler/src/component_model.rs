@@ -3004,7 +3004,7 @@ impl CmInterfaceRegistry {
             ModuleSource::Core { name } => (None, name.as_str()),
             _ => return Vec::new(),
         };
-        let stem = path.strip_suffix(".wado").unwrap_or(path);
+        let stem = path.trim_suffix(".wado");
         let wanted = (namespace, format!("{stem}.wado"));
         // A types-only interface (`wasi:cli/types`) has no functions, so only
         // the types it declares name it.

@@ -1,4 +1,3 @@
-use std::convert::Infallible;
 use std::fmt::Write as _;
 use std::future::Future;
 use std::net::SocketAddr;
@@ -357,7 +356,7 @@ struct ChannelBody {
 
 impl http_body::Body for ChannelBody {
     type Data = Bytes;
-    type Error = Infallible;
+    type Error = !;
 
     fn poll_frame(
         mut self: Pin<&mut Self>,
@@ -371,7 +370,7 @@ impl http_body::Body for ChannelBody {
     }
 }
 
-type StreamingBody = UnsyncBoxBody<Bytes, Infallible>;
+type StreamingBody = UnsyncBoxBody<Bytes, !>;
 
 fn error_response(status: u16, msg: String) -> HyperResponse<StreamingBody> {
     let body: Full<Bytes> = Full::new(Bytes::from(msg));

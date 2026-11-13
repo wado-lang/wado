@@ -1468,6 +1468,18 @@ impl StrSlice {
         return Option::Some(unchecked self.slice(0, self.len() - suffix_len));
     }
 
+    /// The view with `prefix` removed from the front once, or the whole view
+    /// when it does not start with `prefix`.
+    pub fn trim_prefix<S: AsStrSlice>(&self, prefix: S) -> StrSlice {
+        return self.strip_prefix(prefix).unwrap_or(*self);
+    }
+
+    /// The view with `suffix` removed from the end once, or the whole view
+    /// when it does not end with `suffix`.
+    pub fn trim_suffix<S: AsStrSlice>(&self, suffix: S) -> StrSlice {
+        return self.strip_suffix(suffix).unwrap_or(*self);
+    }
+
     /// Byte order against any text, the `cmp` a generic body cannot reach:
     /// `Ord` compares two `StrSlice`s, and a type parameter is neither.
     pub fn cmp_str<S: AsStrSlice>(&self, other: S) -> Ordering {
@@ -1822,6 +1834,14 @@ pub trait AsStrSlice: Eq<String> + Display with () {
 
     fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<StrSlice> {
         return self.as_str_slice().strip_suffix(suffix);
+    }
+
+    fn trim_prefix<P: AsStrSlice>(&self, prefix: P) -> StrSlice {
+        return self.as_str_slice().trim_prefix(prefix);
+    }
+
+    fn trim_suffix<P: AsStrSlice>(&self, suffix: P) -> StrSlice {
+        return self.as_str_slice().trim_suffix(suffix);
     }
 
     fn cmp_str<P: AsStrSlice>(&self, other: P) -> Ordering {

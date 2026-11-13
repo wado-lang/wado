@@ -981,14 +981,8 @@ fn synthesize_lift_map(
             i32_const(layout.offsets[slot] as i32),
         );
         let mut slot_stmts: Vec<TirStmt> = Vec::new();
-        let value = synthesize_lift_inner(
-            slot_ty,
-            slot_addr.clone(),
-            next_local,
-            &mut slot_stmts,
-            locals,
-            ctx,
-        );
+        let value =
+            synthesize_lift_inner(slot_ty, slot_addr, next_local, &mut slot_stmts, locals, ctx);
         loop_stmts.extend(slot_stmts);
         let value = materialize_if_needed(value, next_local, &mut loop_stmts, locals);
         lifted.push(value);

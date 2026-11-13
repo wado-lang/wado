@@ -238,10 +238,7 @@ fn display_path(path: &Path) -> String {
     let cwd = env::current_dir()
         .and_then(|dir| dir.canonicalize())
         .expect("the current directory must resolve");
-    path.strip_prefix(&cwd)
-        .unwrap_or(path)
-        .display()
-        .to_string()
+    path.trim_prefix(&cwd).display().to_string()
 }
 
 #[cfg(test)]

@@ -130,7 +130,7 @@ pub fn unchecked_twin_name(name: &str) -> String {
 
 /// The name a twin's function goes by, where `name` may name the twin.
 pub fn checked_name(name: &str) -> &str {
-    name.strip_suffix(UNCHECKED_TWIN_SUFFIX).unwrap_or(name)
+    name.trim_suffix(UNCHECKED_TWIN_SUFFIX)
 }
 
 const UNCHECKED_TWIN_SUFFIX: &str = "$unchecked";
@@ -1029,7 +1029,7 @@ pub fn eq_payload_local(side: &str, case: &str, index: u32) -> String {
 /// What a copy of the local named `name` is minted under, for [`minted_name`].
 #[must_use]
 pub fn copied_local_what(name: &str) -> &str {
-    name.strip_prefix(INTERNAL_PREFIX).unwrap_or(name)
+    name.trim_prefix(INTERNAL_PREFIX)
 }
 
 /// `name` told apart by `serial` from a same-spelled name already taken.
@@ -2337,7 +2337,7 @@ pub fn filesystem_to_module_path(project_root: &str, file_path: &str) -> Option<
     let relative = path.strip_prefix(&root)?;
 
     // Remove leading slash if present
-    let relative = relative.strip_prefix('/').unwrap_or(relative);
+    let relative = relative.trim_prefix('/');
 
     // Ensure it starts with ./
     if relative.starts_with("./") {

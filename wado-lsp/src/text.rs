@@ -110,8 +110,7 @@ pub fn lsp_position_to_line_col(
 #[must_use]
 pub(crate) fn line_without_terminator(line: &str) -> &str {
     line.strip_suffix('\n')
-        .map(|s| s.strip_suffix('\r').unwrap_or(s))
-        .unwrap_or(line)
+        .map_or(line, |s| s.trim_suffix('\r'))
 }
 
 /// Convert a compiler `Span` to an LSP `Range` in the negotiated

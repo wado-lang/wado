@@ -326,7 +326,7 @@ pub fn run_pipeline(
 
                         if tx
                             .send(WriteBatch {
-                                name: item.name.clone(),
+                                name: item.name,
                                 outputs,
                                 compile_time,
                             })

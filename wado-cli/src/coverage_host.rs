@@ -270,11 +270,7 @@ impl CoverageRun {
         let Ok(absolute) = file.canonicalize() else {
             return path.to_string();
         };
-        absolute
-            .strip_prefix(&self.root)
-            .map_or(absolute.as_path(), |rel| rel)
-            .display()
-            .to_string()
+        absolute.trim_prefix(&self.root).display().to_string()
     }
 
     /// Report through `reporter` and write the reports, given the run's
@@ -344,14 +340,14 @@ fn write_profiles(
     }
     let mut written = String::new();
     for (file, coverage) in profiles {
-        let shown = file.strip_prefix(root).unwrap_or(file).display();
+        let shown = file.trim_prefix(root).display();
         std::fs::create_dir_all(file.parent().expect("a profile lies in `pgo/`"))
             .and_then(|()| std::fs::write(file, pgo::to_text(coverage)))
             .map_err(|e| CliExit::error(format!("pgo: writing {shown}: {e}")))?;
         let _ = writeln!(written, "pgo: wrote {shown}");
     }
     for file in owned.iter().filter(|file| !profiles.contains_key(*file)) {
-        let shown = file.strip_prefix(root).unwrap_or(file).display();
+        let shown = file.trim_prefix(root).display();
         match std::fs::remove_file(file) {
             Ok(()) => {
                 let _ = writeln!(written, "pgo: removed {shown}");

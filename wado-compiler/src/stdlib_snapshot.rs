@@ -7,6 +7,7 @@
 use std::cell::{Cell, OnceCell, RefCell};
 use std::fmt::Write as _;
 use std::future::Future;
+use std::mem::DropGuard;
 use std::pin::pin;
 use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
@@ -119,14 +120,8 @@ fn build_guarded(coverage: Option<CoverageScope>, profile: Option<Applied<'_>>) 
     // otherwise an upstream `catch_unwind` (test harness, fuzzer) would leave
     // `BUILDING` stuck at `true` for the rest of the thread's lifetime,
     // permanently disabling the cache on that thread.
-    struct ResetGuard;
-    impl Drop for ResetGuard {
-        fn drop(&mut self) {
-            BUILDING.with(|c| c.set(false));
-        }
-    }
     BUILDING.with(|c| c.set(true));
-    let _guard = ResetGuard;
+    let _guard = DropGuard::new((), |()| BUILDING.with(|c| c.set(false)));
     build_snapshot(coverage, profile)
 }
 

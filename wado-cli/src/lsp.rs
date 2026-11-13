@@ -1,6 +1,5 @@
 //! `wado lsp` subcommand — delegates to the stdio LSP server in `wado-lsp`.
 
-use std::convert::Infallible;
 use std::fmt::Write as _;
 use std::pin::pin;
 use std::sync::Mutex;
@@ -72,7 +71,7 @@ fn install_prefetcher(pulls: mpsc::UnboundedSender<RegistryComponentNeed>) {
 
 /// Pull each need as it arrives, warning of a pull that fails. A pull's panic
 /// continues here.
-async fn prefetch(mut needs: mpsc::UnboundedReceiver<RegistryComponentNeed>) -> Infallible {
+async fn prefetch(mut needs: mpsc::UnboundedReceiver<RegistryComponentNeed>) -> ! {
     let mut pulls = JoinSet::new();
     loop {
         let need = {
@@ -104,7 +103,7 @@ pub async fn run(_opts: LspOptions) -> Result<(), CliExit> {
         tokio::task::spawn_blocking(|| Handle::current().block_on(wado_lsp::server::run_stdio()));
     let code = match select(server, pin!(prefetch(needs))).await {
         Either::Left((code, _)) => joined(code),
-        Either::Right((never, _)) => match never {},
+        Either::Right((never, _)) => never,
     };
     match code {
         0 => Ok(()),

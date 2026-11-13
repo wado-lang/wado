@@ -321,7 +321,7 @@ pub fn synthesize_traits(project: Package) -> Package {
             trait_env: &trait_env,
             pending: &mut pending,
             requested: &requested,
-            module: module_source.clone(),
+            module: module_source,
             names: &names,
             partial_impls: &partial_impls,
         };
@@ -368,7 +368,7 @@ pub fn synthesize_defaults(project: &mut Package) {
             trait_env: &trait_env,
             pending: &mut pending,
             requested: &requested,
-            module: module_source.clone(),
+            module: module_source,
             names: &names,
             partial_impls: &partial_impls,
         };

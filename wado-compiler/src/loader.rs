@@ -2503,7 +2503,7 @@ fn resolve_include_path_impl(
     if is_remote(module_source_str) {
         return resolve_module_path(module_source_str, include_path);
     }
-    let stripped = include_path.strip_prefix("./").unwrap_or(include_path);
+    let stripped = include_path.trim_prefix("./");
     if let Some(dir) = dir_prefix_to_keep(entry_module_source, module_source_str) {
         format!("{dir}/{stripped}")
     } else {

@@ -661,8 +661,7 @@ fn build_memory_module(
 /// only `[A-Za-z0-9_-]`, so colons and slashes are replaced with `_`.
 fn sanitise_wasm_namespace_for_label(namespace: &str) -> String {
     namespace
-        .strip_prefix("wasm:")
-        .unwrap_or(namespace)
+        .trim_prefix("wasm:")
         .chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
@@ -2879,7 +2878,7 @@ fn collect_component_asset(asset: &WasmAsset, project: &NirPackage) -> Vec<u8> {
 
     // A `cabi_post_` export belongs to the lift it is named after, so it lives
     // and dies with it rather than being asked about separately.
-    let stub = |name: &str| unused.contains(name.strip_prefix("cabi_post_").unwrap_or(name));
+    let stub = |name: &str| unused.contains(name.trim_prefix("cabi_post_"));
     wado_wasm_embed::embed_component(
         &asset.bytes,
         &wado_wasm_embed::Embed {

@@ -107,7 +107,7 @@ pub fn resolve_import_plan(
             if has_used_function || export_referenced_interfaces.contains(&interface_info.path) {
                 push(
                     &mut entries,
-                    interface_info.path.clone(),
+                    interface_info.path,
                     ImportKind::ResourceDefiningInterface,
                 );
             }

@@ -281,10 +281,7 @@ impl SymbolIndex {
 
 /// Whether `file` is `path` or inside it; everything is under an empty path.
 fn is_under(file: &String, path: &String) -> bool {
-    let dir = match path.strip_suffix("/") {
-        Some(d) => d.to_string(),
-        None => *path,
-    };
+    let dir = path.trim_suffix("/");
     return dir.is_empty() || *file == dir || file.starts_with(`${dir}/`);
 }
 

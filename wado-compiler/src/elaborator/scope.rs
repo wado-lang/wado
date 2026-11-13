@@ -7,6 +7,7 @@
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::hash::Hash;
+use std::mem::DropGuard;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
@@ -986,25 +987,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         key: K,
         body: impl FnOnce(&mut Self) -> Option<R>,
     ) -> Option<R> {
-        struct Pop<'r, 'a, H: CompilerHost, K: Eq + Hash> {
-            elaborator: &'r mut Elaborator<'a, H>,
-            stack: fn(&mut Scope) -> &mut IndexSet<K>,
-            key: K,
-        }
-        impl<H: CompilerHost, K: Eq + Hash> Drop for Pop<'_, '_, H, K> {
-            fn drop(&mut self) {
-                (self.stack)(&mut self.elaborator.annotate_ctx).shift_remove(&self.key);
-            }
-        }
         if !stack(&mut self.annotate_ctx).insert(key.clone()) {
             return None;
         }
-        let guard = Pop {
-            elaborator: self,
-            stack,
-            key,
-        };
-        body(guard.elaborator)
+        let mut walk = DropGuard::new(self, move |e| {
+            stack(&mut e.annotate_ctx).shift_remove(&key);
+        });
+        body(&mut walk)
     }
 
     /// Make `Self` stand for `binding` for the rest of this scope, every part
@@ -1024,23 +1013,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         binding: SelfBinding,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        struct Restore<'r, 'a, H: CompilerHost> {
-            elaborator: &'r mut Elaborator<'a, H>,
-            saved: Option<SelfFrame>,
-        }
-        impl<H: CompilerHost> Drop for Restore<'_, '_, H> {
-            fn drop(&mut self) {
-                let saved = self.saved.take().expect("saved self frame present");
-                self.elaborator.annotate_ctx.restore_self_frame(saved);
-            }
-        }
         let saved = self.annotate_ctx.take_self_frame();
         self.set_self_binding(binding);
-        let guard = Restore {
-            elaborator: self,
-            saved: Some(saved),
-        };
-        body(guard.elaborator)
+        let mut bound = DropGuard::new(self, |e| e.annotate_ctx.restore_self_frame(saved));
+        body(&mut bound)
     }
 
     /// [`Self::with_self_binding`] where there is a binding, and `body` as it

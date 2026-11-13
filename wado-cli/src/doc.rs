@@ -1292,7 +1292,7 @@ fn collapse_md_spaces(s: &str) -> String {
 
     for c in s.chars() {
         if c == '`' {
-            in_code = !in_code;
+            in_code.toggle();
             result.push(c);
             prev_space = false;
         } else if c == ' ' && !in_code {
@@ -1319,7 +1319,7 @@ fn replace_md_emphasis(s: &str) -> String {
 
     while i < chars.len() {
         if chars[i] == '`' {
-            in_code = !in_code;
+            in_code.toggle();
             result.push('`');
             i += 1;
         } else if !in_code && chars[i] == '*' {
