@@ -1,0 +1,35 @@
+// A load from linear memory hands back a number, which no collector moves, so
+// it is no safepoint. `sum_words` loops over loads, is over the threshold, and
+// has one site: `sum_twice` splices it there as it would a loop of arithmetic.
+
+fn sum_words(at: i32, count: i32) -> i32 {
+    let mut total = 0;
+    let mut i = 0;
+    while i < count {
+        let word = builtin::load::<i32>(at + i * 4);
+        total += (word ^ builtin::load::<i32>(at)) * 3 + (word >> 2) - (word & 7) * builtin::load::<i32>(at + 4);
+        i += 1;
+    }
+    return total;
+}
+
+#[inline(never)]
+fn sum_twice(at: i32, count: i32) -> i32 {
+    return sum_words(at, count) * 2;
+}
+
+export fn run() {
+    let p = builtin::realloc(0, 0, 4, 16);
+    for let i of 0..<4 {
+        builtin::store(p + i * 4, i + 1);
+    }
+    assert sum_twice(p, builtin::black_box(4)) == 22;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_pass": {"O2": ["nir/inline"]},
+    "wir_scope": "inline_sole_site_linear_load.wado/sum_twice",
+    "wir_not_expect:O2": ["\"inline_sole_site_linear_load.wado/sum_words\"("]
+}

@@ -852,14 +852,14 @@ fn has_safepoint(
     body: &Body,
     type_table: &TypeTable,
     cold: &RareRuns,
-    safepoint_calls: &[bool],
+    safepoint_calls: &[CallSafepoint],
     written: &IndexSet<u32>,
 ) -> bool {
     struct Walk<'a> {
         body: &'a Body,
         type_table: &'a TypeTable,
         cold: &'a RareRuns,
-        safepoint_calls: &'a [bool],
+        safepoint_calls: &'a [CallSafepoint],
         written: &'a IndexSet<u32>,
     }
     impl Walk<'_> {
@@ -909,7 +909,13 @@ fn has_safepoint(
 
         fn is_safepoint(&self, e: ExprId) -> bool {
             match &self.body.exprs[e].kind {
-                ExprKind::Call { func_id, .. } => self.safepoint_calls[func_id.index()],
+                ExprKind::Call { func_id, .. } => match self.safepoint_calls[func_id.index()] {
+                    CallSafepoint::Never => false,
+                    CallSafepoint::Always => true,
+                    CallSafepoint::WhereObject => !self
+                        .type_table
+                        .is_primitive_like(self.body.exprs[e].type_id),
+                },
                 ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => true,
                 kind => allocates(kind),
             }
@@ -944,19 +950,36 @@ fn has_safepoint(
     .block(body.root())
 }
 
-/// Whether a call to each function, by `FuncId` index, is a safepoint: any call
-/// to a function with a body, a builtin declaring `#[side_effect(opaque)]`
-/// (which leaves for the host), and a builtin whose result is freshly
-/// allocated. The other builtins are Wasm instructions.
-fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<bool> {
+/// Whether a call to a function is a safepoint.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum CallSafepoint {
+    /// A builtin that is a Wasm instruction.
+    Never,
+    /// A function with a body, or a builtin declaring `#[side_effect(opaque)]`,
+    /// which leaves for the host.
+    Always,
+    /// A builtin whose result is freshly allocated, which allocates only where
+    /// that result is an object: a generic one such as `load::<v128>` hands
+    /// back a number.
+    WhereObject,
+}
+
+/// What a call to each function is as a safepoint, by `FuncId` index.
+fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<CallSafepoint> {
+    let declarations = &project.builtin_declarations;
     descriptors
         .iter()
         .map(|callee| {
-            let declarations = &project.builtin_declarations;
-            declarations.leaves_for_host(callee)
-                || declarations
-                    .get(callee)
-                    .is_some_and(BuiltinDeclaration::allocates)
+            if declarations.leaves_for_host(callee) {
+                CallSafepoint::Always
+            } else if declarations
+                .get(callee)
+                .is_some_and(BuiltinDeclaration::allocates)
+            {
+                CallSafepoint::WhereObject
+            } else {
+                CallSafepoint::Never
+            }
         })
         .collect()
 }
@@ -1839,7 +1862,7 @@ fn classify_callee(
     cold: &RareRuns,
     foldable: &[bool],
     loopy: &[bool],
-    safepoint_calls: &[bool],
+    safepoint_calls: &[CallSafepoint],
     written: &IndexSet<u32>,
     sites: usize,
     spliced: &[usize],
