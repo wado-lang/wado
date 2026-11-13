@@ -2759,7 +2759,10 @@ fn scalarize_tails(engine: &mut Engine, tails: &[Tail], plan: &SlotTempSroa) {
 fn slot_writes(engine: &mut Engine, exit: ExprId, plan: &SlotTempSroa, span: Span) -> Vec<StmtId> {
     let mut out = Vec::new();
     // A diverging exit hands over nothing: it stays for its effects alone.
-    if engine.type_table().is_never(engine.body.exprs[exit].type_id) {
+    if engine
+        .type_table()
+        .is_never(engine.body.exprs[exit].type_id)
+    {
         out.push(engine.alloc_stmt(StmtKind::Expr(Operand::Expr(exit)), span));
         return out;
     }
