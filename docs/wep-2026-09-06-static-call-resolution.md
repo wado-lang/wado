@@ -211,7 +211,9 @@ select among that link's candidates only.
 
 A link offers what is written for it, so two kinds of answer do not count. A
 blanket reaches every link alike and so separates none: a link that only a
-blanket answers passes the name down. An impl on another instance of a link
+blanket answers passes the name down. Where no link owns the name, the head
+does: the blankets covering it rank there, so two of them are ambiguous rather
+than the first one found winning. An impl on another instance of a link
 answers nothing for this one. The instance is the one the call spells, or the
 one the chain declares where the head is spelled bare, never one the arguments
 would infer.
