@@ -270,11 +270,7 @@ impl CoverageRun {
         let Ok(absolute) = file.canonicalize() else {
             return path.to_string();
         };
-        absolute
-            .strip_prefix(&self.root)
-            .map_or(absolute.as_path(), |rel| rel)
-            .display()
-            .to_string()
+        absolute.trim_prefix(&self.root).display().to_string()
     }
 
     /// Report through `reporter` and write the reports, given the run's
