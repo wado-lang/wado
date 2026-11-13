@@ -599,7 +599,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return LinkOffer::NotStatic;
         }
-        if !reached.is_empty() {
+        // A derivation is written for the type, so it outranks a blanket
+        // covering it through a bound (`spec-traits`, "The Order").
+        if reached.iter().any(|c| c.origin != CandidateOrigin::Blanket) {
             return LinkOffer::Candidates {
                 reached,
                 out_of_scope,
@@ -608,6 +610,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         match self.derived_callee(query, key) {
             Some(callee) => LinkOffer::Derived(callee),
+            None if !reached.is_empty() => LinkOffer::Candidates {
+                reached,
+                out_of_scope,
+                declaring_args,
+            },
             None => LinkOffer::Nothing { out_of_scope },
         }
     }

@@ -2689,13 +2689,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .bind(&[blanket_slot], &[receiver_type_id])
             .substitute(template_return, &mut self.tysys.type_table.borrow_mut());
         let return_type = self.answer_frame_projections(return_type);
-        let param_types = self.blanket_static_param_types(
-            blanket_def,
-            &blanket_module,
-            &blanket_param,
-            method,
-            receiver_type_id,
-        );
+        let param_types =
+            self.blanket_static_param_types(blanket_def, method_def, &blanket_param, receiver_type_id);
 
         // The method's own slots are solved as an instance call's are: from
         // the turbofish, the arguments, and the type expected of the call.
@@ -2836,14 +2831,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn blanket_static_param_types(
         &mut self,
         blanket: DefId,
-        blanket_module: &ModuleSource,
+        method_def: Option<DefId>,
         blanket_param: &str,
-        method: &str,
         receiver_type_id: TypeId,
     ) -> Vec<TypeId> {
-        let key = ImplTargetKey::TypeParam(blanket_module.clone(), blanket_param.to_string());
-        let template = self
-            .lookup_static_method_sig_keyed(blanket_param, method, Some(&key))
+        let template = method_def
+            .and_then(|def| self.tysys.signatures.method_sig(def))
             .map(|sig| sig.value_param_types())
             .unwrap_or_default();
         let blanket_slot = self.tysys.blanket_param_slot(blanket, blanket_param);

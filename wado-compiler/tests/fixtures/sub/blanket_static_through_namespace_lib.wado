@@ -1,0 +1,41 @@
+pub struct Base {
+    pub v: i32,
+}
+
+impl Base {
+    pub fn mk() -> i32 {
+        return 1;
+    }
+}
+
+pub type N = Base;
+
+pub struct S {
+    pub v: i32,
+}
+
+pub trait B2 with () {
+    fn b2(&self) -> i32;
+}
+
+impl B2 for N {
+    fn b2(&self) -> i32 {
+        return 2;
+    }
+}
+
+impl B2 for S {
+    fn b2(&self) -> i32 {
+        return 3;
+    }
+}
+
+pub trait T2 with () {
+    fn mk() -> i32;
+}
+
+impl<T: B2> T2 for T {
+    fn mk() -> i32 {
+        return 20;
+    }
+}

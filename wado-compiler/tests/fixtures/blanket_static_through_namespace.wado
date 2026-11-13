@@ -1,0 +1,14 @@
+// A blanket's static reached through a namespace: `lib::S::mk()` takes the
+// blanket, and `lib::N::mk()` takes it too, since its bound holds at `N` itself
+// and so outranks `Base`'s own `mk` a link below.
+use lib from "./sub/blanket_static_through_namespace_lib.wado";
+use { T2 } from "./sub/blanket_static_through_namespace_lib.wado";
+
+test {
+    assert lib::S::mk() == 20;
+    assert lib::N::mk() == 20;
+    assert lib::Base::mk() == 1;
+}
+
+__DATA__
+{"test": {}}

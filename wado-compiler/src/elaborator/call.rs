@@ -2317,6 +2317,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if self.report_unresolved_static(&resolved, method_name, &args, call.span) {
                         return TypeTable::ERROR;
                     }
+                    if let Some(blanket) = resolved.blanket()
+                        && let Some(receiver) = ns_receiver_type
+                    {
+                        let arg_sites = arg_sites_of(&call.args, args.len(), call.span);
+                        if let Some(return_type) = self.resolve_blanket_static_method(
+                            receiver,
+                            method_name,
+                            blanket,
+                            call.id,
+                            ident.segments.last().map(|segment| segment.id),
+                            &method_type_args,
+                            &call.args,
+                            &args,
+                            &arg_sites,
+                            expected_type,
+                            call.span,
+                            ctx,
+                        ) {
+                            return return_type;
+                        }
+                    }
                     if !resolved.resolves() {
                         let _ = self.emit(TypeError::UnknownFunction {
                             name: effective_name.to_string(),
