@@ -1725,7 +1725,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         TirExprKind::Match {
             expr: scrutinee,
             arms,
-        } => elab_match(scrutinee, arms, cx),
+        } => elab_match(scrutinee, arms, cx.yields(type_id), cx),
         TirExprKind::WithHandler { .. } => {
             unreachable!("effect dispatch desugars `with` ahead of drop elaboration")
         }
@@ -2119,6 +2119,25 @@ fn is_place(expr: &TirExpr, cx: &Cx) -> bool {
     }
 }
 
+/// Whether `expr` is a field of an object a reference points to: a slot that
+/// object owns, though no move can empty it.
+fn is_field_through_reference(expr: &TirExpr, cx: &Cx) -> bool {
+    let TirExprKind::FieldAccess { expr: object, .. } = &expr.kind else {
+        return false;
+    };
+    let mut root: &TirExpr = object;
+    while let TirExprKind::FieldAccess { expr: inner, .. } = &root.kind {
+        root = inner;
+    }
+    matches!(
+        root.kind,
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            ..
+        }
+    ) || cx.affine_types.tt.borrow().is_reference(root.type_id)
+}
+
 /// Replace the place `expr` with its value, emptying the place:
 /// `{ let $moved = place; place = null; $moved }`.
 fn take_place(expr: &mut TirExpr, cx: &mut Cx) {
@@ -2331,7 +2350,7 @@ fn elab_store(expr: &mut TirExpr, cx: &mut Cx) {
             op: TirUnaryOp::Deref,
             expr: reference,
         } => Some((**reference).clone()),
-        _ if is_place(target, cx) => None,
+        _ if is_place(target, cx) || is_field_through_reference(target, cx) => None,
         _ => return,
     };
     let target = (**target).clone();
@@ -2484,7 +2503,9 @@ fn wrap_in_block(expr: &mut TirExpr, build: impl FnOnce(TirExpr) -> Vec<TirStmt>
 /// temporary: the parts no binding takes drop, and the scrutinee is emptied,
 /// before the body runs. A temporary is spilled first, so an arm that does not
 /// consume leaves it for its statement to drop.
-fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
+/// Each arm's value goes where the match's does, `yields`: an arm whose block
+/// ends in a value the match does not take discards it.
+fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], yields: Tail, cx: &mut Cx) {
     // An arm that does not consume the scrutinee owns nothing it binds.
     let bindings: Vec<Vec<Live>> = arms
         .iter()
@@ -2508,7 +2529,6 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
             elab_expr(guard, true, cx);
         }
         let mut block = into_block(&mut arm.body);
-        let yields = cx.yields(arm.body.type_id);
         elab_scope(&mut block, arm_bindings, ScopeKind::Block, yields, cx);
         // Inserted once the body is elaborated: emptying the scrutinee is a
         // move, not a store that drops what it replaces.

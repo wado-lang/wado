@@ -1,0 +1,53 @@
+// A store into a field reached through a reference drops what the field held,
+// as a store into a local's field does: the object the reference points to
+// owns the slot.
+global mut DROPS: List<i32> = [];
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPS.push(self.id);
+    }
+}
+
+affine struct Holder {
+    tok: Tok,
+}
+
+affine struct Outer {
+    holder: Holder,
+}
+
+impl Holder {
+    fn replace(&mut self, id: i32) {
+        self.tok = Tok { id };
+    }
+
+    fn bump(&mut self) {
+        self.tok = next(&self.tok);
+    }
+}
+
+fn next(t: &Tok) -> Tok {
+    return Tok { id: t.id + 1 };
+}
+
+fn replace_nested(outer: &mut Outer, id: i32) {
+    outer.holder.tok = Tok { id };
+}
+
+test {
+    DROPS = [];
+    let mut h = Holder { tok: Tok { id: 1 } };
+    h.replace(2);
+    assert DROPS == [1];
+    h.bump();
+    assert DROPS == [1, 2];
+    let mut o = Outer { holder: h };
+    replace_nested(&mut o, 10);
+    assert DROPS == [1, 2, 3];
+    assert o.holder.tok.id == 10;
+}
