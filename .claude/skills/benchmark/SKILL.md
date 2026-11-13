@@ -90,8 +90,8 @@ uses a profile, such as the thresholds in `pgo.rs` or the inliner's hot price.
 naming one. http-routing has no `(no-pgo)` row, so its A/B, which
 `benchmark/http_routing/README.md` states, ends at the first verdict.
 
-Whether to record the profile again is a separate decision, and
-`benchmark/AGENTS.md` says what a re-recording commits.
+`mise run update-baselines` records the profiles again, so a branch's
+profiles match its code once it goes up for review.
 
 ## Sweeping a compiler knob
 

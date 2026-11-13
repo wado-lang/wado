@@ -110,8 +110,9 @@ and cut every sentence a reader would skip.
 
 Check mergeability again, as above: `main` moves while these steps run.
 
-Then run `mise run update-baselines` and commit the update. This is the only
-step that updates the baselines. CI fails on any difference from either one:
+Then run `mise run update-baselines` and commit the update, the benchmarks'
+profiles included. This is the only step that updates the baselines. CI fails
+on any difference from either one:
 the stdlib coverage, a region a test now reaches included, and the fuel
 benchmarks. `wado-compiler/lib/AGENTS.md` says what the coverage baseline may
 change.
