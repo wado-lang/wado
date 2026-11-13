@@ -425,13 +425,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 reached,
                 out_of_scope,
                 declaring_args,
-            } => match self.select_at_link(at, &owner.key, reached, &declaring_args) {
-                Some(lookup) => lookup,
-                None => match self.derived_callee(&at, &owner.key) {
-                    Some(callee) => StaticLookup::Found(callee),
-                    None => return owner.out_of_scope_lookup(self, out_of_scope),
-                },
-            },
+            } => {
+                // A blanket the link offers alone owns the call even where the
+                // arguments reject it, as any declaration does: its resolver
+                // reports the arguments.
+                let sole_blanket = match reached.as_slice() {
+                    [only] if only.origin == CandidateOrigin::Blanket => {
+                        only.supply.as_ref().map(|supply| supply.impl_def)
+                    }
+                    _ => None,
+                };
+                match self.select_at_link(at, &owner.key, reached, &declaring_args) {
+                    Some(lookup) => lookup,
+                    None => match (self.derived_callee(&at, &owner.key), sole_blanket) {
+                        (Some(callee), _) => StaticLookup::Found(callee),
+                        (None, Some(blanket)) => StaticLookup::Blanket(blanket),
+                        (None, None) => return owner.out_of_scope_lookup(self, out_of_scope),
+                    },
+                }
+            }
             LinkOffer::Nothing { out_of_scope } => {
                 return owner.out_of_scope_lookup(self, out_of_scope);
             }
@@ -1274,9 +1286,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return tied;
         }
+        // At `!` every blanket reaches the receiver and the call traps once
+        // monomorphized, whichever is instantiated: the first written serves.
+        let on_never = receiver_type.is_some_and(|ty| self.tysys.type_table.borrow().is_never(ty));
         match candidates.len() {
             0 => Selection::None,
             1 => Selection::One(Box::new(candidates.remove(0))),
+            _ if on_never
+                && candidates
+                    .iter()
+                    .all(|c| c.origin == CandidateOrigin::Blanket) =>
+            {
+                Selection::One(Box::new(candidates.remove(0)))
+            }
             // One trait, several impls, and no argument that separated them.
             _ => Selection::Overloaded(
                 candidates
