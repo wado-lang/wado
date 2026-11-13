@@ -3,7 +3,7 @@
 use crate::ast::{self, AstId, BinaryOp, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
-use crate::elaborator::synth::ArgSource;
+use crate::elaborator::synth::{ArgProbe, ArgSource};
 use crate::hashmap::IndexMap;
 use crate::name::{
     ARRAY_TYPE_NAME, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, minted_name,
@@ -1672,6 +1672,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Get base type (unwrap reference if needed)
             let base_type_id = self.tysys.through_ref(indexed_type);
+            if let Some(place) = self.index_assign_through_bounds(index_expr, base_type_id, ctx) {
+                return place;
+            }
 
             {
                 if let Some(struct_name) = self.index_dispatch_head(base_type_id) {
@@ -2221,6 +2224,116 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedTraitMethod::through_bound(operand.receiver, found_trait, method_name, info);
         resolved.return_type = return_type;
         Some(self.dispatch_trait_op_method(receiver, rhs.into_iter().collect(), &resolved, origin))
+    }
+
+    /// A subscript read on a bounded container, dispatched through its bounds
+    /// as an operator is: a value read to `IndexValue`, else to `IndexRef` and a
+    /// deref, and a reference to the element to `IndexRef` / `IndexRefMut`.
+    /// `None` where `container` is not one; a missing trait is reported as
+    /// `ERROR`.
+    pub(super) fn dispatch_index_through_bounds(
+        &mut self,
+        index: &ast::IndexExpr,
+        container: TypeId,
+        access: IndexAccess,
+        ctx: &mut FunctionContext,
+    ) -> Option<TypeId> {
+        let operand = self.bounded_operand(container)?;
+        let candidates: &[CompilerItem] = match access {
+            IndexAccess::Value => &[CompilerItem::IndexValue, CompilerItem::IndexRef],
+            IndexAccess::Shared => &[CompilerItem::IndexRef],
+            IndexAccess::Mutable => &[CompilerItem::IndexRefMut],
+        };
+        for &item in candidates {
+            let Some((resolved, key)) =
+                self.index_method_through_bounds(&operand, index, container, item, ctx)
+            else {
+                continue;
+            };
+            let output =
+                self.dispatch_trait_op_method(container, vec![(key, index.index.span())], &resolved, Some(index.id));
+            if item == CompilerItem::IndexValue {
+                return Some(output);
+            }
+            self.sem
+                .types
+                .operator_dispatch
+                .get_mut(&index.id)
+                .expect("dispatch_trait_op_method records the subscript it is given")
+                .needs_deref = true;
+            return Some(self.tysys.through_ref(output));
+        }
+        self.resolve_expr(&index.index, ctx, None);
+        self.report_operator_bound_missing(&operand.spelled, candidates[0], index.span);
+        Some(TypeTable::ERROR)
+    }
+
+    /// `c[i] = v` on a bounded container, dispatched to `IndexAssign` through
+    /// its bounds. `None` where `container` is not one.
+    fn index_assign_through_bounds(
+        &mut self,
+        index: &ast::IndexExpr,
+        container: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> Option<Result<WritePlace, ()>> {
+        let operand = self.bounded_operand(container)?;
+        let item = CompilerItem::IndexAssign;
+        let Some((resolved, _)) = self.index_method_through_bounds(&operand, index, container, item, ctx)
+        else {
+            self.resolve_expr(&index.index, ctx, None);
+            self.report_operator_bound_missing(&operand.spelled, item, index.span);
+            return Some(Err(()));
+        };
+        let [_, output_type] = resolved.param_types[..] else {
+            panic!("`index_assign` takes a key and a value");
+        };
+        let function_ref = self.operator_impl_function(&resolved, container);
+        self.record_index_assign_dispatch(
+            index.id,
+            OperatorDispatch {
+                function_ref,
+                method_def: resolved.method_def,
+                self_kind: resolved.self_kind,
+                arg_ref_wraps: vec![false, false],
+                return_type: TypeTable::UNIT,
+                needs_deref: false,
+            },
+        );
+        Some(Ok(WritePlace::IndexAssign { output_type }))
+    }
+
+    /// `item`'s method as the bound on `container` declaring it types it, with
+    /// the subscript's key resolved against that bound's key type. `None` where
+    /// no bound declares it; the key is then left unresolved.
+    fn index_method_through_bounds(
+        &mut self,
+        operand: &BoundedOperand,
+        index: &ast::IndexExpr,
+        container: TypeId,
+        item: CompilerItem,
+        ctx: &mut FunctionContext,
+    ) -> Option<(ResolvedTraitMethod, TypeId)> {
+        let method_name = self.tysys.operator_method_name(item);
+        let required = self.tysys.required_compiler_trait(item);
+        let (found_trait, info) = {
+            let mut probe = ArgProbe::new(std::slice::from_ref(&index.index), ctx, None);
+            self.find_method_in_trait_bounds(
+                None,
+                false,
+                &operand.bounds,
+                &method_name,
+                container,
+                index.span,
+                required.as_ref(),
+                ArgSource::Exprs(&mut probe),
+            )?
+        };
+        let key = self.resolve_expr(&index.index, ctx, info.param_types.first().copied());
+        let return_type = self.operator_output_type(container, &found_trait, info.return_type);
+        let mut resolved =
+            ResolvedTraitMethod::through_bound(operand.receiver.clone(), found_trait, &method_name, info);
+        resolved.return_type = return_type;
+        Some((resolved, key))
     }
 
     /// `ty` as an operand its bounds give operators to: a type parameter, or a

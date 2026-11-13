@@ -2259,6 +2259,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         }
 
+        if let Some(read) = self.dispatch_index_through_bounds(index, base_type_id, access, ctx) {
+            return read;
+        }
+
         // For List and custom types, look for Index or IndexValue trait implementation
         // (List implements IndexValue<i32> with type Output = T)
         let struct_name = self

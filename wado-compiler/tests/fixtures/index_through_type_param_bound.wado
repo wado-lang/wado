@@ -1,0 +1,50 @@
+// A subscript on a type parameter dispatches through its indexing bounds, as
+// an operator does through its operator trait's bound, whether the parameter
+// is held by value or by reference: a read through `IndexValue`, or through
+// `IndexRef` where only that bound is written, and a write through
+// `IndexAssign`. The bound's key type types the key, so a literal key takes
+// `i64` where the bound names it.
+struct Squares {}
+
+impl IndexValue<i64> for Squares {
+    type Output = i64;
+
+    fn index_value(&self, index: i64) -> i64 {
+        return index * index;
+    }
+}
+
+fn first<B: IndexValue<i32, Output = u8>>(buf: &B) -> u8 {
+    return buf[0];
+}
+
+fn sum<B: IndexValue<i32, Output = u8>>(buf: B, len: i32) -> i32 {
+    let mut total = 0;
+    for let i of 0..<len {
+        total += buf[i] as i32;
+    }
+    return total;
+}
+
+fn at_three<B: IndexValue<i64, Output = i64>>(table: &B) -> i64 {
+    return table[3];
+}
+
+fn put<B: IndexAssign<i32, Output = u8>>(buf: &mut B) {
+    buf[0] = 5;
+}
+
+fn peek<B: IndexRef<i32, Output = String>>(names: &B) -> String {
+    return names[0];
+}
+
+test {
+    let mut xs: List<u8> = [7, 8, 9];
+    assert first(&xs) == 7;
+    assert sum(xs, 3) == 24;
+    assert at_three(&Squares {}) == 9;
+    put(&mut xs);
+    assert xs[0] == 5;
+    let names: List<String> = ["a"];
+    assert peek(&names) == "a";
+}

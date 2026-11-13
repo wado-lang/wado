@@ -1,0 +1,13 @@
+// A subscript on a type parameter no `IndexValue` bound covers names the
+// parameter and the trait it lacks.
+fn first<B>(buf: &B) -> u8 {
+    return buf[0];
+}
+
+test {
+    let xs: List<u8> = [7];
+    assert first(&xs) == 7;
+}
+
+__DATA__
+{ "compile_error": ":4:12: analysis error: type 'B' does not implement trait 'IndexValue' required by bound on 'B'" }
