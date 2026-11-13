@@ -31,7 +31,6 @@
 //! before it is written, so untrusted input cannot expand without bound.
 //!
 
-use { gc_array_to_memory } from "core:rt";
 use { LinearArray } from "core:linear";
 use { i16x8 } from "core:simd";
 
@@ -1507,40 +1506,125 @@ fn hash3_roll(h: i32, next: u8) -> i32 {
     return (h << 5 ^ next as i32) & 32767;
 }
 
-// Bucket the `run - 1` positions a match covers after `pos`, rolling `h`, the
-// hash `pos` was bucketed under. Starting at `pos` would set `prev[pos]` to
-// `pos` and strand every older candidate in that bucket behind the self-link.
-fn insert_hash_run(scratch: i32, head_ptr: i32, prev_ptr: i32, pos: i32, h: i32, run: i32, input_len: i32) {
-    let limit = i32::min(run, input_len - pos - 2);
-    let mut mh = h;
-    for let mut i = 1; i < limit; i += 1 {
-        mh = hash3_roll(mh, builtin::i32_load8_u(scratch + pos + i + 2));
-        builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
-        builtin::i32_store(head_ptr + mh * 4, pos + i);
-    }
+// The positions LZ77 looks back over (RFC 1951 section 2: "at most 32K input
+// bytes"), and the number of 3-byte hashes; a position's chain slot is it
+// modulo the window.
+global WINDOW: i32 = 32768;
+
+// The longest match DEFLATE codes (RFC 1951 section 3.2.5).
+global MAX_MATCH: i32 = 258;
+
+// LZ77's search over an input: the input in linear memory, with a 16-byte zero
+// pad so a `v128` compare reads past a match's end, and the hash chains. `head`
+// holds the latest position under each hash, and `prev` the position before
+// each one under the same hash; -1 ends a chain.
+affine struct Matcher {
+    bytes: LinearArray<u8>,
+    len: i32,
+    head: LinearArray<i32>,
+    prev: LinearArray<i32>,
 }
 
-// Longest common run of `scratch[a..]` and `scratch[b..]`, capped at `max_len`,
-// via 16-byte SIMD compares. The scratch buffer's 16-byte zero pad keeps the
-// trailing `v128.load` past the match end in bounds.
-fn simd_match_len(scratch: i32, a: i32, b: i32, max_len: i32) -> i32 {
-    let mut n = 0;
-    while n < max_len {
-        let eq = builtin::i8x16_bitmask(builtin::i8x16_eq(
-            builtin::v128_load(scratch + a + n),
-            builtin::v128_load(scratch + b + n),
-        ));
-        if eq == 0xFFFF {
-            n += 16;
-        } else {
-            n += builtin::i32_ctz(eq ^ 0xFFFF);
-            break;
+impl Matcher {
+    fn new(input: &ByteList) -> Matcher {
+        let len = input.len();
+        let mut bytes = LinearArray::<u8>::of_bytes(input, 0, len);
+        bytes.resize(len + 16, 0);
+        return Matcher {
+            bytes,
+            len,
+            head: LinearArray::<i32>::filled(WINDOW, -1),
+            prev: LinearArray::<i32>::filled(WINDOW, -1),
+        };
+    }
+
+    fn byte(&self, pos: i32) -> u8 {
+        return unchecked self.bytes.at(pos);
+    }
+
+    // The hash of the 3 bytes at `pos`.
+    fn hash(&self, pos: i32) -> i32
+        contract 0 <= pos < self.len - 2
+    {
+        return hash3(self.byte(pos), self.byte(pos + 1), self.byte(pos + 2));
+    }
+
+    // Bucket `pos` under its hash `h`.
+    fn insert(&mut self, pos: i32, h: i32) {
+        unchecked self.prev.set(pos & WINDOW - 1, unchecked self.head.at(h));
+        unchecked self.head.set(h, pos);
+    }
+
+    // Bucket the `run - 1` positions a match covers after `pos`, rolling `h`,
+    // the hash `pos` was bucketed under. Starting at `pos` would set
+    // `prev[pos]` to `pos` and strand every older candidate in that bucket
+    // behind the self-link.
+    fn insert_run(&mut self, pos: i32, h: i32, run: i32) {
+        let limit = i32::min(run, self.len - pos - 2);
+        let mut mh = h;
+        for let mut i = 1; i < limit; i += 1 {
+            mh = hash3_roll(mh, self.byte(pos + i + 2));
+            self.insert(pos + i, mh);
         }
     }
-    if n > max_len {
+
+    // The longest match for `pos` among the `max_chain` latest positions
+    // bucketed under its hash `h`, as [length, distance], stopping at one of
+    // `nice_length`. Only a match longer than `best_len` counts; with none,
+    // [best_len, 0].
+    fn longest_match(&self, pos: i32, h: i32, best_len: i32, max_chain: i32, nice_length: i32) -> [i32, i32] {
+        let mut best_len = best_len;
+        let mut best_dist = 0;
+        let mut chain = unchecked self.head.at(h);
+        let mut chain_count = 0;
+        let max_len = i32::min(self.len - pos, MAX_MATCH);
+        while chain >= 0 && chain_count < max_chain {
+            let dist = pos - chain;
+            if dist > WINDOW || dist <= 0 {
+                break;
+            }
+            // A candidate can only win by matching at `cmp` and `cmp - 1`, so
+            // two loads reject most of the chain before the compare loop. The
+            // floor of 2 makes the test apply before any match is found, a
+            // match being at least 3 bytes.
+            let cmp = i32::max(best_len, 2);
+            if cmp < max_len
+                && (self.byte(chain + cmp) != self.byte(pos + cmp)
+                    || self.byte(chain + cmp - 1) != self.byte(pos + cmp - 1)) {
+                chain = unchecked self.prev.at(chain & WINDOW - 1);
+                chain_count += 1;
+                continue;
+            }
+            let match_len = self.match_len(chain, pos, max_len);
+            if match_len >= 3 && match_len > best_len {
+                best_len = match_len;
+                best_dist = dist;
+                if best_len >= nice_length {
+                    break;
+                }
+            }
+            chain = unchecked self.prev.at(chain & WINDOW - 1);
+            chain_count += 1;
+        }
+        return [best_len, best_dist];
+    }
+
+    // The common run of the bytes at `a` and at `b`, capped at `max_len`,
+    // compared 16 at a time.
+    fn match_len(&self, a: i32, b: i32, max_len: i32) -> i32 {
+        let mut n = 0;
+        while n < max_len {
+            let eq = builtin::i8x16_bitmask(builtin::i8x16_eq(
+                unchecked self.bytes.load_at::<v128>(a + n),
+                unchecked self.bytes.load_at::<v128>(b + n),
+            ));
+            if eq != 0xFFFF {
+                return i32::min(n + builtin::i32_ctz(eq ^ 0xFFFF), max_len);
+            }
+            n += 16;
+        }
         return max_len;
     }
-    return n;
 }
 
 /// Compresses data using DEFLATE with fixed Huffman codes and LZ77 matching.
@@ -1565,56 +1649,19 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
         return bw.output;
     }
 
-    // Hash table for LZ77
-    let mut head: List<i32> = List::filled(32768, -1);
-    let mut prev: List<i32> = List::filled(32768, -1);
+    let mut matcher = Matcher::new(input);
 
     let mut pos = 0;
     while pos < input_len {
         let mut best_len = 0;
         let mut best_dist = 0;
+        let mut h = 0;
 
         // Try to find a match (need at least 3 bytes remaining for hash)
         if pos + 2 < input_len {
-            let h = hash3(input[pos], input[pos + 1], input[pos + 2]);
-            let mut chain = unchecked head[h];
-            let mut chain_count = 0;
-
-            let max_len = i32::min(input_len - pos, 258);
-            while chain >= 0 && chain_count < 128 {
-                let dist = pos - chain;
-                if dist > 32768 || dist <= 0 {
-                    break;
-                }
-
-                // Early termination: skip if can't beat current best
-                if best_len >= 3 && best_len < max_len && input[chain + best_len] != input[pos + best_len] {
-                    chain = unchecked prev[chain & 32767];
-                    chain_count += 1;
-                    continue;
-                }
-
-                // Check match length
-                let mut match_len = 0;
-                while match_len < max_len && input[chain + match_len] == input[pos + match_len] {
-                    match_len += 1;
-                }
-
-                if match_len >= 3 && match_len > best_len {
-                    best_len = match_len;
-                    best_dist = dist;
-                    if best_len >= 258 {
-                        break;
-                    }
-                }
-
-                chain = unchecked prev[chain & 32767];
-                chain_count += 1;
-            }
-
-            // Update hash table
-            prev[pos & 32767] = unchecked head[h];
-            head[h] = pos;
+            h = matcher.hash(pos);
+            [best_len, best_dist] = matcher.longest_match(pos, h, 0, 128, MAX_MATCH);
+            matcher.insert(pos, h);
         }
 
         if best_len >= 3 {
@@ -1634,14 +1681,7 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
                 bw.write_bits((best_dist - DIST_BASE[dcode]) as u32, dist_ebits);
             }
 
-            // Insert hash entries for the rest of the match
-            for let mut i = 1; i < best_len; i += 1 {
-                if pos + i + 2 < input_len {
-                    let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
-                    prev[pos + i & 32767] = head[mh];
-                    head[mh] = pos + i;
-                }
-            }
+            matcher.insert_run(pos, h, best_len);
             pos += best_len;
         } else {
             // Emit literal
@@ -2404,20 +2444,8 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
             }
         }
     } else {
-        // Z_DEFAULT_STRATEGY or Z_FILTERED: full LZ77 matching. head/prev in
-        // linear memory (i32.load has no bounds check, unlike WasmGC array.get);
-        // memory.fill 0xFF sets each i32 slot to -1.
-        let hash_bytes = 32768 * 4;
-        let head_ptr = builtin::realloc(0, 0, 4, hash_bytes);
-        let prev_ptr = builtin::realloc(0, 0, 4, hash_bytes);
-        builtin::memory_fill(head_ptr, 0xFF as u8, hash_bytes);
-        builtin::memory_fill(prev_ptr, 0xFF as u8, hash_bytes);
-        // Mirror input into linear memory for the 16-byte SIMD match compares;
-        // the 16-byte pad keeps the trailing v128.load in bounds.
-        let scratch_size = input_len + 16;
-        let scratch = builtin::realloc(0, 0, 16, scratch_size);
-        gc_array_to_memory(input.internal_raw_data_ref(), 0, scratch, input_len);
-        builtin::memory_fill(scratch + input_len, 0 as u8, 16);
+        // Z_DEFAULT_STRATEGY or Z_FILTERED: full LZ77 matching.
+        let mut matcher = Matcher::new(input);
 
         if config.use_lazy {
             // Lazy matching (levels 4-9)
@@ -2434,64 +2462,20 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
                 let mut h = 0;
 
                 if pos + 2 < input_len {
-                    h = hash3(
-                        builtin::i32_load8_u(scratch + pos),
-                        builtin::i32_load8_u(scratch + pos + 1),
-                        builtin::i32_load8_u(scratch + pos + 2),
-                    );
-                    let mut chain = builtin::i32_load(head_ptr + h * 4);
-                    let mut chain_count = 0;
+                    h = matcher.hash(pos);
                     let max_chain = if match_available && prev_match_len >= config.good_length {
                         config.max_chain >> 2;
                     } else {
                         config.max_chain;
                     };
-
-                    let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
-                    while chain >= 0 && chain_count < max_chain {
-                        let dist = pos - chain;
-                        if dist > 32768 || dist <= 0 {
-                            break;
-                        }
-
-                        // A candidate can only win by matching at `cmp` and
-                        // `cmp - 1`, so two loads reject most of the chain
-                        // before the compare loop. The floor of 2 makes the
-                        // test apply before any match is found, a match being
-                        // at least 3 bytes.
-                        let cmp = if best_len >= 2 { best_len } else { 2 };
-                        if cmp < max_len
-                            && (builtin::i32_load8_u(scratch + chain + cmp) != builtin::i32_load8_u(scratch + pos + cmp)
-                                || builtin::i32_load8_u(scratch + chain + cmp - 1) != builtin::i32_load8_u(
-                                    scratch + pos + cmp - 1,
-                                )) {
-                            chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
-                            chain_count += 1;
-                            continue;
-                        }
-
-                        let match_len = simd_match_len(scratch, chain, pos, max_len);
-
-                        if match_len >= 3 && match_len > best_len {
-                            best_len = match_len;
-                            best_dist = dist;
-                            if best_len >= config.nice_length {
-                                break;
-                            }
-                        }
-
-                        chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
-                        chain_count += 1;
-                    }
-
-                    builtin::i32_store(prev_ptr + (pos & 32767) * 4, builtin::i32_load(head_ptr + h * 4));
-                    builtin::i32_store(head_ptr + h * 4, pos);
+                    [best_len, best_dist] = matcher.longest_match(pos, h, best_len, max_chain, config.nice_length);
+                    matcher.insert(pos, h);
                 }
 
                 if match_available {
                     if best_len > prev_match_len {
                         // Current match is better: emit previous as literal
-                        tokens.push(token_pack(builtin::i32_load8_u(scratch + pos - 1) as i32, 0));
+                        tokens.push(token_pack(matcher.byte(pos - 1) as i32, 0));
                         prev_match_len = best_len;
                         prev_match_dist = best_dist;
                         pos += 1;
@@ -2499,7 +2483,7 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
                         // Previous match was better: emit it
                         tokens.push(token_pack(257 + prev_match_len - 3, prev_match_dist));
                         let skip = prev_match_len - 1;
-                        insert_hash_run(scratch, head_ptr, prev_ptr, pos, h, skip, input_len);
+                        matcher.insert_run(pos, h, skip);
                         pos += skip;
                         match_available = false;
                         prev_match_len = 0;
@@ -2515,13 +2499,13 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
                     } else {
                         // Match is long enough, emit immediately
                         tokens.push(token_pack(257 + best_len - 3, best_dist));
-                        insert_hash_run(scratch, head_ptr, prev_ptr, pos, h, best_len, input_len);
+                        matcher.insert_run(pos, h, best_len);
                         pos += best_len;
                         match_available = false;
                         prev_match_len = 0;
                     }
                 } else {
-                    tokens.push(token_pack(builtin::i32_load8_u(scratch + pos) as i32, 0));
+                    tokens.push(token_pack(matcher.byte(pos) as i32, 0));
                     pos += 1;
                 }
             }
@@ -2538,63 +2522,21 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
                 let mut h = 0;
 
                 if pos + 2 < input_len {
-                    h = hash3(
-                        builtin::i32_load8_u(scratch + pos),
-                        builtin::i32_load8_u(scratch + pos + 1),
-                        builtin::i32_load8_u(scratch + pos + 2),
-                    );
-                    let mut chain = builtin::i32_load(head_ptr + h * 4);
-                    let mut chain_count = 0;
-
-                    let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
-                    while chain >= 0 && chain_count < config.max_chain {
-                        let dist = pos - chain;
-                        if dist > 32768 || dist <= 0 {
-                            break;
-                        }
-
-                        let cmp = if best_len >= 2 { best_len } else { 2 };
-                        if cmp < max_len
-                            && (builtin::i32_load8_u(scratch + chain + cmp) != builtin::i32_load8_u(scratch + pos + cmp)
-                                || builtin::i32_load8_u(scratch + chain + cmp - 1) != builtin::i32_load8_u(
-                                    scratch + pos + cmp - 1,
-                                )) {
-                            chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
-                            chain_count += 1;
-                            continue;
-                        }
-
-                        let match_len = simd_match_len(scratch, chain, pos, max_len);
-
-                        if match_len >= 3 && match_len > best_len {
-                            best_len = match_len;
-                            best_dist = dist;
-                            if best_len >= config.nice_length {
-                                break;
-                            }
-                        }
-
-                        chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
-                        chain_count += 1;
-                    }
-
-                    builtin::i32_store(prev_ptr + (pos & 32767) * 4, builtin::i32_load(head_ptr + h * 4));
-                    builtin::i32_store(head_ptr + h * 4, pos);
+                    h = matcher.hash(pos);
+                    [best_len, best_dist] = matcher.longest_match(pos, h, 0, config.max_chain, config.nice_length);
+                    matcher.insert(pos, h);
                 }
 
                 if best_len >= 3 {
                     tokens.push(token_pack(257 + best_len - 3, best_dist));
-                    insert_hash_run(scratch, head_ptr, prev_ptr, pos, h, best_len, input_len);
+                    matcher.insert_run(pos, h, best_len);
                     pos += best_len;
                 } else {
-                    tokens.push(token_pack(builtin::i32_load8_u(scratch + pos) as i32, 0));
+                    tokens.push(token_pack(matcher.byte(pos) as i32, 0));
                     pos += 1;
                 }
             }
         }
-        builtin::realloc(scratch, scratch_size, 16, 0);
-        builtin::realloc(head_ptr, hash_bytes, 4, 0);
-        builtin::realloc(prev_ptr, hash_bytes, 4, 0);
     }
 
     let sym_count = tokens.len();
