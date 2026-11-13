@@ -16,10 +16,12 @@ use {
     check_in_place,
     generate_model,
     generate_tokenizer,
+    opened,
     read_header,
     spelling_of,
     weights_of,
 } from "./compile.wado";
+use { ModuleSpec } from "lib:wadopoet";
 use { render_dump, render_dump_json } from "./dump.wado";
 
 // `--type` and `--options` are the `with` clause's words, so a use site reads
@@ -111,6 +113,14 @@ fn cmd_gen(g: GenArgs) -> Result<String, String> with Preopens {
         }
         generate_model(&model, &path, weights_of(indexes, files)?, &g.runtime)?;
     };
+    let mut sources: List<String> = [path];
+    if let Some(index) = g.index {
+        sources.push(index);
+    }
+    for let checkpoint of g.checkpoint {
+        sources.push(checkpoint);
+    }
+    let source = opened(&ModuleSpec::new("loam", sources), source);
     let Some(output) = g.output else {
         return Result::Ok(source);
     };

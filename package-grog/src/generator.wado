@@ -2,10 +2,12 @@
 //! declarations that Grog's runtime encodes.
 
 use { Request, Response, Error, OutputFile, package_of, read_text } from "core:kiln";
+use { ModuleSpec } from "lib:wadopoet";
 use { EmitError, emit } from "./emit.wado";
 use { read } from "./parse.wado";
 
 export fn generate(req: Request) -> Result<Response, Error> {
+    let module = ModuleSpec::from_origin(&req.origin());
     let path = req.primary.path;
     let source = match read_text(req.primary.content) {
         Ok(text) => text,
@@ -15,7 +17,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
     };
     let runtime = runtime_of(&req.module)?;
     let file = read(&source).map_err(|e| at(&path, EmitError::Invalid(e)))?;
-    let generated = emit(&file, runtime).map_err(|e| at(&path, e))?;
+    let generated = emit(&file, &module, runtime).map_err(|e| at(&path, e))?;
     let files: List<OutputFile> = [
         OutputFile {
             path: `${stem(&path)}.wado`,

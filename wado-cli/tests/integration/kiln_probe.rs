@@ -36,11 +36,12 @@ export fn probe(path: String, mut content: Stream<u8>) -> Result<u64, Error> {
 }
 
 export fn generate(req: Request) -> Result<Response, Error> {
+    let origin = req.origin();
     let head = read_text(req.primary.content).unwrap();
     return Result::Ok(Response {
         files: [OutputFile {
             path: "out.wado",
-            content: `pub fn hello() -> i32 { return ${head.trim()}; }`,
+            content: `${origin.header()}pub fn hello() -> i32 { return ${head.trim()}; }`,
             is_entry: true,
         }],
     });

@@ -62,7 +62,7 @@ use { plan_parser } from "./parser_plan.wado";
 use { EmitContext } from "./emit_context.wado";
 use { SCAN_GATE_TYPE, scan_edge_field, scan_gate_fields } from "./scan_gate.wado";
 use { scan_answers_predicates } from "./gate_conditions.wado";
-use { CodeWriter } from "lib:wadopoet";
+use { CodeWriter, ModuleSpec } from "lib:wadopoet";
 use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
@@ -96,6 +96,9 @@ pub struct GenerateOptions {
     pub fragment_entries: List<String> = [],
     /// What the parser promises about its tree; see `PredictionMode`.
     pub prediction: PredictionMode = PredictionMode::Exact,
+    /// What opens the generated module: the Kiln request's origin. Without one,
+    /// `gale` is named as the generator of the grammar's own source files.
+    pub module: Option<ModuleSpec> = null,
 }
 
 /// Result of a codegen pass: the generated `.wado` source plus every
@@ -379,7 +382,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         },
     );
     let mut head = CodeWriter::new();
-    gen_header(&mut head, grammar);
+    options.module.unwrap_or(ModuleSpec::new("gale", grammar.source_files)).emit(&mut head);
+    head.blank();
     if options.trace {
         head.line("use { Level, Log, TextSink, enabled, log_level, set_log_level, trace } from \"core:log\";");
         head.blank();
@@ -652,36 +656,6 @@ fn emit_atn_blob_global<S: AsStrSlice>(w: &mut CodeWriter, atn: &Atn, sim_name: 
 /// byte `b` to `out`.
 fn push_hex_byte(out: &mut String, b: u8) {
     out.push_str(`\\x${b:02x}`);
-}
-
-/// Append `s` as an attribute string literal's content: the reader unescapes
-/// what it reads, so a quote or a backslash goes back escaped.
-fn push_attr_escaped<S: AsStrSlice>(out: &mut String, s: S) {
-    for let c of s.chars() {
-        if c == '"' || c == '\\' {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-}
-
-fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
-    // With no recorded source file, `sources` stays empty rather than naming a
-    // plausible `<GrammarName>.g4` that does not exist.
-    let sources = &grammar.source_files;
-    let mut parts = String::with_capacity(32);
-    parts.push_str("#![generated(by = \"gale\", sources = [");
-    for let mut i = 0; i < sources.len(); i += 1 {
-        if i > 0 {
-            parts.push_str(", ");
-        }
-        parts.push('"');
-        push_attr_escaped(&mut parts, &sources[i]);
-        parts.push('"');
-    }
-    parts.push_str("])]");
-    w.line(&parts);
-    w.blank();
 }
 
 /// Which runtime fragments a generated parser needs. Read after the parser is

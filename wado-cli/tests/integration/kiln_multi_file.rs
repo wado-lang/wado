@@ -22,10 +22,11 @@ use predicates::prelude::*;
 const PASSTHROUGH_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {
+    let origin = req.origin();
     return Result::Ok(Response {
         files: [OutputFile {
             path: "out.wado",
-            content: read_text(req.primary.content).unwrap(),
+            content: `${origin.header()}${read_text(req.primary.content).unwrap()}`,
             is_entry: true,
         }],
     });
@@ -97,10 +98,11 @@ fn two_modules_sharing_one_schema_both_redirect() {
         r#"use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {
+    let origin = req.origin();
     return Result::Ok(Response {
         files: [OutputFile {
             path: "out.wado",
-            content: `pub fn hello() -> i32 { return ${read_text(req.primary.content).unwrap().trim()}; }`,
+            content: `${origin.header()}pub fn hello() -> i32 { return ${read_text(req.primary.content).unwrap().trim()}; }`,
             is_entry: true,
         }],
     });

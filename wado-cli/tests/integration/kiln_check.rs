@@ -10,7 +10,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile {
             path: "hello.wado",
-            content: "pub fn hello() -> i32 { return 1; }\n",
+            content: `${req.origin().header()}pub fn hello() -> i32 { return 1; }\n`,
             is_entry: true,
         }],
     });

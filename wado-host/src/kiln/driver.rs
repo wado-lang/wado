@@ -12,8 +12,8 @@
 //! 2. Execute a single invocation by calling
 //!    [`wado_compiler::compiler_host::CompilerHost::run_generator`] and
 //!    writing the response to disk under the invocation's output
-//!    directory, with a canonical `#![generated]` header stamped on each
-//!    file that does not already carry one — see [`execute`].
+//!    directory, refusing a file that does not open with its
+//!    `#![generated]` header — see [`execute`].
 //! 3. Convert an [`InvocationRun`] into a [`Metadata`]
 //!    record for persistence (`build_metadata`), check a recorded
 //!    `<primary>.kiln.json` for freshness against the current filesystem +
@@ -40,7 +40,7 @@ use wado_compiler::kiln::{
     FileHash, GENERATOR_WORLD_FQ, GeneratedHeader, GeneratorModule, Invocation, InvocationIndex,
     InvocationPath, OptionsAnchor, OptionsDescriptor, Plan, PlanError, collect_inline_invocations,
     content_hash, file_hash, generator_identity, harvest_module_graph, has_generated_marker,
-    hex_digest, validate_options,
+    hex_digest, parse_header, validate_options,
 };
 use wado_compiler::remote::{Integrity, is_remote};
 use wado_compiler::{Code, CompilerOptions, Diagnostic, Lints, OptLevel, Severity};
@@ -113,7 +113,7 @@ pub struct InvocationRun {
 pub struct OutputHash {
     /// Project-root-relative forward-slash path of the written file.
     pub path: String,
-    /// SHA-256 of the file contents as written (header + generator body).
+    /// SHA-256 of the file contents as written.
     pub hash: [u8; 32],
     /// Whether the generator marked this file as the invocation's entry
     /// module — the one a consuming `use ... from "<from>"` resolves to.
@@ -137,6 +137,9 @@ pub enum ExecuteError {
     /// A generator output's `path` is empty or attempts to escape the
     /// invocation's output directory (`..` segments, absolute paths).
     InvalidOutputPath { path: String },
+    /// A generator output does not open with the `#![generated]` header that
+    /// marks it as Kiln's.
+    MissingHeader { path: String },
 }
 
 impl std::fmt::Display for ExecuteError {
@@ -152,15 +155,19 @@ impl std::fmt::Display for ExecuteError {
             ExecuteError::InvalidOutputPath { path } => {
                 write!(f, "kiln: generator produced invalid output path {path:?}")
             }
+            ExecuteError::MissingHeader { path } => write!(
+                f,
+                "kiln: generated file {path:?} does not open with a `#![generated]` header; \
+                 write `req.origin().header()` first"
+            ),
         }
     }
 }
 
 impl std::error::Error for ExecuteError {}
 
-/// Run one invocation: read its inputs, call the host's runner, write
-/// the generator's outputs to disk, stamping a `#![generated]` header on
-/// any output that does not already carry one.
+/// Run one invocation: read its inputs, call the host's runner, and write
+/// the generator's outputs to disk.
 ///
 /// `component_wasm` is the already-compiled generator component; the
 /// caller (higher-level compile flow) is responsible for producing it.
@@ -179,6 +186,8 @@ impl std::error::Error for ExecuteError {}
 ///   including `Unsupported` (which consume-only mode treats specially).
 /// - [`ExecuteError::InvalidOutputPath`] if the generator returns a
 ///   path that escapes the output directory.
+/// - [`ExecuteError::MissingHeader`] if an output does not open with a
+///   `#![generated]` header.
 /// - [`ExecuteError::Io`] for filesystem failures.
 pub async fn execute<H: CompilerHost>(
     invocation: &Invocation,
@@ -254,30 +263,24 @@ pub async fn execute<H: CompilerHost>(
         .await
         .map_err(ExecuteError::Runner)?;
 
-    let output_dir_abs = manifest_root.join(invocation.output_dir.as_str());
-    let by = generator_identity(&invocation.module);
-    let source_paths: Vec<InvocationPath> =
-        files.iter().map(|(path, _, _)| (*path).clone()).collect();
-    let header = GeneratedHeader::emit_with_paths(&by, &source_paths);
-
-    let mut outputs = Vec::with_capacity(response.files.len());
+    // Every file is checked before any is written, so a refused response
+    // leaves the output directory as it was.
+    let mut checked = Vec::with_capacity(response.files.len());
     for file in &response.files {
         let rel = validate_rel_output_path(&file.path)?;
+        if !has_generated_marker(&file.content) {
+            return Err(ExecuteError::MissingHeader {
+                path: file.path.clone(),
+            });
+        }
+        checked.push((rel, file));
+    }
+
+    let output_dir_abs = manifest_root.join(invocation.output_dir.as_str());
+    let mut outputs = Vec::with_capacity(checked.len());
+    for (rel, file) in checked {
         let full_path = output_dir_abs.join(&rel);
-        // A generator may stamp its own `#![generated(...)]` header — Gale
-        // does, so its output is self-describing whether it runs through the
-        // Kiln pipeline or its standalone CLI. Respect that header instead of
-        // prepending a second one; only generators that emit no marker get the
-        // canonical header stamped here so tooling and stale-output GC still
-        // recognize the file.
-        let bytes = if has_generated_marker(&file.content) {
-            file.content.as_bytes().to_vec()
-        } else {
-            let mut bytes = Vec::with_capacity(header.len() + file.content.len());
-            bytes.extend_from_slice(header.as_bytes());
-            bytes.extend_from_slice(file.content.as_bytes());
-            bytes
-        };
+        let bytes = file.content.as_bytes();
 
         let normalized = InvocationPath::normalize(&format!(
             "{}/{}",
@@ -300,12 +303,12 @@ pub async fn execute<H: CompilerHost>(
                 normalized.as_str(),
             );
         }
-        write_atomic(&full_path, &bytes).map_err(|source| ExecuteError::Io {
+        write_atomic(&full_path, bytes).map_err(|source| ExecuteError::Io {
             path: full_path.clone(),
             source,
         })?;
 
-        let hash = file_hash(&normalized, &bytes).hash;
+        let hash = file_hash(&normalized, bytes).hash;
         outputs.push(OutputHash {
             path: normalized.as_str().to_string(),
             hash,
@@ -523,10 +526,9 @@ pub async fn cache_matches<H: CompilerHost>(
 }
 
 fn emit_generated_modified_warning<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
-    use wado_compiler::{Diagnostic, Severity};
     host.emit_diagnostic(Diagnostic {
         severity: Severity::Warning,
-        code: wado_compiler::Code::KilnGeneratedModified,
+        code: Code::KilnGeneratedModified,
         message: format!(
             "kiln[{invocation}]: {path} has been modified after generation; \
              the on-disk content is honored, but `wado check` will fail. \
@@ -536,14 +538,60 @@ fn emit_generated_modified_warning<H: CompilerHost>(host: &H, invocation: &str, 
     });
 }
 
+/// Warn on each of `outputs` whose header names another run than
+/// `invocation`, whether this run wrote it or took it from the cache, so a warm
+/// run reports what the cold one did.
+fn warn_on_foreign_headers<H: CompilerHost>(
+    host: &H,
+    invocation: &Invocation,
+    outputs: &[MetaOutputEntry],
+    manifest_root: &Path,
+) {
+    // What `core:kiln`'s `Request::origin()` gives the generator.
+    let origin = GeneratedHeader {
+        by: invocation.invoked_as.clone(),
+        sources: invocation
+            .files()
+            .map(|(path, _, _)| path.as_str().to_string())
+            .collect(),
+    };
+    for output in outputs {
+        // `execute` refuses a headerless output, so an unreadable or headerless
+        // one here is a stale cache or a hand edit, each already warned of.
+        if let Ok(content) = std::fs::read_to_string(manifest_root.join(&output.path))
+            && let Some(header) = parse_header(&content)
+            && header != origin
+        {
+            emit_header_mismatch_warning(host, &output.path, &header, &origin);
+        }
+    }
+}
+
+fn emit_header_mismatch_warning<H: CompilerHost>(
+    host: &H,
+    path: &str,
+    header: &GeneratedHeader,
+    origin: &GeneratedHeader,
+) {
+    host.emit_diagnostic(Diagnostic {
+        severity: Severity::Warning,
+        code: Code::KilnHeaderMismatch,
+        message: format!(
+            "kiln: generated file {path:?} opens with a header naming by = {:?}, sources = {:?}; \
+             this run is by = {:?}, sources = {:?}",
+            header.by, header.sources, origin.by, origin.sources,
+        ),
+        span: None,
+    });
+}
+
 fn emit_generated_regenerated_notice<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
-    use wado_compiler::{Diagnostic, Severity};
     // `Debug`, not `Warning`: regenerating cached outputs is the expected
     // state after a generator edit, and one run can touch hundreds of
     // files (issue #1218), so per-file warnings are just noise.
     host.emit_diagnostic(Diagnostic {
         severity: Severity::Debug,
-        code: wado_compiler::Code::KilnGeneratedRegenerated,
+        code: Code::KilnGeneratedRegenerated,
         message: format!(
             "kiln[{invocation}]: regenerating {path} (previous content differed from \
              generator output); local edits to this file have been overwritten.",
@@ -553,7 +601,6 @@ fn emit_generated_regenerated_notice<H: CompilerHost>(host: &H, invocation: &str
 }
 
 fn emit_cache_io_warning<H: CompilerHost>(host: &H, path: &Path, source: &std::io::Error) {
-    use wado_compiler::{Code, Diagnostic, Severity};
     host.emit_diagnostic(Diagnostic {
         severity: Severity::Warning,
         code: Code::Log,
@@ -1304,6 +1351,7 @@ where
             };
 
         if let Some(metadata) = entry {
+            warn_on_foreign_headers(host, invocation, &metadata.outputs, manifest_root);
             if executed {
                 let dir = invocation.output_dir.as_str().to_string();
                 let kept = kept_by_dir.entry(dir).or_default();
@@ -1367,7 +1415,6 @@ fn is_unsupported(err: &PipelineError) -> bool {
 }
 
 fn emit_stale_warning<H: CompilerHost>(host: &H, invocation: &str) {
-    use wado_compiler::{Code, Diagnostic, Severity};
     host.emit_diagnostic(Diagnostic {
         severity: Severity::Warning,
         code: Code::KilnStaleCache,
@@ -1523,7 +1570,6 @@ fn emit_metadata_load_warning<H: CompilerHost>(
     invocation: &str,
     source: &kiln_metadata::MetadataError,
 ) {
-    use wado_compiler::{Code, Diagnostic, Severity};
     host.emit_diagnostic(Diagnostic {
         severity: Severity::Warning,
         code: Code::Log,
@@ -1539,6 +1585,8 @@ fn emit_metadata_load_warning<H: CompilerHost>(
 mod tests {
     use super::*;
     use wado_compiler::kiln::InvocationInput;
+
+    const HEADER: &str = "#![generated(by = \"ns:proto@1.0.0\", sources = [])]\n";
 
     mod execute_tests {
         use super::*;
@@ -1641,18 +1689,18 @@ mod tests {
         }
 
         #[test]
-        fn writes_outputs_with_header_and_reports_hashes() {
+        fn writes_outputs_as_returned_and_reports_hashes() {
             let tmp = tempfile::tempdir().unwrap();
             let response = GeneratorResponse {
                 files: vec![
                     GeneratorOutputFile {
                         path: "lib.wado".to_string(),
-                        content: "pub fn hello() {}\n".to_string(),
+                        content: format!("{HEADER}pub fn hello() {{}}\n"),
                         is_entry: true,
                     },
                     GeneratorOutputFile {
                         path: "sub/mod.wado".to_string(),
-                        content: "pub fn sub() {}\n".to_string(),
+                        content: format!("{HEADER}pub fn sub() {{}}\n"),
                         is_entry: false,
                     },
                 ],
@@ -1678,27 +1726,25 @@ mod tests {
 
             let lib =
                 std::fs::read_to_string(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
-            assert!(lib.starts_with("#![generated(by = \"ns:proto@1.0.0\""));
-            assert!(lib.contains("\"schema.proto\""));
-            assert!(lib.contains("\"dep.proto\""));
-            assert!(lib.ends_with("pub fn hello() {}\n"));
-
-            let nested =
-                std::fs::read_to_string(tmp.path().join("build/kiln/proto/sub/mod.wado")).unwrap();
-            assert!(nested.starts_with("#![generated("));
+            assert_eq!(lib, format!("{HEADER}pub fn hello() {{}}\n"));
         }
 
         #[test]
-        fn respects_generator_provided_header() {
+        fn refuses_a_headerless_output_and_writes_nothing() {
             let tmp = tempfile::tempdir().unwrap();
             let response = GeneratorResponse {
-                files: vec![GeneratorOutputFile {
-                    path: "lib.wado".to_string(),
-                    content:
-                        "#![generated(by = \"gale\", sources = [\"schema.proto\"])]\npub fn hello() {}\n"
-                            .to_string(),
-                    is_entry: true,
-                }],
+                files: vec![
+                    GeneratorOutputFile {
+                        path: "lib.wado".to_string(),
+                        content: format!("{HEADER}pub fn hello() {{}}\n"),
+                        is_entry: true,
+                    },
+                    GeneratorOutputFile {
+                        path: "bare.wado".to_string(),
+                        content: "pub fn bare() {}\n".to_string(),
+                        is_entry: false,
+                    },
+                ],
             };
             let host = MockHost::new(
                 &[
@@ -1709,21 +1755,12 @@ mod tests {
             );
 
             let inv = sample_invocation();
-            runtime()
+            let err = runtime()
                 .block_on(async { execute(&inv, b"wasm-bytes", tmp.path(), &host).await })
-                .unwrap();
+                .unwrap_err();
 
-            let lib =
-                std::fs::read_to_string(tmp.path().join("build/kiln/proto/lib.wado")).unwrap();
-            // The generator already stamped its own header; the driver must not
-            // prepend a second one or override the generator's `by`.
-            assert!(lib.starts_with("#![generated(by = \"gale\""));
-            assert_eq!(
-                lib.matches("#![generated").count(),
-                1,
-                "self-stamped header must appear exactly once, got:\n{lib}"
-            );
-            assert!(!lib.contains("ns:proto@1.0.0"));
+            assert!(matches!(err, ExecuteError::MissingHeader { path } if path == "bare.wado"));
+            assert!(!tmp.path().join("build/kiln/proto").exists());
         }
 
         #[test]
@@ -1761,7 +1798,7 @@ mod tests {
             let response = GeneratorResponse {
                 files: vec![GeneratorOutputFile {
                     path: "../escape.wado".to_string(),
-                    content: "x".to_string(),
+                    content: HEADER.to_string(),
                     is_entry: true,
                 }],
             };
@@ -2052,19 +2089,23 @@ mod tests {
                 .unwrap()
         }
 
+        /// One entry module, `lib.wado`.
+        fn lib_response() -> GeneratorResponse {
+            GeneratorResponse {
+                files: vec![GeneratorOutputFile {
+                    path: "lib.wado".to_string(),
+                    content: format!("{HEADER}pub fn hello() {{}}\n"),
+                    is_entry: true,
+                }],
+            }
+        }
+
         #[test]
         fn build_metadata_round_trips_paths_and_hashes() {
             let tmp = tempfile::tempdir().unwrap();
-            let response = GeneratorResponse {
-                files: vec![GeneratorOutputFile {
-                    path: "lib.wado".to_string(),
-                    content: "pub fn hello() {}\n".to_string(),
-                    is_entry: true,
-                }],
-            };
             let run = run_execute_and_return(
                 tmp.path(),
-                response,
+                lib_response(),
                 &[("schema.proto", b"primary"), ("dep.proto", b"dep")],
             );
             let entry = build_metadata(
@@ -2090,16 +2131,9 @@ mod tests {
         #[test]
         fn cache_matches_hits_when_everything_lines_up() {
             let tmp = tempfile::tempdir().unwrap();
-            let response = GeneratorResponse {
-                files: vec![GeneratorOutputFile {
-                    path: "lib.wado".to_string(),
-                    content: "pub fn hello() {}\n".to_string(),
-                    is_entry: true,
-                }],
-            };
             let run = run_execute_and_return(
                 tmp.path(),
-                response,
+                lib_response(),
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
             let entry = build_metadata(
@@ -2142,16 +2176,9 @@ mod tests {
         #[test]
         fn cache_matches_misses_when_output_deleted() {
             let tmp = tempfile::tempdir().unwrap();
-            let response = GeneratorResponse {
-                files: vec![GeneratorOutputFile {
-                    path: "lib.wado".to_string(),
-                    content: "pub fn hello() {}\n".to_string(),
-                    is_entry: true,
-                }],
-            };
             let run = run_execute_and_return(
                 tmp.path(),
-                response,
+                lib_response(),
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
             let entry = build_metadata(
@@ -2172,16 +2199,9 @@ mod tests {
         #[test]
         fn cache_matches_returns_hit_but_modified_when_output_edited_in_place() {
             let tmp = tempfile::tempdir().unwrap();
-            let response = GeneratorResponse {
-                files: vec![GeneratorOutputFile {
-                    path: "lib.wado".to_string(),
-                    content: "pub fn hello() {}\n".to_string(),
-                    is_entry: true,
-                }],
-            };
             let run = run_execute_and_return(
                 tmp.path(),
-                response,
+                lib_response(),
                 &[("schema.proto", b"p"), ("dep.proto", b"d")],
             );
             let entry = build_metadata(

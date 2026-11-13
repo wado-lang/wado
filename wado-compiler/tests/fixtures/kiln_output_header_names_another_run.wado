@@ -1,0 +1,15 @@
+// A generated file whose `#![generated]` header names another generator or
+// other inputs than the run that wrote it is written as returned, with a
+// warning naming what the header should say.
+
+use { hello } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/misattributed_generator.wado" },
+    };
+
+test {
+    assert hello() == 1;
+}
+
+__DATA__
+{"test": {}, "warnings_contains": ["/out.wado\" opens with a header naming by = \"elsewhere\", sources = [\"other.schema\"]; this run is by = \"sub/kiln/misattributed_generator.wado\", sources = [\"sub/kiln/value.schema\"]"]}

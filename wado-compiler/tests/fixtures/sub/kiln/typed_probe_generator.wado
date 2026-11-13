@@ -28,6 +28,7 @@ export fn probe(mut content: Stream<u8>, type: Option<String>) -> Result<u64, Er
 }
 
 export fn generate(req: Request) -> Result<Response, Error> {
+    let origin = req.origin();
     let head = read_text(req.primary.content).unwrap();
     let mut lengths = "";
     for let input of req.inputs {
@@ -36,7 +37,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile {
             path: "out.wado",
-            content: `pub fn head() -> i32 { return ${head.trim()}; }\npub fn lengths() -> List<i32> { return [${lengths}]; }`,
+            content: `${origin.header()}pub fn head() -> i32 { return ${head.trim()}; }\npub fn lengths() -> List<i32> { return [${lengths}]; }`,
             is_entry: true,
         }],
     });

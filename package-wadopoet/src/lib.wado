@@ -1,7 +1,8 @@
 //! Wadopoet: builders for generated Wado source.
 //!
 //! `CodeWriter` indents and blocks, and `prune` drops the functions it holds
-//! that nothing uses. The specs (`StructSpec`, `FnSpec`, …) build
+//! that nothing uses. `ModuleSpec` writes the `#![generated]` header a module
+//! opens with, and the other specs (`StructSpec`, `FnSpec`, …) build
 //! declarations around it, and `wado` escapes a hole for the literal it sits
 //! in. `is_reserved` says which names a minted one must avoid, `is_keyword`
 //! the part of them a qualified name, like an enum case, must avoid.
@@ -20,6 +21,7 @@ pub use {
     FnSpec,
     GlobalSpec,
     ImplSpec,
+    ModuleSpec,
     Vis,
     CharRangePat,
     char_range_pat,

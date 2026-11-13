@@ -19,7 +19,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile {
             path: "greeting.wado",
-            content: "pub fn greeting() -> String { return \"hi\"; }",
+            content: `${req.origin().header()}pub fn greeting() -> String { return "hi"; }`,
             is_entry: true,
         }],
     });

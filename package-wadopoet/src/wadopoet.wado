@@ -1,5 +1,6 @@
 use { ReflectTemplate } from "core:prelude";
 use { HashMap, HashSet } from "core:collections";
+use { Origin } from "core:kiln";
 
 /// What a call does with the callee's result.
 pub variant CallForm {
@@ -214,6 +215,11 @@ impl CodeWriter {
     /// How many blocks are open.
     pub fn depth(&self) -> i32 {
         return self.indent_level;
+    }
+
+    /// Whether nothing has been written.
+    pub fn is_empty(&self) -> bool {
+        return self.buf.is_empty();
     }
 
     /// Whether the innermost open block is a function body `FnSpec::emit_begin`
@@ -1564,6 +1570,34 @@ impl FnSpec {
             sig.push_str(` with (${join_comma(&clauses)})`);
         }
         return sig;
+    }
+}
+
+/// The head of a generated module: the `#![generated]` header that says where
+/// it came from.
+pub struct ModuleSpec {
+    origin: Origin,
+}
+
+impl ModuleSpec {
+    /// The head of a module a Kiln generator writes, from its request's
+    /// `origin()`.
+    pub fn from_origin(origin: &Origin) -> ModuleSpec {
+        return ModuleSpec { origin: *origin };
+    }
+
+    /// The head of a module a script writes outside Kiln: `by` names the
+    /// script, `sources` what it read, each from the repository root.
+    pub fn new<S: AsStrSlice>(by: S, sources: List<String> = []) -> ModuleSpec {
+        return ModuleSpec {
+            origin: Origin { by: by.to_string(), sources },
+        };
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter)
+        contract w.is_empty(), "the header opens the module"
+    {
+        w.raw(self.origin.header());
     }
 }
 

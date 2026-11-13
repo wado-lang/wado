@@ -468,5 +468,6 @@ fn is_kiln_diagnostic(code: &Code) -> bool {
             | Code::KilnGeneratorForbiddenImport
             | Code::KilnNoGeneratedModule
             | Code::KilnGeneratedModified
+            | Code::KilnHeaderMismatch
     )
 }

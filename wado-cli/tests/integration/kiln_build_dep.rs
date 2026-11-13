@@ -45,7 +45,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile {
             path: "greeting.wado",
-            content: "pub fn greeting() -> String { return \"hi from generator\"; }",
+            content: `${req.origin().header()}pub fn greeting() -> String { return "hi from generator"; }`,
             is_entry: true,
         }],
     });
@@ -171,11 +171,12 @@ name = "gen"
         r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {
+    let origin = req.origin();
     let _ = req.primary.content;
     return Result::Ok(Response {
         files: [OutputFile {
             path: "greeting.wado",
-            content: "pub fn greeting() -> String { return \"hi from generator\"; }",
+            content: `${origin.header()}pub fn greeting() -> String { return "hi from generator"; }`,
             is_entry: true,
         }],
     });
@@ -247,7 +248,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile {
             path: "greeting.wado",
-            content: "use { leaf } from \"lib:leaf\";\npub fn greeting() -> String { return leaf(); }",
+            content: `${req.origin().header()}use { leaf } from "lib:leaf";\npub fn greeting() -> String { return leaf(); }`,
             is_entry: true,
         }],
     });
@@ -390,7 +391,7 @@ export fn generate(req: Request) -> Result<Response, Error> {{
     return Result::Ok(Response {{
         files: [OutputFile {{
             path: "greeting.wado",
-            content: "pub fn greeting() -> String {{ return \"{greeting}\"; }}",
+            content: `${{req.origin().header()}}pub fn greeting() -> String {{ return "{greeting}"; }}`,
             is_entry: true,
         }}],
     }});

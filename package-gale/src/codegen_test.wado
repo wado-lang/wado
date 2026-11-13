@@ -21,7 +21,7 @@ use { parse, parse_checked } from "./g4/parser.wado";
 use { count_occurrences } from "../tests/support/text.wado";
 use { lexer_dump } from "../tests/support/fixtures.wado";
 use { eval, EvalHost, Output } from "core:eval";
-use { wado } from "lib:wadopoet";
+use { ModuleSpec, wado } from "lib:wadopoet";
 
 global DEFAULT_OPTIONS: GenerateOptions = GenerateOptions {};
 
@@ -164,13 +164,9 @@ test "generate header" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert output.len() > 0;
-    // Grammar was constructed with no source_files, so gen_header emits an
-    // empty sources list rather than fabricating a nonexistent `{name}.g4`.
-    let header = `#![generated(by = "gale", sources = [])]`;
-    for let mut i = 0; i < header.len(); i += 1 {
-        assert output.byte_at(i) == header.byte_at(i);
-    }
+    // No source file is recorded, so none is named, rather than a nonexistent
+    // `{name}.g4`.
+    assert output.starts_with("#![generated(by = \"gale\")]\n");
 }
 
 test "generate header with multiple source files" {
@@ -187,15 +183,12 @@ test "generate header with multiple source files" {
         source_files: ["HtmlLexer.g4", "HtmlParser.g4"],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let header = `#![generated(by = "gale", sources = ["HtmlLexer.g4", "HtmlParser.g4"])]`;
-    for let mut i = 0; i < header.len(); i += 1 {
-        assert output.byte_at(i) == header.byte_at(i);
-    }
+    assert output.starts_with(`#![generated(by = "gale", sources = ["HtmlLexer.g4", "HtmlParser.g4"])]\n`);
 }
 
-test "generate header escapes a source file name" {
+test "generate opens with the module it is given" {
     let mut grammar = Grammar {
-        name: "Odd",
+        name: "Calc",
         kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [],
@@ -204,13 +197,11 @@ test "generate header escapes a source file name" {
         options: [],
         named_actions: [],
         pending_refs: [],
-        source_files: ["a\"b\\c.g4"],
+        source_files: ["Calc.g4"],
     };
-    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let header = "#![generated(by = \"gale\", sources = [\"a\\\"b\\\\c.g4\"])]";
-    for let mut i = 0; i < header.len(); i += 1 {
-        assert output.byte_at(i) == header.byte_at(i);
-    }
+    let module = ModuleSpec::new("wado-lang:gale", ["src/Calc.g4"]);
+    let output = generate(&mut grammar, &GenerateOptions { module: Option::Some(module) }).source;
+    assert output.starts_with("#![generated(by = \"wado-lang:gale\", sources = [\"src/Calc.g4\"])]\n");
 }
 
 test "generate token kind" {
@@ -6521,8 +6512,22 @@ test "gen prints the parser the Kiln generator builds for the same grammar" {
     let outcome = gale_in(&dir, ["gen", "Expr.g4"]);
     assert outcome.result matches { Ok(_) };
     let built = kiln(["Expr.g4", bytes_of(EXPR)], [], no_options());
-    assert outcome.stdout() == built.source();
+    let [gen_header, gen_body] = split_header(outcome.stdout());
+    let [kiln_header, kiln_body] = split_header(built.source());
+    assert gen_header == "#![generated(by = \"gale\", sources = [\"Expr.g4\"])]";
+    assert kiln_header == "#![generated(by = \"lib:gale\", sources = [\"Expr.g4\"])]";
+    assert gen_body == kiln_body;
     assert outcome.console.stderr() == "";
+}
+
+/// A generated module's `#![generated]` line, and what follows it.
+fn split_header(source: String) -> [String, String] {
+    let view = source.as_str_slice();
+    let end = view.find("\n").unwrap();
+    return [
+        view.slice(0, end).to_string(),
+        view.slice(end, view.len()).to_string(),
+    ];
 }
 
 test "gen --output writes the parser into the first grant and prints nothing" {

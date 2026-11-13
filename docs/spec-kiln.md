@@ -302,7 +302,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile {
             path: "greeting.wado",
-            content: `pub fn greeting() -> String { return "${spelled.join(",")}"; }`,
+            content: `${req.origin().header()}pub fn greeting() -> String { return "${spelled.join(",")}"; }`,
             is_entry: true,
         }],
     });
@@ -392,12 +392,14 @@ export struct Options {
 }
 
 export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let origin = req.origin();                  // before reading moves an input out
     let Ok(schema) = read_text(req.primary.content) else {
         return Result::Err(Error::InvalidSchema("not UTF-8"));
     };
     let source = emit(&schema, &req.options);   // the generator's own work
+    let content = `${origin.header()}${source}`;
     return Result::Ok(Response {
-        files: [OutputFile { path: `${req.options.namespace}.wado`, content: source, is_entry: true }],
+        files: [OutputFile { path: `${req.options.namespace}.wado`, content, is_entry: true }],
     });
 }
 
@@ -414,6 +416,7 @@ A generator with no configuration declares no `Options` and writes
 
 ```wado
 export fn generate(req: Request) -> Result<Response, Error> {
+    let module = ModuleSpec::from_origin(&req.origin());
     let path = req.primary.path;
     let source = match read_text(req.primary.content) {
         Ok(text) => text,
@@ -423,7 +426,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
     };
     let runtime = runtime_of(&req.module)?;
     let file = read(&source).map_err(|e| at(&path, EmitError::Invalid(e)))?;
-    let generated = emit(&file, runtime).map_err(|e| at(&path, e))?;
+    let generated = emit(&file, &module, runtime).map_err(|e| at(&path, e))?;
     let files: List<OutputFile> = [
         OutputFile {
             path: `${stem(&path)}.wado`,
@@ -536,7 +539,8 @@ record response {
 ```
 
 - `path` is relative to the invocation's output directory.
-- `content` is the Wado source.
+- `content` is the Wado source. It opens with the request's `#![generated]`
+  header (see [Output Directory](#output-directory)).
 - Exactly one file has `is-entry` set. It is the entry module the `use` binds
   against.
 
@@ -558,16 +562,23 @@ return Result::Ok(Response { files });
 
 ### Output Directory
 
-Outputs are written to the invocation's output directory, each stamped with a
+Outputs are written to the invocation's output directory. Each opens with a
 `#![generated(by = "...", sources = [...])]` header
-([`#![generated]`](./spec-attributes.md#generated)). The header names the
-generator and its inputs from the package root:
+([`#![generated]`](./spec-attributes.md#generated)), which the generator writes
+and Kiln checks: a run that returns a file without one fails, and writes
+nothing. `req.origin().header()` is that line, newline included. It names the
+generator as the use site named it (`Request.module`), and its inputs from the
+package root, the primary first:
 
 <!-- {"source": "package-gale/tests/generated/cst_calc/calc_ll.wado"} -->
 
 ```wado
-#![generated(by = "gale", sources = ["tests/grammars/calc_ll.g4"])]
+#![generated(by = "src/generator.wado", sources = ["tests/grammars/calc_ll.g4"])]
 ```
+
+A header naming another generator or other inputs is written as returned, with
+a warning (`KILN_HEADER_MISMATCH`) on every run that uses the file, cached or
+not.
 
 That output was written to a directory the use site chose:
 

@@ -11,7 +11,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile {
             path: "out.wado",
-            content: "pub fn logged() -> bool { return true; }",
+            content: `${req.origin().header()}pub fn logged() -> bool { return true; }`,
             is_entry: true,
         }],
     });

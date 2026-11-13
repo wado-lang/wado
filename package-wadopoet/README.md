@@ -35,6 +35,20 @@ let source = w.to_string();
 Build a body in its own writer and append it, rather than printing it with
 `to_string` and writing the text: text loses the calls and names below.
 
+## Opening a Module
+
+`ModuleSpec` writes the `#![generated]` header a generated module opens with.
+Kiln refuses a generator's file without one. A Kiln generator builds the spec
+from its request's origin, taken before an input is read, since reading moves
+the input's content out of the request. A script that writes a module of its
+own names itself with `ModuleSpec::new`.
+
+```wado
+let module = ModuleSpec::from_origin(&req.origin());
+let mut w = CodeWriter::new();
+module.emit(&mut w);
+```
+
 ## Pruning Functions
 
 `prune` drops the functions nothing uses and forwards calls through the ones

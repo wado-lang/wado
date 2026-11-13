@@ -26,6 +26,7 @@ export use { PredictionMode } from "./gen_settings.wado";
 use { NoFields, event } from "core:log";
 use { to_snake_case } from "./gen_util.wado";
 use { Deserialize } from "core:serde";
+use { ModuleSpec } from "lib:wadopoet";
 
 /// Generator-side options. Surfaced under `options = { ... }` at a
 /// consuming `use ... with { generator: { options: { ... } } }` site.
@@ -103,10 +104,10 @@ fn read_inputs(
 /// `kiln::import_check::inject_kiln_request_adapter` (runs before
 /// analyze).
 export fn generate(req: Request<Options>) -> Result<Response, Error> {
-    // Stamp the real Kiln paths; otherwise the generated header's
-    // `sources = [...]` fabricates a nonexistent `<GrammarName>.g4`. A
-    // `"tree-sitter-highlights"` input is a highlight query, compiled into the
-    // highlighter, and every other file a grammar half merged into the primary.
+    let module = ModuleSpec::from_origin(&req.origin());
+    // A `"tree-sitter-highlights"` input is a highlight query, compiled into
+    // the highlighter, and every other file a grammar half merged into the
+    // primary.
     let primary_path = req.primary.path;
     let [g4_inputs, scm_inputs] = read_inputs(req.primary, req.inputs)?;
     let mut grammar = match assemble_grammar(&g4_inputs) {
@@ -151,6 +152,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         trace: req.options.trace,
         fragment_entries: req.options.fragment_entries,
         prediction: req.options.prediction,
+        module: Option::Some(module),
     };
     let generated = codegen_generate(&mut grammar, &gen_opts);
     // Log Gale's prediction-strategy diagnostics at the level
