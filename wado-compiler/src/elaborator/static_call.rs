@@ -260,6 +260,18 @@ struct Candidate {
     return_type: TypeId,
 }
 
+impl Candidate {
+    /// The value blanket impl supplying this candidate, where one does.
+    fn blanket(&self) -> Option<DefId> {
+        (self.origin == CandidateOrigin::Blanket).then(|| {
+            self.supply
+                .as_ref()
+                .expect("a blanket candidate comes through its trait")
+                .impl_def
+        })
+    }
+}
+
 /// The link of a newtype chain a static call belongs to, as
 /// [`Elaborator::static_owner`] finds it.
 struct StaticOwner {
@@ -430,9 +442,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // arguments reject it, as any declaration does: its resolver
                 // reports the arguments.
                 let sole_blanket = match reached.as_slice() {
-                    [only] if only.origin == CandidateOrigin::Blanket => {
-                        only.supply.as_ref().map(|supply| supply.impl_def)
-                    }
+                    [only] => only.blanket(),
                     _ => None,
                 };
                 match self.select_at_link(at, &owner.key, reached, &declaring_args) {
@@ -1005,9 +1015,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // which no name at a call site reaches. The rules have done their
             // part in picking it; instantiating it at the receiver, and
             // mangling it as a blanket, is the blanket resolver's.
-            (CandidateOrigin::Blanket, supply) => supply
-                .as_ref()
-                .map(|supply| StaticLookup::Blanket(supply.impl_def)),
+            (CandidateOrigin::Blanket, _) => candidate.blanket().map(StaticLookup::Blanket),
             // An inherited method is declared nowhere but the trait, so that is
             // where its signature is read from — in the trait's frame, which
             // the block's arguments fill.

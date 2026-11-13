@@ -213,7 +213,9 @@ A blanket offers at the link where its bounds hold, the level the trait
 resolution order gives it (WEP 2026-09-01, rank 1). A newtype inherits its
 base's bounds, so counting a blanket wherever it reaches makes the head own
 every name some blanket supplies, and a blanket only the base admits then
-outranks the base's own declarations and its derivations.
+outranks the base's own declarations and its derivations. Within its link, a
+blanket ranks below what is written for the type, a derivation included (rank
+2).
 
 The rules then pick among the owner's candidates, a blanket included, and the
 blanket resolver instantiates the blanket the rules picked. Instantiating
