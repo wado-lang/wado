@@ -711,21 +711,33 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Some(self.generic_newtype_instance(def, params))
     }
 
-    /// The link below the newtype `key` declares, one link down its chain: the
-    /// key its impls answer at, and the name it answers under. A newtype over
-    /// another newtype or a `flags` reaches that one, whose own impls answer
-    /// before its base's; any other reaches the type its chain stands for.
-    /// Keyed on the declaration: a caller reaching the type only through a
-    /// namespace (`lib::Q`) has no bare name its frame answers for.
+    /// Whether `key` names a newtype's declaration, and not a `flags` one.
+    pub(super) fn is_newtype_key(&self, key: &trait_env::ImplTargetKey) -> bool {
+        key.decl().is_some_and(|def| {
+            self.lookup_generic_newtype_of_decl(def).is_some()
+                || self.lookup_newtype_of_decl(def).is_some_and(|ty| {
+                    matches!(
+                        self.tysys.type_table.borrow().get(ty),
+                        tir::ResolvedType::Newtype { .. }
+                    )
+                })
+        })
+    }
+
+    /// The type the newtype `key` declares wraps, one link down its chain: the
+    /// key its impls answer at, the name it answers under, and the type as the
+    /// declaration writes it. Keyed on the declaration: a caller reaching the
+    /// type only through a namespace (`lib::Q`) has no bare name its frame
+    /// answers for.
     pub(super) fn newtype_link_target(
         &mut self,
         key: &trait_env::ImplTargetKey,
-    ) -> Option<(trait_env::ImplTargetKey, String)> {
+    ) -> Option<(trait_env::ImplTargetKey, String, tir::TypeId)> {
         let trait_env::ImplTargetKey::Decl(def) = key else {
             return None;
         };
         let newtype = self.newtype_self_type(*def)?;
-        let link = self.tysys.type_table.borrow().static_link_below(newtype)?;
+        let link = self.tysys.type_table.borrow().get_newtype_base(newtype)?;
         let link_name = match *self.tysys.type_table.borrow().get(link) {
             tir::ResolvedType::Newtype { def, .. } | tir::ResolvedType::Flags { def } => {
                 self.tysys.type_table.borrow().decl_name(def).to_string()
@@ -733,7 +745,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             _ => self.tysys.get_ultimate_base_struct_name(link),
         };
         let link_key = self.impl_target_of(link, &name::DeclName::new(&link_name));
-        Some((link_key, link_name))
+        Some((link_key, link_name, link))
     }
 
     /// The declaration a `Type::method` call resolves to, at the link of a

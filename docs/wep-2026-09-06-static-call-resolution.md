@@ -209,6 +209,13 @@ newtype derives nothing itself, so a derivation is offered at the link it is
 written for. The owner is found without the arguments, and the arguments then
 select among that link's candidates only.
 
+A link offers what is written for it, so two kinds of answer do not count. A
+blanket reaches every link alike and so separates none: a link that only a
+blanket answers passes the name down. An impl on another instance of a link
+answers nothing for this one. The instance is the one the call spells, or the
+one the chain declares where the head is spelled bare, never one the arguments
+would infer.
+
 The arguments cannot decide it, because they are typed against the owner. A
 site that resolves the parameter list first, to give each argument its expected
 type, needs the owner before any argument exists, so choosing the link by
@@ -394,3 +401,7 @@ picked rather than to pick it.
 - Whether a spelling is a static at all is decided by a full resolution, which
   the call then runs again. It runs once per static call, never in a loop, and
   nothing here measures what the repeat costs.
+
+- The owning link is walked again by each site that needs it on one call: the
+  parameter list, the callee and the inherited retype each ask. Nothing here
+  measures what the repeat costs.

@@ -3572,9 +3572,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A newtype inheriting the static dispatches to the link of its chain
         // that owns it.
         let mut newtype_dispatch: Option<(TypeId, TypeId, Vec<TypeId>)> = None;
+        // The instance the call settled, where a bare generic newtype spelled
+        // none.
+        let receiver = inherited.map_or(receiver_type, |inherited| inherited.newtype);
         let owner = self
-            .newtype_static_owner(receiver_type, method_name, None)
-            .and_then(|(link, _)| (link != receiver_type).then_some((receiver_type, link)));
+            .newtype_static_owner(receiver, method_name, None)
+            .and_then(|(link, _)| (link != receiver).then_some((receiver, link)));
         // The written name keys the impl indices; the fq form names the method.
         let (actual_struct_name, actual_struct_fq, actual_mangled_name) = match owner {
             Some((newtype, link)) => {

@@ -5354,24 +5354,6 @@ impl TypeTable {
         }
     }
 
-    /// The next link down `newtype`'s chain whose impls a static it inherits
-    /// may be declared on: a newtype or `flags` it wraps, else the type the
-    /// chain stands for, as [`Self::inherited_base`] reaches it. `None` where
-    /// `newtype` is no newtype, or its chain stands for itself.
-    pub fn static_link_below(&self, newtype: TypeId) -> Option<TypeId> {
-        let ResolvedType::Newtype { base_type, .. } = self.get(newtype) else {
-            return None;
-        };
-        if matches!(
-            self.get(*base_type),
-            ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
-        ) {
-            return Some(*base_type);
-        }
-        let end = self.reflect_structure_head(newtype);
-        (end != newtype).then_some(end)
-    }
-
     /// The link below `newtype` on its chain that `declared_on` declares: the
     /// base an inherited method's signature names, which alone becomes
     /// `newtype` (`spec-types`, "Method Signature Substitution").

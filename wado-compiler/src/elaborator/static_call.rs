@@ -262,7 +262,13 @@ struct StaticOwner {
     ty: Option<TypeId>,
     /// The spelled head's type, where the owner is a link below it.
     head: Option<TypeId>,
+    /// The link's type as the chain declares it, below the head: the instance
+    /// whose impls own the name where the call knows no type.
+    declared: Option<TypeId>,
     below_head: bool,
+    /// Whether any link answers the name. Where none does, the walk stops at
+    /// the chain's last link and the call is the head's.
+    owns: bool,
     /// The nearest link that left traits out of scope, which a report names
     /// where no link answers.
     nearest: Option<(String, Vec<Candidate>)>,
@@ -270,7 +276,9 @@ struct StaticOwner {
 
 impl StaticOwner {
     /// `query` asked of this link. Below the head the caller's site and key
-    /// name another type, so the link's own key stands for both.
+    /// name another type, so the link's own key stands for both. The
+    /// receiver's arguments stay: they are the declaring block's, which the
+    /// call settled at the link that owns it.
     fn query<'q>(&'q self, query: &StaticQuery<'q>) -> StaticQuery<'q> {
         let (site, receiver_key) = if self.below_head {
             (None, Some(&self.key))
@@ -286,12 +294,16 @@ impl StaticOwner {
         }
     }
 
+    /// The report where the owner answers nothing the call reaches: the
+    /// owner's own traits out of scope, or, where no link owns the name, the
+    /// nearest link's.
     fn out_of_scope_lookup<H: CompilerHost>(
         self,
         e: &Elaborator<'_, H>,
         out_of_scope: Vec<Candidate>,
     ) -> StaticLookup {
-        let (name, out_of_scope) = self.nearest.unwrap_or((self.name, out_of_scope));
+        let nearest = if self.owns { None } else { self.nearest };
+        let (name, out_of_scope) = nearest.unwrap_or((self.name, out_of_scope));
         e.out_of_scope_lookup(&name, &out_of_scope)
     }
 }
@@ -369,7 +381,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve what `query`'s spelling names, once, for every site that used to
     /// ask its own question.
     pub(super) fn resolve_static_callee(&mut self, query: StaticQuery<'_>) -> StaticLookup {
-        let (owner, offer) = self.static_owner_walk(&query);
+        let owner = self.static_owner(&query);
+        let offer = self.link_offer(&owner.query(&query), &owner.key);
         // The arguments and the expected type read the spelled head as the
         // owner, and a callee the owner declares reads the owner as the head;
         // no other link is rewritten either way (`spec-types`, "Method
@@ -410,13 +423,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The link of the newtype chain `query`'s receiver heads that the call
-    /// belongs to, and what it offers: the first, from the head down, whose
-    /// own impls, cases or derivations answer the name. Read without the
-    /// arguments, so a site that needs the callee's frame before they are
-    /// elaborated reads the link the resolution then selects in. A link the
-    /// name reaches owns the call even where no declaration there admits the
-    /// arguments (`spec-types`, "Inherited Associated Functions and Traits").
-    fn static_owner_walk(&mut self, query: &StaticQuery<'_>) -> (StaticOwner, LinkOffer) {
+    /// belongs to: the first, from the head down, whose own impls, cases or
+    /// derivations answer the name. Read without the arguments, and at the
+    /// instance the spelling wrote and the chain declares rather than one the
+    /// call infers, so every site asking reads one owner, the one the
+    /// resolution then selects in. An impl on another instance of a link
+    /// answers nothing there. A blanket covers a link through its bound rather
+    /// than as its own declaration, and owns nothing. A link the name reaches
+    /// owns the call even where no declaration there admits the arguments
+    /// (`spec-types`, "Inherited Associated Functions and Traits").
+    fn static_owner(&mut self, query: &StaticQuery<'_>) -> StaticOwner {
         // One vantage: the key the caller resolved, else the one its reference
         // site answered for, else the name's own. Deriving a second key when
         // the first misses makes the order a silent tiebreak.
@@ -428,39 +444,64 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: query.receiver_name.to_string(),
             ty: query.receiver_type,
             head: None,
+            declared: None,
             below_head: false,
+            owns: true,
             nearest: None,
         };
         loop {
-            let offer = self.link_offer(&owner.query(query), &owner.key);
-            let LinkOffer::Nothing { out_of_scope } = offer else {
-                return (owner, offer);
+            let written = StaticQuery {
+                receiver_type: owner.ty.or(owner.declared),
+                receiver_args: &[],
+                ..owner.query(query)
             };
-            // A newtype reaches what it wraps, one link of a chain at a time,
-            // so a link's own impls answer before its base's. Read from the
-            // alias's declaration, since a namespaced `lib::Q::twice()` leaves
-            // the caller's frame no `Q` to look one up by.
-            let Some((link_key, link_name)) = self.newtype_link_target(&owner.key) else {
-                return (owner, LinkOffer::Nothing { out_of_scope });
+            let out_of_scope = match self.link_offer(&written, &owner.key) {
+                // Whether a link derives the name is its declaration's to
+                // say: an instance still open in the head's parameters cannot.
+                LinkOffer::Nothing { .. }
+                    if self
+                        .derived_callee(
+                            &StaticQuery {
+                                receiver_type: None,
+                                ..written
+                            },
+                            &owner.key,
+                        )
+                        .is_some() =>
+                {
+                    return owner;
+                }
+                LinkOffer::Nothing { out_of_scope } => out_of_scope,
+                LinkOffer::Candidates {
+                    reached,
+                    out_of_scope,
+                    ..
+                } if reached.iter().all(|c| c.origin == CandidateOrigin::Blanket) => out_of_scope,
+                LinkOffer::NotStatic | LinkOffer::Candidates { .. } | LinkOffer::Derived(_) => {
+                    return owner;
+                }
             };
             if owner.nearest.is_none() && !out_of_scope.is_empty() {
                 owner.nearest = Some((owner.name.clone(), out_of_scope));
             }
+            // A newtype reaches what it wraps, one link of a chain at a time,
+            // so a link's own impls answer before its base's. Read from the
+            // alias's declaration, since a namespaced `lib::Q::twice()` leaves
+            // the caller's frame no `Q` to look one up by.
+            let Some((link_key, link_name, declared)) = self.newtype_link_target(&owner.key) else {
+                owner.owns = false;
+                return owner;
+            };
             let link_type = owner
                 .ty
-                .and_then(|ty| self.tysys.type_table.borrow().static_link_below(ty));
+                .and_then(|ty| self.tysys.type_table.borrow().get_newtype_base(ty));
             owner.head = query.receiver_type;
             owner.below_head = true;
             owner.ty = link_type.or(owner.ty);
+            owner.declared = Some(declared);
             owner.key = link_key;
             owner.name = link_name;
         }
-    }
-
-    /// [`Self::static_owner_walk`]'s link alone, for a site that reads the
-    /// callee's frame before the call resolves.
-    fn static_owner(&mut self, query: &StaticQuery<'_>) -> StaticOwner {
-        self.static_owner_walk(query).0
     }
 
     /// Every declaration of `query`'s method the receiver at `key` supplies,
@@ -603,7 +644,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         query: &StaticQuery<'_>,
         key: &ImplTargetKey,
     ) -> Option<Box<StaticCallee>> {
-        if self.newtype_link_target(key).is_some() {
+        if self.is_newtype_key(key) {
             return None;
         }
         let method_name = query.method_name;
@@ -639,7 +680,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The link of `newtype`'s chain its static named `method_name` belongs
     /// to, through `required_trait` where the spelling names one: the link's
-    /// type and key. `None` where `newtype` is no newtype.
+    /// type and key. The newtype itself where no link answers the name. `None`
+    /// where `newtype` is no newtype.
     pub(super) fn newtype_static_owner(
         &mut self,
         newtype: TypeId,
@@ -658,25 +700,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             required_trait,
             ..StaticQuery::of(&name, method_name)
         });
+        if !owner.owns {
+            return Some((newtype, key));
+        }
         let link = owner.ty.expect("the walk carries the head's type down");
         Some((link, owner.key))
     }
 
     /// The link below the newtype `key` its static named `method_name`
-    /// belongs to, with its name. `None` where `key` is no newtype, or where
-    /// it owns the static itself.
+    /// belongs to, with its name. `None` where `key` is no newtype, where it
+    /// owns the static itself, or where no link answers the name.
     pub(super) fn newtype_static_target(
         &mut self,
         key: &ImplTargetKey,
         method_name: &str,
     ) -> Option<(ImplTargetKey, String)> {
-        self.newtype_link_target(key)?;
+        if !self.is_newtype_key(key) {
+            return None;
+        }
         let name = key.decl_name(self.tysys.resolutions.defs())?.to_string();
         let owner = self.static_owner(&StaticQuery {
             receiver_key: Some(key),
             ..StaticQuery::of(&name, method_name)
         });
-        (owner.key != *key).then_some((owner.key, owner.name))
+        (owner.owns && owner.key != *key).then_some((owner.key, owner.name))
     }
 
     /// The key of the link a static named `method_name` on `key` belongs to:

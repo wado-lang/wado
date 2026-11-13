@@ -1,0 +1,20 @@
+// A derived trait a generic newtype inherits answers its type-path spelling,
+// with or without the newtype's arguments written.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+type Named<T> = Pair<String, T>;
+
+test {
+    let x: Named<i32> = { a: "k", b: 1 };
+    let y: Named<i32> = { a: "k", b: 2 };
+    assert Named::<i32>::eq(&x, &x);
+    assert !Named::eq(&x, &y);
+    assert Named::cmp(&x, &y) matches { Less };
+}
+
+__DATA__
+{"test": {}}

@@ -177,7 +177,7 @@ struct StaticTypeArgs {
 /// Signature Substitution").
 #[derive(Clone, Copy)]
 pub(super) struct InheritedStatic {
-    newtype: TypeId,
+    pub(super) newtype: TypeId,
     base: TypeId,
 }
 
@@ -1974,7 +1974,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_args: method_type_args,
                     ..
                 } = static_args;
-                let inherited = self.inherited_static(callee, &impl_type_args_inferred);
                 if suffix == "from"
                     && !own_from
                     && let [arg_type] = args[..]
@@ -2059,10 +2058,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let block = resolved
                     .found()
                     .and_then(|callee| self.tysys.block_of(&callee.method_ref));
+                // A derivation has no block: its slots are the owning link's.
+                let owner = self.static_owner_key(&receiver_key, suffix);
                 let owners: Vec<DefId> = block
                     .into_iter()
                     .chain(resolved.found().and_then(|c| c.method_ref.method_id))
-                    .chain(receiver_key.decl())
+                    .chain(owner.decl())
                     .collect();
                 let mut substituted = self.static_param_types_at(
                     raw_param_types,
@@ -2070,6 +2071,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &impl_type_args_inferred,
                     &method_type_args,
                 );
+                let inherited =
+                    self.inherited_static(&receiver_key, suffix, &impl_type_args_inferred);
                 self.retype_inherited(inherited, &mut substituted);
                 self.answer_frame_projections_in(&mut substituted);
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
@@ -2295,7 +2298,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_args: method_type_args,
                         ..
                     } = static_args;
-                    let inherited = self.inherited_static(callee, &impl_type_args_inferred);
+                    // The importing module never names `Type`, so a receiver
+                    // the namespace did not resolve has no newtype to retype to.
+                    let inherited = ns_key.as_ref().and_then(|key| {
+                        self.inherited_static(key, method_name, &impl_type_args_inferred)
+                    });
                     let resolved = self.resolve_static_callee(StaticQuery {
                         site: ident.segments.get(1).map(|segment| segment.id),
                         receiver_key: ns_key.as_ref(),
@@ -4898,13 +4905,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// open.
     pub(super) fn inherited_static(
         &mut self,
-        callee: StaticCallee<'_>,
+        receiver: &ImplTargetKey,
+        method_name: &str,
         owner_args: &[TypeId],
     ) -> Option<InheritedStatic> {
-        let key = self.static_receiver_key(callee.type_name, callee.receiver_key);
-        let (owner, _) = self.newtype_static_target(&key, callee.method_name)?;
+        let (owner, _) = self.newtype_static_target(receiver, method_name)?;
         let link = owner.decl();
-        let (newtype, _) = self.newtype_at_base_args(&key, link, owner_args)?;
+        let (newtype, _) = self.newtype_at_base_args(receiver, link, owner_args)?;
         let table = self.tysys.type_table.borrow();
         if table.contains_infer_var(newtype) && !self.awaits_report(&table, newtype) {
             return None;
