@@ -254,7 +254,8 @@ struct Candidate {
 }
 
 /// The link of a newtype chain a static call belongs to: the first, from the
-/// spelled head down, whose own impls, cases or derivations answer the name.
+/// spelled head down, whose own impls, cases or derivations answer the name,
+/// else the head.
 struct StaticOwner {
     key: ImplTargetKey,
     name: String,
@@ -266,11 +267,8 @@ struct StaticOwner {
     /// whose impls own the name where the call knows no type.
     declared: Option<TypeId>,
     below_head: bool,
-    /// Whether any link answers the name. Where none does, the owner is the
-    /// head.
-    owns: bool,
-    /// The nearest link that left traits out of scope, which a report names
-    /// where no link answers.
+    /// Where no link answers the name and the owner is the head: the nearest
+    /// link that left traits out of scope, which the report names.
     nearest: Option<(String, Vec<Candidate>)>,
 }
 
@@ -302,8 +300,7 @@ impl StaticOwner {
         e: &Elaborator<'_, H>,
         out_of_scope: Vec<Candidate>,
     ) -> StaticLookup {
-        let nearest = if self.owns { None } else { self.nearest };
-        let (name, out_of_scope) = nearest.unwrap_or((self.name, out_of_scope));
+        let (name, out_of_scope) = self.nearest.unwrap_or((self.name, out_of_scope));
         e.out_of_scope_lookup(&name, &out_of_scope)
     }
 }
@@ -447,10 +444,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             head: None,
             declared: None,
             below_head: false,
-            owns: true,
             nearest: None,
         };
         let mut owner = at_head(key.clone());
+        let mut nearest = None;
         loop {
             let written = StaticQuery {
                 receiver_type: owner.ty.or(owner.declared),
@@ -483,19 +480,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return owner;
                 }
             };
-            if owner.nearest.is_none() && !out_of_scope.is_empty() {
-                owner.nearest = Some((owner.name.clone(), out_of_scope));
+            if nearest.is_none() && !out_of_scope.is_empty() {
+                nearest = Some((owner.name.clone(), out_of_scope));
             }
             // A newtype reaches what it wraps, one link of a chain at a time,
             // so a link's own impls answer before its base's. Read from the
             // alias's declaration, since a namespaced `lib::Q::twice()` leaves
-            // the caller's frame no `Q` to look one up by.
-            // With no link owning the name, the call is the head's, and so are
-            // the blankets that cover it: they rank there, against each other.
+            // the caller's frame no `Q` to look one up by. With no link owning
+            // the name, the call is the head's, and so are the blankets that
+            // cover it: they rank there, against each other.
             let Some((link_key, link_name, declared)) = self.newtype_link_target(&owner.key) else {
                 return StaticOwner {
-                    owns: false,
-                    nearest: owner.nearest,
+                    nearest,
                     ..at_head(key)
                 };
             };
@@ -707,9 +703,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             required_trait,
             ..StaticQuery::of(&name, method_name)
         });
-        if !owner.owns {
-            return Some((newtype, key));
-        }
         let link = owner.ty.expect("the walk carries the head's type down");
         Some((link, owner.key))
     }
@@ -730,7 +723,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_key: Some(key),
             ..StaticQuery::of(&name, method_name)
         });
-        (owner.owns && owner.key != *key).then_some((owner.key, owner.name))
+        (owner.key != *key).then_some((owner.key, owner.name))
     }
 
     /// The key of the link a static named `method_name` on `key` belongs to:
