@@ -77,16 +77,25 @@ The function takes a list of ranges rather than a `CodePointSet`. Its typical
 input is a set the caller built, such as a regular expression's character
 class, and not a property. A property passes through `ranges(p)` first.
 
-Inside the asset, the closure adds what ICU4X's
-`CaseMapper::add_case_closure_to` adds for each code point of the input,
-keeping the characters and dropping the strings. That closure is documented
-over full case folding and the simple mappings, and it adds strings (`ss` for
-`ß`, `i̇` for `İ`). Without the strings it adds exactly the other members of
-the code point's `scf` class: run over every code point against
-`CaseMapper::simple_fold`, ICU4X 2.3 shows no difference. Nothing promises
-that equality across ICU upgrades, so the test below holds it. Using ICU4X's
-closure keeps one copy of the case data, where a table of `scf` classes
-generated beside it would have to agree with it after each upgrade.
+The closure is built from the definition of `scf`. `wado-bundled-icu/gen`
+applies `CaseMapper::simple_fold` to every code point and writes the classes
+of more than one member, each a list of the code points that fold to one
+value. `simple_fold_closure` adds every class with a member in the input. The
+table is generated with the WIT, the Rust tables and the Wado enums, so it
+follows the ICU4X the asset is built from.
+
+| ICU4X | Classes | Code points in them | Of 2 | Of 3 | Of 4 |
+| ----- | ------: | ------------------: | ---: | ---: | ---: |
+| 2.3.0 |    1482 |                2994 | 1455 |   24 |    3 |
+
+A Rust program over `icu_casemap` 2.3.0 that groups every code point by
+`CaseMapper::simple_fold` gives these counts.
+
+ICU4X's own closure, `add_case_closure_to`, is not the source. It is
+documented over a different relation, full case folding together with the
+simple mappings, and adds strings for it (`ss` for `ß`, `i̇` for `İ`). Its
+characters alone equal the `scf` classes at ICU4X 2.3.0, but only as an
+observation that no version promises to keep.
 
 ### What Re builds on it
 
@@ -109,8 +118,9 @@ caselessly at match time.
   `simple_fold` in the asset and the facade. A test holds `simple_fold` to
   the cases in Context, `ß`, `ẞ` and `İ`, and to the Kelvin sign folding to
   `k`.
-- [ ] `simple_fold_closure`. A Rust test in `wado-bundled-icu` checks it against
-  `CaseMapper::simple_fold` over every code point.
+- [ ] `simple_fold_closure`, over the table `gen` writes. A Rust test in
+  `wado-bundled-icu` checks, for every code point, that the closure of it
+  alone holds exactly the code points with the same `simple_fold`.
 - [ ] Re accepts `i`. The differential test against Node's `RegExp` with the `u`
   flag covers it, and so do test262's case-insensitive RegExp tests. The
   known gap in [Re](./wep-2026-11-02-re.md#known-gaps) is removed.
