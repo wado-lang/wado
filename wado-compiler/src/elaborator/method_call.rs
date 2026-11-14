@@ -910,12 +910,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // reference it matched over the base type, which a receiver read
         // through more references than that does not spell.
         let self_type = match matched_ref_kind {
-            Some(RefKind::Shared) => self.tysys.type_table.borrow_mut().make_ref(base_type_id),
-            Some(RefKind::Mut) => self
+            Some(kind) => self
                 .tysys
                 .type_table
                 .borrow_mut()
-                .make_mut_ref(base_type_id),
+                .make_ref_of(kind, base_type_id),
             None => base_type_id,
         };
         let self_binding = SelfBinding {

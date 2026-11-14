@@ -4928,8 +4928,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let receiver = {
                 let mut table = self.tysys.type_table.borrow_mut();
                 match RefKind::from_resolved(table.get(target)) {
-                    Some(RefKind::Shared) => table.make_ref(declared),
-                    Some(RefKind::Mut) => table.make_mut_ref(declared),
+                    Some(kind) => table.make_ref_of(kind, declared),
                     None => declared,
                 }
             };

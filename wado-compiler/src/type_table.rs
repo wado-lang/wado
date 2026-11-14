@@ -3198,6 +3198,14 @@ impl TypeTable {
         self.intern(ResolvedType::MutRef(inner))
     }
 
+    /// A reference of `kind` to `inner`.
+    pub fn make_ref_of(&mut self, kind: RefKind, inner: TypeId) -> TypeId {
+        match kind {
+            RefKind::Shared => self.make_ref(inner),
+            RefKind::Mut => self.make_mut_ref(inner),
+        }
+    }
+
     /// Build the `(binding_type, value)` for one unrolled tuple-for-of element.
     ///
     /// By value (`by_ref == false`), the element is the field access itself,
