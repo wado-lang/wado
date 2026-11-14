@@ -5,8 +5,10 @@
 //! those steps — so a node kind the IR gains is taught to this walk alone,
 //! rather than to each caller's own idea of what a chain may contain.
 
+use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprId, ExprKind, Operand};
+use crate::nir_visitor::reachable_exprs;
 use crate::tir::ResolvedType;
 use crate::type_table::TypeTable;
 
@@ -93,6 +95,36 @@ fn named_place(body: &Body, op: Operand) -> Option<NamedPlace> {
         }
         cursor = inner;
     }
+}
+
+/// The borrows a field access, an index or a deref reads through, which
+/// [`named_place`] drops as steps: the chain around one is what reads or
+/// writes the storage it names.
+pub(super) fn projected_borrows(body: &Body) -> IndexSet<ExprId> {
+    let mut set = IndexSet::default();
+    for e in reachable_exprs(body) {
+        let base = match &body.exprs[e].kind {
+            ExprKind::FieldAccess { expr, .. }
+            | ExprKind::Index { expr, .. }
+            | ExprKind::Unary {
+                op: NirUnaryOp::Deref,
+                expr,
+            } => *expr,
+            _ => continue,
+        };
+        if let Some(b) = base.as_expr()
+            && matches!(
+                body.exprs[b].kind,
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                    ..
+                }
+            )
+        {
+            set.insert(b);
+        }
+    }
+    set
 }
 
 /// The step a unary operator spells, or `None` for one that computes a value.

@@ -13,8 +13,8 @@ use crate::nir_arena::{
 };
 
 use super::place::{
-    is_array_place, lvalue_root_local, peel_wrappers, place_of, referenced_place_operand,
-    write_root_local,
+    is_array_place, lvalue_root_local, peel_wrappers, place_of, projected_borrows,
+    referenced_place_operand, write_root_local,
 };
 use crate::nir_visitor::reachable_exprs;
 use crate::type_table::TypeTable;
@@ -395,36 +395,6 @@ pub(super) fn aggregate_safe_locals(
         }
     }
     safe
-}
-
-/// The borrows a field access, an index or a deref reads through. Each names
-/// the storage under it rather than a handle (see `named_place`), so the chain
-/// around it is what reads or writes that storage, and is judged instead.
-fn projected_borrows(body: &Body) -> IndexSet<ExprId> {
-    let mut set = IndexSet::default();
-    for e in reachable_exprs(body) {
-        let base = match &body.exprs[e].kind {
-            ExprKind::FieldAccess { expr, .. }
-            | ExprKind::Index { expr, .. }
-            | ExprKind::Unary {
-                op: NirUnaryOp::Deref,
-                expr,
-            } => *expr,
-            _ => continue,
-        };
-        if let Some(b) = base.as_expr()
-            && matches!(
-                body.exprs[b].kind,
-                ExprKind::Unary {
-                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-                    ..
-                }
-            )
-        {
-            set.insert(b);
-        }
-    }
-    set
 }
 
 /// Locals of `body` a compile-time frame cannot track: something other than a
