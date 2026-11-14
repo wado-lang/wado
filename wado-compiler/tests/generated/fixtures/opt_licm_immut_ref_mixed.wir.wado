@@ -201,7 +201,6 @@ fn "opt_licm_immut_ref_mixed.wado/run"() with Stdout {
     let $licm_threshold_37: i32;
     let out_41: ref "core:prelude/string.wado//String";
     let x_112: i64;
-    let $sroa_view_repr_205: ref Array<u8>;
     used = builtin::array_len(local.tee elements(array.new_fixed<ref "opt_licm_immut_ref_mixed.wado//Config">(struct.new "opt_licm_immut_ref_mixed.wado//Config" { threshold: black_box(10) })));
     counter = struct.new "opt_licm_immut_ref_mixed.wado//Counter" { value: 0, limit: 100 };
     if @unlikely(0 >= used) {
@@ -231,14 +230,13 @@ fn "opt_licm_immut_ref_mixed.wado/run"() with Stdout {
     used = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_112(x_112 = builtin::i64_extend_i32_s(used); select i64(x_112 < 0_i64, 0_i64 - x_112, x_112)));
     $licm_threshold_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_41, $licm_threshold_37, used);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_3(out_41.repr), $licm_threshold_37, x_112, used);
-    $sroa_view_repr_205 = global:opt_licm_immut_ref_mixed.wado::$const_obj_0;
     if @unlikely(local.tee used(out_41.used + 1) > builtin::array_len($load_3)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_41, used);
     }
     $licm_threshold_37 = out_41.used;
     out_41.used = used;
-    builtin::array_copy<u8>(out_41.repr, $licm_threshold_37, $sroa_view_repr_205, 0, 1);
+    builtin::array_copy<u8>(out_41.repr, $licm_threshold_37, global:opt_licm_immut_ref_mixed.wado::$const_obj_0, 0, 1);
     used = i < 0;
     i = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_112(x_112 = builtin::i64_extend_i32_s(i); select i64(x_112 < 0_i64, 0_i64 - x_112, x_112)));
     used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_41, used, i);

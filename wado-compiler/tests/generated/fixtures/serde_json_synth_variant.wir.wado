@@ -2415,7 +2415,8 @@ fn "core:prelude/fpfmt.wado/big_shl"(n, bits) {
     let shifted: ref "core:prelude/list.wado//List<u32>";
     let used_15: i32;
     let used_28: i32;
-    let $sroa_$iter_1_repr_36: ref Array<u32>;
+    let $licm_repr_34: ref Array<u32>;
+    let $licm_repr_37: ref Array<u32>;
     words = bits / 32;
     if local.tee bits(bits % 32) != 0 {
         "core:prelude/fpfmt.wado/big_mul_add"(n, 1 << bits, 0);
@@ -2423,32 +2424,36 @@ fn "core:prelude/fpfmt.wado/big_shl"(n, bits) {
     if words > 0 {
         shifted = struct.new "core:prelude/list.wado//List<u32>" { repr: builtin::array_new<u32>(n.used + words), used: 0 };
         bits = 0;
+        $licm_repr_34 = shifted.repr;
         b201: block {
             l202: loop {
                 break_if b201 bits >= words;
-                if @unlikely(local.tee used_15(shifted.used) >= builtin::array_len(shifted.repr)) {
+                if @unlikely(local.tee used_15(shifted.used) >= builtin::array_len($licm_repr_34)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(shifted);
+                    $licm_repr_34 = shifted.repr;
                 }
-                builtin::array_set<u32>(shifted.repr, used_15, 0);
+                builtin::array_set<u32>($licm_repr_34, used_15, 0);
                 shifted.used = used_15 + 1;
                 bits = bits + 1;
                 continue l202;
             };
         };
         bits = n.used;
-        $sroa_$iter_1_repr_36 = n.repr;
+        $licm_repr_34 = n.repr;
         words = 0;
+        $licm_repr_37 = shifted.repr;
         b204: block {
             l205: loop {
                 break_if b204 words >= bits;
-                used_15 = builtin::array_get_value<u32>($sroa_$iter_1_repr_36, words);
+                used_15 = builtin::array_get_value<u32>($licm_repr_34, words);
                 words = words + 1;
-                if @unlikely(local.tee used_28(shifted.used) >= builtin::array_len(shifted.repr)) {
+                if @unlikely(local.tee used_28(shifted.used) >= builtin::array_len($licm_repr_37)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(shifted);
+                    $licm_repr_37 = shifted.repr;
                 }
-                builtin::array_set<u32>(shifted.repr, used_28, used_15);
+                builtin::array_set<u32>($licm_repr_37, used_28, used_15);
                 shifted.used = used_28 + 1;
                 continue l205;
             };

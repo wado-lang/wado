@@ -282,14 +282,13 @@ fn "licm_reload_after_callee_loop_write.wado/run"() with Stdout {
     $av_254 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_95(x_95 = builtin::i64_extend_i32_s($av_254); select i64(x_95 < 0_i64, 0_i64 - x_95, x_95)));
     is_negative_91 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_24, is_negative_91, $av_254);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $array_clone_src_1(out_24.repr), is_negative_91, x_95, $av_254);
-    $array_clone_dst_2 = global:licm_reload_after_callee_loop_write.wado::$const_obj_0;
     if @unlikely(local.tee $av_254(out_24.used + 1) > builtin::array_len($array_clone_src_1)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_24, $av_254);
     }
     is_negative_91 = out_24.used;
     out_24.used = $av_254;
-    builtin::array_copy<u8>(out_24.repr, is_negative_91, $array_clone_dst_2, 0, 1);
+    builtin::array_copy<u8>(out_24.repr, is_negative_91, global:licm_reload_after_callee_loop_write.wado::$const_obj_0, 0, 1);
     $av_254 = $sroa_t_h1_247 < 0;
     $sroa_t_h1_247 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_95(x_95 = builtin::i64_extend_i32_s($sroa_t_h1_247); select i64(x_95 < 0_i64, 0_i64 - x_95, x_95)));
     $av_254 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_24, $av_254, $sroa_t_h1_247);

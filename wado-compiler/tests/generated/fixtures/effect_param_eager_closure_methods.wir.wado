@@ -141,16 +141,14 @@ fn "effect_param_eager_closure_methods.wado/run"() with Stdout {
     let out_24: ref "core:prelude/string.wado//String";
     let $temp_inline_core_prelude_traits_wado_TemplateHole_effect_param_eager_closure_methods_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_32_0: ref "core:prelude/format.wado//Formatter";
     let $cm_pair_7_209: i64;
-    let $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__for_each_2_0_repr_233: ref Array<i32>;
     let $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__for_each_2_0_index_234: i32;
     let $sroa_t_h0_247: ref "core:prelude/types.wado//Option<i32>";
     let new_repr: ref Array<u8>;
-    $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__for_each_2_0_repr_233 = global:effect_param_eager_closure_methods.wado::$const_obj_1;
     $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__for_each_2_0_index_234 = 0;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__for_each_2_0_index_234 >= 3;
-            item_17 = builtin::array_get_value<i32>($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__for_each_2_0_repr_233, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__for_each_2_0_index_234);
+            item_17 = builtin::array_get_value<i32>(global:effect_param_eager_closure_methods.wado::$const_obj_1, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__for_each_2_0_index_234);
             $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__for_each_2_0_index_234 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__for_each_2_0_index_234 + 1;
             "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.wado/$Closure_0::$call$dae[self]"(item_17);
             continue l1;
@@ -658,11 +656,8 @@ fn "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.w
     let x_70: i64;
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_529: ref Array<u8>;
-    out_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-    $sroa_view_repr_529 = global:effect_param_eager_closure_methods.wado::$const_obj_12;
-    out_4.used = local.tee $load_0(5);
-    builtin::array_copy<u8>(local.tee $load_1(out_4.repr), 0, $sroa_view_repr_529, 0, 5);
+    local.tee out_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }).used = local.tee $load_0(5);
+    builtin::array_copy<u8>(local.tee $load_1(out_4.repr), 0, global:effect_param_eager_closure_methods.wado::$const_obj_12, 0, 5);
     is_negative_66 = x < 0;
     x_70 = builtin::i64_extend_i32_s(x);
     x_70 = select i64(x_70 < 0_i64, 0_i64 - x_70, x_70);
@@ -742,22 +737,22 @@ fn "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.w
     }
     is_negative_66 = out_4.used;
     out_4.used = $load_0;
-    $sroa_view_repr_529 = out_4.repr;
+    $load_1 = out_4.repr;
     x = is_negative_66 + x;
     b102: block {
         l103: loop {
             break_if b102 (x - is_negative_66) < 2;
             q = x_70 /u 100_i64;
             tens = local.tee $load_0(builtin::i32_wrap_i64(x_70 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_529, x - 1, (48 + $load_0) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_529, x - 2, 48 + tens);
+            builtin::array_set_u8($load_1, x - 1, (48 + $load_0) - (tens * 10));
+            builtin::array_set_u8($load_1, x - 2, 48 + tens);
             x = x - 2;
             x_70 = q;
             continue l103;
         };
     };
     if x > is_negative_66 {
-        builtin::array_set_u8($sroa_view_repr_529, is_negative_66, 48 + builtin::i32_wrap_i64(x_70 %u 10_i64));
+        builtin::array_set_u8($load_1, is_negative_66, 48 + builtin::i32_wrap_i64(x_70 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_40: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_40;

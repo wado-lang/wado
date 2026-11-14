@@ -235,6 +235,7 @@ fn "match_variant_import_module.wado/apply_padding$spec0$sroa[spec.align]"(s, sp
     let result: ref "core:prelude/string.wado//String";
     let start_66: i32;
     let start_87: i32;
+    let $licm_repr_144: ref Array<u8>;
     if local.tee $load_0(s.used) >= 8 {
         return s;
     }
@@ -252,16 +253,18 @@ fn "match_variant_import_module.wado/apply_padding$spec0$sroa[spec.align]"(s, sp
             builtin::array_copy<u8>(result.repr, $load_1, s.repr, 0, $load_0);
         };
         $load_0 = 0;
+        $licm_repr_144 = result.repr;
         b3: block {
             l4: loop {
                 break_if b3 $load_0 >= pad_len;
-                if @unlikely(local.tee $load_1(result.used + 1) > builtin::array_len(result.repr)) {
+                if @unlikely(local.tee $load_1(result.used + 1) > builtin::array_len($licm_repr_144)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, $load_1);
+                    $licm_repr_144 = result.repr;
                 }
                 start_66 = result.used;
                 result.used = $load_1;
-                builtin::array_set_u8(result.repr, start_66, 95);
+                builtin::array_set_u8($licm_repr_144, start_66, 95);
                 $load_0 = $load_0 + 1;
                 continue l4;
             };
@@ -271,16 +274,18 @@ fn "match_variant_import_module.wado/apply_padding$spec0$sroa[spec.align]"(s, sp
         $load_0 = pad_len / 2;
         pad_len = pad_len - $load_0;
         $load_1 = 0;
+        $licm_repr_144 = result.repr;
         b7: block {
             l8: loop {
                 break_if b7 $load_1 >= $load_0;
-                if @unlikely(local.tee start_66(result.used + 1) > builtin::array_len(result.repr)) {
+                if @unlikely(local.tee start_66(result.used + 1) > builtin::array_len($licm_repr_144)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, start_66);
+                    $licm_repr_144 = result.repr;
                 }
                 start_87 = result.used;
                 result.used = start_66;
-                builtin::array_set_u8(result.repr, start_87, 95);
+                builtin::array_set_u8($licm_repr_144, start_87, 95);
                 $load_1 = $load_1 + 1;
                 continue l8;
             };
@@ -296,16 +301,18 @@ fn "match_variant_import_module.wado/apply_padding$spec0$sroa[spec.align]"(s, sp
             builtin::array_copy<u8>(result.repr, start_66, s.repr, 0, $load_0);
         };
         $load_0 = 0;
+        $licm_repr_144 = result.repr;
         b11: block {
             l12: loop {
                 break_if b11 $load_0 >= pad_len;
-                if @unlikely(local.tee $load_1(result.used + 1) > builtin::array_len(result.repr)) {
+                if @unlikely(local.tee $load_1(result.used + 1) > builtin::array_len($licm_repr_144)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, $load_1);
+                    $licm_repr_144 = result.repr;
                 }
                 start_66 = result.used;
                 result.used = $load_1;
-                builtin::array_set_u8(result.repr, start_66, 95);
+                builtin::array_set_u8($licm_repr_144, start_66, 95);
                 $load_0 = $load_0 + 1;
                 continue l12;
             };
@@ -313,16 +320,18 @@ fn "match_variant_import_module.wado/apply_padding$spec0$sroa[spec.align]"(s, sp
         result;
     } else {
         $load_0 = 0;
+        $licm_repr_144 = result.repr;
         b14: block {
             l15: loop {
                 break_if b14 $load_0 >= pad_len;
-                if @unlikely(local.tee $load_1(result.used + 1) > builtin::array_len(result.repr)) {
+                if @unlikely(local.tee $load_1(result.used + 1) > builtin::array_len($licm_repr_144)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, $load_1);
+                    $licm_repr_144 = result.repr;
                 }
                 start_66 = result.used;
                 result.used = $load_1;
-                builtin::array_set_u8(result.repr, start_66, 95);
+                builtin::array_set_u8($licm_repr_144, start_66, 95);
                 $load_0 = $load_0 + 1;
                 continue l15;
             };

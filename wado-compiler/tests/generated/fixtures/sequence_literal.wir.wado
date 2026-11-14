@@ -1844,24 +1844,27 @@ fn "sequence_literal.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/trai
     let end: i32;
     let item: i32;
     let used: i32;
-    let $hfs_index_23: i32;
+    let $licm_repr_23: ref Array<i32>;
+    let $hfs_index_24: i32;
     items = struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(builtin::array_len(elements)), used: 0 };
     end = builtin::array_len(elements);
     elements = local.tee $iter_0(struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements, index: 0, end: end }).repr;
-    $hfs_index_23 = 0;
+    $licm_repr_23 = items.repr;
+    $hfs_index_24 = 0;
     b219: block {
         l220: loop {
-            if $hfs_index_23 >= end {
-                $iter_0.index = $hfs_index_23;
+            if $hfs_index_24 >= end {
+                $iter_0.index = $hfs_index_24;
                 break b219;
             }
-            item = builtin::array_get_value<i32>(elements, $hfs_index_23);
-            $hfs_index_23 = $hfs_index_23 + 1;
-            if @unlikely(local.tee used(items.used) >= builtin::array_len(items.repr)) {
+            item = builtin::array_get_value<i32>(elements, $hfs_index_24);
+            $hfs_index_24 = $hfs_index_24 + 1;
+            if @unlikely(local.tee used(items.used) >= builtin::array_len($licm_repr_23)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(items);
+                $licm_repr_23 = items.repr;
             }
-            builtin::array_set<i32>(items.repr, used, item);
+            builtin::array_set<i32>($licm_repr_23, used, item);
             items.used = used + 1;
             continue l220;
         };
@@ -1893,24 +1896,27 @@ fn "sequence_literal.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.
     let item: i32;
     let used_15: i32;
     let $sroa_out_items_21: ref "core:prelude/list.wado//List<i32>";
-    let $hfs_index_24: i32;
+    let $licm_repr_24: ref Array<i32>;
+    let $hfs_index_25: i32;
     $sroa_out_items_21 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     end = builtin::array_len(elements);
     elements = local.tee $iter_0(struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements, index: 0, end: end }).repr;
-    $hfs_index_24 = 0;
+    $licm_repr_24 = $sroa_out_items_21.repr;
+    $hfs_index_25 = 0;
     b223: block {
         l224: loop {
-            if $hfs_index_24 >= end {
-                $iter_0.index = $hfs_index_24;
+            if $hfs_index_25 >= end {
+                $iter_0.index = $hfs_index_25;
                 break b223;
             }
-            item = builtin::array_get_value<i32>(elements, $hfs_index_24);
-            $hfs_index_24 = $hfs_index_24 + 1;
-            if @unlikely(local.tee used_15($sroa_out_items_21.used) >= builtin::array_len($sroa_out_items_21.repr)) {
+            item = builtin::array_get_value<i32>(elements, $hfs_index_25);
+            $hfs_index_25 = $hfs_index_25 + 1;
+            if @unlikely(local.tee used_15($sroa_out_items_21.used) >= builtin::array_len($licm_repr_24)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_out_items_21);
+                $licm_repr_24 = $sroa_out_items_21.repr;
             }
-            builtin::array_set<i32>($sroa_out_items_21.repr, used_15, item);
+            builtin::array_set<i32>($licm_repr_24, used_15, item);
             $sroa_out_items_21.used = used_15 + 1;
             continue l224;
         };

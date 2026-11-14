@@ -67,19 +67,17 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0$dae[cmp]$spec0" = fn(ref "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>") -> ref null "derived_ord_reaches_blanket_bound.wado//P";  // TypeId(27)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<derived_ord_reaches_blanket_bound.wado/$tmpl$aec43b331a40fe7d,[bool,bool]>$spec0$spec0" = fn(bool, bool) -> ref "core:prelude/string.wado//String";  // TypeId(28)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(30)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(31)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
+type "functype//derived_ord_reaches_blanket_bound.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(32)
 
-type "functype//derived_ord_reaches_blanket_bound.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(33)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(34)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -95,18 +93,19 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:derived_ord_reaches_blanket_bound.wado::$const_obj_0: ref "Array<derived_ord_reaches_blanket_bound.wado/Color>" = array.new_fixed<"derived_ord_reaches_blanket_bound.wado//enum:Color">(0, 1);
-global global:core:prelude/string.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(32);
+global global:derived_ord_reaches_blanket_bound.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
+global global:derived_ord_reaches_blanket_bound.wado::$const_obj_1: ref "Array<derived_ord_reaches_blanket_bound.wado/Color>" = array.new_fixed<"derived_ord_reaches_blanket_bound.wado//enum:Color">(0, 1);
 
 fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
-    let repr_32: ref "Array<derived_ord_reaches_blanket_bound.wado/Color>";
-    let message_36: ref "core:prelude/string.wado//String";
+    let $load_10: ref Array<u8>;
     let $cm_pair_7: i64;
     let item_84: "derived_ord_reaches_blanket_bound.wado//enum:Color";
     let $sroa_best_value_20: "derived_ord_reaches_blanket_bound.wado//enum:Color";
     let item_108: "derived_ord_reaches_blanket_bound.wado//enum:Color";
     let $sroa_xs_repr_124: ref "Array<derived_ord_reaches_blanket_bound.wado/P>";
     let $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129: i32;
+    let out_137: ref "core:prelude/string.wado//String";
+    let $sroa_slot_713: ref null Array<u8>;
     $sroa_xs_repr_124 = array.new_fixed<ref "derived_ord_reaches_blanket_bound.wado//P">(struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: 1 }, struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: 3 });
     let $match_scrut_0: ref null "derived_ord_reaches_blanket_bound.wado//P";
     if @unlikely((if ref.is_null(local.tee $match_scrut_0("derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0$dae[cmp]$spec0"(struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>" { repr: $sroa_xs_repr_124, index: 0, end: 2 }))) == 0 -> bool {
@@ -118,13 +117,12 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
         "derived_ord_reaches_blanket_bound.wado/run$cold1"();
         unreachable;
     }
-    repr_32 = global:derived_ord_reaches_blanket_bound.wado::$const_obj_0;
     $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = 1;
     $sroa_best_value_20 = 0;
     b2: block {
         l3: loop {
             break_if b2 (builtin::i64_extend_i32_s($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129) + 3_i64) >= builtin::i64_extend_i32_s(2);
-            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
+            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(global:derived_ord_reaches_blanket_bound.wado::$const_obj_1, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
             $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + 1;
             if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
                 if $sroa_best_value_20 < item_84 {
@@ -137,7 +135,7 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
             } != 2 {
                 $sroa_best_value_20 = item_84;
             }
-            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
+            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(global:derived_ord_reaches_blanket_bound.wado::$const_obj_1, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
             $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + 1;
             if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
                 if $sroa_best_value_20 < item_84 {
@@ -150,7 +148,7 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
             } != 2 {
                 $sroa_best_value_20 = item_84;
             }
-            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
+            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(global:derived_ord_reaches_blanket_bound.wado::$const_obj_1, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
             $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + 1;
             if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
                 if $sroa_best_value_20 < item_84 {
@@ -163,7 +161,7 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
             } != 2 {
                 $sroa_best_value_20 = item_84;
             }
-            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
+            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(global:derived_ord_reaches_blanket_bound.wado::$const_obj_1, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
             $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + 1;
             if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
                 if $sroa_best_value_20 < item_84 {
@@ -182,7 +180,7 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
     b16: block {
         l17: loop {
             break_if b16 $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 >= 2;
-            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
+            item_84 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(global:derived_ord_reaches_blanket_bound.wado::$const_obj_1, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
             $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + 1;
             if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_by__Closure_1_sroa_return__dae_cmp__1__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
                 if $sroa_best_value_20 < item_84 {
@@ -198,103 +196,153 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
             continue l17;
         };
     };
-    message_36 = block -> ref "core:prelude/string.wado//String" {
-        $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = (if ref.is_null(local.tee $match_scrut_0("derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0$dae[cmp]$spec0"(struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>" { repr: $sroa_xs_repr_124, index: 0, end: 2 }))) == 0 -> bool {
-            $match_scrut_0.n == 3;
-        } else {
-            0;
-        });
-        repr_32 = global:derived_ord_reaches_blanket_bound.wado::$const_obj_0;
-        $sroa_best_value_20 = 1;
-        item_84 = 0;
-        b23: block {
-            l24: loop {
-                break_if b23 (builtin::i64_extend_i32_s($sroa_best_value_20) + 3_i64) >= builtin::i64_extend_i32_s(2);
-                item_108 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_best_value_20);
-                $sroa_best_value_20 = $sroa_best_value_20 + 1;
-                if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
-                    if item_108 < item_84 {
-                        break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
-                    }
-                    if item_108 > item_84 {
-                        break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 2;
-                    }
-                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 1;
-                } == 0 {
-                    item_84 = item_108;
-                } else {
+    $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = (if ref.is_null(local.tee $match_scrut_0("derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0$dae[cmp]$spec0"(struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>" { repr: $sroa_xs_repr_124, index: 0, end: 2 }))) == 0 -> bool {
+        $match_scrut_0.n == 3;
+    } else {
+        0;
+    });
+    $sroa_best_value_20 = 1;
+    item_84 = 0;
+    b22: block {
+        l23: loop {
+            break_if b22 (builtin::i64_extend_i32_s($sroa_best_value_20) + 3_i64) >= builtin::i64_extend_i32_s(2);
+            item_108 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(global:derived_ord_reaches_blanket_bound.wado::$const_obj_1, $sroa_best_value_20);
+            $sroa_best_value_20 = $sroa_best_value_20 + 1;
+            if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
+                if item_108 < item_84 {
+                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
                 }
-                item_108 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_best_value_20);
-                $sroa_best_value_20 = $sroa_best_value_20 + 1;
-                if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
-                    if item_108 < item_84 {
-                        break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
-                    }
-                    if item_108 > item_84 {
-                        break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 2;
-                    }
-                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 1;
-                } == 0 {
-                    item_84 = item_108;
-                } else {
+                if item_108 > item_84 {
+                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 2;
                 }
-                item_108 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_best_value_20);
-                $sroa_best_value_20 = $sroa_best_value_20 + 1;
-                if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
-                    if item_108 < item_84 {
-                        break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
-                    }
-                    if item_108 > item_84 {
-                        break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 2;
-                    }
-                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 1;
-                } == 0 {
-                    item_84 = item_108;
-                } else {
+                break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 1;
+            } == 0 {
+                item_84 = item_108;
+            } else {
+            }
+            item_108 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(global:derived_ord_reaches_blanket_bound.wado::$const_obj_1, $sroa_best_value_20);
+            $sroa_best_value_20 = $sroa_best_value_20 + 1;
+            if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
+                if item_108 < item_84 {
+                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
                 }
-                item_108 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_best_value_20);
-                $sroa_best_value_20 = $sroa_best_value_20 + 1;
-                if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
-                    if item_108 < item_84 {
-                        break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
-                    }
-                    if item_108 > item_84 {
-                        break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 2;
-                    }
-                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 1;
-                } == 0 {
-                    item_84 = item_108;
-                } else {
+                if item_108 > item_84 {
+                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 2;
                 }
-                continue l24;
-            };
+                break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 1;
+            } == 0 {
+                item_84 = item_108;
+            } else {
+            }
+            item_108 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(global:derived_ord_reaches_blanket_bound.wado::$const_obj_1, $sroa_best_value_20);
+            $sroa_best_value_20 = $sroa_best_value_20 + 1;
+            if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
+                if item_108 < item_84 {
+                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
+                }
+                if item_108 > item_84 {
+                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 2;
+                }
+                break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 1;
+            } == 0 {
+                item_84 = item_108;
+            } else {
+            }
+            item_108 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(global:derived_ord_reaches_blanket_bound.wado::$const_obj_1, $sroa_best_value_20);
+            $sroa_best_value_20 = $sroa_best_value_20 + 1;
+            if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
+                if item_108 < item_84 {
+                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
+                }
+                if item_108 > item_84 {
+                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 2;
+                }
+                break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 1;
+            } == 0 {
+                item_84 = item_108;
+            } else {
+            }
+            continue l23;
         };
-        b37: block {
-            l38: loop {
-                break_if b37 $sroa_best_value_20 >= 2;
-                item_108 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(repr_32, $sroa_best_value_20);
-                $sroa_best_value_20 = $sroa_best_value_20 + 1;
-                if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
-                    if item_108 < item_84 {
-                        break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
-                    }
-                    if item_108 > item_84 {
-                        break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 2;
-                    }
-                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 1;
-                } == 0 {
-                    item_84 = item_108;
-                } else {
+    };
+    b36: block {
+        l37: loop {
+            break_if b36 $sroa_best_value_20 >= 2;
+            item_108 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(global:derived_ord_reaches_blanket_bound.wado::$const_obj_1, $sroa_best_value_20);
+            $sroa_best_value_20 = $sroa_best_value_20 + 1;
+            if $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
+                if item_108 < item_84 {
+                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
                 }
-                continue l38;
-            };
+                if item_108 > item_84 {
+                    break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 2;
+                }
+                break $inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__min_by__Closure_2_sroa_return__dae_cmp__2__$inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 1;
+            } == 0 {
+                item_84 = item_108;
+            } else {
+            }
+            continue l37;
         };
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<derived_ord_reaches_blanket_bound.wado/$tmpl$aec43b331a40fe7d,[bool,bool]>$spec0$spec0"($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129, 1);
+    };
+    out_137 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
+    $inline_core_prelude_string_wado_String__format_derived_ord_reaches_blanket_bound_wado__tmpl_aec43b331a40fe7d__bool_bool___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22: block {
+        break $inline_core_prelude_string_wado_String__format_derived_ord_reaches_blanket_bound_wado__tmpl_aec43b331a40fe7d__bool_bool___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22;
+    };
+    if $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 {
+        $sroa_slot_713 = array.new_fixed<u8>(116, 114, 117, 101);
+        $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = 4;
+    } else {
+        $sroa_slot_713 = array.new_data<u8>("false");
+        $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = 5;
+    }
+    $inline_core_prelude_string_wado_String__format_derived_ord_reaches_blanket_bound_wado__tmpl_aec43b331a40fe7d__bool_bool___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
+        $inline_core_prelude_string_wado_String__format_derived_ord_reaches_blanket_bound_wado__tmpl_aec43b331a40fe7d__bool_bool___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
+            break_if $inline_core_prelude_string_wado_String__format_derived_ord_reaches_blanket_bound_wado__tmpl_aec43b331a40fe7d__bool_bool___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 == 0;
+            if @unlikely(local.tee $sroa_best_value_20(0 + $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129) > builtin::array_len(out_137.repr)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_137, $sroa_best_value_20);
+            }
+            item_84 = out_137.used;
+            out_137.used = $sroa_best_value_20;
+            builtin::array_copy<u8>(out_137.repr, item_84, $sroa_slot_713, 0, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
+        };
+        break $inline_core_prelude_string_wado_String__format_derived_ord_reaches_blanket_bound_wado__tmpl_aec43b331a40fe7d__bool_bool___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
+    };
+    if @unlikely(local.tee $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129(out_137.used + 1) > builtin::array_len(out_137.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_137, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
+    }
+    $sroa_best_value_20 = out_137.used;
+    out_137.used = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129;
+    builtin::array_copy<u8>(local.tee $load_10(out_137.repr), $sroa_best_value_20, global:derived_ord_reaches_blanket_bound.wado::$const_obj_0, 0, 1);
+    if 1 {
+        $sroa_slot_713 = array.new_fixed<u8>(116, 114, 117, 101);
+        $sroa_best_value_20 = 4;
+    } else {
+        $sroa_slot_713 = array.new_data<u8>("false");
+        $sroa_best_value_20 = 5;
+    }
+    $inline_core_prelude_string_wado_String__format_derived_ord_reaches_blanket_bound_wado__tmpl_aec43b331a40fe7d__bool_bool___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
+        $inline_core_prelude_string_wado_String__format_derived_ord_reaches_blanket_bound_wado__tmpl_aec43b331a40fe7d__bool_bool___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
+            break_if $inline_core_prelude_string_wado_String__format_derived_ord_reaches_blanket_bound_wado__tmpl_aec43b331a40fe7d__bool_bool___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 $sroa_best_value_20 == 0;
+            if @unlikely(local.tee $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 + $sroa_best_value_20) > builtin::array_len($load_10)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_137, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
+            }
+            item_84 = out_137.used;
+            out_137.used = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129;
+            builtin::array_copy<u8>(out_137.repr, item_84, $sroa_slot_713, 0, $sroa_best_value_20);
+        };
+        break $inline_core_prelude_string_wado_String__format_derived_ord_reaches_blanket_bound_wado__tmpl_aec43b331a40fe7d__bool_bool___spec0_spec0_0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
+    };
+    $inline_core_prelude_string_wado_String__format_derived_ord_reaches_blanket_bound_wado__tmpl_aec43b331a40fe7d__bool_bool___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_58: block {
+        break $inline_core_prelude_string_wado_String__format_derived_ord_reaches_blanket_bound_wado__tmpl_aec43b331a40fe7d__bool_bool___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_58;
     };
     $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_best_value_20 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129 = "derived_ord_reaches_blanket_bound.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_best_value_20, message_36.repr, message_36.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_best_value_20, out_137.repr, out_137.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__max_derived_ord_reaches_blanket_bound_wado_Color__sroa_return__10_0_index_129);
 }
 
@@ -356,52 +404,52 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b44: block {
-        l45: loop {
-            break_if b44 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
-            at = $mv$data$start + i;
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
-            builtin::store_i64(ptr_13 + i, w);
-            i = i + 8;
-            at = $mv$data$start + i;
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
-            builtin::store_i64(ptr_13 + i, w);
-            i = i + 8;
-            continue l45;
-        };
-    }; b46: block {
-        l47: loop {
-            break_if b46 i > $licm_arith_7;
-            at = $mv$data$start + i;
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
-            builtin::store_i64(ptr_13 + i, w);
-            i = i + 8;
-            continue l47;
-        };
-    }; b48: block {
+    $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b48: block {
         l49: loop {
-            break_if b48 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
-            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
-            i = i + 1;
-            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
-            i = i + 1;
-            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
-            i = i + 1;
-            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
-            i = i + 1;
+            break_if b48 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
+            at = $mv$data$start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            at = $mv$data$start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
             continue l49;
         };
     }; b50: block {
         l51: loop {
-            break_if b50 i >= $mv$data$end;
+            break_if b50 i > $licm_arith_7;
+            at = $mv$data$start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            continue l51;
+        };
+    }; b52: block {
+        l53: loop {
+            break_if b52 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l51;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            continue l53;
+        };
+    }; b54: block {
+        l55: loop {
+            break_if b54 i >= $mv$data$end;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            continue l55;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     ptr_13 = 0;
     block {
-        l53: loop {
+        l57: loop {
             i = $mv$data$start + ptr_13;
             $licm_arith_7 = $mv$data$end - ptr_13;
             $licm_arith_7 = local.tee i($inline_cm_await_blocked_6: block -> i32 {
@@ -433,7 +481,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return i;
             }
-            continue l53;
+            continue l57;
         };
     };
 }
@@ -468,11 +516,11 @@ fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIte
         break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_P__core_prelude_traits_wado_Iterator__next_0 local.tee $av_29(self.index) >= 2;
         $sroa_item_n_26 = builtin::array_get_value<ref "derived_ord_reaches_blanket_bound.wado//P">(local.tee $load_1(self.repr), $av_29).n;
         self.index = local.tee $av_29($av_29 + 1);
-        b60: block {
-            l61: loop {
+        b64: block {
+            l65: loop {
                 if $av_29 >= 2 {
                     self.index = $av_29;
-                    break b60;
+                    break b64;
                 }
                 $sroa_item_n_27 = builtin::array_get_value<ref "derived_ord_reaches_blanket_bound.wado//P">($load_1, $av_29).n;
                 $av_29 = $av_29 + 1;
@@ -492,77 +540,12 @@ fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIte
                 } != 2 {
                     $sroa_item_n_26 = $sroa_item_n_27;
                 }
-                continue l61;
+                continue l65;
             };
         };
         return struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: $sroa_item_n_26 };
     };
     return ref.null none;
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::format<derived_ord_reaches_blanket_bound.wado/$tmpl$aec43b331a40fe7d,[bool,bool]>$spec0$spec0"($mv$t$h0, $mv$t$h1) {
-    let $load_8: ref Array<u8>;
-    let out_3: ref "core:prelude/string.wado//String";
-    let new_used_180: i32;
-    let start_181: i32;
-    let $sroa_view_repr_700: ref Array<u8>;
-    let $sroa_slot_713: ref null Array<u8>;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    $inline_core_prelude_string_wado_String__internal_push_view_22: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_22;
-    };
-    if $mv$t$h0 {
-        $sroa_slot_713 = array.new_fixed<u8>(116, 114, 117, 101);
-        $mv$t$h0 = 4;
-    } else {
-        $sroa_slot_713 = array.new_data<u8>("false");
-        $mv$t$h0 = 5;
-    }
-    $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
-        $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 $mv$t$h0 == 0;
-            if @unlikely(local.tee new_used_180(0 + $mv$t$h0) > builtin::array_len(out_3.repr)) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_180);
-            }
-            start_181 = out_3.used;
-            out_3.used = new_used_180;
-            builtin::array_copy<u8>(out_3.repr, start_181, $sroa_slot_713, 0, $mv$t$h0);
-        };
-        break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
-    };
-    $sroa_view_repr_700 = global:core:prelude/string.wado::$const_obj_2;
-    if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len(out_3.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
-    }
-    new_used_180 = out_3.used;
-    out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(local.tee $load_8(out_3.repr), new_used_180, $sroa_view_repr_700, 0, 1);
-    if $mv$t$h1 {
-        $sroa_slot_713 = array.new_fixed<u8>(116, 114, 117, 101);
-        $mv$t$h1 = 4;
-    } else {
-        $sroa_slot_713 = array.new_data<u8>("false");
-        $mv$t$h1 = 5;
-    }
-    $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
-        $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 $mv$t$h1 == 0;
-            if @unlikely(local.tee $mv$t$h0($mv$t$h0 + $mv$t$h1) > builtin::array_len($load_8)) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
-            }
-            new_used_180 = out_3.used;
-            out_3.used = $mv$t$h0;
-            builtin::array_copy<u8>(out_3.repr, new_used_180, $sroa_slot_713, 0, $mv$t$h1);
-        };
-        break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
-    };
-    $inline_core_prelude_string_wado_String__internal_push_view_58: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_58;
-    };
-    return out_3;
 }
 
 export fn "derived_ord_reaches_blanket_bound.wado/$cm_export__run" as "run"

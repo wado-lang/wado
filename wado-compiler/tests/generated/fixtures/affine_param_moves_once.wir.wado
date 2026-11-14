@@ -124,11 +124,13 @@ fn "affine_param_moves_once.wado/$cm_binding__wasi:http/types@0.3.0#[method]fiel
     let $result_12: ref "core:prelude/list.wado//List<u8>";
     let arr_19: ref Array<u8>;
     let value_30: ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]";
+    let $licm_repr_36: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
     $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/$wasi:http/types@0.3.0#[method]fields.copy-all"(self, $outptr);
     self = builtin::load_i32($outptr);
     $result_4 = struct.new "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee $count_3(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
+    $licm_repr_36 = $result_4.repr;
     b0: block {
         l1: loop {
             break_if b0 $i >= $count_3;
@@ -145,11 +147,12 @@ fn "affine_param_moves_once.wado/$cm_binding__wasi:http/types@0.3.0#[method]fiel
                 drop("mem/realloc"($str_ptr, $elem_addr, 1, 0));
             }
             value_30 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: $lifted_string, 1: $result_12 };
-            if @unlikely(local.tee $elem_addr($result_4.used) >= builtin::array_len($result_4.repr)) {
+            if @unlikely(local.tee $elem_addr($result_4.used) >= builtin::array_len($licm_repr_36)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::grow"($result_4);
+                $licm_repr_36 = $result_4.repr;
             }
-            builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($result_4.repr, $elem_addr, value_30);
+            builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($licm_repr_36, $elem_addr, value_30);
             $result_4.used = $elem_addr + 1;
             $i = $i + 1;
             continue l1;

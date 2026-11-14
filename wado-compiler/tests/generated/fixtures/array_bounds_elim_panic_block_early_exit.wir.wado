@@ -215,21 +215,24 @@ fn "array_bounds_elim_panic_block_early_exit.wado/run"() with Stdout {
     let out_31: ref "core:prelude/string.wado//String";
     let x: i64;
     let $sroa_$iter_0_start_131: i32;
+    let $licm_repr_137: ref Array<i32>;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     xs = struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(64), used: 0 };
     $sroa_$iter_0_start_131 = 0;
+    $licm_repr_137 = xs.repr;
     b4: block {
         l5: loop {
             break_if b4 $sroa_$iter_0_start_131 >= 4;
             $sroa_$iter_0_start_131 = local.tee current($sroa_$iter_0_start_131) + 1;
             current = black_box(current);
-            if @unlikely(local.tee used(xs.used) >= builtin::array_len(xs.repr)) {
+            if @unlikely(local.tee used(xs.used) >= builtin::array_len($licm_repr_137)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs);
+                $licm_repr_137 = xs.repr;
             }
-            builtin::array_set<i32>(xs.repr, used, current);
+            builtin::array_set<i32>($licm_repr_137, used, current);
             xs.used = used + 1;
             continue l5;
         };

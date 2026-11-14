@@ -1,0 +1,34 @@
+// An inlined `push` binds `let self = &mut out` and hands `self` whole to the
+// cold `grow(self)`. Folding that argument back to `&mut out` drops the alias,
+// so `field_scalarize` keeps `out.used` in a local across the loop instead of
+// loading and storing the field on every push.
+
+use { println, Stdout } from "core:cli";
+
+fn fill(n: i32) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let i of 0..<n {
+        if i % 3 == 0 {
+            out.push(i);
+        } else {
+            out.push(i * 2);
+        }
+    }
+    return out;
+}
+
+export fn run() with Stdout {
+    let xs = fill(builtin::black_box(100));
+    let mut sum = 0;
+    for let x of xs {
+        sum += x;
+    }
+    println(`${xs.len()} ${xs[0]} ${xs[1]} ${xs[99]} ${sum}`);
+}
+
+__DATA__
+{
+    "stdout": "100 0 2 99 8217\n",
+    "wir_pass": {"O2": ["nir/peephole", "nir/field_scalarize"]},
+    "wir_expect:O2": ["let $hfs_used_"]
+}

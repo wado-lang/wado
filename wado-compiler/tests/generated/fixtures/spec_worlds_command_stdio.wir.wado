@@ -452,10 +452,8 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     "wasi/stream-drop-writable"(i_14);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(end_20);
     end_20 = bytes_2.used;
-    builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
-    $sroa_slice_repr_634 = global:spec_worlds_command_stdio.wado::$const_obj_1;
-    builder.used = local.tee i_14(5);
-    builtin::array_copy<u8>(local.tee out_26(builder.repr), 0, $sroa_slice_repr_634, 0, 5);
+    local.tee builder(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }).used = local.tee i_14(5);
+    builtin::array_copy<u8>(local.tee $sroa_slice_repr_634(builder.repr), 0, global:spec_worlds_command_stdio.wado::$const_obj_1, 0, 5);
     $mv$scalar$code = end_20 < 0;
     $cm_pair_7_52 = builtin::i64_extend_i32_s(end_20);
     $cm_pair_7_52 = select i64($cm_pair_7_52 < 0_i64, 0_i64 - $cm_pair_7_52, $cm_pair_7_52);
@@ -520,7 +518,7 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
         break $inline_count_digits_u64_1: 20;
     };
     if $mv$scalar$code {
-        if @unlikely(local.tee i_14(i_14 + 1) > builtin::array_len(out_26)) {
+        if @unlikely(local.tee i_14(i_14 + 1) > builtin::array_len($sroa_slice_repr_634)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(builder, i_14);
         }
@@ -552,14 +550,13 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     if end_20 > $mv$scalar$code {
         builtin::array_set_u8($sroa_slice_repr_634, $mv$scalar$code, 48 + builtin::i32_wrap_i64($cm_pair_7_52 %u 10_i64));
     }
-    out_26 = global:spec_worlds_command_stdio.wado::$const_obj_0;
     if @unlikely(local.tee end_20(i_14 + 6) > builtin::array_len($sroa_slice_repr_634)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(builder, end_20);
     }
     i_14 = builder.used;
     builder.used = end_20;
-    builtin::array_copy<u8>(builder.repr, i_14, out_26, 0, 6);
+    builtin::array_copy<u8>(builder.repr, i_14, global:spec_worlds_command_stdio.wado::$const_obj_0, 0, 6);
     end_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_52("wasi/stream-new"()));
     i_14 = builtin::i32_wrap_i64($cm_pair_7_52 >> 32_i64);
     end_20 = "spec_worlds_command_stdio.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"(end_20);
@@ -1482,8 +1479,10 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_size
     let packed: i32;
     let $sroa_slot_31: i32;
     let $licm_arith_37: i32;
+    let $licm_repr_38: ref Array<u8>;
     all = struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     $licm_arith_37 = self.value;
+    $licm_repr_38 = all.repr;
     block {
         l170: loop {
             $sroa_slot_31 = "mem/realloc"(0, 0, 1, 4096);
@@ -1491,11 +1490,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_size
             chunk = "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[end]"(struct.new "core:prelude/types.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: $licm_arith_37, packed: packed, ptr: $sroa_slot_31, size: 4096, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } });
             $inline_core_prelude_list_wado_List_u8___extend_9: block {
                 break_if $inline_core_prelude_list_wado_List_u8___extend_9 local.tee $sroa_slot_31(chunk.items.used) == 0;
-                if @unlikely(local.tee packed(all.used + $sroa_slot_31) > builtin::array_len(all.repr)) {
+                if @unlikely(local.tee packed(all.used + $sroa_slot_31) > builtin::array_len($licm_repr_38)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(all, packed);
+                    $licm_repr_38 = all.repr;
                 }
-                builtin::array_copy<u8>(all.repr, all.used, chunk.items.repr, 0, $sroa_slot_31);
+                builtin::array_copy<u8>($licm_repr_38, all.used, chunk.items.repr, 0, $sroa_slot_31);
                 all.used = packed;
             };
             if chunk.result != 0 {

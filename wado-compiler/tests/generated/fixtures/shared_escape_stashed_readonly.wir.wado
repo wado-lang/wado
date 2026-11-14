@@ -237,8 +237,8 @@ fn "shared_escape_stashed_readonly.wado/stash"(xs, seed) {
 }
 
 fn "shared_escape_stashed_readonly.wado/run"() with Stdout {
-    let $load_0: ref "core:prelude/list.wado//List<f64>";
-    let $load_2: ref Array<f64>;
+    let $load_1: ref "core:prelude/list.wado//List<f64>";
+    let $load_3: ref Array<f64>;
     let z: i32;
     let total: f64;
     let keep: ref "core:prelude/list.wado//List<shared_escape_stashed_readonly.wado/Holder>";
@@ -248,11 +248,13 @@ fn "shared_escape_stashed_readonly.wado/run"() with Stdout {
     let $sroa_slot_65: i32;
     let $sroa_$iter_0_start_68: i32;
     let $licm_arith_72: bool;
+    let $licm_repr_73: ref "Array<shared_escape_stashed_readonly.wado/Holder>";
     z = black_box(0);
     total = 0;
     keep = struct.new "core:prelude/list.wado//List<shared_escape_stashed_readonly.wado/Holder>" { repr: array.new_fixed<ref "shared_escape_stashed_readonly.wado//Holder">(), used: 0 };
     $sroa_$iter_0_start_68 = 0;
     $licm_arith_72 = 0 <= z;
+    $licm_repr_73 = keep.repr;
     b3: block {
         l4: loop {
             $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__4: block {
@@ -266,20 +268,21 @@ fn "shared_escape_stashed_readonly.wado/run"() with Stdout {
             };
             if $sroa_slot_65 == 1 {
                 h = "shared_escape_stashed_readonly.wado/stash"(global:shared_escape_stashed_readonly.wado::$const_obj_1, z);
-                total = (total + $sroa_slot_65 = local.tee $load_0(h.data).used; if @unlikely(($licm_arith_72 & (z < $sroa_slot_65)) == 0) {
+                total = (total + $sroa_slot_65 = local.tee $load_1(h.data).used; if @unlikely(($licm_arith_72 & (z < $sroa_slot_65)) == 0) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<f64>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(z, $sroa_slot_65, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("shared_escape_stashed_readonly.wado:41"), used: 38 });
                     unreachable;
-                }; builtin::array_get_value<f64>(local.tee $load_2($load_0.repr), z)) + if @unlikely(1 >= $sroa_slot_65) {
+                }; builtin::array_get_value<f64>(local.tee $load_3($load_1.repr), z)) + if @unlikely(1 >= $sroa_slot_65) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<f64>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, $sroa_slot_65, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("shared_escape_stashed_readonly.wado:41"), used: 38 });
                     unreachable;
-                }; builtin::array_get_value<f64>($load_2, 1);
-                if @unlikely(local.tee $sroa_slot_65(keep.used) >= builtin::array_len(keep.repr)) {
+                }; builtin::array_get_value<f64>($load_3, 1);
+                if @unlikely(local.tee $sroa_slot_65(keep.used) >= builtin::array_len($licm_repr_73)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<shared_escape_stashed_readonly.wado/Holder>::grow"(keep);
+                    $licm_repr_73 = keep.repr;
                 }
-                builtin::array_set<ref "shared_escape_stashed_readonly.wado//Holder">(keep.repr, $sroa_slot_65, h);
+                builtin::array_set<ref "shared_escape_stashed_readonly.wado//Holder">($licm_repr_73, $sroa_slot_65, h);
                 keep.used = $sroa_slot_65 + 1;
             } else {
                 break b3;
@@ -1523,7 +1526,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<shared_esca
     let $sroa_slot_176: bool;
     let $sroa_slot_177: bool;
     let $sroa_slot_178: "core:prelude/fpfmt.wado//enum:SpecialKind";
-    let $sroa_view_repr_780: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_22;
@@ -1576,14 +1578,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<shared_esca
         }
         "core:prelude/fpfmt.wado/write_decimal"(out_3, bits_314, $sroa_slot_176, $sroa_slot_178);
     };
-    $sroa_view_repr_780 = global:core:prelude/string.wado::$const_obj_33;
     if @unlikely(local.tee $sroa_slot_176(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $sroa_slot_176);
     }
     $sroa_slot_177 = out_3.used;
     out_3.used = $sroa_slot_176;
-    builtin::array_copy<u8>(local.tee $load_11(out_3.repr), $sroa_slot_177, $sroa_view_repr_780, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_11(out_3.repr), $sroa_slot_177, global:core:prelude/string.wado::$const_obj_33, 0, 1);
     $sroa_slot_177 = $mv$t$h1 < 0;
     bits_314 = builtin::i64_extend_i32_s($mv$t$h1);
     bits_314 = select i64(bits_314 < 0_i64, 0_i64 - bits_314, bits_314);
@@ -1663,22 +1664,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<shared_esca
     }
     $sroa_slot_177 = out_3.used;
     out_3.used = $sroa_slot_176;
-    $sroa_view_repr_780 = out_3.repr;
+    $load_11 = out_3.repr;
     $mv$t$h1 = $sroa_slot_177 + $mv$t$h1;
     b221: block {
         l222: loop {
             break_if b221 ($mv$t$h1 - $sroa_slot_177) < 2;
             q = bits_314 /u 100_i64;
             $sroa_slot_178 = local.tee $sroa_slot_176(builtin::i32_wrap_i64(bits_314 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_780, $mv$t$h1 - 1, (48 + $sroa_slot_176) - ($sroa_slot_178 * 10));
-            builtin::array_set_u8($sroa_view_repr_780, $mv$t$h1 - 2, 48 + $sroa_slot_178);
+            builtin::array_set_u8($load_11, $mv$t$h1 - 1, (48 + $sroa_slot_176) - ($sroa_slot_178 * 10));
+            builtin::array_set_u8($load_11, $mv$t$h1 - 2, 48 + $sroa_slot_178);
             $mv$t$h1 = $mv$t$h1 - 2;
             bits_314 = q;
             continue l222;
         };
     };
     if $mv$t$h1 > $sroa_slot_177 {
-        builtin::array_set_u8($sroa_view_repr_780, $sroa_slot_177, 48 + builtin::i32_wrap_i64(bits_314 %u 10_i64));
+        builtin::array_set_u8($load_11, $sroa_slot_177, 48 + builtin::i32_wrap_i64(bits_314 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_62: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_62;

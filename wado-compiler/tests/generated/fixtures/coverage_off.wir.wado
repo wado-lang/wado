@@ -383,23 +383,24 @@ fn "coverage_off.wado/$test_0_methods_and_closures"() {
     let result: ref "core:prelude/list.wado//List<i32>";
     let item_28: i32;
     let used_31: i32;
-    let $sroa_self_repr_49: ref Array<i32>;
-    let $sroa_self_index_50: i32;
+    let $licm_repr_45: ref Array<i32>;
+    let $sroa_self_index_51: i32;
     "core:rt/coverage_probe$spec0$dae[id]"();
-    if @unlikely((local.tee $sroa_self_index_50("core:rt/coverage_probe$spec1$dae[id]"(); $sroa_self_repr_49 = global:coverage_off.wado::$const_obj_0; $sroa_self_index_50 = 0; result = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }; b1: block {
+    if @unlikely((local.tee $sroa_self_index_51("core:rt/coverage_probe$spec1$dae[id]"(); $sroa_self_index_51 = 0; $licm_repr_45 = local.tee result(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr; b1: block {
         l2: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__10: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__11: block {
-                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__11 $sroa_self_index_50 >= 0;
-                    item_28 = builtin::array_get_value<i32>($sroa_self_repr_49, $sroa_self_index_50);
-                    $sroa_self_index_50 = $sroa_self_index_50 + 1;
+                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__11 $sroa_self_index_51 >= 0;
+                    item_28 = builtin::array_get_value<i32>(global:coverage_off.wado::$const_obj_0, $sroa_self_index_51);
+                    $sroa_self_index_51 = $sroa_self_index_51 + 1;
                     "core:rt/coverage_probe$spec2$dae[id]"();
                     item_28 = item_28 + 1;
-                    if @unlikely(local.tee used_31(result.used) >= builtin::array_len(result.repr)) {
+                    if @unlikely(local.tee used_31(result.used) >= builtin::array_len($licm_repr_45)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result);
+                        $licm_repr_45 = result.repr;
                     }
-                    builtin::array_set<i32>(result.repr, used_31, item_28);
+                    builtin::array_set<i32>($licm_repr_45, used_31, item_28);
                     result.used = used_31 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__10;
                 };
@@ -409,7 +410,7 @@ fn "coverage_off.wado/$test_0_methods_and_closures"() {
         };
     }; result.used) == 0) == 0) {
         cold_path;
-        "coverage_off.wado/$test_0_methods_and_closures$cold0"($sroa_self_index_50);
+        "coverage_off.wado/$test_0_methods_and_closures$cold0"($sroa_self_index_51);
         unreachable;
     }
 }

@@ -353,6 +353,7 @@ fn "opt_value_copy_dead_ref_holder_moves.wado/swap_indexed$dae[n]"() {
 }
 
 fn "opt_value_copy_dead_ref_holder_moves.wado/swap_rebuilt$dae[n]"() {
+    let $load_0: ref "Array<opt_value_copy_dead_ref_holder_moves.wado/P>";
     let cur: ref "core:prelude/list.wado//List<opt_value_copy_dead_ref_holder_moves.wado/P>";
     let next_1: ref "core:prelude/list.wado//List<opt_value_copy_dead_ref_holder_moves.wado/P>";
     let spent: ref "core:prelude/list.wado//List<opt_value_copy_dead_ref_holder_moves.wado/P>";
@@ -362,8 +363,8 @@ fn "opt_value_copy_dead_ref_holder_moves.wado/swap_rebuilt$dae[n]"() {
     let value_34: ref "opt_value_copy_dead_ref_holder_moves.wado//P";
     let used_35: i32;
     let $sroa_$iter_0_start_62: i32;
-    let $sroa_$iter_1_repr_66: ref "Array<opt_value_copy_dead_ref_holder_moves.wado/P>";
-    let $sroa_$iter_1_index_67: i32;
+    let $sroa_$iter_1_repr_67: ref "Array<opt_value_copy_dead_ref_holder_moves.wado/P>";
+    let $sroa_$iter_1_index_68: i32;
     cur = struct.new "core:prelude/list.wado//List<opt_value_copy_dead_ref_holder_moves.wado/P>" { repr: array.new_fixed<ref "opt_value_copy_dead_ref_holder_moves.wado//P">(struct.new "opt_value_copy_dead_ref_holder_moves.wado//P" { a: 1 }), used: 1 };
     next_1 = struct.new "core:prelude/list.wado//List<opt_value_copy_dead_ref_holder_moves.wado/P>" { repr: array.new_fixed<ref "opt_value_copy_dead_ref_holder_moves.wado//P">(), used: 0 };
     $sroa_$iter_0_start_62 = 0;
@@ -371,29 +372,31 @@ fn "opt_value_copy_dead_ref_holder_moves.wado/swap_rebuilt$dae[n]"() {
         l17: loop {
             break_if b16 $sroa_$iter_0_start_62 >= 3;
             $sroa_$iter_0_start_62 = local.tee current($sroa_$iter_0_start_62) + 1;
-            builtin::array_fill<ref "opt_value_copy_dead_ref_holder_moves.wado//P">(next_1.repr, 0, ref.null none, next_1.used);
+            builtin::array_fill<ref "opt_value_copy_dead_ref_holder_moves.wado//P">(local.tee $load_0(next_1.repr), 0, ref.null none, next_1.used);
             next_1.used = 0;
             end = cur.used;
-            $sroa_$iter_1_repr_66 = cur.repr;
-            $sroa_$iter_1_index_67 = 0;
+            $sroa_$iter_1_repr_67 = cur.repr;
+            $sroa_$iter_1_index_68 = 0;
             b18: block {
                 l19: loop {
-                    break_if b18 $sroa_$iter_1_index_67 >= end;
-                    ref_val = builtin::array_get_value<ref "opt_value_copy_dead_ref_holder_moves.wado//P">($sroa_$iter_1_repr_66, $sroa_$iter_1_index_67);
-                    $sroa_$iter_1_index_67 = $sroa_$iter_1_index_67 + 1;
+                    break_if b18 $sroa_$iter_1_index_68 >= end;
+                    ref_val = builtin::array_get_value<ref "opt_value_copy_dead_ref_holder_moves.wado//P">($sroa_$iter_1_repr_67, $sroa_$iter_1_index_68);
+                    $sroa_$iter_1_index_68 = $sroa_$iter_1_index_68 + 1;
                     value_34 = struct.new "opt_value_copy_dead_ref_holder_moves.wado//P" { a: ref_val.a + current };
-                    if @unlikely(local.tee used_35(next_1.used) >= builtin::array_len(next_1.repr)) {
+                    if @unlikely(local.tee used_35(next_1.used) >= builtin::array_len($load_0)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_dead_ref_holder_moves.wado/P>::grow"(next_1);
+                        $load_0 = next_1.repr;
                     }
-                    builtin::array_set<ref "opt_value_copy_dead_ref_holder_moves.wado//P">(next_1.repr, used_35, value_34);
-                    next_1.used = used_35 + 1;
+                    builtin::array_set<ref "opt_value_copy_dead_ref_holder_moves.wado//P">($load_0, used_35, value_34);
+                    next_1.used = local.tee used_35(used_35 + 1);
                     ref_val = struct.new "opt_value_copy_dead_ref_holder_moves.wado//P" { a: ref_val.a };
-                    if @unlikely(local.tee used_35(next_1.used) >= builtin::array_len(next_1.repr)) {
+                    if @unlikely(used_35 >= builtin::array_len($load_0)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_dead_ref_holder_moves.wado/P>::grow"(next_1);
+                        $load_0 = next_1.repr;
                     }
-                    builtin::array_set<ref "opt_value_copy_dead_ref_holder_moves.wado//P">(next_1.repr, used_35, ref_val);
+                    builtin::array_set<ref "opt_value_copy_dead_ref_holder_moves.wado//P">($load_0, used_35, ref_val);
                     next_1.used = used_35 + 1;
                     continue l19;
                 };

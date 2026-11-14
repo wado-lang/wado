@@ -270,18 +270,21 @@ fn "closure_capture_for_header_write.wado/run"() {
     let value_72: ref struct;
     let used_73: i32;
     let value_141: ref "closure_capture_for_header_write.wado//$Closure_3";
+    let $licm_repr_161: ref Array<fn()->i32>;
     n = struct.new "core:prelude//$Cell<i32>" { value: 0 };
     updated = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     k_2 = 0;
+    $licm_repr_161 = updated.repr;
     b0: block {
         l1: loop {
             break_if b0 k_2 >= 2;
             value_72 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_write.wado//$Closure_0" { $capture_0: n }, func: ref.func "closure/closure_capture_for_header_write.wado/$closure_wrapper_0" };
-            if @unlikely(local.tee used_73(updated.used) >= builtin::array_len(updated.repr)) {
+            if @unlikely(local.tee used_73(updated.used) >= builtin::array_len($licm_repr_161)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(updated);
+                $licm_repr_161 = updated.repr;
             }
-            builtin::array_set<ref struct>(updated.repr, used_73, value_72);
+            builtin::array_set<ref struct>($licm_repr_161, used_73, value_72);
             updated.used = used_73 + 1;
             k_2 = k_2 + 1;
             n.value = n.value + 1;
@@ -312,16 +315,17 @@ fn "closure_capture_for_header_write.wado/run"() {
         unreachable;
     }
     n = struct.new "core:prelude//$Cell<i32>" { value: 0 };
-    updated = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
+    $licm_repr_161 = local.tee updated(struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 }).repr;
     b9: block {
         l10: loop {
             break_if b9 n.value = local.tee k_2(n.value + 1); k_2 < 3 == 0;
             value_72 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_write.wado//$Closure_1" { $capture_0: n }, func: ref.func "closure/closure_capture_for_header_write.wado/$closure_wrapper_1" };
-            if @unlikely(local.tee k_2(updated.used) >= builtin::array_len(updated.repr)) {
+            if @unlikely(local.tee k_2(updated.used) >= builtin::array_len($licm_repr_161)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(updated);
+                $licm_repr_161 = updated.repr;
             }
-            builtin::array_set<ref struct>(updated.repr, k_2, value_72);
+            builtin::array_set<ref struct>($licm_repr_161, k_2, value_72);
             updated.used = k_2 + 1;
             continue l10;
         };
@@ -349,16 +353,17 @@ fn "closure_capture_for_header_write.wado/run"() {
         unreachable;
     }
     n = struct.new "core:prelude//$Cell<i32>" { value: 0 };
-    updated = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
+    $licm_repr_161 = local.tee updated(struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 }).repr;
     b18: block {
         l19: loop {
             break_if b18 n.value >= 2;
             value_72 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_write.wado//$Closure_2" { $capture_0: n }, func: ref.func "closure/closure_capture_for_header_write.wado/$closure_wrapper_2" };
-            if @unlikely(local.tee k_2(updated.used) >= builtin::array_len(updated.repr)) {
+            if @unlikely(local.tee k_2(updated.used) >= builtin::array_len($licm_repr_161)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(updated);
+                $licm_repr_161 = updated.repr;
             }
-            builtin::array_set<ref struct>(updated.repr, k_2, value_72);
+            builtin::array_set<ref struct>($licm_repr_161, k_2, value_72);
             updated.used = k_2 + 1;
             n.value = n.value + 1;
             continue l19;
@@ -388,15 +393,17 @@ fn "closure_capture_for_header_write.wado/run"() {
     }
     updated = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     k_2 = 0;
+    $licm_repr_161 = updated.repr;
     b27: block {
         l28: loop {
             break_if b27 k_2 >= 2;
             value_141 = struct.new "closure_capture_for_header_write.wado//$Closure_3" { $capture_0: k_2 };
-            if @unlikely(local.tee used_73(updated.used) >= builtin::array_len(updated.repr)) {
+            if @unlikely(local.tee used_73(updated.used) >= builtin::array_len($licm_repr_161)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(updated);
+                $licm_repr_161 = updated.repr;
             }
-            builtin::array_set<ref struct>(updated.repr, used_73, struct.new "canonical//CanonicalClosure_0" { env: value_141, func: ref.func "closure/closure_capture_for_header_write.wado/$closure_wrapper_3" });
+            builtin::array_set<ref struct>($licm_repr_161, used_73, struct.new "canonical//CanonicalClosure_0" { env: value_141, func: ref.func "closure/closure_capture_for_header_write.wado/$closure_wrapper_3" });
             updated.used = used_73 + 1;
             k_2 = k_2 + 1;
             continue l28;

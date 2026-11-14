@@ -113,7 +113,7 @@ fn "const_object_globalization_retained_scalar_struct.wado/stash"(p, seed) {
 }
 
 fn "const_object_globalization_retained_scalar_struct.wado/run"() with Stdout {
-    let $load_0: ref "const_object_globalization_retained_scalar_struct.wado//Point";
+    let $load_1: ref "const_object_globalization_retained_scalar_struct.wado//Point";
     let $load_9: ref Array<u8>;
     let z: i32;
     let acc: i32;
@@ -121,13 +121,14 @@ fn "const_object_globalization_retained_scalar_struct.wado/run"() with Stdout {
     let h_5: ref "const_object_globalization_retained_scalar_struct.wado//Holder";
     let $sroa_slot_40: i32;
     let $sroa_$iter_0_start_43: i32;
-    let out_65: ref "core:prelude/string.wado//String";
-    let x_136: i64;
-    let $sroa_view_repr_204: ref Array<u8>;
+    let $licm_repr_47: ref "Array<const_object_globalization_retained_scalar_struct.wado/Holder>";
+    let out_66: ref "core:prelude/string.wado//String";
+    let x_137: i64;
     z = black_box(0);
     acc = 0;
     keep = struct.new "core:prelude/list.wado//List<const_object_globalization_retained_scalar_struct.wado/Holder>" { repr: array.new_fixed<ref "const_object_globalization_retained_scalar_struct.wado//Holder">(), used: 0 };
     $sroa_$iter_0_start_43 = 0;
+    $licm_repr_47 = keep.repr;
     b3: block {
         l4: loop {
             $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__4: block {
@@ -141,12 +142,13 @@ fn "const_object_globalization_retained_scalar_struct.wado/run"() with Stdout {
             };
             if $sroa_slot_40 == 1 {
                 h_5 = "const_object_globalization_retained_scalar_struct.wado/stash"(global:const_object_globalization_retained_scalar_struct.wado::$const_obj_1, z);
-                acc = ((acc + local.tee $load_0(h_5.p).x) + $load_0.y) + h_5.tag;
-                if @unlikely(local.tee $sroa_slot_40(keep.used) >= builtin::array_len(keep.repr)) {
+                acc = ((acc + local.tee $load_1(h_5.p).x) + $load_1.y) + h_5.tag;
+                if @unlikely(local.tee $sroa_slot_40(keep.used) >= builtin::array_len($licm_repr_47)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<const_object_globalization_retained_scalar_struct.wado/Holder>::grow"(keep);
+                    $licm_repr_47 = keep.repr;
                 }
-                builtin::array_set<ref "const_object_globalization_retained_scalar_struct.wado//Holder">(keep.repr, $sroa_slot_40, h_5);
+                builtin::array_set<ref "const_object_globalization_retained_scalar_struct.wado//Holder">($licm_repr_47, $sroa_slot_40, h_5);
                 keep.used = $sroa_slot_40 + 1;
             } else {
                 break b3;
@@ -155,33 +157,32 @@ fn "const_object_globalization_retained_scalar_struct.wado/run"() with Stdout {
         };
     };
     z = keep.used;
-    out_65 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
+    out_66 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__format_const_object_globalization_retained_scalar_struct_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__format_const_object_globalization_retained_scalar_struct_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22;
     };
     $sroa_$iter_0_start_43 = acc < 0;
-    acc = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_136(x_136 = builtin::i64_extend_i32_s(acc); select i64(x_136 < 0_i64, 0_i64 - x_136, x_136)));
-    $sroa_$iter_0_start_43 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_65, $sroa_$iter_0_start_43, acc);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_9(out_65.repr), $sroa_$iter_0_start_43, x_136, acc);
-    $sroa_view_repr_204 = global:const_object_globalization_retained_scalar_struct.wado::$const_obj_0;
-    if @unlikely(local.tee acc(out_65.used + 1) > builtin::array_len($load_9)) {
+    acc = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_137(x_137 = builtin::i64_extend_i32_s(acc); select i64(x_137 < 0_i64, 0_i64 - x_137, x_137)));
+    $sroa_$iter_0_start_43 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_66, $sroa_$iter_0_start_43, acc);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_9(out_66.repr), $sroa_$iter_0_start_43, x_137, acc);
+    if @unlikely(local.tee acc(out_66.used + 1) > builtin::array_len($load_9)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_65, acc);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_66, acc);
     }
-    $sroa_$iter_0_start_43 = out_65.used;
-    out_65.used = acc;
-    builtin::array_copy<u8>(out_65.repr, $sroa_$iter_0_start_43, $sroa_view_repr_204, 0, 1);
+    $sroa_$iter_0_start_43 = out_66.used;
+    out_66.used = acc;
+    builtin::array_copy<u8>(out_66.repr, $sroa_$iter_0_start_43, global:const_object_globalization_retained_scalar_struct.wado::$const_obj_0, 0, 1);
     acc = z < 0;
-    z = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_136(x_136 = builtin::i64_extend_i32_s(z); select i64(x_136 < 0_i64, 0_i64 - x_136, x_136)));
-    acc = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_65, acc, z);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_65.repr, acc, x_136, z);
+    z = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_137(x_137 = builtin::i64_extend_i32_s(z); select i64(x_137 < 0_i64, 0_i64 - x_137, x_137)));
+    acc = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_66, acc, z);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_66.repr, acc, x_137, z);
     $inline_core_prelude_string_wado_String__format_const_object_globalization_retained_scalar_struct_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70: block {
         break $inline_core_prelude_string_wado_String__format_const_object_globalization_retained_scalar_struct_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70;
     };
-    z = builtin::i32_wrap_i64(local.tee x_136("wasi/stream-new"()));
-    acc = builtin::i32_wrap_i64(x_136 >> 32_i64);
+    z = builtin::i32_wrap_i64(local.tee x_137("wasi/stream-new"()));
+    acc = builtin::i32_wrap_i64(x_137 >> 32_i64);
     z = "const_object_globalization_retained_scalar_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(z);
-    builtin::array_copy<u8>(local.tee $load_9(builtin::array_new<u8>(local.tee $sroa_$iter_0_start_43(out_65.used) + 1)), 0, out_65.repr, 0, $sroa_$iter_0_start_43);
+    builtin::array_copy<u8>(local.tee $load_9(builtin::array_new<u8>(local.tee $sroa_$iter_0_start_43(out_66.used) + 1)), 0, out_66.repr, 0, $sroa_$iter_0_start_43);
     builtin::array_set_u8($load_9, $sroa_$iter_0_start_43, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         $sroa_$iter_0_start_43 = $sroa_$iter_0_start_43 + 1;

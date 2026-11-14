@@ -70,7 +70,8 @@ impl FieldWrites {
 /// prevent hoisting field accesses on the other.
 #[derive(Default)]
 struct ModifiedVars {
-    /// Locals that are fully modified (assigned as a whole, passed as &mut, etc.).
+    /// Locals that are fully modified (assigned as a whole, borrowed `&mut`
+    /// outside a call argument, a cell passed `&mut`, etc.).
     /// Membership poisons the whole alias set: a full modification of one alias
     /// may write the shared heap object every alias points at.
     fully: IndexSet<u32>,
@@ -1854,11 +1855,24 @@ fn collect_modified_vars_in_expr(
             collect_modified_vars_in_operand(body, *inner, modified, type_table);
         }
         // A call's writes through an argument are asked field by field
-        // (`call_writes_field`), so the call leaves the argument unmarked here.
+        // (`call_writes_field`), so the call leaves the argument unmarked here,
+        // a `&mut local` included where the reference is the local's handle
+        // rather than a cell the call could replace the value in.
         ExprKind::Call { args, .. } => {
             modified.call_sites.push(e);
             let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             for a in arg_ids {
+                if let ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr: inner,
+                } = &body.exprs[a].kind
+                    && inner
+                        .as_expr()
+                        .is_some_and(|ie| matches!(body.exprs[ie].kind, ExprKind::Local { .. }))
+                    && type_table.cell_payload(body.exprs[a].type_id).is_none()
+                {
+                    continue;
+                }
                 collect_modified_vars_in_expr(body, a, modified, type_table);
             }
         }

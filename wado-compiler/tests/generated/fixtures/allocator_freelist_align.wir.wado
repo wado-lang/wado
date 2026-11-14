@@ -205,14 +205,12 @@ fn "allocator_freelist_align.wado/run"() with Stdout {
     let item: i32;
     let $cm_pair_7: i64;
     let new_repr: ref Array<u8>;
-    let $sroa_$iter_0_repr_50: ref Array<i32>;
     let $sroa_$iter_0_index_51: i32;
-    $sroa_$iter_0_repr_50 = global:allocator_freelist_align.wado::$const_obj_1;
     $sroa_$iter_0_index_51 = 0;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_index_51 >= 7;
-            item = builtin::array_get_value<i32>($sroa_$iter_0_repr_50, $sroa_$iter_0_index_51);
+            item = builtin::array_get_value<i32>(global:allocator_freelist_align.wado::$const_obj_1, $sroa_$iter_0_index_51);
             $sroa_$iter_0_index_51 = $sroa_$iter_0_index_51 + 1;
             if @unlikely((local.tee $v1(local.tee p("mem/realloc"(0, 0, 16, item)) & 15) == 0) == 0) {
                 cold_path;

@@ -269,6 +269,7 @@ fn "licm_reloadable_hoist_nonunit.wado/run"() with Stdout {
     let $cm_pair_7: i64;
     let $sroa_$iter_0_repr_49: ref Array<i32>;
     let $sroa_$iter_0_index_50: i32;
+    let $licm_repr_52: ref Array<u8>;
     bag = struct.new "licm_reloadable_hoist_nonunit.wado//Bag" { items: global:licm_reloadable_hoist_nonunit.wado::$const_obj_1 };
     out_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     "licm_reloadable_hoist_nonunit.wado/probe"(bag, bag, out_1);
@@ -276,6 +277,7 @@ fn "licm_reloadable_hoist_nonunit.wado/run"() with Stdout {
     end = out_1.used;
     $sroa_$iter_0_repr_49 = out_1.repr;
     $sroa_$iter_0_index_50 = 0;
+    $licm_repr_52 = s.repr;
     b12: block {
         l13: loop {
             break_if b12 $sroa_$iter_0_index_50 >= end;
@@ -284,13 +286,14 @@ fn "licm_reloadable_hoist_nonunit.wado/run"() with Stdout {
             other_18 = "core:prelude/string.wado/core:prelude/string.wado/String::format<licm_reloadable_hoist_nonunit.wado/$tmpl$47d98586269b5b43,[&i32]>$spec0$spec0$sroa[t.h0.value]"(ref_val);
             $inline_core_prelude_string_wado_String__internal_push_string_9: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_string_9 local.tee ref_val(other_18.used) == 0;
-                if @unlikely(local.tee new_used(s.used + ref_val) > builtin::array_len(s.repr)) {
+                if @unlikely(local.tee new_used(s.used + ref_val) > builtin::array_len($licm_repr_52)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used);
+                    $licm_repr_52 = s.repr;
                 }
                 start_30 = s.used;
                 s.used = new_used;
-                builtin::array_copy<u8>(s.repr, start_30, other_18.repr, 0, ref_val);
+                builtin::array_copy<u8>($licm_repr_52, start_30, other_18.repr, 0, ref_val);
             };
             continue l13;
         };
@@ -1210,7 +1213,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<licm_reload
     let pair: i32;
     let tens: i32;
     let start_152: i32;
-    let $sroa_view_repr_500: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
@@ -1311,14 +1313,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<licm_reload
     if t > start_152 {
         builtin::array_set_u8($load_8, start_152, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
-    $sroa_view_repr_500 = global:core:prelude/string.wado::$const_obj_5;
     if @unlikely(local.tee t(is_negative_65 + 1) > builtin::array_len($load_8)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, t);
     }
     is_negative_65 = out_3.used;
     out_3.used = t;
-    builtin::array_copy<u8>(out_3.repr, is_negative_65, $sroa_view_repr_500, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, is_negative_65, global:core:prelude/string.wado::$const_obj_5, 0, 1);
     return out_3;
 }
 

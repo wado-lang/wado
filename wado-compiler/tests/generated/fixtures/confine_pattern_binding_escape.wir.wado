@@ -250,6 +250,7 @@ global global:core:prelude/traits.wado::$const_obj_31: ref "core:prelude/string.
 
 fn "confine_pattern_binding_escape.wado/run"() {
     let $load_5: i32;
+    let self_92: i32;
     let $sroa_q_l_94: ref "core:prelude/list.wado//List<i32>";
     let $sroa_one_1_100: ref null "confine_pattern_binding_escape.wado//P";
     $sroa_q_l_94 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
@@ -283,13 +284,13 @@ fn "confine_pattern_binding_escape.wado/run"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_q_l_94);
     }
     builtin::array_set<i32>($sroa_q_l_94.repr, $load_5, 3);
-    $sroa_q_l_94.used = $load_5 + 1;
-    if @unlikely(local.tee $load_5($sroa_one_1_100.l.used) != 1) {
+    $sroa_q_l_94.used = local.tee $load_5($load_5 + 1);
+    if @unlikely(local.tee self_92($sroa_one_1_100.l.used) != 1) {
         cold_path;
-        "confine_pattern_binding_escape.wado/run$cold1"($sroa_one_1_100, $load_5);
+        "confine_pattern_binding_escape.wado/run$cold1"($sroa_one_1_100, self_92);
         unreachable;
     }
-    if @unlikely(local.tee $load_5($sroa_q_l_94.used) != 2) {
+    if @unlikely($load_5 != 2) {
         cold_path;
         "confine_pattern_binding_escape.wado/run$cold0"($load_5);
         unreachable;

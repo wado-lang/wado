@@ -646,6 +646,11 @@ impl ProgramFacts<'_> {
         self.globals
             .is_some_and(|g| matches!(g.get(key), Some(Lattice::Const(_))))
     }
+
+    /// The builtin a call to `func_id` performs, if the engine knows it.
+    pub(crate) fn builtin(&self, func_id: &FuncId) -> Option<CtfeBuiltin> {
+        self.ctfe_builtins.and_then(|m| m.get(func_id)).copied()
+    }
 }
 
 /// Partial evaluator over the arena `Body`.

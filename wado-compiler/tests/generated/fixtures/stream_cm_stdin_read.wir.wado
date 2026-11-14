@@ -259,7 +259,6 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let $sroa_view_repr_535: ref Array<u8>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:stream_cm_stdin_read.wado::$modules_initialized);
         cold_path;
@@ -269,10 +268,8 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     _done = $pattern_temp_0.1;
     self_5 = "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_sized$dae[expected]"(stdin_stream).used;
     "wasi/stream-drop-readable"(stdin_stream.value);
-    out_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
-    $sroa_view_repr_535 = global:stream_cm_stdin_read.wado::$const_obj_1;
-    out_19.used = local.tee $load_2(5);
-    builtin::array_copy<u8>(local.tee $load_3(out_19.repr), 0, $sroa_view_repr_535, 0, 5);
+    local.tee out_19(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }).used = local.tee $load_2(5);
+    builtin::array_copy<u8>(local.tee $load_3(out_19.repr), 0, global:stream_cm_stdin_read.wado::$const_obj_1, 0, 5);
     is_negative_81 = self_5 < 0;
     x = builtin::i64_extend_i32_s(self_5);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -352,31 +349,30 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     }
     is_negative_81 = out_19.used;
     out_19.used = $load_2;
-    $sroa_view_repr_535 = out_19.repr;
+    $load_3 = out_19.repr;
     self_5 = is_negative_81 + self_5;
     b22: block {
         l23: loop {
             break_if b22 (self_5 - is_negative_81) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_535, self_5 - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_535, self_5 - 2, 48 + tens);
+            builtin::array_set_u8($load_3, self_5 - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($load_3, self_5 - 2, 48 + tens);
             self_5 = self_5 - 2;
             x = q;
             continue l23;
         };
     };
     if self_5 > is_negative_81 {
-        builtin::array_set_u8($sroa_view_repr_535, is_negative_81, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($load_3, is_negative_81, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
-    $load_3 = global:stream_cm_stdin_read.wado::$const_obj_0;
-    if @unlikely(local.tee self_5($load_2 + 6) > builtin::array_len($sroa_view_repr_535)) {
+    if @unlikely(local.tee self_5($load_2 + 6) > builtin::array_len($load_3)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_19, self_5);
     }
     $load_2 = out_19.used;
     out_19.used = self_5;
-    builtin::array_copy<u8>(out_19.repr, $load_2, $load_3, 0, 6);
+    builtin::array_copy<u8>(out_19.repr, $load_2, global:stream_cm_stdin_read.wado::$const_obj_0, 0, 6);
     self_5 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $load_2 = builtin::i32_wrap_i64(x >> 32_i64);
     self_5 = "stream_cm_stdin_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_5);
@@ -909,8 +905,10 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_size
     let packed: i32;
     let $sroa_slot_31: i32;
     let $licm_arith_37: i32;
+    let $licm_repr_38: ref Array<u8>;
     all = struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     $licm_arith_37 = self.value;
+    $licm_repr_38 = all.repr;
     block {
         l91: loop {
             $sroa_slot_31 = "mem/realloc"(0, 0, 1, 4096);
@@ -918,11 +916,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_size
             chunk = "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[end]"(struct.new "core:prelude/types.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: $licm_arith_37, packed: packed, ptr: $sroa_slot_31, size: 4096, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } });
             $inline_core_prelude_list_wado_List_u8___extend_9: block {
                 break_if $inline_core_prelude_list_wado_List_u8___extend_9 local.tee $sroa_slot_31(chunk.items.used) == 0;
-                if @unlikely(local.tee packed(all.used + $sroa_slot_31) > builtin::array_len(all.repr)) {
+                if @unlikely(local.tee packed(all.used + $sroa_slot_31) > builtin::array_len($licm_repr_38)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(all, packed);
+                    $licm_repr_38 = all.repr;
                 }
-                builtin::array_copy<u8>(all.repr, all.used, chunk.items.repr, 0, $sroa_slot_31);
+                builtin::array_copy<u8>($licm_repr_38, all.used, chunk.items.repr, 0, $sroa_slot_31);
                 all.used = packed;
             };
             if chunk.result != 0 {

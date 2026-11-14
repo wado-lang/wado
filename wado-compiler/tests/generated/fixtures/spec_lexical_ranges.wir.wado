@@ -779,15 +779,17 @@ fn "spec_lexical_ranges.wado/$test_2_iteration"() {
     let $licm_repr_95: ref Array<i32>;
     seen = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     $sroa_$iter_0_start_87 = 0;
+    $licm_repr_95 = seen.repr;
     b7: block {
         l8: loop {
             break_if b7 $sroa_$iter_0_start_87 >= 3;
             $sroa_$iter_0_start_87 = local.tee current_19($sroa_$iter_0_start_87) + 1;
-            if @unlikely(local.tee used_25(seen.used) >= builtin::array_len(seen.repr)) {
+            if @unlikely(local.tee used_25(seen.used) >= builtin::array_len($licm_repr_95)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(seen);
+                $licm_repr_95 = seen.repr;
             }
-            builtin::array_set<i32>(seen.repr, used_25, current_19);
+            builtin::array_set<i32>($licm_repr_95, used_25, current_19);
             seen.used = used_25 + 1;
             continue l8;
         };
@@ -842,16 +844,17 @@ seen: "), used: 104 }, s1: struct.new "core:prelude/string.wado//String" { repr:
         unreachable;
     }
     $temp_inline_core_prelude_traits_wado_IterStepBy_core_prelude_range_wado_RangeExclusive_i32___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___13_0 = struct.new "core:prelude/traits.wado//IterStepBy<core:prelude/range.wado/RangeExclusive<i32>>" { inner: struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 0, end: 10 }, gap: 2, started: 0 };
-    seen = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_95 = local.tee seen(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b21: block {
         l22: loop {
             multivalue_bind [$sroa_$iter_0_start_87, current_19] = "core:prelude/traits.wado/core:prelude/traits.wado/IterStepBy<core:prelude/range.wado/RangeExclusive<i32>>^core:prelude/traits.wado/Iterator::next$sroa[return]$spec0"($temp_inline_core_prelude_traits_wado_IterStepBy_core_prelude_range_wado_RangeExclusive_i32___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___13_0);
             if $sroa_$iter_0_start_87 == 1 {
-                if @unlikely(local.tee $sroa_$iter_0_start_87(seen.used) >= builtin::array_len(seen.repr)) {
+                if @unlikely(local.tee $sroa_$iter_0_start_87(seen.used) >= builtin::array_len($licm_repr_95)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(seen);
+                    $licm_repr_95 = seen.repr;
                 }
-                builtin::array_set<i32>(seen.repr, $sroa_$iter_0_start_87, current_19);
+                builtin::array_set<i32>($licm_repr_95, $sroa_$iter_0_start_87, current_19);
                 seen.used = $sroa_$iter_0_start_87 + 1;
             } else {
                 break b21;
