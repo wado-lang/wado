@@ -4900,29 +4900,56 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .is_inherited()
                     .then(|| (impl_def, method.sig.clone()))
             });
-        let (impl_def, mut sig) = inheriting.next()?;
+        let (impl_def, sig) = inheriting.next()?;
         if matches!(choice, SigChoice::Unique) && inheriting.next().is_some() {
             return None;
         }
-        let (receiver, receiver_params) = if let Some(decl) = key.decl() {
+        self.inherited_sig_in_block(impl_def, sig)
+    }
+
+    /// The trait default `sig`, which block `impl_def` inherits, read in the
+    /// frame of the declaration the block targets: `Self` is that declaration
+    /// at its own parameters, behind the block's reference where it targets
+    /// one.
+    pub(super) fn inherited_sig_in_block(
+        &self,
+        impl_def: DefId,
+        mut sig: MethodSig,
+    ) -> Option<MethodSig> {
+        let (target, decl) = {
+            let table = self.tysys.type_table.borrow();
             (
-                self.declared_self_type(decl)?,
+                table.impl_target_whole(impl_def),
+                table.impl_target_decl(impl_def),
+            )
+        };
+        let (receiver, receiver_params) = if let Some(decl) = decl {
+            let declared = self.declared_self_type(decl)?;
+            let receiver = {
+                let mut table = self.tysys.type_table.borrow_mut();
+                match RefKind::from_resolved(table.get(target)) {
+                    Some(RefKind::Shared) => table.make_ref(declared),
+                    Some(RefKind::Mut) => table.make_mut_ref(declared),
+                    None => declared,
+                }
+            };
+            (
+                receiver,
                 self.type_lookup()
                     .declared_type_param_ids(decl)
                     .map(<[TypeId]>::to_vec)
                     .unwrap_or_default(),
             )
         } else {
-            // A receiver no declaration names is written only as a primitive's
-            // path, whose impl binds nothing.
+            // A target naming no declaration is a builtin shape, which a block
+            // writes whole and so binds nothing.
             assert!(
-                trait_env.impl_headers[&impl_def].type_params.is_empty(),
-                "a static call names a declaration-less receiver only by a primitive"
+                self.tysys.trait_env.impl_headers[&impl_def]
+                    .type_params
+                    .is_empty(),
+                "a block for a builtin shape declares no parameters"
             );
-            (
-                self.tysys.type_table.borrow().impl_target_whole(impl_def),
-                Vec::new(),
-            )
+            (target, Vec::new())
         };
         let frame = self.tysys.trait_frame_at(impl_def, receiver);
         let in_frame = sig.decl.instantiate(&self.tysys.type_table, &frame);
@@ -6114,7 +6141,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     raw_args: call.args.get(receiver..).unwrap_or_default(),
                     decl_return_type: declared_return,
                     expected_return_type: expected_type,
-                    trait_decl,
+                    self_binding: SelfBinding::of_static(type_param_type_id, trait_decl),
                     declaring_module: found_trait.module().cloned(),
                     impl_args: &[],
                     inst: inst.as_ref(),

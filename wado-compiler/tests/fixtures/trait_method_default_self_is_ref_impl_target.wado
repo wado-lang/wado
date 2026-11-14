@@ -10,6 +10,7 @@ trait Shown with () {
 
 trait Tr: Shown with () {
     fn m(&self, x: i32 = tag(List::<Self>::with_capacity(0))) -> i32;
+    fn t<U: Shown = Self>(&self, x: i32 = U::id()) -> i32;
 }
 
 fn tag<T: Shown>(_x: List<T>) -> i32 {
@@ -36,15 +37,18 @@ impl Tr for &A {
     fn m(&self, x: i32) -> i32 {
         return x;
     }
+    fn t<U: Shown>(&self, x: i32) -> i32 {
+        return x;
+    }
 }
 
 export fn run() with Stdout {
     let a = A { v: 1 };
     let r = &a;
-    println(`${r.m()} ${Tr::m(&r)}`);
+    println(`${r.m()} ${Tr::m(&r)} ${r.t()}`);
 }
 
 __DATA__
 {
-    "stdout": "2 2\n"
+    "stdout": "2 2 2\n"
 }

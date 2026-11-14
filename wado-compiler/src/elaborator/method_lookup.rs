@@ -199,8 +199,7 @@ impl MethodInfo {
 /// both their signature and declaration forms, and its parameter and return
 /// types — with the call-site context the solver needs.
 pub(super) struct MethodInferenceInput<'a> {
-    /// Receiver's `TypeId` at the call site (any reference level; the
-    /// helper strips references internally).
+    /// Receiver's `TypeId` at the call site, which a diagnostic names.
     pub receiver_type: TypeId,
     /// Method name, for the "cannot infer" diagnostic.
     pub method_name: &'a str,
@@ -225,11 +224,10 @@ pub(super) struct MethodInferenceInput<'a> {
     /// Expected return type at the call site (from a type annotation or
     /// surrounding call), used for back-inference.
     pub expected_return_type: Option<TypeId>,
-    /// The dispatch-resolved trait, when this is a trait method. Disambiguates
-    /// the method lookup for same-named methods on different traits (e.g.
-    /// `payload` on Serialize vs Deserialize). A declaration, not a spelling:
-    /// two modules' same-named traits are two traits.
-    pub trait_decl: Option<DefId>,
+    /// What `Self` is at the call: the selected impl's target, under the trait
+    /// declaring the method when it is a trait method. The caller settles it,
+    /// since only the dispatch knows whether a `&A` impl answered.
+    pub self_binding: SelfBinding,
     /// Module declaring the method. See
     /// [`Elaborator::fill_defaulted_method_type_args`].
     pub declaring_module: Option<ModuleSource>,
@@ -1658,8 +1656,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_decl = self.tysys.signatures.declaring_trait(sig);
         self.fill_defaulted_method_type_args(
             &sig.own_params,
-            receiver_type,
-            trait_decl,
+            SelfBinding::of_static(receiver_type, trait_decl),
             &sig.own_type_param_ids(),
             declaring_module,
             inferred,
@@ -1677,16 +1674,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn fill_defaulted_method_type_args(
         &mut self,
         method_type_params: &[ast::GenericParam],
-        receiver_type: TypeId,
-        trait_decl: Option<DefId>,
+        declaring: SelfBinding,
         slots: &[TypeId],
         declaring_module: Option<ModuleSource>,
         inferred: &mut [TypeId],
     ) -> bool {
-        let receiver_type = self.tysys.get_base_type(receiver_type);
-        if self.tysys.is_unbound_type_param(receiver_type) {
-            return false;
-        }
         let no_scope = ScopeParams::default();
         let has_fillable = method_type_params
             .iter()
@@ -1695,15 +1687,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !has_fillable {
             return false;
         }
-        if let Some(trait_) = trait_decl {
-            self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_);
+        if let Some(trait_) = declaring.declaring_trait {
+            self.register_assoc_types_for_concrete_type_and_trait(declaring.type_id, trait_);
         }
         let defaults = self.resolve_method_type_param_defaults(
             method_type_params,
-            SelfBinding {
-                type_id: receiver_type,
-                declaring_trait: trait_decl,
-            },
+            declaring,
             slots,
             declaring_module,
         );
@@ -1844,12 +1833,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn method_type_args_for_value_defaults(
         &mut self,
         method_type_params: &[ast::GenericParam],
-        mut declaring: SelfBinding,
+        declaring: SelfBinding,
         slots: &[TypeId],
         declaring_module: Option<ModuleSource>,
         known: &mut [TypeId],
     ) {
-        declaring.type_id = self.tysys.get_base_type(declaring.type_id);
         let fillable: Vec<bool> = method_type_params
             .iter()
             .zip(known.iter())
@@ -1996,10 +1984,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name,
                     span: input.span,
                     type_args: &explicit,
-                    self_binding: Some(SelfBinding {
-                        type_id: input.receiver_type,
-                        declaring_trait: input.trait_decl,
-                    }),
+                    self_binding: Some(input.self_binding),
                     impl_args: input.impl_args,
                 },
             )
@@ -2020,9 +2005,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> (Vec<TypeId>, SubstitutionContext) {
         let (slots, own_params, impl_args, span) =
             (input.slots, input.own_params, input.impl_args, input.span);
-        let self_binding = self
-            .tysys
-            .base_self_binding(input.receiver_type, input.trait_decl);
+        let self_binding = input.self_binding;
         let reached = self
             .tysys
             .packs_args_reach(input.param_types, input.args.len());
@@ -2060,7 +2043,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// call.
     fn infer_method_type_args(&mut self, input: MethodInferenceInput<'_>) -> Vec<TypeId> {
         let MethodInferenceInput {
-            receiver_type,
             slots,
             own_params,
             param_types,
@@ -2068,7 +2050,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             raw_args,
             decl_return_type,
             expected_return_type,
-            trait_decl,
+            self_binding,
             declaring_module,
             inst,
             impl_args,
@@ -2109,8 +2091,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_assoc_bound_args(&method_type_params, &mut inferred);
         self.fill_defaulted_method_type_args(
             &method_type_params,
-            receiver_type,
-            trait_decl,
+            self_binding,
             slots,
             declaring_module,
             &mut inferred,
@@ -2135,7 +2116,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         let names = slot_names(&method_type_params, &self.tysys.resolutions);
-        let self_binding = self.tysys.base_self_binding(receiver_type, trait_decl);
         self.defer_pinned_packs(
             inst,
             &method_type_params,
@@ -4288,6 +4268,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let impl_args = settled_impl_args(&impl_type_bindings);
+        let self_binding = self.tysys.base_self_binding(
+            output_type,
+            method_trait_name.as_ref().and_then(FqTraitName::canonical),
+        );
         // This path answers the call, so it runs the method's own inference too:
         // a subscript receiver does not decide whether an argument gets a type.
         let (args, inst) = self.resolve_args_through_slots(
@@ -4301,10 +4285,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name: &method_call.method,
                 span: method_call.span,
                 type_args: &type_args,
-                self_binding: Some(self.tysys.base_self_binding(
-                    output_type,
-                    method_trait_name.as_ref().and_then(FqTraitName::canonical),
-                )),
+                self_binding: Some(self_binding),
                 impl_args: &impl_args,
             },
             expected_type.map(|expected| ExpectedReturn {
@@ -4326,7 +4307,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 raw_args: &method_call.args,
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
-                trait_decl: method_trait_name.as_ref().and_then(FqTraitName::canonical),
+                self_binding,
                 declaring_module: impl_module.clone(),
                 impl_args: &impl_args,
                 inst: inst.as_ref(),
@@ -4357,10 +4338,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_else(|| self.current_module_source.clone());
         if omits_a_default(args.len(), &defaults) {
             let mut type_bindings = impl_type_bindings;
-            let self_binding = self.tysys.base_self_binding(
-                output_base_type_id,
-                method_trait_name.as_ref().and_then(FqTraitName::canonical),
-            );
             let own = self.value_default_slot_bindings(
                 &method_own_params,
                 &method_type_param_ids,

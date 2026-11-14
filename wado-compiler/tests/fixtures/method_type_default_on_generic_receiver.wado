@@ -1,0 +1,31 @@
+// A method's type default fills an omitted type argument whatever the receiver
+// is, a type parameter included: a generic function's `T` and a trait default
+// body's own `Self` take `U = i32` as a concrete receiver does.
+use { println, Stdout } from "core:cli";
+
+trait Tr with () {
+    fn m<U = i32>(&self) -> i32 {
+        return 1;
+    }
+    fn e(&self) -> i32 {
+        return Self::m(self) + self.m() * 10;
+    }
+}
+
+struct A {}
+
+impl Tr for A {}
+
+fn via<T: Tr>(t: &T) -> i32 {
+    return t.m() * 100;
+}
+
+export fn run() with Stdout {
+    let a = A {};
+    println(`${a.m()} ${a.e()} ${via(&a)}`);
+}
+
+__DATA__
+{
+    "stdout": "1 11 100\n"
+}

@@ -1039,7 +1039,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 raw_args: args_ast,
                 decl_return_type: return_type,
                 expected_return_type: expected_at_base,
-                trait_decl: trait_name.as_ref().and_then(FqTraitName::canonical),
+                self_binding,
                 declaring_module: Some(callee_module.clone()),
                 impl_args: &impl_args,
                 inst: inst.as_ref(),
@@ -2018,12 +2018,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // which admits every candidate.
         let arg_types: Vec<TypeId> = preselected.clone().unwrap_or_default();
 
-        let callee_sig = static_receiver.as_ref().and_then(|key| {
-            self.unique_qualified_method_sig_keyed(key, &static_call.method)
-                .or_else(|| {
-                    self.inherited_default_method_sig(key, &static_call.method, SigChoice::Unique)
-                })
-        });
         let resolved = match (&static_receiver, &struct_name_for_lookup) {
             (Some(receiver), Some(name)) => {
                 let name = name.clone();
@@ -2042,6 +2036,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.report_unanswered_static(&resolved, &static_call.method, static_call.span) {
             return TypeTable::ERROR;
         }
+        // A reference's blocks share one key whatever they refer to, so the
+        // key names no one signature there: the block the resolution
+        // selected does.
+        let callee_sig = match static_receiver.as_ref() {
+            Some(key) if key.ref_kind().is_some() => resolved
+                .found()
+                .and_then(|callee| self.selected_static_sig(&callee.method_ref)),
+            Some(key) => self
+                .unique_qualified_method_sig_keyed(key, &static_call.method)
+                .or_else(|| {
+                    self.inherited_default_method_sig(key, &static_call.method, SigChoice::Unique)
+                }),
+            None => None,
+        };
         let (callee_params, declares_params) = resolved.params();
         let CalleeParams {
             param_is_mut,
@@ -2291,7 +2299,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     raw_args: &static_call.args,
                     decl_return_type: declared_return,
                     expected_return_type: expected_at_base,
-                    trait_decl: declaring_trait,
+                    self_binding: SelfBinding::of_static(target_type_id, declaring_trait),
                     declaring_module: Some(sig.defaults_module.clone()),
                     impl_args: &impl_args,
                     inst: None,
@@ -2414,63 +2422,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let resolved = self.tysys.type_table.borrow().get(target_type_id).clone();
-        let (struct_name, struct_module, mangled_struct_name, struct_type_args) = match resolved {
-            ResolvedType::Struct { .. }
-            | ResolvedType::Resource { .. }
-            | ResolvedType::Enum { .. }
-            | ResolvedType::Variant { .. }
-            | ResolvedType::Tuple(_) => {
-                nominal_receiver(&self.tysys.type_table.borrow(), target_type_id)
-            }
-            ResolvedType::Primitive(prim) => primitive_receiver(prim),
-            // `()` has its impl blocks in core:prelude/primitive, as a method
-            // call on it finds them.
-            ResolvedType::Unit => (
-                UNIT_TYPE_NAME.to_string(),
-                ModuleSource::primitive(),
-                FqTypeName::builtin(UNIT_TYPE_NAME),
-                vec![],
-            ),
-            ResolvedType::BuiltinArray(elem) => {
-                let arg = self.tysys.type_table.borrow().fq_type_name(elem);
-                (
-                    ARRAY_TYPE_NAME.to_string(),
-                    ModuleSource::array(),
-                    FqTypeName::builtin(ARRAY_TYPE_NAME).with_args(vec![arg]),
-                    vec![elem],
-                )
-            }
-            ResolvedType::Newtype { .. } => {
-                self.newtype_static_receiver(target_type_id, &static_call.method, required_trait)
-            }
-            ResolvedType::Flags { .. } => {
-                nominal_receiver(&self.tysys.type_table.borrow(), target_type_id)
-            }
-            ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee) => {
-                let table = self.tysys.type_table.borrow();
-                let kind = RefKind::from_resolved(&resolved).expect("matched a reference");
-                let module = match table.get(pointee) {
-                    ResolvedType::Primitive(prim) => ModuleSource::of_primitive(*prim),
-                    _ => nominal_receiver(&table, pointee).1,
-                };
-                (
-                    kind.prefix().to_string(),
-                    module,
-                    table.fq_type_name(target_type_id),
-                    vec![],
-                )
-            }
+        let Some((struct_name, struct_module, mangled_struct_name, struct_type_args)) =
+            self.static_receiver_parts(target_type_id, &static_call.method, required_trait)
+        else {
             // Resolving the target reported why it failed.
-            _ if target_type_id == TypeTable::ERROR => return TypeTable::ERROR,
-            // The target names no struct-like type: a trait, an undeclared
-            // name.
-            _ => {
+            if target_type_id != TypeTable::ERROR {
+                // The target names no struct-like type: a trait, an undeclared
+                // name.
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: static_call_symbol_name(static_call),
                     span: static_call.span,
                 });
-                return TypeTable::ERROR;
             }
+            return TypeTable::ERROR;
         };
 
         // A trait impl's static is mangled with its trait, so WIR resolves it.
@@ -2777,7 +2741,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 raw_args,
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
-                trait_decl,
+                self_binding: SelfBinding::of_static(receiver_type_id, trait_decl),
                 declaring_module: Some(blanket_module.clone()),
                 impl_args: &impl_args,
                 inst: None,
@@ -3040,6 +3004,82 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .map(|(blanket, _)| blanket)
             .collect()
+    }
+
+    /// The signature of the declaration a static resolution selected, read in
+    /// the block supplying it: a trait default the block inherits is read
+    /// there as [`Self::inherited_sig_in_block`] reads it.
+    fn selected_static_sig(&self, selected: &StaticMethodRef) -> Option<sig::MethodSig> {
+        let Some(block) = selected.supplying_block else {
+            return self
+                .tysys
+                .signatures
+                .method_sig(selected.method_id?)
+                .cloned();
+        };
+        let trait_decl = self.tysys.trait_env.impl_headers[&block].trait_def()?;
+        let inherited = self
+            .tysys
+            .trait_sig_of(&trait_decl)?
+            .method(&selected.method_name)?
+            .sig
+            .clone();
+        self.inherited_sig_in_block(block, inherited)
+    }
+
+    /// The receiver a static call on `target` names, `None` where the target
+    /// names no type a block can be written for. A newtype names the link of
+    /// its chain that owns `method`; a reference names itself, hosted where
+    /// what it refers to is.
+    fn static_receiver_parts(
+        &mut self,
+        target: TypeId,
+        method: &str,
+        required_trait: Option<DefId>,
+    ) -> Option<QualifiedReceiver> {
+        let resolved = self.tysys.type_table.borrow().get(target).clone();
+        match resolved {
+            ResolvedType::Newtype { .. } => {
+                Some(self.newtype_static_receiver(target, method, required_trait))
+            }
+            ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee) => {
+                let kind = RefKind::from_resolved(&resolved).expect("matched a reference");
+                let (_, module, _, args) = self.receiver_shape(pointee)?;
+                let fq = self.tysys.type_table.borrow().fq_type_name(target);
+                Some((kind.prefix().to_string(), module, fq, args))
+            }
+            _ => self.receiver_shape(target),
+        }
+    }
+
+    /// The receiver `ty` names by its shape alone.
+    fn receiver_shape(&self, ty: TypeId) -> Option<QualifiedReceiver> {
+        let table = self.tysys.type_table.borrow();
+        match table.get(ty) {
+            ResolvedType::Struct { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Tuple(_)
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Newtype { .. } => Some(nominal_receiver(&table, ty)),
+            ResolvedType::Primitive(prim) => Some(primitive_receiver(*prim)),
+            // `()` has its impl blocks in core:prelude/primitive, as a method
+            // call on it finds them.
+            ResolvedType::Unit => Some((
+                UNIT_TYPE_NAME.to_string(),
+                ModuleSource::primitive(),
+                FqTypeName::builtin(UNIT_TYPE_NAME),
+                vec![],
+            )),
+            &ResolvedType::BuiltinArray(elem) => Some((
+                ARRAY_TYPE_NAME.to_string(),
+                ModuleSource::array(),
+                FqTypeName::builtin(ARRAY_TYPE_NAME).with_args(vec![table.fq_type_name(elem)]),
+                vec![elem],
+            )),
+            _ => None,
+        }
     }
 
     /// The receiver a qualified call on a newtype names: the link of its chain
