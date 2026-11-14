@@ -18,6 +18,7 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::{NirPackage, SpecializationCapHit};
 use crate::nir_value_graph::ValueKind;
+use crate::nir_visitor::reachable_exprs;
 use crate::niri::{
     Callee, CalleeMap, CtfeBuiltinMap, GlobalKey, build_callee_map, build_ctfe_builtin_map,
 };
@@ -940,9 +941,7 @@ impl CallerScan {
     fn roots(&self, facts: &IndexMap<(FuncId, u32), ParamFacts>) -> IndexMap<u32, FieldConsts> {
         let mut roots = self.roots.clone();
         for (local, edges) in &self.forwards {
-            let consts = roots
-                .get_mut(local)
-                .expect("a forwarded local is a root");
+            let consts = roots.get_mut(local).expect("a forwarded local is a root");
             for edge in edges {
                 match facts.get(edge) {
                     Some(param) if !param.opaque => {
@@ -968,14 +967,10 @@ fn scan_caller(
     let Some(body) = func.body.as_ref().filter(|_| !func.is_dead) else {
         return CallerScan::default();
     };
-    let mut calls = Vec::new();
-    body.for_each_reachable_node(|node| {
-        if let NodeRef::Expr(id) = node
-            && matches!(body.exprs[id].kind, ExprKind::Call { .. })
-        {
-            calls.push(id);
-        }
-    });
+    let calls = reachable_exprs(body)
+        .into_iter()
+        .filter(|&id| matches!(body.exprs[id].kind, ExprKind::Call { .. }))
+        .collect();
     let cold_calls = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
     let locals = &func.locals;
     let mut roots: IndexMap<u32, FieldConsts> = IndexMap::default();

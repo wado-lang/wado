@@ -129,7 +129,6 @@ impl FunctionGate {
         }
     }
 
-
     /// The threads this gate's sweeps run on, for the whole-program walks a
     /// pass takes before its sweep.
     pub fn exec(&self) -> &Arc<Executor> {

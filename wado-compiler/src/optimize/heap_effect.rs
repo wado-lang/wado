@@ -296,8 +296,8 @@ impl Layouts {
 }
 
 /// The call-graph-wide summaries, kept across the passes of one project's
-/// optimization and re-solved only where a function was written since. A
-/// store position names one function for the whole of it.
+/// optimization and re-solved only where a function's write count moved since.
+/// A store position names one function for the whole of it.
 #[derive(Default)]
 pub(super) struct HeapEffectsCache {
     layouts: Layouts,
@@ -361,13 +361,7 @@ impl HeapEffectsCache {
             }
         }
         if edited.contains(&true) {
-            self.solve(
-                &project.functions,
-                type_table,
-                exec,
-                &edited,
-                &mut moved,
-            );
+            self.solve(&project.functions, type_table, exec, &edited, &mut moved);
         }
         #[cfg(debug_assertions)]
         self.assert_one_settled(&project.functions, type_table);

@@ -225,8 +225,6 @@ pub fn optimize(
     // says nothing about its body, so clearing bodies leaves every entry current
     // and only an appended function needs a new one.
     let mut descriptors = dce::DescriptorCache::default();
-    // Keyed by each function's write count, so each pass that reads heap
-    // effects re-solves only what the passes before it rewrote.
     let mut heap_effects = HeapEffectsCache::default();
     match opt_level {
         OptLevel::O0 => {
@@ -377,12 +375,7 @@ pub fn optimize(
     // two soundness gates (scalar-field + receiver-availability) and the WIR
     // const-local propagation keep it default-safe.
     run_pass("nir/promote_fields", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(
-            p,
-            &exec,
-            Some(&mut heap_effects),
-            FreezePhase::Terminal,
-        )
+        extract::freeze_pure_arith(p, &exec, Some(&mut heap_effects), FreezePhase::Terminal)
     });
     // Re-run the structural BCE matcher now that `promote_fields` froze
     // invariant bounds (`arr.used`) into constant operands the in-loop
