@@ -29,7 +29,7 @@ use crate::symbol_notation::render;
 use crate::token::{Delimiter, Quote, Span};
 
 use crate::tir::{
-    AnonShape, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE, ResolvedType,
+    AnonShape, AssocParamId, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE, ResolvedType,
     RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole, TemplateShape, TirExpr,
     TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeArgMap, TypeId, TypeParamId,
     is_open_row, positional_substitution, projection_arguments, range_item, slots_from_impl_args,
@@ -45,6 +45,11 @@ pub struct TypeTable {
     /// The slot each inference variable stands for, read only by diagnostics.
     /// Beside the variant, not inside it, so the interning key stays the id.
     infer_var_names: IndexMap<InferVarId, String>,
+    /// How each declaration spells its type parameters and packs, for
+    /// messages and mangled names. Beside the variant for the same reason.
+    param_names: IndexMap<TypeParamId, String>,
+    /// How each trait spells its generic associated types' own parameters.
+    assoc_param_names: IndexMap<AssocParamId, String>,
     /// The id the next [`EffectRef::Var`] takes.
     next_effect_var: u32,
     /// Whether the effect check has solved the variables, after which a use
@@ -265,6 +270,8 @@ impl TypeTable {
             types: TypeMap::default(),
             intern_map: IndexMap::default(),
             infer_var_names: IndexMap::default(),
+            param_names: IndexMap::default(),
+            assoc_param_names: IndexMap::default(),
             next_effect_var: 0,
             effect_vars_solved: false,
             row_flows: IndexSet::default(),
@@ -2313,11 +2320,6 @@ impl TypeTable {
         }
     }
 
-    /// Which pack `pack` is.
-    fn pack_id(&self, pack: TypeId) -> TypeParamId {
-        self.pack_parts(pack).0
-    }
-
     /// Whether a type is a declared type pack, as opposed to one of the
     /// tuples a pack stands for.
     pub fn is_type_pack(&self, id: TypeId) -> bool {
@@ -3229,10 +3231,32 @@ impl TypeTable {
     /// Create the type parameter `owner` declares at `index` (`T` in
     /// `struct Box<T>`).
     pub fn make_type_param(&mut self, owner: DefId, name: String, index: u32) -> TypeId {
-        self.intern(ResolvedType::TypeParam {
-            id: TypeParamId { owner, index },
-            name,
-        })
+        let id = TypeParamId { owner, index };
+        self.name_param(id, name);
+        self.intern(ResolvedType::TypeParam { id })
+    }
+
+    /// Record how `id`'s declaration spells it. A declaration spells each of
+    /// its parameters once, so a second spelling is two parameters taken for one.
+    fn name_param(&mut self, id: TypeParamId, name: String) {
+        let held = self.param_names.entry(id).or_insert_with(|| name.clone());
+        assert_eq!(*held, name, "one parameter has one spelling: {id:?}");
+    }
+
+    /// How `id`'s declaration spells it.
+    #[must_use]
+    pub fn param_name(&self, id: TypeParamId) -> &str {
+        self.param_names
+            .get(&id)
+            .unwrap_or_else(|| panic!("a parameter is named where it is declared: {id:?}"))
+    }
+
+    /// How the trait declaring `id` spells it.
+    #[must_use]
+    pub fn assoc_param_name(&self, id: &AssocParamId) -> &str {
+        self.assoc_param_names
+            .get(id)
+            .unwrap_or_else(|| panic!("a parameter is named where it is declared: {id:?}"))
     }
 
     /// The parameters of `owning_trait`'s generic associated type
@@ -3248,12 +3272,17 @@ impl TypeTable {
             .iter()
             .enumerate()
             .map(|(index, name)| {
-                self.intern(ResolvedType::AssocParam {
+                let id = AssocParamId {
                     owning_trait,
                     assoc_name: assoc_name.to_string(),
                     index: index as u32,
-                    name: name.clone(),
-                })
+                };
+                let held = self
+                    .assoc_param_names
+                    .entry(id.clone())
+                    .or_insert_with(|| name.clone());
+                assert_eq!(held, name, "one parameter has one spelling: {id:?}");
+                self.intern(ResolvedType::AssocParam(id))
             })
             .collect()
     }
@@ -3318,9 +3347,10 @@ impl TypeTable {
 
     /// Create a type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
     pub fn make_type_pack(&mut self, owner: DefId, name: String, index: u32) -> TypeId {
+        let id = TypeParamId { owner, index };
+        self.name_param(id, name);
         self.intern(ResolvedType::TypePack {
-            id: TypeParamId { owner, index },
-            name,
+            id,
             mapped_elem: None,
         })
     }
@@ -3410,49 +3440,70 @@ impl TypeTable {
 
     /// Create a mapped type pack: element `i` is `elem[F := F_i]`, where the
     /// pack param may recur in `elem` as a scalar `TypeParam` placeholder.
-    /// Drives its arity from pack `(name, index)`. See
-    /// [`ResolvedType::TypePack`].
-    pub fn make_mapped_type_pack(
-        &mut self,
-        owner: DefId,
-        name: String,
-        index: u32,
-        elem: TypeId,
-    ) -> TypeId {
+    /// Drives its arity from pack `id`. See [`ResolvedType::TypePack`].
+    pub fn make_mapped_type_pack(&mut self, id: TypeParamId, elem: TypeId) -> TypeId {
+        self.declared(id);
         self.intern(ResolvedType::TypePack {
-            id: TypeParamId { owner, index },
-            name,
+            id,
             mapped_elem: Some(elem),
         })
     }
 
-    /// `pack`'s identity and name.
-    fn pack_parts(&self, pack: TypeId) -> (TypeParamId, String) {
-        let ResolvedType::TypePack { id, name, .. } = self.get(pack) else {
+    /// `id` again, as a parameter its declaration already made.
+    pub fn type_param_of(&mut self, id: TypeParamId) -> TypeId {
+        self.declared(id);
+        self.intern(ResolvedType::TypeParam { id })
+    }
+
+    /// `id` again, as an identity pack its declaration already made.
+    pub fn type_pack_of(&mut self, id: TypeParamId) -> TypeId {
+        self.declared(id);
+        self.intern(ResolvedType::TypePack {
+            id,
+            mapped_elem: None,
+        })
+    }
+
+    /// Spell the slot `to` a parameter moves into as the parameter itself.
+    fn move_param(&mut self, from: TypeParamId, to: TypeParamId) {
+        let name = self.param_name(from).to_string();
+        self.name_param(to, name);
+    }
+
+    fn declared(&self, id: TypeParamId) {
+        assert!(
+            self.param_names.contains_key(&id),
+            "a parameter is made again only after its declaration made it: {id:?}"
+        );
+    }
+
+    /// Which pack `pack` is.
+    fn pack_id(&self, pack: TypeId) -> TypeParamId {
+        let ResolvedType::TypePack { id, .. } = self.get(pack) else {
             unreachable!("expected a type pack, found {:?}", self.get(pack))
         };
-        (*id, name.clone())
+        *id
     }
 
     /// `pack` mapped through `elem`: the mapped pack of `pack`'s declaration and
     /// slot.
     pub fn map_pack(&mut self, pack: TypeId, elem: TypeId) -> TypeId {
-        let (id, name) = self.pack_parts(pack);
-        self.make_mapped_type_pack(id.owner, name, id.index, elem)
+        let id = self.pack_id(pack);
+        self.make_mapped_type_pack(id, elem)
     }
 
     /// The scalar placeholder an identity pack's element stands as: a type
     /// parameter at the pack's declaration and slot, which per-element
     /// substitution binds to `P_k`.
     pub fn pack_placeholder(&mut self, pack: TypeId) -> TypeId {
-        let (id, name) = self.pack_parts(pack);
-        self.make_type_param(id.owner, name, id.index)
+        let id = self.pack_id(pack);
+        self.type_param_of(id)
     }
 
     /// The identity pack `pack`'s declaration binds at `pack`'s slot.
     pub fn plain_pack(&mut self, pack: TypeId) -> TypeId {
-        let (id, name) = self.pack_parts(pack);
-        self.make_type_pack(id.owner, name, id.index)
+        let id = self.pack_id(pack);
+        self.type_pack_of(id)
     }
 
     /// Create the projection `<param_id as owning_trait<trait_args>>::assoc_name<args>`,
@@ -4717,12 +4768,11 @@ impl TypeTable {
     /// `None` where it is no parameter of that family.
     fn family_param_index(&self, id: TypeId, owning_trait: DefId, assoc_name: &str) -> Option<u32> {
         match self.get(id) {
-            ResolvedType::AssocParam {
-                owning_trait: owner,
-                assoc_name: name,
-                index,
-                ..
-            } if *owner == owning_trait && name == assoc_name => Some(*index),
+            ResolvedType::AssocParam(param)
+                if param.owning_trait == owning_trait && param.assoc_name == assoc_name =>
+            {
+                Some(param.index)
+            }
             _ => None,
         }
     }
@@ -4752,25 +4802,28 @@ impl TypeTable {
             return replaced;
         }
         match self.get(type_id).clone() {
-            ResolvedType::TypeParam { id, name } => match leaves.params.get(&id) {
+            ResolvedType::TypeParam { id } => match leaves.params.get(&id) {
                 Some(&filled) => filled,
                 None => match leaves.renames.get(&id) {
-                    Some(&moved) => self.make_type_param(moved.owner, name, moved.index),
+                    Some(&moved) => {
+                        self.move_param(id, moved);
+                        self.type_param_of(moved)
+                    }
                     None => type_id,
                 },
             },
-            ResolvedType::TypePack {
-                id,
-                name,
-                mapped_elem,
-            } => match leaves.params.get(&id) {
+            ResolvedType::TypePack { id, mapped_elem } => match leaves.params.get(&id) {
                 Some(&filled) => filled,
                 None => match (leaves.renames.get(&id), mapped_elem) {
                     (Some(&moved), Some(elem)) => {
                         let elem = self.subst_rec(elem, leaves);
-                        self.make_mapped_type_pack(moved.owner, name, moved.index, elem)
+                        self.move_param(id, moved);
+                        self.make_mapped_type_pack(moved, elem)
                     }
-                    (Some(&moved), None) => self.make_type_pack(moved.owner, name, moved.index),
+                    (Some(&moved), None) => {
+                        self.move_param(id, moved);
+                        self.type_pack_of(moved)
+                    }
                     // A mapped pack the substitution leaves keeps its length,
                     // its element substituted.
                     (None, Some(elem)) => {
@@ -4778,7 +4831,7 @@ impl TypeTable {
                         if substituted == elem {
                             type_id
                         } else {
-                            self.make_mapped_type_pack(id.owner, name, id.index, substituted)
+                            self.make_mapped_type_pack(id, substituted)
                         }
                     }
                     (None, None) => type_id,
@@ -4799,14 +4852,9 @@ impl TypeTable {
                     type_id
                 }
             }
-            ResolvedType::AssocParam {
-                owning_trait,
-                assoc_name,
-                index,
-                ..
-            } => match leaves.family {
-                Some(at) if at.owning_trait == owning_trait && at.assoc_name == assoc_name => {
-                    at.args[index as usize]
+            ResolvedType::AssocParam(id) => match leaves.family {
+                Some(at) if at.owning_trait == id.owning_trait && at.assoc_name == id.assoc_name => {
+                    at.args[id.index as usize]
                 }
                 _ => type_id,
             },
@@ -5507,15 +5555,6 @@ impl TypeTable {
         }
     }
 
-    /// The name of every type pack `id` mentions, so a caller can ask whose
-    /// declaration they belong to.
-    pub fn pack_names(&self, id: TypeId) -> Vec<String> {
-        self.pack_types(id)
-            .into_iter()
-            .map(|pack| self.pack_parts(pack).1)
-            .collect()
-    }
-
     /// Which pack each type pack `id` mentions is, a mapped pack's element's
     /// included.
     pub fn packs(&self, id: TypeId) -> Vec<TypeParamId> {
@@ -6035,9 +6074,8 @@ impl TypeTable {
             }
             ResolvedType::Ref(inner) => ref_type_name(RefKind::Shared, &render(*inner)),
             ResolvedType::MutRef(inner) => ref_type_name(RefKind::Mut, &render(*inner)),
-            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
-                name.clone()
-            }
+            ResolvedType::TypeParam { id } => self.param_name(*id).to_string(),
+            ResolvedType::AssocParam(id) => self.assoc_param_name(id).to_string(),
             ResolvedType::InferVar(var) => self.infer_var_name(*var),
             ResolvedType::AssocTypeProjection {
                 param_id,
@@ -6078,23 +6116,16 @@ impl TypeTable {
             ResolvedType::Flags { def } => self.head_name(*def, qualified),
             // A repeat reads as the source spells it, its length unnamed.
             ResolvedType::TypePack {
-                name,
+                id,
                 mapped_elem: Some(element),
-                ..
-            } if repeated_element(name).is_some() => type_pack_name(&render(*element)),
-            ResolvedType::TypePack { name, .. } => type_pack_name(name),
+            } if repeated_element(self.param_name(*id)).is_some() => {
+                type_pack_name(&render(*element))
+            }
+            ResolvedType::TypePack { id, .. } => type_pack_name(self.param_name(*id)),
             ResolvedType::PackElement { pack, walk } => {
-                pack_element_name(self.pack_name(*pack), *walk)
+                pack_element_name(self.param_name(self.pack_id(*pack)), *walk)
             }
         }
-    }
-
-    /// The name a pack was declared under, without the `..` a spread spells.
-    fn pack_name(&self, pack: TypeId) -> &str {
-        let ResolvedType::TypePack { name, .. } = self.get(pack) else {
-            panic!("a pack element names a type pack");
-        };
-        name
     }
 
     /// Mangle a type for use inside struct / function names — `Tuple<i32,String>`
@@ -6243,9 +6274,11 @@ impl TypeTable {
             | ResolvedType::Resource { def, .. }
             | ResolvedType::Newtype { def, .. } => declared(*def),
             ResolvedType::Tuple(_) => declared(self.tuple_def()),
-            ResolvedType::TypeParam { id, name } => {
-                Receiver::Type(FqTypeName::binder_of(&self.defs, id.owner, name))
-            }
+            ResolvedType::TypeParam { id } => Receiver::Type(FqTypeName::binder_of(
+                &self.defs,
+                id.owner,
+                self.param_name(*id),
+            )),
             ResolvedType::BuiltinArray(_) => builtin(ARRAY_TYPE_NAME),
             ResolvedType::Unit => builtin(UNIT_TYPE_NAME),
             ResolvedType::Primitive(prim) => builtin(prim.as_str()),
@@ -6386,21 +6419,17 @@ impl TypeTable {
             | ResolvedType::Variant { def, type_args } => {
                 FqTypeName::declared(&self.defs, *def).with_args(args_of(type_args))
             }
-            ResolvedType::TypeParam { id, name } => {
-                FqTypeName::binder_of(&self.defs, id.owner, name)
+            ResolvedType::TypeParam { id } => {
+                FqTypeName::binder_of(&self.defs, id.owner, self.param_name(*id))
             }
-            ResolvedType::AssocParam {
-                owning_trait,
-                assoc_name,
-                name,
-                ..
-            } => FqTypeName::binder_of_family(&self.defs, *owning_trait, assoc_name, name),
-            ResolvedType::TypePack {
-                id,
-                name,
-                mapped_elem,
-            } => {
-                let pack = FqTypeName::pack_spread(&self.defs, id.owner, name);
+            ResolvedType::AssocParam(id) => FqTypeName::binder_of_family(
+                &self.defs,
+                id.owning_trait,
+                &id.assoc_name,
+                self.assoc_param_name(id),
+            ),
+            ResolvedType::TypePack { id, mapped_elem } => {
+                let pack = FqTypeName::pack_spread(&self.defs, id.owner, self.param_name(*id));
                 match mapped_elem {
                     Some(element) => pack.with_args(args_of(&[*element])),
                     None => pack,
@@ -6452,8 +6481,9 @@ impl TypeTable {
                 FqTypeName::unresolved(&self.mangle_type_name(id))
             }
             ResolvedType::PackElement { pack, walk } => {
-                let (pack, name) = self.pack_parts(*pack);
-                FqTypeName::binder_of(&self.defs, pack.owner, &pack_element_name(&name, *walk))
+                let pack = self.pack_id(*pack);
+                let name = pack_element_name(self.param_name(pack), *walk);
+                FqTypeName::binder_of(&self.defs, pack.owner, &name)
             }
         }
     }
@@ -6494,7 +6524,7 @@ impl TypeTable {
                 TypeNameInfo::Named(mangle_declared(self.def_module(*def), self.decl_name(*def)))
             }
             // A type parameter is a template's own binder, not a declaration.
-            ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
+            ResolvedType::TypeParam { id } => TypeNameInfo::Named(self.param_name(*id).to_string()),
             ResolvedType::AssocParam { .. } => {
                 TypeNameInfo::Named(self.fq_type_name(id).to_mangled())
             }
@@ -6540,12 +6570,15 @@ impl TypeTable {
                     }
                 }
             }
-            ResolvedType::TypePack { name, .. } => TypeNameInfo::Named(type_pack_name(name)),
+            ResolvedType::TypePack { id, .. } => {
+                TypeNameInfo::Named(type_pack_name(self.param_name(*id)))
+            }
             // One parameter list cannot name a pack and a parameter alike, so
             // the bare name is unique to the element of the outermost walk.
-            ResolvedType::PackElement { pack, walk } => {
-                TypeNameInfo::Named(pack_element_name(self.pack_name(*pack), *walk))
-            }
+            ResolvedType::PackElement { pack, walk } => TypeNameInfo::Named(pack_element_name(
+                self.param_name(self.pack_id(*pack)),
+                *walk,
+            )),
             ResolvedType::Never => TypeNameInfo::Named(NEVER_TYPE_NAME.to_string()),
             ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
         }

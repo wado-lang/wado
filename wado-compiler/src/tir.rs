@@ -139,6 +139,15 @@ impl TypeParamId {
     }
 }
 
+/// A generic associated type's own parameter: the trait declaring the
+/// associated type, its name there, and the parameter's slot in its list.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AssocParamId {
+    pub owning_trait: DefId,
+    pub assoc_name: String,
+    pub index: u32,
+}
+
 /// What a use site fills a declaration's parameters with.
 pub type TypeArgMap = IndexMap<TypeParamId, TypeId>;
 
@@ -731,10 +740,12 @@ pub enum ResolvedType {
     /// inside that item it is opaque: nothing but itself is assignable to it.
     /// It appears only within the item that binds it; a *use* of a polymorphic
     /// signature instantiates these into [`ResolvedType::InferVar`]s.
-    TypeParam {
-        id: TypeParamId,
-        name: String,
-    },
+    ///
+    /// Its name lives beside it ([`TypeTable::param_name`]), not inside it, so
+    /// nothing can tell two parameters apart, or take them for one, by name.
+    ///
+    /// [`TypeTable::param_name`]: crate::type_table::TypeTable::param_name
+    TypeParam { id: TypeParamId },
     /// Inference variable — a *flexible* variable standing for a type the
     /// solver has yet to determine. Minted when a use site instantiates a
     /// polymorphic signature: where a rigid parameter rejects anything but
@@ -752,7 +763,6 @@ pub enum ResolvedType {
     /// `R` does not mention the pack).
     TypePack {
         id: TypeParamId,
-        name: String,
         mapped_elem: Option<TypeId>,
     },
     /// One element of an identity pack: what `for let v of t` over `t: [..T]`
@@ -780,14 +790,10 @@ pub enum ResolvedType {
     /// So a binding holding only these is as concrete as its impl.
     ///
     /// Identified by its position in the declaration, never by the name a
-    /// site writes it under: an impl may rename it, and the two are one.
-    AssocParam {
-        owning_trait: DefId,
-        assoc_name: String,
-        index: u32,
-        /// The declaration's spelling, for messages.
-        name: String,
-    },
+    /// site writes it under: an impl may rename it, and the two are one. The
+    /// declaration's spelling lives beside it, as a [`ResolvedType::TypeParam`]'s
+    /// does.
+    AssocParam(AssocParamId),
     /// A tuple, `[i32, String]`: the elements, among which a
     /// [`ResolvedType::TypePack`] stands for the run it expands to.
     Tuple(Vec<TypeId>),
@@ -2341,13 +2347,11 @@ pub fn impl_args_in_slot_order(
         .collect()
 }
 
-/// Substitution-key base for method-level type params: past the highest
-/// impl-param *index*, not the count. A concrete type in a receiver slot
-/// (`String` in `impl<V> ... for TreeMap<String, V>`) is not a param, so a later
-/// param keeps a sparse index the count would undershoot, colliding a method
-/// param onto an impl slot. Elaboration and monomorphization both derive it here.
+/// One past the highest impl-param *index*, not the count. A concrete type in a
+/// receiver slot (`String` in `impl<V> ... for TreeMap<String, V>`) is not a
+/// param, so a later param keeps a sparse index the count would undershoot.
 #[must_use]
-pub fn method_param_offset(impl_type_params: &[TirTypeParam]) -> u32 {
+pub fn impl_slot_end(impl_type_params: &[TirTypeParam]) -> u32 {
     impl_type_params
         .iter()
         .map(|p| p.id.index + 1)

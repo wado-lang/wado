@@ -5037,7 +5037,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             let name =
                 util::bound_param_name(&tt, decl_param).expect("a struct slot is a type parameter");
-            names.push(name.clone());
+            names.push(name.to_string());
         }
         if names.is_empty() {
             return;

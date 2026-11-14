@@ -1916,25 +1916,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         own_params: &[ast::GenericParam],
         slots: &[TypeId],
         type_args: &[TypeId],
-        reached: &[String],
+        reached: &[TypeParamId],
         span: Span,
     ) {
+        let scope = self.scope_type_param_ids();
+        let table = self.tysys.type_table.borrow();
         let reached_packs: Vec<(&ast::GenericParam, TypeId, TypeId)> = own_params
             .iter()
             .zip(slots)
             .zip(type_args)
-            .filter(|((p, _), _)| p.is_pack && reached.contains(&p.name))
+            .filter(|((p, slot), _)| p.is_pack && reached.contains(&table.declared_param(**slot)))
             .map(|((p, &slot), &arg)| (p, slot, arg))
             .collect();
         if reached_packs.is_empty() {
             return;
         }
-        // A pack left answering for itself is unanswered, whatever a caller's
-        // pack of the same name interns to. One spread over the caller's own
-        // (`[..Bs]`) is the caller forwarding it, settled as the caller's. One
-        // deferred to a variable reports itself if nothing answers it.
-        let scope = self.scope_type_param_ids();
-        let table = self.tysys.type_table.borrow();
+        // A pack left answering for itself is unanswered. One spread over the
+        // caller's own (`[..Bs]`) is the caller forwarding it, settled as the
+        // caller's. One deferred to a variable reports itself if nothing
+        // answers it.
         let in_scope = |t: TypeId| scope.contains(&t);
         let open: Vec<String> = reached_packs
             .into_iter()
@@ -2036,7 +2036,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .packs_args_reach(input.param_types, input.args.len());
         let (method_name, receiver_type) = (input.method_name.to_string(), input.receiver_type);
         let mut type_args = self.resolve_method_type_args(explicit, input);
-        let reached = self.settle_unreached_packs(own_params, &mut type_args, &reached);
+        let reached = self.settle_unreached_packs(own_params, slots, &mut type_args, &reached);
         self.report_unsettled_reached_packs(
             &method_name,
             receiver_type,

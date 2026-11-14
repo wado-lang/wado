@@ -126,7 +126,6 @@ impl Monomorphizer {
                 for &e in &elems {
                     let ResolvedType::TypePack {
                         id: pack,
-                        name: pack_name,
                         mapped_elem,
                     } = type_table.get(e).clone()
                     else {
@@ -145,7 +144,8 @@ impl Monomorphizer {
                         .or_else(|| substitution.get(&pack).copied())
                         .unwrap_or_else(|| {
                             panic!(
-                                "TypePack `..{pack_name}` ({pack:?}) not found in substitution map"
+                                "TypePack `{}` ({pack:?}) not found in substitution map",
+                                type_table.name(e)
                             )
                         });
                     match mapped_elem {

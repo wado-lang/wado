@@ -380,13 +380,13 @@ pub(super) fn slot_type_bindings(
         .iter()
         .zip(concrete)
         .filter_map(|(&slot, &type_id)| {
-            let (id, name, settled) = match table.get(slot) {
-                ResolvedType::TypeParam { id, name } => (id, name, SettledAs::Type(type_id)),
-                ResolvedType::TypePack { id, name, .. } => (id, name, SettledAs::Pack(slot)),
+            let (id, settled) = match table.get(slot) {
+                ResolvedType::TypeParam { id } => (id, SettledAs::Type(type_id)),
+                ResolvedType::TypePack { id, .. } => (id, SettledAs::Pack(slot)),
                 _ => return None,
             };
             Some(DefaultTypeBinding {
-                param: ParamRef::of(id.owner, name),
+                param: ParamRef::of(id.owner, table.param_name(*id)),
                 bounds: Vec::new(),
                 settled,
             })
@@ -993,8 +993,7 @@ impl TypeSystem {
             // `Self::m()` goes through that bound as `T::m()` does. A blanket's
             // `Self` is its receiver `T`, which the rewrite below keeps reaching
             // the blanket itself.
-            if self.binder_name(self_type_id).as_deref() == Some("Self")
-                && ctx.trait_ctx.type_params.contains_key("Self")
+            if self.is_trait_self(self_type_id) && ctx.trait_ctx.type_params.contains_key("Self")
             {
                 return self.callee_ident_for_type_param("Self", suffix, self_type_id);
             }
@@ -1011,6 +1010,14 @@ impl TypeSystem {
         }
 
         CalleeIdentKind::AsIs(ident)
+    }
+
+    /// Whether `ty` is a trait's own `Self`.
+    fn is_trait_self(&self, ty: TypeId) -> bool {
+        self.type_table.borrow().type_param_id(ty).is_some_and(|id| {
+            self.resolutions.defs().kind(id.owner).is_trait_like()
+                && id == TypeParamId::trait_self(id.owner)
+        })
     }
 
     /// A `Param::method()` call, where `Param` is the type parameter bound to
@@ -2060,14 +2067,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .and_then(|callee| self.tysys.block_of(&callee.method_ref));
                 // A derivation has no block: its slots are the owning link's.
                 let owner = self.static_owner_key(&receiver_key, suffix);
-                let owners: Vec<DefId> = block
-                    .into_iter()
-                    .chain(resolved.found().and_then(|c| c.method_ref.method_id))
-                    .chain(owner.decl())
-                    .collect();
+                let impl_owners: Vec<DefId> = block.into_iter().chain(owner.decl()).collect();
                 let mut substituted = self.static_param_types_at(
                     raw_param_types,
-                    &owners,
+                    &impl_owners,
+                    resolved.found().and_then(|c| c.method_ref.method_id),
                     &impl_type_args_inferred,
                     &method_type_args,
                 );
@@ -2670,7 +2674,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // After the projection above, which is what answers for a pack bound
         // through another parameter's associated type.
         let reached = self.tysys.packs_callee_args_reach(&callee, args.len());
-        self.settle_unreached_packs(&declared, &mut type_args, &reached);
+        let slots = self.tysys.callee_slots(&callee);
+        self.settle_unreached_packs(&declared, &slots, &mut type_args, &reached);
 
         if !type_args.is_empty() {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
@@ -4423,17 +4428,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the owner is settled, a pack its projection left open closes here, for
     /// the pin's check to refute. Returns the packs it left open as reached,
     /// which a reporter that only knows `reached` must report too.
+    ///
+    /// `slots` are the parameters `declared` writes, as the declaration made
+    /// them.
     pub(super) fn settle_unreached_packs(
         &mut self,
         declared: &[ast::GenericParam],
+        slots: &[TypeId],
         type_args: &mut Vec<TypeId>,
-        reached: &[String],
-    ) -> Vec<String> {
+        reached: &[TypeParamId],
+    ) -> Vec<TypeParamId> {
         let mut reached = reached.to_vec();
         let real = RealTypeParams::borrowed(declared);
         if !real.iter().any(|p| p.is_pack) {
             return reached;
         }
+        assert_eq!(real.len(), slots.len(), "one slot per parameter written");
+        let ids: Vec<TypeParamId> = {
+            let table = self.tysys.type_table.borrow();
+            slots.iter().map(|&slot| table.declared_param(slot)).collect()
+        };
         let scope = self.scope_type_param_ids();
         for (i, owner) in real.iter().enumerate() {
             let owner_open = type_args
@@ -4442,56 +4456,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !owner_open {
                 continue;
             }
+            let resolutions = &self.tysys.resolutions;
             reached.extend(
                 owner
                     .bounds
                     .iter()
                     .flat_map(|bound| &bound.assoc_types)
-                    .filter_map(|assoc| {
-                        assoc_bound_target_param(&assoc.ty, &self.tysys.resolutions)
+                    .filter_map(|assoc| assoc_bound_target_param(&assoc.ty, resolutions))
+                    .filter_map(|target| {
+                        real.iter()
+                            .position(|p| ParamRef::declared(p, resolutions) == target)
                     })
-                    .map(|target| target.name),
+                    .map(|at| ids[at]),
             );
         }
+        let unreached = |i: usize| real[i].is_pack && !reached.contains(&ids[i]);
         // A pack slot the site never reached stands for no arguments at all, so
         // append one empty tuple per trailing pack. A non-pack slot stops the
         // walk: nothing here can answer for it.
-        while real
-            .get(type_args.len())
-            .is_some_and(|p| p.is_pack && !reached.contains(&p.name))
-        {
+        while type_args.len() < real.len() && unreached(type_args.len()) {
             let empty = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
             type_args.push(empty);
         }
         if type_args.len() != real.len() {
             return reached;
         }
+        // An argument spelled in the caller's own parameters is the caller
+        // forwarding them, which answers the slot.
+        let in_scope = |t: TypeId| scope.contains(&t);
         let unanswered: Vec<usize> = (0..real.len())
-            .filter(|&i| real[i].is_pack && !reached.contains(&real[i].name))
+            .filter(|&i| unreached(i))
             .filter(|&i| {
-                self.tysys.is_unbound_type_param(type_args[i])
+                let arg = type_args[i];
+                (self.tysys.is_unbound_type_param(arg) && !in_scope(arg))
                     || self
                         .tysys
                         .type_table
                         .borrow()
-                        .contains_type_pack(type_args[i])
+                        .any_type_pack(arg, &|pack| !in_scope(pack))
             })
             .collect();
-        if unanswered.is_empty() {
-            return reached;
-        }
-        // A pack the caller declares interns to the same id as the callee's,
-        // so a scope holding one is a forwarding this cannot tell apart.
-        if scope
-            .iter()
-            .any(|&s| self.tysys.type_table.borrow().contains_type_pack(s))
-        {
-            return reached;
-        }
         for pack_pos in unanswered {
-            if scope.contains(&type_args[pack_pos]) {
-                continue;
-            }
             type_args[pack_pos] = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
         }
         reached
@@ -4852,7 +4857,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect()
         };
         sig.declaring_slot_count = receiver_params.len() as u32;
-        sig.method_slot_base = sig.declaring_slot_count;
+        sig.declaring_slot_end = sig.declaring_slot_count;
         sig.declaring_impl = None;
         Some(sig)
     }
@@ -5093,7 +5098,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|&arg| table.substitute_type_params(arg, &slots))
             .collect();
-        for index in out.len() as u32..sig.method_slot_base {
+        for index in out.len() as u32..sig.declaring_slot_end {
             let Some(&id) = ids
                 .iter()
                 .find(|&&id| table.declared_param(id).index == index)
@@ -5668,11 +5673,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 impl TypeSystem {
     /// [`Self::packs_args_reach`] for a free function, whose parameter types
     /// the callee reference answers.
-    fn packs_callee_args_reach(&self, callee: &CalleeRef, arg_count: usize) -> Vec<String> {
+    fn packs_callee_args_reach(&self, callee: &CalleeRef, arg_count: usize) -> Vec<TypeParamId> {
         let Some(decl) = self.generic_decl_sig(callee) else {
             return vec![];
         };
         self.packs_args_reach(&decl.param_types, arg_count)
+    }
+
+    /// The parameters a generic function callee declares, as its declaration
+    /// made them.
+    pub(super) fn callee_slots(&self, callee: &CalleeRef) -> Vec<TypeId> {
+        self.generic_decl_sig(callee)
+            .map(|decl| decl.type_params.iter().map(|&(_, slot)| slot).collect())
+            .unwrap_or_default()
     }
 
     /// A builtin's return type, `TypeParam`-based for a generic one.
@@ -5695,12 +5708,16 @@ impl TypeSystem {
 
     /// The packs a parameter the call writes an argument for mentions. Those a
     /// written argument was meant to settle; the rest the site never reached.
-    pub(super) fn packs_args_reach(&self, param_types: &[TypeId], arg_count: usize) -> Vec<String> {
+    pub(super) fn packs_args_reach(
+        &self,
+        param_types: &[TypeId],
+        arg_count: usize,
+    ) -> Vec<TypeParamId> {
         let table = self.type_table.borrow();
         param_types
             .iter()
             .take(arg_count)
-            .flat_map(|&t| table.pack_names(t))
+            .flat_map(|&t| table.packs(t))
             .collect()
     }
 

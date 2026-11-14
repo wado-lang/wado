@@ -16,7 +16,7 @@ use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, MethodName, display_generic_name, global_name};
 use crate::tir::{
-    AssocTypeSig, TirEffectOp, TirParam, TraitFrame, TraitRef, TypeId, method_param_offset,
+    AssocTypeSig, TirEffectOp, TirParam, TraitFrame, TraitRef, TypeId, impl_slot_end,
 };
 use crate::token::Span;
 use crate::type_table::{ImplProjection, TypeTable};
@@ -1009,12 +1009,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .collect();
 
         // Only the parameters taking a slot reach the inference cache: an
-        // `fn`-bound one is its concrete signature, no generic.
-        let method_type_params = self.register_generic_params(
-            method_def,
-            &func.type_params,
-            method_param_offset(&impl_type_params),
-        );
+        // `fn`-bound one is its concrete signature, no generic. The method
+        // owns them, so they number from 0 whatever frame walks its body: a
+        // trait's default body is walked under every impl inheriting it.
+        let method_type_params = self.register_generic_params(method_def, &func.type_params, 0);
         MethodFrame {
             impl_type_params,
             declaring_type_params,
@@ -1128,7 +1126,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.with_module_perspective_for(&home, |e| {
             let mut clean = e.enter_inherited_type_param_scope();
             clean.annotate_ctx.trait_ctx = TraitContext::default();
-            let (mut scope, self_param, _) =
+            let (mut scope, self_param) =
                 clean.enter_trait_frame(trait_id, &header.name, header.span, &header.type_params);
             let known = scope
                 .tysys
@@ -1424,7 +1422,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             frame_scope.reject_signature_annotations(&method.params, method.return_type.as_ref());
             let mut type_params = frame.declaring_type_params;
             let declaring_slot_count = type_params.len() as u32;
-            let method_slot_base = method_param_offset(&frame.impl_type_params);
+            let declaring_slot_end = impl_slot_end(&frame.impl_type_params);
             type_params.extend(frame.method_type_params.iter().cloned());
             let self_kind = method
                 .params
@@ -1455,7 +1453,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         })
                         .collect(),
                     declaring_slot_count,
-                    method_slot_base,
+                    declaring_slot_end,
                     declaring_impl: Some(impl_def),
                     own_params: own_params_of(&method.type_params),
                     cm_name: method.attrs.iter().find_map(Attribute::cm_identifier),
@@ -1770,11 +1768,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The scope a `trait`'s methods resolve in: `Self` as slot 0, bounded by
     /// the trait itself, then the trait's own type parameters. Returned with
-    /// the `Self` slot and the first slot a method's own parameters may take.
+    /// the `Self` slot.
     fn enter_trait_scope(
         &mut self,
         trait_decl: &ast::TraitDecl,
-    ) -> (TypeParamScope<'_, 'a, H>, TypeId, u32) {
+    ) -> (TypeParamScope<'_, 'a, H>, TypeId) {
         self.enter_trait_frame(
             trait_decl.id,
             &trait_decl.name,
@@ -1791,7 +1789,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         name: &str,
         span: Span,
         type_params: &[ast::GenericParam],
-    ) -> (TypeParamScope<'_, 'a, H>, TypeId, u32) {
+    ) -> (TypeParamScope<'_, 'a, H>, TypeId) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.clear_binders();
 
@@ -1838,9 +1836,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Some(declaring),
             )],
         );
-        let slotted = scope.register_generic_params(trait_def, type_params, 1);
-        let next_slot = 1 + u32::try_from(slotted.len()).expect("fewer than 2^32 parameters");
-        (scope, self_slot, next_slot)
+        scope.register_generic_params(trait_def, type_params, 1);
+        (scope, self_slot)
     }
 
     /// What each method call in `func`, a default body of `trait_decl`, selects
@@ -1963,10 +1960,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .clone();
         let trait_id = self.tysys.resolutions.defs().ast_id(trait_decl);
         {
-            let (mut scope, _, next_slot) =
-                self.enter_trait_frame(trait_id, &name, span, &type_params);
+            let (mut scope, _) = self.enter_trait_frame(trait_id, &name, span, &type_params);
             let method = scope.tysys.def_at(func.id);
-            scope.register_generic_params(method, &func.type_params, next_slot);
+            scope.register_generic_params(method, &func.type_params, 0);
             scope.sem.decls.clear_fn_local_items();
             let return_type = sig.return_type.unwrap_or(TypeTable::UNIT);
             let mut ctx = FunctionContext::new(return_type, func.name.clone());
@@ -1988,12 +1984,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if !declares_a_default(&trait_decl.methods) {
             return;
         }
-        let (mut scope, _, next_slot) = self.enter_trait_scope(trait_decl);
+        let (mut scope, _) = self.enter_trait_scope(trait_decl);
         scope.sem.decls.clear_fn_local_items();
         for method in &trait_decl.methods {
             let mut method_scope = scope.enter_inherited_type_param_scope();
             let method_def = method_scope.tysys.def_at(method.id);
-            method_scope.register_generic_params(method_def, &method.type_params, next_slot);
+            method_scope.register_generic_params(method_def, &method.type_params, 0);
             // Both frames are in scope for a default, so both supply the type
             // argument a caller gets by default, in declaration-slot order.
             let type_params: Vec<ast::GenericParam> = trait_decl
@@ -2018,7 +2014,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for assoc in &trait_decl.associated_types {
             self.reject_unsupported_assoc_params(&assoc.name, &assoc.type_params);
         }
-        let (mut scope, self_slot, next_slot) = self.enter_trait_scope(trait_decl);
+        let (mut scope, self_slot) = self.enter_trait_scope(trait_decl);
 
         let decl_slots: Vec<(String, TypeId)> = std::iter::once(("Self".to_string(), self_slot))
             .chain(trait_decl.type_params.iter().filter_map(|tp| {
@@ -2044,7 +2040,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 method_scope.resolve_effects(&method.effects);
             }
             let method_def = method_scope.tysys.def_at(method.id);
-            method_scope.register_generic_params(method_def, &method.type_params, next_slot);
+            method_scope.register_generic_params(method_def, &method.type_params, 0);
             // Only slot-consuming parameters. A `fn`-bound one registers as
             // its bound's function type, so admitting it here put a
             // `Function` where a slot belongs — and made a trait's signature
@@ -2107,7 +2103,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         declaring_slot_count: decl_slots.len() as u32,
                         // A declaration numbers its own slots densely from
                         // zero, so the count is also where the method's begin.
-                        method_slot_base: decl_slots.len() as u32,
+                        declaring_slot_end: decl_slots.len() as u32,
                         declaring_impl: None,
                         own_params: own_params_of(&method.type_params),
                         cm_name: method.attrs.iter().find_map(Attribute::cm_identifier),
@@ -2329,7 +2325,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     declaring_slot_count: decl_slots.len() as u32,
                     // A declaration numbers its own slots densely from zero, so
                     // the count is also where the method's begin.
-                    method_slot_base: decl_slots.len() as u32,
+                    declaring_slot_end: decl_slots.len() as u32,
                     declaring_impl: None,
                     // An `interface` / `resource` operation declares no type
                     // parameters of its own.

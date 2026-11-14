@@ -669,10 +669,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (expected_referent, _) = unwrap_ref(expected, &table);
         let (actual_referent, _) = unwrap_ref(actual, &table);
         match table.get(expected_referent) {
-            ResolvedType::TypePack { name: pack, .. } => {
+            ResolvedType::TypePack { id: pack, .. } => {
                 // Inside an expansion the bare pack name spells the step's element.
-                if matches!(table.get(actual_referent), ResolvedType::TypeParam { name, .. } if name == pack)
-                {
+                if matches!(table.get(actual_referent), ResolvedType::TypeParam { id } if id == pack) {
                     return;
                 }
             }
