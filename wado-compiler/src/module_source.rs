@@ -177,7 +177,7 @@ impl<F: Fn(&str) -> Option<String>> PackageHost for TestPackages<F> {
     }
 }
 
-/// Interner for `ModuleSource` payloads. Interns into the thread's
+/// Interner for `ModuleSource` payloads. Interns into the process's
 /// [`StringInterner`], which adopts every well-known
 /// `LazyLock<Arc<str>>` static (`PLACEHOLDER_NAME`, `CORE_PRELUDE`, ...).
 /// As a result, calls like `interner.core("prelude")`
