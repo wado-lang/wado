@@ -1036,9 +1036,8 @@ impl TypeSystem {
                 bounding == self_trait
                     || self
                         .trait_env
-                        .supertrait_closure(&bounding)
-                        .iter()
-                        .any(|inherited| inherited.decl == self_trait)
+                        .supertrait_decls(&bounding)
+                        .any(|decl| decl == self_trait)
             })
     }
 
@@ -2522,17 +2521,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let self_binding = ns_receiver_type
                         .map(|receiver| self.tysys.base_self_binding(receiver, declaring_trait));
                     let type_bindings = match (sig, ns_receiver_type) {
-                        (Some(sig), Some(receiver)) => {
-                            self.own_slot_default_bindings(
-                                &param_defaults,
-                                &sig.own_params,
-                                &sig.own_type_param_ids(),
-                                receiver,
-                                declaring_trait,
-                                method_type_args.clone(),
-                                Some(defaults_module.clone()),
-                            )
-                        }
+                        (Some(sig), Some(receiver)) => self.own_slot_default_bindings(
+                            &param_defaults,
+                            &sig.own_params,
+                            &sig.own_type_param_ids(),
+                            receiver,
+                            declaring_trait,
+                            method_type_args.clone(),
+                            Some(defaults_module.clone()),
+                        ),
                         (sig, _) => slot_type_bindings(
                             &self.tysys.type_table,
                             &sig.map(|sig| sig.own_type_param_ids()).unwrap_or_default(),
