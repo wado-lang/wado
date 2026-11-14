@@ -669,9 +669,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (expected_referent, _) = unwrap_ref(expected, &table);
         let (actual_referent, _) = unwrap_ref(actual, &table);
         match table.get(expected_referent) {
-            ResolvedType::TypePack { name: pack, .. } => {
+            ResolvedType::TypePack { id: pack, .. } => {
                 // Inside an expansion the bare pack name spells the step's element.
-                if matches!(table.get(actual_referent), ResolvedType::TypeParam { name, .. } if name == pack)
+                if matches!(table.get(actual_referent), ResolvedType::TypeParam { id } if id == pack)
                 {
                     return;
                 }
@@ -686,12 +686,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         }
-        let binders = self.annotate_ctx.trait_ctx.binders();
-        if !table.packs(expected).into_iter().all(|pack| {
-            binders
-                .iter()
-                .any(|binder| table.type_param_id(binder.type_id) == Some(pack))
-        }) {
+        let scope = self.scope_type_param_ids();
+        if !table
+            .packs(expected)
+            .into_iter()
+            .all(|pack| scope.ids().contains(&pack))
+        {
             return;
         }
         let (expected_name, found_name) = (table.name(expected), table.name(actual));

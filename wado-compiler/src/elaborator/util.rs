@@ -1088,12 +1088,8 @@ pub(super) fn bound_param(table: &TypeTable, id: TypeId) -> Option<TypeParamId> 
 }
 
 /// The name of the parameter [`bound_param`] answers.
-pub(super) fn bound_param_name(table: &TypeTable, id: TypeId) -> Option<&String> {
-    match table.get(id) {
-        ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => Some(name),
-        ResolvedType::PackElement { pack, .. } => bound_param_name(table, *pack),
-        _ => None,
-    }
+pub(super) fn bound_param_name(table: &TypeTable, id: TypeId) -> Option<&str> {
+    bound_param(table, id).map(|param| table.param_name(param))
 }
 
 /// Run `body` with `owner`'s `field` set to `value`, answering its result and

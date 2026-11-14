@@ -6,7 +6,7 @@
 
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
-use crate::tir::{ResolvedType, SubstitutionContext, TypeArgMap, TypeId};
+use crate::tir::{ResolvedType, SubstitutionContext, TypeArgMap, TypeId, TypeParamId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -120,9 +120,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (i, &slot) in slots.iter().enumerate() {
             let named_slot = {
                 let tt = self.tysys.type_table.borrow();
+                let named = |id: &TypeParamId, is_pack| {
+                    Some((*id, tt.param_name(*id).to_string(), is_pack))
+                };
                 match tt.get(slot) {
-                    ResolvedType::TypeParam { id, name } => Some((*id, name.clone(), false)),
-                    ResolvedType::TypePack { id, name, .. } => Some((*id, name.clone(), true)),
+                    ResolvedType::TypeParam { id } => named(id, false),
+                    ResolvedType::TypePack { id, .. } => named(id, true),
                     _ => None,
                 }
             };
@@ -193,27 +196,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.answer_frame_projections(substituted)
     }
 
-    /// A static method's parameter types at a call. The declarations in
-    /// `owners`, its impl block's and its own, number one sequence: the impl's
-    /// parameters first and the method's after them.
+    /// A static method's parameter types at a call: the parameters of a
+    /// declaration in `impl_owners` filled from `impl_args`, and the method's
+    /// own, which `method` declares, from `method_args`.
     pub(super) fn static_param_types_at(
         &mut self,
         param_types: Vec<TypeId>,
-        owners: &[DefId],
+        impl_owners: &[DefId],
+        method: Option<DefId>,
         impl_args: &[TypeId],
         method_args: &[TypeId],
     ) -> Vec<TypeId> {
         if impl_args.is_empty() && method_args.is_empty() {
             return param_types;
         }
-        let combined: Vec<TypeId> = impl_args.iter().chain(method_args).copied().collect();
         let subst: TypeArgMap = {
             let table = self.tysys.type_table.borrow();
             param_types
                 .iter()
                 .flat_map(|&t| table.type_params_in(t))
-                .filter(|param| owners.contains(&param.owner))
-                .filter_map(|param| Some((param, *combined.get(param.index as usize)?)))
+                .filter_map(|param| {
+                    let args = if Some(param.owner) == method {
+                        method_args
+                    } else if impl_owners.contains(&param.owner) {
+                        impl_args
+                    } else {
+                        return None;
+                    };
+                    Some((param, *args.get(param.index as usize)?))
+                })
                 .collect()
         };
         param_types

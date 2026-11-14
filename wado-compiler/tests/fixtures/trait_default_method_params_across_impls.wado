@@ -1,0 +1,48 @@
+// A trait's default method is walked under every impl inheriting it. Its own
+// parameters belong to the method, so they are the same parameters whether
+// the impl declares none or several of its own.
+
+trait Pairs {
+    fn tag(&self) -> i32;
+
+    fn pair<F, T>(&self, first: F, second: T) -> [i32, F, T] {
+        return [self.tag(), first, second];
+    }
+}
+
+struct Plain {
+    v: i32,
+}
+
+impl Pairs for Plain {
+    fn tag(&self) -> i32 {
+        return self.v;
+    }
+}
+
+struct Holder<A, B> {
+    a: A,
+    b: B,
+    v: i32,
+}
+
+impl<A, B> Pairs for Holder<A, B> {
+    fn tag(&self) -> i32 {
+        return self.v;
+    }
+}
+
+test "a default method's parameters keep their meaning under each impl" {
+    let p = Plain { v: 1 };
+    let [t, f, s] = p.pair("one", true);
+    assert t == 1;
+    assert f == "one";
+    assert s;
+
+    let h = Holder { a: 0 as i64, b: "b", v: 2 };
+    let [t2, f2, s2] = h.pair(3.5, 'c');
+    assert t2 == 2;
+    assert f2 == 3.5;
+    assert s2 == 'c';
+    assert h.a == 0 && h.b == "b";
+}

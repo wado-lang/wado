@@ -2362,7 +2362,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (receiver, spelled) = {
             let tt = self.tysys.type_table.borrow();
             let spelled = match bound_param_name(&tt, ty) {
-                Some(param) => param.clone(),
+                Some(param) => param.to_string(),
                 None if matches!(tt.get(ty), ResolvedType::AssocTypeProjection { .. }) => {
                     tt.name(ty)
                 }

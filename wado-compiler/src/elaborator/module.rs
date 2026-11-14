@@ -10,7 +10,8 @@ use super::scope::{BinderInScope, ScopedBound};
 use super::trait_env;
 use super::type_resolution::slot_type_ids;
 use super::types::{
-    EnumInfo, GenericNewtypeInfo, ParamSlot, StructFieldInfo, VariantCaseData, VariantInfo,
+    EnumInfo, GenericNewtypeInfo, ParamSlot, RealTypeParams, StructFieldInfo, VariantCaseData,
+    VariantInfo,
 };
 use crate::elaborator::item::{
     register_enum_compiler_items, register_function_compiler_item, register_method_compiler_item,
@@ -252,11 +253,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Set up method-level type parameters so that `V::Output`-style
                     // associated type projections can be resolved in the return type.
                     let mut method_scope = scope.enter_inherited_type_param_scope();
-                    let offset = method_scope.annotate_ctx.trait_ctx.type_params.len();
                     let self_binding = method_scope.self_binding();
                     let method_def = method_scope.tysys.def_at(method.id);
-                    for (i, param) in method.type_params.iter().enumerate() {
-                        let idx = (offset + i) as u32;
+                    for (idx, param) in (0..).zip(RealTypeParams::borrowed(&method.type_params)) {
                         let type_id = method_scope
                             .tysys
                             .type_table

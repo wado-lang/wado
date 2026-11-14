@@ -17,7 +17,7 @@ use crate::tir::{
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeArgMap, TypeId, TypeParamId, deref_to_layers, hold_hole,
-    impl_args_in_slot_order, method_param_offset, transpose_tuple_expr,
+    impl_args_in_slot_order, impl_slot_end, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};
@@ -3042,7 +3042,7 @@ impl Monomorphizer {
         type_table.bind_impl_slots_asked(block, asked, receiver, &mut slots);
         impl_args_in_slot_order(
             block,
-            method_param_offset(&template.impl_type_params),
+            impl_slot_end(&template.impl_type_params),
             &slots,
             &receiver_args,
         )
