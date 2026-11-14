@@ -5,6 +5,7 @@
 //! query needs without paying for monomorphize / lower / codegen.
 
 use std::cell::OnceCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::analyze::Analyzer;
@@ -1556,6 +1557,7 @@ pub fn semantics_of<H: CompilerHost>(
         None,
         None,
         &LivenessScope::Compilation,
+        None,
     )
 }
 
@@ -1570,6 +1572,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     coverage: Option<CoverageScope>,
     profile: Option<Applied<'_>>,
     liveness_scope: &LivenessScope,
+    dependencies: Option<Rc<Semantics>>,
 ) -> Semantics {
     // Before any phase reports: a diagnostic's span names the file it indexes
     // by looking its parse up here.
@@ -1583,17 +1586,21 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // compiler's `Rc<RefCell<TypeTable>>` plumbing.
     let interner = std::rc::Rc::new(std::cell::RefCell::new(load_result.interner));
 
-    // Per-thread stdlib `Semantics` snapshot.  When present,
+    // Per-thread `Semantics` snapshot: `dependencies`, which continues the
+    // stdlib's, or else the stdlib's.  When present,
     // `annotate_modules` seeds its `TypeTable` / decl maps / registries
     // from this snapshot and `build_tir_from_state` copies the
-    // pre-lowered stdlib `TirModule`s directly into its result, skipping
-    // the work otherwise duplicated across a `wado test` run.  Returns
-    // `None` when called from inside the snapshot builder itself (re-entry
+    // pre-lowered `TirModule`s it serves directly into its result, skipping
+    // the work otherwise duplicated across a `wado test` run.  `None` when
+    // called from inside the stdlib snapshot builder itself (re-entry
     // guard); a fresh full pipeline runs in that case.
     let snapshot = {
         let _span = logger.span("stdlib_snapshot");
-        get_or_init_snapshot(coverage, profile)
-            .filter(|snap| reparsed_snapshot_module(snap, &load_result.modules).is_none())
+        let parsed_alike =
+            |snap: &Rc<Semantics>| reparsed_snapshot_module(snap, &load_result.modules).is_none();
+        dependencies
+            .filter(parsed_alike)
+            .or_else(|| get_or_init_snapshot(coverage, profile).filter(parsed_alike))
     };
 
     let (symbols, analyze_ok) = {
@@ -1969,6 +1976,7 @@ mod tests {
             coverage,
             profile.map(|profile| profile.applied(pgo::Thresholds::default())),
             &LivenessScope::Compilation,
+            None,
         )
     }
 

@@ -98,6 +98,47 @@ fn an_evaluated_program_reaches_a_dependencys_dependency() {
         .success();
 }
 
+/// Programs over one dependency compile on the snapshot of it the first one
+/// built, the bundled component the dependency reaches included.
+#[test]
+fn successive_programs_over_one_dependency_compile_on_its_snapshot() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_packages(tmp.path(), "hello", "hello");
+    let app = tmp.path().join("app");
+    fs::write(
+        tmp.path().join("greet/src/lib.wado"),
+        "use { BinaryProperty, contains } from \"core:icu\";\n\
+         pub fn hello() -> String { return if contains(BinaryProperty::Uppercase, 'A') { \"upper\" } else { \"lower\" }; }\n",
+    )
+    .unwrap();
+    let program = |suffix: &str| {
+        format!(
+            "eval(`use {{ println, Stdout }} from \"core:cli\";\n\
+             use {{ hello }} from \"greet\";\n\
+             export fn run() with Stdout {{ println(hello()); println(\"{suffix}\"); }}`)"
+        )
+    };
+    fs::write(
+        app.join("app_test.wado"),
+        format!(
+            "use {{ eval }} from \"core:eval\";\n\n\
+             test \"each program reaches the dependency\" {{\n\
+             \x20   let first = {};\n\
+             \x20   assert first matches {{ Ok(o) && o.stdout == \"upper\\n1\\n\" }}, `${{first:?}}`;\n\
+             \x20   let second = {};\n\
+             \x20   assert second matches {{ Ok(o) && o.stdout == \"upper\\n2\\n\" }}, `${{second:?}}`;\n\
+             }}\n",
+            program("1"),
+            program("2"),
+        ),
+    )
+    .unwrap();
+    wado_in(&app)
+        .args(["test", "app_test.wado"])
+        .assert()
+        .success();
+}
+
 #[test]
 fn editing_the_dependency_misses_the_cache() {
     let tmp = tempfile::tempdir().unwrap();

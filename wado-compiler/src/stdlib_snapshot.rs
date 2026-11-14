@@ -189,6 +189,7 @@ fn build_snapshot(coverage: Option<CoverageScope>, profile: Option<Applied<'_>>)
         coverage,
         profile,
         &LivenessScope::Compilation,
+        None,
     );
     assert!(
         sem.is_complete(),
@@ -224,24 +225,26 @@ fn poll_to_completion<F: Future>(fut: F) -> F::Output {
     }
 }
 
-/// `ModuleSource` variants whose state is captured by a snapshot.
-///
-/// Only modules with names that are stable across compiles in the same
-/// process can be served from the cache — that is exactly the set of
-/// stdlib modules served from `cached_stdlib_module()` plus the `core:libm.wat`
-/// Wasm asset module. Returns the subset of `snap.tir_modules` whose
-/// keys match.
+/// Whether a module of `ms`'s kind can be served from a snapshot: one whose
+/// parse a later compile on the thread can take again. An `EntryPoint` never
+/// is, and compares equal to any other whatever its filename, so the check
+/// keeps a compile's entry from matching a snapshot's synthetic one.
+pub(crate) fn is_snapshot_kind(ms: &ModuleSource) -> bool {
+    matches!(
+        ms,
+        ModuleSource::Core { .. }
+            | ModuleSource::Binding { .. }
+            | ModuleSource::Wasm { .. }
+            | ModuleSource::Dependency { .. }
+    )
+}
+
+/// The modules `snap` serves: the subset of `snap.tir_modules` of a
+/// [`is_snapshot_kind`] kind.
 pub(crate) fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
     snap.tir_modules
         .keys()
-        .filter(|ms| {
-            matches!(
-                ms,
-                ModuleSource::Core { .. }
-                    | ModuleSource::Binding { .. }
-                    | ModuleSource::Wasm { .. }
-            )
-        })
+        .filter(|ms| is_snapshot_kind(ms))
         .cloned()
         .collect()
 }

@@ -4,6 +4,9 @@
 //! This enables converting ALL modules to TIR before codegen.
 
 use std::collections::VecDeque;
+use std::sync::{LazyLock, Mutex};
+
+use crate::parallel::lock;
 
 use crate::hashmap::IndexSet;
 
@@ -1474,6 +1477,8 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// pin is held to once the graph is loaded: an importer read later may pin
     /// a file read earlier.
     remote_reads: IndexMap<String, Integrity>,
+    /// Set by [`Self::with_roots`].
+    roots: Vec<ModuleSource>,
 }
 
 impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
@@ -1506,7 +1511,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             asset_origins: IndexMap::default(),
             remote_pins: IndexMap::default(),
             remote_reads: IndexMap::default(),
+            roots: Vec::new(),
         }
+    }
+
+    /// Load `roots` beside what the entry imports, as though it imported them.
+    #[must_use]
+    pub(crate) fn with_roots(mut self, roots: Vec<ModuleSource>) -> Self {
+        self.roots = roots;
+        self
     }
 
     /// Skip the function bodies of every `#![generated]` user module that
@@ -1609,6 +1622,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             &mut pending,
             &mut wasm_imports,
         )?;
+        for root in std::mem::take(&mut self.roots) {
+            let written = root.to_string();
+            let at = DiagnosticSpan::from_span(&crate::Span::default(), Some(&written));
+            pending.push_back((root, PathSite { written, at }));
+        }
 
         {
             let _span = self.logger.span(&format!("bind {entry_name}"));
@@ -1664,7 +1682,13 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 self.skip_generated_bodies && module_source.is_user_authored();
             let (mut ast, skipped) = {
                 let _span = self.logger.span(&format!("parse {mod_name}"));
-                self.parse_source_with(&source, &module_source, skip_generated_bodies)?
+                if matches!(module_source, ModuleSource::Dependency { .. })
+                    && !self.skip_generated_bodies
+                {
+                    (self.parse_dependency(&source, &module_source)?, None)
+                } else {
+                    self.parse_source_with(&source, &module_source, skip_generated_bodies)?
+                }
             };
 
             // Collect its imports (before bind)
@@ -1982,7 +2006,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) -> Result<(), LoadError> {
         let span = format!("decode component {namespace}");
         self.logger.span_start(&span);
-        let built = self.build_component_bindings(source, &bytes);
+        let built = self.component_bindings(source, &bytes);
         self.logger.span_end(&span);
         let bindings = built?;
 
@@ -2026,6 +2050,30 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             },
         );
         Ok(())
+    }
+
+    /// The bindings of the component `bytes`, a bundled one's decoded once per
+    /// process as a stdlib module is parsed once: an `AstId` must mean the
+    /// same node in every compile a snapshot seeds.
+    fn component_bindings(
+        &self,
+        source: &ModuleSource,
+        bytes: &[u8],
+    ) -> Result<ComponentBindings, LoadError> {
+        static BUNDLED: LazyLock<Mutex<IndexMap<String, ComponentBindings>>> =
+            LazyLock::new(Mutex::default);
+        let ModuleSource::Wasm { path, .. } = source else {
+            panic!("a component asset is a wasm module: {source}");
+        };
+        if stdlib::get_stdlib_wasm_asset(path).is_none() {
+            return self.build_component_bindings(source, bytes);
+        }
+        if let Some(bindings) = lock(&BUNDLED).get(path.as_str()) {
+            return Ok(bindings.clone());
+        }
+        let bindings = self.build_component_bindings(source, bytes)?;
+        lock(&BUNDLED).insert(path.to_string(), bindings.clone());
+        Ok(bindings)
     }
 
     fn build_component_bindings(
@@ -2375,6 +2423,30 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         module_source: &ModuleSource,
     ) -> Result<Module, LoadError> {
         Ok(self.parse_source_with(source, module_source, false)?.0)
+    }
+
+    /// The parse of a dependency module's `source`: the one an earlier compile
+    /// took while the source is unchanged, since a dependency snapshot's facts
+    /// key on the `AstId`s one parse mints.
+    fn parse_dependency(
+        &self,
+        source: &str,
+        module_source: &ModuleSource,
+    ) -> Result<Module, LoadError> {
+        static PARSES: LazyLock<Mutex<IndexMap<String, (String, Module)>>> =
+            LazyLock::new(Mutex::default);
+        let ModuleSource::Dependency { path, .. } = module_source else {
+            panic!("only a dependency module's parse is kept: {module_source}");
+        };
+        let identity = path.to_string();
+        if let Some((parsed, module)) = lock(&PARSES).get(&identity)
+            && parsed == source
+        {
+            return Ok(module.clone());
+        }
+        let module = self.parse_source(source, module_source)?;
+        lock(&PARSES).insert(identity, (source.to_string(), module.clone()));
+        Ok(module)
     }
 
     /// Parse `source`, skipping a generated module's function bodies when

@@ -7,7 +7,7 @@
 use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, mpsc};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -105,6 +105,10 @@ pub struct EvalHost {
     /// The threads of compiles past the limit, joined when the host drops so
     /// a panic on one still ends the run.
     stranded: Mutex<Vec<CompileThread>>,
+    /// Compile threads waiting for the next compile. A compile leaves the
+    /// stdlib and dependency snapshots on its thread, which the next one there
+    /// seeds from.
+    idle: Mutex<Vec<Worker>>,
 }
 
 impl Drop for EvalHost {
@@ -118,6 +122,11 @@ impl Drop for EvalHost {
         );
         for compile in stranded.into_iter().filter(CompileThread::has_ended) {
             join_in_drop(compile.thread);
+        }
+        let idle = std::mem::take(self.idle.get_mut().unwrap_or_else(PoisonError::into_inner));
+        for Worker { jobs, thread } in idle {
+            drop(jobs);
+            join_in_drop(thread.thread);
         }
     }
 }
@@ -138,6 +147,7 @@ impl EvalHost {
             cpu,
             strandable: Arc::new(Semaphore::new(parallelism - 1)),
             stranded: Mutex::default(),
+            idle: Mutex::default(),
         }
     }
 
@@ -279,17 +289,23 @@ impl EvalHost {
             ..CompilerOptions::default()
         };
         let held = Arc::new(Mutex::new(vec![self.cpu_permit().await]));
-        let (report, thread) = spawn_compile(source, options, deps, Arc::clone(&held));
+        let worker = lock(&self.idle).pop().unwrap_or_else(Worker::spawn);
+        let report = worker.compile(source, options, deps, Arc::clone(&held));
         match tokio::time::timeout(COMPILE_TIME_LIMIT, report).await {
-            Ok(Ok(compiled)) => compiled,
+            Ok(Ok(compiled)) => {
+                lock(&self.idle).push(worker);
+                compiled
+            }
             Ok(Err(_unsent)) => resume_unwind(
-                thread
+                worker
+                    .thread
                     .thread
                     .join()
                     .expect_err("only a panic ends the compile thread unreported"),
             ),
             Err(_elapsed) => {
-                self.abandon(&held, thread);
+                // Closing its queue ends the thread once the compile does.
+                self.abandon(&held, worker.thread);
                 (Compiled::TimedOut, None)
             }
         }
@@ -508,41 +524,62 @@ struct Entry {
     outcome: Outcome,
 }
 
-/// Compile `source` on a thread that holds `held` until it ends, and report
-/// the outcome and the files it read on the returned channel. A panic drops
-/// the sender unsent.
-fn spawn_compile(
-    source: String,
-    options: CompilerOptions,
-    deps: Arc<Dependencies>,
-    held: Arc<Mutex<Vec<OwnedSemaphorePermit>>>,
-) -> (
-    oneshot::Receiver<(Compiled, Option<Vec<Input>>)>,
-    CompileThread,
-) {
-    let (report, compiled) = oneshot::channel();
-    let panicked = Arc::new(AtomicBool::new(false));
-    let flag = Arc::clone(&panicked);
-    let thread =
-        std::thread::Builder::new()
+/// A thread that compiles what its queue hands it, one compile at a time.
+struct Worker {
+    jobs: mpsc::Sender<Box<dyn FnOnce() + Send>>,
+    thread: CompileThread,
+}
+
+impl Worker {
+    fn spawn() -> Self {
+        let (jobs, queue) = mpsc::channel::<Box<dyn FnOnce() + Send>>();
+        let panicked = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&panicked);
+        let thread = std::thread::Builder::new()
             .name("eval-compile".to_string())
             .stack_size(COMPILER_STACK_SIZE)
             .spawn(move || {
-                let _held = held;
                 let _flag = PanicFlag(flag);
-                let host = DependencyHost::new(deps);
-                let compiled = current_thread_runtime().block_on(
-                    wado_compiler::compile_with_options(&source, &host, Some(EVAL_FILE), options),
-                );
-                let compiled = match compiled {
-                    Ok(result) => Compiled::Wasm(result.wasm),
-                    Err(_) => Compiled::Failed(compile_failure(&lock(&host.diagnostics))),
-                };
-                // Past the limit nobody is listening, and the outcome is dropped.
-                let _ = report.send((compiled, host.read.reads()));
+                for job in queue {
+                    job();
+                }
             })
             .expect("spawning the eval compile thread");
-    (compiled, CompileThread { thread, panicked })
+        Self {
+            jobs,
+            thread: CompileThread { thread, panicked },
+        }
+    }
+
+    /// Compile `source`, holding `held` until the compile ends, and report the
+    /// outcome and the files it read on the returned channel. A panic drops
+    /// the sender unsent.
+    fn compile(
+        &self,
+        source: String,
+        options: CompilerOptions,
+        deps: Arc<Dependencies>,
+        held: Arc<Mutex<Vec<OwnedSemaphorePermit>>>,
+    ) -> oneshot::Receiver<(Compiled, Option<Vec<Input>>)> {
+        let (report, compiled) = oneshot::channel();
+        let job = move || {
+            let _held = held;
+            let host = DependencyHost::new(deps);
+            let compiled = current_thread_runtime().block_on(
+                wado_compiler::compile_with_options(&source, &host, Some(EVAL_FILE), options),
+            );
+            let compiled = match compiled {
+                Ok(result) => Compiled::Wasm(result.wasm),
+                Err(_) => Compiled::Failed(compile_failure(&lock(&host.diagnostics))),
+            };
+            // Past the limit nobody is listening, and the outcome is dropped.
+            let _ = report.send((compiled, host.read.reads()));
+        };
+        self.jobs
+            .send(Box::new(job))
+            .expect("an idle compile thread takes jobs");
+        compiled
+    }
 }
 
 /// A compile's thread, and whether a panic is unwinding out of it.

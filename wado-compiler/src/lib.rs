@@ -31,6 +31,7 @@ pub mod coverage;
 mod cut_memo;
 pub mod defs;
 pub(crate) mod demanded_imports;
+pub(crate) mod dependency_snapshot;
 pub(crate) mod divergence;
 pub mod doc;
 pub mod effect_check;
@@ -810,7 +811,7 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
         production,
         walked,
     }));
-    let sem = semantics::semantics_with_logger(load, &logger, false, None, None, &scope);
+    let sem = semantics::semantics_with_logger(load, &logger, false, None, None, &scope, None);
     sem.is_complete()
         .then(|| unused_diagnostics(&sem, lints, false))
 }
@@ -1517,8 +1518,30 @@ pub async fn compile_with_options<H: CompilerHost>(
         }
     }
 
-    compile_after_load(load_result, options, &logger, filename, is_todo_module)
-        .map_err(|Bail| CompileFailure { is_todo_module })
+    let dependencies = dependency_seed(&load_result, host, &options).await;
+    compile_after_load(
+        load_result,
+        dependencies,
+        options,
+        &logger,
+        filename,
+        is_todo_module,
+    )
+    .map_err(|Bail| CompileFailure { is_todo_module })
+}
+
+/// The dependency snapshot a compile under `options` seeds from. A probed or
+/// profiled compile marks what it reifies, which a snapshot built unmarked
+/// would not.
+async fn dependency_seed<H: CompilerHost>(
+    load: &loader::LoadResult,
+    host: &H,
+    options: &CompilerOptions,
+) -> Option<Rc<semantics::Semantics>> {
+    if options.coverage.is_some() || options.profile.is_some() {
+        return None;
+    }
+    dependency_snapshot::dependency_snapshot(load, host).await
 }
 
 /// Compile each `with { provider: "./p.wado" }` directive into a provider
@@ -1730,6 +1753,7 @@ fn check_effects_and_moves<H: CompilerHost>(
 /// Internal: run compilation phases after module loading.
 fn compile_after_load<H: CompilerHost>(
     load_result: loader::LoadResult,
+    dependencies: Option<Rc<semantics::Semantics>>,
     mut options: CompilerOptions,
     logger: &Logger<'_, H>,
     filename: Option<String>,
@@ -1747,6 +1771,7 @@ fn compile_after_load<H: CompilerHost>(
         marked_regions,
     } = build_after_load(
         load_result,
+        dependencies,
         options,
         provided_import_fqs,
         logger,
@@ -1826,6 +1851,7 @@ struct DumpViews {
 /// are the imports a provider supplies, which the effect check discharges.
 fn build_after_load<H: CompilerHost>(
     load_result: loader::LoadResult,
+    dependencies: Option<Rc<semantics::Semantics>>,
     options: CompilerOptions,
     provided_import_fqs: IndexSet<String>,
     logger: &Logger<'_, H>,
@@ -1895,6 +1921,7 @@ fn build_after_load<H: CompilerHost>(
             .filter(|_| codegen_flags.pgo.applies())
             .map(|profile| profile.applied(options.opt.profile_thresholds())),
         &LivenessScope::Compilation,
+        dependencies,
     );
     if let Some(views) = views.as_deref_mut() {
         views.analysis = Some(AnalysisViews {
@@ -2793,8 +2820,10 @@ pub async fn dump_with_options<H: CompilerHost>(
         inline_decisions: inline_decisions.map(String::from),
         ..DumpViews::default()
     };
+    let dependencies = dependency_seed(&load_result, host, &options).await;
     let built = build_after_load(
         load_result,
+        dependencies,
         options,
         provided_import_fqs,
         &logger,

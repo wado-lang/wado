@@ -71,7 +71,10 @@ use crate::primitive::PrimitiveType;
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::semantics::Semantics;
 use crate::signature_reach;
-use crate::stdlib_snapshot::{is_building, rehydrate_tir_module, stdlib_sources};
+use crate::dependency_snapshot;
+use crate::stdlib_snapshot::{
+    is_building, is_snapshot_kind, rehydrate_tir_module, stdlib_sources,
+};
 use crate::symbol::SymbolKind;
 use crate::tir::{StructDef, TirFunction, TraitRef};
 use crate::token::Span;
@@ -912,7 +915,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             Arc::make_mut(&mut cm_interface_registry).bind_program_types(modules, &resolutions);
             // Resolve `Interface::method` calls into CM components during
             // annotate — the same role build_from_stdlib plays for WASI.
-            fold_component_interfaces(&mut cm_interface_registry, modules, &stdlib_set)
+            fold_component_interfaces(&mut cm_interface_registry, modules)
                 .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
             (cm_interface_registry, world_registry)
         };
@@ -1783,8 +1786,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if build_tir {
             // The snapshot caches every stdlib declaration, being built before
             // any program that could narrow the set; this compile's liveness is
-            // what narrows it. Building the snapshot itself gates on nothing.
-            let gate = (!is_building()).then_some(&state.liveness.emit_live);
+            // what narrows it. Building a snapshot itself gates on nothing.
+            let gate = (!is_building() && !dependency_snapshot::is_building())
+                .then_some(&state.liveness.emit_live);
             // A rehydrated `TirFunction` names its declaration, not the AST node
             // liveness is keyed by, so the set is projected once per compile.
             let live_defs: IndexSet<DefId> = gate
@@ -2252,15 +2256,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 }
 
 /// Whether `ms` is served from the snapshot: its facts and its pre-lowered
-/// `TirModule` are the snapshot's, so it runs no pass this compile. Only
-/// stdlib variants are eligible — `ModuleSource::EntryPoint` values compare
-/// equal regardless of filename, so the gate keeps the user entry from
-/// matching the snapshot's synthetic empty entry.
+/// `TirModule` are the snapshot's, so it runs no pass this compile.
 fn is_stdlib_snapshot_hit(snapshot: Option<&Semantics>, ms: &ModuleSource) -> bool {
-    matches!(
-        ms,
-        ModuleSource::Core { .. } | ModuleSource::Binding { .. } | ModuleSource::Wasm { .. }
-    ) && snapshot.is_some_and(|s| s.tir_modules.contains_key(ms))
+    is_snapshot_kind(ms) && snapshot.is_some_and(|s| s.tir_modules.contains_key(ms))
 }
 
 /// The use→def edges the source spells: `direct` from each module's own
@@ -2450,10 +2448,9 @@ fn trait_method_impls(tysys: &TypeSystem) -> IndexMap<ast::AstId, IndexSet<ast::
 pub(crate) fn fold_component_interfaces(
     registry: &mut Arc<CmInterfaceRegistry>,
     modules: &IndexMap<ModuleSource, Module>,
-    stdlib_set: &IndexSet<ModuleSource>,
 ) -> Result<(), String> {
     for (ms, module) in modules {
-        if !matches!(ms, ModuleSource::Wasm { .. }) || stdlib_set.contains(ms) {
+        if !matches!(ms, ModuleSource::Wasm { .. }) {
             continue;
         }
         let interface_fqs: Vec<String> = exported_interfaces(module)

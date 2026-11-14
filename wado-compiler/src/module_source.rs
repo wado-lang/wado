@@ -20,6 +20,7 @@ use crate::primitive::PrimitiveType;
 use crate::remote::is_remote;
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
 use crate::token::Span;
+use std::cell::RefCell;
 use std::fmt;
 use std::sync::{Arc, LazyLock};
 use unicode_normalization::UnicodeNormalization;
@@ -72,6 +73,14 @@ static WASI_HTTP: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("http")
 static ENTRY_FILENAME_STDIN: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("<stdin>"));
 static ENTRY_FILENAME_UNINITIALIZED: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("<uninitialized>"));
+
+thread_local! {
+    /// One pool for every interner on the thread, so a module is one identity
+    /// across compiles and a dependency snapshot one compile built seeds the
+    /// next.
+    static MODULE_STRINGS: RefCell<StringInterner> =
+        RefCell::new(StringInterner::with_well_known_arcs(well_known_arcs()));
+}
 
 fn well_known_arcs() -> Vec<Arc<str>> {
     let mut arcs: Vec<Arc<str>> = vec![
@@ -171,15 +180,14 @@ impl<F: Fn(&str) -> Option<String>> PackageHost for TestPackages<F> {
     }
 }
 
-/// Interner for `ModuleSource` payloads. Wraps a generic
-/// [`StringInterner`] and adopts every well-known
-/// `LazyLock<Arc<str>>` static (`PLACEHOLDER_NAME`, `CORE_PRELUDE`, ...)
-/// at construction. As a result, calls like `interner.core("prelude")`
+/// Interner for `ModuleSource` payloads. Interns into the thread's
+/// [`StringInterner`], which adopts every well-known
+/// `LazyLock<Arc<str>>` static (`PLACEHOLDER_NAME`, `CORE_PRELUDE`, ...).
+/// As a result, calls like `interner.core("prelude")`
 /// return the same `Arc` as the static — and therefore the same
 /// [`InternedStr`] as [`ModuleSource::prelude`].
 #[derive(Debug)]
 pub struct ModuleSourceInterner {
-    strings: StringInterner,
     /// Resolved `[dependencies]`, consulted for bare-name `use` clauses, plus
     /// declared-but-unresolved entries (with reasons) for precise errors.
     /// Empty for single-file compilation.
@@ -223,7 +231,6 @@ pub struct ModuleSourceInterner {
 impl ModuleSourceInterner {
     pub fn new() -> Self {
         Self {
-            strings: StringInterner::with_well_known_arcs(well_known_arcs()),
             dependencies: DependencyIndex::default(),
             package_roots: hashmap::IndexMap::default(),
             redirect_packages: hashmap::IndexMap::default(),
@@ -554,7 +561,7 @@ impl ModuleSourceInterner {
     }
 
     pub fn intern(&mut self, s: &str) -> InternedStr {
-        self.strings.intern(s)
+        MODULE_STRINGS.with_borrow_mut(|strings| strings.intern(s))
     }
 
     pub fn core(&mut self, name: &str) -> ModuleSource {
