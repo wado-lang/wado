@@ -840,13 +840,14 @@ unchecked String::from_utf8(bytes): "), used: 37 }, r1: struct.new "core:prelude
 unchecked String::from_utf8(bytes): "), used: 37 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, s.used);
         unreachable;
     }
+    out = global:contract_checks_test_world.wado::$const_obj_2.repr;
     if @unlikely(local.tee $load_1($load_1 + 2) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, $load_1);
     }
     i_231 = s.used;
     s.used = $load_1;
-    builtin::array_copy<u8>(local.tee $load_0(s.repr), i_231, global:contract_checks_test_world.wado::$const_obj_2.repr, 0, 2);
+    builtin::array_copy<u8>(local.tee $load_0(s.repr), i_231, out, 0, 2);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__75: block -> bool {
         if $load_1 != 5 {
             break $inline_core_prelude_array_wado_seq_eq_u8__75: 0;

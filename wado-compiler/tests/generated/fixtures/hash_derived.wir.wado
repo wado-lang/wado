@@ -6650,26 +6650,26 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u64>::grow"(self) {
 fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_derived.wado/Pair<core:prelude/string.wado/String,hash_derived.wado/Shape>,i32>::rebuild_table$unchecked"(self, slots) {
     let $load_1: i32;
     let $load_2: ref "core:collections/entries.wado//EntryLog<hash_derived.wado/Pair<core:prelude/string.wado/String,hash_derived.wado/Shape>,i32>";
+    let alive: ref Array<bool>;
+    let fps: ref Array<i32>;
     let s: i32;
     let a: ref Array<i32>;
     let current: i32;
     let $sroa_v_end_37: i32;
     let $sroa_$iter_2_start_38: i32;
-    let $licm_fps_41: ref Array<i32>;
-    let $licm_alive_43: ref Array<bool>;
     self.table = local.tee a(builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a);
     self.shift = local.tee $load_1(32 - builtin::i32_ctz(slots));
     slots = slots - 1;
-    $sroa_v_end_37 = local.tee $load_2(self.log).count;
+    alive = local.tee $load_2(self.log).alive;
+    fps = self.fps;
+    $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    $licm_fps_41 = self.fps;
-    $licm_alive_43 = $load_2.alive;
     b803: block {
         l804: loop {
             break_if b803 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
-            if builtin::array_get_value<bool>($licm_alive_43, current) {
-                s = builtin::array_get_value<i32>($licm_fps_41, current) >>u $load_1;
+            if builtin::array_get_value<bool>(alive, current) {
+                s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
                 b806: block {
                     l807: loop {
                         break_if b806 builtin::array_get_value<i32>(a, s) == -1;
@@ -6687,26 +6687,26 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
 fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_derived.wado/Shape,()>::rebuild_table$unchecked"(self, slots) {
     let $load_1: i32;
     let $load_2: ref "core:collections/entries.wado//EntryLog<hash_derived.wado/Shape,()>";
+    let alive: ref Array<bool>;
+    let fps: ref Array<i32>;
     let s: i32;
     let a: ref Array<i32>;
     let current: i32;
     let $sroa_v_end_37: i32;
     let $sroa_$iter_2_start_38: i32;
-    let $licm_fps_41: ref Array<i32>;
-    let $licm_alive_43: ref Array<bool>;
     self.table = local.tee a(builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a);
     self.shift = local.tee $load_1(32 - builtin::i32_ctz(slots));
     slots = slots - 1;
-    $sroa_v_end_37 = local.tee $load_2(self.log).count;
+    alive = local.tee $load_2(self.log).alive;
+    fps = self.fps;
+    $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    $licm_fps_41 = self.fps;
-    $licm_alive_43 = $load_2.alive;
     b808: block {
         l809: loop {
             break_if b808 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
-            if builtin::array_get_value<bool>($licm_alive_43, current) {
-                s = builtin::array_get_value<i32>($licm_fps_41, current) >>u $load_1;
+            if builtin::array_get_value<bool>(alive, current) {
+                s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
                 b811: block {
                     l812: loop {
                         break_if b811 builtin::array_get_value<i32>(a, s) == -1;
@@ -6724,26 +6724,26 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
 fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_derived.wado/Point,core:prelude/string.wado/String>::rebuild_table$unchecked"(self, slots) {
     let $load_1: i32;
     let $load_2: ref "core:collections/entries.wado//EntryLog<hash_derived.wado/Point,core:prelude/string.wado/String>";
+    let alive: ref Array<bool>;
+    let fps: ref Array<i32>;
     let s: i32;
     let a: ref Array<i32>;
     let current: i32;
     let $sroa_v_end_37: i32;
     let $sroa_$iter_2_start_38: i32;
-    let $licm_fps_41: ref Array<i32>;
-    let $licm_alive_43: ref Array<bool>;
     self.table = local.tee a(builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a);
     self.shift = local.tee $load_1(32 - builtin::i32_ctz(slots));
     slots = slots - 1;
-    $sroa_v_end_37 = local.tee $load_2(self.log).count;
+    alive = local.tee $load_2(self.log).alive;
+    fps = self.fps;
+    $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    $licm_fps_41 = self.fps;
-    $licm_alive_43 = $load_2.alive;
     b813: block {
         l814: loop {
             break_if b813 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
-            if builtin::array_get_value<bool>($licm_alive_43, current) {
-                s = builtin::array_get_value<i32>($licm_fps_41, current) >>u $load_1;
+            if builtin::array_get_value<bool>(alive, current) {
+                s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
                 b816: block {
                     l817: loop {
                         break_if b816 builtin::array_get_value<i32>(a, s) == -1;
@@ -6761,26 +6761,26 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
 fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_derived.wado/Tagged,()>::rebuild_table$unchecked"(self, slots) {
     let $load_1: i32;
     let $load_2: ref "core:collections/entries.wado//EntryLog<hash_derived.wado/Tagged,()>";
+    let alive: ref Array<bool>;
+    let fps: ref Array<i32>;
     let s: i32;
     let a: ref Array<i32>;
     let current: i32;
     let $sroa_v_end_37: i32;
     let $sroa_$iter_2_start_38: i32;
-    let $licm_fps_41: ref Array<i32>;
-    let $licm_alive_43: ref Array<bool>;
     self.table = local.tee a(builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a);
     self.shift = local.tee $load_1(32 - builtin::i32_ctz(slots));
     slots = slots - 1;
-    $sroa_v_end_37 = local.tee $load_2(self.log).count;
+    alive = local.tee $load_2(self.log).alive;
+    fps = self.fps;
+    $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    $licm_fps_41 = self.fps;
-    $licm_alive_43 = $load_2.alive;
     b818: block {
         l819: loop {
             break_if b818 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
-            if builtin::array_get_value<bool>($licm_alive_43, current) {
-                s = builtin::array_get_value<i32>($licm_fps_41, current) >>u $load_1;
+            if builtin::array_get_value<bool>(alive, current) {
+                s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
                 b821: block {
                     l822: loop {
                         break_if b821 builtin::array_get_value<i32>(a, s) == -1;
@@ -6798,26 +6798,26 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
 fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_derived.wado/Perm,i32>::rebuild_table$unchecked"(self, slots) {
     let $load_1: i32;
     let $load_2: ref "core:collections/entries.wado//EntryLog<hash_derived.wado/Perm,i32>";
+    let alive: ref Array<bool>;
+    let fps: ref Array<i32>;
     let s: i32;
     let a: ref Array<i32>;
     let current: i32;
     let $sroa_v_end_37: i32;
     let $sroa_$iter_2_start_38: i32;
-    let $licm_fps_41: ref Array<i32>;
-    let $licm_alive_43: ref Array<bool>;
     self.table = local.tee a(builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a);
     self.shift = local.tee $load_1(32 - builtin::i32_ctz(slots));
     slots = slots - 1;
-    $sroa_v_end_37 = local.tee $load_2(self.log).count;
+    alive = local.tee $load_2(self.log).alive;
+    fps = self.fps;
+    $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    $licm_fps_41 = self.fps;
-    $licm_alive_43 = $load_2.alive;
     b823: block {
         l824: loop {
             break_if b823 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
-            if builtin::array_get_value<bool>($licm_alive_43, current) {
-                s = builtin::array_get_value<i32>($licm_fps_41, current) >>u $load_1;
+            if builtin::array_get_value<bool>(alive, current) {
+                s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
                 b826: block {
                     l827: loop {
                         break_if b826 builtin::array_get_value<i32>(a, s) == -1;
@@ -6835,26 +6835,26 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
 fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_derived.wado/Color,()>::rebuild_table$unchecked"(self, slots) {
     let $load_1: i32;
     let $load_2: ref "core:collections/entries.wado//EntryLog<hash_derived.wado/Color,()>";
+    let alive: ref Array<bool>;
+    let fps: ref Array<i32>;
     let s: i32;
     let a: ref Array<i32>;
     let current: i32;
     let $sroa_v_end_37: i32;
     let $sroa_$iter_2_start_38: i32;
-    let $licm_fps_41: ref Array<i32>;
-    let $licm_alive_43: ref Array<bool>;
     self.table = local.tee a(builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a);
     self.shift = local.tee $load_1(32 - builtin::i32_ctz(slots));
     slots = slots - 1;
-    $sroa_v_end_37 = local.tee $load_2(self.log).count;
+    alive = local.tee $load_2(self.log).alive;
+    fps = self.fps;
+    $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    $licm_fps_41 = self.fps;
-    $licm_alive_43 = $load_2.alive;
     b828: block {
         l829: loop {
             break_if b828 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
-            if builtin::array_get_value<bool>($licm_alive_43, current) {
-                s = builtin::array_get_value<i32>($licm_fps_41, current) >>u $load_1;
+            if builtin::array_get_value<bool>(alive, current) {
+                s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
                 b831: block {
                     l832: loop {
                         break_if b831 builtin::array_get_value<i32>(a, s) == -1;

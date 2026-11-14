@@ -482,20 +482,20 @@ fn "recursive_type_finite_instances.wado/count$sroa[tree.value]"(tree) {
     let children: ref "core:prelude/list.wado//List<recursive_type_finite_instances.wado/Tree<i32>>";
     let total: i32;
     let end: i32;
+    let $sroa_$iter_0_repr_15: ref "Array<recursive_type_finite_instances.wado/Tree<i32>>";
     let $sroa_$iter_0_index_16: i32;
-    let $licm_repr_18: ref "Array<recursive_type_finite_instances.wado/Tree<i32>>";
     return (if ref.test "recursive_type_finite_instances.wado//Tree<i32>::Leaf"(tree) -> i32 {
         1;
     } else {
         children = ref.cast "recursive_type_finite_instances.wado//Tree<i32>::Branch"(tree).payload_0;
         total = 0;
         end = children.used;
+        $sroa_$iter_0_repr_15 = children.repr;
         $sroa_$iter_0_index_16 = 0;
-        $licm_repr_18 = children.repr;
         b8: block {
             l9: loop {
                 break_if b8 $sroa_$iter_0_index_16 >= end;
-                tree = builtin::array_get_value<ref "recursive_type_finite_instances.wado//Tree<i32>">($licm_repr_18, $sroa_$iter_0_index_16);
+                tree = builtin::array_get_value<ref "recursive_type_finite_instances.wado//Tree<i32>">($sroa_$iter_0_repr_15, $sroa_$iter_0_index_16);
                 $sroa_$iter_0_index_16 = $sroa_$iter_0_index_16 + 1;
                 total = total + "recursive_type_finite_instances.wado/count$sroa[tree.value]"(tree);
                 continue l9;

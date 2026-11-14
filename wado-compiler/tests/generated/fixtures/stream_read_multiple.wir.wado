@@ -1432,13 +1432,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/tr
     })).0;
     $twin_2 = $variant_payload_7.1;
     if $inline_core_prelude_types_wado_CopyBuffer__ready_cancel_2: block -> bool {
+        $load_13 = $twin_2.buffer;
         let $mv$$vr_1$1: ref null "core:prelude/types.wado//ResourceId";
         let $mv$$vr_1$2: ref null "core:prelude/types.wado//ReadyEvent";
-        multivalue_bind [$load_16, $mv$$vr_1$1, $mv$$vr_1$2] = "core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$sroa[return]"(local.tee $load_13($twin_2.buffer).handle, $load_13.packed);
+        multivalue_bind [$load_16, $mv$$vr_1$1, $mv$$vr_1$2] = "core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$sroa[return]"($load_13.handle, $load_13.packed);
         if $load_16 == 1 {
             break $inline_core_prelude_types_wado_CopyBuffer__ready_cancel_2: 0;
         }
-        "wasi/waitable-join"($twin_2.buffer.handle, 0);
+        "wasi/waitable-join"($load_13.handle, 0);
         break $inline_core_prelude_types_wado_CopyBuffer__ready_cancel_2: 1;
     } {
         $twin_2.buffer.packed = "wasi/stream-cancel-read"($twin_1.value);

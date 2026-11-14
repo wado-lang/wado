@@ -614,17 +614,16 @@ match rx { _ && *rx > 100 => \"large\", _ && *rx > 10 => \"medium\", _ => \"smal
 }
 
 fn "match_ergonomics.wado/$test_2_a__mut_scrutinee_writes_through_in_if_let"() {
-    let $load_0: ref "core:prelude/list.wado//List<i32>";
-    let c_2: ref "match_ergonomics.wado//Hits";
+    let self_8: ref "core:prelude/list.wado//List<i32>";
     let used_10: i32;
     let $sroa_opt_value_16: ref null "match_ergonomics.wado//Hits";
     if ref.is_null(local.tee $sroa_opt_value_16(struct.new "match_ergonomics.wado//Hits" { hits: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 } })) == 0 {
-        if @unlikely(local.tee used_10(local.tee $load_0(local.tee c_2(ref.as_non_null($sroa_opt_value_16)).hits).used) >= builtin::array_len($load_0.repr)) {
+        if @unlikely(local.tee used_10(local.tee self_8($sroa_opt_value_16.hits).used) >= builtin::array_len(self_8.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_0);
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_8);
         }
-        builtin::array_set<i32>(local.tee $load_0(c_2.hits).repr, used_10, 2);
-        $load_0.used = used_10 + 1;
+        builtin::array_set<i32>(self_8.repr, used_10, 2);
+        self_8.used = used_10 + 1;
     } else {
     }
     if ref.is_null($sroa_opt_value_16) == 0 {
@@ -638,18 +637,18 @@ fn "match_ergonomics.wado/$test_2_a__mut_scrutinee_writes_through_in_if_let"() {
 }
 
 fn "match_ergonomics.wado/$test_3_a__mut_scrutinee_writes_through_in_match"() {
-    let $load_0: ref "core:prelude/list.wado//List<i32>";
     let c_2: ref "match_ergonomics.wado//Hits";
+    let self_10: ref "core:prelude/list.wado//List<i32>";
     let used_12: i32;
     let $sroa_opt_value_19: ref null "match_ergonomics.wado//Hits";
     if @unlikely(local.tee used_12((if @likely(ref.is_null(local.tee $sroa_opt_value_19(struct.new "match_ergonomics.wado//Hits" { hits: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(10), used: 1 } })) == 0) -> i32 {
-        if @unlikely(local.tee used_12(local.tee $load_0(local.tee c_2(ref.as_non_null($sroa_opt_value_19)).hits).used) >= builtin::array_len($load_0.repr)) {
+        if @unlikely(local.tee used_12(local.tee self_10(local.tee c_2(ref.as_non_null($sroa_opt_value_19)).hits).used) >= builtin::array_len(self_10.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_0);
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_10);
         }
-        builtin::array_set<i32>(local.tee $load_0(c_2.hits).repr, used_12, 20);
-        $load_0.used = local.tee used_12(used_12 + 1);
-        used_12;
+        builtin::array_set<i32>(self_10.repr, used_12, 20);
+        self_10.used = used_12 + 1;
+        c_2.hits.used;
     } else {
         unreachable;
     })) != 2) {

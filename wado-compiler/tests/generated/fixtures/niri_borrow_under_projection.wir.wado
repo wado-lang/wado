@@ -96,7 +96,7 @@ fn "niri_borrow_under_projection.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let $sroa_value_value_98: i64;
-    let start_290: i32;
+    let start_289: i32;
     p = black_box(struct.new "niri_borrow_under_projection.wado//Price" { amount: 1_i64, seat_category_id: 3_i64 });
     "core:cbor/write_head"(local.tee buf_24(struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_new<u8>(64), used: 0 }), 5, 2_i64);
     $sroa_value_value_98 = p.amount;
@@ -191,22 +191,22 @@ fn "niri_borrow_under_projection.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, is_negative_87);
         }
-        start_290 = out_13.used;
+        start_289 = out_13.used;
         out_13.used = is_negative_87;
-        builtin::array_set_u8(out_13.repr, start_290, 45);
+        builtin::array_set_u8(out_13.repr, start_289, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_87(out_13.used + $load_9) > builtin::array_len(out_13.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, is_negative_87);
     }
-    start_290 = out_13.used;
+    start_289 = out_13.used;
     out_13.used = is_negative_87;
-    $load_9 = start_290 + $load_9;
     $array_clone_src_5 = out_13.repr;
+    $load_9 = start_289 + $load_9;
     b24: block {
         l25: loop {
-            break_if b24 ($load_9 - start_290) < 2;
+            break_if b24 ($load_9 - start_289) < 2;
             q = $sroa_value_value_98 /u 100_i64;
             tens = local.tee is_negative_87(builtin::i32_wrap_i64($sroa_value_value_98 - (q * 100_i64))) / 10;
             builtin::array_set_u8($array_clone_src_5, $load_9 - 1, (48 + is_negative_87) - (tens * 10));
@@ -216,8 +216,8 @@ fn "niri_borrow_under_projection.wado/run"() with Stdout {
             continue l25;
         };
     };
-    if $load_9 > start_290 {
-        builtin::array_set_u8($array_clone_src_5, start_290, 48 + builtin::i32_wrap_i64($sroa_value_value_98 %u 10_i64));
+    if $load_9 > start_289 {
+        builtin::array_set_u8($array_clone_src_5, start_289, 48 + builtin::i32_wrap_i64($sroa_value_value_98 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_47: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_47;
@@ -225,11 +225,11 @@ fn "niri_borrow_under_projection.wado/run"() with Stdout {
     $load_9 = builtin::i32_wrap_i64(local.tee $sroa_value_value_98("wasi/stream-new"()));
     is_negative_87 = builtin::i32_wrap_i64($sroa_value_value_98 >> 32_i64);
     $load_9 = "niri_borrow_under_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_9);
-    builtin::array_copy<u8>(local.tee $array_clone_src_5(builtin::array_new<u8>(local.tee start_290(out_13.used) + 1)), 0, out_13.repr, 0, start_290);
-    builtin::array_set_u8($array_clone_src_5, start_290, 10);
+    builtin::array_copy<u8>(local.tee $array_clone_src_5(builtin::array_new<u8>(local.tee start_289(out_13.used) + 1)), 0, out_13.repr, 0, start_289);
+    builtin::array_set_u8($array_clone_src_5, start_289, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_290 = start_290 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_87, $array_clone_src_5, 0, start_290);
+        start_289 = start_289 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_87, $array_clone_src_5, 0, start_289);
     });
     "wasi/stream-drop-writable"(is_negative_87);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_9);

@@ -636,16 +636,16 @@ fn "sub/cross_module_variant_iter_helper.wado/sub/cross_module_variant_iter_help
     let $load_0: ref "core:prelude/list.wado//List<sub/cross_module_variant_iter_helper.wado/Choice>";
     let b: ref "sub/cross_module_variant_iter_helper.wado//BData";
     let end: i32;
+    let $sroa_$iter_0_repr_18: ref "Array<sub/cross_module_variant_iter_helper.wado/Choice>";
     let $sroa_$iter_0_index_19: i32;
-    let $licm_repr_22: ref "Array<sub/cross_module_variant_iter_helper.wado/Choice>";
     if ref.test "sub/cross_module_variant_iter_helper.wado//Choice::A"(c) {
         end = local.tee $load_0(ref.cast "sub/cross_module_variant_iter_helper.wado//Choice::A"(c).payload_0.children).used;
+        $sroa_$iter_0_repr_18 = $load_0.repr;
         $sroa_$iter_0_index_19 = 0;
-        $licm_repr_22 = $load_0.repr;
         b67: block {
             l68: loop {
                 break_if b67 $sroa_$iter_0_index_19 >= end;
-                c = builtin::array_get_value<ref "sub/cross_module_variant_iter_helper.wado//Choice">($licm_repr_22, $sroa_$iter_0_index_19);
+                c = builtin::array_get_value<ref "sub/cross_module_variant_iter_helper.wado//Choice">($sroa_$iter_0_repr_18, $sroa_$iter_0_index_19);
                 $sroa_$iter_0_index_19 = $sroa_$iter_0_index_19 + 1;
                 "sub/cross_module_variant_iter_helper.wado/sub/cross_module_variant_iter_helper.wado/walk<sub/cross_module_variant_iter_helper.wado/Counter>$sroa[c.value]"(h, c);
                 continue l68;

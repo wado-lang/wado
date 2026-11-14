@@ -81,7 +81,6 @@ import fn wasi/task-return from "wasi/task-return";
 fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
     let $load_1: ref "Array<[hfs_letdestructure_loop_local.wado/Acc,i32]>";
     let $load_11: i32;
-    let $load_21: ref Array<u8>;
     let pairs: ref "core:prelude/list.wado//List<[hfs_letdestructure_loop_local.wado/Acc,i32]>";
     let total: i32;
     let a: ref "hfs_letdestructure_loop_local.wado//Acc";
@@ -90,6 +89,7 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
     let v_28: ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]";
     let out_42: ref "core:prelude/string.wado//String";
     let x: i64;
+    let arr: ref Array<u8>;
     let q: u64;
     let $sroa_$iter_0_index_169: i32;
     pairs = struct.new "core:prelude/list.wado//List<[hfs_letdestructure_loop_local.wado/Acc,i32]>" { repr: array.new_fixed<ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]">(), used: 0 };
@@ -212,22 +212,22 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
     }
     n_4 = out_42.used;
     out_42.used = $sroa_$iter_0_index_169;
+    arr = out_42.repr;
     total = n_4 + total;
-    $load_21 = out_42.repr;
     b28: block {
         l29: loop {
             break_if b28 (total - n_4) < 2;
             q = x /u 100_i64;
             $load_11 = local.tee $sroa_$iter_0_index_169(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_21, total - 1, (48 + $sroa_$iter_0_index_169) - ($load_11 * 10));
-            builtin::array_set_u8($load_21, total - 2, 48 + $load_11);
+            builtin::array_set_u8(arr, total - 1, (48 + $sroa_$iter_0_index_169) - ($load_11 * 10));
+            builtin::array_set_u8(arr, total - 2, 48 + $load_11);
             total = total - 2;
             x = q;
             continue l29;
         };
     };
     if total > n_4 {
-        builtin::array_set_u8($load_21, n_4, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8(arr, n_4, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_54: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_54;
@@ -235,11 +235,11 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
     total = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $sroa_$iter_0_index_169 = builtin::i32_wrap_i64(x >> 32_i64);
     total = "hfs_letdestructure_loop_local.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(total);
-    builtin::array_copy<u8>(local.tee $load_21(builtin::array_new<u8>(local.tee n_4(out_42.used) + 1)), 0, out_42.repr, 0, n_4);
-    builtin::array_set_u8($load_21, n_4, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee n_4(out_42.used) + 1)), 0, out_42.repr, 0, n_4);
+    builtin::array_set_u8(arr, n_4, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         n_4 = n_4 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$iter_0_index_169, $load_21, 0, n_4);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$iter_0_index_169, arr, 0, n_4);
     });
     "wasi/stream-drop-writable"($sroa_$iter_0_index_169);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(total);

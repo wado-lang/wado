@@ -292,21 +292,21 @@ global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: r
 
 fn "hfs_field_handle_written_through_root.wado/add"(log, v) {
     let $load_1: i32;
-    let $load_2: ref "core:prelude/list.wado//List<i32>";
+    let self_2: ref "core:prelude/list.wado//List<i32>";
     let used_4: i32;
     log.calls = local.tee $load_1(log.calls + 1);
-    if @unlikely(local.tee used_4(local.tee $load_2(log.marks).used) >= builtin::array_len($load_2.repr)) {
+    if @unlikely(local.tee used_4(local.tee self_2(log.marks).used) >= builtin::array_len(self_2.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_2);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_2);
     }
-    builtin::array_set<i32>(local.tee $load_2(log.marks).repr, used_4, $load_1);
-    $load_2.used = used_4 + 1;
-    if @unlikely(local.tee $load_1(local.tee $load_2(log.items).used) >= builtin::array_len($load_2.repr)) {
+    builtin::array_set<i32>(self_2.repr, used_4, $load_1);
+    self_2.used = used_4 + 1;
+    if @unlikely(local.tee $load_1(local.tee self_2(log.items).used) >= builtin::array_len(self_2.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_2);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_2);
     }
-    builtin::array_set<i32>(local.tee $load_2(log.items).repr, $load_1, v);
-    $load_2.used = $load_1 + 1;
+    builtin::array_set<i32>(self_2.repr, $load_1, v);
+    self_2.used = $load_1 + 1;
 }
 
 fn "hfs_field_handle_written_through_root.wado/walk"($mv$keys$repr, $mv$keys$used, log, nested) {

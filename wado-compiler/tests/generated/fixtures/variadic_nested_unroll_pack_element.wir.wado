@@ -497,32 +497,32 @@ fn "variadic_nested_unroll_pack_element.wado/$test_0_a_nested_walk_over_the_same
     let copies: ref "core:prelude/list.wado//List<variadic_nested_unroll_pack_element.wado/Mixed>";
     let v_15: ref "variadic_nested_unroll_pack_element.wado//Mixed";
     let v_16: ref "core:prelude/string.wado//String";
+    let $sroa_$iter_2_repr_39: ref "Array<variadic_nested_unroll_pack_element.wado/Mixed>";
     let $sroa_$iter_2_index_40: i32;
-    let $licm_repr_42: ref "Array<variadic_nested_unroll_pack_element.wado/Mixed>";
-    let $av_43: i32;
+    let $av_42: i32;
     m = struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: 7, label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, on: 1 };
     if @unlikely(local.tee $load_1(local.tee copies("variadic_nested_unroll_pack_element.wado/variadic_nested_unroll_pack_element.wado/Mixed^variadic_nested_unroll_pack_element.wado/Rebuild::rebuild"(7, m.label, 1)).used) != 3) {
         cold_path;
         "variadic_nested_unroll_pack_element.wado/$test_0_a_nested_walk_over_the_same_pack_rebuilds_every_field$cold0"($load_1);
         unreachable;
     }
+    $sroa_$iter_2_repr_39 = copies.repr;
     $sroa_$iter_2_index_40 = 0;
-    $licm_repr_42 = copies.repr;
     b1: block {
         l2: loop {
             break_if b1 $sroa_$iter_2_index_40 >= $load_1;
-            v_15 = struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: local.tee $av_43(local.tee v_15(builtin::array_get_value<ref "variadic_nested_unroll_pack_element.wado//Mixed">($licm_repr_42, $sroa_$iter_2_index_40)).count), label: v_16 = v_15.label; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_16.repr; $load_6 = v_16.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_6)), 0, $array_clone_src_1, 0, $load_6); $array_clone_dst_2, used: $load_6 }, on: v_15.on };
+            v_15 = struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: local.tee $av_42(local.tee v_15(builtin::array_get_value<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_$iter_2_repr_39, $sroa_$iter_2_index_40)).count), label: v_16 = v_15.label; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_16.repr; $load_6 = v_16.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_6)), 0, $array_clone_src_1, 0, $load_6); $array_clone_dst_2, used: $load_6 }, on: v_15.on };
             $sroa_$iter_2_index_40 = $sroa_$iter_2_index_40 + 1;
-            if @unlikely(select i32((if $av_43 == 7 -> i32 {
+            if @unlikely(select i32((if $av_42 == 7 -> i32 {
                 $inline_core_prelude_array_wado_seq_eq_u8__9: block -> bool {
-                    if local.tee $av_43(local.tee v_16(v_15.label).used) != 2 {
+                    if local.tee $av_42(local.tee v_16(v_15.label).used) != 2 {
                         break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                     }
                     $load_6 = 0;
                     $array_clone_src_1 = v_16.repr;
                     b6: block {
                         l7: loop {
-                            break_if b6 (builtin::i64_extend_i32_s($load_6) + 3_i64) >= builtin::i64_extend_i32_s($av_43);
+                            break_if b6 (builtin::i64_extend_i32_s($load_6) + 3_i64) >= builtin::i64_extend_i32_s($av_42);
                             if builtin::array_get_value<u8>($array_clone_src_1, $load_6) != builtin::array_get_value<u8>(global:variadic_nested_unroll_pack_element.wado::$const_obj_1, $load_6) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                             }
@@ -544,7 +544,7 @@ fn "variadic_nested_unroll_pack_element.wado/$test_0_a_nested_walk_over_the_same
                     };
                     b12: block {
                         l13: loop {
-                            break_if b12 $load_6 >= $av_43;
+                            break_if b12 $load_6 >= $av_42;
                             if builtin::array_get_value<u8>($array_clone_src_1, $load_6) != builtin::array_get_value<u8>(global:variadic_nested_unroll_pack_element.wado::$const_obj_1, $load_6) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                             }

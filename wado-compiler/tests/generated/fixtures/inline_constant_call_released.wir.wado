@@ -65,13 +65,13 @@ import fn wasi/task-return from "wasi/task-return";
 global mut global:inline_constant_call_released.wado::SEED: i32 = 7;
 
 fn "inline_constant_call_released.wado/append"(s, v) {
-    let $load_8: ref Array<u8>;
     let out_7: ref "core:prelude/string.wado//String";
     let is_negative_69: bool;
     let x: i64;
+    let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_161: i32;
+    let start_160: i32;
     out_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_22;
@@ -144,33 +144,33 @@ fn "inline_constant_call_released.wado/append"(s, v) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_7, is_negative_69);
         }
-        start_161 = out_7.used;
+        start_160 = out_7.used;
         out_7.used = is_negative_69;
-        builtin::array_set_u8(out_7.repr, start_161, 45);
+        builtin::array_set_u8(out_7.repr, start_160, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_69(out_7.used + v) > builtin::array_len(out_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_7, is_negative_69);
     }
-    start_161 = out_7.used;
+    start_160 = out_7.used;
     out_7.used = is_negative_69;
-    v = start_161 + v;
-    $load_8 = out_7.repr;
+    arr = out_7.repr;
+    v = start_160 + v;
     b22: block {
         l23: loop {
-            break_if b22 (v - start_161) < 2;
+            break_if b22 (v - start_160) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_69(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_8, v - 1, (48 + is_negative_69) - (tens * 10));
-            builtin::array_set_u8($load_8, v - 2, 48 + tens);
+            builtin::array_set_u8(arr, v - 1, (48 + is_negative_69) - (tens * 10));
+            builtin::array_set_u8(arr, v - 2, 48 + tens);
             v = v - 2;
             x = q;
             continue l23;
         };
     };
-    if v > start_161 {
-        builtin::array_set_u8($load_8, start_161, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if v > start_160 {
+        builtin::array_set_u8(arr, start_160, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
@@ -181,9 +181,9 @@ fn "inline_constant_call_released.wado/append"(s, v) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, is_negative_69);
         }
-        start_161 = s.used;
+        start_160 = s.used;
         s.used = is_negative_69;
-        builtin::array_copy<u8>(s.repr, start_161, out_7.repr, 0, v);
+        builtin::array_copy<u8>(s.repr, start_160, out_7.repr, 0, v);
     };
 }
 

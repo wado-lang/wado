@@ -1070,6 +1070,7 @@ assigned: "), used: 140 }, s1: struct.new "core:prelude/string.wado//String" { r
 
 fn "value_reference_to_call_result_copies.wado/$test_2_a_write_by_the_callee_before_it_reads_the_reference"() {
     let $load_0: ref Array<u8>;
+    let $contract_arg_0_9: ref "core:prelude/string.wado//String";
     let start_53: i32;
     let $deref_value_180: ref "core:prelude/string.wado//String";
     let $deref_value_181: ref "core:prelude/string.wado//String";
@@ -1090,8 +1091,7 @@ fn "value_reference_to_call_result_copies.wado/$test_2_a_write_by_the_callee_bef
     start_53 = $sroa_$sroa_$sroa_$sroa_a_items_174_repr_182_0_194_text_197.used;
     $sroa_$sroa_$sroa_$sroa_a_items_174_repr_182_0_194_text_197.used = 4;
     builtin::array_copy<u8>($sroa_$sroa_$sroa_$sroa_a_items_174_repr_182_0_194_text_197.repr, start_53, global:value_reference_to_call_result_copies.wado::$const_obj_3, 0, 1);
-    $load_0 = local.tee $sroa_$sroa_$sroa_$sroa_a_items_174_repr_182_0_194_text_197(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98, 99), used: 3 }).repr;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(3)), 0, $load_0, 0, 3);
+    $contract_arg_0_9 = struct.new "core:prelude/string.wado//String" { repr: $load_0 = local.tee $sroa_$sroa_$sroa_$sroa_a_items_174_repr_182_0_194_text_197(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98, 99), used: 3 }).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(3)), 0, $load_0, 0, 3); $array_clone_dst_2, used: 3 };
     if @unlikely(4 > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$sroa_$sroa_$sroa_a_items_174_repr_182_0_194_text_197, 4);
@@ -1099,7 +1099,7 @@ fn "value_reference_to_call_result_copies.wado/$test_2_a_write_by_the_callee_bef
     start_53 = $sroa_$sroa_$sroa_$sroa_a_items_174_repr_182_0_194_text_197.used;
     $sroa_$sroa_$sroa_$sroa_a_items_174_repr_182_0_194_text_197.used = 4;
     builtin::array_copy<u8>($sroa_$sroa_$sroa_$sroa_a_items_174_repr_182_0_194_text_197.repr, start_53, global:value_reference_to_call_result_copies.wado::$const_obj_3, 0, 1);
-    $sroa_$sroa_$sroa_$sroa_a_items_174_repr_182_0_194_text_197 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $load_0(builtin::array_new<u8>(3)), 0, $array_clone_dst_2, 0, 3); $load_0, used: 3 };
+    $sroa_$sroa_$sroa_$sroa_a_items_174_repr_182_0_194_text_197 = struct.new "core:prelude/string.wado//String" { repr: $load_0 = $contract_arg_0_9.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(3)), 0, $load_0, 0, 3); $array_clone_dst_2, used: 3 };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__41: block -> bool {
         block {
         };
@@ -1645,8 +1645,8 @@ GLOBAL_ITEMS.items[0].text: "), used: 221 }, s1: struct.new "core:prelude/string
 fn "value_reference_to_call_result_copies.wado/$test_4_a_write_before_the_call_reads_the_reference"() {
     let $load_0: ref Array<u8>;
     let read_bound: ref "core:prelude/string.wado//String";
-    let read_beside_write: ref "core:prelude/string.wado//String";
     let start_50: i32;
+    let $deref_value_178: ref "core:prelude/string.wado//String";
     let $sroa_$sroa_$sroa_$sroa_n_items_173_repr_179_0_191_text_192: ref "core:prelude/string.wado//String";
     $load_0 = local.tee $sroa_$sroa_$sroa_$sroa_n_items_173_repr_179_0_191_text_192(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98, 99), used: 3 }).repr;
     let $array_clone_dst_2: ref Array<u8>;
@@ -1659,7 +1659,7 @@ fn "value_reference_to_call_result_copies.wado/$test_4_a_write_before_the_call_r
     $sroa_$sroa_$sroa_$sroa_n_items_173_repr_179_0_191_text_192.used = 4;
     builtin::array_copy<u8>(local.tee $load_0($sroa_$sroa_$sroa_$sroa_n_items_173_repr_179_0_191_text_192.repr), start_50, global:value_reference_to_call_result_copies.wado::$const_obj_3, 0, 1);
     read_bound = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>(3)), 0, $array_clone_dst_2, 0, 3); $array_clone_dst_5, used: 3 };
-    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(4)), 0, $load_0, 0, 4);
+    $deref_value_178 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(4)), 0, $load_0, 0, 4); $array_clone_dst_2, used: 4 };
     if @unlikely(5 > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$sroa_$sroa_$sroa_n_items_173_repr_179_0_191_text_192, 5);
@@ -1667,7 +1667,7 @@ fn "value_reference_to_call_result_copies.wado/$test_4_a_write_before_the_call_r
     start_50 = $sroa_$sroa_$sroa_$sroa_n_items_173_repr_179_0_191_text_192.used;
     $sroa_$sroa_$sroa_$sroa_n_items_173_repr_179_0_191_text_192.used = 5;
     builtin::array_copy<u8>(local.tee $load_0($sroa_$sroa_$sroa_$sroa_n_items_173_repr_179_0_191_text_192.repr), start_50, global:value_reference_to_call_result_copies.wado::$const_obj_31, 0, 1);
-    read_beside_write = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>(4)), 0, $array_clone_dst_2, 0, 4); $array_clone_dst_5, used: 4 };
+    $deref_value_178 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_2 = $deref_value_178.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>(4)), 0, $array_clone_dst_2, 0, 4); $array_clone_dst_5, used: 4 };
     builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(5)), 0, $load_0, 0, 5);
     if @unlikely(6 > builtin::array_len($load_0)) {
         cold_path;
@@ -1728,7 +1728,7 @@ read_bound: "), used: 165 }, s1: struct.new "core:prelude/string.wado//String" {
         block {
         };
         start_50 = 0;
-        $load_0 = read_beside_write.repr;
+        $load_0 = $deref_value_178.repr;
         b244: block {
             l245: loop {
                 break_if b244 (builtin::i64_extend_i32_s(start_50) + 3_i64) >= builtin::i64_extend_i32_s(4);
@@ -1764,7 +1764,7 @@ read_bound: "), used: 165 }, s1: struct.new "core:prelude/string.wado//String" {
         break $inline_core_prelude_array_wado_seq_eq_u8__45: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $sroa_$sroa_$sroa_$sroa_n_items_173_repr_179_0_191_text_192("core:prelude/string.wado/core:prelude/string.wado/String::format<value_reference_to_call_result_copies.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "value_reference_to_call_result_copies.wado//$tmpl$d48748ffcad618c0" { h0: read_beside_write, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_a_write_before_the_call_reads_the_reference at value_reference_to_call_result_copies.wado:169
+        "core:rt/panic"(local.tee $sroa_$sroa_$sroa_$sroa_n_items_173_repr_179_0_191_text_192("core:prelude/string.wado/core:prelude/string.wado/String::format<value_reference_to_call_result_copies.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "value_reference_to_call_result_copies.wado//$tmpl$d48748ffcad618c0" { h0: $deref_value_178, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_a_write_before_the_call_reads_the_reference at value_reference_to_call_result_copies.wado:169
 condition: read_beside_write == \"abc!\"
 read_beside_write: "), used: 180 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_a_write_before_the_call_reads_the_reference at value_reference_to_call_result_copies.wado:169
 condition: read_beside_write == \"abc!\"

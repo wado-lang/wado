@@ -379,9 +379,8 @@ fn "affine_ref_binding_address_taken.wado/$test_0_a_for_of_over_borrowed_affine_
     let ref_val: ref null "affine_ref_binding_address_taken.wado//Tok";
     let $sroa_$iter_0_index_25: i32;
     used = builtin::array_len(local.tee elements(array.new_fixed<ref null "affine_ref_binding_address_taken.wado//Tok">(struct.new "affine_ref_binding_address_taken.wado//Tok" { n: 1 }, struct.new "affine_ref_binding_address_taken.wado//Tok" { n: 2 })));
-    $drop_spill_3 = struct.new "core:prelude/list.wado//List<affine_ref_binding_address_taken.wado/Tok>" { repr: elements, used: used };
+    elements = local.tee $drop_spill_3(struct.new "core:prelude/list.wado//List<affine_ref_binding_address_taken.wado/Tok>" { repr: elements, used: used }).repr;
     $sroa_$iter_0_index_25 = 0;
-    elements = $drop_spill_3.repr;
     b0: block {
         l1: loop {
             if ref.test "core:prelude/types.wado//Option<&affine_ref_binding_address_taken.wado/Tok>::Some"(local.tee $match_4($inline_core_prelude_slice_wado_SliceRefIter_affine_ref_binding_address_taken_wado_Tok__core_prelude_traits_wado_Iterator__next_3: block -> ref "core:prelude/types.wado//Option<&affine_ref_binding_address_taken.wado/Tok>" {

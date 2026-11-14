@@ -313,23 +313,22 @@ fn "condition_implication_sibling_field_lengths.wado/second_input"($mv$node$outp
     let v_28: ref "core:prelude/string.wado//String";
     let value_31: ref "core:prelude/string.wado//String";
     let b_47: i32;
+    let $sroa_$iter_0_repr_101: ref "Array<core:prelude/string.wado/String>";
     let $sroa_$iter_0_index_102: i32;
     let $licm_log_106: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>";
-    let $licm_repr_108: ref "Array<core:prelude/string.wado/String>";
-    let $licm_values_109: ref "Array<core:prelude/string.wado/String>";
-    let $licm_keys_110: ref "Array<core:prelude/string.wado/String>";
+    let $licm_values_107: ref "Array<core:prelude/string.wado/String>";
+    let $licm_keys_108: ref "Array<core:prelude/string.wado/String>";
     v_16 = struct.new "core:collections/hashmap.wado//HashSeed" { k0: local.tee v_16(global:core:collections/hashmap.wado::DEFAULT_HASH_SEED).k0, k1: v_16.k1 };
     map = struct.new "core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<ref "core:prelude/string.wado//String">(0), alive: builtin::array_new<bool>(0), count: 0 }, fps: builtin::array_new<i32>(0), table: builtin::array_new<i32>(0), shift: 32, seed: v_16 };
     end = $mv$node$inputs.used;
+    $sroa_$iter_0_repr_101 = $mv$node$inputs.repr;
     $sroa_$iter_0_index_102 = 0;
-    $licm_log_106 = map.log;
-    $licm_repr_108 = $mv$node$inputs.repr;
-    $licm_values_109 = $licm_log_106.values;
-    $licm_keys_110 = $licm_log_106.keys;
+    $licm_values_107 = local.tee $licm_log_106(map.log).values;
+    $licm_keys_108 = $licm_log_106.keys;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_index_102 >= end;
-            v_28 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_108, $sroa_$iter_0_index_102);
+            v_28 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_101, $sroa_$iter_0_index_102);
             let $array_clone_src_1: ref Array<u8>;
             $array_clone_src_1 = v_28.repr;
             $load_8 = v_28.used;
@@ -340,17 +339,17 @@ fn "condition_implication_sibling_field_lengths.wado/second_input"($mv$node$outp
             value_31 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>($load_8)), 0, $array_clone_dst_2, 0, $load_8); $array_clone_src_1, used: $load_8 };
             $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_core_prelude_string_wado_String___insert_16: block {
                 if local.tee $load_8("core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::place"(map, v_28)) >= 0 {
-                    builtin::array_set<ref "core:prelude/string.wado//String">($licm_values_109, $load_8, value_31);
+                    builtin::array_set<ref "core:prelude/string.wado//String">($licm_values_107, $load_8, value_31);
                     break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_core_prelude_string_wado_String___insert_16;
                 }
-                if @unlikely(local.tee $load_8($licm_log_106.count) == builtin::array_len($licm_keys_110)) {
+                if @unlikely(local.tee $load_8($licm_log_106.count) == builtin::array_len($licm_keys_108)) {
                     cold_path;
                     "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>::grow"($licm_log_106, b_47 = $load_8 * 2; select i32(4 > b_47, 4, b_47));
-                    $licm_values_109 = $licm_log_106.values;
-                    $licm_keys_110 = $licm_log_106.keys;
+                    $licm_values_107 = $licm_log_106.values;
+                    $licm_keys_108 = $licm_log_106.keys;
                 }
-                builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_110, $load_8, v_28);
-                builtin::array_set<ref "core:prelude/string.wado//String">($licm_values_109, $load_8, value_31);
+                builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_108, $load_8, v_28);
+                builtin::array_set<ref "core:prelude/string.wado//String">($licm_values_107, $load_8, value_31);
                 builtin::array_set<bool>($licm_log_106.alive, $load_8, 1);
                 $licm_log_106.count = $load_8 + 1;
             };
@@ -1442,9 +1441,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
-    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
+    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -1461,25 +1460,26 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_7: block -> i32 {
+        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(self.repr, new_used, c);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_7: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_7: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_7: 3;
         }
-        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
-        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_7: 4;
     };
 }
@@ -1791,26 +1791,26 @@ fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:pr
 fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::rebuild_table$unchecked"(self, slots) {
     let $load_1: i32;
     let $load_2: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>";
+    let alive: ref Array<bool>;
+    let fps: ref Array<i32>;
     let s: i32;
     let a: ref Array<i32>;
     let current: i32;
     let $sroa_v_end_37: i32;
     let $sroa_$iter_2_start_38: i32;
-    let $licm_fps_41: ref Array<i32>;
-    let $licm_alive_43: ref Array<bool>;
     self.table = local.tee a(builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a);
     self.shift = local.tee $load_1(32 - builtin::i32_ctz(slots));
     slots = slots - 1;
-    $sroa_v_end_37 = local.tee $load_2(self.log).count;
+    alive = local.tee $load_2(self.log).alive;
+    fps = self.fps;
+    $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    $licm_fps_41 = self.fps;
-    $licm_alive_43 = $load_2.alive;
     b231: block {
         l232: loop {
             break_if b231 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
-            if builtin::array_get_value<bool>($licm_alive_43, current) {
-                s = builtin::array_get_value<i32>($licm_fps_41, current) >>u $load_1;
+            if builtin::array_get_value<bool>(alive, current) {
+                s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
                 b234: block {
                     l235: loop {
                         break_if b234 builtin::array_get_value<i32>(a, s) == -1;
@@ -2152,8 +2152,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     let out_3: ref "core:prelude/string.wado//String";
     let val_i64_66: i64;
     let q: i32;
-    let $licm_repr_135: ref Array<u8>;
-    let start_219: i32;
+    let arr: ref Array<u8>;
+    let start_218: i32;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
@@ -2169,19 +2169,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, q);
     }
-    start_219 = out_3.used;
+    start_218 = out_3.used;
     out_3.used = q;
-    t = start_219 + t;
+    arr = out_3.repr;
+    t = start_218 + t;
     if val_i64_66 == 0_i64 {
-        builtin::array_set_u8(out_3.repr, start_219, 48);
+        builtin::array_set_u8(arr, start_218, 48);
     } else {
-        $licm_repr_135 = out_3.repr;
         b297: block {
             l298: loop {
                 break_if b297 val_i64_66 == 0_i64;
                 t = t - 1;
                 q = builtin::i32_wrap_i64(val_i64_66 & 15_i64);
-                builtin::array_set_u8($licm_repr_135, t, select i32(q < 10, 48 + q, (97 + q) - 10));
+                builtin::array_set_u8(arr, t, select i32(q < 10, 48 + q, (97 + q) - 10));
                 val_i64_66 = val_i64_66 >>u 4_i64;
                 continue l298;
             };

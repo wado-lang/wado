@@ -265,6 +265,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[s
     let q: u64;
     let tens: i32;
     let start_152: i32;
+    let $licm_repr_514: ref Array<u8>;
     if @unlikely(local.tee new_used_74(f.used + 1) > builtin::array_len(f.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_74);
@@ -274,6 +275,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[s
     builtin::array_set_u8(local.tee $load_4(f.repr), start_75, 91);
     start_75 = 0;
     i_5 = 0;
+    $licm_repr_514 = $load_4;
     b23: block {
         l24: loop {
             break_if b23 i_5 >= end;
@@ -281,7 +283,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[s
                 if @unlikely(local.tee new_used_74(new_used_74 + 2) > builtin::array_len($load_4)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_74);
-                    $load_4 = f.repr;
+                    $load_4 = local.tee $licm_repr_514(f.repr);
                 } else {
                 }
                 start_21 = f.used;
@@ -352,27 +354,28 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[s
                 break $inline_count_digits_u64_1: 20;
             };
             if is_negative_29 {
-                if @unlikely(local.tee is_negative_29(new_used_74 + 1) > builtin::array_len($load_4)) {
+                if @unlikely(local.tee is_negative_29(new_used_74 + 1) > builtin::array_len($licm_repr_514)) {
                     cold_path;
                     f.used = new_used_74;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, is_negative_29);
-                    $load_4 = f.repr;
+                    $licm_repr_514 = f.repr;
                     new_used_74 = f.used;
                 }
                 start_152 = new_used_74;
                 new_used_74 = is_negative_29;
-                builtin::array_set_u8($load_4, start_152, 45);
+                builtin::array_set_u8($licm_repr_514, start_152, 45);
             } else {
             }
-            if @unlikely(local.tee is_negative_29(new_used_74 + start_21) > builtin::array_len($load_4)) {
+            if @unlikely(local.tee is_negative_29(new_used_74 + start_21) > builtin::array_len($licm_repr_514)) {
                 cold_path;
                 f.used = new_used_74;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, is_negative_29);
-                $load_4 = f.repr;
+                $licm_repr_514 = f.repr;
                 new_used_74 = f.used;
             }
             start_152 = new_used_74;
             new_used_74 = is_negative_29;
+            $load_4 = $licm_repr_514;
             start_21 = start_152 + start_21;
             b49: block {
                 l50: loop {

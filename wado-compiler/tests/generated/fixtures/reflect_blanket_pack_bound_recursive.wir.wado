@@ -2702,26 +2702,26 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
 fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<reflect_blanket_pack_bound_recursive.wado/Node,()>::rebuild_table$unchecked"(self, slots) {
     let $load_1: i32;
     let $load_2: ref "core:collections/entries.wado//EntryLog<reflect_blanket_pack_bound_recursive.wado/Node,()>";
+    let alive: ref Array<bool>;
+    let fps: ref Array<i32>;
     let s: i32;
     let a: ref Array<i32>;
     let current: i32;
     let $sroa_v_end_37: i32;
     let $sroa_$iter_2_start_38: i32;
-    let $licm_fps_41: ref Array<i32>;
-    let $licm_alive_43: ref Array<bool>;
     self.table = local.tee a(builtin::array_fill<i32>(local.tee a(builtin::array_new<i32>(slots)), 0, -1, slots); a);
     self.shift = local.tee $load_1(32 - builtin::i32_ctz(slots));
     slots = slots - 1;
-    $sroa_v_end_37 = local.tee $load_2(self.log).count;
+    alive = local.tee $load_2(self.log).alive;
+    fps = self.fps;
+    $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    $licm_fps_41 = self.fps;
-    $licm_alive_43 = $load_2.alive;
     b339: block {
         l340: loop {
             break_if b339 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
-            if builtin::array_get_value<bool>($licm_alive_43, current) {
-                s = builtin::array_get_value<i32>($licm_fps_41, current) >>u $load_1;
+            if builtin::array_get_value<bool>(alive, current) {
+                s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
                 b342: block {
                     l343: loop {
                         break_if b342 builtin::array_get_value<i32>(a, s) == -1;

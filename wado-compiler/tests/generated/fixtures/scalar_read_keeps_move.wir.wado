@@ -179,49 +179,47 @@ fn "scalar_read_keeps_move.wado/keep"(n) {
     let $load_6: i32;
     let out: ref "core:prelude/list.wado//List<scalar_read_keeps_move.wado/Item>";
     let seen: ref "core:prelude/list.wado//List<i32>";
-    let self_10: ref "core:prelude/list.wado//List<scalar_read_keeps_move.wado/Item>";
     let v_16: ref "scalar_read_keeps_move.wado//Item";
     let v_17: ref "core:prelude/list.wado//List<i32>";
     let i: i32;
     let $licm_repr_43: ref Array<i32>;
+    let $licm_repr_44: ref "Array<scalar_read_keeps_move.wado/Item>";
     let $sroa_$iter_0_index_48: i32;
-    let $licm_repr_53: ref "Array<scalar_read_keeps_move.wado/Item>";
-    let $av_54: i32;
+    let $av_53: i32;
     out = struct.new "core:prelude/list.wado//List<scalar_read_keeps_move.wado/Item>" { repr: array.new_fixed<ref "scalar_read_keeps_move.wado//Item">(), used: 0 };
     seen = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     let $mv_repr_1: ref "Array<scalar_read_keeps_move.wado/Item>";
     multivalue_bind [$mv_repr_1, n] = "scalar_read_keeps_move.wado/make"(n);
-    self_10 = struct.new "core:prelude/list.wado//List<scalar_read_keeps_move.wado/Item>" { repr: $mv_repr_1, used: n };
+    $mv_repr_1 = struct.new "core:prelude/list.wado//List<scalar_read_keeps_move.wado/Item>" { repr: $mv_repr_1, used: n }.repr;
     $sroa_$iter_0_index_48 = 0;
     $licm_repr_43 = seen.repr;
-    $mv_repr_1 = out.repr;
-    $licm_repr_53 = self_10.repr;
+    $licm_repr_44 = out.repr;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_index_48 >= n;
-            $av_54 = local.tee v_16(builtin::array_get_value<ref "scalar_read_keeps_move.wado//Item">($licm_repr_53, $sroa_$iter_0_index_48)).tag;
-            v_16 = struct.new "scalar_read_keeps_move.wado//Item" { ids: v_17 = v_16.ids; struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_3: ref Array<i32>; $array_clone_src_3 = v_17.repr; $load_6 = v_17.used; let $array_clone_dst_4: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_4(builtin::array_new<i32>($load_6)), 0, $array_clone_src_3, 0, $load_6); $array_clone_dst_4, used: $load_6 }, tag: $av_54 };
+            $av_53 = local.tee v_16(builtin::array_get_value<ref "scalar_read_keeps_move.wado//Item">($mv_repr_1, $sroa_$iter_0_index_48)).tag;
+            v_16 = struct.new "scalar_read_keeps_move.wado//Item" { ids: v_17 = v_16.ids; struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_3: ref Array<i32>; $array_clone_src_3 = v_17.repr; $load_6 = v_17.used; let $array_clone_dst_4: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_4(builtin::array_new<i32>($load_6)), 0, $array_clone_src_3, 0, $load_6); $array_clone_dst_4, used: $load_6 }, tag: $av_53 };
             $sroa_$iter_0_index_48 = $sroa_$iter_0_index_48 + 1;
-            if $av_54 == -1 {
+            if $av_53 == -1 {
                 if $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__8: block -> bool {
                     $load_6 = seen.used;
                     i = 0;
                     b4: block {
                         l5: loop {
                             break_if b4 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($load_6);
-                            if builtin::array_get_value<i32>($licm_repr_43, i) == $av_54 {
+                            if builtin::array_get_value<i32>($licm_repr_43, i) == $av_53 {
                                 break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__8: 1;
                             }
                             i = i + 1;
-                            if builtin::array_get_value<i32>($licm_repr_43, i) == $av_54 {
+                            if builtin::array_get_value<i32>($licm_repr_43, i) == $av_53 {
                                 break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__8: 1;
                             }
                             i = i + 1;
-                            if builtin::array_get_value<i32>($licm_repr_43, i) == $av_54 {
+                            if builtin::array_get_value<i32>($licm_repr_43, i) == $av_53 {
                                 break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__8: 1;
                             }
                             i = i + 1;
-                            if builtin::array_get_value<i32>($licm_repr_43, i) == $av_54 {
+                            if builtin::array_get_value<i32>($licm_repr_43, i) == $av_53 {
                                 break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__8: 1;
                             }
                             i = i + 1;
@@ -231,7 +229,7 @@ fn "scalar_read_keeps_move.wado/keep"(n) {
                     b10: block {
                         l11: loop {
                             break_if b10 i >= $load_6;
-                            if builtin::array_get_value<i32>($licm_repr_43, i) == $av_54 {
+                            if builtin::array_get_value<i32>($licm_repr_43, i) == $av_53 {
                                 break $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__8: 1;
                             }
                             i = i + 1;
@@ -245,17 +243,17 @@ fn "scalar_read_keeps_move.wado/keep"(n) {
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(seen);
                         $licm_repr_43 = seen.repr;
                     }
-                    builtin::array_set<i32>($licm_repr_43, $load_6, $av_54);
+                    builtin::array_set<i32>($licm_repr_43, $load_6, $av_53);
                     seen.used = $load_6 + 1;
                 }
             } else {
-                if @unlikely(local.tee $av_54(out.used) >= builtin::array_len($mv_repr_1)) {
+                if @unlikely(local.tee $av_53(out.used) >= builtin::array_len($licm_repr_44)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_keeps_move.wado/Item>::grow"(out);
-                    $mv_repr_1 = out.repr;
+                    $licm_repr_44 = out.repr;
                 }
-                builtin::array_set<ref "scalar_read_keeps_move.wado//Item">($mv_repr_1, $av_54, v_16);
-                out.used = $av_54 + 1;
+                builtin::array_set<ref "scalar_read_keeps_move.wado//Item">($licm_repr_44, $av_53, v_16);
+                out.used = $av_53 + 1;
             }
             continue l1;
         };

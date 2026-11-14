@@ -1479,9 +1479,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
-    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
+    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -1498,25 +1498,26 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_0: block -> i32 {
+        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(self.repr, new_used, c);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_0: 3;
         }
-        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
-        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_0: 4;
     };
 }
@@ -1696,15 +1697,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<destructuring_assign_index_swap_unchecked.wado/Tok>::push"(self, value) {
-    let $load_2: ref null "Array<destructuring_assign_index_swap_unchecked.wado/Tok>";
     let used: i32;
+    let $arg_4: ref null "Array<destructuring_assign_index_swap_unchecked.wado/Tok>";
     let $held_7: ref null "destructuring_assign_index_swap_unchecked.wado//Tok";
     if @unlikely(local.tee used(self.used) >= builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<destructuring_assign_index_swap_unchecked.wado/Tok>::grow"(self);
     }
-    if ref.is_null(local.tee $held_7(builtin::array_get_value<ref null "destructuring_assign_index_swap_unchecked.wado//Tok">(local.tee $load_2(self.repr), used))) {
-        builtin::array_set<ref null "destructuring_assign_index_swap_unchecked.wado//Tok">($load_2, used, value);
+    if ref.is_null(local.tee $held_7(builtin::array_get_value<ref null "destructuring_assign_index_swap_unchecked.wado//Tok">(local.tee $arg_4(self.repr), used))) {
+        builtin::array_set<ref null "destructuring_assign_index_swap_unchecked.wado//Tok">($arg_4, used, value);
     } else {
         $held_7.id = value.id;
     }
@@ -1844,13 +1845,12 @@ fn "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(self, f) {
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
-    let $load_1: ref Array<u8>;
     let is_negative: bool;
     let x: i64;
+    let arr: ref Array<u8>;
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let self_17: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     x = builtin::i64_extend_i32_s(self);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -1915,23 +1915,22 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
         break $inline_count_digits_u64_1: 20;
     };
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(f, is_negative, self);
-    self_17 = f.buf;
+    arr = f.buf.repr;
     self = is_negative + self;
-    $load_1 = self_17.repr;
     b304: block {
         l305: loop {
             break_if b304 (self - is_negative) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_1, self - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($load_1, self - 2, 48 + tens);
+            builtin::array_set_u8(arr, self - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, self - 2, 48 + tens);
             self = self - 2;
             x = q;
             continue l305;
         };
     };
     if self > is_negative {
-        builtin::array_set_u8($load_1, is_negative, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8(arr, is_negative, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
 }
 

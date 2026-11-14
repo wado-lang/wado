@@ -75,15 +75,15 @@ import fn wasi/task-return from "wasi/task-return";
 
 fn "contract_clause_reads_while_let_binding.wado/run"() with Stdout {
     let $load_1: i32;
-    let $load_13: ref Array<u8>;
     let keys_0: ref "core:prelude/list.wado//List<contract_clause_reads_while_let_binding.wado/Key>";
     let out_44: ref "core:prelude/string.wado//String";
     let is_negative_107: bool;
     let x: i64;
+    let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     let $licm_repr_166: ref "Array<contract_clause_reads_while_let_binding.wado/Key>";
-    let start_196: i32;
+    let start_195: i32;
     $licm_repr_166 = local.tee keys_0(struct.new "core:prelude/list.wado//List<contract_clause_reads_while_let_binding.wado/Key>" { repr: array.new_fixed<ref "contract_clause_reads_while_let_binding.wado//Key">(struct.new "contract_clause_reads_while_let_binding.wado//Key" { frag: ref.null none }), used: 1 }).repr;
     b0: block {
         l1: loop {
@@ -176,33 +176,33 @@ fn "contract_clause_reads_while_let_binding.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_44, is_negative_107);
         }
-        start_196 = out_44.used;
+        start_195 = out_44.used;
         out_44.used = is_negative_107;
-        builtin::array_set_u8(out_44.repr, start_196, 45);
+        builtin::array_set_u8(out_44.repr, start_195, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_107(out_44.used + $load_1) > builtin::array_len(out_44.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_44, is_negative_107);
     }
-    start_196 = out_44.used;
+    start_195 = out_44.used;
     out_44.used = is_negative_107;
-    $load_1 = start_196 + $load_1;
-    $load_13 = out_44.repr;
+    arr = out_44.repr;
+    $load_1 = start_195 + $load_1;
     b26: block {
         l27: loop {
-            break_if b26 ($load_1 - start_196) < 2;
+            break_if b26 ($load_1 - start_195) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_107(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_13, $load_1 - 1, (48 + is_negative_107) - (tens * 10));
-            builtin::array_set_u8($load_13, $load_1 - 2, 48 + tens);
+            builtin::array_set_u8(arr, $load_1 - 1, (48 + is_negative_107) - (tens * 10));
+            builtin::array_set_u8(arr, $load_1 - 2, 48 + tens);
             $load_1 = $load_1 - 2;
             x = q;
             continue l27;
         };
     };
-    if $load_1 > start_196 {
-        builtin::array_set_u8($load_13, start_196, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $load_1 > start_195 {
+        builtin::array_set_u8(arr, start_195, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_57: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_57;
@@ -210,11 +210,11 @@ fn "contract_clause_reads_while_let_binding.wado/run"() with Stdout {
     $load_1 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_107 = builtin::i32_wrap_i64(x >> 32_i64);
     $load_1 = "contract_clause_reads_while_let_binding.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_1);
-    builtin::array_copy<u8>(local.tee $load_13(builtin::array_new<u8>(local.tee start_196(out_44.used) + 1)), 0, out_44.repr, 0, start_196);
-    builtin::array_set_u8($load_13, start_196, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_195(out_44.used) + 1)), 0, out_44.repr, 0, start_195);
+    builtin::array_set_u8(arr, start_195, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_196 = start_196 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_107, $load_13, 0, start_196);
+        start_195 = start_195 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_107, arr, 0, start_195);
     });
     "wasi/stream-drop-writable"(is_negative_107);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_1);

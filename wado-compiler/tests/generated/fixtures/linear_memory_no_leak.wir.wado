@@ -2676,7 +2676,7 @@ fn "core:zlib/read_dynamic_tables$sroa[return]"(state, input) {
     let index_71: i32;
     let value_86: i32;
     let $licm_lens_136: ref "core:prelude/list.wado//List<u16>";
-    let $licm_repr_138: ref Array<u16>;
+    let $licm_repr_154: ref Array<u16>;
     let $licm_ptr_160: i32;
     let $hfs_next_162: i32;
     let $av_163: u64;
@@ -2715,7 +2715,7 @@ fn "core:zlib/read_dynamic_tables$sroa[return]"(state, input) {
     }
     value_65 = 0;
     $mv$$match_46$1 = local.tee $licm_lens_136(state.lens).used;
-    $licm_repr_138 = $licm_lens_136.repr;
+    $licm_repr_154 = $licm_lens_136.repr;
     b317: block {
         l318: loop {
             break_if b317 value_65 >= 19;
@@ -2730,7 +2730,7 @@ fn "core:zlib/read_dynamic_tables$sroa[return]"(state, input) {
                 "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(index_71, $mv$$match_46$1);
                 unreachable;
             }
-            builtin::array_set<u16>($licm_repr_138, index_71, value_86);
+            builtin::array_set<u16>($licm_repr_154, index_71, value_86);
             value_65 = value_65 + 1;
             continue l318;
         };
@@ -2743,7 +2743,7 @@ fn "core:zlib/read_dynamic_tables$sroa[return]"(state, input) {
     $mv$$match_45$1 = $mv$$match_45$0 + value_58;
     $mv$$match_46$1 = 0;
     index_71 = local.tee $licm_lens_136(state.lens).used;
-    $licm_repr_138 = $licm_lens_136.repr;
+    $licm_repr_154 = $licm_lens_136.repr;
     value_86 = state.end;
     $licm_ptr_160 = input.block.ptr;
     b322: block {
@@ -2768,7 +2768,7 @@ fn "core:zlib/read_dynamic_tables$sroa[return]"(state, input) {
                     "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"($mv$$match_46$1, index_71);
                     unreachable;
                 }
-                builtin::array_set<u16>($licm_repr_138, $mv$$match_46$1, $mv$$vr_48$0);
+                builtin::array_set<u16>($licm_repr_154, $mv$$match_46$1, $mv$$vr_48$0);
                 $mv$$match_46$1 = $mv$$match_46$1 + 1;
                 continue l323;
             }
@@ -2817,7 +2817,7 @@ fn "core:zlib/read_dynamic_tables$sroa[return]"(state, input) {
                     "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv$$vr_48$0, index_71, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1193"), used: 14 });
                     unreachable;
                 }
-                builtin::array_get_value<u16>($licm_repr_138, $mv$$vr_48$0);
+                builtin::array_get_value<u16>($licm_repr_154, $mv$$vr_48$0);
             } else {
                 0;
             });
@@ -2830,7 +2830,7 @@ fn "core:zlib/read_dynamic_tables$sroa[return]"(state, input) {
                         "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"($mv$$match_46$1, index_71);
                         unreachable;
                     }
-                    builtin::array_set<u16>($licm_repr_138, $mv$$match_46$1, $mv$$vr_48$0);
+                    builtin::array_set<u16>($licm_repr_154, $mv$$match_46$1, $mv$$vr_48$0);
                     $mv$$match_46$1 = $mv$$match_46$1 + 1;
                     $mv$$vr_48$2 = $mv$$vr_48$2 + 1;
                     continue l338;
@@ -3094,10 +3094,10 @@ fn "core:zlib/inflate_zlib$sroa[return]$dae[max_output]"(input) {
     }
     flg = cmf * 1;
     array_227 = struct.new "core:linear//LinearArray<u8>" { block: local.tee block(struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, flg), bytes: flg }), len: cmf };
+    $load_1 = input.repr;
     flg = block.ptr;
     i_256 = 0;
     $licm_arith_7_259 = cmf - 8;
-    $load_1 = input.repr;
     b380: block {
         l381: loop {
             break_if b380 (builtin::i64_extend_i32_s(i_256) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7_259);
@@ -5424,7 +5424,6 @@ fn "core:zlib/write_tokens"(bw, $mv$tokens$repr, $mv$tokens$used, sym_count, $mv
 
 fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
     let $load_10: i32;
-    let $load_12: ref Array<u8>;
     let length_codes_table_3: ref "core:prelude/list.wado//List<u8>";
     let dist_codes_table_4: ref "core:prelude/list.wado//List<u8>";
     let bw_6: ref "core:zlib//BitWriter";
@@ -5446,12 +5445,13 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
     let $licm_prev_648: ref null "core:linear//LinearArray<i32>";
     let $licm_block_650: ref null "core:linear//Block";
     let $licm_ptr_652: i32;
+    let arr: ref Array<u8>;
     let w: i64;
     let $licm_arith_7: i32;
-    let $licm_ptr_688: i32;
-    let $licm_ptr_689: i32;
-    let $licm_arith_690: i32;
-    let $hfs_used_691: i32;
+    let $licm_ptr_686: i32;
+    let $licm_ptr_687: i32;
+    let $licm_arith_688: i32;
+    let $hfs_used_689: i32;
     self_85 = input.used;
     length_codes_table_3 = block -> ref "core:prelude/list.wado//List<u8>" {
         let $mv_arg_1: ref "core:prelude/list.wado//List<i32>";
@@ -5486,13 +5486,13 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
         cold_path;
         "core:linear/core:linear/LinearArray<u8>::of_bytes$contract_report1"(16, $v3_572, $load_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1539"), used: 14 });
         unreachable;
-    }; bytes_638 = local.tee $v3_572($load_10 + 16) * 1; array_628 = struct.new "core:linear//LinearArray<u8>" { block: local.tee block(struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, bytes_638), bytes: bytes_638 }), len: $v3_572 }; $v3_572 = block.ptr; bytes_638 = 0; $licm_arith_7 = $load_10 - 8; $load_12 = input.repr; b820: block {
+    }; bytes_638 = local.tee $v3_572($load_10 + 16) * 1; array_628 = struct.new "core:linear//LinearArray<u8>" { block: local.tee block(struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, bytes_638), bytes: bytes_638 }), len: $v3_572 }; arr = input.repr; $v3_572 = block.ptr; bytes_638 = 0; $licm_arith_7 = $load_10 - 8; b820: block {
         l821: loop {
             break_if b820 (builtin::i64_extend_i32_s(bytes_638) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 7)) << 56_i64);
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 7)) << 56_i64);
             builtin::store_i64($v3_572 + bytes_638, w);
             bytes_638 = bytes_638 + 8;
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 7)) << 56_i64);
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 7)) << 56_i64);
             builtin::store_i64($v3_572 + bytes_638, w);
             bytes_638 = bytes_638 + 8;
             continue l821;
@@ -5500,7 +5500,7 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
     }; b822: block {
         l823: loop {
             break_if b822 bytes_638 > $licm_arith_7;
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_12, bytes_638 + 7)) << 56_i64);
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_638 + 7)) << 56_i64);
             builtin::store_i64($v3_572 + bytes_638, w);
             bytes_638 = bytes_638 + 8;
             continue l823;
@@ -5508,20 +5508,20 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
     }; b824: block {
         l825: loop {
             break_if b824 (builtin::i64_extend_i32_s(bytes_638) + 3_i64) >= builtin::i64_extend_i32_s($load_10);
-            builtin::store_u8($v3_572 + bytes_638, builtin::array_get_value_u8($load_12, bytes_638));
+            builtin::store_u8($v3_572 + bytes_638, builtin::array_get_value_u8(arr, bytes_638));
             bytes_638 = bytes_638 + 1;
-            builtin::store_u8($v3_572 + bytes_638, builtin::array_get_value_u8($load_12, bytes_638));
+            builtin::store_u8($v3_572 + bytes_638, builtin::array_get_value_u8(arr, bytes_638));
             bytes_638 = bytes_638 + 1;
-            builtin::store_u8($v3_572 + bytes_638, builtin::array_get_value_u8($load_12, bytes_638));
+            builtin::store_u8($v3_572 + bytes_638, builtin::array_get_value_u8(arr, bytes_638));
             bytes_638 = bytes_638 + 1;
-            builtin::store_u8($v3_572 + bytes_638, builtin::array_get_value_u8($load_12, bytes_638));
+            builtin::store_u8($v3_572 + bytes_638, builtin::array_get_value_u8(arr, bytes_638));
             bytes_638 = bytes_638 + 1;
             continue l825;
         };
     }; b826: block {
         l827: loop {
             break_if b826 bytes_638 >= $load_10;
-            builtin::store_u8($v3_572 + bytes_638, builtin::array_get_value_u8($load_12, bytes_638));
+            builtin::store_u8($v3_572 + bytes_638, builtin::array_get_value_u8(arr, bytes_638));
             bytes_638 = bytes_638 + 1;
             continue l827;
         };
@@ -5545,10 +5545,10 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
     block = array_628.block;
     $licm_block_650 = $licm_head_647.block;
     $licm_ptr_652 = $licm_prev_648.block.ptr;
-    $licm_ptr_688 = block.ptr;
-    $licm_ptr_689 = $licm_block_650.ptr;
-    $licm_arith_690 = $load_10 - 2;
-    $hfs_used_691 = 0;
+    $licm_ptr_686 = block.ptr;
+    $licm_ptr_687 = $licm_block_650.ptr;
+    $licm_arith_688 = $load_10 - 2;
+    $hfs_used_689 = 0;
     b830: block {
         l831: loop {
             break_if b830 $v3_572 >= self_85;
@@ -5556,45 +5556,45 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
             best_dist_20 = 0;
             h_21 = 0;
             if ($v3_572 + 2) < self_85 {
-                if @unlikely(((0 <= $v3_572) & ($v3_572 < $licm_arith_690)) == 0) {
+                if @unlikely(((0 <= $v3_572) & ($v3_572 < $licm_arith_688)) == 0) {
                     cold_path;
-                    "core:zlib/core:zlib/Matcher::hash$contract_report0"($v3_572, $licm_arith_690, $load_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:2470"), used: 14 });
+                    "core:zlib/core:zlib/Matcher::hash$contract_report0"($v3_572, $licm_arith_688, $load_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:2470"), used: 14 });
                     unreachable;
                 }
-                best_dist_20 = builtin::load_u8($licm_ptr_688 + ($v3_572 * 1));
-                h_21 = builtin::load_u8($licm_ptr_688 + (($v3_572 + 1) * 1));
-                c_188 = builtin::load_u8($licm_ptr_688 + (($v3_572 + 2) * 1));
+                best_dist_20 = builtin::load_u8($licm_ptr_686 + ($v3_572 * 1));
+                h_21 = builtin::load_u8($licm_ptr_686 + (($v3_572 + 1) * 1));
+                c_188 = builtin::load_u8($licm_ptr_686 + (($v3_572 + 2) * 1));
                 h_21 = (((best_dist_20 << 10) ^ (h_21 << 5)) ^ c_188) & 32767;
                 multivalue_bind [best_len_19, best_dist_20] = (best_dist_20 = select i32(select i32(match_available, bytes_638 >= 8, 0), 32, 128); "core:zlib/core:zlib/Matcher::longest_match$dae[nice_length]"(matcher.bytes, matcher.len, matcher.head, matcher.prev, $v3_572, h_21, best_len_19, best_dist_20));
                 c_188 = $v3_572 & 32767;
-                value_218 = builtin::load_i32($licm_ptr_689 + (h_21 * 4));
+                value_218 = builtin::load_i32($licm_ptr_687 + (h_21 * 4));
                 builtin::store_i32($licm_ptr_652 + (c_188 * 4), value_218);
-                builtin::store_i32($licm_ptr_689 + (h_21 * 4), $v3_572);
+                builtin::store_i32($licm_ptr_687 + (h_21 * 4), $v3_572);
             }
             if match_available {
                 if best_len_19 > bytes_638 {
-                    bytes_638 = builtin::load_u8($licm_ptr_688 + (($v3_572 - 1) * 1));
-                    if @unlikely($hfs_used_691 >= builtin::array_len($licm_repr_529)) {
+                    bytes_638 = builtin::load_u8($licm_ptr_686 + (($v3_572 - 1) * 1));
+                    if @unlikely($hfs_used_689 >= builtin::array_len($licm_repr_529)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($mv_arg_1);
                         $licm_repr_529 = $mv_arg_1.repr;
                     } else {
                     }
-                    builtin::array_set<i32>($licm_repr_529, $hfs_used_691, bytes_638);
-                    $hfs_used_691 = $hfs_used_691 + 1;
+                    builtin::array_set<i32>($licm_repr_529, $hfs_used_689, bytes_638);
+                    $hfs_used_689 = $hfs_used_689 + 1;
                     bytes_638 = best_len_19;
                     $licm_arith_7 = best_dist_20;
                     $v3_572 = $v3_572 + 1;
                 } else {
                     $licm_arith_7 = (((257 + bytes_638) - 3) & 65535) | (($licm_arith_7 & 65535) << 16);
-                    if @unlikely($hfs_used_691 >= builtin::array_len($licm_repr_529)) {
+                    if @unlikely($hfs_used_689 >= builtin::array_len($licm_repr_529)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($mv_arg_1);
                         $licm_repr_529 = $mv_arg_1.repr;
                     } else {
                     }
-                    builtin::array_set<i32>($licm_repr_529, $hfs_used_691, $licm_arith_7);
-                    $hfs_used_691 = $hfs_used_691 + 1;
+                    builtin::array_set<i32>($licm_repr_529, $hfs_used_689, $licm_arith_7);
+                    $hfs_used_689 = $hfs_used_689 + 1;
                     bytes_638 = bytes_638 - 1;
                     $licm_arith_7 = ($load_10 - $v3_572) - 2;
                     $licm_arith_7 = select i32(bytes_638 < $licm_arith_7, bytes_638, $licm_arith_7);
@@ -5602,12 +5602,12 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
                     b838: block {
                         l839: loop {
                             break_if b838 match_available >= $licm_arith_7;
-                            best_len_19 = builtin::load_u8($licm_ptr_688 + ((($v3_572 + match_available) + 2) * 1));
+                            best_len_19 = builtin::load_u8($licm_ptr_686 + ((($v3_572 + match_available) + 2) * 1));
                             h_21 = ((h_21 << 5) ^ best_len_19) & 32767;
                             best_dist_20 = local.tee best_len_19($v3_572 + match_available) & 32767;
-                            c_188 = builtin::load_i32($licm_ptr_689 + (h_21 * 4));
+                            c_188 = builtin::load_i32($licm_ptr_687 + (h_21 * 4));
                             builtin::store_i32($licm_ptr_652 + (best_dist_20 * 4), c_188);
-                            builtin::store_i32($licm_ptr_689 + (h_21 * 4), best_len_19);
+                            builtin::store_i32($licm_ptr_687 + (h_21 * 4), best_len_19);
                             match_available = match_available + 1;
                             continue l839;
                         };
@@ -5625,26 +5625,26 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
                     $v3_572 = $v3_572 + 1;
                 } else {
                     bytes_638 = (((257 + best_len_19) - 3) & 65535) | ((best_dist_20 & 65535) << 16);
-                    if @unlikely($hfs_used_691 >= builtin::array_len($licm_repr_529)) {
+                    if @unlikely($hfs_used_689 >= builtin::array_len($licm_repr_529)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($mv_arg_1);
                         $licm_repr_529 = $mv_arg_1.repr;
                     } else {
                     }
-                    builtin::array_set<i32>($licm_repr_529, $hfs_used_691, bytes_638);
-                    $hfs_used_691 = $hfs_used_691 + 1;
+                    builtin::array_set<i32>($licm_repr_529, $hfs_used_689, bytes_638);
+                    $hfs_used_689 = $hfs_used_689 + 1;
                     bytes_638 = ($load_10 - $v3_572) - 2;
                     bytes_638 = select i32(best_len_19 < bytes_638, best_len_19, bytes_638);
                     match_available = 1;
                     b843: block {
                         l844: loop {
                             break_if b843 match_available >= bytes_638;
-                            best_dist_20 = builtin::load_u8($licm_ptr_688 + ((($v3_572 + match_available) + 2) * 1));
+                            best_dist_20 = builtin::load_u8($licm_ptr_686 + ((($v3_572 + match_available) + 2) * 1));
                             h_21 = ((h_21 << 5) ^ best_dist_20) & 32767;
                             c_188 = local.tee best_dist_20($v3_572 + match_available) & 32767;
-                            value_218 = builtin::load_i32($licm_ptr_689 + (h_21 * 4));
+                            value_218 = builtin::load_i32($licm_ptr_687 + (h_21 * 4));
                             builtin::store_i32($licm_ptr_652 + (c_188 * 4), value_218);
-                            builtin::store_i32($licm_ptr_689 + (h_21 * 4), best_dist_20);
+                            builtin::store_i32($licm_ptr_687 + (h_21 * 4), best_dist_20);
                             match_available = match_available + 1;
                             continue l844;
                         };
@@ -5654,18 +5654,18 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
                     bytes_638 = 0;
                 }
             } else {
-                best_len_19 = builtin::load_u8($licm_ptr_688 + ($v3_572 * 1));
-                if @unlikely($hfs_used_691 >= builtin::array_len($licm_repr_529)) {
+                best_len_19 = builtin::load_u8($licm_ptr_686 + ($v3_572 * 1));
+                if @unlikely($hfs_used_689 >= builtin::array_len($licm_repr_529)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($mv_arg_1);
                     $licm_repr_529 = $mv_arg_1.repr;
                 } else {
                 }
-                builtin::array_set<i32>($licm_repr_529, $hfs_used_691, best_len_19);
-                $hfs_used_691 = $hfs_used_691 + 1;
+                builtin::array_set<i32>($licm_repr_529, $hfs_used_689, best_len_19);
+                $hfs_used_689 = $hfs_used_689 + 1;
                 $v3_572 = $v3_572 + 1;
             }
-            $mv_arg_1.used = $hfs_used_691;
+            $mv_arg_1.used = $hfs_used_689;
             continue l831;
         };
     };
@@ -8599,9 +8599,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
-    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
+    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -8618,25 +8618,26 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_7: block -> i32 {
+        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(self.repr, new_used, c);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_7: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_7: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_7: 3;
         }
-        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
-        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_7: 4;
     };
 }
@@ -8684,126 +8685,126 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/stri
 fn "core:zlib/core:zlib/InflateState::load_fixed_tables"(self) {
     let sym: i32;
     let $licm_lens_55: ref "core:prelude/list.wado//List<u16>";
-    let $licm_used_56: i32;
-    let $licm_repr_57: ref Array<u16>;
+    let $licm_used_60: i32;
+    let $licm_repr_61: ref Array<u16>;
     sym = 0;
-    $licm_used_56 = local.tee $licm_lens_55(self.lens).used;
-    $licm_repr_57 = $licm_lens_55.repr;
-    if 144 <= $licm_used_56 {
+    $licm_used_60 = local.tee $licm_lens_55(self.lens).used;
+    $licm_repr_61 = $licm_lens_55.repr;
+    if 144 <= $licm_used_60 {
         if sym < 144 {
-            builtin::array_fill<u16>($licm_repr_57, sym, 8, 144 - sym);
+            builtin::array_fill<u16>($licm_repr_61, sym, 8, 144 - sym);
             sym = 144;
         }
     } else {
         b1380: block {
             l1381: loop {
                 break_if b1380 sym >= 144;
-                if @unlikely(sym >= $licm_used_56) {
+                if @unlikely(sym >= $licm_used_60) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(sym, $licm_used_56);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(sym, $licm_used_60);
                     unreachable;
                 }
-                builtin::array_set<u16>($licm_repr_57, sym, 8);
+                builtin::array_set<u16>($licm_repr_61, sym, 8);
                 sym = sym + 1;
                 continue l1381;
             };
         };
     }
-    $licm_used_56 = local.tee $licm_lens_55(self.lens).used;
-    $licm_repr_57 = $licm_lens_55.repr;
-    if (256 <= $licm_used_56) & (sym >= 0) {
+    $licm_used_60 = local.tee $licm_lens_55(self.lens).used;
+    $licm_repr_61 = $licm_lens_55.repr;
+    if (256 <= $licm_used_60) & (sym >= 0) {
         if sym < 256 {
-            builtin::array_fill<u16>($licm_repr_57, sym, 9, 256 - sym);
+            builtin::array_fill<u16>($licm_repr_61, sym, 9, 256 - sym);
             sym = 256;
         }
     } else {
         b1385: block {
             l1386: loop {
                 break_if b1385 sym >= 256;
-                if @unlikely(sym >=u $licm_used_56) {
+                if @unlikely(sym >=u $licm_used_60) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(sym, $licm_used_56);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(sym, $licm_used_60);
                     unreachable;
                 }
-                builtin::array_set<u16>($licm_repr_57, sym, 9);
+                builtin::array_set<u16>($licm_repr_61, sym, 9);
                 sym = sym + 1;
                 continue l1386;
             };
         };
     }
-    $licm_used_56 = local.tee $licm_lens_55(self.lens).used;
-    $licm_repr_57 = $licm_lens_55.repr;
-    if (280 <= $licm_used_56) & (sym >= 0) {
+    $licm_used_60 = local.tee $licm_lens_55(self.lens).used;
+    $licm_repr_61 = $licm_lens_55.repr;
+    if (280 <= $licm_used_60) & (sym >= 0) {
         if sym < 280 {
-            builtin::array_fill<u16>($licm_repr_57, sym, 7, 280 - sym);
+            builtin::array_fill<u16>($licm_repr_61, sym, 7, 280 - sym);
             sym = 280;
         }
     } else {
         b1390: block {
             l1391: loop {
                 break_if b1390 sym >= 280;
-                if @unlikely(sym >=u $licm_used_56) {
+                if @unlikely(sym >=u $licm_used_60) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(sym, $licm_used_56);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(sym, $licm_used_60);
                     unreachable;
                 }
-                builtin::array_set<u16>($licm_repr_57, sym, 7);
+                builtin::array_set<u16>($licm_repr_61, sym, 7);
                 sym = sym + 1;
                 continue l1391;
             };
         };
     }
-    $licm_used_56 = local.tee $licm_lens_55(self.lens).used;
-    $licm_repr_57 = $licm_lens_55.repr;
-    if (288 <= $licm_used_56) & (sym >= 0) {
+    $licm_used_60 = local.tee $licm_lens_55(self.lens).used;
+    $licm_repr_61 = $licm_lens_55.repr;
+    if (288 <= $licm_used_60) & (sym >= 0) {
         if sym < 288 {
-            builtin::array_fill<u16>($licm_repr_57, sym, 8, 288 - sym);
+            builtin::array_fill<u16>($licm_repr_61, sym, 8, 288 - sym);
         }
     } else {
         b1395: block {
             l1396: loop {
                 break_if b1395 sym >= 288;
-                if @unlikely(sym >=u $licm_used_56) {
+                if @unlikely(sym >=u $licm_used_60) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(sym, $licm_used_56);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(sym, $licm_used_60);
                     unreachable;
                 }
-                builtin::array_set<u16>($licm_repr_57, sym, 8);
+                builtin::array_set<u16>($licm_repr_61, sym, 8);
                 sym = sym + 1;
                 continue l1396;
             };
         };
     }
     let $mv$result$2: i32;
-    multivalue_bind [sym, $licm_used_56, $mv$result$2] = ($licm_lens_55 = self.lens; "core:zlib/inflate_table"(1, $licm_lens_55.repr, $licm_lens_55.used, 0, 288, self.codes, 0, 9, self.work));
+    multivalue_bind [sym, $licm_used_60, $mv$result$2] = ($licm_lens_55 = self.lens; "core:zlib/inflate_table"(1, $licm_lens_55.repr, $licm_lens_55.used, 0, 288, self.codes, 0, 9, self.work));
     self.lencode_off = 0;
-    self.lenbits = $licm_used_56;
+    self.lenbits = $licm_used_60;
     sym = 0;
-    $licm_used_56 = local.tee $licm_lens_55(self.lens).used;
-    $licm_repr_57 = $licm_lens_55.repr;
-    if (32 <= $licm_used_56) & (sym >= 0) {
+    $licm_used_60 = local.tee $licm_lens_55(self.lens).used;
+    $licm_repr_61 = $licm_lens_55.repr;
+    if (32 <= $licm_used_60) & (sym >= 0) {
         if sym < 32 {
-            builtin::array_fill<u16>($licm_repr_57, sym, 5, 32 - sym);
+            builtin::array_fill<u16>($licm_repr_61, sym, 5, 32 - sym);
         }
     } else {
         b1400: block {
             l1401: loop {
                 break_if b1400 sym >= 32;
-                if @unlikely(sym >=u $licm_used_56) {
+                if @unlikely(sym >=u $licm_used_60) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(sym, $licm_used_56);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(sym, $licm_used_60);
                     unreachable;
                 }
-                builtin::array_set<u16>($licm_repr_57, sym, 5);
+                builtin::array_set<u16>($licm_repr_61, sym, 5);
                 sym = sym + 1;
                 continue l1401;
             };
         };
     }
     let $mv$result2$2: i32;
-    multivalue_bind [sym, $licm_used_56, $mv$result2$2] = ($licm_lens_55 = self.lens; "core:zlib/inflate_table"(2, $licm_lens_55.repr, $licm_lens_55.used, 0, 32, self.codes, $mv$result$2, 5, self.work));
+    multivalue_bind [sym, $licm_used_60, $mv$result2$2] = ($licm_lens_55 = self.lens; "core:zlib/inflate_table"(2, $licm_lens_55.repr, $licm_lens_55.used, 0, 32, self.codes, $mv$result$2, 5, self.work));
     self.distcode_off = $mv$result$2;
-    self.distbits = $licm_used_56;
+    self.distbits = $licm_used_60;
 }
 
 fn "core:zlib/core:zlib/InflateState::need_bits$unchecked$sroa[return]"(self, input, n) {
@@ -8970,10 +8971,11 @@ fn "core:zlib/core:zlib/BitWriter::flush"(self) {
     let used_3: i32;
     let $licm_output_15: ref "core:prelude/list.wado//List<u8>";
     let $licm_repr_16: ref Array<u8>;
+    let $av_17: i32;
     $licm_repr_16 = local.tee $licm_output_15(self.output).repr;
     b1423: block {
         l1424: loop {
-            break_if b1423 self.bits < 8;
+            break_if b1423 local.tee $av_17(self.bits) < 8;
             value_2 = builtin::i32_wrap_i64(self.buf & 255_i64);
             if @unlikely(local.tee used_3($licm_output_15.used) >= builtin::array_len($licm_repr_16)) {
                 cold_path;
@@ -8983,18 +8985,19 @@ fn "core:zlib/core:zlib/BitWriter::flush"(self) {
             builtin::array_set_u8($licm_repr_16, used_3, value_2);
             $licm_output_15.used = used_3 + 1;
             self.buf = self.buf >>u 8_i64;
-            self.bits = self.bits - 8;
+            self.bits = $av_17 - 8;
             continue l1424;
         };
     };
     if self.bits > 0 {
-        value_2 = builtin::i32_wrap_i64(self.buf & 255_i64);
-        if @unlikely(local.tee used_3(local.tee $licm_output_15(self.output).used) >= builtin::array_len($licm_output_15.repr)) {
+        $licm_output_15 = self.output;
+        $av_17 = builtin::i32_wrap_i64(self.buf & 255_i64);
+        if @unlikely(local.tee value_2($licm_output_15.used) >= builtin::array_len($licm_output_15.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"($licm_output_15);
         }
-        builtin::array_set_u8(local.tee $licm_output_15(self.output).repr, used_3, value_2);
-        $licm_output_15.used = used_3 + 1;
+        builtin::array_set_u8($licm_output_15.repr, value_2, $av_17);
+        $licm_output_15.used = value_2 + 1;
         self.buf = 0_i64;
         self.bits = 0;
     }
@@ -9857,13 +9860,12 @@ fn "core:linear/core:linear/LinearArray<i32>::at$unchecked$sroa[self.block]"($mv
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
-    let $load_1: ref Array<u8>;
     let is_negative: bool;
     let x: i64;
+    let arr: ref Array<u8>;
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let self_17: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     x = builtin::i64_extend_i32_s(self);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -9928,23 +9930,22 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
         break $inline_count_digits_u64_1: 20;
     };
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(f, is_negative, self);
-    self_17 = f.buf;
+    arr = f.buf.repr;
     self = is_negative + self;
-    $load_1 = self_17.repr;
     b1548: block {
         l1549: loop {
             break_if b1548 (self - is_negative) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_1, self - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($load_1, self - 2, 48 + tens);
+            builtin::array_set_u8(arr, self - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, self - 2, 48 + tens);
             self = self - 2;
             x = q;
             continue l1549;
         };
     };
     if self > is_negative {
-        builtin::array_set_u8($load_1, is_negative, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8(arr, is_negative, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
 }
 
@@ -10633,7 +10634,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<linear_memo
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let start_154: i32;
+    let start_153: i32;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
@@ -10706,22 +10707,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<linear_memo
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
         }
-        start_154 = out_3.used;
+        start_153 = out_3.used;
         out_3.used = is_negative_65;
-        builtin::array_set_u8(out_3.repr, start_154, 45);
+        builtin::array_set_u8(out_3.repr, start_153, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_65(out_3.used + t) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
     }
-    start_154 = out_3.used;
+    start_153 = out_3.used;
     out_3.used = is_negative_65;
-    t = start_154 + t;
     $load_8 = out_3.repr;
+    t = start_153 + t;
     b1670: block {
         l1671: loop {
-            break_if b1670 (t - start_154) < 2;
+            break_if b1670 (t - start_153) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8($load_8, t - 1, (48 + pair) - (tens * 10));
@@ -10731,8 +10732,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<linear_memo
             continue l1671;
         };
     };
-    if t > start_154 {
-        builtin::array_set_u8($load_8, start_154, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if t > start_153 {
+        builtin::array_set_u8($load_8, start_153, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     if @unlikely(local.tee t(is_negative_65 + 1) > builtin::array_len($load_8)) {
         cold_path;

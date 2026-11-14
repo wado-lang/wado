@@ -631,7 +631,7 @@ fn "http_uninit_string_conditional_trap.wado/$cm_task_entry__handle"(request) {
     let $sroa_$pattern_temp_0_1_272: i32;
     let $sroa_$pattern_temp_1_0_273: ref null "core:prelude//$Resource";
     let $licm_repr_283: ref Array<u8>;
-    let $licm_repr_290: ref Array<u8>;
+    let $sroa_$temp_inline_core_prelude_string_wado_StrUtf8ByteIter_core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_u8___26_0_repr_287: ref Array<u8>;
     if (ref.is_null("http_uninit_string_conditional_trap.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-path-with-query"(request)) == 0) == 0 {
         body_str = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fallback"), used: 8 };
     } else {
@@ -648,14 +648,14 @@ fn "http_uninit_string_conditional_trap.wado/$cm_task_entry__handle"(request) {
     $sroa_$pattern_temp_0_0_271 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"(struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $sroa_$pattern_temp_1_0_273 }).payload_0.value;
     "wasi/task-return:handle"(0, $sroa_$pattern_temp_0_0_271, 0, 0_i64, 0, 0, 0, 0);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        $sroa_$temp_inline_core_prelude_string_wado_StrUtf8ByteIter_core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_u8___26_0_repr_287 = body_str.repr;
         $sroa_$pattern_temp_0_0_271 = body_str.used;
         resp_headers = 0;
         $licm_repr_283 = local.tee result_253(struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }).repr;
-        $licm_repr_290 = body_str.repr;
         b5: block {
             l6: loop {
                 break_if b5 resp_headers >= $sroa_$pattern_temp_0_0_271;
-                byte_259 = builtin::array_get_value<u8>($licm_repr_290, resp_headers);
+                byte_259 = builtin::array_get_value<u8>($sroa_$temp_inline_core_prelude_string_wado_StrUtf8ByteIter_core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_u8___26_0_repr_287, resp_headers);
                 resp_headers = resp_headers + 1;
                 if @unlikely(local.tee used_264(result_253.used) >= builtin::array_len($licm_repr_283)) {
                     cold_path;
@@ -1868,7 +1868,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     block {
         l206: loop {
             $mv$data$used = pending.used;
-            ptr_18 = builtin::i32_wrap_i64(ptr_18 = "mem/realloc"(0, 0, 1, $mv$data$used); i = 0; $licm_arith_39 = $mv$data$used - 8; $mv$data$repr = pending.repr; b207: block {
+            ptr_18 = builtin::i32_wrap_i64(ptr_18 = "mem/realloc"(0, 0, 1, $mv$data$used); $mv$data$repr = pending.repr; i = 0; $licm_arith_39 = $mv$data$used - 8; b207: block {
                 l208: loop {
                     break_if b207 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_39);
                     w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 7)) << 56_i64);

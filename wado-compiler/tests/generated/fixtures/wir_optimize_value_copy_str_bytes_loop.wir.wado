@@ -70,30 +70,30 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
     let s: ref "core:prelude/string.wado//String";
     let byte_9: u8;
     let q: u64;
+    let $sroa_$iter_2_repr_149: ref Array<u8>;
     let $sroa_$iter_2_used_150: i32;
     let $sroa_$iter_2_index_151: i32;
-    let $licm_repr_183: ref Array<u8>;
     byte_sum = 0_i64;
     i_1 = 0;
     b0: block {
         l1: loop {
             break_if b0 i_1 >= 3;
-            $sroa_$iter_2_used_150 = local.tee s("core:prelude/string.wado/core:prelude/string.wado/String::format<wir_optimize_value_copy_str_bytes_loop.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(i_1)).used;
+            $sroa_$iter_2_repr_149 = local.tee s("core:prelude/string.wado/core:prelude/string.wado/String::format<wir_optimize_value_copy_str_bytes_loop.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(i_1)).repr;
+            $sroa_$iter_2_used_150 = s.used;
             $sroa_$iter_2_index_151 = 0;
-            $licm_repr_183 = s.repr;
             b2: block {
                 l3: loop {
                     break_if b2 (builtin::i64_extend_i32_s($sroa_$iter_2_index_151) + 3_i64) >= builtin::i64_extend_i32_s($sroa_$iter_2_used_150);
-                    byte_9 = builtin::array_get_value<u8>($licm_repr_183, $sroa_$iter_2_index_151);
+                    byte_9 = builtin::array_get_value<u8>($sroa_$iter_2_repr_149, $sroa_$iter_2_index_151);
                     $sroa_$iter_2_index_151 = $sroa_$iter_2_index_151 + 1;
                     byte_sum = byte_sum + builtin::i64_extend_i32_u(byte_9);
-                    byte_9 = builtin::array_get_value<u8>($licm_repr_183, $sroa_$iter_2_index_151);
+                    byte_9 = builtin::array_get_value<u8>($sroa_$iter_2_repr_149, $sroa_$iter_2_index_151);
                     $sroa_$iter_2_index_151 = $sroa_$iter_2_index_151 + 1;
                     byte_sum = byte_sum + builtin::i64_extend_i32_u(byte_9);
-                    byte_9 = builtin::array_get_value<u8>($licm_repr_183, $sroa_$iter_2_index_151);
+                    byte_9 = builtin::array_get_value<u8>($sroa_$iter_2_repr_149, $sroa_$iter_2_index_151);
                     $sroa_$iter_2_index_151 = $sroa_$iter_2_index_151 + 1;
                     byte_sum = byte_sum + builtin::i64_extend_i32_u(byte_9);
-                    byte_9 = builtin::array_get_value<u8>($licm_repr_183, $sroa_$iter_2_index_151);
+                    byte_9 = builtin::array_get_value<u8>($sroa_$iter_2_repr_149, $sroa_$iter_2_index_151);
                     $sroa_$iter_2_index_151 = $sroa_$iter_2_index_151 + 1;
                     byte_sum = byte_sum + builtin::i64_extend_i32_u(byte_9);
                     continue l3;
@@ -102,7 +102,7 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
             b4: block {
                 l5: loop {
                     break_if b4 $sroa_$iter_2_index_151 >= $sroa_$iter_2_used_150;
-                    byte_9 = builtin::array_get_value<u8>($licm_repr_183, $sroa_$iter_2_index_151);
+                    byte_9 = builtin::array_get_value<u8>($sroa_$iter_2_repr_149, $sroa_$iter_2_index_151);
                     $sroa_$iter_2_index_151 = $sroa_$iter_2_index_151 + 1;
                     byte_sum = byte_sum + builtin::i64_extend_i32_u(byte_9);
                     continue l5;
@@ -182,22 +182,22 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
     }
     $sroa_$iter_2_index_151 = s.used;
     s.used = $sroa_$iter_2_used_150;
+    $sroa_$iter_2_repr_149 = s.repr;
     i_1 = $sroa_$iter_2_index_151 + i_1;
-    $licm_repr_183 = s.repr;
     b26: block {
         l27: loop {
             break_if b26 (i_1 - $sroa_$iter_2_index_151) < 2;
             q = byte_sum /u 100_i64;
             byte_9 = local.tee $sroa_$iter_2_used_150(builtin::i32_wrap_i64(byte_sum - (q * 100_i64))) / 10;
-            builtin::array_set_u8($licm_repr_183, i_1 - 1, (48 + $sroa_$iter_2_used_150) - (byte_9 * 10));
-            builtin::array_set_u8($licm_repr_183, i_1 - 2, 48 + byte_9);
+            builtin::array_set_u8($sroa_$iter_2_repr_149, i_1 - 1, (48 + $sroa_$iter_2_used_150) - (byte_9 * 10));
+            builtin::array_set_u8($sroa_$iter_2_repr_149, i_1 - 2, 48 + byte_9);
             i_1 = i_1 - 2;
             byte_sum = q;
             continue l27;
         };
     };
     if i_1 > $sroa_$iter_2_index_151 {
-        builtin::array_set_u8($licm_repr_183, $sroa_$iter_2_index_151, 48 + builtin::i32_wrap_i64(byte_sum %u 10_i64));
+        builtin::array_set_u8($sroa_$iter_2_repr_149, $sroa_$iter_2_index_151, 48 + builtin::i32_wrap_i64(byte_sum %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_45: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_45;
@@ -205,11 +205,11 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
     i_1 = builtin::i32_wrap_i64(local.tee byte_sum("wasi/stream-new"()));
     $sroa_$iter_2_used_150 = builtin::i32_wrap_i64(byte_sum >> 32_i64);
     i_1 = "wir_optimize_value_copy_str_bytes_loop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_1);
-    builtin::array_copy<u8>(local.tee $licm_repr_183(builtin::array_new<u8>(local.tee $sroa_$iter_2_index_151(s.used) + 1)), 0, s.repr, 0, $sroa_$iter_2_index_151);
-    builtin::array_set_u8($licm_repr_183, $sroa_$iter_2_index_151, 10);
+    builtin::array_copy<u8>(local.tee $sroa_$iter_2_repr_149(builtin::array_new<u8>(local.tee $sroa_$iter_2_index_151(s.used) + 1)), 0, s.repr, 0, $sroa_$iter_2_index_151);
+    builtin::array_set_u8($sroa_$iter_2_repr_149, $sroa_$iter_2_index_151, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         $sroa_$iter_2_index_151 = $sroa_$iter_2_index_151 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$iter_2_used_150, $licm_repr_183, 0, $sroa_$iter_2_index_151);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$iter_2_used_150, $sroa_$iter_2_repr_149, 0, $sroa_$iter_2_index_151);
     });
     "wasi/stream-drop-writable"($sroa_$iter_2_used_150);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i_1);
@@ -424,8 +424,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<wir_optimiz
     }
     is_negative_65 = out_3.used;
     out_3.used = $load_0;
-    t = is_negative_65 + t;
     $load_1 = out_3.repr;
+    t = is_negative_65 + t;
     b69: block {
         l70: loop {
             break_if b69 (t - is_negative_65) < 2;

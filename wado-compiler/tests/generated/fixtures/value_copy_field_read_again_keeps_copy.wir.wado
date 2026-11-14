@@ -747,13 +747,13 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_3_the_next_iteration_reads
     let $sroa_p_y_49: ref "core:prelude/list.wado//List<i32>";
     let $sroa_$iter_0_start_52: i32;
     let $licm_repr_56: ref "Array<core:prelude/list.wado/List<i32>>";
-    let $licm_repr_57: ref Array<i32>;
-    let i_75: i32;
+    let i_74: i32;
+    let $licm_repr_77: ref Array<i32>;
     $sroa_p_y_49 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(2), used: 1 };
     taken = struct.new "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude/list.wado//List<i32>">(), used: 0 };
     $sroa_$iter_0_start_52 = 0;
     $licm_repr_56 = taken.repr;
-    $licm_repr_57 = $sroa_p_y_49.repr;
+    $licm_repr_77 = $sroa_p_y_49.repr;
     b49: block {
         l50: loop {
             break_if b49 $sroa_$iter_0_start_52 >= 3;
@@ -766,12 +766,12 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_3_the_next_iteration_reads
             }
             builtin::array_set<ref "core:prelude/list.wado//List<i32>">($licm_repr_56, $load_3, t);
             taken.used = $load_3 + 1;
-            if @unlikely(local.tee $load_3($sroa_p_y_49.used) >= builtin::array_len($licm_repr_57)) {
+            if @unlikely(local.tee $load_3($sroa_p_y_49.used) >= builtin::array_len($licm_repr_77)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_p_y_49);
-                $licm_repr_57 = $sroa_p_y_49.repr;
+                $licm_repr_77 = $sroa_p_y_49.repr;
             }
-            builtin::array_set<i32>($licm_repr_57, $load_3, current);
+            builtin::array_set<i32>($licm_repr_77, $load_3, current);
             $sroa_p_y_49.used = $load_3 + 1;
             continue l50;
         };
@@ -789,38 +789,38 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_3_the_next_iteration_reads
                     if local.tee $load_3($sroa_p_y_49.used) != t.used {
                         break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: 0;
                     }
-                    i_75 = 0;
-                    $licm_repr_57 = $sroa_p_y_49.repr;
+                    i_74 = 0;
+                    $licm_repr_77 = $sroa_p_y_49.repr;
                     $array_clone_src_1 = t.repr;
                     b59: block {
                         l60: loop {
-                            break_if b59 (builtin::i64_extend_i32_s(i_75) + 3_i64) >= builtin::i64_extend_i32_s($load_3);
-                            if builtin::array_get_value<i32>($licm_repr_57, i_75) != builtin::array_get_value<i32>($array_clone_src_1, i_75) {
+                            break_if b59 (builtin::i64_extend_i32_s(i_74) + 3_i64) >= builtin::i64_extend_i32_s($load_3);
+                            if builtin::array_get_value<i32>($licm_repr_77, i_74) != builtin::array_get_value<i32>($array_clone_src_1, i_74) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: 0;
                             }
-                            i_75 = i_75 + 1;
-                            if builtin::array_get_value<i32>($licm_repr_57, i_75) != builtin::array_get_value<i32>($array_clone_src_1, i_75) {
+                            i_74 = i_74 + 1;
+                            if builtin::array_get_value<i32>($licm_repr_77, i_74) != builtin::array_get_value<i32>($array_clone_src_1, i_74) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: 0;
                             }
-                            i_75 = i_75 + 1;
-                            if builtin::array_get_value<i32>($licm_repr_57, i_75) != builtin::array_get_value<i32>($array_clone_src_1, i_75) {
+                            i_74 = i_74 + 1;
+                            if builtin::array_get_value<i32>($licm_repr_77, i_74) != builtin::array_get_value<i32>($array_clone_src_1, i_74) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: 0;
                             }
-                            i_75 = i_75 + 1;
-                            if builtin::array_get_value<i32>($licm_repr_57, i_75) != builtin::array_get_value<i32>($array_clone_src_1, i_75) {
+                            i_74 = i_74 + 1;
+                            if builtin::array_get_value<i32>($licm_repr_77, i_74) != builtin::array_get_value<i32>($array_clone_src_1, i_74) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: 0;
                             }
-                            i_75 = i_75 + 1;
+                            i_74 = i_74 + 1;
                             continue l60;
                         };
                     };
                     b65: block {
                         l66: loop {
-                            break_if b65 i_75 >= $load_3;
-                            if builtin::array_get_value<i32>($licm_repr_57, i_75) != builtin::array_get_value<i32>($array_clone_src_1, i_75) {
+                            break_if b65 i_74 >= $load_3;
+                            if builtin::array_get_value<i32>($licm_repr_77, i_74) != builtin::array_get_value<i32>($array_clone_src_1, i_74) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: 0;
                             }
-                            i_75 = i_75 + 1;
+                            i_74 = i_74 + 1;
                             continue l66;
                         };
                     };

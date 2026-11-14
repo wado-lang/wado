@@ -217,11 +217,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_referenced_scrutinee_field.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(t) {
-    let $load_8: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_65: bool;
     let x: i64;
     let start_126: i32;
+    let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -307,22 +307,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_c
     }
     start_126 = out_3.used;
     out_3.used = is_negative_65;
+    arr = out_3.repr;
     t = start_126 + t;
-    $load_8 = out_3.repr;
     b41: block {
         l42: loop {
             break_if b41 (t - start_126) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_8, t - 1, (48 + is_negative_65) - (tens * 10));
-            builtin::array_set_u8($load_8, t - 2, 48 + tens);
+            builtin::array_set_u8(arr, t - 1, (48 + is_negative_65) - (tens * 10));
+            builtin::array_set_u8(arr, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l42;
         };
     };
     if t > start_126 {
-        builtin::array_set_u8($load_8, start_126, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8(arr, start_126, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;

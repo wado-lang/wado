@@ -619,20 +619,20 @@ fn "treeset_mut_ref_deep.wado/collect_lits$sroa[elem.value,&mut(seen.inner)]"(el
     let ref_val_50: ref "core:prelude/list.wado//List<treeset_mut_ref_deep.wado/Elem>";
     let end_61: i32;
     let ref_val_63: ref "treeset_mut_ref_deep.wado//Elem";
+    let $sroa_$iter_1_repr_68: ref "Array<core:prelude/list.wado/List<treeset_mut_ref_deep.wado/Elem>>";
+    let $sroa_$iter_0_repr_71: ref "Array<treeset_mut_ref_deep.wado/Elem>";
     let $sroa_$iter_0_index_72: i32;
-    let $licm_repr_74: ref "Array<core:prelude/list.wado/List<treeset_mut_ref_deep.wado/Elem>>";
-    let $licm_repr_75: ref "Array<treeset_mut_ref_deep.wado/Elem>";
     if ref.test "treeset_mut_ref_deep.wado//Elem::Lit"(elem) {
         text = ref.cast "treeset_mut_ref_deep.wado//Elem::Lit"(elem).payload_0;
         if "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::find_index"(local.tee $load_0(seen.log), seen.slots, seen.nkeys, seen.kids, seen.lens, seen.root, seen.height, local.tee $load_7(text.repr), local.tee $load_8(text.used)) >= 0 == 0 {
             value_15 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_8)), 0, $load_7, 0, $load_8); $array_clone_dst_2, used: $load_8 };
             $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String______try_insert_4: block {
-                break_if $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String______try_insert_4 "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::place"(seen, value_15, local.tee $load_8($load_0.count)) >= 0;
-                if @unlikely($load_8 == builtin::array_len($load_0.keys)) {
+                break_if $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String______try_insert_4 "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::place"(seen, value_15, $load_0.count) >= 0;
+                if @unlikely(local.tee $load_8($load_0.count) == builtin::array_len($load_0.keys)) {
                     cold_path;
                     "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,()>::grow"($load_0, b = $load_8 * 2; select i32(4 > b, 4, b));
                 }
-                builtin::array_set<ref "core:prelude/string.wado//String">(local.tee $load_0(seen.log).keys, $load_8, value_15);
+                builtin::array_set<ref "core:prelude/string.wado//String">($load_0.keys, $load_8, value_15);
                 builtin::array_set<()>($load_0.values, $load_8, nop);
                 builtin::array_set<bool>($load_0.alive, $load_8, 1);
                 $load_0.count = $load_8 + 1;
@@ -653,20 +653,20 @@ fn "treeset_mut_ref_deep.wado/collect_lits$sroa[elem.value,&mut(seen.inner)]"(el
     }
     if ref.test "treeset_mut_ref_deep.wado//Elem::Group"(elem) {
         $load_8 = local.tee alts(ref.cast "treeset_mut_ref_deep.wado//Elem::Group"(elem).payload_0).used;
+        $sroa_$iter_1_repr_68 = alts.repr;
         b = 0;
-        $licm_repr_74 = alts.repr;
         b48: block {
             l49: loop {
                 break_if b48 b >= $load_8;
-                ref_val_50 = builtin::array_get_value<ref "core:prelude/list.wado//List<treeset_mut_ref_deep.wado/Elem>">($licm_repr_74, b);
+                ref_val_50 = builtin::array_get_value<ref "core:prelude/list.wado//List<treeset_mut_ref_deep.wado/Elem>">($sroa_$iter_1_repr_68, b);
                 b = b + 1;
                 end_61 = ref_val_50.used;
+                $sroa_$iter_0_repr_71 = ref_val_50.repr;
                 $sroa_$iter_0_index_72 = 0;
-                $licm_repr_75 = ref_val_50.repr;
                 b50: block {
                     l51: loop {
                         break_if b50 $sroa_$iter_0_index_72 >= end_61;
-                        ref_val_63 = builtin::array_get_value<ref "treeset_mut_ref_deep.wado//Elem">($licm_repr_75, $sroa_$iter_0_index_72);
+                        ref_val_63 = builtin::array_get_value<ref "treeset_mut_ref_deep.wado//Elem">($sroa_$iter_0_repr_71, $sroa_$iter_0_index_72);
                         $sroa_$iter_0_index_72 = $sroa_$iter_0_index_72 + 1;
                         "treeset_mut_ref_deep.wado/collect_lits$sroa[elem.value,&mut(seen.inner)]"(ref_val_63, seen, result);
                         continue l51;
@@ -1268,9 +1268,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_u
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
-    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
+    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -1287,25 +1287,26 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_7: block -> i32 {
+        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(self.repr, new_used, c);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_7: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_7: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_7: 3;
         }
-        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
-        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_7: 4;
     };
 }

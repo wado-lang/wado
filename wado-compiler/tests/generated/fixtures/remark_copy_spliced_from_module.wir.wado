@@ -99,7 +99,6 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 fn "remark_copy_spliced_from_module.wado/run"() with Stdout, Environment {
-    let $load_17: ref Array<u8>;
     let b: ref "core:prelude/list.wado//List<i32>";
     let $temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___6_0: ref "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>";
     let self_26: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
@@ -110,9 +109,10 @@ fn "remark_copy_spliced_from_module.wado/run"() with Stdout, Environment {
     let used_44: i32;
     let x: i64;
     let $licm_repr_150: ref "Array<core:prelude/string.wado/String>";
+    let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_216: i32;
+    let start_215: i32;
     used_44 = builtin::array_len(local.tee elements_43(array.new_fixed<i32>(local.tee used_38($temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___6_0 = struct.new "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: local.tee self_26("remark_copy_spliced_from_module.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"()).repr, index: 0, end: self_26.used }, remaining: 1 }; $licm_repr_150 = local.tee self_26(struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }).repr; b0: block {
         l1: loop {
             if ref.is_null(local.tee $local_3("core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::next"($temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___6_0))) == 0 {
@@ -211,33 +211,33 @@ fn "remark_copy_spliced_from_module.wado/run"() with Stdout, Environment {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(item, used_44);
         }
-        start_216 = item.used;
+        start_215 = item.used;
         item.used = used_44;
-        builtin::array_set_u8(item.repr, start_216, 45);
+        builtin::array_set_u8(item.repr, start_215, 45);
     } else {
     }
     if @unlikely(local.tee used_44(item.used + used_38) > builtin::array_len(item.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(item, used_44);
     }
-    start_216 = item.used;
+    start_215 = item.used;
     item.used = used_44;
-    used_38 = start_216 + used_38;
-    $load_17 = item.repr;
+    arr = item.repr;
+    used_38 = start_215 + used_38;
     b27: block {
         l28: loop {
-            break_if b27 (used_38 - start_216) < 2;
+            break_if b27 (used_38 - start_215) < 2;
             q = x /u 100_i64;
             tens = local.tee used_44(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_17, used_38 - 1, (48 + used_44) - (tens * 10));
-            builtin::array_set_u8($load_17, used_38 - 2, 48 + tens);
+            builtin::array_set_u8(arr, used_38 - 1, (48 + used_44) - (tens * 10));
+            builtin::array_set_u8(arr, used_38 - 2, 48 + tens);
             used_38 = used_38 - 2;
             x = q;
             continue l28;
         };
     };
-    if used_38 > start_216 {
-        builtin::array_set_u8($load_17, start_216, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if used_38 > start_215 {
+        builtin::array_set_u8(arr, start_215, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_61: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_61;
@@ -245,11 +245,11 @@ fn "remark_copy_spliced_from_module.wado/run"() with Stdout, Environment {
     used_38 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     used_44 = builtin::i32_wrap_i64(x >> 32_i64);
     used_38 = "remark_copy_spliced_from_module.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_38);
-    builtin::array_copy<u8>(local.tee $load_17(builtin::array_new<u8>(local.tee start_216(item.used) + 1)), 0, item.repr, 0, start_216);
-    builtin::array_set_u8($load_17, start_216, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_215(item.used) + 1)), 0, item.repr, 0, start_215);
+    builtin::array_set_u8(arr, start_215, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_216 = start_216 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(used_44, $load_17, 0, start_216);
+        start_215 = start_215 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(used_44, arr, 0, start_215);
     });
     "wasi/stream-drop-writable"(used_44);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_38);

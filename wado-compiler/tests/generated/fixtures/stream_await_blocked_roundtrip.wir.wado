@@ -648,7 +648,6 @@ fn "stream_await_blocked_roundtrip.wado/$cm_export__handle"($p0) {
 
 fn "stream_await_blocked_roundtrip.wado/$cm_task_entry__handle"(request) {
     let $load_9: ref "core:prelude/list.wado//List<u8>";
-    let $load_11: ref Array<u8>;
     let body_stream_3: ref null "core:prelude//$Resource";
     let _trailers: ref null "core:prelude//$Resource";
     let body: ref "core:prelude/list.wado//List<u8>";
@@ -667,7 +666,7 @@ fn "stream_await_blocked_roundtrip.wado/$cm_task_entry__handle"(request) {
     let $replaced_3: ref null "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>";
     let started_275: ref null "core:prelude/types.wado//StartedRead<u8>";
     let packed: i32;
-    let $licm_repr_323: ref Array<u8>;
+    let $sroa_$iter_0_repr_316: ref Array<u8>;
     $sroa_$pattern_temp_0_0_242 = builtin::i32_wrap_i64(local.tee $cm_pair_206("wasi/future-new:transmission-wasi:http/types.wado#ErrorCode"()));
     $sroa_$pattern_temp_0_1_243 = builtin::i32_wrap_i64($cm_pair_206 >> 32_i64);
     body_stream_3 = local.tee $local_210("stream_await_blocked_roundtrip.wado/$cm_binding__wasi:http/types@0.3.0#[static]request.consume-body"(request, $sroa_$pattern_temp_0_0_242)).0;
@@ -696,17 +695,16 @@ fn "stream_await_blocked_roundtrip.wado/$cm_task_entry__handle"(request) {
                 "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/traits.wado/Drop::drop"(copy);
             }
             request = local.tee $load_9(chunk_260.items).used;
+            $sroa_$iter_0_repr_316 = $load_9.repr;
             $sroa_$pattern_temp_0_0_242 = 0;
-            $licm_repr_323 = local.tee $load_11($load_9.repr);
             b5: block {
                 l6: loop {
                     break_if b5 $sroa_$pattern_temp_0_0_242 >= request;
-                    packed = builtin::array_get_value<u8>($licm_repr_323, $sroa_$pattern_temp_0_0_242);
+                    packed = builtin::array_get_value<u8>($sroa_$iter_0_repr_316, $sroa_$pattern_temp_0_0_242);
                     $sroa_$pattern_temp_0_0_242 = $sroa_$pattern_temp_0_0_242 + 1;
                     if @unlikely(local.tee used_227(body.used) >= builtin::array_len($licm_repr_251)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(body);
-                        $licm_repr_323 = $load_11;
                         $licm_repr_251 = body.repr;
                     }
                     builtin::array_set_u8($licm_repr_251, used_227, packed);
@@ -736,8 +734,8 @@ fn "stream_await_blocked_roundtrip.wado/$cm_task_entry__handle"(request) {
             break_if b8 packed >= request;
             used_227 = builtin::array_get_value<u8>($licm_repr_251, packed);
             packed = packed + 1;
-            used_227 = builtin::array_len(local.tee $load_11(array.new_fixed<u8>(used_227)));
-            body = struct.new "core:prelude/list.wado//List<u8>" { repr: $load_11, used: used_227 };
+            used_227 = builtin::array_len(local.tee $sroa_$iter_0_repr_316(array.new_fixed<u8>(used_227)));
+            body = struct.new "core:prelude/list.wado//List<u8>" { repr: $sroa_$iter_0_repr_316, used: used_227 };
             drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"($sroa_$pattern_temp_0_1_243, body.repr, used_227));
             continue l9;
         };
@@ -2058,7 +2056,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     block {
         l249: loop {
             $mv$data$used = pending.used;
-            ptr_18 = builtin::i32_wrap_i64(ptr_18 = "mem/realloc"(0, 0, 1, $mv$data$used); i = 0; $licm_arith_39 = $mv$data$used - 8; $mv$data$repr = pending.repr; b250: block {
+            ptr_18 = builtin::i32_wrap_i64(ptr_18 = "mem/realloc"(0, 0, 1, $mv$data$used); $mv$data$repr = pending.repr; i = 0; $licm_arith_39 = $mv$data$used - 8; b250: block {
                 l251: loop {
                     break_if b250 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_39);
                     w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 7)) << 56_i64);
@@ -2466,13 +2464,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/tr
     })).0;
     $twin_2 = $variant_payload_7.1;
     if $inline_core_prelude_types_wado_CopyBuffer__ready_cancel_2: block -> bool {
+        $load_13 = $twin_2.buffer;
         let $mv$$vr_1$1: ref null "core:prelude/types.wado//ResourceId";
         let $mv$$vr_1$2: ref null "core:prelude/types.wado//ReadyEvent";
-        multivalue_bind [$load_16, $mv$$vr_1$1, $mv$$vr_1$2] = "core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$sroa[return]"(local.tee $load_13($twin_2.buffer).handle, $load_13.packed);
+        multivalue_bind [$load_16, $mv$$vr_1$1, $mv$$vr_1$2] = "core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$sroa[return]"($load_13.handle, $load_13.packed);
         if $load_16 == 1 {
             break $inline_core_prelude_types_wado_CopyBuffer__ready_cancel_2: 0;
         }
-        "wasi/waitable-join"($twin_2.buffer.handle, 0);
+        "wasi/waitable-join"($load_13.handle, 0);
         break $inline_core_prelude_types_wado_CopyBuffer__ready_cancel_2: 1;
     } {
         $twin_2.buffer.packed = "wasi/stream-cancel-read"($twin_1.value);

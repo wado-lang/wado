@@ -237,10 +237,10 @@ fn "pgo_hot_try_call.wado/plain$sroa[return]"(x) {
 }
 
 fn "pgo_hot_try_call.wado/run"() with Stdout {
-    let $load_8: ref Array<u8>;
     let x_0: i32;
     let e_21: ref "core:prelude/string.wado//String";
     let x_85: i64;
+    let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     x_0 = black_box(3);
@@ -344,22 +344,22 @@ fn "pgo_hot_try_call.wado/run"() with Stdout {
     }
     $mv$self_19$1 = e_21.used;
     e_21.used = $mv$self_19$0;
+    arr = e_21.repr;
     x_0 = $mv$self_19$1 + x_0;
-    $load_8 = e_21.repr;
     b30: block {
         l31: loop {
             break_if b30 (x_0 - $mv$self_19$1) < 2;
             q = x_85 /u 100_i64;
             tens = local.tee $mv$self_19$0(builtin::i32_wrap_i64(x_85 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_8, x_0 - 1, (48 + $mv$self_19$0) - (tens * 10));
-            builtin::array_set_u8($load_8, x_0 - 2, 48 + tens);
+            builtin::array_set_u8(arr, x_0 - 1, (48 + $mv$self_19$0) - (tens * 10));
+            builtin::array_set_u8(arr, x_0 - 2, 48 + tens);
             x_0 = x_0 - 2;
             x_85 = q;
             continue l31;
         };
     };
     if x_0 > $mv$self_19$1 {
-        builtin::array_set_u8($load_8, $mv$self_19$1, 48 + builtin::i32_wrap_i64(x_85 %u 10_i64));
+        builtin::array_set_u8(arr, $mv$self_19$1, 48 + builtin::i32_wrap_i64(x_85 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_44: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_44;
@@ -796,9 +796,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
-    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
+    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -815,25 +815,26 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_7: block -> i32 {
+        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(self.repr, new_used, c);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_7: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_7: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_7: 3;
         }
-        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
-        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_7: 4;
     };
 }

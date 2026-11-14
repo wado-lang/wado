@@ -74,13 +74,13 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "array_bounds_elim_conditional_entry_oob.wado/run"() with Stdout {
-    let $load_8: ref Array<u8>;
     let n_1: i32;
     let repr_3: ref Array<i32>;
     let out_16: ref "core:prelude/string.wado//String";
     let x: i64;
     let flag: bool;
     let i_117: i32;
+    let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     builtin::array_fill<i32>(local.tee repr_3(builtin::array_new<i32>(local.tee n_1(black_box(5)))), 0, 3, n_1);
@@ -186,22 +186,22 @@ fn "array_bounds_elim_conditional_entry_oob.wado/run"() with Stdout {
     }
     i_117 = out_16.used;
     out_16.used = n_1;
+    arr = out_16.repr;
     n_1 = i_117 + flag;
-    $load_8 = out_16.repr;
     b26: block {
         l27: loop {
             break_if b26 (n_1 - i_117) < 2;
             q = x /u 100_i64;
             tens = local.tee flag(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_8, n_1 - 1, (48 + flag) - (tens * 10));
-            builtin::array_set_u8($load_8, n_1 - 2, 48 + tens);
+            builtin::array_set_u8(arr, n_1 - 1, (48 + flag) - (tens * 10));
+            builtin::array_set_u8(arr, n_1 - 2, 48 + tens);
             n_1 = n_1 - 2;
             x = q;
             continue l27;
         };
     };
     if n_1 > i_117 {
-        builtin::array_set_u8($load_8, i_117, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8(arr, i_117, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;

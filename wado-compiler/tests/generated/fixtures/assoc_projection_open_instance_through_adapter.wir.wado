@@ -1881,9 +1881,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
-    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
+    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -1905,25 +1905,26 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_8: block -> i32 {
+        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(self.repr, new_used, c);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_8: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_8: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_8: 3;
         }
-        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
-        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_8: 4;
     };
 }
@@ -2421,12 +2422,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 }
 
 fn "assoc_projection_open_instance_through_adapter.wado/assoc_projection_open_instance_through_adapter.wado/$Closure_0::$call$dae[self]"(x) {
-    let $load_9: ref Array<u8>;
     let out_4: ref "core:prelude/string.wado//String";
     let self_60: i32;
     let is_negative_66: bool;
     let x_70: i64;
     let start_137: i32;
+    let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     out_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -2517,22 +2518,22 @@ fn "assoc_projection_open_instance_through_adapter.wado/assoc_projection_open_in
     }
     start_137 = out_4.used;
     out_4.used = is_negative_66;
+    arr = out_4.repr;
     self_60 = start_137 + self_60;
-    $load_9 = out_4.repr;
     b333: block {
         l334: loop {
             break_if b333 (self_60 - start_137) < 2;
             q = x_70 /u 100_i64;
             tens = local.tee is_negative_66(builtin::i32_wrap_i64(x_70 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_9, self_60 - 1, (48 + is_negative_66) - (tens * 10));
-            builtin::array_set_u8($load_9, self_60 - 2, 48 + tens);
+            builtin::array_set_u8(arr, self_60 - 1, (48 + is_negative_66) - (tens * 10));
+            builtin::array_set_u8(arr, self_60 - 2, 48 + tens);
             self_60 = self_60 - 2;
             x_70 = q;
             continue l334;
         };
     };
     if self_60 > start_137 {
-        builtin::array_set_u8($load_9, start_137, 48 + builtin::i32_wrap_i64(x_70 %u 10_i64));
+        builtin::array_set_u8(arr, start_137, 48 + builtin::i32_wrap_i64(x_70 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_40: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_40;

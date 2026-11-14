@@ -4502,12 +4502,12 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     let v_4: ref "core:prelude//$Cell<i32>";
     let $match_5: ref null "tuple//[&core:prelude/string.wado/String, &i32]";
     let existing: i32;
-    let $licm_values_34: ref Array<i32>;
-    let $licm_keys_35: ref "Array<core:prelude/string.wado/String>";
+    let $licm_values_35: ref Array<i32>;
+    let $licm_keys_36: ref "Array<core:prelude/string.wado/String>";
     let $av_37: i32;
     $iter_0 = struct.new "core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado/String,i32>" { log: $mv$base$log, index: 0 };
-    $licm_values_34 = local.tee $mv$base$log(self.log).values;
-    $licm_keys_35 = $mv$base$log.keys;
+    $licm_values_35 = local.tee $mv$base$log(self.log).values;
+    $licm_keys_36 = $mv$base$log.keys;
     b716: block {
         l717: loop {
             if ref.is_null(local.tee $match_5("core:collections/entries.wado/core:collections/entries.wado/MapEntriesRefIter<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/Iterator::next"($iter_0))) == 0 {
@@ -4519,17 +4519,17 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                     k = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = k.repr; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_37)), 0, $array_clone_src_2, 0, $av_37); $array_clone_dst_3, used: $av_37 };
                     $av_37 = v_4.value;
                     if local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(self, k, local.tee $load_8($mv$base$log.count))) >= 0 {
-                        builtin::array_set<i32>($licm_values_34, existing, $av_37);
+                        builtin::array_set<i32>($licm_values_35, existing, $av_37);
                         break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_3;
                     }
-                    if @unlikely($load_8 == builtin::array_len($licm_keys_35)) {
+                    if @unlikely($load_8 == builtin::array_len($licm_keys_36)) {
                         cold_path;
                         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($mv$base$log, existing = $load_8 * 2; select i32(4 > existing, 4, existing));
-                        $licm_values_34 = $mv$base$log.values;
-                        $licm_keys_35 = $mv$base$log.keys;
+                        $licm_values_35 = $mv$base$log.values;
+                        $licm_keys_36 = $mv$base$log.keys;
                     }
-                    builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_35, $load_8, k);
-                    builtin::array_set<i32>($licm_values_34, $load_8, $av_37);
+                    builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_36, $load_8, k);
+                    builtin::array_set<i32>($licm_values_35, $load_8, $av_37);
                     builtin::array_set<bool>($mv$base$log.alive, $load_8, 1);
                     $mv$base$log.count = $load_8 + 1;
                 };

@@ -398,9 +398,9 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
     let $cm_pair_7_78: i64;
     let $sroa_$pattern_temp_0_1_14_85: i32;
     let started_88: ref null "core:prelude/types.wado//StartedRead<wasi:filesystem/types.wado/DirectoryEntry>";
+    let $sroa_$iter_0_repr_130: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
     let $sroa_$iter_0_index_131: i32;
     let new_repr_140: ref Array<u8>;
-    let $licm_repr_169: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:cm_stream_read_record_in_branch.wado::$modules_initialized);
         cold_path;
@@ -445,12 +445,12 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
     entries = $pattern_temp_1.1.items;
     $load_0 = 0;
     $sroa_$pattern_temp_0_1_14_85 = entries.used;
+    $sroa_$iter_0_repr_130 = entries.repr;
     $sroa_$iter_0_index_131 = 0;
-    $licm_repr_169 = entries.repr;
     b5: block {
         l6: loop {
             break_if b5 $sroa_$iter_0_index_131 >= $sroa_$pattern_temp_0_1_14_85;
-            drop((if local.tee $load_18(local.tee v_35(local.tee v_34(builtin::array_get_value<ref "wasi:filesystem/types.wado//DirectoryEntry">($licm_repr_169, $sroa_$iter_0_index_131)).type).discriminant) == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+            drop((if local.tee $load_18(local.tee v_35(local.tee v_34(builtin::array_get_value<ref "wasi:filesystem/types.wado//DirectoryEntry">($sroa_$iter_0_repr_130, $sroa_$iter_0_index_131)).type).discriminant) == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
                 v_35;
             } else if $load_18 == 1 -> ref "wasi:filesystem/types.wado//DescriptorType" {
                 v_35;
@@ -1700,11 +1700,11 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
     let $arg_13: i32;
     let $arg_14: i32;
     let $slot_20: ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]";
-    let $av_24: i32;
+    let $av_23: i32;
     $taken_9 = builtin::array_get_value<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee $load_0(self.repr), index);
     builtin::array_set<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($load_0, index, ref.null none);
     $arg_13 = index + 1;
-    $arg_14 = (local.tee $av_24(self.used) - 1) - index;
+    $arg_14 = (local.tee $av_23(self.used) - 1) - index;
     builtin::array_copy<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($load_0, index, $load_0, $arg_13, $arg_14);
     if ref.eq($load_0, $load_0) {
         if index > $arg_13 {
@@ -1715,13 +1715,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
     } else {
         builtin::array_fill<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($load_0, $arg_13, ref.null none, $arg_14);
     }
-    self.used = local.tee index($av_24 - 1);
+    self.used = local.tee index($av_23 - 1);
     $arg_13 = index + 1;
-    $av_24 = index;
+    $av_23 = index;
     b199: block {
         l200: loop {
-            break_if b199 $av_24 >= $arg_13;
-            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($load_0, $av_24))) == 0 {
+            break_if b199 $av_23 >= $arg_13;
+            if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($load_0, $av_23))) == 0 {
                 if ref.is_null(local.tee $load_3($slot_20.0)) == 0 {
                     $arg_14 = $load_3.value;
                     $load_3.value = 0;
@@ -1729,11 +1729,11 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
                 }
                 $slot_20.0 = ref.null none;
             }
-            $av_24 = $av_24 + 1;
+            $av_23 = $av_23 + 1;
             continue l200;
         };
     };
-    builtin::array_set<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(self.repr, index, ref.null none);
+    builtin::array_set<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($load_0, index, ref.null none);
     return $taken_9;
 }
 

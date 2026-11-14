@@ -84,24 +84,24 @@ fn "opt_dropped_value_if_expr_condition.wado/go"(ctx, k, n, token) {
     let out_10: ref "core:prelude/list.wado//List<i32>";
     let used_16: i32;
     let $licm_repr_51: ref Array<i32>;
-    let $av_65: i32;
+    let $av_63: i32;
     hits = 0;
-    $av_65 = ctx.calls;
+    $av_63 = ctx.calls;
     if k == 1 {
-        ctx.calls = $av_65 + 1;
+        ctx.calls = $av_63 + 1;
         out_10 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
         k = 0;
         $licm_repr_51 = out_10.repr;
         b1: block {
             l2: loop {
                 break_if b1 k >= n;
-                $av_65 = k * 2;
+                $av_63 = k * 2;
                 if @unlikely(local.tee used_16(out_10.used) >= builtin::array_len($licm_repr_51)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out_10);
                     $licm_repr_51 = out_10.repr;
                 }
-                builtin::array_set<i32>($licm_repr_51, used_16, $av_65);
+                builtin::array_set<i32>($licm_repr_51, used_16, $av_63);
                 out_10.used = used_16 + 1;
                 k = k + 1;
                 continue l2;
@@ -109,8 +109,8 @@ fn "opt_dropped_value_if_expr_condition.wado/go"(ctx, k, n, token) {
         };
         if $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__6: block -> bool {
             k = out_10.used;
-            n = 0;
             $licm_repr_51 = out_10.repr;
+            n = 0;
             b5: block {
                 l6: loop {
                     break_if b5 (builtin::i64_extend_i32_s(n) + 3_i64) >= builtin::i64_extend_i32_s(k);
@@ -148,24 +148,24 @@ fn "opt_dropped_value_if_expr_condition.wado/go"(ctx, k, n, token) {
             hits = 1;
         }
     } else if k == 2 {
-        if ctx.calls = $av_65 + 1; out_10 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }; k = 0; $licm_repr_51 = out_10.repr; b16: block {
+        if ctx.calls = $av_63 + 1; out_10 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }; k = 0; $licm_repr_51 = out_10.repr; b16: block {
             l17: loop {
                 break_if b16 k >= n;
-                $av_65 = k * 2;
+                $av_63 = k * 2;
                 if @unlikely(local.tee used_16(out_10.used) >= builtin::array_len($licm_repr_51)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out_10);
                     $licm_repr_51 = out_10.repr;
                 }
-                builtin::array_set<i32>($licm_repr_51, used_16, $av_65);
+                builtin::array_set<i32>($licm_repr_51, used_16, $av_63);
                 out_10.used = used_16 + 1;
                 k = k + 1;
                 continue l17;
             };
         }; $inline_core_prelude_slice_wado_Slice_i32___contains_sroa_value_value__15: block -> bool {
             k = out_10.used;
-            n = 0;
             $licm_repr_51 = out_10.repr;
+            n = 0;
             b19: block {
                 l20: loop {
                     break_if b19 (builtin::i64_extend_i32_s(n) + 3_i64) >= builtin::i64_extend_i32_s(k);
@@ -392,11 +392,11 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_dropped_value_if_expr_condition.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(t) {
-    let $load_8: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_65: bool;
     let x: i64;
     let start_126: i32;
+    let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -482,22 +482,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_dropped
     }
     start_126 = out_3.used;
     out_3.used = is_negative_65;
+    arr = out_3.repr;
     t = start_126 + t;
-    $load_8 = out_3.repr;
     b68: block {
         l69: loop {
             break_if b68 (t - start_126) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_8, t - 1, (48 + is_negative_65) - (tens * 10));
-            builtin::array_set_u8($load_8, t - 2, 48 + tens);
+            builtin::array_set_u8(arr, t - 1, (48 + is_negative_65) - (tens * 10));
+            builtin::array_set_u8(arr, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l69;
         };
     };
     if t > start_126 {
-        builtin::array_set_u8($load_8, start_126, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8(arr, start_126, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;

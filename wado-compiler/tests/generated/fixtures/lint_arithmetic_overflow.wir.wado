@@ -1549,7 +1549,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitud
     let top_digits: i32;
     let digit_count: i32;
     let offset: i32;
-    let self_19: ref "core:prelude/string.wado//String";
+    let arr: ref Array<u8>;
     chunk = struct.new "core:prelude/int128.wado//u128" { low: -8446744073709551616_i64, high: 0_i64 };
     top = self.low;
     mid = 0_i64;
@@ -1570,15 +1570,15 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitud
     }
     digit_count = local.tee top_digits("core:prelude/primitive.wado/count_digits_u64"(top)) + ((chunks - 1) * 19);
     offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, global:core:prelude/int128.wado::$const_obj_0, digit_count);
-    self_19 = f.buf;
+    arr = f.buf.repr;
     digit_count = offset + digit_count;
     if chunks == 3 {
-        "core:prelude/primitive.wado/write_decimal_digits"(self_19.repr, digit_count - 38, mid, 19);
+        "core:prelude/primitive.wado/write_decimal_digits"(arr, digit_count - 38, mid, 19);
     }
     if chunks > 1 {
-        "core:prelude/primitive.wado/write_decimal_digits"(self_19.repr, digit_count - 19, bottom, 19);
+        "core:prelude/primitive.wado/write_decimal_digits"(arr, digit_count - 19, bottom, 19);
     }
-    "core:prelude/primitive.wado/write_decimal_digits"(self_19.repr, offset, top, top_digits);
+    "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, top, top_digits);
 }
 
 fn "core:prelude/int128.wado/core:prelude/int128.wado/u128^core:prelude/traits.wado/Ord::cmp"($mv$self$low, $mv$self$high, $mv$other$low, $mv$other$high) {

@@ -865,7 +865,7 @@ fn "value_copy_share_reference_field.wado/$test_4_a_read_off_a_reference_bound_o
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_0);
     }
-    builtin::array_set<i32>(local.tee $load_0(inner.f).repr, $load_2, 999);
+    builtin::array_set<i32>($load_0.repr, $load_2, 999);
     $load_0.used = $load_2 + 1;
     if @unlikely($inline_core_prelude_array_wado_seq_eq_i32__7: block -> bool {
         if local.tee $load_2(v_3.used) != 2 {
@@ -916,7 +916,7 @@ condition: v == [1, 2]
 v: "), used: 167 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_4.used);
         unreachable;
     }
-    $load_0 = struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_1 = $load_0.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(local.tee $load_2($load_0.used))), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
+    $load_0 = struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_1 = local.tee $load_0(inner.f).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(local.tee $load_2($load_0.used))), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_i32__11: block -> bool {
         if local.tee $load_2($load_0.used) != 3 {
             break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;

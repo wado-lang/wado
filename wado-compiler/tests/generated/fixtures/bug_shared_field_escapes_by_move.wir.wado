@@ -575,14 +575,14 @@ fn "bug_shared_field_escapes_by_move.wado/moved_by_value$sroa[s.buf]"($mv$s$repr
 }
 
 fn "bug_shared_field_escapes_by_move.wado/moved_into_a_literal$sroa[s.buf]"($mv$s$repr, $mv$s$used) {
-    let $sroa_t_held_12: ref "core:prelude/list.wado//List<i32>";
-    $sroa_t_held_12 = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($mv$s$used)), 0, $mv$s$repr, 0, $mv$s$used); $array_clone_dst_2, used: $mv$s$used };
-    if @unlikely($mv$s$used >= builtin::array_len($sroa_t_held_12.repr)) {
+    let a: ref "core:prelude/list.wado//List<i32>";
+    a = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($mv$s$used)), 0, $mv$s$repr, 0, $mv$s$used); $array_clone_dst_2, used: $mv$s$used };
+    if @unlikely($mv$s$used >= builtin::array_len(a.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_t_held_12);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(a);
     }
-    builtin::array_set<i32>($sroa_t_held_12.repr, $mv$s$used, 4);
-    $sroa_t_held_12.used = $mv$s$used + 1;
+    builtin::array_set<i32>(a.repr, $mv$s$used, 4);
+    a.used = $mv$s$used + 1;
     return $mv$s$used;
 }
 

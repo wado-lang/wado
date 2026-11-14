@@ -220,11 +220,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<tagged_temp
     }
     q = out_3.used;
     out_3.used = $load_0;
+    $load_1 = out_3.repr;
     t = q + t;
     if val_i64_67 == 0_i64 {
-        builtin::array_set_u8(out_3.repr, q, 48);
+        builtin::array_set_u8($load_1, q, 48);
     } else {
-        $load_1 = out_3.repr;
         b21: block {
             l22: loop {
                 break_if b21 val_i64_67 == 0_i64;
@@ -236,7 +236,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<tagged_temp
             };
         };
     }
-    if @unlikely(local.tee t($load_0 + 4) > builtin::array_len(out_3.repr)) {
+    if @unlikely(local.tee t($load_0 + 4) > builtin::array_len($load_1)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, t);
     }

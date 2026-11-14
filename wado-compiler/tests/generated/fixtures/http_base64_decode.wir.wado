@@ -815,21 +815,21 @@ result: "), used: 126 }, s1: struct.new "core:prelude/string.wado//String" { rep
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(70, 65, 73, 76), used: 4 };
     });
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        $arg_spill_1 = $mv_arg_3.repr;
         $sroa_$pattern_temp_0_0_254 = $mv_arg_3.used;
         i = 0;
-        $arg_spill_1 = local.tee $mv_arg_2(struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }).repr;
-        out = $mv_arg_3.repr;
+        out = local.tee $mv_arg_2(struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }).repr;
         b17: block {
             l18: loop {
                 break_if b17 i >= $sroa_$pattern_temp_0_0_254;
-                $mv$scalar$code = builtin::array_get_value<u8>(out, i);
+                $mv$scalar$code = builtin::array_get_value<u8>($arg_spill_1, i);
                 i = i + 1;
-                if @unlikely(local.tee $mv$scalar$advance($mv_arg_2.used) >= builtin::array_len($arg_spill_1)) {
+                if @unlikely(local.tee $mv$scalar$advance($mv_arg_2.used) >= builtin::array_len(out)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"($mv_arg_2);
-                    $arg_spill_1 = $mv_arg_2.repr;
+                    out = $mv_arg_2.repr;
                 }
-                builtin::array_set_u8($arg_spill_1, $mv$scalar$advance, $mv$scalar$code);
+                builtin::array_set_u8(out, $mv$scalar$advance, $mv$scalar$code);
                 $mv_arg_2.used = $mv$scalar$advance + 1;
                 continue l18;
             };
@@ -2505,7 +2505,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     block {
         l300: loop {
             $mv$data$used = pending.used;
-            ptr_18 = builtin::i32_wrap_i64(ptr_18 = "mem/realloc"(0, 0, 1, $mv$data$used); i = 0; $licm_arith_39 = $mv$data$used - 8; $mv$data$repr = pending.repr; b301: block {
+            ptr_18 = builtin::i32_wrap_i64(ptr_18 = "mem/realloc"(0, 0, 1, $mv$data$used); $mv$data$repr = pending.repr; i = 0; $licm_arith_39 = $mv$data$used - 8; b301: block {
                 l302: loop {
                     break_if b301 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_39);
                     w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 7)) << 56_i64);

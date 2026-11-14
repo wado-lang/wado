@@ -305,9 +305,9 @@ fn "opt_walk_fn_miscompile.wado/gen_walk_field"(w, $mv$field$name, $mv$field$act
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(var, $licm_indent_level_92);
         }
-        new_used_22 = local.tee var(w.buf).used;
+        new_used_22 = var.used;
         var.used = $licm_indent_level_92;
-        builtin::array_copy<u8>(local.tee $licm_repr_96(var.repr), new_used_22, $mv$field$name.repr, 0, i_9);
+        builtin::array_copy<u8>(local.tee $licm_repr_96(w.buf.repr), new_used_22, $mv$field$name.repr, 0, i_9);
         builtin::array_set_u8($licm_repr_96, new_used_22 + i_9, 10);
     } else {
         rn = ref.as_non_null($mv$field$action);
@@ -337,9 +337,9 @@ fn "opt_walk_fn_miscompile.wado/gen_walk_field"(w, $mv$field$name, $mv$field$act
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(var, $licm_indent_level_92);
         }
-        new_used_22 = local.tee var(w.buf).used;
+        new_used_22 = var.used;
         var.used = $licm_indent_level_92;
-        builtin::array_copy<u8>(local.tee $licm_repr_96(var.repr), new_used_22, $mv$field$name.repr, 0, i_9);
+        builtin::array_copy<u8>(local.tee $licm_repr_96(w.buf.repr), new_used_22, $mv$field$name.repr, 0, i_9);
         builtin::array_set_u8($licm_repr_96, new_used_22 + i_9, 10);
     }
 }
@@ -427,8 +427,8 @@ fn "opt_walk_fn_miscompile.wado/gen_walk_fn"(w, rule_name, n_alts, n_fields) {
     let $licm_indent_level_322: i32;
     let $licm_buf_323: ref "core:prelude/string.wado//String";
     let $licm_repr_327: ref "Array<core:prelude/string.wado/String>";
+    let $sroa_$iter_4_repr_339: ref "Array<opt_walk_fn_miscompile.wado/WalkField>";
     let $licm_repr_342: ref Array<u8>;
-    let $licm_repr_347: ref "Array<opt_walk_fn_miscompile.wado/WalkField>";
     opener_15 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_walk_fn_miscompile.wado/$tmpl$5d09a9f8d325483d,[core:prelude/string.wado/String]>$spec0$spec0$sroa[t.h0]"(rule_name);
     i_19 = 0;
     $licm_indent_level_322 = w.indent_level;
@@ -453,9 +453,9 @@ fn "opt_walk_fn_miscompile.wado/gen_walk_fn"(w, rule_name, n_alts, n_fields) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($licm_buf_323, $licm_indent_level_322);
     }
-    new_used_32 = local.tee $licm_buf_323(w.buf).used;
+    new_used_32 = $licm_buf_323.used;
     $licm_buf_323.used = $licm_indent_level_322;
-    builtin::array_copy<u8>(local.tee $licm_repr_342($licm_buf_323.repr), new_used_32, opener_15.repr, 0, i_19);
+    builtin::array_copy<u8>(local.tee $licm_repr_342(local.tee $licm_buf_323(w.buf).repr), new_used_32, opener_15.repr, 0, i_19);
     builtin::array_copy<u8>($licm_repr_342, new_used_32 + i_19, global:opt_walk_fn_miscompile.wado::$const_obj_10, 0, 3);
     w.indent_level = local.tee i_19(w.indent_level + 1);
     case_names = "opt_walk_fn_miscompile.wado/build_case_names"(n_alts);
@@ -480,9 +480,9 @@ fn "opt_walk_fn_miscompile.wado/gen_walk_fn"(w, rule_name, n_alts, n_fields) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(opener_15, i_19);
     }
-    $licm_indent_level_322 = local.tee opener_15(w.buf).used;
+    $licm_indent_level_322 = opener_15.used;
     opener_15.used = i_19;
-    builtin::array_copy<u8>(local.tee $licm_repr_342(opener_15.repr), $licm_indent_level_322, global:opt_walk_fn_miscompile.wado::$const_obj_13, 0, 10);
+    builtin::array_copy<u8>(local.tee $licm_repr_342(local.tee opener_15(w.buf).repr), $licm_indent_level_322, global:opt_walk_fn_miscompile.wado::$const_obj_13, 0, 10);
     builtin::array_copy<u8>($licm_repr_342, $licm_indent_level_322 + 10, global:opt_walk_fn_miscompile.wado::$const_obj_10, 0, 3);
     w.indent_level = local.tee i_19(w.indent_level + 1);
     $licm_indent_level_322 = 0;
@@ -555,13 +555,13 @@ fn "opt_walk_fn_miscompile.wado/gen_walk_fn"(w, rule_name, n_alts, n_fields) {
             builtin::array_copy<u8>($licm_repr_342, start_110, $licm_buf_323.repr, 0, start_33);
             builtin::array_set_u8($licm_repr_342, start_110 + start_33, 10);
             start_33 = local.tee fields("opt_walk_fn_miscompile.wado/build_walk_fields"(n_fields)).used;
+            $sroa_$iter_4_repr_339 = fields.repr;
             new_used_109 = 0;
-            $licm_repr_347 = fields.repr;
             w.indent_level = i_19;
             b39: block {
                 l40: loop {
                     break_if b39 new_used_109 >= start_33;
-                    ref_val = builtin::array_get_value<ref "opt_walk_fn_miscompile.wado//WalkField">($licm_repr_347, new_used_109);
+                    ref_val = builtin::array_get_value<ref "opt_walk_fn_miscompile.wado//WalkField">($sroa_$iter_4_repr_339, new_used_109);
                     new_used_109 = new_used_109 + 1;
                     $licm_buf_323 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110), used: 1 };
                     "opt_walk_fn_miscompile.wado/gen_walk_field"(w, ref_val.name, ref_val.action, $licm_buf_323);
@@ -651,12 +651,12 @@ fn "opt_walk_fn_miscompile.wado/gen_walk_fn"(w, rule_name, n_alts, n_fields) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(rule_name, n_alts);
     }
-    n_fields = local.tee rule_name(w.buf).used;
+    n_fields = rule_name.used;
     rule_name.used = n_alts;
     builtin::array_copy<u8>(rule_name.repr, n_fields, global:opt_walk_fn_miscompile.wado::$const_obj_2, 0, 2);
     w.indent_level = local.tee n_alts(w.indent_level - 1);
     n_fields = 0;
-    $licm_repr_342 = rule_name.repr;
+    $licm_repr_342 = local.tee rule_name(w.buf).repr;
     b54: block {
         l55: loop {
             break_if b54 n_fields >= n_alts;
@@ -676,7 +676,7 @@ fn "opt_walk_fn_miscompile.wado/gen_walk_fn"(w, rule_name, n_alts, n_fields) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(rule_name, n_alts);
     }
-    n_fields = local.tee rule_name(w.buf).used;
+    n_fields = rule_name.used;
     rule_name.used = n_alts;
     builtin::array_copy<u8>(rule_name.repr, n_fields, global:opt_walk_fn_miscompile.wado::$const_obj_2, 0, 2);
 }
@@ -1114,9 +1114,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_u
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
-    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
+    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -1133,25 +1133,26 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_0: block -> i32 {
+        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(self.repr, new_used, c);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_0: 3;
         }
-        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
-        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_0: 4;
     };
 }

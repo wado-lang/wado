@@ -781,14 +781,14 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
 }
 
 fn "core:prelude/fpfmt.wado/write_exp"(buf, d, p, nd, upper) {
-    let $load_0: ref Array<u8>;
     let start_6: i32;
+    let raw: ref Array<u8>;
     let other_20: ref "core:prelude/string.wado//String";
     p = (p + nd) - 1;
     if nd > 1 {
         start_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(buf, nd + 1);
         "core:prelude/fpfmt.wado/write_digits_at"(buf, start_6, d, nd);
-        builtin::array_copy<u8>(local.tee $load_0(buf.repr), start_6 + 2, $load_0, start_6 + 1, nd - 1);
+        builtin::array_copy<u8>(local.tee raw(buf.repr), start_6 + 2, raw, start_6 + 1, nd - 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(buf, start_6 + 1, 46);
     } else {
         nd = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(buf, 1);
@@ -824,10 +824,10 @@ fn "core:prelude/fpfmt.wado/write_exp"(buf, d, p, nd, upper) {
 }
 
 fn "core:prelude/fpfmt.wado/write_exp_prec"(buf, d, p, nd, precision, upper) {
-    let $load_0: ref Array<u8>;
     let available: i32;
     let start_10: i32;
     let skip_12: i32;
+    let raw_13: ref Array<u8>;
     let other_29: ref "core:prelude/string.wado//String";
     if precision < 0 {
         "core:prelude/fpfmt.wado/write_exp"(buf, d, p, nd, upper);
@@ -849,7 +849,7 @@ fn "core:prelude/fpfmt.wado/write_exp_prec"(buf, d, p, nd, precision, upper) {
             };
         };
         "core:prelude/fpfmt.wado/write_digits_at"(buf, start_10, d, available);
-        builtin::array_copy<u8>(local.tee $load_0(buf.repr), start_10 + 2, $load_0, start_10 + 1, available - 1);
+        builtin::array_copy<u8>(local.tee raw_13(buf.repr), start_10 + 2, raw_13, start_10 + 1, available - 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(buf, start_10 + 1, 46);
         $inline_zeros_at_sroa__mut_buf_repr___0: block {
             available = (start_10 + available) + 1;

@@ -669,7 +669,6 @@ mini::RK_PROG: "), used: 16 }, s2: struct.new "core:prelude/string.wado//String"
 fn "wir_xmodule_return_xmod.wado/_run_parse_entry$$Closure_0$dae[max_errors,entry]$spec0"(input) {
     let $load_0: ref "core:prelude/list.wado//List<i32>";
     let $load_16: i32;
-    let $load_25: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/Diagnostic>";
     let tokens_1: ref "sub/wir_xmodule_return_parser.wado//TokenStream";
     let p_2: ref "sub/wir_xmodule_return_parser.wado//Parser";
     let _r: ref null "sub/wir_xmodule_return_parser.wado//ParseError";
@@ -679,6 +678,7 @@ fn "wir_xmodule_return_xmod.wado/_run_parse_entry$$Closure_0$dae[max_errors,entr
     let $dead_field_slot_11: ref "sub/wir_xmodule_return_parser.wado//CstNode";
     let v_21: ref "sub/wir_xmodule_return_parser.wado//Span";
     let v_22: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
+    let self_38: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/Diagnostic>";
     let self_45: ref "sub/wir_xmodule_return_parser.wado//TreeBuilder";
     let pos: ref "core:prelude//$Cell<i32>";
     let $sroa_$sroa_e_span_62_start_65: i32;
@@ -763,12 +763,12 @@ fn "wir_xmodule_return_xmod.wado/_run_parse_entry$$Closure_0$dae[max_errors,entr
                 continue l12;
             };
         }; $array_clone_src_7, used: $load_16 };
-        if @unlikely(local.tee $array_clone_len_3(local.tee $load_25(p_2.diagnostics).used) >= builtin::array_len($load_25.repr)) {
+        if @unlikely(local.tee $array_clone_len_3(local.tee self_38(p_2.diagnostics).used) >= builtin::array_len(self_38.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/Diagnostic>::grow"($load_25);
+            "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/Diagnostic>::grow"(self_38);
         }
-        builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//Diagnostic">($load_25.repr, $array_clone_len_3, d);
-        $load_25.used = $array_clone_len_3 + 1;
+        builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//Diagnostic">(self_38.repr, $array_clone_len_3, d);
+        self_38.used = $array_clone_len_3 + 1;
     } else {
     }
     self_45 = p_2.b;
@@ -797,10 +797,10 @@ fn "wir_xmodule_return_xmod.wado/_run_parse_entry$$Closure_0$dae[max_errors,entr
     builtin::array_copy<i32>(builtin::array_new<i32>(local.tee $array_clone_len_3($load_0.used)), 0, $array_clone_src_1, 0, $array_clone_len_3);
     $array_clone_src_1 = local.tee $load_0(tokens_1.flags).repr;
     builtin::array_copy<i32>(builtin::array_new<i32>(local.tee $array_clone_len_3($load_0.used)), 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $load_25 = p_2.diagnostics;
+    self_38 = p_2.diagnostics;
     let $array_clone_src_57: ref "Array<sub/wir_xmodule_return_parser.wado/Diagnostic>";
-    $array_clone_src_57 = $load_25.repr;
-    $array_clone_len_3 = $load_25.used;
+    $array_clone_src_57 = self_38.repr;
+    $array_clone_len_3 = self_38.used;
     let $array_clone_dst_58: ref "Array<sub/wir_xmodule_return_parser.wado/Diagnostic>";
     $array_clone_dst_58 = builtin::array_new<ref "sub/wir_xmodule_return_parser.wado//Diagnostic">($array_clone_len_3);
     $sroa_$sroa_e_span_62_start_65 = 0;
@@ -1513,11 +1513,11 @@ fn "sub/wir_xmodule_return_parser.wado/try_WS"($mv$chars$repr, $mv$chars$used, s
 fn "sub/wir_xmodule_return_parser.wado/_parse_prog"(p) {
     let $load_1: ref "core:prelude/list.wado//List<i32>";
     let $load_3: i32;
-    let $load_6: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/BuildEvent>";
-    let $load_28: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let self_16: i32;
+    let self_20: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/BuildEvent>";
     let value_21: ref "sub/wir_xmodule_return_parser.wado//BuildEvent";
     let $qm_e_30: ref "sub/wir_xmodule_return_parser.wado//ParseError";
+    let self_57: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     self_16 = local.tee $load_1(p.tokens.starts).used;
     if @unlikely(local.tee $load_3(p.pos) >=u self_16) {
         cold_path;
@@ -1525,13 +1525,14 @@ fn "sub/wir_xmodule_return_parser.wado/_parse_prog"(p) {
         unreachable;
     }
     self_16 = builtin::array_get_value<i32>($load_1.repr, $load_3);
+    self_20 = p.b.events;
     value_21 = struct.new "sub/wir_xmodule_return_parser.wado//BuildEvent::Open" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: 0, 1: self_16 } };
-    if @unlikely(local.tee self_16(local.tee $load_6(p.b.events).used) >= builtin::array_len($load_6.repr)) {
+    if @unlikely(local.tee self_16(self_20.used) >= builtin::array_len(self_20.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"($load_6);
+        "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"(self_20);
     }
-    builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(local.tee $load_6(p.b.events).repr, self_16, value_21);
-    $load_6.used = self_16 + 1;
+    builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(self_20.repr, self_16, value_21);
+    self_20.used = self_16 + 1;
     $match_scrut_0 = $inline__parse_prog__inner_7: block -> ref null "sub/wir_xmodule_return_parser.wado//ParseError" {
         self_16 = local.tee $load_1(p.tokens.starts).used;
         if @unlikely(local.tee $load_3(p.pos) >=u self_16) {
@@ -1561,20 +1562,21 @@ fn "sub/wir_xmodule_return_parser.wado/_parse_prog"(p) {
         break $inline__parse_prog__inner_7: ref.null none;
     };
     self_16 = "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser::last_end"(p.tokens, p.pos);
+    self_20 = p.b.events;
     value_21 = struct.new "sub/wir_xmodule_return_parser.wado//BuildEvent::Close" { discriminant: 1, payload_0: self_16 };
-    if @unlikely(local.tee self_16(local.tee $load_6(p.b.events).used) >= builtin::array_len($load_6.repr)) {
+    if @unlikely(local.tee self_16(self_20.used) >= builtin::array_len(self_20.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"($load_6);
+        "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"(self_20);
     }
-    builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(local.tee $load_6(p.b.events).repr, self_16, value_21);
-    $load_6.used = self_16 + 1;
+    builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(self_20.repr, self_16, value_21);
+    self_20.used = self_16 + 1;
     if ref.is_null($match_scrut_0) == 0 {
-        if @unlikely(local.tee self_16(local.tee $load_28(local.tee $qm_e_30(ref.as_non_null($match_scrut_0)).rule_stack).used) >= builtin::array_len($load_28.repr)) {
+        if @unlikely(local.tee self_16(local.tee self_57(local.tee $qm_e_30(ref.as_non_null($match_scrut_0)).rule_stack).used) >= builtin::array_len(self_57.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"($load_28);
+            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_57);
         }
-        builtin::array_set<ref "core:prelude/string.wado//String">(local.tee $load_28($qm_e_30.rule_stack).repr, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 114, 111, 103), used: 4 });
-        $load_28.used = self_16 + 1;
+        builtin::array_set<ref "core:prelude/string.wado//String">(self_57.repr, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 114, 111, 103), used: 4 });
+        self_57.used = self_16 + 1;
         return $qm_e_30;
     } else {
     }
@@ -1585,9 +1587,9 @@ fn "sub/wir_xmodule_return_parser.wado/_parse_expr__inner"(p) {
     let $load_0: ref "sub/wir_xmodule_return_parser.wado//TokenStream";
     let $load_1: ref "core:prelude/list.wado//List<i32>";
     let $load_3: i32;
-    let $load_7: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/BuildEvent>";
     let $qm_e_4: ref "sub/wir_xmodule_return_parser.wado//ParseError";
     let self_29: i32;
+    let self_35: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/BuildEvent>";
     let span_53: ref "sub/wir_xmodule_return_parser.wado//Span";
     self_29 = local.tee $load_1(local.tee $load_0(p.tokens).starts).used;
     if @unlikely(local.tee $load_3(p.pos) >=u self_29) {
@@ -1597,12 +1599,12 @@ fn "sub/wir_xmodule_return_parser.wado/_parse_expr__inner"(p) {
     }
     drop(builtin::array_get_value<i32>($load_1.repr, $load_3));
     if local.tee self_29(builtin::array_get_value<i32>(p.kinds, $load_3)) == 4 {
-        if @unlikely(local.tee self_29(local.tee $load_7(p.b.events).used) >= builtin::array_len($load_7.repr)) {
+        if @unlikely(local.tee self_29(local.tee self_35(p.b.events).used) >= builtin::array_len(self_35.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"($load_7);
+            "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"(self_35);
         }
-        builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(local.tee $load_7(p.b.events).repr, self_29, struct.new "sub/wir_xmodule_return_parser.wado//BuildEvent::SetAlt" { discriminant: 5, payload_0: 0 });
-        $load_7.used = self_29 + 1;
+        builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(self_35.repr, self_29, struct.new "sub/wir_xmodule_return_parser.wado//BuildEvent::SetAlt" { discriminant: 5, payload_0: 0 });
+        self_35.used = self_29 + 1;
         let $mv$$vr_15$2: ref null "sub/wir_xmodule_return_parser.wado//ParseError";
         multivalue_bind [self_29, $load_3, $mv$$vr_15$2] = "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser::expect$sroa[return]"(p, 4);
         drop((if @likely(self_29 == 0) -> i32 {
@@ -1634,12 +1636,12 @@ fn "sub/wir_xmodule_return_parser.wado/_parse_expr__inner"(p) {
         }));
         return ref.null none;
     } else if self_29 == 0 {
-        if @unlikely(local.tee self_29(local.tee $load_7(p.b.events).used) >= builtin::array_len($load_7.repr)) {
+        if @unlikely(local.tee self_29(local.tee self_35(p.b.events).used) >= builtin::array_len(self_35.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"($load_7);
+            "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"(self_35);
         }
-        builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(local.tee $load_7(p.b.events).repr, self_29, struct.new "sub/wir_xmodule_return_parser.wado//BuildEvent::SetAlt" { discriminant: 5, payload_0: 1 });
-        $load_7.used = self_29 + 1;
+        builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(self_35.repr, self_29, struct.new "sub/wir_xmodule_return_parser.wado//BuildEvent::SetAlt" { discriminant: 5, payload_0: 1 });
+        self_35.used = self_29 + 1;
         multivalue_bind [self_29, $load_3, $mv$$vr_15$2] = "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser::expect$sroa[return]"(p, 0);
         drop((if @likely(self_29 == 0) -> i32 {
             $load_3;
@@ -1662,12 +1664,12 @@ fn "sub/wir_xmodule_return_parser.wado/_parse_expr__inner"(p) {
 fn "sub/wir_xmodule_return_parser.wado/_parse_expr"(p) {
     let $load_1: ref "core:prelude/list.wado//List<i32>";
     let $load_3: i32;
-    let $load_6: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/BuildEvent>";
-    let $load_23: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let r: ref null "sub/wir_xmodule_return_parser.wado//ParseError";
     let $local_4: ref "sub/wir_xmodule_return_parser.wado//ParseError";
     let self_16: i32;
+    let self_20: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/BuildEvent>";
     let value_21: ref "sub/wir_xmodule_return_parser.wado//BuildEvent";
+    let self_36: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     self_16 = local.tee $load_1(p.tokens.starts).used;
     if @unlikely(local.tee $load_3(p.pos) >=u self_16) {
         cold_path;
@@ -1675,29 +1677,31 @@ fn "sub/wir_xmodule_return_parser.wado/_parse_expr"(p) {
         unreachable;
     }
     self_16 = builtin::array_get_value<i32>($load_1.repr, $load_3);
+    self_20 = p.b.events;
     value_21 = struct.new "sub/wir_xmodule_return_parser.wado//BuildEvent::Open" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: 1, 1: self_16 } };
-    if @unlikely(local.tee self_16(local.tee $load_6(p.b.events).used) >= builtin::array_len($load_6.repr)) {
+    if @unlikely(local.tee self_16(self_20.used) >= builtin::array_len(self_20.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"($load_6);
+        "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"(self_20);
     }
-    builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(local.tee $load_6(p.b.events).repr, self_16, value_21);
-    $load_6.used = self_16 + 1;
+    builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(self_20.repr, self_16, value_21);
+    self_20.used = self_16 + 1;
     r = "sub/wir_xmodule_return_parser.wado/_parse_expr__inner"(p);
     self_16 = "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser::last_end"(p.tokens, p.pos);
+    self_20 = p.b.events;
     value_21 = struct.new "sub/wir_xmodule_return_parser.wado//BuildEvent::Close" { discriminant: 1, payload_0: self_16 };
-    if @unlikely(local.tee self_16(local.tee $load_6(p.b.events).used) >= builtin::array_len($load_6.repr)) {
+    if @unlikely(local.tee self_16(self_20.used) >= builtin::array_len(self_20.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"($load_6);
+        "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"(self_20);
     }
-    builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(local.tee $load_6(p.b.events).repr, self_16, value_21);
-    $load_6.used = self_16 + 1;
+    builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(self_20.repr, self_16, value_21);
+    self_20.used = self_16 + 1;
     if ref.is_null(r) == 0 {
-        if @unlikely(local.tee self_16(local.tee $load_23(local.tee $local_4(ref.as_non_null(r)).rule_stack).used) >= builtin::array_len($load_23.repr)) {
+        if @unlikely(local.tee self_16(local.tee self_36(local.tee $local_4(ref.as_non_null(r)).rule_stack).used) >= builtin::array_len(self_36.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"($load_23);
+            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_36);
         }
-        builtin::array_set<ref "core:prelude/string.wado//String">(local.tee $load_23($local_4.rule_stack).repr, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 120, 112, 114), used: 4 });
-        $load_23.used = self_16 + 1;
+        builtin::array_set<ref "core:prelude/string.wado//String">(self_36.repr, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 120, 112, 114), used: 4 });
+        self_36.used = self_16 + 1;
         return $local_4;
     } else {
     }
@@ -2332,9 +2336,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_u
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
-    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
+    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -2356,25 +2360,26 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_0: block -> i32 {
+        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(self.repr, new_used, c);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
-            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_0: 3;
         }
-        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
-        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_0: 4;
     };
 }
@@ -2444,44 +2449,44 @@ fn "core:prelude/string.wado/core:prelude/string.wado/$tmpl$b145b32c9a586330^cor
 }
 
 fn "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/TokenStream::push_token_flagged$dae[flags,return]"(self, kind, start, end, triv_lo, triv_hi) {
-    let $load_0: ref "core:prelude/list.wado//List<i32>";
+    let self_8: ref "core:prelude/list.wado//List<i32>";
     let used_10: i32;
-    if @unlikely(local.tee used_10(local.tee $load_0(self.kinds).used) >= builtin::array_len($load_0.repr)) {
+    if @unlikely(local.tee used_10(local.tee self_8(self.kinds).used) >= builtin::array_len(self_8.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_0);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_8);
     }
-    builtin::array_set<i32>(local.tee $load_0(self.kinds).repr, used_10, kind);
-    $load_0.used = used_10 + 1;
-    if @unlikely(local.tee kind(local.tee $load_0(self.starts).used) >= builtin::array_len($load_0.repr)) {
+    builtin::array_set<i32>(self_8.repr, used_10, kind);
+    self_8.used = used_10 + 1;
+    if @unlikely(local.tee kind(local.tee self_8(self.starts).used) >= builtin::array_len(self_8.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_0);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_8);
     }
-    builtin::array_set<i32>(local.tee $load_0(self.starts).repr, kind, start);
-    $load_0.used = kind + 1;
-    if @unlikely(local.tee kind(local.tee $load_0(self.ends).used) >= builtin::array_len($load_0.repr)) {
+    builtin::array_set<i32>(self_8.repr, kind, start);
+    self_8.used = kind + 1;
+    if @unlikely(local.tee kind(local.tee self_8(self.ends).used) >= builtin::array_len(self_8.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_0);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_8);
     }
-    builtin::array_set<i32>(local.tee $load_0(self.ends).repr, kind, end);
-    $load_0.used = kind + 1;
-    if @unlikely(local.tee kind(local.tee $load_0(self.triv_lo).used) >= builtin::array_len($load_0.repr)) {
+    builtin::array_set<i32>(self_8.repr, kind, end);
+    self_8.used = kind + 1;
+    if @unlikely(local.tee kind(local.tee self_8(self.triv_lo).used) >= builtin::array_len(self_8.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_0);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_8);
     }
-    builtin::array_set<i32>(local.tee $load_0(self.triv_lo).repr, kind, triv_lo);
-    $load_0.used = kind + 1;
-    if @unlikely(local.tee kind(local.tee $load_0(self.triv_hi).used) >= builtin::array_len($load_0.repr)) {
+    builtin::array_set<i32>(self_8.repr, kind, triv_lo);
+    self_8.used = kind + 1;
+    if @unlikely(local.tee kind(local.tee self_8(self.triv_hi).used) >= builtin::array_len(self_8.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_0);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_8);
     }
-    builtin::array_set<i32>(local.tee $load_0(self.triv_hi).repr, kind, triv_hi);
-    $load_0.used = kind + 1;
-    if @unlikely(local.tee kind(local.tee $load_0(self.flags).used) >= builtin::array_len($load_0.repr)) {
+    builtin::array_set<i32>(self_8.repr, kind, triv_hi);
+    self_8.used = kind + 1;
+    if @unlikely(local.tee kind(local.tee self_8(self.flags).used) >= builtin::array_len(self_8.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_0);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_8);
     }
-    builtin::array_set<i32>(local.tee $load_0(self.flags).repr, kind, 0);
-    $load_0.used = kind + 1;
+    builtin::array_set<i32>(self_8.repr, kind, 0);
+    self_8.used = kind + 1;
     return;
 }
 
@@ -2522,11 +2527,11 @@ fn "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser
 }
 
 fn "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser::expect$sroa[return]"(self, kind) {
-    let $load_0: i32;
-    let $load_3: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/BuildEvent>";
-    let $load_20: ref "sub/wir_xmodule_return_parser.wado//TokenStream";
-    let $load_21: ref "core:prelude/list.wado//List<i32>";
+    let $load_1: i32;
+    let $load_16: ref "sub/wir_xmodule_return_parser.wado//TokenStream";
+    let $load_17: ref "core:prelude/list.wado//List<i32>";
     let name: ref "core:prelude/string.wado//String";
+    let self_9: ref "core:prelude/list.wado//List<sub/wir_xmodule_return_parser.wado/BuildEvent>";
     let value_10: ref "sub/wir_xmodule_return_parser.wado//BuildEvent";
     let span_30: ref "sub/wir_xmodule_return_parser.wado//Span";
     let expected_31: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
@@ -2535,27 +2540,28 @@ fn "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser
     let self_61: ref "core:prelude/list.wado//List<char>";
     let elements_77: ref "Array<core:prelude/string.wado/String>";
     let $licm_repr_87: ref Array<char>;
-    $load_0 = self.pos;
-    if builtin::array_get_value<i32>(self.kinds, $load_0) == kind {
+    if builtin::array_get_value<i32>(self.kinds, local.tee $load_1(self.pos)) == kind {
         if kind == 2 {
-            value_10 = struct.new "sub/wir_xmodule_return_parser.wado//BuildEvent::Tok" { discriminant: 2, payload_0: $load_0 };
-            if @unlikely(local.tee kind(local.tee $load_3(self.b.events).used) >= builtin::array_len($load_3.repr)) {
+            self_9 = self.b.events;
+            value_10 = struct.new "sub/wir_xmodule_return_parser.wado//BuildEvent::Tok" { discriminant: 2, payload_0: $load_1 };
+            if @unlikely(local.tee kind(self_9.used) >= builtin::array_len(self_9.repr)) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"($load_3);
+                "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"(self_9);
             }
-            builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(local.tee $load_3(self.b.events).repr, kind, value_10);
-            $load_3.used = kind + 1;
+            builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(self_9.repr, kind, value_10);
+            self_9.used = kind + 1;
             return 0, self.pos, ref.null none;
         }
-        self.pos = $load_0 + 1;
-        value_10 = struct.new "sub/wir_xmodule_return_parser.wado//BuildEvent::Tok" { discriminant: 2, payload_0: $load_0 };
-        if @unlikely(local.tee kind(local.tee $load_3(self.b.events).used) >= builtin::array_len($load_3.repr)) {
+        self.pos = $load_1 + 1;
+        self_9 = self.b.events;
+        value_10 = struct.new "sub/wir_xmodule_return_parser.wado//BuildEvent::Tok" { discriminant: 2, payload_0: $load_1 };
+        if @unlikely(local.tee kind(self_9.used) >= builtin::array_len(self_9.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"($load_3);
+            "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>::grow"(self_9);
         }
-        builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(local.tee $load_3(self.b.events).repr, kind, value_10);
-        $load_3.used = kind + 1;
-        return 0, $load_0, ref.null none;
+        builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">(self_9.repr, kind, value_10);
+        self_9.used = kind + 1;
+        return 0, $load_1, ref.null none;
     }
     name = (if kind == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(73, 78, 84), used: 3 };
@@ -2573,26 +2579,26 @@ fn "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Unknown"), used: 7 };
     });
     return 1, 0, s = block -> ref "core:prelude/string.wado//String" {
-        kind = local.tee $load_21(local.tee $load_20(self.tokens).starts).used;
-        if @unlikely($load_0 >=u kind) {
+        kind = local.tee $load_17(local.tee $load_16(self.tokens).starts).used;
+        if @unlikely($load_1 >=u kind) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($load_0, kind, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:336"), used: 38 });
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($load_1, kind, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:336"), used: 38 });
             unreachable;
         }
-        kind = builtin::array_get_value<i32>($load_21.repr, $load_0);
-        self_59 = local.tee $load_21($load_20.ends).used;
-        if @unlikely($load_0 >= self_59) {
+        kind = builtin::array_get_value<i32>($load_17.repr, $load_1);
+        self_59 = local.tee $load_17($load_16.ends).used;
+        if @unlikely($load_1 >= self_59) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($load_0, self_59, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:337"), used: 38 });
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($load_1, self_59, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:337"), used: 38 });
             unreachable;
         }
-        s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee $load_0(builtin::array_get_value<i32>($load_21.repr, $load_0)) - kind), used: 0 };
-        self_59 = local.tee self_61($load_20.chars).used;
+        s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee $load_1(builtin::array_get_value<i32>($load_17.repr, $load_1)) - kind), used: 0 };
+        self_59 = local.tee self_61($load_16.chars).used;
         $licm_repr_87 = self_61.repr;
-        if ($load_0 <= self_59) & (kind >= 0) {
+        if ($load_1 <= self_59) & (kind >= 0) {
             b324: block {
                 l325: loop {
-                    break_if b324 kind >= $load_0;
+                    break_if b324 kind >= $load_1;
                     "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, builtin::array_get_value<char>($licm_repr_87, kind));
                     kind = kind + 1;
                     continue l325;
@@ -2601,7 +2607,7 @@ fn "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser
         } else {
             b326: block {
                 l327: loop {
-                    break_if b326 kind >= $load_0;
+                    break_if b326 kind >= $load_1;
                     "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, if @unlikely(kind >=u self_59) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(kind, self_59, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:330"), used: 38 });
@@ -2614,7 +2620,7 @@ fn "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/Parser
         }
         "core:prelude/string.wado/core:prelude/string.wado/String::format<sub/wir_xmodule_return_parser.wado/$tmpl$60f2adf5184ddec7,[core:prelude/string.wado/String,core:prelude/string.wado/String]>$spec0$spec0"(name, s);
     }; span_30 = block -> ref "sub/wir_xmodule_return_parser.wado//Span" {
-        "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/TokenStream::span_at"(local.tee $load_20(self.tokens).starts, $load_20.ends, self.pos);
+        "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/TokenStream::span_at"(local.tee $load_16(self.tokens).starts, $load_16.ends, self.pos);
     }; kind = builtin::array_len(local.tee elements_77(array.new_fixed<ref "core:prelude/string.wado//String">(name))); expected_31 = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: elements_77, used: kind }; multivalue_bind [_, _] = "sub/wir_xmodule_return_parser.wado/line_col"(local.tee self_61(self.tokens.chars).repr, self_61.used, span_30.start); struct.new "sub/wir_xmodule_return_parser.wado//ParseError" { message: s, span: span_30, expected: expected_31, rule_stack: struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 } };
 }
 

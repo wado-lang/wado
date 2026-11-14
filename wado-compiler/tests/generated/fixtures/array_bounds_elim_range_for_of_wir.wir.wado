@@ -68,7 +68,6 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 fn "array_bounds_elim_range_for_of_wir.wado/run"() with Stdout {
-    let $load_10: ref Array<u8>;
     let xs_0: ref "core:prelude/list.wado//List<i32>";
     let out_15: ref "core:prelude/string.wado//String";
     let x: i64;
@@ -77,6 +76,7 @@ fn "array_bounds_elim_range_for_of_wir.wado/run"() with Stdout {
     let current: i32;
     let $sroa_$iter_0_start_29: i32;
     let $licm_repr_32: ref Array<i32>;
+    let arr: ref Array<u8>;
     let q: u64;
     xs_0 = black_box(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4), used: 4 });
     s = 0;
@@ -174,22 +174,22 @@ fn "array_bounds_elim_range_for_of_wir.wado/run"() with Stdout {
     }
     $sroa_$iter_0_start_29 = out_15.used;
     out_15.used = self_125;
+    arr = out_15.repr;
     s = $sroa_$iter_0_start_29 + s;
-    $load_10 = out_15.repr;
     b24: block {
         l25: loop {
             break_if b24 (s - $sroa_$iter_0_start_29) < 2;
             q = x /u 100_i64;
             current = local.tee self_125(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_10, s - 1, (48 + self_125) - (current * 10));
-            builtin::array_set_u8($load_10, s - 2, 48 + current);
+            builtin::array_set_u8(arr, s - 1, (48 + self_125) - (current * 10));
+            builtin::array_set_u8(arr, s - 2, 48 + current);
             s = s - 2;
             x = q;
             continue l25;
         };
     };
     if s > $sroa_$iter_0_start_29 {
-        builtin::array_set_u8($load_10, $sroa_$iter_0_start_29, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8(arr, $sroa_$iter_0_start_29, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;
@@ -197,11 +197,11 @@ fn "array_bounds_elim_range_for_of_wir.wado/run"() with Stdout {
     s = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     self_125 = builtin::i32_wrap_i64(x >> 32_i64);
     s = "array_bounds_elim_range_for_of_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(s);
-    builtin::array_copy<u8>(local.tee $load_10(builtin::array_new<u8>(local.tee $sroa_$iter_0_start_29(out_15.used) + 1)), 0, out_15.repr, 0, $sroa_$iter_0_start_29);
-    builtin::array_set_u8($load_10, $sroa_$iter_0_start_29, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee $sroa_$iter_0_start_29(out_15.used) + 1)), 0, out_15.repr, 0, $sroa_$iter_0_start_29);
+    builtin::array_set_u8(arr, $sroa_$iter_0_start_29, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         $sroa_$iter_0_start_29 = $sroa_$iter_0_start_29 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(self_125, $load_10, 0, $sroa_$iter_0_start_29);
+        "core:rt/cm_stream_write_raw_all_u8"(self_125, arr, 0, $sroa_$iter_0_start_29);
     });
     "wasi/stream-drop-writable"(self_125);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(s);
