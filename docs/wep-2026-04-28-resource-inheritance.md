@@ -506,6 +506,10 @@ exception.
 
 #### Host runtime contract
 
+> Superseded by [WEP: An Unrestricted Resource Is a Host Reference](./wep-2026-11-14-extern-handles.md):
+> the handle becomes an `externref`, and the class is read from a minted handle
+> or asked of the host. The class numbering stands.
+
 A handle is a number the host mints, `class * 2^37 + index`: an integer-valued
 `f64` below 2^53, holding a 16-bit class and a 37-bit index into the host's
 object table. It is never a NaN and never takes part in arithmetic; the guest
@@ -577,6 +581,9 @@ Four interactions need explicit rules. Effects have one more, stated in §"Narro
 
 #### `Eq` is auto-derived as reference equality
 
+> Superseded in part by [WEP: An Unrestricted Resource Is a Host Reference](./wep-2026-11-14-extern-handles.md#-is-identity):
+> equality is still identity, but it is no longer a compare of bits.
+
 Every unrestricted resource auto-derives `Eq`, so a type holding one derives it as well. Two handles compare equal iff they reference the same host object — JavaScript's `===` semantics for the browser case.
 
 `Eq` compares the bits of the two handles. The host interns handles, and an object's class never changes, so two handles are equal exactly when they name one object. No host call is made.
@@ -588,6 +595,9 @@ Cross-type comparison falls out of subtyping. `el == html_input` is well-typed w
 `Ord` is **not** auto-derived. Resources have no natural ordering and the host has no obligation to define one.
 
 #### `Inspect` shows the dynamic type, `Display` asks the host
+
+> Superseded in part by [WEP: An Unrestricted Resource Is a Host Reference](./wep-2026-11-14-extern-handles.md#narrowing-asks-for-the-class-once):
+> `Inspect` still names the dynamic type, with no index beside it.
 
 Debug output is most useful when it shows what is really there. So `Inspect` (`${x:?}` / `${x:#?}`) renders the dynamic type, not the static one. The handle carries its class, and the class names one resource in the tree:
 
@@ -637,6 +647,10 @@ Coming from languages where `Option` is covariant (Scala, Kotlin's nullable type
 This is deliberate. Wado does not special-case a container or a constructor to make an upcast fit. The consistency comes from rules Wado already has: aggregates are invariant, type parameters are solved to the most specific type, and `as` converts a value explicitly.
 
 ### Lowering
+
+> Superseded by [WEP: An Unrestricted Resource Is a Host Reference](./wep-2026-11-14-extern-handles.md):
+> the handle is an `externref`, and an import that takes one is a core import
+> rather than a canonical ABI one. The erasure to one type stands.
 
 How `extends` and the operations on it lower from Wado to WIT/CM, and from WIT/CM to wasm. The recurring pattern is **erasure at the CM layer**: extends-related Wado types collapse to a single CM resource type, with method namespacing carrying the only distinction the host needs.
 
@@ -767,6 +781,9 @@ Not built:
 - A parent declared by a prebuilt module. The collect pass skips what the stdlib snapshot covers, so a snapshot parent reaches validation without its method names or its arity; rather than accept what it cannot check, the compiler rejects the clause. `wado-lang:web` is a package, never snapshotted, so nothing reaches it yet.
 
 ### Known gap: the handle is an index, not a reference
+
+> Superseded by [WEP: An Unrestricted Resource Is a Host Reference](./wep-2026-11-14-extern-handles.md),
+> which closes this gap by leaving the canonical ABI for these imports.
 
 An extern-handle would rather be a Wasm GC `externref`: the collector would reclaim it, and the host table would disappear along with the leak above. The WIR already carries the type (`WirAbstractHeapType::Extern`), so the guest side is not what blocks it.
 

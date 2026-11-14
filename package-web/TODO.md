@@ -74,6 +74,8 @@ lower is then available to each interface the slice adds.
 
 - A handle is never released. The glue's table keeps every object the program
   receives, and the callback registry keeps every closure it registers.
+  [WEP: An Unrestricted Resource Is a Host Reference](../docs/wep-2026-11-14-extern-handles.md)
+  holds the roadmap that ends this.
 - A program cannot recover from a DOM exception: it traps.
 - CI runs the glue on jsdom only, never in a browser.
 - jco 1.30.0 fails an export that a listener reenters during
