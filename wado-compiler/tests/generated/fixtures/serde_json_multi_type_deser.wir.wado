@@ -1218,7 +1218,7 @@ fn "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(self) {
     let s_30: ref "core:prelude/string.wado//String";
     let $qm_e_32: ref "core:serde//DeserializeError";
     let a_71: i32;
-    let $sroa_slice_repr_104: ref Array<u8>;
+    let $sroa_slice_repr_103: ref Array<u8>;
     if @unlikely(local.tee quote("core:json/core:json/JsonDeserializer::peek_after_whitespace"(self)) < 0) {
         cold_path;
         return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 8 };
@@ -1254,7 +1254,7 @@ fn "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(self) {
                 unreachable;
             }
             $mv$prefix$valid = select i32(a_71 < $mv$prefix$valid, local.tee a_71(select i32($mv$prefix$end > quote, $mv$prefix$end, quote)), $mv$prefix$valid);
-            $sroa_slice_repr_104 = $load_2.repr;
+            $sroa_slice_repr_103 = $load_2.repr;
             quote = $mv$prefix$stop + quote;
             $mv$prefix$stop = $mv$prefix$stop + $mv$prefix$valid;
             $inline_core_prelude_string_wado_String__push_bytes_unchecked_core_prelude_bytes_wado_ByteSlice__16: block {
@@ -1265,7 +1265,7 @@ fn "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(self) {
                 }
                 $mv$prefix$valid = s_30.used;
                 s_30.used = $mv$prefix$stop;
-                builtin::array_copy<u8>(s_30.repr, $mv$prefix$valid, $sroa_slice_repr_104, quote, $mv$prefix$stop);
+                builtin::array_copy<u8>(s_30.repr, $mv$prefix$valid, $sroa_slice_repr_103, quote, $mv$prefix$stop);
             };
             break $thread_$inline_core_json_JsonDeserializer__append_scanned_run_5;
         };

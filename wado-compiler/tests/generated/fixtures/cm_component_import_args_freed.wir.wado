@@ -141,14 +141,14 @@ fn "cm_component_import_args_freed.wado/run"() with Stdout {
     let ptr_82: i32;
     let $sroa_$iter_0_start_131: i32;
     let $licm_repr_139: ref Array<u8>;
-    let $licm_repr_142: ref Array<u8>;
+    let $licm_repr_140: ref Array<u8>;
     let $licm_arith_143: i64;
     let $licm_arith_144: i64;
     bytes = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
     text = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(65536), used: 0 };
     $sroa_$iter_0_start_131 = 0;
     $licm_repr_139 = bytes.repr;
-    $licm_repr_142 = text.repr;
+    $licm_repr_140 = text.repr;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_start_131 >= 65536;
@@ -160,14 +160,14 @@ fn "cm_component_import_args_freed.wado/run"() with Stdout {
             }
             builtin::array_set_u8($licm_repr_139, used_24, 1);
             bytes.used = used_24 + 1;
-            if @unlikely(local.tee used_24(text.used + 1) > builtin::array_len($licm_repr_142)) {
+            if @unlikely(local.tee used_24(text.used + 1) > builtin::array_len($licm_repr_140)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(text, used_24);
-                $licm_repr_142 = text.repr;
+                $licm_repr_140 = text.repr;
             }
             start_35 = text.used;
             text.used = used_24;
-            builtin::array_set_u8($licm_repr_142, start_35, 97);
+            builtin::array_set_u8($licm_repr_140, start_35, 97);
             continue l1;
         };
     };
@@ -180,8 +180,9 @@ fn "cm_component_import_args_freed.wado/run"() with Stdout {
     }
     $sroa_$iter_0_start_131 = builtin::memory_size();
     used_24 = 0;
+    start_35 = bytes.used;
     $licm_repr_139 = bytes.repr;
-    $licm_arith_143 = builtin::i64_extend_i32_s(local.tee start_35(bytes.used)) << 32_i64;
+    $licm_arith_143 = builtin::i64_extend_i32_s(start_35) << 32_i64;
     $licm_arith_144 = builtin::i64_extend_i32_s(start_35) << 32_i64;
     b6: block {
         l7: loop {
@@ -194,7 +195,7 @@ fn "cm_component_import_args_freed.wado/run"() with Stdout {
                     drop("mem/realloc"($temp_7.ptr, ptr_82, 1, 0));
                 }
             }
-            total = ((total + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#length"(text))) + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#sum-blob"(struct.new "tuple//[core:prelude/list.wado/List<u8>, u32]" { 0: struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_copy<u8>(local.tee $licm_repr_142(builtin::array_new<u8>(start_35)), 0, $licm_repr_139, 0, start_35); $licm_repr_142, used: start_35 }, 1: 1 }))) + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#wide"(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ptr_82 = builtin::i32_wrap_i64(ptr_82 = "mem/realloc"(0, 0, 1, start_35); "core:rt/gc_array_to_memory$spec0$dae[src_start]"($licm_repr_139, ptr_82, start_35); builtin::i64_extend_i32_u(ptr_82) | $licm_arith_144); released_65 = struct.new "core:prelude//$Cell<bool>" { value: 0 }; local.tee $temp_7(struct.new "core:linear//ListView<u8>" { ptr: ptr_82, len: start_35, owned_bytes: start_35, released: released_65 })));
+            total = ((total + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#length"(text))) + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#sum-blob"(struct.new "tuple//[core:prelude/list.wado/List<u8>, u32]" { 0: struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_copy<u8>(local.tee $licm_repr_140(builtin::array_new<u8>(start_35)), 0, $licm_repr_139, 0, start_35); $licm_repr_140, used: start_35 }, 1: 1 }))) + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#wide"(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ptr_82 = builtin::i32_wrap_i64(ptr_82 = "mem/realloc"(0, 0, 1, start_35); "core:rt/gc_array_to_memory$spec0$dae[src_start]"($licm_repr_139, ptr_82, start_35); builtin::i64_extend_i32_u(ptr_82) | $licm_arith_144); released_65 = struct.new "core:prelude//$Cell<bool>" { value: 0 }; local.tee $temp_7(struct.new "core:linear//ListView<u8>" { ptr: ptr_82, len: start_35, owned_bytes: start_35, released: released_65 })));
             if ref.is_null($temp_7) == 0 {
                 $temp_7.released.value = 1;
                 if local.tee ptr_82($temp_7.owned_bytes) > 0 {
