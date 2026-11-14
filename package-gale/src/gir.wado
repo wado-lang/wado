@@ -170,6 +170,8 @@ pub variant DiagnosticSite {
     /// A lexer action body, by action id. `rule` stays empty — a lexer rule
     /// is not a parser rule and must not inline under one.
     LexerAction(i32),
+    /// A lexer rule, by name. `rule` stays empty, as for `LexerAction`.
+    LexerRule(String),
     /// A grammar-level host owning no rule: `@members`, `@lexer::members`,
     /// `superClass`, `fragment_entries`, the highlight query.
     Host(String),
@@ -199,6 +201,7 @@ impl DiagnosticOwner {
             Action(id) => `action ${*id}`,
             AttrInit(name) => `initializer of '${*name}' in rule '${self.rule}'`,
             LexerAction(id) => `lexer action ${*id}`,
+            LexerRule(name) => `lexer rule '${*name}'`,
             Host(name) => *name,
         };
     }
@@ -238,6 +241,10 @@ pub variant DiagnosticKind {
     /// Under `prediction: "longest"`, a decision only the runtime ATN simulator makes.
     /// No parser is built from such a grammar.
     SimulatorRequired,
+    /// Under `caseInsensitive`, a range whose bounds are letters of different
+    /// case, as `[Z-a]`. Such a range matches only what it spans, so the other
+    /// case of the letters in it does not match.
+    CaseMixedRange,
 }
 
 /// The level a build reports `kind` at, or `null` for one it does not report.
@@ -255,7 +262,7 @@ pub fn diagnostic_level(kind: &DiagnosticKind) -> Option<Level> {
     return match *kind {
         OptionalScanGuardFallback => null,
         OverlapTournament => Option::Some(Level::Info),
-        UnsupportedAction | HighlightQuery | FragmentEntry => Option::Some(Level::Warn),
+        UnsupportedAction | HighlightQuery | FragmentEntry | CaseMixedRange => Option::Some(Level::Warn),
         SimulatorRequired => Option::Some(Level::Error),
     };
 }

@@ -28,6 +28,8 @@ use {
     lexer_grammar_run_action_ids,
     lexer_mode_attr_use,
     splice_suffixed_alternations,
+    case_mixed_ranges,
+    resolve_ci,
 } from "./lexer_gen.wado";
 use { gen_parser } from "./parser_gen.wado";
 use { collect_members, translate_gate_bodies } from "./action_gen.wado";
@@ -339,6 +341,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_alt_enums(&mut w, grammar);
     gen_parser(&mut w, grammar, &lowered, &parser_members, &mut ctx);
     warn_unhandled_lexer_actions(grammar, &ctx.settings, &mut ctx.diagnostics);
+    warn_case_mixed_ranges(grammar, &mut ctx.diagnostics);
     warn_atn_class_lexer_predicates(grammar, &latn.atn_class_rules, &mut ctx.diagnostics);
     gen_string_tree_helper(&mut w, grammar, &lit_tokens);
     if let Some(query) = &options.highlight_query {
@@ -492,6 +495,21 @@ fn warn_superclass_refused<S: AsStrSlice, S1: AsStrSlice>(diagnostics: &mut Diag
 /// `emit_actions`, so a `language = Java` grammar warns nothing — except under
 /// a `superClass`, whose base-call rewrite runs actions the host translator
 /// never sees, leaving the rest to report.
+fn warn_case_mixed_ranges(grammar: &Grammar, diagnostics: &mut Diagnostics) {
+    for let rule of &grammar.lexer_rules {
+        if !resolve_ci(&grammar.options, &rule.options) {
+            continue;
+        }
+        for let r of &case_mixed_ranges(&rule.body) {
+            diagnostics.warn(
+                &DiagnosticOwner { site: DiagnosticSite::LexerRule(rule.name) },
+                DiagnosticKind::CaseMixedRange,
+                `range ${r.start}..${r.end} is kept as written, not widened by caseInsensitive: its bounds are letters of different case`,
+            );
+        }
+    }
+}
+
 fn warn_unhandled_lexer_actions(grammar: &Grammar, settings: &GenSettings, diagnostics: &mut Diagnostics) {
     if !settings.emit_actions && !settings.has_superclass() {
         return;

@@ -462,10 +462,9 @@ fn build_element(b: &mut LatnBuilder, elem: &LexerElement) -> [i32, i32] {
     };
 }
 
-/// Unicode-scalar ranges for the char span `[lo, hi]`, folding case when
-/// `ci` so the lexer ATN matches both cases like the static path
-/// (`fold_range_ci`). An inverted span (`lo > hi`, e.g. `[z-a]`) yields no
-/// range — a dead, never-matching atom.
+/// Unicode-scalar ranges for the char span `[lo, hi]`, folded under `ci` as
+/// the static path folds it (`fold_range_ci`). An inverted span (`lo > hi`,
+/// e.g. `[z-a]`) yields no range — a dead, never-matching atom.
 fn ci_ranges(ci: bool, lo: char, hi: char) -> List<[i32, i32]> {
     if lo as i32 > hi as i32 {
         return [];
