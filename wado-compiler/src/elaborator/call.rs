@@ -993,7 +993,11 @@ impl TypeSystem {
             // `Self::m()` goes through that bound as `T::m()` does. A blanket's
             // `Self` is its receiver `T`, which the rewrite below keeps reaching
             // the blanket itself.
-            if self.is_trait_self(self_type_id) && ctx.trait_ctx.type_params.contains_key("Self") {
+            if self.is_trait_self(self_type_id) {
+                assert!(
+                    ctx.trait_ctx.binder(self_type_id).is_some(),
+                    "a frame standing on a trait's `Self` binds it"
+                );
                 return self.callee_ident_for_type_param("Self", suffix, self_type_id);
             }
             // `Self` names the receiver, not one of its bounds: an impl
