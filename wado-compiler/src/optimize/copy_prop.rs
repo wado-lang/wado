@@ -1051,7 +1051,7 @@ pub fn propagate_copies(
     let copy_value_id = project.builtin_func_id("copy_value");
     let type_table = project.type_table.borrow();
     let param_mut = build_param_mut(project);
-    let effects = heap.effects(project, &type_table, gate);
+    let effects = heap.effects(project, &type_table, gate.exec());
     let type_table = &*type_table;
     let functions = &project.functions;
     let len = functions.len();

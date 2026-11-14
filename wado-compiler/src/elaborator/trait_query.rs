@@ -289,6 +289,17 @@ pub(super) struct SelfBinding {
     pub(super) declaring_trait: Option<DefId>,
 }
 
+impl SelfBinding {
+    /// A static call's: its target as written, which no receiver adjustment
+    /// reads through, so an `impl … for &A` answers there with `Self = &A`.
+    pub(super) fn of_static(target: TypeId, declaring_trait: Option<DefId>) -> Self {
+        Self {
+            type_id: target,
+            declaring_trait,
+        }
+    }
+}
+
 impl TypeSystem {
     /// [`SelfBinding`] for a call on `receiver`, read past its references to
     /// the type an `impl` block targets.

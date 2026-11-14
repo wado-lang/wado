@@ -232,7 +232,8 @@ same baked data the case does and approximates nothing.
 The enum is the size knob. Each property has its own exports in the asset, one
 for its ranges, one for a single character and one for its parser, so a call
 roots one property and the collection keeps that property's data alone. The
-binary properties share one set of exports, which is a known gap below. Two
+binary properties share one set of exports, a known gap in
+`wado-bundled-icu/TODO.md`. Two
 choices follow from it:
 
 - A value crosses the boundary as its position in its enum, a `u16`, rather
@@ -404,59 +405,6 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   surface waits on full resource import, a gap shared with every
   resource-bearing third-party component.
 
-## Known gaps
-
-- **The collection reaches an interface's lifts, not a world's.** A world-level
-  lift is a root whether or not the program calls it, because the import plan
-  lists every world function the dependency declares and `used_wasi_functions`
-  keys effect operations alone
-  ([#2068](https://github.com/wado-lang/wado/issues/2068)). `core:icu` exports
-  interfaces only, so it costs nothing here.
-
-- **The collection stops at the export.** A program reaching one binary
-  property carries the code and data of all 63. Their exports take the
-  position of a case and match over every one, so naming `Uppercase` does not
-  narrow what the function roots. An enumerated property does not have this
-  gap: its values share one map, which any of them reaches anyway.
-
-- **A dropped lift leaves a stub, not a hole.** A lift the program does not
-  import keeps its name and signature in the core module, because the
-  component's `canon lift` still aliases it. Dropping it outright would mean
-  renumbering the component's own index spaces. The data and code a lift
-  reached are gone, but its stub, its export name and the component's alias of
-  it remain. With three exports per property that comes to kilobytes in every
-  program that uses `core:icu` at all.
-
-- **A collator takes no options.** The keywords a `-u-` extension carries
-  (`co`, `kn`, …) are dropped with the extension, and `Collator::new` takes
-  nothing else, so a program cannot ask for phonebook order or numeric
-  collation.
-
-## Open questions
-
-- [ ] A closure cannot own an affine value
-  ([Affine Types](./wep-2026-10-17-affine-types.md#a-closure-cannot-own-an-affine-value)),
-  so no function returns a comparator that carries its collator, and a map
-  keyed by `Accept-Language` cannot hold collators either
-  ([maps and sets of affine values](./wep-2026-10-17-affine-types.md#maps-and-sets-of-affine-values)).
-  Nor can a global hold one ([Affine Types](./spec-affine.md)), so a collator
-  built once per program is passed down by `&`.
-- [ ] Does ICU4X expose collation sort keys? A bulk key-extraction call would let
-  a sort cross the boundary once instead of per comparison, which dominates
-  any handle-versus-lookup difference.
-- [ ] Where the facade's date/time formatting meets
-  [`core:temporal`](./wep-2026-06-05-core-temporal.md), which takes its zone
-  IANA canonicalization from here — WASI's `timezone` answers only for the
-  host's own zone, so it cannot serve one, and ICU4X's own zone data stops
-  at identifiers: `TimezonePeriodsV1` is 6.8 KB for every zone and holds a
-  standard/daylight pair, not the transitions that say which is in effect.
-  Open: whether the tzdb the offsets do need rides this facade's data
-  component as one more marker set, or arrives beside it.
-- [ ] The full capability inventory, and which of its data is locale-bearing.
-  The first cut covers what the spikes measured — locale identity,
-  normalization, case mapping, character properties, segmentation,
-  collation — with formatting, plural rules, and transliteration following.
-
 ## Implementation
 
 - [x] Affine resource support in CM component import
@@ -476,12 +424,6 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   `StrSlice`s, and `grapheme_count` counts them without listing them. Against a
   program printing one line, uppercasing one string adds 68 KB and counting its
   graphemes 33 KB.
-- [ ] The [data-provider mechanism](./wep-2026-06-13-compile-time-data-providers.md)
-  itself, reduced here to an archive lookup: `core:icu` runs no provider
-  component and needs no compile-time execution.
-- [ ] Ship the asset relocatable, and move the locale-bearing capabilities onto
-  a buffer provider with the rest left baked. The asset is first-party and
-  bundled already; what it is not yet is either of those.
 - [x] Collect over a component asset. Each core module it holds is embedded and
   every other section copied byte for byte, so nothing is renumbered and
   each `alias core export` still resolves. The root set is the lifted
@@ -513,12 +455,6 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   print/reparse preserves them where a `reloc` entry's offset into the
   encoded code section would not. Resolving the map at compile time instead
   would need the asset to ship relocatable, and ship in binary with it.
-- [ ] Grow the facade past character properties: re-exports, the Wado-native
-  shapes (`Ord`, iterators, `Display`), and the one-shot helpers.
-- [ ] Build the data image — per-(capability, locale) zlib entries plus index,
-  deduplicated against the fallback parent — and bundle it with the
-  toolchain.
-- [ ] Feed several blobs to the asset through ICU4X's fork provider.
 
 ## References
 
@@ -534,3 +470,9 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   need no longer be CM-representable.
 - [Affine Types](./wep-2026-10-17-affine-types.md) — the handle kind the facade
   draws on.
+
+## Status
+
+This WEP is complete. Further development of `core:icu`, its roadmap, known
+gaps and open questions included, is tracked in `wado-bundled-icu/`
+(`TODO.md`, `AGENTS.md`) rather than here, and no new WEP is opened for it.

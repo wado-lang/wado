@@ -157,7 +157,7 @@ hand-authored layout. Naming a file bypasses the exclusion, so never
 - `wado-manifest/` — `wado.toml` / `wado.lock` parsing, validation, and dependency resolution.
 - `wado-wasm-embed/` — prepares a core wasm asset for embedding in a component: memory definition to import, then a prune to the used exports.
 - `wado-bundled-libm/` — deterministic math, bundled into the compiler as a Wasm module.
-- `wado-bundled-icu/` — ICU binding for Wado (under development; not bundled yet).
+- `wado-bundled-icu/` — the ICU4X component behind `core:icu`, bundled into the compiler as a Wasm component; also where `core:icu` is designed and its open work tracked.
 - `docs/` — the language spec (`docs/spec-*.md`), the compiler and formatter guides (`docs/compiler.md`, `docs/optimizer.md`, `docs/formatter.md`), stdlib docs, and the Wado Evolution Proposals (`docs/wep-*.md`).
 - `benchmark/`, `wasm-size/` — performance and code-size measurement.
 - `cloudflare-worker/` — serves a `wasi:http/service` component from a Cloudflare Worker, via jco.

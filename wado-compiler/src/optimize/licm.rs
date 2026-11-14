@@ -230,7 +230,7 @@ pub fn apply_licm(
     let panic_ids = resolve_panic_ids(project);
     let quiet_callee_ids = resolve_quiet_callee_ids(project, &panic_ids);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let effects = heap.effects(project, &type_table, gate);
+    let effects = heap.effects(project, &type_table, gate.exec());
     let type_table = &*type_table;
     let functions = &project.functions;
     gate.run_gated_par(GatedPass::Licm, functions.len(), |buffers, fid| {

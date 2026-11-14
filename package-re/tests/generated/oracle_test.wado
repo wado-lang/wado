@@ -608,3 +608,136 @@ test "[\\]\\[]+" {
 test "[\\-]" {
     assert spans(#"[\-]"#, "-") == "0..1";
 }
+
+test "(?i:abc)" {
+    assert spans(#"(?i:abc)"#, "ABC") == "0..3";
+    assert spans(#"(?i:abc)"#, "aBc") == "0..3";
+    assert spans(#"(?i:abc)"#, "abd") == "";
+}
+
+test "a(?i:b)c" {
+    assert spans(#"a(?i:b)c"#, "aBc") == "0..3";
+    assert spans(#"a(?i:b)c"#, "ABC") == "";
+    assert spans(#"a(?i:b)c"#, "abC") == "";
+}
+
+test "(?i:a(?-i:b))" {
+    assert spans(#"(?i:a(?-i:b))"#, "AB") == "";
+    assert spans(#"(?i:a(?-i:b))"#, "Ab") == "0..2";
+    assert spans(#"(?i:a(?-i:b))"#, "ab") == "0..2";
+}
+
+test "(?i:k)" {
+    assert spans(#"(?i:k)"#, "k") == "0..1";
+    assert spans(#"(?i:k)"#, "K") == "0..1";
+    assert spans(#"(?i:k)"#, "\u{212A}") == "0..3";
+}
+
+test "(?i:\u{212A})" {
+    assert spans(#"(?i:K)"#, "k") == "0..1";
+    assert spans(#"(?i:K)"#, "K") == "0..1";
+}
+
+test "(?i:s)" {
+    assert spans(#"(?i:s)"#, "S") == "0..1";
+    assert spans(#"(?i:s)"#, "\u{17F}") == "0..2";
+}
+
+test "(?i:\u{DF})" {
+    assert spans(#"(?i:ß)"#, "\u{1E9E}") == "0..3";
+    assert spans(#"(?i:ß)"#, "ss") == "";
+    assert spans(#"(?i:ß)"#, "SS") == "";
+}
+
+test "(?i:\u{130})" {
+    assert spans(#"(?i:İ)"#, "i") == "";
+    assert spans(#"(?i:İ)"#, "I") == "";
+    assert spans(#"(?i:İ)"#, "\u{130}") == "0..2";
+    assert spans(#"(?i:İ)"#, "\u{131}") == "";
+}
+
+test "(?i:i)" {
+    assert spans(#"(?i:i)"#, "I") == "0..1";
+    assert spans(#"(?i:i)"#, "\u{130}") == "";
+    assert spans(#"(?i:i)"#, "\u{131}") == "";
+}
+
+test "(?i:\u{3C3})" {
+    assert spans(#"(?i:σ)"#, "\u{3A3}") == "0..2";
+    assert spans(#"(?i:σ)"#, "\u{3C2}") == "0..2";
+}
+
+test "(?i:\u{10400})" {
+    assert spans(#"(?i:𐐀)"#, "\u{10428}") == "0..4";
+}
+
+test "(?i:[a-z]+)" {
+    assert spans(#"(?i:[a-z]+)"#, "Hello WORLD") == "0..5 6..11";
+    assert spans(#"(?i:[a-z]+)"#, "\u{17F}\u{212A}") == "0..5";
+}
+
+test "(?i:[^a])" {
+    assert spans(#"(?i:[^a])"#, "A") == "";
+    assert spans(#"(?i:[^a])"#, "a") == "";
+    assert spans(#"(?i:[^a])"#, "b") == "0..1";
+}
+
+test "(?i:[^k])" {
+    assert spans(#"(?i:[^k])"#, "\u{212A}") == "";
+    assert spans(#"(?i:[^k])"#, "x") == "0..1";
+}
+
+test "(?i:\\w)" {
+    assert spans(#"(?i:\w)"#, "\u{17F}") == "0..2";
+    assert spans(#"(?i:\w)"#, "\u{212A}") == "0..3";
+    assert spans(#"(?i:\w)"#, "\u{E9}") == "";
+}
+
+test "(?i:\\W)" {
+    assert spans(#"(?i:\W)"#, "\u{17F}") == "";
+    assert spans(#"(?i:\W)"#, "S") == "";
+    assert spans(#"(?i:\W)"#, "!") == "0..1";
+}
+
+test "(?i:[\\W])" {
+    assert spans(#"(?i:[\W])"#, "\u{17F}") == "";
+    assert spans(#"(?i:[\W])"#, "!") == "0..1";
+}
+
+test "(?i:[^\\W])" {
+    assert spans(#"(?i:[^\W])"#, "\u{17F}") == "0..2";
+    assert spans(#"(?i:[^\W])"#, "!") == "";
+}
+
+test "(?i:\\P{Lu})" {
+    assert spans(#"(?i:\P{Lu})"#, "A") == "0..1";
+    assert spans(#"(?i:\P{Lu})"#, "a") == "0..1";
+}
+
+test "(?i:\\p{Lu})" {
+    assert spans(#"(?i:\p{Lu})"#, "a") == "0..1";
+    assert spans(#"(?i:\p{Lu})"#, "1") == "";
+}
+
+test "(?i:\\b)" {
+    assert spans(#"(?i:\b)"#, "\u{17F}") == "0..0 2..2";
+    assert spans(#"(?i:\b)"#, "a\u{212A} b") == "0..0 4..4 5..5 6..6";
+}
+
+test "(?i:a\\B\u{17F})" {
+    assert spans(#"(?i:a\Bſ)"#, "a\u{17F}") == "0..3";
+}
+
+test "(?i:\\B)" {
+    assert spans(#"(?i:\B)"#, "\u{17F}!") == "3..3";
+}
+
+test "(?i:.)" {
+    assert spans(#"(?i:.)"#, "A") == "0..1";
+    assert spans(#"(?i:.)"#, "\u{A}") == "";
+}
+
+test "(?i:\\d)" {
+    assert spans(#"(?i:\d)"#, "1") == "0..1";
+    assert spans(#"(?i:\d)"#, "a") == "";
+}

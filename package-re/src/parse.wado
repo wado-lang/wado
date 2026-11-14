@@ -533,10 +533,6 @@ impl Parser {
             }
         }
         self.expect(':', "`(?` must be followed by `:`, `<name>`, or modifiers `ims` and `:`")?;
-        if add & Flag::IgnoreCase != Flag::none() {
-            let at = start + 2 + self.src.slice(start + 2, dash).find("i").unwrap();
-            self.refuse(at, "the `i` modifier needs simple case folding, which core:icu does not offer yet");
-        }
         let body = self.disjunction()?;
         self.close_group(start)?;
         if add == Flag::none() && remove == Flag::none() {

@@ -49,6 +49,40 @@ first: `ranges(BinaryProperty::WhiteSpace)`,
 Whether `ch` has the property or property value, without building the
 ranges.
 
+### `pub fn simple_lowercase(ch: char) -> char`
+
+`Simple_Lowercase_Mapping` of `ch`: its lowercase as one character, or `ch`
+where that takes more than one or there is none. No locale tailors it.
+
+### `pub fn simple_uppercase(ch: char) -> char`
+
+`Simple_Uppercase_Mapping` of `ch`, as `simple_lowercase` answers its
+lowercase: `ß` stays `ß`.
+
+### `pub fn simple_titlecase(ch: char) -> char`
+
+`Simple_Titlecase_Mapping` of `ch`, as `simple_lowercase` answers its
+lowercase: `ǆ` becomes `ǅ`.
+
+### `pub fn simple_fold(ch: char) -> char`
+
+`Simple_Case_Folding` of `ch`, the `C` and `S` entries of
+`CaseFolding.txt`: two characters match caselessly, one at a time, when
+their simple foldings are equal. `ẞ` folds to `ß` and `İ` to itself; the
+Turkic `T` entries are not applied. `Locale::fold` folds whole text in full.
+
+### `pub fn simple_fold_closure(set: List<[u32, u32]>) -> List<[u32, u32]>`
+
+- `contract are_code_point_ranges(&set), "each range must run upward within 0..=0x10FFFF"`
+
+Every code point whose `simple_fold` equals that of one in `set`: the set
+a character class matches caselessly, one character at a time.
+`simple_fold_closure([[107, 107]])` is `k`, `K` and the Kelvin sign.
+
+Both lists hold inclusive ranges. `set` may come in any order, overlap or
+touch; the answer comes lowest first with no two ranges touching, the shape
+`ranges(p)` answers.
+
 ### `pub fn graphemes(text: String) -> Graphemes`
 
 The extended grapheme clusters of `text` (UAX #29), in order: what a reader

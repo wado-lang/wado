@@ -1,0 +1,82 @@
+// A static of an impl for a reference is selected by what the reference
+// refers to, whatever its shape: a builtin (`&()`, `&Array<i32>`), a generic
+// declaration (`&Box<T>`, inheriting the trait's body), or one of several
+// declarations whose impls each answer for their own. The selected block's
+// signature fills an omitted type argument from its default.
+use { println, Stdout } from "core:cli";
+
+trait Tr with () {
+    fn k() -> i32 {
+        return 3;
+    }
+    fn s<U = i32>() -> i32;
+    fn m<U = i32>(&self) -> i32 {
+        return Self::k();
+    }
+    fn e(&self) -> i32 {
+        return Self::m(self);
+    }
+}
+
+struct Box<T> {
+    t: T,
+}
+
+struct A {}
+
+struct B {}
+
+impl Tr for &() {
+    fn k() -> i32 {
+        return 5;
+    }
+    fn s<U>() -> i32 {
+        return 50;
+    }
+}
+
+impl Tr for &Array<i32> {
+    fn k() -> i32 {
+        return 6;
+    }
+    fn s<U>() -> i32 {
+        return 60;
+    }
+}
+
+impl<T> Tr for &Box<T> {
+    fn s<U>() -> i32 {
+        return 30;
+    }
+}
+
+impl Tr for &A {
+    fn k() -> i32 {
+        return 7;
+    }
+    fn s<U>() -> i32 {
+        return 70;
+    }
+}
+
+impl Tr for &B {
+    fn k() -> i32 {
+        return 8;
+    }
+    fn s<U>() -> i32 {
+        return 80;
+    }
+}
+
+export fn run() with Stdout {
+    let a = A {};
+    let b = B {};
+    println(`${Tr::<&()>::k()} ${Tr::<&Array<i32>>::k()} ${Tr::<&Box<i32>>::k()}`);
+    println(`${Tr::<&()>::s()} ${Tr::<&Box<i32>>::s()} ${Tr::<&A>::s()} ${Tr::<&B>::s()}`);
+    println(`${(&a).e()} ${(&b).e()}`);
+}
+
+__DATA__
+{
+    "stdout": "5 6 3\n50 30 70 80\n7 8\n"
+}

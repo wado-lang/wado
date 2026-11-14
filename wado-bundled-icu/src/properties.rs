@@ -34,7 +34,7 @@ fn fold(name: &str) -> String {
         .collect()
 }
 
-fn ranges_of(iter: impl Iterator<Item = RangeInclusive<u32>>) -> Vec<(u32, u32)> {
+pub(crate) fn ranges_of(iter: impl Iterator<Item = RangeInclusive<u32>>) -> Vec<(u32, u32)> {
     iter.map(|r| (*r.start(), *r.end())).collect()
 }
 

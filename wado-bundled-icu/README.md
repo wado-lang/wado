@@ -2,7 +2,8 @@
 
 Bundles [ICU4X](https://github.com/unicode-org/icu4x) into a self-contained
 **Wasm Component Model** component, the way `wado-bundled-libm` bundles libm.
-See [WEP: `core:icu`](../docs/wep-2026-08-09-core-icu.md).
+See [WEP: `core:icu`](../docs/wep-2026-08-09-core-icu.md) for the design, and
+[AGENTS.md](./AGENTS.md) for how work continues here.
 
 It is its own Cargo workspace root so its heavy dependency tree (icu +
 wit-bindgen) never perturbs the main workspace's pinned wasm-tools generation.
@@ -64,9 +65,13 @@ constructs a collator collects it away.
 ### Case mapping and graphemes
 
 `casemap` maps and folds by the language subtag alone, the only one that selects
-a tailoring. `fold` picks ICU4X's Turkic folding for `tr` and `az`.
+a tailoring. `fold` picks ICU4X's Turkic folding for `tr` and `az`. The four
+simple mappings take one character and no locale, since none is tailored.
+`simple-fold-closure` closes a set of code points over simple folding, through
+the classes `gen/` writes into `src/casemap/fold_classes.rs`: ICU4X maps a
+character to its folding but offers no way back.
 `segmenter` returns where each grapheme cluster ends, or only how many there
-are. The core module holding all four interfaces is 1.68 MB, the size of
+are. The core module holding all four interfaces is 1.59 MB, the size of
 `target/wasm32-unknown-unknown/release/wado_bundled_icu.wasm` after
 `cargo build --release`.
 
