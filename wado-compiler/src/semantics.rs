@@ -1598,9 +1598,11 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         let _span = logger.span("stdlib_snapshot");
         let parsed_alike =
             |snap: &Rc<Semantics>| reparsed_snapshot_module(snap, &load_result.modules).is_none();
-        dependencies
-            .filter(parsed_alike)
-            .or_else(|| get_or_init_snapshot(coverage, profile).filter(parsed_alike))
+        let dependencies = dependencies.filter(parsed_alike);
+        if dependencies.is_some() {
+            crate::compiler_trace!("dependency_snapshot", "seeds the compile");
+        }
+        dependencies.or_else(|| get_or_init_snapshot(coverage, profile).filter(parsed_alike))
     };
 
     let (symbols, analyze_ok) = {

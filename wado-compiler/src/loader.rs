@@ -4,7 +4,7 @@
 //! This enables converting ALL modules to TIR before codegen.
 
 use std::collections::VecDeque;
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use crate::hashmap::IndexSet;
 
@@ -2072,8 +2072,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             return Ok(bindings.clone());
         }
         let bindings = self.build_component_bindings(source, bytes)?;
-        lock(&BUNDLED).insert(path.to_string(), bindings.clone());
-        Ok(bindings)
+        // A racing decode that landed first is the one compiles already use.
+        Ok(lock(&BUNDLED)
+            .entry(path.to_string())
+            .or_insert(bindings)
+            .clone())
     }
 
     fn build_component_bindings(
@@ -2433,20 +2436,31 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         source: &str,
         module_source: &ModuleSource,
     ) -> Result<Module, LoadError> {
-        static PARSES: LazyLock<Mutex<IndexMap<String, (String, Module)>>> =
+        static PARSES: LazyLock<Mutex<IndexMap<String, Arc<Module>>>> =
             LazyLock::new(Mutex::default);
         let ModuleSource::Dependency { path, .. } = module_source else {
             panic!("only a dependency module's parse is kept: {module_source}");
         };
-        let identity = path.to_string();
-        if let Some((parsed, module)) = lock(&PARSES).get(&identity)
-            && parsed == source
-        {
-            return Ok(module.clone());
+        let kept = |parses: &IndexMap<String, Arc<Module>>| {
+            parses
+                .get(path.as_str())
+                .filter(|module| module.source() == source)
+                .cloned()
+        };
+        if let Some(module) = kept(&lock(&PARSES)) {
+            return Ok(Module::clone(&module));
         }
-        let module = self.parse_source(source, module_source)?;
-        lock(&PARSES).insert(identity, (source.to_string(), module.clone()));
-        Ok(module)
+        let parsed = Arc::new(self.parse_source(source, module_source)?);
+        // A racing parse of the same source that landed first is the one
+        // compiles already use.
+        let module = {
+            let mut parses = lock(&PARSES);
+            kept(&parses).unwrap_or_else(|| {
+                parses.insert(path.to_string(), Arc::clone(&parsed));
+                parsed
+            })
+        };
+        Ok(Module::clone(&module))
     }
 
     /// Parse `source`, skipping a generated module's function bodies when

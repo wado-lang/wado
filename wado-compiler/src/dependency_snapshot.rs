@@ -26,16 +26,25 @@ use crate::module_source::ModuleSource;
 use crate::name::{INTERNAL_PREFIX, entry_dir_of};
 use crate::remote::Integrity;
 use crate::semantics::{Semantics, semantics_with_logger};
+use crate::stdlib_snapshot::reparsed_snapshot_module;
 
 /// The dependency modules a snapshot serves, each with the parse it was built
 /// over, in a fixed order.
 type Key = Vec<(ModuleSource, AstIdSpace)>;
 
+/// What this thread knows of the dependency modules it last compiled over.
+enum Slot {
+    /// One compile over them, which builds nothing: a snapshot pays only when a
+    /// second compile reuses it, and a one-shot `wado compile` never does.
+    Seen(Key),
+    /// The snapshot of them, or `None` where none can serve them, so the same
+    /// parses do not build again.
+    Built(Key, Option<Rc<Semantics>>),
+}
+
 thread_local! {
-    /// The snapshot last built on this thread, by its key: `None` in place of
-    /// the snapshot where that build failed, so the same parses do not build
-    /// again. One at a time: a thread compiles one package's programs in turn.
-    static SNAPSHOT: RefCell<Option<(Key, Option<Rc<Semantics>>)>> = const { RefCell::new(None) };
+    /// One key at a time: a thread compiles one package's programs in turn.
+    static SNAPSHOT: RefCell<Option<Slot>> = const { RefCell::new(None) };
     /// Set while [`build`] runs.
     static BUILDING: Cell<bool> = const { Cell::new(false) };
 }
@@ -47,9 +56,9 @@ pub(crate) fn is_building() -> bool {
     BUILDING.with(Cell::get)
 }
 
-/// The snapshot of `load`'s dependency modules, built on the first compile of
-/// them on this thread. `None` where `load` has none, or one the snapshot
-/// cannot serve.
+/// The snapshot of `load`'s dependency modules, built on the second compile of
+/// them in a row on this thread. `None` where `load` has none, or where no
+/// snapshot can serve them.
 pub(crate) async fn dependency_snapshot<H: CompilerHost>(
     load: &LoadResult,
     host: &H,
@@ -58,26 +67,32 @@ pub(crate) async fn dependency_snapshot<H: CompilerHost>(
     if key.is_empty() || !key.iter().all(|(source, _)| servable(load, source)) {
         return None;
     }
-    let cached = SNAPSHOT.with_borrow(|slot| {
-        slot.as_ref()
-            .filter(|(built, _)| *built == key)
-            .map(|(_, snapshot)| snapshot.clone())
-    });
-    if let Some(snapshot) = cached {
-        return snapshot;
-    }
-    let snapshot = build(load, host, &key).await.map(Rc::new);
-    crate::compiler_trace!(
-        "dependency_snapshot",
-        "{} over {} modules",
-        if snapshot.is_some() {
-            "built"
-        } else {
-            "refused"
-        },
-        key.len()
-    );
-    SNAPSHOT.set(Some((key, snapshot.clone())));
+    let (slot, snapshot) = match SNAPSHOT.take() {
+        Some(Slot::Built(built, snapshot)) if built == key => {
+            (Slot::Built(built, snapshot.clone()), snapshot)
+        }
+        Some(Slot::Seen(seen)) if seen == key => {
+            // Built where the compile reads them, it serves the compile unless
+            // a module came back as another parse, as one decoded per compile does.
+            let snapshot = build(load, host, &key)
+                .await
+                .filter(|snapshot| reparsed_snapshot_module(snapshot, &load.modules).is_none())
+                .map(Rc::new);
+            crate::compiler_trace!(
+                "dependency_snapshot",
+                "{} over {} modules",
+                if snapshot.is_some() {
+                    "built"
+                } else {
+                    "refused"
+                },
+                key.len()
+            );
+            (Slot::Built(key, snapshot.clone()), snapshot)
+        }
+        Some(Slot::Built(..) | Slot::Seen(_)) | None => (Slot::Seen(key), None),
+    };
+    SNAPSHOT.set(Some(slot));
     snapshot
 }
 

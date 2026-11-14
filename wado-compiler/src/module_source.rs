@@ -15,14 +15,14 @@ use crate::name::{
     DeclaredHead, canonicalize_entry_point, effect_namespace, module_parent_dir,
     packaged_module_name,
 };
+use crate::parallel::lock;
 use crate::path::{normalize, relative_path};
 use crate::primitive::PrimitiveType;
 use crate::remote::is_remote;
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
 use crate::token::Span;
-use std::cell::RefCell;
 use std::fmt;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Mutex};
 use unicode_normalization::UnicodeNormalization;
 
 /// Sentinel `Arc<str>` for `ModuleSource::default()` placeholders.
@@ -74,13 +74,10 @@ static ENTRY_FILENAME_STDIN: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::f
 static ENTRY_FILENAME_UNINITIALIZED: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("<uninitialized>"));
 
-thread_local! {
-    /// One pool for every interner on the thread, so a module is one identity
-    /// across compiles and a dependency snapshot one compile built seeds the
-    /// next.
-    static MODULE_STRINGS: RefCell<StringInterner> =
-        RefCell::new(StringInterner::with_well_known_arcs(well_known_arcs()));
-}
+/// One pool for every interner, so a module is one identity across compiles
+/// and threads, and a dependency snapshot one compile built seeds the next.
+static MODULE_STRINGS: LazyLock<Mutex<StringInterner>> =
+    LazyLock::new(|| Mutex::new(StringInterner::with_well_known_arcs(well_known_arcs())));
 
 fn well_known_arcs() -> Vec<Arc<str>> {
     let mut arcs: Vec<Arc<str>> = vec![
@@ -561,7 +558,7 @@ impl ModuleSourceInterner {
     }
 
     pub fn intern(&mut self, s: &str) -> InternedStr {
-        MODULE_STRINGS.with_borrow_mut(|strings| strings.intern(s))
+        lock(&MODULE_STRINGS).intern(s)
     }
 
     pub fn core(&mut self, name: &str) -> ModuleSource {

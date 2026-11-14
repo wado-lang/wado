@@ -264,7 +264,7 @@ fn resolve_resource_extends<H: CompilerHost>(
             );
             continue;
         }
-        // Absent: the collect pass skipped a stdlib-snapshot module, so with no
+        // Absent: the collect pass skipped a snapshot-served module, so with no
         // method names or arity the checks below would pass by default.
         if !method_names.contains_key(&parent) {
             reject(
@@ -457,8 +457,8 @@ pub(crate) struct AnnotateState {
     /// so a `TirModule`'s position in the result map matches the
     /// dependency order downstream phases expect.
     pub(crate) sorted_sources: Vec<ModuleSource>,
-    /// Per-module semantic facts, one entry per loaded module: a stdlib module
-    /// served from the snapshot shares the snapshot's, and the rest are filled
+    /// Per-module semantic facts, one entry per loaded module: a module served
+    /// from the snapshot shares the snapshot's, and the rest are filled
     /// by the passes in [`Elaborator::build_tir_from_state`]. A pass takes its
     /// module's entry out and owns it, so its `&mut` access stays disjoint and
     /// needs no shared-mutability plumbing.
@@ -521,7 +521,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // below are the first to ask.
         let resolutions = {
             let _span = logger.span("elaborate/resolutions");
-            // Continue the snapshot's table: a stdlib `ImplSig` cached there
+            // Continue the snapshot's table: an `ImplSig` cached there
             // carries `DefId`s, and they only read back as the same
             // declarations if the identities are the same ones.
             let seed = snapshot_state.map(|s| s.tysys.resolutions.defs().as_ref());
@@ -788,7 +788,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // tables via [`TypeLookup`] — no per-module flat-map cloning.
         for (module_source, module) in modules {
             if served.contains(module_source) {
-                // Stdlib fields are already resolved in the seeded maps.
+                // Served fields are already resolved in the seeded maps.
                 continue;
             }
             let namespace_imports = namespace_imports_of(
@@ -922,7 +922,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             } else {
                 BuiltinRegistry::build(&modules[&ModuleSource::builtin()], &type_table)
             };
-            // Stdlib wasm assets (e.g. `core:libm.wat`) are already in
+            // Served wasm assets (e.g. `core:libm.wat`) are already in
             // `snapshot.state.tysys.builtin_registry`.
             for (ms, module) in modules {
                 if ms.is_wasm_asset() && !served.contains(ms) {
@@ -1394,9 +1394,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut result = IndexMap::default();
         // Per-rehydration memo: maps each cached function `Rc`'s pointer
         // identity to its per-compile clone, so that aliasing between
-        // `functions` and `generic_functions` within a single stdlib
+        // `functions` and `generic_functions` within a single served
         // module is preserved.  Lives across the whole loop so aliases
-        // between distinct stdlib modules (e.g. a generic helper shared
+        // between distinct served modules (e.g. a generic helper shared
         // between two `core:prelude/*` modules) are preserved too.
         let mut fn_remap: IndexMap<*const RefCell<TirFunction>, Rc<RefCell<TirFunction>>> =
             IndexMap::default();
@@ -1404,7 +1404,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Per-module resolution: walk modules in the per-compile
         // topological order so a `TirModule`'s position in the result map
         // matches the dependency order downstream phases expect.  For
-        // each module either rehydrate from the snapshot cache (stdlib)
+        // each module either rehydrate from the snapshot cache (served)
         // or run the full body-level resolve pass (user code).  Errors
         // are emitted to the logger; we keep going so one broken module
         // doesn't mask others.
@@ -1770,12 +1770,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             logger.remark(message.clone(), DiagnosticSpan::from_span(span, None));
         }
 
-        // Phase 2 — `reify`: rehydrate stdlib TIR from the snapshot and reify
+        // Phase 2 — `reify`: rehydrate served TIR from the snapshot and reify
         // the eligible user modules, gating item emission on `emit_live`.
         // Iterating `sorted_sources` keeps `result`'s insertion order identical
         // to the single-pass form downstream phases expect.
         if build_tir {
-            // The snapshot caches every stdlib declaration, being built before
+            // The snapshot caches every declaration it serves, being built before
             // any program that could narrow the set; this compile's liveness is
             // what narrows it. Building a snapshot itself gates on nothing.
             let gate = (!is_building() && !dependency_snapshot::is_building())
@@ -1792,7 +1792,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if is_snapshot_hit(snapshot, module_source) {
                     let snap_module = snapshot
                         .and_then(|s| s.tir_modules.get(module_source))
-                        .expect("stdlib snapshot hit implies a cached TirModule");
+                        .expect("a snapshot hit implies a cached TirModule");
                     result.insert(
                         module_source.clone(),
                         rehydrate_tir_module(
@@ -1847,7 +1847,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) {
         for (module_source, module) in modules {
             if served.contains(module_source) {
-                // Stdlib decls were interned when the snapshot was built.
+                // Served decls were interned when the snapshot was built.
                 continue;
             }
             let mut tt = type_table.borrow_mut();
@@ -2140,7 +2140,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) {
         for (module_source, module) in modules {
             if served.contains(module_source) {
-                // Stdlib generic-assoc defs are baked into the seeded
+                // Served generic-assoc defs are baked into the seeded
                 // `TypeTable` via the snapshot.
                 continue;
             }
