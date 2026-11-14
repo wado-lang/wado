@@ -1,6 +1,7 @@
 // A literal of constants the body then writes is built on every run, so it
 // stays a safepoint: a looping callee filling one is left a call, as one
-// allocating anything else is.
+// allocating anything else is. The write reaches the literal through the
+// handle `licm` copies out of `digits.repr`, which counts as writing `digits`.
 use { println, Stdout } from "core:cli";
 
 fn digit_sum(value: i32) -> i32 {
@@ -20,7 +21,9 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "11\n",
-    "wir_pass": {"O2": ["nir/cold_outline"]},
+    "wir_contrast": {"O2": [
+        {"        digits[i] = v % 10;\n": "        v += digits[i];\n"}
+    ]},
     "wir_expect:O2": [
         "digit_sum\"("
     ]
