@@ -122,7 +122,7 @@ pub(super) fn run_peephole(
             let params = func.params.iter().map(|p| p.local_index).collect();
             func.body
                 .as_ref()
-                .map(|b| build_ref_elim(b, LazyHeapFrame::new(effects, params)))
+                .map(|b| build_ref_elim(b, LazyHeapFrame::new(effects, params), type_table))
         });
         // Adjacent-use box-local elision runs post-inline only (it collapses the
         // cells `sroa_param` / `inline` expose). Its stats come from

@@ -12,6 +12,7 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId
 use crate::nir_engine::{Engine, Rule};
 use crate::tir::TypeId;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::arena_query::{Place, is_place_prefix, place_path};
 use crate::optimize::arena_query::is_pure_expr;
@@ -29,6 +30,12 @@ struct RefInfo {
     /// binding, not its own, so the positional capture guard falls back to a
     /// whole-body check for it (the safe superset).
     inherited: bool,
+    /// The borrow `r` was bound with, which a whole use of `r` takes again.
+    borrow: NirUnaryOp,
+    /// Whether a whole use of `r` as a call argument folds to `&E`: the
+    /// reference is the handle of a place, not a cell, so borrowing the place
+    /// again yields the same handle.
+    passes_whole: bool,
 }
 
 /// Reference elimination as a rule on the unified post-inline peephole session
@@ -51,10 +58,19 @@ pub(super) struct RefElimRule {
 }
 
 /// Build a [`RefElimRule`] for one function from its pristine body.
-pub(super) fn build_ref_elim(body: &Body, heap: LazyHeapFrame) -> RefElimRule {
+pub(super) fn build_ref_elim(
+    body: &Body,
+    heap: LazyHeapFrame,
+    type_table: &TypeTable,
+) -> RefElimRule {
     let rebound = find_rebound_locals(body);
     let mut refs: IndexMap<u32, RefInfo> = IndexMap::default();
-    analyze_block(body, body.root(), &rebound, &mut refs);
+    let ctx = Analysis {
+        body,
+        rebound: &rebound,
+        type_table,
+    };
+    ctx.analyze_block(body.root(), &mut refs);
 
     // Capture-at-binding: a `let r = &<place>` reference captures the object the
     // place denotes at binding time; folding `r.field` back into a re-read of
@@ -179,6 +195,33 @@ impl Rule for RefElimRule {
                     std::mem::replace(&mut engine.body.exprs[resolved].kind, ExprKind::Dead);
                 engine.body.exprs[inner_e].type_id = engine.body.exprs[resolved].type_id;
                 engine.replace_expr_kind(inner_e, referent);
+                true
+            }
+            // `r` handed whole to a call → `&E` taken again.
+            ExprKind::Local { index, .. } => {
+                let index = *index;
+                let Some(info) = self.refs.get(&index).filter(|i| i.eliminable) else {
+                    return false;
+                };
+                let Some(NodeRef::Expr(parent)) = engine.parent_of(NodeRef::Expr(id)) else {
+                    return false;
+                };
+                if !matches!(engine.body.exprs[parent].kind, ExprKind::Call { .. }) {
+                    return false;
+                }
+                assert!(
+                    info.passes_whole,
+                    "a call takes `r` whole only where it may"
+                );
+                let borrow = info.borrow;
+                let resolved = resolve_via_engine(engine, info.referent_e, &self.refs);
+                engine.replace_expr_kind(
+                    id,
+                    ExprKind::Unary {
+                        op: borrow,
+                        expr: resolved.into(),
+                    },
+                );
                 true
             }
             // `*r` for a deref-only ref `r` → the literal's binding.
@@ -520,148 +563,154 @@ fn invalidates_capture(r: &Replacement, local: u32, facts: &CaptureFacts) -> boo
 // Pass 1: collect ref bindings + classify every use of each binding.
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn analyze_block(
-    body: &Body,
-    block: BlockId,
-    rebound: &IndexSet<u32>,
-    refs: &mut IndexMap<u32, RefInfo>,
-) {
-    for s in &body.blocks[block].stmts {
-        analyze_stmt(body, *s, rebound, refs);
-    }
+struct Analysis<'a> {
+    body: &'a Body,
+    rebound: &'a IndexSet<u32>,
+    type_table: &'a TypeTable,
 }
 
-fn analyze_stmt(
-    body: &Body,
-    stmt: StmtId,
-    rebound: &IndexSet<u32>,
-    refs: &mut IndexMap<u32, RefInfo>,
-) {
-    if let StmtKind::Let {
-        local_index, value, ..
-    } = &body.stmts[stmt].kind
-        && let Some(ve) = value.as_expr()
-    {
-        register_let_binding(body, *local_index, ve, rebound, refs);
-    }
-    // Then classify uses in the statement's children (the value, nested blocks).
-    let mut kids = Vec::new();
-    body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
-    for c in kids {
-        analyze_node(body, c, rebound, refs);
-    }
-}
-
-fn register_let_binding(
-    body: &Body,
-    local_index: u32,
-    value: ExprId,
-    rebound: &IndexSet<u32>,
-    refs: &mut IndexMap<u32, RefInfo>,
-) {
-    if rebound.contains(&local_index) {
-        return;
-    }
-    // Pattern (1): `let r = &E` / `let r = &mut E` with E a pure-read referent,
-    // or `let r = &E` (shared only) with E a pure inline aggregate (e.g. the
-    // inlined `len(&self)` binds `self = &String { … }`). Substituting a pure
-    // aggregate at each `r.field` use lets `project_struct_literal` fold it; a
-    // `&mut` to a temporary aggregate is excluded since separate substituted
-    // copies would not share a write.
-    if let ExprKind::Unary { op, expr } = &body.exprs[value].kind
-        && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-        && let Some(referent_e) = expr.as_expr()
-        && (is_valid_referent(body, referent_e)
-            || (matches!(op, NirUnaryOp::Ref) && is_inline_pure_aggregate(body, referent_e)))
-    {
-        refs.insert(
-            local_index,
-            RefInfo {
-                referent_e,
-                eliminable: true,
-                inherited: false,
-            },
-        );
-        return;
-    }
-    // Pattern (2): `let r = s` where s is itself a tracked ref local.
-    if let ExprKind::Local { index, .. } = &body.exprs[value].kind
-        && let Some(info) = refs.get(index)
-    {
-        let inherited = RefInfo {
-            referent_e: info.referent_e,
-            eliminable: info.eliminable,
-            inherited: true,
-        };
-        refs.insert(local_index, inherited);
-    }
-}
-
-fn analyze_node(
-    body: &Body,
-    node: NodeRef,
-    rebound: &IndexSet<u32>,
-    refs: &mut IndexMap<u32, RefInfo>,
-) {
-    match node {
-        NodeRef::Expr(id) => analyze_expr(body, id, rebound, refs),
-        NodeRef::Block(b) => analyze_block(body, b, rebound, refs),
-        NodeRef::Stmt(s) => analyze_stmt(body, s, rebound, refs),
-        NodeRef::Pat(_) => {
-            // Patterns may carry a `ConstantValue` sub-expression; classify it.
-            let mut kids = Vec::new();
-            body.for_each_child(node, |c| kids.push(c));
-            for c in kids {
-                analyze_node(body, c, rebound, refs);
-            }
+impl Analysis<'_> {
+    fn analyze_block(&self, block: BlockId, refs: &mut IndexMap<u32, RefInfo>) {
+        for s in &self.body.blocks[block].stmts {
+            self.analyze_stmt(*s, refs);
         }
     }
-}
 
-fn analyze_expr_operand(
-    body: &Body,
-    op: Operand,
-    rebound: &IndexSet<u32>,
-    refs: &mut IndexMap<u32, RefInfo>,
-) {
-    if let Some(e) = op.as_expr() {
-        analyze_expr(body, e, rebound, refs);
+    fn analyze_stmt(&self, stmt: StmtId, refs: &mut IndexMap<u32, RefInfo>) {
+        let body = self.body;
+        if let StmtKind::Let {
+            local_index, value, ..
+        } = &body.stmts[stmt].kind
+            && let Some(ve) = value.as_expr()
+        {
+            self.register_let_binding(*local_index, ve, refs);
+        }
+        // Then classify uses in the statement's children (the value, nested blocks).
+        let mut kids = Vec::new();
+        body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
+        for c in kids {
+            self.analyze_node(c, refs);
+        }
     }
-}
 
-fn analyze_expr(
-    body: &Body,
-    id: ExprId,
-    rebound: &IndexSet<u32>,
-    refs: &mut IndexMap<u32, RefInfo>,
-) {
-    match &body.exprs[id].kind {
-        // Field access on a tracked ref local: the pattern we optimize — an
-        // acceptable use, so do not mark non-eliminable. Recurse into a
-        // non-Local inner so nested ref uses are still classified.
-        ExprKind::FieldAccess { expr: inner, .. } => {
-            let inner = *inner;
-            // A promoted `Operand::Value` inner is a constant, not a tracked ref.
-            if let Some(ie) = inner.as_expr()
-                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
-                && refs.contains_key(index)
+    fn register_let_binding(
+        &self,
+        local_index: u32,
+        value: ExprId,
+        refs: &mut IndexMap<u32, RefInfo>,
+    ) {
+        let body = self.body;
+        if self.rebound.contains(&local_index) {
+            return;
+        }
+        // Pattern (1): `let r = &E` / `let r = &mut E` with E a pure-read referent,
+        // or `let r = &E` (shared only) with E a pure inline aggregate (e.g. the
+        // inlined `len(&self)` binds `self = &String { … }`). Substituting a pure
+        // aggregate at each `r.field` use lets `project_struct_literal` fold it; a
+        // `&mut` to a temporary aggregate is excluded since separate substituted
+        // copies would not share a write.
+        if let ExprKind::Unary { op, expr } = &body.exprs[value].kind
+            && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
+            && let Some(referent_e) = expr.as_expr()
+        {
+            let is_place = is_valid_referent(body, referent_e);
+            if is_place
+                || (matches!(op, NirUnaryOp::Ref) && is_inline_pure_aggregate(body, referent_e))
             {
+                let reference_type = body.exprs[value].type_id;
+                refs.insert(
+                    local_index,
+                    RefInfo {
+                        referent_e,
+                        eliminable: true,
+                        inherited: false,
+                        borrow: *op,
+                        passes_whole: is_place
+                            && self.type_table.cell_payload(reference_type).is_none(),
+                    },
+                );
                 return;
             }
-            analyze_expr_operand(body, inner, rebound, refs);
         }
-        // Direct (non-field-access) use of a tracked ref local: non-eliminable.
-        ExprKind::Local { index, .. } => {
-            let index = *index;
-            if let Some(info) = refs.get_mut(&index) {
-                info.eliminable = false;
+        // Pattern (2): `let r = s` where s is itself a tracked ref local.
+        if let ExprKind::Local { index, .. } = &body.exprs[value].kind
+            && let Some(info) = refs.get(index)
+        {
+            let inherited = RefInfo {
+                referent_e: info.referent_e,
+                eliminable: info.eliminable,
+                inherited: true,
+                borrow: info.borrow,
+                passes_whole: info.passes_whole,
+            };
+            refs.insert(local_index, inherited);
+        }
+    }
+
+    fn analyze_node(&self, node: NodeRef, refs: &mut IndexMap<u32, RefInfo>) {
+        match node {
+            NodeRef::Expr(id) => self.analyze_expr(id, refs),
+            NodeRef::Block(b) => self.analyze_block(b, refs),
+            NodeRef::Stmt(s) => self.analyze_stmt(s, refs),
+            NodeRef::Pat(_) => {
+                // Patterns may carry a `ConstantValue` sub-expression; classify it.
+                let mut kids = Vec::new();
+                self.body.for_each_child(node, |c| kids.push(c));
+                for c in kids {
+                    self.analyze_node(c, refs);
+                }
             }
         }
-        _ => {
-            let mut kids = Vec::new();
-            body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
-            for c in kids {
-                analyze_node(body, c, rebound, refs);
+    }
+
+    fn analyze_expr_operand(&self, op: Operand, refs: &mut IndexMap<u32, RefInfo>) {
+        if let Some(e) = op.as_expr() {
+            self.analyze_expr(e, refs);
+        }
+    }
+
+    fn analyze_expr(&self, id: ExprId, refs: &mut IndexMap<u32, RefInfo>) {
+        let body = self.body;
+        match &body.exprs[id].kind {
+            // Field access on a tracked ref local: the pattern we optimize — an
+            // acceptable use, so do not mark non-eliminable. Recurse into a
+            // non-Local inner so nested ref uses are still classified.
+            ExprKind::FieldAccess { expr: inner, .. } => {
+                let inner = *inner;
+                // A promoted `Operand::Value` inner is a constant, not a tracked ref.
+                if let Some(ie) = inner.as_expr()
+                    && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
+                    && refs.contains_key(index)
+                {
+                    return;
+                }
+                self.analyze_expr_operand(inner, refs);
+            }
+            // A call handed `r` whole takes `&E` in its place where `r` passes whole.
+            ExprKind::Call { args, .. } => {
+                for arg in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
+                    if let Some(ae) = arg.as_expr()
+                        && let ExprKind::Local { index, .. } = &body.exprs[ae].kind
+                        && refs.get(index).is_some_and(|info| info.passes_whole)
+                    {
+                        continue;
+                    }
+                    self.analyze_expr_operand(arg, refs);
+                }
+            }
+            // Direct (non-field-access) use of a tracked ref local: non-eliminable.
+            ExprKind::Local { index, .. } => {
+                let index = *index;
+                if let Some(info) = refs.get_mut(&index) {
+                    info.eliminable = false;
+                }
+            }
+            _ => {
+                let mut kids = Vec::new();
+                body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+                for c in kids {
+                    self.analyze_node(c, refs);
+                }
             }
         }
     }
