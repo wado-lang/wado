@@ -120,10 +120,10 @@ caselessly at match time.
 ## Roadmap
 
 - [ ] `simple_lowercase`, `simple_uppercase`, `simple_titlecase` and
-      `simple_fold` in the asset and the facade. A test holds `simple_fold` to
-      the cases in Context: `ß`, `ẞ`, `İ` and the Kelvin sign.
+  `simple_fold` in the asset and the facade. A test holds `simple_fold` to
+  the cases in Context: `ß`, `ẞ`, `İ` and the Kelvin sign.
 - [ ] `simple_fold_closure`. A Rust test in `wado-bundled-icu` checks it against
-      `CaseMapper::simple_fold` over every code point.
+  `CaseMapper::simple_fold` over every code point.
 - [ ] Re accepts `i`. The differential test against Node's `RegExp` with the `u`
-      flag covers it, and so do test262's case-insensitive RegExp tests. The
-      known gap in [Re](./wep-2026-11-02-re.md#known-gaps) is removed.
+  flag covers it, and so do test262's case-insensitive RegExp tests. The
+  known gap in [Re](./wep-2026-11-02-re.md#known-gaps) is removed.
