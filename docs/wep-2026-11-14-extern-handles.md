@@ -130,8 +130,17 @@ in linear memory, and a result that does not fit in one value still returns
 through a pointer. The host reads the memory and calls `cabi_realloc` through
 the core instance, as the canonical ABI's lowering did for it before.
 
-A handle never spills to linear memory, which cannot hold a reference. A
-signature that would spill one is rejected.
+A handle never reaches linear memory, which cannot hold a reference. The
+canonical ABI spills there past 16 flat parameters and past one flat result,
+and those limits are its own, not Wasm's. A web import drops both where a
+handle is involved:
+
+- Its parameters never spill, however many they flatten to.
+- A result holding a handle returns as several values, which the glue returns
+  as an array. A record or a tuple with a handle in it crosses this way.
+
+A list's elements always live in linear memory, so a list of handles is the one
+shape left without a form. A signature holding one is rejected.
 
 These imports are not component imports. The emitted WIT does not list them.
 
@@ -280,8 +289,10 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
 - No browser was measured, only V8 in Node and JavaScriptCore in Bun, both
   against jsdom. SpiderMonkey was not run at all. Collection across the two
   heaps with a browser's own DOM objects is unseen.
-- A list of handles and a record holding one have no crossing form, since both
-  spill to linear memory. `sequence<Node>` waits on this.
+- A list of handles has no crossing form, since a list's elements live in
+  linear memory. `sequence<Node>` waits on this.
+- A JavaScript import returning several values was not run. The JS API
+  specifies it, and no check here covers it.
 - `Promise<T>` has no crossing form. A `Future<T>` is a canonical ABI handle,
   and a web import no longer passes through the canonical ABI.
 - A callback runs outside any Component Model task when the event loop calls
