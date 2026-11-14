@@ -105,6 +105,18 @@ The closure runs once, when the pattern compiles, so matching decodes and folds
 nothing. Re rejects backreferences, so it never compares two captured strings
 caselessly at match time.
 
+## Roadmap
+
+- [ ] `simple_lowercase`, `simple_uppercase`, `simple_titlecase` and
+  `simple_fold` in the asset and the facade. A test holds `simple_fold` to
+  the cases in Context, `ß`, `ẞ` and `İ`, and to the Kelvin sign folding to
+  `k`.
+- [ ] `simple_fold_closure`. A Rust test in `wado-bundled-icu` checks it against
+  `CaseMapper::simple_fold` over every code point.
+- [ ] Re accepts `i`. The differential test against Node's `RegExp` with the `u`
+  flag covers it, and so do test262's case-insensitive RegExp tests. The
+  known gap in [Re](./wep-2026-11-02-re.md#known-gaps) is removed.
+
 ## Known gaps
 
 - No Turkic simple folding. The `T` entries of `CaseFolding.txt` map `I` to
@@ -114,16 +126,5 @@ caselessly at match time.
 - No inverse for the three simple case mappings. A caller that wants every
   character whose `simple_lowercase` lands in a set has no set operation for
   it, only `simple_fold_closure`.
-- Gale's `caseInsensitive` widens a range by ASCII case alone. Whether ANTLR4
-  widens beyond ASCII is for Gale's oracle to settle.
-
-## Roadmap
-
-- [ ] `simple_lowercase`, `simple_uppercase`, `simple_titlecase` and
-  `simple_fold` in the asset and the facade. A test holds `simple_fold` to
-  the cases in Context: `ß`, `ẞ`, `İ` and the Kelvin sign.
-- [ ] `simple_fold_closure`. A Rust test in `wado-bundled-icu` checks it against
-  `CaseMapper::simple_fold` over every code point.
-- [ ] Re accepts `i`. The differential test against Node's `RegExp` with the `u`
-  flag covers it, and so do test262's case-insensitive RegExp tests. The
-  known gap in [Re](./wep-2026-11-02-re.md#known-gaps) is removed.
+- Gale's `caseInsensitive` widens a range by ASCII case alone, and whether
+  ANTLR4 widens it further is unsettled.
