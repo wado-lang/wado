@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794625839833,
+  "lastUpdate": 1794644942962,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77233,6 +77233,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/556b1b20ad12f2f507a91e081a73bd698dd7b2c7"
         },
         "date": 1794625839276,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24478,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434281,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "49329baa2326a60321b5e2e3bed731cfaf70e526",
+          "message": "Merge pull request #2621 from wado-lang/compiler/param-identity-without-name\n\nrefactor(compiler): identify a type parameter by its declaration, not its name",
+          "timestamp": "2026-11-14T17:14:21+09:00",
+          "tree_id": "3e8164e90b360e83faab95adfeaf8e8d90d9eb51",
+          "url": "https://github.com/wado-lang/wado/commit/49329baa2326a60321b5e2e3bed731cfaf70e526"
+        },
+        "date": 1794644942400,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
