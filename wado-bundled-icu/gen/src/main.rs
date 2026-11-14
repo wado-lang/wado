@@ -89,8 +89,8 @@ fn main() {
     );
 }
 
-/// Every code point grouped by its `Simple_Case_Folding`, each group of more
-/// than one member listed in ascending order, the groups by their first member.
+/// The code points that share their `Simple_Case_Folding` with another,
+/// ascending, each linked to the next one in its class.
 fn fold_classes() -> String {
     let mapper = icu_casemap::CaseMapper::new();
     let mut classes = BTreeMap::<char, Vec<u32>>::new();

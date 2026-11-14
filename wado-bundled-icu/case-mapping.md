@@ -44,8 +44,8 @@ the case mapping data `Locale::fold` already reaches.
 
 ## The closure of a set under simple folding
 
-`simple_fold_closure(ranges)` answers every code point whose `scf` equals the
-`scf` of some code point in `ranges`. Both lists hold inclusive ranges; the
+`simple_fold_closure(set)` answers every code point whose `scf` equals the
+`scf` of some code point in `set`. Both lists hold inclusive ranges; the
 answer comes lowest first, with no two touching, and the input may come in any
 order, overlap or touch.
 
