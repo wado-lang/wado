@@ -1700,12 +1700,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for i in 0..inferred.len() {
             if self.slot_takes_default(inferred[i], &no_scope)
                 && let Some(default_ty) = defaults[i]
-                && default_ty != TypeTable::ERROR
-                && !self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .contains_type_param(default_ty)
+                && self.default_settles_slot(default_ty)
             {
                 inferred[i] = default_ty;
                 filled = true;
@@ -1857,16 +1852,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (i, &fill) in fillable.iter().enumerate() {
             if fill
                 && let Some(default_ty) = defaults[i]
-                && default_ty != TypeTable::ERROR
-                && !self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .contains_type_param(default_ty)
+                && self.default_settles_slot(default_ty)
             {
                 known[i] = default_ty;
             }
         }
+    }
+
+    /// Whether a resolved type default can stand for its slot: it names no
+    /// parameter but the caller's own, as `Self` at a receiver `t: &T` names
+    /// `T`. One naming the callee's parameters waits for their inference.
+    fn default_settles_slot(&self, default_ty: TypeId) -> bool {
+        default_ty != TypeTable::ERROR
+            && self
+                .tysys
+                .type_table
+                .borrow()
+                .type_params_all_in(default_ty, self.scope_type_param_ids().ids())
     }
 
     /// A method call's type arguments: what its turbofish names, plus inference

@@ -3258,16 +3258,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .copied()
             .collect();
         keys.extend(declared.iter().filter(|k| !is_current(k)).copied());
-        let referent = target
-            .ref_kind()
-            .map(|_| receiver_type.expect("a reference key is asked with the reference it keys"));
+        // A key naming no declaration holds blocks of different shapes (`&A`
+        // and `&B`, `[..T]` and `[A, B, A]`), which no declaration's arguments
+        // tell apart, so the receiver is matched against each whole target.
+        assert!(
+            target.ref_kind().is_none() || receiver_type.is_some(),
+            "a reference key is asked with the reference it keys"
+        );
+        let shaped = target.decl().is_none().then_some(receiver_type).flatten();
         let table = self.tysys.type_table.borrow();
         keys.retain(|key| {
             self.tysys
                 .impl_head_decl_name(&env.impl_headers[key], defs.module(*key))
                 == declared_name
                 && !self.impl_at_other_instantiation(*key, receiver_args)
-                && referent.is_none_or(|receiver| {
+                && shaped.is_none_or(|receiver| {
                     table.binds_type_params(&[table.impl_target_whole(*key)], &[receiver])
                 })
         });

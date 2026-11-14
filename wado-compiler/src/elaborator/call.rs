@@ -4940,15 +4940,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .unwrap_or_default(),
             )
         } else {
-            // A target naming no declaration is a builtin shape, which a block
-            // writes whole and so binds nothing.
-            assert!(
-                self.tysys.trait_env.impl_headers[&impl_def]
-                    .type_params
-                    .is_empty(),
-                "a block for a builtin shape declares no parameters"
-            );
-            (target, Vec::new())
+            // A builtin shape has no declaration to read parameters off, so
+            // the block's own target is the receiver, at the slots it places.
+            let params = self.tysys.type_table.borrow_mut().matched_param_types(target);
+            (target, params)
         };
         let frame = self.tysys.trait_frame_at(impl_def, receiver);
         let in_frame = sig.decl.instantiate(&self.tysys.type_table, &frame);

@@ -5894,6 +5894,24 @@ impl TypeTable {
         });
     }
 
+    /// The parameters matching `id` binds, in the order `id` places them, each
+    /// as the type that spells it: a pack as its identity pack.
+    pub fn matched_param_types(&mut self, id: TypeId) -> Vec<TypeId> {
+        let mut params = IndexSet::default();
+        self.type_params_matched_in(id, &mut params);
+        let packs = self.packs(id);
+        params
+            .into_iter()
+            .map(|param| {
+                if packs.contains(&param) {
+                    self.type_pack_of(param)
+                } else {
+                    self.type_param_of(param)
+                }
+            })
+            .collect()
+    }
+
     /// Whether `id` names a parameter `owner` does not declare, looking also
     /// into a newtype's base, which no argument of the newtype shows: a local
     /// newtype reaches the enclosing function's parameter there. An instance's
