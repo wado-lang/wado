@@ -1,0 +1,63 @@
+// A static an `impl Tr for &A` declares is reached as every other impl's is:
+// `Self::k()` inside the impl, `Tr::<&A>::k()` from outside, and `Self::k()`
+// from a default body or a default argument the `&A` impl takes.
+use { println, Stdout } from "core:cli";
+
+trait Tr with () {
+    fn k() -> i32;
+    fn j() -> i32;
+    fn m(&self, n: i32 = Self::k()) -> i32;
+    fn d(&self) -> i32 {
+        return Self::k() * 10;
+    }
+}
+
+struct A {}
+
+impl Tr for A {
+    fn k() -> i32 {
+        return 1;
+    }
+    fn j() -> i32 {
+        return Self::k() + 1;
+    }
+    fn m(&self, n: i32) -> i32 {
+        return n;
+    }
+}
+
+impl Tr for &A {
+    fn k() -> i32 {
+        return 7;
+    }
+    fn j() -> i32 {
+        return Self::k() + 1;
+    }
+    fn m(&self, n: i32) -> i32 {
+        return n;
+    }
+}
+
+impl Tr for &i32 {
+    fn k() -> i32 {
+        return 3;
+    }
+    fn j() -> i32 {
+        return Self::k() + 1;
+    }
+    fn m(&self, n: i32) -> i32 {
+        return n;
+    }
+}
+
+export fn run() with Stdout {
+    let a = A {};
+    let r = &a;
+    println(`${Tr::<A>::j()} ${Tr::<&A>::j()} ${Tr::<&A>::k()} ${Tr::<&i32>::j()}`);
+    println(`${a.m()} ${r.m()} ${a.d()} ${r.d()}`);
+}
+
+__DATA__
+{
+    "stdout": "2 8 7 4\n1 7 10 70\n"
+}

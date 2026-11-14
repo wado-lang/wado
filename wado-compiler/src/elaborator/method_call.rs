@@ -2441,6 +2441,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Flags { .. } => {
                 nominal_receiver(&self.tysys.type_table.borrow(), target_type_id)
             }
+            ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee) => {
+                let table = self.tysys.type_table.borrow();
+                let kind = RefKind::from_resolved(&resolved).expect("matched a reference");
+                let module = match table.get(pointee) {
+                    ResolvedType::Primitive(prim) => ModuleSource::of_primitive(*prim),
+                    _ => nominal_receiver(&table, pointee).1,
+                };
+                (
+                    kind.prefix().to_string(),
+                    module,
+                    table.fq_type_name(target_type_id),
+                    vec![],
+                )
+            }
             // Resolving the target reported why it failed.
             _ if target_type_id == TypeTable::ERROR => return TypeTable::ERROR,
             // The target names no struct-like type: a trait, an undeclared
@@ -2458,7 +2472,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The receiver comes off the resolved type: re-deriving it from
         // `struct_name` searches the caller's frame, which an aliased import
         // leaves without that name at all.
-        let receiver_key = self.impl_target_of(target_type_id, &DeclName::new(&struct_name));
+        let receiver_key = match RefKind::from_resolved(&resolved) {
+            Some(kind) => ImplTargetKey::Ref(kind),
+            None => self.impl_target_of(target_type_id, &DeclName::new(&struct_name)),
+        };
         let Ok(resolution) = self.static_trait_ref(
             StaticQuery {
                 receiver_key: Some(&receiver_key),
@@ -3170,10 +3187,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The trait impl blocks on the receiver `struct_name` at `receiver_args`,
     /// current-module-first; a block binding it as its own parameter only here.
+    /// A reference's blocks share one bucket whatever they refer to, so there
+    /// the block's target has to match `receiver_type` itself.
     pub(super) fn trait_impls_for_receiver(
         &self,
         struct_name: &str,
         target_hint: Option<&ImplTargetKey>,
+        receiver_type: Option<TypeId>,
         receiver_args: &[TypeId],
     ) -> Vec<DefId> {
         let defs = self.tysys.resolutions.defs();
@@ -3194,11 +3214,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .copied()
             .collect();
         keys.extend(declared.iter().filter(|k| !is_current(k)).copied());
+        let referent = target
+            .ref_kind()
+            .map(|_| receiver_type.expect("a reference key is asked with the reference it keys"));
+        let table = self.tysys.type_table.borrow();
         keys.retain(|key| {
             self.tysys
                 .impl_head_decl_name(&env.impl_headers[key], defs.module(*key))
                 == declared_name
                 && !self.impl_at_other_instantiation(*key, receiver_args)
+                && referent.is_none_or(|receiver| {
+                    table.binds_type_params(&[table.impl_target_whole(*key)], &[receiver])
+                })
         });
         keys
     }
@@ -3444,7 +3471,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .receiver_declaring_args(recv.ty, recv.args, recv.key.and_then(ImplTargetKey::decl))
             .unwrap_or_default();
-        for impl_def in self.trait_impls_for_receiver(recv.name, recv.key, &receiver_args) {
+        for impl_def in self.trait_impls_for_receiver(recv.name, recv.key, recv.ty, &receiver_args)
+        {
             let Some(trait_decl) = self.tysys.signatures.impl_trait(impl_def) else {
                 continue;
             };
@@ -3961,6 +3989,13 @@ impl TypeSystem {
     ) -> (Option<String>, Option<ImplTargetKey>) {
         let key = {
             let table = self.type_table.borrow();
+            // A reference buckets by its kind, as an `impl … for &A` header
+            // does.
+            if let Some(kind) = RefKind::from_resolved(table.get(target_type_id)) {
+                let key = ImplTargetKey::Ref(kind);
+                let name = key.display_name(self.resolutions.defs()).to_string();
+                return (Some(name), Some(key));
+            }
             // Keyed on what a newtype wraps, not on itself: its impls are
             // looked up on its base. A `flags` wraps nothing it inherits from.
             let head = table.reflect_structure_head(target_type_id);

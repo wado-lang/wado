@@ -227,6 +227,26 @@ impl ArgSite {
     }
 }
 
+/// `head::method(…)` as the static call it is, `head` a type written in its
+/// place.
+fn static_call_on_head(
+    call: &ast::CallExpr,
+    head: &ast::PathSegment,
+    method: &ast::PathSegment,
+) -> ast::StaticMethodCallExpr {
+    ast::StaticMethodCallExpr {
+        id: call.id,
+        target_type: ast::Type::Named(ast::NamedType::new(head.id, head.name.clone(), head.span)),
+        method: method.name.clone(),
+        method_id: method.id,
+        method_span: method.span,
+        type_args: call.type_args.clone(),
+        args: call.args.clone(),
+        has_trailing_comma: call.has_trailing_comma,
+        span: call.span,
+    }
+}
+
 pub(super) fn arg_sites_of(raw_args: &[Expr], resolved: usize, call_span: Span) -> Vec<ArgSite> {
     (0..resolved)
         .map(|i| ArgSite::of(raw_args, i, call_span))
@@ -1652,29 +1672,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .self_type
                 .is_some_and(|ty| self.tysys.binder_name(ty).is_none())
         {
-            let on_self = ast::StaticMethodCallExpr {
-                id: call.id,
-                target_type: ast::Type::Named(ast::NamedType::new(
-                    head.id,
-                    head.name.clone(),
-                    head.span,
-                )),
-                method: method.name.clone(),
-                method_id: method.id,
-                method_span: method.span,
-                type_args: call.type_args.clone(),
-                args: call.args.clone(),
-                has_trailing_comma: call.has_trailing_comma,
-                span: call.span,
-            };
             return self.resolve_static_method_call_of_trait(
-                &on_self,
+                &static_call_on_head(call, head, method),
                 Some(required),
                 ctx,
                 expected_type,
             );
         }
         let mut callee_kind = self.tysys.classify_call_callee(&self.annotate_ctx, ident);
+        // A reference has no declaration name to spell the call under, so a
+        // `Self::m()` or `T::m()` standing for `&A` goes to the static path,
+        // which keys an `impl … for &A` by its reference kind.
+        if given_args.is_none()
+            && let CalleeIdentKind::Rewritten { receiver, .. } = callee_kind
+            && self.tysys.type_table.borrow().is_reference(receiver)
+            && let [head, method] = ident.segments.as_slice()
+        {
+            return self.resolve_static_method_call_of_trait(
+                &static_call_on_head(call, head, method),
+                None,
+                ctx,
+                expected_type,
+            );
+        }
         // A bare case constructs (`Some(x)`) only where the expected type
         // supplies it, and then ahead of any function of that name.
         if let CalleeIdentKind::AsIs(bare) = callee_kind

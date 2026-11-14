@@ -569,6 +569,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             query.receiver_name,
             query.method_name,
             query.receiver_key,
+            query.receiver_type,
             declaring_args,
         ));
         candidates.extend(self.blanket_candidates(query.method_name, query.receiver_type));
@@ -1445,9 +1446,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_name: &str,
         method_name: &str,
         target_hint: Option<&ImplTargetKey>,
+        receiver_type: Option<TypeId>,
         receiver_args: &[TypeId],
     ) -> Vec<Candidate> {
-        self.trait_impls_for_receiver(receiver_name, target_hint, receiver_args)
+        self.trait_impls_for_receiver(receiver_name, target_hint, receiver_type, receiver_args)
             .into_iter()
             .filter_map(|impl_def| {
                 let header = &self.tysys.trait_env.impl_headers[&impl_def];
