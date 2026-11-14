@@ -1490,8 +1490,8 @@ pub async fn compile_with_options<H: CompilerHost>(
     let mut load_result = {
         let module_loader = loader::ModuleLoader::new(host, log_level)
             .with_invocations(options.invocations.clone());
-        module_loader
-            .load_all(source, filename.as_deref())
+        // Boxed: inline, the load is most of every caller's future.
+        Box::pin(module_loader.load_all(source, filename.as_deref()))
             .await
             .map_err(|e| {
                 let _ = logger.error(e);
@@ -1541,7 +1541,8 @@ async fn dependency_seed<H: CompilerHost>(
     if options.coverage.is_some() || options.profile.is_some() {
         return None;
     }
-    dependency_snapshot::dependency_snapshot(load, host).await
+    // Boxed: the build's load would otherwise inline into every compile's future.
+    Box::pin(dependency_snapshot::dependency_snapshot(load, host)).await
 }
 
 /// Compile each `with { provider: "./p.wado" }` directive into a provider
