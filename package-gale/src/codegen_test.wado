@@ -1843,7 +1843,8 @@ X : . ;";
 test "caseInsensitive maps a range by its bounds, or leaves it as written" {
     // `[α-ω]` maps both bounds to the other case. `[à-ÿ]` does not: `ÿ`'s
     // uppercase is `Ÿ`, outside Latin-1, so the uppercase bounds span another
-    // width. `[_-z]` does not either: `_` has no uppercase above `Z`.
+    // width. `[_-z]` does not either: `_` is its own uppercase and `z`'s is
+    // `Z`, below it.
     let input = "lexer grammar Test;
 options { caseInsensitive = true; }
 GREEK : [α-ω]+ ;
@@ -1877,8 +1878,7 @@ C options { caseInsensitive = false; } : [A-z] ;";
 }
 
 // Gale departs from the jar here: the jar's `'ǅ'` and `[Ǆ-ǅ]` match `Ǆ` and
-// `ǆ` but not the `ǅ` written in them, so a wider class can match less than
-// the char it names.
+// `ǆ` but not the `ǅ` written in them.
 test "caseInsensitive matches a titlecase char as written" {
     let input = "lexer grammar Test;
 options { caseInsensitive = true; }
