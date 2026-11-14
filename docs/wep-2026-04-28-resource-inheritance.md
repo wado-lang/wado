@@ -58,8 +58,8 @@ This makes the web bindings the right pilot for unrestricted resources. The blas
 
 ### `resource extends` is gated on `unrestricted` (v1)
 
-> Superseded in part by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md#repr--extern-declares-an-extern-handle):
-> `extends` is gated on `repr = "extern"`, which itself requires
+> Superseded in part by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md#repr--externref-declares-an-extern-handle):
+> `extends` is gated on `repr = "externref"`, which itself requires
 > `unrestricted`.
 
 In v1, `resource X extends Y { ... }` is permitted **only when `X` and `Y` are both unrestricted**.
@@ -90,7 +90,7 @@ Concretely:
 
 ### Why the field names linearity, not representation
 
-> Superseded in part by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md#repr--extern-declares-an-extern-handle):
+> Superseded in part by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md#repr--externref-declares-an-extern-handle):
 > the two axes stay apart, and the representation gets a field of its own,
 > `repr`.
 

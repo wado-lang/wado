@@ -78,23 +78,24 @@ the embedder each core module and its imports before instantiating it.
 
 ## Decision
 
-### `repr = "extern"` declares an extern handle
+### `repr = "externref"` declares an extern handle
 
 A resource states its representation beside its linearity:
 
 ```wado
-#[cm("wado-lang:web/node", linearity = "unrestricted", repr = "extern", classes = "1..=4")]
+#[cm("wado-lang:web/node", linearity = "unrestricted", repr = "externref", classes = "1..=4")]
 resource Node extends EventTarget { ... }
 ```
 
 A resource so declared is an extern handle. The two fields are two axes.
 `linearity` says whether a handle may be copied, which the compiler enforces.
 `repr` says what the handle is in Wasm, which decides how it crosses a boundary.
+Its value is the Wasm type's own name.
 Everything below follows from `repr`, and nothing from `linearity`.
 
-- `repr = "extern"` requires `linearity = "unrestricted"`. The collector
+- `repr = "externref"` requires `linearity = "unrestricted"`. The collector
   reclaims an extern handle, so there is no drop for an owner to run.
-- `extends` and `classes` require `repr = "extern"`, where they required
+- `extends` and `classes` require `repr = "externref"`, where they required
   `linearity = "unrestricted"` before. One Wasm value for a whole tree is what
   makes an upcast free.
 - A resource without `repr` is represented as the Component Model represents
@@ -213,7 +214,7 @@ no number of its own, and giving it one is the last step of the roadmap.
 
 Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
 
-- [ ] `repr = "extern"` on `#[cm]`, validated beside `linearity`, `extends` and
+- [ ] `repr = "externref"` on `#[cm]`, validated beside `linearity`, `extends` and
   `classes`, and declared by `wado-from-idl` on every resource of the slice
 - [ ] The representation: an extern handle is `(ref null extern)` in
   the guest, `Option<R>` is the nullable reference, and the `f64` cast is gone
@@ -252,7 +253,7 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
 - A component that imports another component's extern handle has no path: the
   handle does not cross a component boundary.
 - `linearity = "unrestricted"` without `repr` has no consumer once the web
-  bindings declare `repr = "extern"`. The `f64` handle it means today is
+  bindings declare `repr = "externref"`. The `f64` handle it means today is
   removed with the table, and what a copyable canonical ABI token such as
   `Waitable` needs from it is undecided.
 
