@@ -21,7 +21,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "25\n",
-    "wir_pass": {"O2": ["nir/const_fold"]},
-    "wir_expect:O2": ["$const_obj_{}: ref \"core:prelude/slice.wado//Slice<u8>\" = struct.new \"core:prelude/slice.wado//Slice<u8>\" { repr: array.new_fixed<u8>(115, 101, 97, 116, 67, 97, 116, 101, 103, 111, 114, 121, 73, 100)"],
-    "wir_not_expect:O2": ["builtin::array_new<u8>(14)"]
+    "wir_pass": {"O2": ["nir/const_fold", "nir/store_load_forward_post_scalarize"]},
+    "wir_expect:O2": ["$const_obj_{}: ref \"core:prelude/slice.wado//Slice<u8>\" = struct.new \"core:prelude/slice.wado//Slice<u8>\" { repr: array.new_fixed<u8>(115, 101, 97, 116, 67, 97, 116, 101, 103, 111, 114, 121, 73, 100)"]
 }

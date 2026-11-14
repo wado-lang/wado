@@ -2044,7 +2044,8 @@ global global:core:serde::$const_obj_194: ref "core:prelude/string.wado//String"
 global global:core:serde::$const_obj_196: ref Array<u8> = array.new_fixed<u8>(102, 97, 108, 115, 101);
 global global:core:serde::$const_obj_197: ref Array<u8> = array.new_fixed<u8>(116, 114, 117, 101);
 global global:core:prelude/traits.wado::$const_obj_203: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 101, 114, 105, 97, 108, 105, 122, 101, 69, 114, 114, 111, 114), used: 14 };
-global global:core:serde::$const_obj_205: ref "core:prelude/slice.wado//Slice<u8>" = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: array.new_fixed<u8>(116, 121, 112, 101), start: 0, end: 4 };
+global global:core:serde::$const_obj_205: ref "core:prelude/slice.wado//Slice<u8>" = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: array.new_fixed<u8>(119, 115), start: 0, end: 2 };
+global global:core:serde::$const_obj_206: ref "core:prelude/slice.wado//Slice<u8>" = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: array.new_fixed<u8>(116, 121, 112, 101), start: 0, end: 4 };
 global global:core:prelude/traits.wado::$const_obj_209: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 101, 114, 105, 97, 108, 105, 122, 101, 69, 114, 114, 111, 114, 75, 105, 110, 100), used: 18 };
 global global:core:prelude/traits.wado::$const_obj_210: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(85, 110, 115, 117, 112, 112, 111, 114, 116, 101, 100, 86, 97, 108, 117, 101), used: 16 };
 global global:core:serde::$const_obj_229: ref Array<u8> = array.new_fixed<u8>(93);
@@ -17979,17 +17980,14 @@ fn "core:serde/serde_internal_tag.wado/PreTokenizer^core:serde/Serialize::serial
         };
     }
     if @likely($load_0 == 1) {
-        let $array_clone_src_3: ref Array<u8>;
-        $array_clone_src_3 = global:core:serde::$const_obj_38;
-        let $array_clone_dst_4: ref Array<u8>;
-        builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(2)), 0, $array_clone_src_3, 0, 2);
         "core:cbor/write_head"(s.buf, 5, 1_i64);
         "core:cbor/write_head"(local.tee self_188(s.buf), 3, 4_i64);
-        let $mv_arg_7: ref "core:prelude/slice.wado//Slice<u8>";
-        $mv_arg_7 = global:core:serde::$const_obj_205;
-        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(self_188, $mv_arg_7.repr, $mv_arg_7.start, $mv_arg_7.end);
+        let $mv_arg_4: ref "core:prelude/slice.wado//Slice<u8>";
+        $mv_arg_4 = global:core:serde::$const_obj_206;
+        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(self_188, $mv_arg_4.repr, $mv_arg_4.start, $mv_arg_4.end);
         "core:cbor/write_head"(self_188, 3, 2_i64);
-        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(self_188, $array_clone_dst_4, 0, 2);
+        $mv_arg_4 = global:core:serde::$const_obj_205;
+        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(self_188, $mv_arg_4.repr, $mv_arg_4.start, $mv_arg_4.end);
         return ref.null none;
     }
     if @likely($load_0 == 2) {
