@@ -1,7 +1,7 @@
 //! Sets of code points, each a list of sorted, disjoint, non-adjacent
 //! inclusive ranges.
 
-use { GeneralCategoryGroup, ranges } from "core:icu";
+use { GeneralCategoryGroup, ranges, simple_fold_closure } from "core:icu";
 use { CharSet, NamedSet } from "./ast.wado";
 
 internal global MAX_CODE_POINT: u32 = 0x10FFFF;
@@ -50,14 +50,17 @@ internal fn line_terminators() -> List<[u32, u32]> {
     ];
 }
 
-/// WordCharacters without `i`: `[A-Za-z0-9_]`.
-fn word() -> List<[u32, u32]> {
-    return [
+/// WordCharacters (§22.2.2.9.3): `[A-Za-z0-9_]`, and under `i` the characters
+/// whose simple folding lies in it. Simple folding maps the set into itself,
+/// so that is the set's closure.
+internal fn word(ignore_case: bool) -> List<[u32, u32]> {
+    let ascii: List<[u32, u32]> = [
         [0x30, 0x39],
         [0x41, 0x5A],
         [0x5F, 0x5F],
         [0x61, 0x7A],
     ];
+    return if ignore_case { simple_fold_closure(ascii) } else { ascii };
 }
 
 /// CharacterClassEscape `s`: WhiteSpace and LineTerminator. WhiteSpace is TAB,
@@ -75,12 +78,12 @@ fn space() -> List<[u32, u32]> {
     return normalize(out);
 }
 
-fn named(set: &NamedSet) -> List<[u32, u32]> {
+fn named(set: &NamedSet, ignore_case: bool) -> List<[u32, u32]> {
     let positive: List<[u32, u32]> = match set.kind {
         Digit => [
             [0x30, 0x39],
         ],
-        Word => word(),
+        Word => word(ignore_case),
         Space => space(),
         Property(p) => p.ranges,
     };
@@ -90,28 +93,51 @@ fn named(set: &NamedSet) -> List<[u32, u32]> {
     return positive;
 }
 
-/// The code points `set` matches.
-internal fn resolve(set: &CharSet) -> List<[u32, u32]> {
+/// The code points `set` matches. Under `i` a class matches what folds as one
+/// of its members does, and a negated class the rest (CharacterSetMatcher,
+/// §22.2.2.7.1).
+internal fn resolve(set: &CharSet, ignore_case: bool) -> List<[u32, u32]> {
     let mut out: List<[u32, u32]> = [];
     for let item of &set.items {
         match *item {
             Range(r) => out.push(r),
             Named(n) => {
-                for let r of named(&n) {
+                for let r of named(&n, ignore_case) {
                     out.push(r);
                 }
             },
         }
     }
-    let merged = normalize(out);
+    let members = if ignore_case { simple_fold_closure(out) } else { normalize(out) };
     if set.negated {
-        return complement(&merged);
+        return complement(&members);
     }
-    return merged;
+    return members;
 }
 
 /// Whether `b` encodes one of WordCharacters without `i`. Each is ASCII, so no
 /// byte of a longer sequence is one.
 internal fn is_word_byte(b: u8) -> bool {
     return b.is_ascii_alphanumeric() || b == b'_';
+}
+
+/// WordCharacters under `i`, which `\b` and `\B` test inside one.
+internal global FOLDED_WORD: List<[u32, u32]> = word(true);
+
+/// Whether the normalized `set` holds `c`.
+internal fn includes(set: &List<[u32, u32]>, c: u32) -> bool {
+    let mut lo = 0;
+    let mut hi = set.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        let [first, last] = set[mid];
+        if c < first {
+            hi = mid;
+        } else if c > last {
+            lo = mid + 1;
+        } else {
+            return true;
+        }
+    }
+    return false;
 }

@@ -533,10 +533,6 @@ impl Parser {
             }
         }
         self.expect(':', "`(?` must be followed by `:`, `<name>`, or modifiers `ims` and `:`")?;
-        if add & Flag::IgnoreCase != Flag::none() {
-            let at = start + 2 + self.src.slice(start + 2, dash).find("i").unwrap();
-            self.refuse(at, "Re does not support the `i` modifier yet");
-        }
         let body = self.disjunction()?;
         self.close_group(start)?;
         if add == Flag::none() && remove == Flag::none() {

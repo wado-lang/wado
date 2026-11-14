@@ -230,6 +230,8 @@ test "Display reads back to the same regular expression" {
     assert reprinted.is_match("abd") && reprinted.is_match("acd") && !reprinted.is_match("abcd");
 }
 
-test "i waits for simple case folding" {
-    assert Regex::new(#"(?i:a)"#).is_err();
+test "i folds the classes of a whole pattern" {
+    let r = Regex::new(#"(?i:straße\w)"#).unwrap();
+    assert r.is_match("STRAẞEſ");
+    assert !r.is_match("STRASSE_");
 }
