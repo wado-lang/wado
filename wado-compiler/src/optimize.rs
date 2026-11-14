@@ -225,6 +225,9 @@ pub fn optimize(
     // says nothing about its body, so clearing bodies leaves every entry current
     // and only an appended function needs a new one.
     let mut descriptors = dce::DescriptorCache::default();
+    // Keyed by each function's write count, so each pass that reads heap
+    // effects re-solves only what the passes before it rewrote.
+    let mut heap_effects = HeapEffectsCache::default();
     match opt_level {
         OptLevel::O0 => {
             // DCE alone: it cuts codegen work, and nothing else may change
@@ -258,7 +261,14 @@ pub fn optimize(
                 &exec,
                 Initializers::DropUnread,
             );
-            run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
+            run_optimization_passes(
+                &mut project,
+                &config,
+                profiler,
+                &mut descriptors,
+                &mut heap_effects,
+                &exec,
+            );
             // Final DCE: clean up code made dead by optimizations
             run_dce(
                 &mut project,
@@ -299,7 +309,14 @@ pub fn optimize(
                 &exec,
                 Initializers::DropUnread,
             );
-            run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
+            run_optimization_passes(
+                &mut project,
+                &config,
+                profiler,
+                &mut descriptors,
+                &mut heap_effects,
+                &exec,
+            );
             run_dce(
                 &mut project,
                 profiler,
@@ -334,7 +351,14 @@ pub fn optimize(
                 &exec,
                 Initializers::DropUnread,
             );
-            run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
+            run_optimization_passes(
+                &mut project,
+                &config,
+                profiler,
+                &mut descriptors,
+                &mut heap_effects,
+                &exec,
+            );
             run_dce(
                 &mut project,
                 profiler,
@@ -356,7 +380,7 @@ pub fn optimize(
         extract::freeze_pure_arith(
             p,
             &exec,
-            /* include_fields */ true,
+            Some(&mut heap_effects),
             FreezePhase::Terminal,
         )
     });
@@ -380,7 +404,7 @@ pub fn optimize(
     // checks are versioned, and before `select_lowering`, which
     // reshapes conditions out of matcher form.
     run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
-        loop_version_bce::version_loops(p, &mut descriptors, &exec)
+        loop_version_bce::version_loops(p, &mut descriptors, &exec, &mut heap_effects)
     });
     // After every bounds-check eliminator, which read the signed halves.
     run_pass("nir/unsigned_range_check", &mut project, profiler, |p| {
@@ -402,7 +426,7 @@ pub fn optimize(
     });
 
     run_pass("nir/multi_value_param", &mut project, profiler, |p| {
-        multi_value_param::classify_multi_value_params(p, &exec)
+        multi_value_param::classify_multi_value_params(p, &exec, &mut heap_effects)
     });
 
     // Freeze re-emittable pure arithmetic (constants / local reads composed by
@@ -412,12 +436,7 @@ pub fn optimize(
     // root and are simply not emitted. (Early arith promotion already ran before
     // the loop; `FieldAccess` promotion ran above, after SROA.)
     run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(
-            p,
-            &exec,
-            /* include_fields */ false,
-            FreezePhase::Terminal,
-        )
+        extract::freeze_pure_arith(p, &exec, None, FreezePhase::Terminal)
     });
 
     // The born-resolved invariant is now enforced by the type system: a call
@@ -840,6 +859,7 @@ fn run_optimization_passes(
     config: &OptConfig,
     profiler: &dyn SpanEmitter,
     descriptor_cache: &mut dce::DescriptorCache,
+    heap_effects: &mut HeapEffectsCache,
     exec: &Arc<Executor>,
 ) {
     // So `nir/inline` weighs a function by literals that carry only what some
@@ -858,9 +878,6 @@ fn run_optimization_passes(
     // an interprocedural pass scans all functions but reports exactly the ones
     // it touched. Both go through `&mut gate`.
     let mut gate = gate::FunctionGate::new(project, exec);
-    // Keyed by each function's write count, so each pass that reads heap
-    // effects re-solves only what the passes before it rewrote.
-    let mut heap_effects = HeapEffectsCache::default();
     let mut mod_ref_summaries = SummaryCache::default();
     let mut sroa_param_state = SroaParamState::default();
     let mut param_spec_state = param_spec::ParamSpecState::new(config.specializations);
@@ -888,7 +905,7 @@ fn run_optimization_passes(
     // the SROA passes), since SROA scalarizes the structs a promoted `FieldAccess`
     // would reference. See the late call in `optimize`.
     run_pass("nir/promote_pure_values_early", project, profiler, |p| {
-        extract::freeze_pure_arith(p, exec, /* include_fields */ false, FreezePhase::Early)
+        extract::freeze_pure_arith(p, exec, None, FreezePhase::Early)
     });
     // What changed in the iteration just run, and so the convergence flag:
     // empty ends the loop, non-empty after it names what held the loop open.
@@ -976,7 +993,7 @@ fn run_optimization_passes(
             // Hosts `MatchToSwitchRule` (`include_match = true`), so `inline` copies
             // `Switch`-shaped bodies, and `const_branch_prune`.
             gated!("nir/peephole", GatedPass::PeepholePre, |p, g| {
-                peephole::run_peephole(p, g, true, &mut heap_effects, &mut mod_ref_summaries)
+                peephole::run_peephole(p, g, true, heap_effects, &mut mod_ref_summaries)
             });
             // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
             // copies when the binding's elements are provably never mutated through
@@ -986,7 +1003,7 @@ fn run_optimization_passes(
             gate_only!(
                 "nir/value_copy_demote",
                 GatedPass::ValueCopyDemote,
-                |p, g| demote_value_copies(p, g, descriptor_cache, &mut heap_effects)
+                |p, g| demote_value_copies(p, g, descriptor_cache, heap_effects)
             );
             // Single-field parameter SROA: rewrite functions whose parameter type
             // is `&S` for a single-field struct (a cell being the canonical
@@ -1026,7 +1043,7 @@ fn run_optimization_passes(
             // inline's freshly dead bindings. No `MatchToSwitchRule` — the
             // pre-inline run lowered every reachable `Match` already.
             gated!("nir/peephole", GatedPass::PeepholePost, |p, g| {
-                peephole::run_peephole(p, g, false, &mut heap_effects, &mut mod_ref_summaries)
+                peephole::run_peephole(p, g, false, heap_effects, &mut mod_ref_summaries)
             });
             // `labeled_block_fusion` moved into the post-inline `nir/peephole`
             // session as `LabeledBlockFusionRule`; see `optimize/peephole.rs`.
@@ -1037,7 +1054,7 @@ fn run_optimization_passes(
             );
             gated!("nir/sroa", GatedPass::Sroa, scalar_replace_aggregates);
             gated!("nir/copy_prop", GatedPass::CopyProp, |p, g| {
-                propagate_copies(p, g, &mut heap_effects)
+                propagate_copies(p, g, heap_effects)
             });
             // DAE / DRVE after `copy_prop` shrinks signatures and discards unused
             // let-bindings before `const_fold` revisits the simplified body.
@@ -1072,7 +1089,7 @@ fn run_optimization_passes(
                 )
             });
             gated!("nir/licm", GatedPass::Licm, |p, g| {
-                apply_licm(p, g, &mut heap_effects)
+                apply_licm(p, g, heap_effects)
             });
         });
         compiler_trace!(
@@ -1114,7 +1131,7 @@ fn run_optimization_passes(
     // inserts to be counted as new field accesses on the next iteration,
     // triggering spurious re-scalarization of the same fields.
     run_pass("nir/field_scalarize", project, profiler, |p| {
-        scalarize_hot_fields(p, &mut gate, &mut heap_effects)
+        scalarize_hot_fields(p, &mut gate, heap_effects)
     });
     // Forward the scalarization shadow inits (`$hfs_x = obj.f`) to constants.
     // `field_scalarize` runs after the fixed-point loop, so no in-loop

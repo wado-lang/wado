@@ -91,7 +91,7 @@ pub(super) fn run_peephole(
     // Post-inline only: the closure-bearing field read it resolves through is
     // what `inline` exposes when an iterator adaptor's `next` is copied in.
     let closure_devirt_rule = (!pre_inline).then(|| build_closure_devirt(project));
-    let heap_effects = (!pre_inline).then(|| heap.effects(project, &type_table, gate));
+    let heap_effects = (!pre_inline).then(|| heap.effects(project, &type_table, gate.exec()));
 
     debug_assert!(
         gate.any_pending(gated_pass, len),

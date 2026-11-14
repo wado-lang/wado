@@ -15,7 +15,6 @@ use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
-use super::gate::FunctionGate;
 use super::heap_effect::HeapEffectsCache;
 use super::multi_value_return::is_eligible_field_type;
 
@@ -28,7 +27,11 @@ const MIN_PARAM_FIELDS: usize = 2;
 
 /// Set `param_abi` on every parameter that can take one Wasm slot per field.
 /// Runs after every transformation, so it sees the final NIR shape.
-pub fn classify_multi_value_params(project: &mut NirPackage, exec: &Arc<Executor>) -> bool {
+pub(super) fn classify_multi_value_params(
+    project: &mut NirPackage,
+    exec: &Arc<Executor>,
+    heap: &mut HeapEffectsCache,
+) -> bool {
     let abis = {
         let type_table = project.type_table.borrow();
         let mut candidates = collect_candidates(project, &type_table);
@@ -36,9 +39,7 @@ pub fn classify_multi_value_params(project: &mut NirPackage, exec: &Arc<Executor
         // nothing the call runs may write an `S` the callee reads after. The
         // whole-program summary that answers it is built only for one.
         if candidates.values().any(|c| c.through_ref) {
-            let gate = FunctionGate::new(project, exec);
-            let mut cache = HeapEffectsCache::default();
-            let heap = cache.effects(project, &type_table, &gate);
+            let heap = heap.effects(project, &type_table, exec);
             candidates.retain(|&(func_idx, _), c| {
                 !c.through_ref || !heap.function_may_write(func_idx, c.aggregate)
             });

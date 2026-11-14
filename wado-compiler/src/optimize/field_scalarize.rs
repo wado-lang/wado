@@ -60,7 +60,7 @@ pub fn scalarize_hot_fields(
 
     // Phase 2: Run scalarization (mutable access)
     let type_table = project.type_table.borrow();
-    let effects = heap.effects(project, &type_table, gate);
+    let effects = heap.effects(project, &type_table, gate.exec());
     let mut changed = false;
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();

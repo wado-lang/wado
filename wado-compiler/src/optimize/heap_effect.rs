@@ -26,7 +26,6 @@ use crate::type_table::TypeTable;
 
 use super::arena_query::holds_reference;
 use super::body_memo::BodyMemo;
-use super::gate::FunctionGate;
 use crate::parallel::{Executor, lock};
 
 /// Where a class's objects may come from: a bit per parameter (the last one
@@ -296,11 +295,11 @@ impl Layouts {
     }
 }
 
-/// The call-graph-wide summaries, kept across one [`FunctionGate`]'s passes and
-/// re-solved only where a function was written since.
+/// The call-graph-wide summaries, kept across the passes of one project's
+/// optimization and re-solved only where a function was written since. A
+/// store position names one function for the whole of it.
 #[derive(Default)]
 pub(super) struct HeapEffectsCache {
-    gate: Option<u64>,
     layouts: Layouts,
     functions: BodyMemo<FunctionEntry>,
     summaries: Vec<Summary>,
@@ -323,20 +322,19 @@ impl HeapEffectsCache {
         &'t mut self,
         project: &NirPackage,
         type_table: &'t TypeTable,
-        gate: &FunctionGate,
+        exec: &Executor,
     ) -> HeapEffects<'t> {
-        self.refresh(project, type_table, gate);
+        self.refresh(project, type_table, exec);
         HeapEffects {
             type_table,
             cache: self,
         }
     }
 
-    fn refresh(&mut self, project: &NirPackage, type_table: &TypeTable, gate: &FunctionGate) {
+    fn refresh(&mut self, project: &NirPackage, type_table: &TypeTable, exec: &Executor) {
         let layouts = Layouts::of(project);
-        if self.gate != Some(gate.id()) || self.layouts != layouts {
+        if self.layouts != layouts {
             *self = Self {
-                gate: Some(gate.id()),
                 layouts,
                 ..Self::default()
             };
@@ -348,7 +346,7 @@ impl HeapEffectsCache {
         let declarations = &project.builtin_declarations;
         self.functions.refresh_observing(
             project,
-            gate.exec(),
+            exec,
             |f| FunctionEntry::of(f, declarations),
             |i, old, new| {
                 edited[i] = true;
@@ -366,7 +364,7 @@ impl HeapEffectsCache {
             self.solve(
                 &project.functions,
                 type_table,
-                gate.exec(),
+                exec,
                 &edited,
                 &mut moved,
             );
