@@ -50,18 +50,20 @@ internal fn line_terminators() -> List<[u32, u32]> {
     ];
 }
 
-/// WordCharacters (§22.2.2.9.3): `[A-Za-z0-9_]`, and under `i` the characters
-/// whose simple folding lies in it. Simple folding maps the set into itself,
-/// so that is the set's closure.
-internal fn word(ignore_case: bool) -> List<[u32, u32]> {
-    let ascii: List<[u32, u32]> = [
+/// WordCharacters (§22.2.2.9.3) without `i`: `[A-Za-z0-9_]`.
+fn ascii_word() -> List<[u32, u32]> {
+    return [
         [0x30, 0x39],
         [0x41, 0x5A],
         [0x5F, 0x5F],
         [0x61, 0x7A],
     ];
-    return if ignore_case { simple_fold_closure(ascii) } else { ascii };
 }
+
+/// WordCharacters under `i`: the characters whose simple folding lies in
+/// `ascii_word()`. Simple folding maps that set into itself, so this is its
+/// closure.
+internal global FOLDED_WORD: List<[u32, u32]> = simple_fold_closure(ascii_word());
 
 /// CharacterClassEscape `s`: WhiteSpace and LineTerminator. WhiteSpace is TAB,
 /// VT, FF, ZWNBSP and the Space_Separator characters.
@@ -83,7 +85,7 @@ fn named(set: &NamedSet, ignore_case: bool) -> List<[u32, u32]> {
         Digit => [
             [0x30, 0x39],
         ],
-        Word => word(ignore_case),
+        Word => if ignore_case { FOLDED_WORD } else { ascii_word() },
         Space => space(),
         Property(p) => p.ranges,
     };
@@ -120,9 +122,6 @@ internal fn resolve(set: &CharSet, ignore_case: bool) -> List<[u32, u32]> {
 internal fn is_word_byte(b: u8) -> bool {
     return b.is_ascii_alphanumeric() || b == b'_';
 }
-
-/// WordCharacters under `i`, which `\b` and `\B` test inside one.
-internal global FOLDED_WORD: List<[u32, u32]> = word(true);
 
 /// Whether the normalized `set` holds `c`.
 internal fn includes(set: &List<[u32, u32]>, c: u32) -> bool {

@@ -68,9 +68,16 @@ impl Guest for Component {
         let input = builder.build();
         let mut closure = CodePointInversionListBuilder::new();
         closure.add_set(&input);
-        for class in fold_classes::CLASSES {
-            if class.iter().any(|&c| input.contains32(c)) {
-                class.iter().for_each(|&c| closure.add32(c));
+        let members = fold_classes::MEMBERS;
+        for range in input.iter_ranges() {
+            let mut i = members.partition_point(|&c| c < *range.start());
+            while members.get(i).is_some_and(|&c| c <= *range.end()) {
+                let mut j = usize::from(fold_classes::NEXT[i]);
+                while j != i {
+                    closure.add32(members[j]);
+                    j = usize::from(fold_classes::NEXT[j]);
+                }
+                i += 1;
             }
         }
         ranges_of(closure.build().iter_ranges())

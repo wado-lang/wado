@@ -197,11 +197,21 @@ fn holds(look: Look, text: StrSlice, pos: i32) -> bool {
 }
 
 fn folded_word_before(text: StrSlice, pos: i32) -> bool {
-    return pos > 0 && includes(&FOLDED_WORD, text.char_at_byte(text.floor_char_boundary(pos - 1)) as u32);
+    return pos > 0 && is_folded_word_at(text, text.floor_char_boundary(pos - 1));
 }
 
 fn folded_word_after(text: StrSlice, pos: i32) -> bool {
-    return pos < text.len() && includes(&FOLDED_WORD, text.char_at_byte(pos) as u32);
+    return pos < text.len() && is_folded_word_at(text, pos);
+}
+
+/// Whether the character at `at` is in `FOLDED_WORD`, decoding only one
+/// past ASCII.
+fn is_folded_word_at(text: StrSlice, at: i32) -> bool {
+    let b = text.byte_at(at);
+    if b < 0x80 {
+        return is_word_byte(b);
+    }
+    return includes(&FOLDED_WORD, text.char_at_byte(at) as u32);
 }
 
 fn word_before(text: StrSlice, pos: i32) -> bool {

@@ -71,7 +71,7 @@ simple mappings take one character and no locale, since none is tailored.
 the classes `gen/` writes into `src/casemap/fold_classes.rs`: ICU4X maps a
 character to its folding but offers no way back.
 `segmenter` returns where each grapheme cluster ends, or only how many there
-are. The core module holding all four interfaces is 1.68 MB, the size of
+are. The core module holding all four interfaces is 1.59 MB, the size of
 `target/wasm32-unknown-unknown/release/wado_bundled_icu.wasm` after
 `cargo build --release`.
 

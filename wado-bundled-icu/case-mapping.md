@@ -55,17 +55,21 @@ ranges rather than a `CodePointSet` because its typical input is a set the
 caller built, such as a character class.
 
 The closure is built from the definition of `scf`. `gen/` applies
-`CaseMapper::simple_fold` to every code point and writes the classes of more
-than one member into `src/casemap/fold_classes.rs`, each the code points that
-fold to one value. The closure adds every class with a member in the input,
-over ICU4X's inversion lists. The table is regenerated with the rest of `gen/`'s
-outputs, so it follows the ICU4X the asset is built from.
+`CaseMapper::simple_fold` to every code point and groups those that fold to one
+value into classes. It writes the members of the classes of more than one into
+`src/casemap/fold_classes.rs`, sorted by code point, with each member linked to
+the next one in its class so that following the links from any member visits
+its class. The closure searches the members for each range of the input and
+adds the classes of those it finds, over ICU4X's inversion lists, so its cost
+follows the input rather than the table. The table is regenerated with the rest
+of `gen/`'s outputs, so it follows the ICU4X the asset is built from.
 
 | ICU4X | Classes | Code points in them | Of 2 members | Of 3 | Of 4 |
 | ----- | ------: | ------------------: | -----------: | ---: | ---: |
 | 2.3.0 |    1482 |                2994 |         1455 |   24 |    3 |
 
-`src/casemap/fold_classes.rs` holds these classes; count its rows by length.
+Grouping `MEMBERS` in `src/casemap/fold_classes.rs` by its `NEXT` cycles gives
+these counts.
 
 ICU4X's own closure, `add_case_closure_to`, is not the source. It is
 documented over a different relation, full case folding together with the
@@ -79,9 +83,14 @@ observation that no version promises to keep.
 | ----------------------------------- | -------- |
 | `println("a")`, no `core:icu`       | 4,501 B  |
 | `simple_fold('A')`                  | 57,559 B |
-| `simple_fold_closure([[107, 107]])` | 73,459 B |
+| `simple_fold_closure([[107, 107]])` | 67,550 B |
 | `Locale::uppercase`                 | 85,329 B |
 
 Each is `wado compile -O2` of a `run` that asks it once and prints the answer,
 all with one `wado` binary. `Locale::uppercase` measured the same before the
 simple mappings were added.
+
+Re closes every set it compiles under `i`, and any pattern read at run time
+may turn `i` on, so a program that uses Re carries the closure whether or not
+its patterns do. `Regex::new("a+b").unwrap().is_match("aab")` compiles to
+481,823 B without `i` support and 506,397 B with it.

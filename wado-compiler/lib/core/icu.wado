@@ -394,21 +394,21 @@ pub fn simple_fold(ch: char) -> char {
     return Casemap::simple_fold(ch);
 }
 
-/// Every code point whose `simple_fold` equals that of one in `ranges`: the
-/// set a character class matches caselessly, one character at a time.
+/// Every code point whose `simple_fold` equals that of one in `set`: the set
+/// a character class matches caselessly, one character at a time.
 /// `simple_fold_closure([[107, 107]])` is `k`, `K` and the Kelvin sign.
 ///
-/// Both lists hold inclusive ranges. The answer comes lowest first, with no
-/// two ranges touching, as `ranges` answers; the input may come in any order,
-/// overlap or touch.
-pub fn simple_fold_closure(ranges: List<[u32, u32]>) -> List<[u32, u32]>
-    contract are_code_point_ranges(&ranges), "each range must run upward within 0..=0x10FFFF"
+/// Both lists hold inclusive ranges. `set` may come in any order, overlap or
+/// touch; the answer comes lowest first with no two ranges touching, the shape
+/// `ranges(p)` answers.
+pub fn simple_fold_closure(set: List<[u32, u32]>) -> List<[u32, u32]>
+    contract are_code_point_ranges(&set), "each range must run upward within 0..=0x10FFFF"
 {
-    return Casemap::simple_fold_closure(ranges);
+    return Casemap::simple_fold_closure(set);
 }
 
-fn are_code_point_ranges(ranges: &List<[u32, u32]>) -> bool {
-    for let [lo, hi] of ranges {
+fn are_code_point_ranges(set: &List<[u32, u32]>) -> bool {
+    for let [lo, hi] of set {
         if *lo > *hi || *hi > 0x10FFFF {
             return false;
         }
