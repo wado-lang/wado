@@ -2,7 +2,7 @@
 
 ## Context
 
-[Re](./wep-2026-11-02-re.md) refuses a pattern that turns on the `i` modifier.
+[Re](./wep-2026-11-02-re.md) refused a pattern that turns on the `i` modifier.
 ECMA-262 defines `i` through `Canonicalize` (§22.2.2.7.3): in Unicode mode, two
 characters match when their simple case foldings are equal. Simple case folding
 is `scf`, the `C` and `S` entries of `CaseFolding.txt`. It maps one character
