@@ -117,21 +117,24 @@ caselessly at match time.
 ## Roadmap
 
 - [x] `simple_lowercase`, `simple_uppercase`, `simple_titlecase` and
-  `simple_fold` in the asset and the facade. A test holds `simple_fold` to
-  the cases in Context, `ß`, `ẞ` and `İ`, and to the Kelvin sign folding to
-  `k`. A program that already maps case pays nothing for them:
+  `simple_fold` in the asset and the facade. The test checks that each
+  function reaches its own mapping, on a character where it differs from the
+  others; ICU4X's answers themselves are not retested.
+- [x] `simple_fold_closure`, over the table `gen` writes. Its tests cover the
+  closure's own logic: a class joins whole when one member is in the input,
+  the input survives, and unsorted, overlapping or touching input comes back
+  in the documented shape. A program that already maps case pays nothing for
+  either item:
 
-  | The program asks                    | Size     |
-  | ----------------------------------- | -------- |
-  | `println("a")`, no `core:icu`       | 4,501 B  |
-  | `simple_fold('A')`                  | 57,173 B |
-  | `Locale::uppercase`, before & after | 84,863 B |
+  | The program asks                        | Size     |
+  | --------------------------------------- | -------- |
+  | `println("a")`, no `core:icu`           | 4,501 B  |
+  | `simple_fold('A')`                      | 57,559 B |
+  | `simple_fold_closure([[107, 107]])`     | 73,459 B |
+  | `Locale::uppercase`, on `main` and here | 85,329 B |
 
   Each is `wado compile -O2` of a `run` that asks it once and prints the
-  answer.
-- [ ] `simple_fold_closure`, over the table `gen` writes. A Rust test in
-  `wado-bundled-icu` checks, for every code point, that the closure of it
-  alone holds exactly the code points with the same `simple_fold`.
+  answer, all with one `wado` binary.
 - [ ] Re accepts `i`. The differential test against Node's `RegExp` with the `u`
   flag covers it, and so do test262's case-insensitive RegExp tests. The
   known gap in [Re](./wep-2026-11-02-re.md#known-gaps) is removed.

@@ -43,6 +43,10 @@ interface casemap {
   simple-titlecase: func(ch: char) -> char;
   /// `Simple_Case_Folding`: the `C` and `S` entries of `CaseFolding.txt`.
   simple-fold: func(ch: char) -> char;
+  /// Every code point whose simple folding equals that of one in `ranges`,
+  /// as inclusive ranges, lowest first, none touching. `ranges` may come in
+  /// any order, overlap or touch.
+  simple-fold-closure: func(ranges: list<tuple<u32, u32>>) -> list<tuple<u32, u32>>;
 }
 
 // Extended grapheme clusters (UAX #29), which no locale tailors.

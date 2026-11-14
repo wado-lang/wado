@@ -66,6 +66,9 @@ constructs a collator collects it away.
 `casemap` maps and folds by the language subtag alone, the only one that selects
 a tailoring. `fold` picks ICU4X's Turkic folding for `tr` and `az`. The four
 simple mappings take one character and no locale, since none is tailored.
+`simple-fold-closure` closes a set of code points over simple folding, through
+the classes `gen/` writes into `src/casemap/fold_classes.rs`: ICU4X maps a
+character to its folding but offers no way back.
 `segmenter` returns where each grapheme cluster ends, or only how many there
 are. The core module holding all four interfaces is 1.68 MB, the size of
 `target/wasm32-unknown-unknown/release/wado_bundled_icu.wasm` after

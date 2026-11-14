@@ -71,6 +71,18 @@ lowercase: `ǆ` becomes `ǅ`.
 their simple foldings are equal. `ẞ` folds to `ß` and `İ` to itself; the
 Turkic `T` entries are not applied. `Locale::fold` folds whole text in full.
 
+### `pub fn simple_fold_closure(ranges: List<[u32, u32]>) -> List<[u32, u32]>`
+
+- `contract are_code_point_ranges(&ranges), "each range must run upward within 0..=0x10FFFF"`
+
+Every code point whose `simple_fold` equals that of one in `ranges`: the
+set a character class matches caselessly, one character at a time.
+`simple_fold_closure([[107, 107]])` is `k`, `K` and the Kelvin sign.
+
+Both lists hold inclusive ranges. The answer comes lowest first, with no
+two ranges touching, as `ranges` answers; the input may come in any order,
+overlap or touch.
+
 ### `pub fn graphemes(text: String) -> Graphemes`
 
 The extended grapheme clusters of `text` (UAX #29), in order: what a reader
