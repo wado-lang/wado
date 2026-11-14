@@ -1,6 +1,6 @@
 //! Reference elimination: drop the `let self = &arr` bindings inlining leaves
 //! behind, folding each `self.repr` back to `arr.repr`, field-access chains
-//! included. `build_ref_elim` classifies every use in one pristine-body
+//! included, and a `self` handed whole to a call back to `&arr`. `build_ref_elim` classifies every use in one pristine-body
 //! analysis; the referent is then stored unresolved and resolved during the
 //! transform, so a transitive `let r2 = &r1.field` survives `r1`'s removal.
 
@@ -24,7 +24,8 @@ struct RefInfo {
     /// inherited referent of a transitive `let r = s` shadow). Resolved
     /// lazily during the transform.
     referent_e: ExprId,
-    /// True until a non-field-access use is found.
+    /// True until a use other than a field access, or a call argument where
+    /// `passes_whole`, is found.
     eliminable: bool,
     /// A `let r = s` shadow inheriting `s`'s referent. Its capture point is `s`'s
     /// binding, not its own, so the positional capture guard falls back to a
@@ -47,7 +48,7 @@ struct RefInfo {
 /// `r.field` with the resolved referent, bind each `*r` literal by value) run
 /// through the engine edit API so the worklist re-examines the result.
 pub(super) struct RefElimRule {
-    /// `let r = &E` bindings (eliminable when every use is `r.field`).
+    /// `let r = &E` bindings (see [`RefInfo::eliminable`]).
     refs: IndexMap<u32, RefInfo>,
     /// `let r = &literal` bindings read only as `*r`; value is the source
     /// literal expression.
@@ -698,7 +699,7 @@ impl Analysis<'_> {
                     self.analyze_expr_operand(arg, refs);
                 }
             }
-            // Direct (non-field-access) use of a tracked ref local: non-eliminable.
+            // Any other use of a tracked ref local: non-eliminable.
             ExprKind::Local { index, .. } => {
                 let index = *index;
                 if let Some(info) = refs.get_mut(&index) {
