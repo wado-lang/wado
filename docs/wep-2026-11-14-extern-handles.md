@@ -51,7 +51,8 @@ A hand-written component was run on wasmtime 50.0.1 under `wado`'s own engine
 configuration, and on Node 26 after a jco 1.30.0 transpile, against jsdom. Its
 main core module imports functions that take and return `externref`. Inside the
 component a second core module satisfies those imports with functions that
-trap.
+trap. The component is not in the tree: the roadmap's collection test takes its
+place.
 
 | Check                                                                           | wasmtime | jco on Node |
 | ------------------------------------------------------------------------------- | -------- | ----------- |
