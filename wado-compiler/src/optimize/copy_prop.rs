@@ -884,13 +884,7 @@ fn apply_in_expr(
             } => emit_ref(engine, id, NirUnaryOp::MutRef, index, name, inner_type_id),
             CopySource::RefProjection { op, projection, .. } => {
                 let cloned = engine.clone_expr(projection);
-                engine.replace_expr_kind(
-                    id,
-                    ExprKind::Unary {
-                        op,
-                        expr: cloned.into(),
-                    },
-                );
+                emit_borrow(engine, id, op, cloned);
             }
             CopySource::Promoted(v) => {
                 engine.redirect_expr(id, Operand::Value(v));
@@ -920,13 +914,40 @@ fn emit_ref(
 ) {
     let span = engine.body.exprs[id].span;
     let inner = engine.alloc_expr(ExprKind::Local { index, name }, inner_type_id, span);
-    engine.replace_expr_kind(
-        id,
-        ExprKind::Unary {
-            op,
-            expr: inner.into(),
-        },
-    );
+    emit_borrow(engine, id, op, inner);
+}
+
+/// Replace `id`, a read of a reference local, with `&place` / `&mut place`. A
+/// field access or a deref over `id` reads through the reference as it reads
+/// the place, so there `place` itself goes in: `(&mut x).f` would leave a
+/// borrow of `x` that names no handle of its own, which `niri` takes for one
+/// the frame cannot track until a peephole round removes it.
+fn emit_borrow(engine: &mut Engine, id: ExprId, op: NirUnaryOp, place: ExprId) {
+    let parent = engine.parent_of(NodeRef::Expr(id)).and_then(|p| match p {
+        NodeRef::Expr(p) => Some(p),
+        NodeRef::Stmt(_) | NodeRef::Block(_) | NodeRef::Pat(_) => None,
+    });
+    match parent.map(|p| (p, &engine.body.exprs[p].kind)) {
+        Some((_, ExprKind::FieldAccess { expr, .. })) if expr.as_expr() == Some(id) => {
+            assert!(engine.redirect_expr(id, place.into()));
+        }
+        Some((
+            deref,
+            ExprKind::Unary {
+                op: NirUnaryOp::Deref,
+                ..
+            },
+        )) => {
+            assert!(engine.redirect_expr(deref, place.into()));
+        }
+        _ => engine.replace_expr_kind(
+            id,
+            ExprKind::Unary {
+                op,
+                expr: place.into(),
+            },
+        ),
+    }
 }
 
 /// Whole-function copy-propagation fixpoint driven from the engine session
