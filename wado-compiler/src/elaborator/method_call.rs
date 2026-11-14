@@ -3241,9 +3241,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let env = &self.tysys.trait_env;
         let declared = env.entries_by_receiver_vec(&target.receiver(defs));
-        let is_current = |k: &&DefId| *defs.module(**k) == self.current_module_source;
-        let mut keys: Vec<DefId> = declared.iter().filter(is_current).copied().collect();
-        keys.extend(declared.iter().filter(|k| !is_current(k)).copied());
+        let (mut keys, elsewhere): (Vec<DefId>, Vec<DefId>) = declared
+            .iter()
+            .partition(|&&k| *defs.module(k) == self.current_module_source);
+        keys.extend(elsewhere);
         // A key naming no declaration holds blocks of different shapes (`&A`
         // and `&B`, `[..T]` and `[A, B, A]`), which no declaration's arguments
         // tell apart, so the receiver is matched against each whole target.
