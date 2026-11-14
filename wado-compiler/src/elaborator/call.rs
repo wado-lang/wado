@@ -1633,14 +1633,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Expr::Ident(ident) = &call.callee else {
             unreachable!("non-Ident callees are handled by the indirect-call fast path above")
         };
-        // A default body's author reached `Self::m()` through a bound. `Self`
-        // still names this impl's target, which supplies the body; the bound
-        // names the trait, as `Trait::<Self>::m()` would. A blanket's `Self` is
-        // its receiver parameter, which only the rewrite below reaches.
+        // A default body's author reached `Self::m()` through a bound, and a
+        // trait method's default walked at its receiver was written in its
+        // trait. `Self` still names the concrete type, which supplies the
+        // method; the trait is the one named, as `Trait::<Self>::m()` would.
+        // A blanket's `Self` is its receiver parameter, which only the rewrite
+        // below reaches.
         if given_args.is_none()
             && let [head, method] = ident.segments.as_slice()
             && head.name == "Self"
-            && let Some(required) = self.abstract_selection(call.id).map(|s| s.trait_decl)
+            && let Some(required) = self
+                .abstract_selection(call.id)
+                .map(|s| s.trait_decl)
+                .or(self.annotate_ctx.trait_ctx.self_reads_trait)
             && self
                 .annotate_ctx
                 .trait_ctx
@@ -3418,23 +3423,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> R {
         let mut scope = self.enter_inherited_type_param_scope();
         // A receiver the caller's own parameter stands for is that parameter,
-        // bound by whatever binds it there.
-        let receiver_binders: Vec<(String, BinderInScope, Vec<ScopedBound>)> = self_binding
-            .map(|binding| {
+        // bound by whatever binds it there, shadowed or not. The default
+        // reaches it as `Self` alone: the caller's name for it is not in scope.
+        let receiver_binder: Option<(BinderInScope, Vec<ScopedBound>)> =
+            self_binding.and_then(|binding| {
                 let saved = scope.saved();
+                let binder = *saved.binder(binding.type_id)?;
                 let table = scope.tysys.type_table.borrow();
-                saved
-                    .type_params
-                    .iter()
-                    .filter(|(_, binder)| binder.type_id == binding.type_id)
-                    .map(|(name, binder)| {
-                        let bounds = saved.bounds(&table, BoundsOf::Type(binding.type_id));
-                        (name.clone(), *binder, bounds)
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        // Resolved against the enclosing scope, which the loop below clears.
+                Some((
+                    binder,
+                    saved.bounds(&table, BoundsOf::Type(binding.type_id)),
+                ))
+            }); // Resolved against the enclosing scope, which the loop below clears.
         //
         // A type argument nothing pinned is still an inference variable;
         // standing for one spells the variable into the diagnostic (`unknown
@@ -3478,11 +3478,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.annotate_ctx.trait_ctx.clear_binders();
         scope.annotate_ctx.trait_ctx.clear_bounds();
         match self_binding {
-            Some(binding) => scope.set_self_binding(binding),
+            Some(binding) => {
+                scope.set_self_binding(binding);
+                scope.annotate_ctx.trait_ctx.self_reads_trait = binding.declaring_trait;
+            }
             None => scope.clear_self_binding(),
         }
-        for (name, binder, bounds) in receiver_binders {
-            scope.bind_param(&name, binder, bounds);
+        if let Some((binder, bounds)) = receiver_binder {
+            scope.bind_param("Self", binder, bounds);
         }
         for (i, binding) in bindings.iter().enumerate() {
             let Some(bounds) = &installed[i] else {
