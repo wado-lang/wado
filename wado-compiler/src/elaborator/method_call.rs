@@ -46,9 +46,7 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sig;
 use crate::elaborator::synth::{ArgProbe, ArgSource};
-use crate::elaborator::trait_env::{
-    BlanketBound, BlanketReceiver, ImplHeader, get_type_name_static,
-};
+use crate::elaborator::trait_env::{BlanketBound, BlanketReceiver};
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
 use crate::name::{DeclName, FqTraitName, unalias_namespace_member};
 use crate::resolve::Resolution;
@@ -3230,7 +3228,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The trait impl blocks on the receiver `struct_name` at `receiver_args`,
-    /// current-module-first; a block binding it as its own parameter only here.
+    /// current-module-first.
     pub(super) fn trait_impls_for_receiver(
         &self,
         struct_name: &str,
@@ -3240,21 +3238,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<DefId> {
         let defs = self.tysys.resolutions.defs();
         let target = self.static_receiver_key(struct_name, target_hint);
-        let declared_name = target.decl_name(defs).unwrap_or(struct_name).to_string();
 
         let env = &self.tysys.trait_env;
         let declared = env.entries_by_receiver_vec(&target.receiver(defs));
-        let binder = env.entries_by_receiver_vec(&Receiver::Type(FqTypeName::param_bucket(
-            &self.current_module_source,
-            &declared_name,
-        )));
         let is_current = |k: &&DefId| *defs.module(**k) == self.current_module_source;
-        let mut keys: Vec<DefId> = declared
-            .iter()
-            .chain(binder.iter())
-            .filter(is_current)
-            .copied()
-            .collect();
+        let mut keys: Vec<DefId> = declared.iter().filter(is_current).copied().collect();
         keys.extend(declared.iter().filter(|k| !is_current(k)).copied());
         // A key naming no declaration holds blocks of different shapes (`&A`
         // and `&B`, `[..T]` and `[A, B, A]`), which no declaration's arguments
@@ -3266,10 +3254,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let shaped = target.decl().is_none().then_some(receiver_type).flatten();
         let table = self.tysys.type_table.borrow();
         keys.retain(|key| {
-            self.tysys
-                .impl_head_decl_name(&env.impl_headers[key], defs.module(*key))
-                == declared_name
-                && !self.impl_at_other_instantiation(*key, receiver_args)
+            !self.impl_at_other_instantiation(*key, receiver_args)
                 && shaped.is_none_or(|receiver| {
                     table.binds_type_params(&[table.impl_target_whole(*key)], &[receiver])
                 })
@@ -3934,16 +3919,6 @@ impl TypeSystem {
         }
     }
 
-    /// An impl header's target head as a declaration name, resolved through the
-    /// impl's own imports unless one of its type parameters shadows the spelling.
-    fn impl_head_decl_name(&self, header: &ImplHeader, impl_module: &ModuleSource) -> String {
-        let head = get_type_name_static(&header.ty);
-        if header.type_params.iter().any(|p| p.name == head) {
-            return head;
-        }
-        self.import_original_name(&head, impl_module)
-    }
-
     /// The impl block a selection came from, when written for one instantiation.
     /// Read off target arguments: `impl Default for List<T>` declares no parameters.
     /// A block inheriting its trait's default supplies it without declaring it.
@@ -4106,15 +4081,6 @@ impl TypeSystem {
         self.trait_env
             .resource_static(&ImplTargetKey::Decl(def), method_name)
             .is_some()
-    }
-
-    /// The original name `name` resolves to *within `module`*: its
-    /// `use { Original as name }` original, or `name` itself when not aliased.
-    fn import_original_name(&self, name: &str, module: &ModuleSource) -> String {
-        self.resolutions.imported_as(module, name).map_or_else(
-            || name.to_string(),
-            |def| self.resolutions.defs().name(def).to_string(),
-        )
     }
 }
 
