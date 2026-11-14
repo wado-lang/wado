@@ -318,16 +318,15 @@ fn "value_copy_unwrapped_payload_mutated.wado/run"() with Stdout {
     let $load_33: ref Array<i32>;
     let $load_37: ref "Array<value_copy_unwrapped_payload_mutated.wado/Shape>";
     let m: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>";
-    let key_157: ref "core:prelude/string.wado//String";
-    let value_158: ref "value_copy_unwrapped_payload_mutated.wado//Shape";
-    let self_187: ref null "value_copy_unwrapped_payload_mutated.wado//Shape";
-    let v_195: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
-    let e_217: i32;
-    let $cm_pair_7_287: i64;
-    let $sroa_$pattern_temp_0_1_14_294: i32;
-    let $sroa_$sroa_v_axes_370_repr_385: ref "Array<core:prelude/string.wado/String>";
-    let new_repr_408: ref Array<u8>;
-    $sroa_$sroa_v_axes_370_repr_385 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 });
+    let key_161: ref "core:prelude/string.wado//String";
+    let value_162: ref "value_copy_unwrapped_payload_mutated.wado//Shape";
+    let self_191: ref null "value_copy_unwrapped_payload_mutated.wado//Shape";
+    let v_199: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
+    let e_221: i32;
+    let $cm_pair_7_291: i64;
+    let $sroa_$pattern_temp_0_1_14_298: i32;
+    let $sroa_$sroa_v_axes_374_repr_389: ref "Array<core:prelude/string.wado/String>";
+    $sroa_$sroa_v_axes_374_repr_389 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 });
     let $array_clone_dst_2: ref "Array<core:prelude/string.wado/String>";
     $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(1);
     let $array_clone_i_4: i32;
@@ -336,7 +335,7 @@ fn "value_copy_unwrapped_payload_mutated.wado/run"() with Stdout {
     $array_clone_deep_prefix: block {
         l0: loop {
             break_if $array_clone_deep_prefix $array_clone_i_4 >= 1;
-            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$sroa_v_axes_370_repr_385, $array_clone_i_4);
+            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$sroa_v_axes_374_repr_389, $array_clone_i_4);
             builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, $array_clone_i_4, (if ref.is_null($array_clone_elem_5) -> ref null "core:prelude/string.wado//String" {
                 $array_clone_elem_5;
             } else {
@@ -347,21 +346,25 @@ fn "value_copy_unwrapped_payload_mutated.wado/run"() with Stdout {
         };
     };
     builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83), used: 1 });
-    $array_clone_i_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_287("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_294 = builtin::i32_wrap_i64($cm_pair_7_287 >> 32_i64);
+    let $array_clone_src_6: ref Array<u8>;
+    $array_clone_src_6 = global:value_copy_unwrapped_payload_mutated.wado::$const_obj_2;
+    let $array_clone_dst_7: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>(1)), 0, $array_clone_src_6, 0, 1);
+    $array_clone_i_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_291("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_298 = builtin::i32_wrap_i64($cm_pair_7_291 >> 32_i64);
     $array_clone_i_4 = "value_copy_unwrapped_payload_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($array_clone_i_4);
-    builtin::array_copy<u8>(local.tee new_repr_408(builtin::array_new<u8>(2)), 0, global:value_copy_unwrapped_payload_mutated.wado::$const_obj_2, 0, 1);
-    builtin::array_set_u8(new_repr_408, 1, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_294, new_repr_408);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_294);
+    builtin::array_copy<u8>(local.tee $array_clone_src_6(builtin::array_new<u8>(2)), 0, $array_clone_dst_7, 0, 1);
+    builtin::array_set_u8($array_clone_src_6, 1, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_298, $array_clone_src_6);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_298);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($array_clone_i_4);
-    $sroa_$sroa_v_axes_370_repr_385 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 });
+    $sroa_$sroa_v_axes_374_repr_389 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 });
     $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(1);
     $array_clone_i_4 = 0;
     $array_clone_deep_prefix: block {
         l2: loop {
             break_if $array_clone_deep_prefix $array_clone_i_4 >= 1;
-            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$sroa_v_axes_370_repr_385, $array_clone_i_4);
+            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$sroa_v_axes_374_repr_389, $array_clone_i_4);
             builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, $array_clone_i_4, (if ref.is_null($array_clone_elem_5) -> ref null "core:prelude/string.wado//String" {
                 $array_clone_elem_5;
             } else {
@@ -372,21 +375,23 @@ fn "value_copy_unwrapped_payload_mutated.wado/run"() with Stdout {
         };
     };
     builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83), used: 1 });
-    $array_clone_i_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_287("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_294 = builtin::i32_wrap_i64($cm_pair_7_287 >> 32_i64);
+    $array_clone_src_6 = global:value_copy_unwrapped_payload_mutated.wado::$const_obj_2;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>(1)), 0, $array_clone_src_6, 0, 1);
+    $array_clone_i_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_291("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_298 = builtin::i32_wrap_i64($cm_pair_7_291 >> 32_i64);
     $array_clone_i_4 = "value_copy_unwrapped_payload_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($array_clone_i_4);
-    builtin::array_copy<u8>(local.tee new_repr_408(builtin::array_new<u8>(2)), 0, global:value_copy_unwrapped_payload_mutated.wado::$const_obj_2, 0, 1);
-    builtin::array_set_u8(new_repr_408, 1, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_294, new_repr_408);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_294);
+    builtin::array_copy<u8>(local.tee $array_clone_src_6(builtin::array_new<u8>(2)), 0, $array_clone_dst_7, 0, 1);
+    builtin::array_set_u8($array_clone_src_6, 1, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_298, $array_clone_src_6);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_298);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($array_clone_i_4);
-    $sroa_$sroa_v_axes_370_repr_385 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 });
+    $sroa_$sroa_v_axes_374_repr_389 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 });
     $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(1);
     $array_clone_i_4 = 0;
     $array_clone_deep_prefix: block {
         l4: loop {
             break_if $array_clone_deep_prefix $array_clone_i_4 >= 1;
-            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$sroa_v_axes_370_repr_385, $array_clone_i_4);
+            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$sroa_v_axes_374_repr_389, $array_clone_i_4);
             builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, $array_clone_i_4, (if ref.is_null($array_clone_elem_5) -> ref null "core:prelude/string.wado//String" {
                 $array_clone_elem_5;
             } else {
@@ -397,21 +402,23 @@ fn "value_copy_unwrapped_payload_mutated.wado/run"() with Stdout {
         };
     };
     builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83), used: 1 });
-    $array_clone_i_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_287("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_294 = builtin::i32_wrap_i64($cm_pair_7_287 >> 32_i64);
+    $array_clone_src_6 = global:value_copy_unwrapped_payload_mutated.wado::$const_obj_2;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>(1)), 0, $array_clone_src_6, 0, 1);
+    $array_clone_i_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_291("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_298 = builtin::i32_wrap_i64($cm_pair_7_291 >> 32_i64);
     $array_clone_i_4 = "value_copy_unwrapped_payload_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($array_clone_i_4);
-    builtin::array_copy<u8>(local.tee new_repr_408(builtin::array_new<u8>(2)), 0, global:value_copy_unwrapped_payload_mutated.wado::$const_obj_2, 0, 1);
-    builtin::array_set_u8(new_repr_408, 1, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_294, new_repr_408);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_294);
+    builtin::array_copy<u8>(local.tee $array_clone_src_6(builtin::array_new<u8>(2)), 0, $array_clone_dst_7, 0, 1);
+    builtin::array_set_u8($array_clone_src_6, 1, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_298, $array_clone_src_6);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_298);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($array_clone_i_4);
-    $sroa_$sroa_v_axes_370_repr_385 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 });
+    $sroa_$sroa_v_axes_374_repr_389 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 });
     $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(1);
     $array_clone_i_4 = 0;
     $array_clone_deep_prefix: block {
         l6: loop {
             break_if $array_clone_deep_prefix $array_clone_i_4 >= 1;
-            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$sroa_v_axes_370_repr_385, $array_clone_i_4);
+            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$sroa_v_axes_374_repr_389, $array_clone_i_4);
             builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, $array_clone_i_4, (if ref.is_null($array_clone_elem_5) -> ref null "core:prelude/string.wado//String" {
                 $array_clone_elem_5;
             } else {
@@ -422,60 +429,62 @@ fn "value_copy_unwrapped_payload_mutated.wado/run"() with Stdout {
         };
     };
     builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83), used: 1 });
-    $array_clone_i_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_287("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_294 = builtin::i32_wrap_i64($cm_pair_7_287 >> 32_i64);
+    $array_clone_src_6 = global:value_copy_unwrapped_payload_mutated.wado::$const_obj_2;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>(1)), 0, $array_clone_src_6, 0, 1);
+    $array_clone_i_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_291("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_298 = builtin::i32_wrap_i64($cm_pair_7_291 >> 32_i64);
     $array_clone_i_4 = "value_copy_unwrapped_payload_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($array_clone_i_4);
-    builtin::array_copy<u8>(local.tee new_repr_408(builtin::array_new<u8>(2)), 0, global:value_copy_unwrapped_payload_mutated.wado::$const_obj_2, 0, 1);
-    builtin::array_set_u8(new_repr_408, 1, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_294, new_repr_408);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_294);
+    builtin::array_copy<u8>(local.tee $array_clone_src_6(builtin::array_new<u8>(2)), 0, $array_clone_dst_7, 0, 1);
+    builtin::array_set_u8($array_clone_src_6, 1, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_298, $array_clone_src_6);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_298);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($array_clone_i_4);
     m = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<ref "value_copy_unwrapped_payload_mutated.wado//Shape">(0), alive: builtin::array_new<bool>(0), count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
-    key_157 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
-    value_158 = struct.new "value_copy_unwrapped_payload_mutated.wado//Shape" { axes: struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 }), used: 1 } };
-    $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___insert_55: block {
-        if local.tee $array_clone_i_4("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::place"(m, key_157, local.tee $load_8(m.log).count)) >= 0 {
-            builtin::array_set<ref "value_copy_unwrapped_payload_mutated.wado//Shape">($load_8.values, $array_clone_i_4, value_158);
-            break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___insert_55;
+    key_161 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
+    value_162 = struct.new "value_copy_unwrapped_payload_mutated.wado//Shape" { axes: struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 }), used: 1 } };
+    $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___insert_59: block {
+        if local.tee $array_clone_i_4("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::place"(m, key_161, local.tee $load_8(m.log).count)) >= 0 {
+            builtin::array_set<ref "value_copy_unwrapped_payload_mutated.wado//Shape">($load_8.values, $array_clone_i_4, value_162);
+            break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___insert_59;
         }
         if @unlikely(local.tee $array_clone_i_4($load_8.count) == builtin::array_len($load_8.keys)) {
             cold_path;
-            "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::grow"($load_8, $sroa_$pattern_temp_0_1_14_294 = $array_clone_i_4 * 2; select i32(4 > $sroa_$pattern_temp_0_1_14_294, 4, $sroa_$pattern_temp_0_1_14_294));
+            "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::grow"($load_8, $sroa_$pattern_temp_0_1_14_298 = $array_clone_i_4 * 2; select i32(4 > $sroa_$pattern_temp_0_1_14_298, 4, $sroa_$pattern_temp_0_1_14_298));
         }
-        builtin::array_set<ref "core:prelude/string.wado//String">($load_8.keys, $array_clone_i_4, key_157);
-        builtin::array_set<ref "value_copy_unwrapped_payload_mutated.wado//Shape">($load_8.values, $array_clone_i_4, value_158);
+        builtin::array_set<ref "core:prelude/string.wado//String">($load_8.keys, $array_clone_i_4, key_161);
+        builtin::array_set<ref "value_copy_unwrapped_payload_mutated.wado//Shape">($load_8.values, $array_clone_i_4, value_162);
         builtin::array_set<bool>($load_8.alive, $array_clone_i_4, 1);
         $load_8.count = $array_clone_i_4 + 1;
     };
-    $sroa_$sroa_v_axes_370_repr_385 = local.tee v_195($inline_core_prelude_types_wado_Option_value_copy_unwrapped_payload_mutated_wado_Shape___unwrap_65: block -> ref "value_copy_unwrapped_payload_mutated.wado//Shape" {
-        if @likely(ref.is_null(local.tee self_187($inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___value_at_67: block -> ref null "value_copy_unwrapped_payload_mutated.wado//Shape" {
+    $sroa_$sroa_v_axes_374_repr_389 = local.tee v_199($inline_core_prelude_types_wado_Option_value_copy_unwrapped_payload_mutated_wado_Shape___unwrap_69: block -> ref "value_copy_unwrapped_payload_mutated.wado//Shape" {
+        if @likely(ref.is_null(local.tee self_191($inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___value_at_71: block -> ref null "value_copy_unwrapped_payload_mutated.wado//Shape" {
             if local.tee $array_clone_i_4(block -> i32 {
-                new_repr_408 = global:value_copy_unwrapped_payload_mutated.wado::$const_obj_0;
-                "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::find_index$spec0$sroa[key.repr]"(m.log, m.slots, m.nkeys, m.kids, m.lens, m.root, m.height, new_repr_408);
+                $array_clone_src_6 = global:value_copy_unwrapped_payload_mutated.wado::$const_obj_0;
+                "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::find_index$spec0$sroa[key.repr]"(m.log, m.slots, m.nkeys, m.kids, m.lens, m.root, m.height, $array_clone_src_6);
             }) < 0 {
-                break $inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___value_at_67: ref.null none;
+                break $inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___value_at_71: ref.null none;
             }
-            break $inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___value_at_67: builtin::array_get_value<ref "value_copy_unwrapped_payload_mutated.wado//Shape">(m.log.values, $array_clone_i_4);
+            break $inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___value_at_71: builtin::array_get_value<ref "value_copy_unwrapped_payload_mutated.wado//Shape">(m.log.values, $array_clone_i_4);
         })) == 0) {
-            break $inline_core_prelude_types_wado_Option_value_copy_unwrapped_payload_mutated_wado_Shape___unwrap_65: ref.as_non_null(self_187);
+            break $inline_core_prelude_types_wado_Option_value_copy_unwrapped_payload_mutated_wado_Shape___unwrap_69: ref.as_non_null(self_191);
         } else {
         }
         cold_path;
         "core:prelude/types.wado/core:prelude/types.wado/Option<value_copy_unwrapped_payload_mutated.wado/Shape>::unwrap$cold0$dae[self]"();
         unreachable;
     }.axes).repr;
-    $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(local.tee $array_clone_i_4(v_195.used));
-    $sroa_$pattern_temp_0_1_14_294 = 0;
+    $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(local.tee $array_clone_i_4(v_199.used));
+    $sroa_$pattern_temp_0_1_14_298 = 0;
     $array_clone_deep_prefix: block {
         l13: loop {
-            break_if $array_clone_deep_prefix $sroa_$pattern_temp_0_1_14_294 >= $array_clone_i_4;
-            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$sroa_v_axes_370_repr_385, $sroa_$pattern_temp_0_1_14_294);
-            builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, $sroa_$pattern_temp_0_1_14_294, (if ref.is_null($array_clone_elem_5) -> ref null "core:prelude/string.wado//String" {
+            break_if $array_clone_deep_prefix $sroa_$pattern_temp_0_1_14_298 >= $array_clone_i_4;
+            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$sroa_v_axes_374_repr_389, $sroa_$pattern_temp_0_1_14_298);
+            builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, $sroa_$pattern_temp_0_1_14_298, (if ref.is_null($array_clone_elem_5) -> ref null "core:prelude/string.wado//String" {
                 $array_clone_elem_5;
             } else {
                 "value_copy_unwrapped_payload_mutated.wado/$value_copy$core:prelude/string.wado/String"(ref.as_non_null($array_clone_elem_5));
             }));
-            $sroa_$pattern_temp_0_1_14_294 = $sroa_$pattern_temp_0_1_14_294 + 1;
+            $sroa_$pattern_temp_0_1_14_298 = $sroa_$pattern_temp_0_1_14_298 + 1;
             continue l13;
         };
     };
@@ -485,14 +494,14 @@ fn "value_copy_unwrapped_payload_mutated.wado/run"() with Stdout {
         unreachable;
     }
     builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83), used: 1 });
-    v_195 = key_157 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }; if @unlikely(local.tee e_217("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::find_index"(local.tee $load_8(m.log), local.tee $load_30(m.slots), local.tee $sroa_$sroa_v_axes_370_repr_385(m.nkeys), local.tee $load_32(m.kids), local.tee $load_33(m.lens), local.tee $array_clone_i_4(m.root), local.tee $sroa_$pattern_temp_0_1_14_294(m.height), local.tee new_repr_408(key_157.repr), 1)) < 0) {
+    v_199 = key_161 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }; if @unlikely(local.tee e_221("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::find_index"(local.tee $load_8(m.log), local.tee $load_30(m.slots), local.tee $sroa_$sroa_v_axes_374_repr_389(m.nkeys), local.tee $load_32(m.kids), local.tee $load_33(m.lens), local.tee $array_clone_i_4(m.root), local.tee $sroa_$pattern_temp_0_1_14_298(m.height), local.tee $array_clone_src_6(key_161.repr), 1)) < 0) {
         cold_path;
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::found$cold0$dae[self,e]"(key_157);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::found$cold0$dae[self,e]"(key_161);
         unreachable;
-    }; builtin::array_get_value<ref "value_copy_unwrapped_payload_mutated.wado//Shape">(local.tee $load_37($load_8.values), e_217).axes;
-    $array_clone_i_4 = if @unlikely(local.tee $array_clone_i_4("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::find_index"($load_8, $load_30, $sroa_$sroa_v_axes_370_repr_385, $load_32, $load_33, $array_clone_i_4, $sroa_$pattern_temp_0_1_14_294, new_repr_408, key_157.used)) < 0) {
+    }; builtin::array_get_value<ref "value_copy_unwrapped_payload_mutated.wado//Shape">(local.tee $load_37($load_8.values), e_221).axes;
+    $array_clone_i_4 = if @unlikely(local.tee $array_clone_i_4("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::find_index"($load_8, $load_30, $sroa_$sroa_v_axes_374_repr_389, $load_32, $load_33, $array_clone_i_4, $sroa_$pattern_temp_0_1_14_298, $array_clone_src_6, key_161.used)) < 0) {
         cold_path;
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::found$cold0$dae[self,e]"(key_157);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::found$cold0$dae[self,e]"(key_161);
         unreachable;
     }; builtin::array_get_value<ref "value_copy_unwrapped_payload_mutated.wado//Shape">($load_37, $array_clone_i_4).axes.used;
     if @unlikely(0 >= $array_clone_i_4) {
@@ -500,41 +509,41 @@ fn "value_copy_unwrapped_payload_mutated.wado/run"() with Stdout {
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $array_clone_i_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_unwrapped_payload_mutated.wado:68"), used: 44 });
         unreachable;
     }
-    key_157 = builtin::array_get_value<ref "core:prelude/string.wado//String">(v_195.repr, 0);
-    $array_clone_i_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_287("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_294 = builtin::i32_wrap_i64($cm_pair_7_287 >> 32_i64);
+    key_161 = builtin::array_get_value<ref "core:prelude/string.wado//String">(v_199.repr, 0);
+    $array_clone_i_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_291("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_298 = builtin::i32_wrap_i64($cm_pair_7_291 >> 32_i64);
     $array_clone_i_4 = "value_copy_unwrapped_payload_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($array_clone_i_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_294, key_157.repr, key_157.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_298, key_161.repr, key_161.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($array_clone_i_4);
-    $sroa_$sroa_v_axes_370_repr_385 = local.tee v_195($inline_core_prelude_types_wado_Option_value_copy_unwrapped_payload_mutated_wado_Shape___unwrap_82: block -> ref "value_copy_unwrapped_payload_mutated.wado//Shape" {
-        if @likely(ref.is_null(local.tee self_187($inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___value_at_84: block -> ref null "value_copy_unwrapped_payload_mutated.wado//Shape" {
+    $sroa_$sroa_v_axes_374_repr_389 = local.tee v_199($inline_core_prelude_types_wado_Option_value_copy_unwrapped_payload_mutated_wado_Shape___unwrap_86: block -> ref "value_copy_unwrapped_payload_mutated.wado//Shape" {
+        if @likely(ref.is_null(local.tee self_191($inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___value_at_88: block -> ref null "value_copy_unwrapped_payload_mutated.wado//Shape" {
             if local.tee $array_clone_i_4(block -> i32 {
-                new_repr_408 = global:value_copy_unwrapped_payload_mutated.wado::$const_obj_0;
-                "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::find_index$spec0$sroa[key.repr]"(m.log, m.slots, m.nkeys, m.kids, m.lens, m.root, m.height, new_repr_408);
+                $array_clone_src_6 = global:value_copy_unwrapped_payload_mutated.wado::$const_obj_0;
+                "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::find_index$spec0$sroa[key.repr]"(m.log, m.slots, m.nkeys, m.kids, m.lens, m.root, m.height, $array_clone_src_6);
             }) < 0 {
-                break $inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___value_at_84: ref.null none;
+                break $inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___value_at_88: ref.null none;
             }
-            break $inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___value_at_84: builtin::array_get_value<ref "value_copy_unwrapped_payload_mutated.wado//Shape">(m.log.values, $array_clone_i_4);
+            break $inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_value_copy_unwrapped_payload_mutated_wado_Shape___value_at_88: builtin::array_get_value<ref "value_copy_unwrapped_payload_mutated.wado//Shape">(m.log.values, $array_clone_i_4);
         })) == 0) {
-            break $inline_core_prelude_types_wado_Option_value_copy_unwrapped_payload_mutated_wado_Shape___unwrap_82: ref.as_non_null(self_187);
+            break $inline_core_prelude_types_wado_Option_value_copy_unwrapped_payload_mutated_wado_Shape___unwrap_86: ref.as_non_null(self_191);
         } else {
         }
         cold_path;
         "core:prelude/types.wado/core:prelude/types.wado/Option<value_copy_unwrapped_payload_mutated.wado/Shape>::unwrap$cold0$dae[self]"();
         unreachable;
     }.axes).repr;
-    $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(local.tee $array_clone_i_4(v_195.used));
-    $sroa_$pattern_temp_0_1_14_294 = 0;
+    $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(local.tee $array_clone_i_4(v_199.used));
+    $sroa_$pattern_temp_0_1_14_298 = 0;
     $array_clone_deep_prefix: block {
         l22: loop {
-            break_if $array_clone_deep_prefix $sroa_$pattern_temp_0_1_14_294 >= $array_clone_i_4;
-            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$sroa_v_axes_370_repr_385, $sroa_$pattern_temp_0_1_14_294);
-            builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, $sroa_$pattern_temp_0_1_14_294, (if ref.is_null($array_clone_elem_5) -> ref null "core:prelude/string.wado//String" {
+            break_if $array_clone_deep_prefix $sroa_$pattern_temp_0_1_14_298 >= $array_clone_i_4;
+            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$sroa_v_axes_374_repr_389, $sroa_$pattern_temp_0_1_14_298);
+            builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, $sroa_$pattern_temp_0_1_14_298, (if ref.is_null($array_clone_elem_5) -> ref null "core:prelude/string.wado//String" {
                 $array_clone_elem_5;
             } else {
                 "value_copy_unwrapped_payload_mutated.wado/$value_copy$core:prelude/string.wado/String"(ref.as_non_null($array_clone_elem_5));
             }));
-            $sroa_$pattern_temp_0_1_14_294 = $sroa_$pattern_temp_0_1_14_294 + 1;
+            $sroa_$pattern_temp_0_1_14_298 = $sroa_$pattern_temp_0_1_14_298 + 1;
             continue l22;
         };
     };
@@ -544,14 +553,14 @@ fn "value_copy_unwrapped_payload_mutated.wado/run"() with Stdout {
         unreachable;
     }
     builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83), used: 1 });
-    v_195 = key_157 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }; if @unlikely(local.tee e_217("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::find_index"(local.tee $load_8(m.log), local.tee $load_30(m.slots), local.tee $sroa_$sroa_v_axes_370_repr_385(m.nkeys), local.tee $load_32(m.kids), local.tee $load_33(m.lens), local.tee $array_clone_i_4(m.root), local.tee $sroa_$pattern_temp_0_1_14_294(m.height), local.tee new_repr_408(key_157.repr), 1)) < 0) {
+    v_199 = key_161 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }; if @unlikely(local.tee e_221("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::find_index"(local.tee $load_8(m.log), local.tee $load_30(m.slots), local.tee $sroa_$sroa_v_axes_374_repr_389(m.nkeys), local.tee $load_32(m.kids), local.tee $load_33(m.lens), local.tee $array_clone_i_4(m.root), local.tee $sroa_$pattern_temp_0_1_14_298(m.height), local.tee $array_clone_src_6(key_161.repr), 1)) < 0) {
         cold_path;
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::found$cold0$dae[self,e]"(key_157);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::found$cold0$dae[self,e]"(key_161);
         unreachable;
-    }; builtin::array_get_value<ref "value_copy_unwrapped_payload_mutated.wado//Shape">(local.tee $load_37($load_8.values), e_217).axes;
-    $array_clone_i_4 = if @unlikely(local.tee $array_clone_i_4("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::find_index"($load_8, $load_30, $sroa_$sroa_v_axes_370_repr_385, $load_32, $load_33, $array_clone_i_4, $sroa_$pattern_temp_0_1_14_294, new_repr_408, key_157.used)) < 0) {
+    }; builtin::array_get_value<ref "value_copy_unwrapped_payload_mutated.wado//Shape">(local.tee $load_37($load_8.values), e_221).axes;
+    $array_clone_i_4 = if @unlikely(local.tee $array_clone_i_4("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::find_index"($load_8, $load_30, $sroa_$sroa_v_axes_374_repr_389, $load_32, $load_33, $array_clone_i_4, $sroa_$pattern_temp_0_1_14_298, $array_clone_src_6, key_161.used)) < 0) {
         cold_path;
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::found$cold0$dae[self,e]"(key_157);
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>::found$cold0$dae[self,e]"(key_161);
         unreachable;
     }; builtin::array_get_value<ref "value_copy_unwrapped_payload_mutated.wado//Shape">($load_37, $array_clone_i_4).axes.used;
     if @unlikely(0 >= $array_clone_i_4) {
@@ -559,11 +568,11 @@ fn "value_copy_unwrapped_payload_mutated.wado/run"() with Stdout {
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $array_clone_i_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_unwrapped_payload_mutated.wado:70"), used: 44 });
         unreachable;
     }
-    key_157 = builtin::array_get_value<ref "core:prelude/string.wado//String">(v_195.repr, 0);
-    $array_clone_i_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_287("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_294 = builtin::i32_wrap_i64($cm_pair_7_287 >> 32_i64);
+    key_161 = builtin::array_get_value<ref "core:prelude/string.wado//String">(v_199.repr, 0);
+    $array_clone_i_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_291("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_298 = builtin::i32_wrap_i64($cm_pair_7_291 >> 32_i64);
     $array_clone_i_4 = "value_copy_unwrapped_payload_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($array_clone_i_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_294, key_157.repr, key_157.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_298, key_161.repr, key_161.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($array_clone_i_4);
 }
 
