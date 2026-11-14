@@ -48,28 +48,30 @@ canonical ABI.
 ### What was measured
 
 A hand-written component was run on wasmtime 50.0.1 under `wado`'s own engine
-configuration, and on Node 26 after a jco 1.30.0 transpile, against jsdom. Its
+configuration, and after a jco 1.30.0 transpile on Node 26 (V8) and Bun 1.4.4
+(JavaScriptCore, Safari's engine), against jsdom. The two JavaScript engines
+agreed on every row. Its
 main core module imports functions that take and return `externref`. Inside the
 component a second core module satisfies those imports with functions that
 trap. The component is not in the tree: the roadmap's collection test takes its
 place.
 
-| Check                                                                           | wasmtime | jco on Node |
-| ------------------------------------------------------------------------------- | -------- | ----------- |
-| The component validates and instantiates                                        | passes   | passes      |
-| A call to a web import the host does not replace traps                          | passes   | —           |
-| A guest GC struct is a handle: `extern.convert_any`, `ref.test`, `ref.eq`       | passes   | passes      |
-| The host replaces the trapping module's functions with its own                  | —        | passes      |
-| A host object crosses as an `externref`, in both directions                     | —        | passes      |
-| The host calls a core export the component does not lift                        | —        | passes      |
-| That export runs during an import call, and calls a `canon lower`ed sync import | —        | passes      |
-| It does the same from the event loop, outside any export call                   | —        | passes      |
-| Handles the guest dropped are collected                                         | —        | passes      |
-| A handle held in a guest global survives, and is collected once cleared         | —        | passes      |
-| A detached element and a closure that hold each other are collected             | —        | passes      |
-| A guest GC struct keys a JavaScript `WeakMap`                                   | —        | passes      |
+| Check                                                                           | wasmtime | jco, Node and Bun |
+| ------------------------------------------------------------------------------- | -------- | ----------------- |
+| The component validates and instantiates                                        | passes   | passes            |
+| A call to a web import the host does not replace traps                          | passes   | —                 |
+| A guest GC struct is a handle: `extern.convert_any`, `ref.test`, `ref.eq`       | passes   | passes            |
+| The host replaces the trapping module's functions with its own                  | —        | passes            |
+| A host object crosses as an `externref`, in both directions                     | —        | passes            |
+| The host calls a core export the component does not lift                        | —        | passes            |
+| That export runs during an import call, and calls a `canon lower`ed sync import | —        | passes            |
+| It does the same from the event loop, outside any export call                   | —        | passes            |
+| Handles the guest dropped are collected                                         | —        | passes            |
+| A handle held in a guest global survives, and is collected once cleared         | —        | passes            |
+| A detached element and a closure that hold each other are collected             | —        | passes            |
+| A guest GC struct keys a JavaScript `WeakMap`                                   | —        | passes            |
 
-One fact decides how `==` lowers. On V8 no host value passes `ref.test eqref`
+One fact decides how `==` lowers. On both engines no host value passes `ref.test eqref`
 once internalized: not a DOM object, a plain object, a function or a string. A
 guest struct does. The specification says the same of every engine. The JS API
 turns a JavaScript object that is not an exported Wasm object into `ref.host`
@@ -195,10 +197,10 @@ interface the slice leaves out, as the `instanceof` scan of today's glue does.
 Both were run over jsdom objects with the slice padded to 1507 classes, the
 real ones last in the scan's order:
 
-| `class-of` by                    | Relative time |
-| -------------------------------- | ------------- |
-| `instanceof` scan, deepest first | 773           |
-| Prototype chain into a map       | 1             |
+| `class-of` by                    | Relative time, V8 | Relative time, JavaScriptCore |
+| -------------------------------- | ----------------- | ----------------------------- |
+| `instanceof` scan, deepest first | 773               | 1884                          |
+| Prototype chain into a map       | 1                 | 1                             |
 
 They agreed on every object tried, an `HTMLDivElement` and a `Text` outside the
 slice included.
@@ -267,8 +269,9 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
 
 ## Known gaps
 
-- Only V8 was measured. No test runs in Firefox or Safari, so collection across
-  the two heaps is known for V8 alone.
+- No browser was measured, only V8 in Node and JavaScriptCore in Bun, both
+  against jsdom. SpiderMonkey was not run at all. Collection across the two
+  heaps with a browser's own DOM objects is unseen.
 - A list of handles and a record holding one have no crossing form, since both
   spill to linear memory. `sequence<Node>` waits on this.
 - `Promise<T>` has no crossing form. A `Future<T>` is a canonical ABI handle,
