@@ -761,7 +761,7 @@ fn classify_argument(
 
 /// What a callee does to one of its struct-reference parameters, closed over
 /// the calls the parameter is forwarded to.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 struct ParamFacts {
     reads: IndexSet<u32>,
     writes: IndexSet<u32>,
@@ -775,18 +775,16 @@ struct ParamFacts {
 fn summarize_params(
     project: &NirPackage,
     signatures: &Signatures,
+    memo: &mut BodyMemo<Vec<(u32, ParamFacts)>>,
     exec: &Executor,
 ) -> IndexMap<(FuncId, u32), ParamFacts> {
-    let functions = &project.functions;
     let types = project.type_table.borrow();
     let types: &TypeTable = &types;
-    let per_function = exec.map_indices(functions.len(), |index| {
-        let func = functions[index].borrow();
+    let per_function = memo.refresh(project, exec, |func| {
         let Some(body) = func.body.as_ref().filter(|_| !func.is_dead) else {
             return Vec::new();
         };
-        let id = FuncId::new(index);
-        let signature = &signatures.of[index];
+        let signature = &signatures.of[func.id.expect("func_id assigned at lower").index()];
         let tracked: IndexSet<u32> = signature
             .param_struct
             .iter()
@@ -822,34 +820,48 @@ fn summarize_params(
                     facts.opaque |= use_facts.opaque || !use_facts.rebinds.is_empty();
                     facts.forwards.extend(use_facts.forwards);
                 }
-                ((id, local), facts)
+                (local, facts)
             })
             .collect()
     });
-    let mut facts: IndexMap<(FuncId, u32), ParamFacts> =
-        per_function.into_iter().flatten().collect();
+    let mut facts: IndexMap<(FuncId, u32), ParamFacts> = per_function
+        .iter()
+        .enumerate()
+        .flat_map(|(index, params)| {
+            params
+                .iter()
+                .map(move |(local, facts)| ((FuncId::new(index), *local), facts.clone()))
+        })
+        .collect();
 
     let mut changed = true;
     while changed {
         changed = false;
-        let keys: Vec<(FuncId, u32)> = facts.keys().copied().collect();
-        for key in keys {
-            let forwards = facts[&key].forwards.clone();
-            for edge in forwards {
-                // No summary means the callee's parameter is not a tracked
-                // struct reference, so nothing is known about it.
-                let Some(target) = facts.get(&edge).cloned() else {
-                    let current = &mut facts[&key];
-                    changed |= !current.opaque;
-                    current.opaque = true;
-                    continue;
+        for index in 0..facts.len() {
+            for slot in 0..facts[index].forwards.len() {
+                let current = &facts[index];
+                let added = match facts.get(&current.forwards[slot]) {
+                    Some(target) => ParamFacts {
+                        reads: target.reads.difference(&current.reads).copied().collect(),
+                        writes: target.writes.difference(&current.writes).copied().collect(),
+                        opaque: target.opaque && !current.opaque,
+                        forwards: Vec::new(),
+                    },
+                    // No summary means the callee's parameter is not a tracked
+                    // struct reference, so nothing is known about it.
+                    None => ParamFacts {
+                        opaque: !current.opaque,
+                        ..ParamFacts::default()
+                    },
                 };
-                let current = &mut facts[&key];
-                let before = (current.reads.len(), current.writes.len(), current.opaque);
-                current.reads.extend(target.reads.iter().copied());
-                current.writes.extend(target.writes.iter().copied());
-                current.opaque |= target.opaque;
-                changed |= before != (current.reads.len(), current.writes.len(), current.opaque);
+                if added == ParamFacts::default() {
+                    continue;
+                }
+                let current = &mut facts[index];
+                current.reads.extend(added.reads);
+                current.writes.extend(added.writes);
+                current.opaque |= added.opaque;
+                changed = true;
             }
         }
     }
@@ -905,18 +917,66 @@ fn struct_literal_consts(
     )
 }
 
-/// The constant fields of every struct local (and already specialized
-/// parameter) of `func` that survive every write and every call the local is
-/// passed to. Flow-insensitive: a field is kept only when it holds the same
-/// constant at every program point.
-fn collect_roots(
+/// What a caller's body alone says about the constants it passes: its calls,
+/// the roots before the callee summaries narrow them, which
+/// [`CallerScan::roots`] does each round, and the calls a cold run holds.
+#[derive(Debug, Default, PartialEq)]
+struct CallerScan {
+    /// Every reachable call, in walk order.
+    calls: Vec<ExprId>,
+    /// The constant fields of each struct local (and already specialized
+    /// parameter) that survive every write and rebinding in the body.
+    roots: IndexMap<u32, FieldConsts>,
+    /// The calls each root is passed to, whose callees may write its fields.
+    forwards: IndexMap<u32, Vec<(FuncId, u32)>>,
+    alias_of: IndexMap<u32, u32>,
+    cold_calls: IndexSet<ExprId>,
+}
+
+impl CallerScan {
+    /// The constant fields of every root that also survive each call it is
+    /// passed to. Flow-insensitive: a field is kept only when it holds the
+    /// same constant at every program point.
+    fn roots(&self, facts: &IndexMap<(FuncId, u32), ParamFacts>) -> IndexMap<u32, FieldConsts> {
+        let mut roots = self.roots.clone();
+        for (local, edges) in &self.forwards {
+            let consts = roots
+                .get_mut(local)
+                .expect("a forwarded local is a root");
+            for edge in edges {
+                match facts.get(edge) {
+                    Some(param) if !param.opaque => {
+                        consts.retain(|field, _| !param.writes.contains(field));
+                    }
+                    Some(_) | None => consts.clear(),
+                }
+            }
+        }
+        merge_aliases(&mut roots, &self.alias_of);
+        roots.retain(|_, consts| !consts.is_empty());
+        roots
+    }
+}
+
+fn scan_caller(
     func: &NirFunction,
-    body: &Body,
     types: &TypeTable,
     signatures: &Signatures,
-    facts: &IndexMap<(FuncId, u32), ParamFacts>,
     seed: Option<&IndexMap<String, ParamSeed>>,
-) -> IndexMap<u32, FieldConsts> {
+    markers: MarkerBuiltins,
+) -> CallerScan {
+    let Some(body) = func.body.as_ref().filter(|_| !func.is_dead) else {
+        return CallerScan::default();
+    };
+    let mut calls = Vec::new();
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Expr(id) = node
+            && matches!(body.exprs[id].kind, ExprKind::Call { .. })
+        {
+            calls.push(id);
+        }
+    });
+    let cold_calls = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
     let locals = &func.locals;
     let mut roots: IndexMap<u32, FieldConsts> = IndexMap::default();
     for param in &func.params {
@@ -1006,15 +1066,20 @@ fn collect_roots(
     }
     roots.retain(|_, consts| !consts.is_empty());
     if roots.is_empty() {
-        return roots;
+        return CallerScan {
+            calls,
+            cold_calls,
+            ..CallerScan::default()
+        };
     }
 
     let tracked: IndexSet<u32> = roots.keys().copied().collect();
     let mut uses: IndexMap<u32, LocalUses> = IndexMap::default();
     collect_local_uses(body, types, &tracked, &alias_reads, signatures, &mut uses);
 
-    for (local, use_facts) in &uses {
-        let Some(consts) = roots.get_mut(local) else {
+    let mut forwards: IndexMap<u32, Vec<(FuncId, u32)>> = IndexMap::default();
+    for (local, use_facts) in uses {
+        let Some(consts) = roots.get_mut(&local) else {
             continue;
         };
         if use_facts.opaque {
@@ -1034,7 +1099,7 @@ fn collect_roots(
                 continue;
             }
             let expected = locals
-                .get(*local as usize)
+                .get(local as usize)
                 .and_then(|l| struct_base(l.type_id, types));
             let Some(assigned) = struct_literal_consts(
                 body,
@@ -1048,18 +1113,17 @@ fn collect_roots(
             };
             consts.retain(|field, c| assigned.get(field) == Some(c));
         }
-        for edge in &use_facts.forwards {
-            match facts.get(edge) {
-                Some(param) if !param.opaque => {
-                    consts.retain(|field, _| !param.writes.contains(field));
-                }
-                Some(_) | None => consts.clear(),
-            }
+        if !use_facts.forwards.is_empty() {
+            forwards.insert(local, use_facts.forwards);
         }
     }
-    merge_aliases(&mut roots, &alias_of);
-    roots.retain(|_, consts| !consts.is_empty());
-    roots
+    CallerScan {
+        calls,
+        roots,
+        forwards,
+        alias_of,
+        cold_calls,
+    }
 }
 
 /// The locals bound once as `let r = &p;` to one of `params`, which inlining a
@@ -1217,6 +1281,7 @@ impl Site {
 fn select_sites(
     locals: &[NirLocal],
     body: &Body,
+    calls: &[ExprId],
     types: &TypeTable,
     signatures: &Signatures,
     facts: &IndexMap<(FuncId, u32), ParamFacts>,
@@ -1225,24 +1290,15 @@ fn select_sites(
     state: &ParamSpecState,
 ) -> Vec<Site> {
     let mut sites = Vec::new();
-    body.for_each_reachable_node(|node| {
-        let NodeRef::Expr(id) = node else {
-            return;
+    for &id in calls {
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[id].kind else {
+            panic!("a scanned call is a call");
         };
-        let (callee, arguments): (FuncId, Vec<(usize, Operand, bool)>) = match &body.exprs[id].kind
-        {
-            ExprKind::Call { func_id, args, .. } => (
-                *func_id,
-                args.iter()
-                    .enumerate()
-                    .map(|(i, a)| (i, a.expr, a.is_mut))
-                    .collect(),
-            ),
-            _ => return,
-        };
+        let callee = *func_id;
+        let arguments = args.iter().enumerate().map(|(i, a)| (i, a.expr, a.is_mut));
         let signature = &signatures.of[callee.index()];
         if !signature.has_body {
-            return;
+            continue;
         }
         let unanimous = constants.get(&callee);
         let mut bindings: Vec<Binding> = Vec::new();
@@ -1293,7 +1349,7 @@ fn select_sites(
             });
         }
         if bindings.is_empty() {
-            return;
+            continue;
         }
         bindings.sort_unstable_by_key(|(param, slot, _)| (*param, *slot));
         assert!(
@@ -1309,7 +1365,7 @@ fn select_sites(
             cold: false,
             diverges: false,
         });
-    });
+    }
     sites
 }
 
@@ -1424,12 +1480,24 @@ pub(super) fn specialize_const_params(
     let cached = state.cached_clones(project);
     let mut reachable =
         reachable_function_positions(project, descriptors, reachability, gate.exec(), cached);
+    let mut memos = RoundMemos::default();
     let mut changed = false;
-    while specialize_round(project, state, gate, &mut reachable) {
+    while specialize_round(project, state, gate, &mut memos, &mut reachable) {
         changed = true;
     }
     gate.catch_up(GatedPass::ParamSpec, project.functions.len());
     changed
+}
+
+/// The per-function facts a round reads, re-derived only for the functions the
+/// rounds before it wrote or minted. Besides its own function, each reads only
+/// its callees' signatures and a clone's seeds, which hold still for one call
+/// of the pass: a round rewrites bodies and appends clones, never parameters.
+#[derive(Default)]
+struct RoundMemos {
+    call_constants: BodyMemo<CallConsts>,
+    param_uses: BodyMemo<Vec<(u32, ParamFacts)>>,
+    callers: BodyMemo<CallerScan>,
 }
 
 /// One step deeper. `reachable` holds the callers whose arguments the call
@@ -1438,9 +1506,11 @@ fn specialize_round(
     project: &mut NirPackage,
     state: &mut ParamSpecState,
     gate: &mut FunctionGate,
+    memos: &mut RoundMemos,
     reachable: &mut IndexSet<usize>,
 ) -> bool {
-    let constants = collect_call_constants(project, reachable, gate.exec());
+    let constants =
+        collect_call_constants(project, reachable, &mut memos.call_constants, gate.exec());
     let propagated = propagate_scalar_constants(project, state, &constants, gate);
     let signatures = {
         let types = project.type_table.borrow();
@@ -1448,7 +1518,7 @@ fn specialize_round(
             recursive_functions(state.callees.refresh(project, gate.exec(), body_callees));
         Signatures::build(project, &types, &recursive, gate.exec())
     };
-    let facts = summarize_params(project, &signatures, gate.exec());
+    let facts = summarize_params(project, &signatures, &mut memos.param_uses, gate.exec());
     let markers = MarkerBuiltins::of(project);
     let per_caller = collect_sites(
         project,
@@ -1457,6 +1527,7 @@ fn specialize_round(
         &facts,
         &constants,
         markers,
+        &mut memos.callers,
         gate.exec(),
     );
     if per_caller.is_empty() {
@@ -1491,12 +1562,10 @@ type CallConsts = IndexMap<FuncId, Vec<Option<FieldConst>>>;
 fn collect_call_constants(
     project: &NirPackage,
     reachable: &IndexSet<usize>,
+    memo: &mut BodyMemo<CallConsts>,
     exec: &Executor,
 ) -> CallConsts {
-    let functions = &project.functions;
-    let positions: Vec<usize> = reachable.iter().copied().collect();
-    let per_function = exec.map(&positions, |&pos| {
-        let func = functions[pos].borrow();
+    let per_function = memo.refresh(project, exec, |func| {
         let mut constants = CallConsts::default();
         if !func.is_dead
             && let Some(body) = &func.body
@@ -1506,8 +1575,10 @@ fn collect_call_constants(
         constants
     });
     let mut constants = CallConsts::default();
-    for (callee, here) in per_function.into_iter().flatten() {
-        join_call(&mut constants, callee, here);
+    for &pos in reachable {
+        for (callee, here) in &per_function[pos] {
+            join_call(&mut constants, *callee, here.clone());
+        }
     }
     for global in &project.globals {
         collect_body_call_constants(global.init.slot_expr().body(), &mut constants);
@@ -1607,20 +1678,27 @@ fn collect_sites(
     facts: &IndexMap<(FuncId, u32), ParamFacts>,
     constants: &CallConsts,
     markers: MarkerBuiltins,
+    memo: &mut BodyMemo<CallerScan>,
     exec: &Executor,
 ) -> Vec<(usize, Vec<Site>)> {
     let types = project.type_table.borrow();
     let types: &TypeTable = &types;
+    let scans = memo.refresh(project, exec, |func| {
+        let seed = state
+            .param_consts
+            .get(&func.id.expect("func_id assigned at lower"));
+        scan_caller(func, types, signatures, seed, markers)
+    });
     let functions = &project.functions;
     exec.filter_map_indices(functions.len(), |index| {
         let func = functions[index].borrow();
         let body = func.body.as_ref().filter(|_| !func.is_dead)?;
-        let seed = state.param_consts.get(&FuncId::new(index));
-        let roots = collect_roots(&func, body, types, signatures, facts, seed);
-        let cold_calls = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
+        let scan = &scans[index];
+        let roots = scan.roots(facts);
         let mut sites = select_sites(
             &func.locals,
             body,
+            &scan.calls,
             types,
             signatures,
             facts,
@@ -1630,7 +1708,7 @@ fn collect_sites(
         );
         for site in &mut sites {
             site.diverges = types.is_never(body.exprs[site.call].type_id);
-            site.cold = cold_calls.contains(&site.call) || site.diverges;
+            site.cold = scan.cold_calls.contains(&site.call) || site.diverges;
         }
         (!sites.is_empty()).then_some((index, sites))
     })
