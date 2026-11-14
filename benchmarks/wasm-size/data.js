@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794669536720,
+  "lastUpdate": 1794670742497,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77365,6 +77365,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6eb368cf06645e420f2331eefacb1d9f7220f4d0"
         },
         "date": 1794669535851,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24478,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434281,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ed5826a5d0b51a5bf16e3d9540cad94c7f2102d1",
+          "message": "Merge pull request #2624 from wado-lang/ccr-0ea92ac8-1fra6x\n\nfeat(re): match case-insensitively under `i`, on general simple case mapping in core:icu",
+          "timestamp": "2026-11-15T00:05:56+09:00",
+          "tree_id": "c3e310c70bb4dd807f11cb6bef6278518ffda451",
+          "url": "https://github.com/wado-lang/wado/commit/ed5826a5d0b51a5bf16e3d9540cad94c7f2102d1"
+        },
+        "date": 1794670741552,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
