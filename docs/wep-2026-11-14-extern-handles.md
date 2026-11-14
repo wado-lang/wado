@@ -117,7 +117,7 @@ value, with `None` as the null reference.
 The handle is no longer a number. `as` converts a handle only to a resource it
 extends, and nothing converts one to or from `f64`.
 
-A handle is either the host's object or a struct the guest minted (below). The
+A handle is either the host's object or backed by a value of the guest (below). The
 program cannot tell which, and no rule below depends on which host is running.
 
 ### The web imports leave the canonical ABI
@@ -150,26 +150,33 @@ component with no web import at the component level.
 One artifact serves both, so the program a server renders is the one the
 browser runs.
 
-### A guest mints a handle from a struct
+### A guest value backs a handle
 
 A handler such as `SurfaceDom` answers web calls in Wado, so it must make
-handles. A minted handle is a GC struct holding a class and a reference to a
-value of the handler's choosing, converted with `extern.convert_any`. The
-handler reads the value back from a handle it minted, and gets `None` from one
-it did not.
+handles. Every extern handle type has two functions for it:
 
 ```wado
-let node: Node = builtin::mint_handle(ELEMENT_CLASS, &element);
-let back = builtin::minted::<SurfaceElement>(&node);   // Option<&mut SurfaceElement>
+let node: Node = HtmlInputElement::backed_by(&input);
+let back = node.backing::<SurfaceInput>();   // Option<&mut SurfaceInput>
 ```
 
-A node of `SurfaceDom` is then collected like any other value, and the handler
-keeps no table either.
+- `R::backed_by(&value)` makes a handle of type `R` that the value stands
+  behind. The handle's class is `R`'s own, so no class number is written, and
+  the result upcasts like any `R`.
+- `handle.backing::<T>()` gives the value back. It is `None` for the host's
+  object, and for a handle backed by a value of another type.
 
-A handler may mint a handle for one value any number of times. Each is the same
-handle to the program: `==` compares the values minted from, not the structs
-around them. A handler therefore has no duty to remember the handle it gave
-out, which it could only break silently.
+A backed handle is a GC struct holding the class and a reference to the value,
+converted with `extern.convert_any`. A node of `SurfaceDom` is then collected
+like any other value, and the handler keeps no table either.
+
+Calling `backed_by` on one value any number of times gives the same handle to
+the program: `==` compares the backing values, not the structs around them. A
+handler therefore has no duty to remember the handle it gave out, which it
+could only break silently.
+
+Any code may call either function. A backed handle that reaches a real host is
+no object of that host's, and the host rejects it as it would any wrong value.
 
 ### Narrowing asks for the class once
 
@@ -178,7 +185,7 @@ The class numbering of
 stays: each resource declares `classes = "lo..=hi"`, and a narrowing is a range
 test on a class. What changes is where the class comes from.
 
-- A minted handle carries its class in the struct, so the guest reads it.
+- A backed handle carries its class in the struct, so the guest reads it.
 - A host object carries none. The guest calls the import `class-of`, which
   answers the class of the nearest ancestor the slice declares.
 
@@ -215,14 +222,13 @@ order:
 
 1. Two null references are equal, and a null differs from anything else. This
    is `None == None` for an `Option<R>`, and it calls no import.
-2. Two minted handles are equal when `ref.eq` holds of the values they were
-   minted from.
-3. Two handles neither of which is minted are the host's objects. The guest
+2. Two backed handles are equal when `ref.eq` holds of their backing values.
+3. Two handles neither of which is backed are the host's objects. The guest
    calls the import `same`, which answers JavaScript's `===`.
-4. A minted handle and one that is not differ.
+4. A backed handle and one that is not differ.
 
-A handle is minted exactly when it passes `ref.test` for the minted struct's
-type, which no host object does. Under a handler every handle is minted, so
+A handle is backed exactly when it passes `ref.test` for the backing struct's
+type, which no host object does. Under a handler every handle is backed, so
 `same` is never called where only a trap would answer it.
 
 ### A closure crosses as itself
@@ -252,9 +258,11 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
   `classes`, and declared by `wado-from-idl` on every resource of the slice
 - [ ] The representation: an extern handle is `(ref null extern)` in
   the guest, `Option<R>` is the nullable reference, and the `f64` cast is gone
-- [ ] Minted handles: `builtin::mint_handle` and `builtin::minted`, narrowing
-  and `Inspect` reading a minted class, and `==` by `ref.eq`
-- [ ] `SurfaceDom` mints its handles from its own nodes and keeps no table
+- [ ] Backed handles: `backed_by` and `backing` on every extern handle type,
+  narrowing and `Inspect` reading a backed handle's class, and `==` by `ref.eq`
+  of the backing values
+- [ ] `SurfaceDom` backs its handles with its own nodes and keeps no table, and
+  `wado-from-idl` stops emitting the class globals
 - [ ] The boundary: a web import is a core import, the synthesized trapping
   module satisfies it, and the component validates and runs on wasmtime
 - [ ] The glue: `wado-from-idl` generates shims over core signatures, reading
