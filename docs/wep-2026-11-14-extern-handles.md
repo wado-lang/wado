@@ -1,9 +1,9 @@
-# WEP: An Unrestricted Resource Is a Host Reference (`externref`)
+# WEP: Extern Handles — Resources the Collector Reclaims (`externref`)
 
 ## Context
 
-An unrestricted resource is the handle type the web bindings are built on: a
-DOM object the program may copy freely
+The web bindings are built on one handle type: a DOM object the program may
+copy freely. It is a resource declared `linearity = "unrestricted"`
 ([Resource Inheritance](./wep-2026-04-28-resource-inheritance.md)). Today it
 crosses the component boundary as an `f64` holding a class and an index into a
 table the host keeps.
@@ -78,11 +78,34 @@ the embedder each core module and its imports before instantiating it.
 
 ## Decision
 
-### The handle is a nullable `externref`
+### `repr = "extern"` declares an extern handle
 
-An unrestricted resource is one Wasm value, `(ref null extern)`. Every type in
-an `extends` tree is that one value, so an upcast and an inherited method's
-receiver stay no-ops. `Option<R>` of an unrestricted resource `R` is the same
+A resource states its representation beside its linearity:
+
+```wado
+#[cm("wado-lang:web/node", linearity = "unrestricted", repr = "extern", classes = "1..=4")]
+resource Node extends EventTarget { ... }
+```
+
+A resource so declared is an extern handle. The two fields are two axes.
+`linearity` says whether a handle may be copied, which the compiler enforces.
+`repr` says what the handle is in Wasm, which decides how it crosses a boundary.
+Everything below follows from `repr`, and nothing from `linearity`.
+
+- `repr = "extern"` requires `linearity = "unrestricted"`. The collector
+  reclaims an extern handle, so there is no drop for an owner to run.
+- `extends` and `classes` require `repr = "extern"`, where they required
+  `linearity = "unrestricted"` before. One Wasm value for a whole tree is what
+  makes an upcast free.
+- A resource without `repr` is represented as the Component Model represents
+  it, so `linearity = "unrestricted"` alone stays available to a copyable token
+  that crosses as a canonical ABI value.
+
+### An extern handle is a nullable `externref`
+
+An extern handle is one Wasm value, `(ref null extern)`. Every type in an
+`extends` tree is that one value, so an upcast and an inherited method's
+receiver stay no-ops. `Option<R>` of an extern handle type `R` is the same
 value, with `None` as the null reference.
 
 The handle is no longer a number. `as` converts a handle only to a resource it
@@ -93,7 +116,7 @@ program cannot tell which, and no rule below depends on which host is running.
 
 ### The web imports leave the canonical ABI
 
-An import whose signature holds an unrestricted resource is a core function
+An import whose signature holds an extern handle is a core function
 import of the main module. Its flat signature is the canonical ABI's, with two
 differences: a handle is one `externref`, and a closure is one `externref`
 (below). A string or a list of scalars still crosses as a pointer and a length
@@ -190,7 +213,9 @@ no number of its own, and giving it one is the last step of the roadmap.
 
 Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
 
-- [ ] The representation: an unrestricted resource is `(ref null extern)` in
+- [ ] `repr = "extern"` on `#[cm]`, validated beside `linearity`, `extends` and
+  `classes`, and declared by `wado-from-idl` on every resource of the slice
+- [ ] The representation: an extern handle is `(ref null extern)` in
   the guest, `Option<R>` is the nullable reference, and the `f64` cast is gone
 - [ ] Minted handles: `builtin::mint_handle` and `builtin::minted`, narrowing
   and `Inspect` reading a minted class, and `==` by `ref.eq`
@@ -224,13 +249,18 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
   module's imports. Nothing in jco's documentation promises the shape.
 - No host other than a JavaScript engine and a Wado handler can answer a web
   import, since no other host has a reference to give.
-- A component that imports another component's unrestricted resource has no
-  path: the handle does not cross a component boundary.
+- A component that imports another component's extern handle has no path: the
+  handle does not cross a component boundary.
+- `linearity = "unrestricted"` without `repr` has no consumer once the web
+  bindings declare `repr = "extern"`. The `f64` handle it means today is
+  removed with the table, and what a copyable canonical ABI token such as
+  `Waitable` needs from it is undecided.
 
 ## Supersedes
 
-- [Resource Inheritance](./wep-2026-04-28-resource-inheritance.md): "Host
-  runtime contract", "`Eq` is auto-derived as reference equality", "`Inspect`
+- [Resource Inheritance](./wep-2026-04-28-resource-inheritance.md): the gate of
+  "`resource extends` is gated on `unrestricted`", the single field of "Why the
+  field names linearity, not representation", "Host runtime contract", "`Eq` is auto-derived as reference equality", "`Inspect`
   shows the dynamic type", "Lowering", "Lifecycle" and "Known gap: the handle is
   an index, not a reference". Its language rules stand: linearity, `extends`,
   subtyping, method resolution, and narrowing as a pattern.
@@ -246,6 +276,6 @@ Until the roadmap lands, those sections describe what is built.
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md) —
   CM-GC changes how `own` and `borrow` are represented, not what they mean
 - [Resource Ownership](./wep-2026-05-21-resource-ownership.md) — the affine
-  discipline an unrestricted resource is exempt from
+  discipline an extern handle is exempt from
 - [Research: Component Model Pain Points](./research-cm-pain-points.md) — what
   the Component Model lacks for handles and callbacks

@@ -217,7 +217,7 @@
 - [Linear Arrays — Arrays Outside the GC Heap](./wep-2026-10-26-linear-arrays.md)
 - [Re — Linear-Time Regular Expressions for Wado](./wep-2026-11-02-re.md)
 - [URIs and URI References as Identifiers (`core:uri`)](./wep-2026-11-07-core-uri.md)
-- [An Unrestricted Resource Is a Host Reference (`externref`)](./wep-2026-11-14-extern-handles.md)
+- [Extern Handles — Resources the Collector Reclaims (`externref`)](./wep-2026-11-14-extern-handles.md)
 
 ## Standard Library
 

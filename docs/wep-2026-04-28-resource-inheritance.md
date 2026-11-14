@@ -58,6 +58,10 @@ This makes the web bindings the right pilot for unrestricted resources. The blas
 
 ### `resource extends` is gated on `unrestricted` (v1)
 
+> Superseded in part by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md#repr--extern-declares-an-extern-handle):
+> `extends` is gated on `repr = "extern"`, which itself requires
+> `unrestricted`.
+
 In v1, `resource X extends Y { ... }` is permitted **only when `X` and `Y` are both unrestricted**.
 
 The reason is mechanical, not philosophical: an upcast hands out a second name for one handle, which is a copy. An unrestricted handle may be copied, so `HTMLInputElement` and the same value typed as `Element` are the identical wasm value, differing only in Wado's static type witness; upcast is a no-op and narrowing reads the class the host tagged that one value with. An affine handle may not be copied at all — with CM `resource` handles the two are distinct entries in distinct tables, so every cast becomes a host call that mints a handle the caller then owes a drop on.
@@ -85,6 +89,10 @@ Concretely:
   [Resource Ownership](./wep-2026-05-21-resource-ownership.md), `Waitable`, has never had: its value semantics is inferred today from the absence of a `dtor`, and nothing in the declaration says so.
 
 ### Why the field names linearity, not representation
+
+> Superseded in part by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md#repr--extern-declares-an-extern-handle):
+> the two axes stay apart, and the representation gets a field of its own,
+> `repr`.
 
 Linearity is what the compiler enforces. Whether a handle may be copied decides
 the move check, the cleanup pass, and whether `extends` is possible at all.
@@ -506,7 +514,7 @@ exception.
 
 #### Host runtime contract
 
-> Superseded by [WEP: An Unrestricted Resource Is a Host Reference](./wep-2026-11-14-extern-handles.md):
+> Superseded by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md):
 > the handle becomes an `externref`, and the class is read from a minted handle
 > or asked of the host. The class numbering stands.
 
@@ -581,7 +589,7 @@ Four interactions need explicit rules. Effects have one more, stated in §"Narro
 
 #### `Eq` is auto-derived as reference equality
 
-> Superseded in part by [WEP: An Unrestricted Resource Is a Host Reference](./wep-2026-11-14-extern-handles.md#-is-identity):
+> Superseded in part by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md#-is-identity):
 > equality is still identity, but it is no longer a compare of bits.
 
 Every unrestricted resource auto-derives `Eq`, so a type holding one derives it as well. Two handles compare equal iff they reference the same host object — JavaScript's `===` semantics for the browser case.
@@ -596,7 +604,7 @@ Cross-type comparison falls out of subtyping. `el == html_input` is well-typed w
 
 #### `Inspect` shows the dynamic type, `Display` asks the host
 
-> Superseded in part by [WEP: An Unrestricted Resource Is a Host Reference](./wep-2026-11-14-extern-handles.md#narrowing-asks-for-the-class-once):
+> Superseded in part by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md#narrowing-asks-for-the-class-once):
 > `Inspect` still names the dynamic type, with no index beside it.
 
 Debug output is most useful when it shows what is really there. So `Inspect` (`${x:?}` / `${x:#?}`) renders the dynamic type, not the static one. The handle carries its class, and the class names one resource in the tree:
@@ -648,7 +656,7 @@ This is deliberate. Wado does not special-case a container or a constructor to m
 
 ### Lowering
 
-> Superseded by [WEP: An Unrestricted Resource Is a Host Reference](./wep-2026-11-14-extern-handles.md):
+> Superseded by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md):
 > the handle is an `externref`, and an import that takes one is a core import
 > rather than a canonical ABI one. The erasure to one type stands.
 
@@ -782,7 +790,7 @@ Not built:
 
 ### Known gap: the handle is an index, not a reference
 
-> Superseded by [WEP: An Unrestricted Resource Is a Host Reference](./wep-2026-11-14-extern-handles.md),
+> Superseded by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md),
 > which closes this gap by leaving the canonical ABI for these imports.
 
 An extern-handle would rather be a Wasm GC `externref`: the collector would reclaim it, and the host table would disappear along with the leak above. The WIR already carries the type (`WirAbstractHeapType::Extern`), so the guest side is not what blocks it.
