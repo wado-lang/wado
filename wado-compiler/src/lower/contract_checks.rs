@@ -25,7 +25,7 @@ use crate::lower::translate::{convert_function_ref, tir_function_key};
 use crate::module_source::ModuleSource;
 use crate::name::{
     CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, LocalMethodName, RefKind,
-    contract_report_name, minted_name,
+    CONTRACT_ARG, contract_report_name, minted_name,
 };
 use crate::rarity::Mark;
 use crate::synthesis::common::{cold_path_stmt, marker_stmt_mark};
@@ -932,7 +932,7 @@ impl Expander<'_> {
     fn bind(&mut self, slot: &mut TirExpr, sink: Sink<'_>) -> TirExpr {
         let index = self.func.locals.len() as u32;
         // Each binding joins `bound`, so its size is the serial.
-        let name = minted_name("contract_arg", self.bound.len());
+        let name = minted_name(CONTRACT_ARG, self.bound.len());
         let (type_id, span) = (slot.type_id, slot.span);
         let in_place = matches!(sink, Sink::InPlace);
         self.func.locals.push(TirLocal {

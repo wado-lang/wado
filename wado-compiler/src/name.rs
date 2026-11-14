@@ -1020,6 +1020,17 @@ pub fn is_licm_hoist(name: &str) -> bool {
         .is_some_and(|rest| rest.starts_with('_'))
 }
 
+/// What a contract check mints the local it binds an argument to under.
+pub const CONTRACT_ARG: &str = "contract_arg";
+
+/// Whether `name` is one minted under [`CONTRACT_ARG`].
+#[must_use]
+pub fn is_contract_arg(name: &str) -> bool {
+    name.strip_prefix(INTERNAL_PREFIX)
+        .and_then(|rest| rest.strip_prefix(CONTRACT_ARG))
+        .is_some_and(|rest| rest.starts_with('_'))
+}
+
 /// The local a derived `Eq` binds `side`'s payload of variant case `case` to.
 #[must_use]
 pub fn eq_payload_local(side: &str, case: &str, index: u32) -> String {

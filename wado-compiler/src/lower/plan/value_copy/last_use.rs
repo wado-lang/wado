@@ -109,7 +109,7 @@ pub fn analyze_ownership(
         match_sources: Vec::new(),
         pending_writes: Vec::new(),
         handed: Vec::new(),
-        beyond_handed_calls: 0,
+        beyond_handed_writes: 0,
         points_to,
         frame: points_to
             .frame(&func.module_source, &func.name)
@@ -229,6 +229,8 @@ enum Storage {
     Referent(u32),
     /// Storage this global holds.
     Global(ModuleSource, String),
+    /// Storage any global holds.
+    Globals,
     /// Storage this frame cannot name, which anyone may write.
     Unnamed,
 }
@@ -248,7 +250,7 @@ struct WriteCheck<'a> {
 struct CallStart {
     mutations: usize,
     handed: usize,
-    beyond_handed_calls: usize,
+    beyond_handed_writes: usize,
 }
 
 /// What may be written while a callee holds an argument.
@@ -847,6 +849,7 @@ impl<'a> Analyzer<'a> {
             // and a read rooted at the referent would never meet.
             let mut roots: IndexSet<u32> = IndexSet::default();
             collect_local_roots(place, &mut roots);
+            let recorded = self.mutations.len();
             for r in roots {
                 let path = match self.resolver.binding(r) {
                     Some(Names::Place(place)) => place,
@@ -871,6 +874,11 @@ impl<'a> Analyzer<'a> {
                     rebinds_place: false,
                     live: live.clone(),
                 });
+            }
+            // Storage no local of this frame names, such as a global's, as a
+            // callee's own write to it counts in `ModRef`.
+            if self.mutations.len() == recorded {
+                self.beyond_handed_writes += 1;
             }
         }
     }
@@ -1483,9 +1491,10 @@ struct Analyzer<'a> {
     /// What every value handed to a call reaches, in walk order, so a check
     /// reads what the later arguments handed on.
     handed: Vec<Locations<'a>>,
-    /// How many calls walked so far may write beyond what they are handed,
-    /// so a check sees whether one ran while the callee held its argument.
-    beyond_handed_calls: usize,
+    /// How many writes walked so far may land beyond what calls are handed,
+    /// a call's or one to storage no local names, so a check sees whether one
+    /// ran while the callee held its argument.
+    beyond_handed_writes: usize,
     points_to: &'a PointsTo,
     /// This body's frame in `points_to`.
     frame: u32,
@@ -2529,6 +2538,14 @@ impl<'a> Analyzer<'a> {
                         stripped.mark(|marks| marks.written = true);
                     }
                 }
+                Storage::Globals => {
+                    if self
+                        .points_to
+                        .globals_written(&written.locations, written.beyond_handed)
+                    {
+                        stripped.mark(|marks| marks.written = true);
+                    }
+                }
                 Storage::Unnamed => stripped.mark(|marks| marks.written = true),
             }
         }
@@ -2545,7 +2562,7 @@ impl<'a> Analyzer<'a> {
                 sources.extend(handed.iter());
             }
         }
-        let beyond_handed = self.beyond_handed_calls > since.beyond_handed_calls;
+        let beyond_handed = self.beyond_handed_writes > since.beyond_handed_writes;
         let mut written = pt.reach_written(sources, beyond_handed);
         for m in &self.mutations[since.mutations..] {
             match m.lands {
@@ -2570,9 +2587,9 @@ impl<'a> Analyzer<'a> {
         let start = CallStart {
             mutations: self.mutations.len(),
             handed: self.handed.len(),
-            beyond_handed_calls: self.beyond_handed_calls,
+            beyond_handed_writes: self.beyond_handed_writes,
         };
-        self.beyond_handed_calls += usize::from(beyond_handed);
+        self.beyond_handed_writes += usize::from(beyond_handed);
         start
     }
 
@@ -2594,12 +2611,14 @@ impl<'a> Analyzer<'a> {
                 Names::Place(place) => out.push(Storage::Local(place.root)),
                 Names::Unknown => match (alias_root(leaf), &projected_from(leaf).kind) {
                     (Some(root), _) => out.push(Storage::Local(root)),
-                    // A named call hands back storage of its own or reached
-                    // through its arguments, and so does a part of it.
+                    // A named call hands back storage of its own, reached
+                    // through its arguments, or read out of a global, and so
+                    // does a part of it.
                     (None, TirExprKind::Call { args, .. }) => {
                         for a in args {
                             self.storage_roots(place::unwrap_ref(&a.expr), out);
                         }
+                        out.push(Storage::Globals);
                     }
                     (
                         None,

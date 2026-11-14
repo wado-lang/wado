@@ -176,6 +176,13 @@ impl PointsTo {
         self.any_written(vec![node], written, beyond_handed)
     }
 
+    /// Whether the storage of any global, or what it reaches, may be written,
+    /// as [`Self::global_reaches_written`] asks of one.
+    #[must_use]
+    pub fn globals_written(&self, written: &IndexSet<u32>, beyond_handed: bool) -> bool {
+        beyond_handed || written.iter().any(|l| self.global_reach.contains(l))
+    }
+
     /// Whether any of `work`, or what it reaches, meets `written`, or, where
     /// `beyond_handed`, [`Self::global_reach`].
     fn any_written(

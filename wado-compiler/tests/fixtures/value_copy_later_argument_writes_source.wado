@@ -5,7 +5,7 @@
 // spot, an assignment, a `&mut` some local or struct keeps, a closure that
 // captured the value, a second reference parameter naming the same storage, a
 // reference into a list's element, a `&mut` a global keeps, or a global, and
-// whether the argument is a local or a call handing back part of one.
+// whether the argument is a local, a global, or a call handing back part of one.
 
 struct Pair {
     a: i32,
@@ -19,6 +19,12 @@ struct Holder {
 global mut G: Pair = Pair { a: 1, s: [] };
 global mut UNHELD: Pair = Pair { a: 0, s: [] };
 global mut GH: Holder = Holder { w: &mut UNHELD };
+global mut GD: Pair = Pair { a: 1, s: [] };
+
+#[inline("never")]
+fn global_items() -> List<i32> {
+    return GD.s;
+}
 
 #[inline("never")]
 fn bump_a(w: &mut Pair) {
@@ -113,6 +119,8 @@ export fn run() {
     assert two(*e, then: { list[0].a = 1001; *e }) == 1011;
     let mut m = pair();
     assert count(items(&m), then: { m.s.push(1); m.s.len() }) == 1;
+    assert two(GD, then: { GD.a = 1001; GD }) == 1011;
+    assert count(global_items(), then: { GD.s.push(1); GD.s.len() }) == 1;
 }
 
 __DATA__
