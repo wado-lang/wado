@@ -1,5 +1,6 @@
 //! The program a tree compiles to: a Pike VM's instructions over UTF-8 bytes.
 
+use { simple_fold_closure } from "core:icu";
 use { Flag, Node } from "./ast.wado";
 use { MAX_CODE_POINT, complement, line_terminators, resolve } from "./charset.wado";
 use { PatternError } from "./parse.wado";
@@ -19,6 +20,9 @@ internal enum Look {
     EndLine,
     WordBoundary,
     NotWordBoundary,
+    /// `\b` and `\B` under `i`, whose WordCharacters reach past ASCII.
+    FoldedWordBoundary,
+    FoldedNotWordBoundary,
 }
 
 internal variant Inst {
@@ -182,16 +186,16 @@ impl Compiler {
 
     fn node(&mut self, node: &Node) -> Result<(), PatternError> {
         match *node {
-            Char(c) => self.ranges(&[
+            Char(c) => self.chars([
                 [c, c],
             ])?,
             Any => {
                 if self.flags & Flag::DotAll != Flag::none() {
-                    self.ranges(&[
+                    self.chars([
                         [0, MAX_CODE_POINT],
                     ])?;
                 } else {
-                    self.ranges(&complement(&line_terminators()))?;
+                    self.chars(complement(&line_terminators()))?;
                 }
             },
             Start => {
@@ -203,12 +207,14 @@ impl Compiler {
                 self.push(Inst::Assert(look))?;
             },
             WordBoundary => {
-                self.push(Inst::Assert(Look::WordBoundary))?;
+                let look = if self.ignore_case() { Look::FoldedWordBoundary } else { Look::WordBoundary };
+                self.push(Inst::Assert(look))?;
             },
             NotWordBoundary => {
-                self.push(Inst::Assert(Look::NotWordBoundary))?;
+                let look = if self.ignore_case() { Look::FoldedNotWordBoundary } else { Look::NotWordBoundary };
+                self.push(Inst::Assert(look))?;
             },
-            Set(set) => self.ranges(&resolve(&set))?,
+            Set(set) => self.ranges(&resolve(&set, self.ignore_case()))?,
             Group(g) => {
                 if let Some(i) = g.index {
                     self.push(Inst::Save(2 * i))?;
@@ -219,7 +225,6 @@ impl Compiler {
                 }
             },
             Modified(m) => {
-                assert m.add & Flag::IgnoreCase == Flag::none(), "the parser refuses the `i` modifier";
                 let outer = self.flags;
                 self.flags = (self.flags | m.add) & ~m.remove;
                 self.node(&m.body)?;
@@ -238,6 +243,17 @@ impl Compiler {
 
     fn multiline(&self) -> bool {
         return self.flags & Flag::Multiline != Flag::none();
+    }
+
+    fn ignore_case(&self) -> bool {
+        return self.flags & Flag::IgnoreCase != Flag::none();
+    }
+
+    /// What matches one of `set`, which is normalized: under `i`, each
+    /// character that folds as one of them does (CharacterSetMatcher,
+    /// §22.2.2.7.1).
+    fn chars(&mut self, set: List<[u32, u32]>) -> Result<(), PatternError> {
+        return self.ranges(&if self.ignore_case() { simple_fold_closure(set) } else { set });
     }
 
     /// A choice among what `emit` compiles each of `items` to, each split

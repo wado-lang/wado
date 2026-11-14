@@ -3,7 +3,7 @@
 //! in priority order and one is dropped where a higher one already reached its
 //! instruction, which is what makes the first match found the leftmost-first one.
 
-use { is_word_byte } from "./charset.wado";
+use { FOLDED_WORD, includes, is_word_byte } from "./charset.wado";
 use { Look, Program } from "./program.wado";
 
 struct Thread {
@@ -191,7 +191,27 @@ fn holds(look: Look, text: StrSlice, pos: i32) -> bool {
         EndLine => pos == text.len() || terminator_starts_at(text, pos),
         WordBoundary => word_before(text, pos) != word_after(text, pos),
         NotWordBoundary => word_before(text, pos) == word_after(text, pos),
+        FoldedWordBoundary => folded_word_before(text, pos) != folded_word_after(text, pos),
+        FoldedNotWordBoundary => folded_word_before(text, pos) == folded_word_after(text, pos),
     };
+}
+
+fn folded_word_before(text: StrSlice, pos: i32) -> bool {
+    return pos > 0 && is_folded_word_at(text, text.floor_char_boundary(pos - 1));
+}
+
+fn folded_word_after(text: StrSlice, pos: i32) -> bool {
+    return pos < text.len() && is_folded_word_at(text, pos);
+}
+
+/// Whether the character at `at` is in `FOLDED_WORD`, decoding only one
+/// past ASCII.
+fn is_folded_word_at(text: StrSlice, at: i32) -> bool {
+    let b = text.byte_at(at);
+    if b < 0x80 {
+        return is_word_byte(b);
+    }
+    return includes(&FOLDED_WORD, text.char_at_byte(at) as u32);
 }
 
 fn word_before(text: StrSlice, pos: i32) -> bool {

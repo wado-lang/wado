@@ -216,6 +216,73 @@ test "folding is full, and Turkic in tr and az" {
     assert !en.eq_ignore_case("a", "b");
 }
 
+test "each simple mapping reaches its own property" {
+    assert icu::simple_lowercase('Ǆ') == 'ǆ';
+    assert icu::simple_uppercase('ǅ') == 'Ǆ';
+    assert icu::simple_titlecase('ǆ') == 'ǅ';
+    // Final sigma lowercases to itself and folds to `σ`.
+    assert icu::simple_lowercase('ς') == 'ς';
+    assert icu::simple_fold('ς') == 'σ';
+}
+
+test "a fold class joins the closure whole when one member is in the input" {
+    // `k`, `K` and the Kelvin sign fold to one value.
+    assert icu::simple_fold_closure([
+        [107, 107],
+    ]) == [
+        [75, 75],
+        [107, 107],
+        [0x212A, 0x212A],
+    ];
+    // `ſ` joins through `s`.
+    assert icu::simple_fold_closure([
+        [97, 122],
+    ]) == [
+        [65, 90],
+        [97, 122],
+        [0x17F, 0x17F],
+        [0x212A, 0x212A],
+    ];
+    assert icu::simple_fold_closure([
+        [48, 57],
+    ]) == [
+        [48, 57],
+    ];
+    assert icu::simple_fold_closure([]) == [];
+}
+
+test "the closure answers ranges lowest first, none touching, whatever the input's order" {
+    assert icu::simple_fold_closure([
+        [100, 101],
+        [97, 99],
+        [98, 100],
+    ]) == [
+        [65, 69],
+        [97, 101],
+    ];
+    assert icu::simple_fold_closure([
+        [98, 98],
+        [97, 97],
+    ]) == [
+        [65, 66],
+        [97, 98],
+    ];
+}
+
+#[expect_trap]
+test "the closure traps on a range that runs downward" {
+    icu::simple_fold_closure([
+        [98, 97],
+    ]);
+}
+
+#[expect_trap]
+test "the closure traps on a range past the last code point" {
+    icu::simple_fold_closure([
+        [97, 0x110000],
+    ]);
+}
+
 test "graphemes are what a reader counts as characters" {
     let text = "e\u{301}👨‍👩‍👧🇯🇵!";
     let mut clusters: List<String> = [];
