@@ -1,0 +1,29 @@
+// A local struct's field default resolves in the struct's own scope, which
+// binds no parameter of the enclosing item: inside a trait default method the
+// trait's `Self` is out of reach there, as an enclosing function's `T` is.
+trait Tr with () {
+    fn k() -> i32;
+    fn d(&self) -> i32 {
+        struct Local { v: i32 = Self::k() }
+        let l = Local {};
+        return l.v;
+    }
+}
+
+struct A {}
+
+impl Tr for A {
+    fn k() -> i32 {
+        return 7;
+    }
+}
+
+export fn run() {
+    let a = A {};
+    let _ = a.d();
+}
+
+__DATA__
+{
+    "compile_error": ":7:33: analysis error: unknown function 'Self::k'"
+}

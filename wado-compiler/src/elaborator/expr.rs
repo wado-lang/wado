@@ -4319,6 +4319,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let walk = DefaultWalk {
                     site: Some(struct_lit.id),
                     home: Some(struct_module_source),
+                    self_binding: None,
                     bindings,
                     written: Vec::new(),
                     defaults,

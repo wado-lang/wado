@@ -17,6 +17,7 @@ use super::method_call::{MethodSignatureFacts, StaticReceiver};
 use super::method_lookup::narrow_to_reaching;
 use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
+use super::solver_bridge::Ordered;
 use super::synth::ArgClass;
 use super::trait_env::{ImplHeader, ImplTargetKey};
 use super::trait_query::{DerivedAt, NewtypePeel};
@@ -569,6 +570,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             query.receiver_name,
             query.method_name,
             query.receiver_key,
+            query.receiver_type,
             declaring_args,
         ));
         candidates.extend(self.blanket_candidates(query.method_name, query.receiver_type));
@@ -669,7 +671,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // argument.
             Selection::Overloaded(traits) => Some(self.overloaded_callee(key, method_name, traits)),
             Selection::Tied { blocks, trait_args } => Some(StaticLookup::Tied {
-                receiver: receiver_name.to_string(),
+                receiver: receiver_type.map_or_else(
+                    || receiver_name.to_string(),
+                    |ty| self.tysys.type_id_to_string(ty),
+                ),
                 blocks,
                 trait_args,
             }),
@@ -1294,6 +1299,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return tied;
         }
+        if candidates.len() > 1
+            && let Some(receiver) = receiver_type
+        {
+            match self.order_among(&candidates, receiver) {
+                Some(Ordered::One(Some(chosen))) => {
+                    candidates.retain(|c| c.supply.as_ref().is_some_and(|s| s.impl_def == chosen));
+                }
+                Some(Ordered::AmbiguousBlankets(tied)) => {
+                    let blocks: Vec<DefId> = tied.into_iter().flatten().collect();
+                    let trait_args = {
+                        let mut table = self.tysys.type_table.borrow_mut();
+                        let slots = table.impl_slots(blocks[0], declaring_args);
+                        table.impl_trait_args_at(blocks[0], &slots)
+                    };
+                    return Selection::Tied { blocks, trait_args };
+                }
+                _ => {}
+            }
+        }
         // At `!` every blanket reaches the receiver and the call traps once
         // monomorphized, whichever is instantiated: the first written serves.
         let on_never = receiver_type.is_some_and(|ty| self.tysys.type_table.borrow().is_never(ty));
@@ -1315,6 +1339,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect(),
             ),
         }
+    }
+
+    /// What the order says among `candidates`, one trait's blocks the
+    /// arguments left standing, as it says for the method form: an impl for
+    /// one instantiation over one for the head, a non-variadic impl over a
+    /// variadic one, and two head impls tied.
+    fn order_among(&self, candidates: &[Candidate], receiver: TypeId) -> Option<Ordered> {
+        let trait_decl = candidates[0].supply.as_ref()?.trait_decl;
+        if candidates
+            .iter()
+            .any(|c| c.supply.as_ref().is_none_or(|s| s.trait_decl != trait_decl))
+        {
+            return None;
+        }
+        let (pointee, through_ref) = match self.tysys.type_table.borrow().get(receiver) {
+            ResolvedType::Ref(inner) => (*inner, Some(false)),
+            ResolvedType::MutRef(inner) => (*inner, Some(true)),
+            _ => (receiver, None),
+        };
+        let method = self.tysys.resolutions.defs().name(candidates[0].method_id);
+        let bridge = self.tysys.solver.as_ref()?.borrow();
+        bridge.select(
+            &self.tysys,
+            &self.annotate_ctx,
+            self.frame_module(),
+            pointee,
+            through_ref,
+            method,
+            Some(trait_decl),
+            &[],
+        )
     }
 
     /// The rule a method call's selection applies, over the static
@@ -1445,9 +1500,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_name: &str,
         method_name: &str,
         target_hint: Option<&ImplTargetKey>,
+        receiver_type: Option<TypeId>,
         receiver_args: &[TypeId],
     ) -> Vec<Candidate> {
-        self.trait_impls_for_receiver(receiver_name, target_hint, receiver_args)
+        self.trait_impls_for_receiver(receiver_name, target_hint, receiver_type, receiver_args)
             .into_iter()
             .filter_map(|impl_def| {
                 let header = &self.tysys.trait_env.impl_headers[&impl_def];

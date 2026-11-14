@@ -1,0 +1,31 @@
+// Two head impls reaching one receiver tie for a qualified static as they do
+// for the method form, and the report names the receiver in full.
+use { println, Stdout } from "core:cli";
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+trait Tr with () {
+    fn j() -> i32;
+}
+
+impl<T> Tr for Pair<T, i32> {
+    fn j() -> i32 {
+        return 1;
+    }
+}
+
+impl<A, B> Tr for Pair<A, B> {
+    fn j() -> i32 {
+        return 2;
+    }
+}
+
+export fn run() with Stdout {
+    println(`${Tr::<Pair<String, i32>>::j()}`);
+}
+
+__DATA__
+{"compile_error":":27:16: analysis error: ambiguous impls of 'Tr' for 'Pair<String, i32>': 'impl<T> Tr for Pair<T, i32>' and 'impl<A, B> Tr for Pair<A, B>' both reach it, and nothing ranks them; write 'impl Tr for Pair<String, i32>'"}
