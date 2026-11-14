@@ -6579,8 +6579,12 @@ impl TypeTable {
 /// Record how a declaration spells parameter `id`. It spells each of its
 /// parameters once, so a second spelling is two parameters taken for one.
 fn spell<K: Hash + Eq>(names: &mut IndexMap<K, String>, id: K, name: String) {
-    let held = names.entry(id).or_insert_with(|| name.clone());
-    assert_eq!(*held, name, "one parameter has one spelling");
+    match names.get(&id) {
+        Some(held) => assert_eq!(*held, name, "one parameter has one spelling"),
+        None => {
+            names.insert(id, name);
+        }
+    }
 }
 
 /// What an impl block's target writes.

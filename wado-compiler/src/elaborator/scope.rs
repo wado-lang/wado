@@ -39,7 +39,9 @@ pub(super) struct ScopeParams(Vec<TypeParamId>);
 impl ScopeParams {
     /// Whether `t` is a parameter or pack the scope owns.
     pub(super) fn owns(&self, table: &TypeTable, t: TypeId) -> bool {
-        table.type_param_id(t).is_some_and(|id| self.0.contains(&id))
+        table
+            .type_param_id(t)
+            .is_some_and(|id| self.0.contains(&id))
     }
 
     /// Whether `t` spreads a pack the scope does not own, which only the
@@ -1175,7 +1177,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The parameters the enclosing generic scope owns: a slot bound to one of
-    /// them is the caller forwarding its generics, not inference giving up.
+    /// them is the caller forwarding its generics, not inference giving up. A
+    /// binder standing on a concrete type (an impl's `Self`, an `fn`-bound
+    /// parameter) is no parameter to forward.
     pub(super) fn scope_type_param_ids(&self) -> ScopeParams {
         let tt = RefCell::borrow(&self.tysys.type_table);
         ScopeParams(
@@ -1183,7 +1187,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .trait_ctx
                 .binders()
                 .into_iter()
-                .map(|binder| tt.declared_param(binder.type_id))
+                .filter_map(|binder| tt.type_param_id(binder.type_id))
                 .collect(),
         )
     }

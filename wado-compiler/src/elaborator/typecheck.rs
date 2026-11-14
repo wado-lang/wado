@@ -686,12 +686,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         }
-        let binders = self.annotate_ctx.trait_ctx.binders();
-        if !table.packs(expected).into_iter().all(|pack| {
-            binders
-                .iter()
-                .any(|binder| table.type_param_id(binder.type_id) == Some(pack))
-        }) {
+        let scope = self.scope_type_param_ids();
+        if !table
+            .packs(expected)
+            .into_iter()
+            .all(|pack| scope.ids().contains(&pack))
+        {
             return;
         }
         let (expected_name, found_name) = (table.name(expected), table.name(actual));
