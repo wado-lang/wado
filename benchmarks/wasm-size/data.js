@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794659246424,
+  "lastUpdate": 1794669536720,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77321,6 +77321,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3fe0a81ac4362563f7c7f5f2c7b3537fd72fdaf4"
         },
         "date": 1794659246149,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24478,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434281,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6eb368cf06645e420f2331eefacb1d9f7220f4d0",
+          "message": "Merge pull request #2622 from wado-lang/compiler/trait-self-by-identity\n\nfix(compiler): resolve a default argument in its declaration's frame, Self included",
+          "timestamp": "2026-11-15T00:05:42+09:00",
+          "tree_id": "4ad9ff797865dbec5734306be2332f08fa4e0070",
+          "url": "https://github.com/wado-lang/wado/commit/6eb368cf06645e420f2331eefacb1d9f7220f4d0"
+        },
+        "date": 1794669535851,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
