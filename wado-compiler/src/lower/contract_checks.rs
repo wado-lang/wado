@@ -99,7 +99,7 @@ pub fn lower(flat: &mut FlatPackage) {
             func: &mut func,
             site: None,
             expanding: Vec::new(),
-            bound: IndexSet::default(),
+            bound: 0,
             declared: Vec::new(),
         };
         expander.visit_block(&mut body);
@@ -654,8 +654,8 @@ struct Expander<'a> {
     /// The functions whose clauses are being copied, outermost first. A clause
     /// calling its own function back is left to call it.
     expanding: Vec<FunctionId>,
-    /// The locals [`Self::bind`] made.
-    bound: IndexSet<u32>,
+    /// How many locals [`Self::bind`] made, the serial of the next.
+    bound: u32,
     /// The declarations of the locals [`Self::bind`] assigns in place, which
     /// go ahead of the statement being expanded.
     declared: Vec<TirStmt>,
@@ -931,8 +931,7 @@ impl Expander<'_> {
     /// argument, out of reach of the clauses after it.
     fn bind(&mut self, slot: &mut TirExpr, sink: Sink<'_>) -> TirExpr {
         let index = self.func.locals.len() as u32;
-        // Each binding joins `bound`, so its size is the serial.
-        let name = minted_name(CONTRACT_ARG, self.bound.len());
+        let name = minted_name(CONTRACT_ARG, self.bound);
         let (type_id, span) = (slot.type_id, slot.span);
         let in_place = matches!(sink, Sink::InPlace);
         self.func.locals.push(TirLocal {
@@ -942,7 +941,7 @@ impl Expander<'_> {
             span,
         });
         self.func.local_count = self.func.locals.len() as u32;
-        self.bound.insert(index);
+        self.bound += 1;
         let read = TirExpr::new(
             TirExprKind::Local {
                 index,
@@ -992,22 +991,18 @@ impl Expander<'_> {
         read
     }
 
-    /// Whether `stmts` is a binding [`Self::bind`] made in place.
-    fn binds(&self, stmts: &[TirStmt]) -> bool {
-        in_place_binding(stmts).is_some_and(|binding| self.bound.contains(&binding.local))
-    }
-
-    /// `expr` read again: each binding made in place in it is its local.
+    /// `expr` read again: each binding [`Self::bind`] made in place in it is
+    /// its local.
     fn read_of(&self, expr: &TirExpr) -> TirExpr {
-        struct Reread<'a>(&'a Expander<'a>);
-        impl TirMutVisitor for Reread<'_> {
+        struct Reread;
+        impl TirMutVisitor for Reread {
             fn visit_expr(&mut self, expr: &mut TirExpr) {
                 if let TirExprKind::Block(block) = &mut expr.kind
-                    && self.0.binds(&block.stmts)
+                    && in_place_binding(&block.stmts).is_some()
                 {
                     let read = block.stmts.pop().expect("a binding ends in its read");
                     let TirStmtKind::Expr(read) = read.kind else {
-                        unreachable!("matched by `binds`");
+                        unreachable!("matched by `in_place_binding`");
                     };
                     *expr = read;
                     return;
@@ -1016,7 +1011,7 @@ impl Expander<'_> {
             }
         }
         let mut read = expr.clone();
-        Reread(self).visit_expr(&mut read);
+        Reread.visit_expr(&mut read);
         read
     }
 }

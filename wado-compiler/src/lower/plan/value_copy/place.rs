@@ -543,12 +543,12 @@ pub fn in_place_binding(stmts: &[TirStmt]) -> Option<InPlaceBinding<'_>> {
     };
     (is_contract_arg(name)
         && matches!(target.kind, TirExprKind::Local { index: assigned, .. } if assigned == *index))
-        .then_some(InPlaceBinding {
-            local: *index,
-            target,
-            value,
-            read,
-        })
+    .then_some(InPlaceBinding {
+        local: *index,
+        target,
+        value,
+        read,
+    })
 }
 
 /// What `&referent` takes the value of: the value an in-place binding binds
