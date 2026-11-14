@@ -2,7 +2,8 @@
 
 Bundles [ICU4X](https://github.com/unicode-org/icu4x) into a self-contained
 **Wasm Component Model** component, the way `wado-bundled-libm` bundles libm.
-See [WEP: `core:icu`](../docs/wep-2026-08-09-core-icu.md).
+See [WEP: `core:icu`](../docs/wep-2026-08-09-core-icu.md) for the design, and
+[AGENTS.md](./AGENTS.md) for how work continues here.
 
 It is its own Cargo workspace root so its heavy dependency tree (icu +
 wit-bindgen) never perturbs the main workspace's pinned wasm-tools generation.
