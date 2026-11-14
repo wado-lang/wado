@@ -267,41 +267,41 @@ fn "licm_reloadable_hoist_nonunit.wado/run"() with Stdout {
     let new_used: i32;
     let start_30: i32;
     let $cm_pair_7: i64;
-    let $licm_repr_49: ref Array<u8>;
-    let $sroa_$iter_0_repr_50: ref Array<i32>;
-    let $sroa_$iter_0_index_51: i32;
+    let $sroa_$iter_0_repr_49: ref Array<i32>;
+    let $sroa_$iter_0_index_50: i32;
+    let $licm_repr_52: ref Array<u8>;
     bag = struct.new "licm_reloadable_hoist_nonunit.wado//Bag" { items: global:licm_reloadable_hoist_nonunit.wado::$const_obj_1 };
     out_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     "licm_reloadable_hoist_nonunit.wado/probe"(bag, bag, out_1);
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     end = out_1.used;
-    $sroa_$iter_0_repr_50 = out_1.repr;
-    $sroa_$iter_0_index_51 = 0;
-    $licm_repr_49 = s.repr;
+    $sroa_$iter_0_repr_49 = out_1.repr;
+    $sroa_$iter_0_index_50 = 0;
+    $licm_repr_52 = s.repr;
     b12: block {
         l13: loop {
-            break_if b12 $sroa_$iter_0_index_51 >= end;
-            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_50, $sroa_$iter_0_index_51);
-            $sroa_$iter_0_index_51 = $sroa_$iter_0_index_51 + 1;
+            break_if b12 $sroa_$iter_0_index_50 >= end;
+            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_49, $sroa_$iter_0_index_50);
+            $sroa_$iter_0_index_50 = $sroa_$iter_0_index_50 + 1;
             other_18 = "core:prelude/string.wado/core:prelude/string.wado/String::format<licm_reloadable_hoist_nonunit.wado/$tmpl$47d98586269b5b43,[&i32]>$spec0$spec0$sroa[t.h0.value]"(ref_val);
             $inline_core_prelude_string_wado_String__internal_push_string_9: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_string_9 local.tee ref_val(other_18.used) == 0;
-                if @unlikely(local.tee new_used(s.used + ref_val) > builtin::array_len($licm_repr_49)) {
+                if @unlikely(local.tee new_used(s.used + ref_val) > builtin::array_len($licm_repr_52)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used);
-                    $licm_repr_49 = s.repr;
+                    $licm_repr_52 = s.repr;
                 }
                 start_30 = s.used;
                 s.used = new_used;
-                builtin::array_copy<u8>($licm_repr_49, start_30, other_18.repr, 0, ref_val);
+                builtin::array_copy<u8>($licm_repr_52, start_30, other_18.repr, 0, ref_val);
             };
             continue l13;
         };
     };
     end = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$iter_0_index_51 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_$iter_0_index_50 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     end = "licm_reloadable_hoist_nonunit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(end);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_index_51, s.repr, s.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_index_50, s.repr, s.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(end);
 }
 
