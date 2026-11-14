@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794553665606,
+  "lastUpdate": 1794625839833,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77209,6 +77209,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 434207,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "556b1b20ad12f2f507a91e081a73bd698dd7b2c7",
+          "message": "Merge pull request #2620 from wado-lang/perf/zlib-inflate-linear\n\nperf(core:zlib): inflate and deflate in linear memory, decompress ahead of C zlib on Wasm",
+          "timestamp": "2026-11-14T11:50:37+09:00",
+          "tree_id": "d2496a17a01922eae3c3f3a0936417be425feeb8",
+          "url": "https://github.com/wado-lang/wado/commit/556b1b20ad12f2f507a91e081a73bd698dd7b2c7"
+        },
+        "date": 1794625839276,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24478,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434281,
             "unit": "bytes"
           }
         ]
