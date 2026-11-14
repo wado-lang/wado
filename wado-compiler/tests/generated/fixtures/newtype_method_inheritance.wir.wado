@@ -64,53 +64,53 @@ global global:newtype_method_inheritance.wado::$const_obj_1: ref Array<u8> = arr
 fn "newtype_method_inheritance.wado/run"() with Stdout {
     let $load_1: ref Array<u8>;
     let out_8: ref "core:prelude/string.wado//String";
-    let $sroa_view_repr_151: ref Array<u8>;
+    let $sroa_view_repr_153: ref Array<u8>;
     let pos: i32;
-    let t_554: u64;
+    let t_556: u64;
     let q: u64;
     let pair: i32;
     let tens: i32;
     out_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-    $sroa_view_repr_151 = global:newtype_method_inheritance.wado::$const_obj_1;
-    builtin::array_copy<u8>(local.tee $load_1(out_8.repr), 0, $sroa_view_repr_151, 0, 5);
+    $sroa_view_repr_153 = global:newtype_method_inheritance.wado::$const_obj_1;
+    builtin::array_copy<u8>(local.tee $load_1(out_8.repr), 0, $sroa_view_repr_153, 0, 5);
     out_8.used = 7;
     pos = 7;
-    t_554 = 30_i64;
+    t_556 = 30_i64;
     b0: block {
         l1: loop {
             break_if b0 (pos - 5) < 2;
-            q = t_554 /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(t_554 - (q * 100_i64))) / 10;
+            q = t_556 /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(t_556 - (q * 100_i64))) / 10;
             builtin::array_set_u8($load_1, pos - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8($load_1, pos - 2, 48 + tens);
             pos = pos - 2;
-            t_554 = q;
+            t_556 = q;
             continue l1;
         };
     };
     if pos > 5 {
-        builtin::array_set_u8($load_1, 5, 48 + builtin::i32_wrap_i64(t_554 %u 10_i64));
+        builtin::array_set_u8($load_1, 5, 48 + builtin::i32_wrap_i64(t_556 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
     };
-    pos = builtin::i32_wrap_i64(local.tee t_554("wasi/stream-new"()));
-    pair = builtin::i32_wrap_i64(t_554 >> 32_i64);
+    pos = builtin::i32_wrap_i64(local.tee t_556("wasi/stream-new"()));
+    pair = builtin::i32_wrap_i64(t_556 >> 32_i64);
     pos = "newtype_method_inheritance.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_151(builtin::array_new<u8>(local.tee tens(out_8.used) + 1)), 0, out_8.repr, 0, tens);
-    builtin::array_set_u8($sroa_view_repr_151, tens, 10);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_153(builtin::array_new<u8>(local.tee tens(out_8.used) + 1)), 0, out_8.repr, 0, tens);
+    builtin::array_set_u8($sroa_view_repr_153, tens, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         tens = tens + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(pair, $sroa_view_repr_151, 0, tens);
+        "core:rt/cm_stream_write_raw_all_u8"(pair, $sroa_view_repr_153, 0, tens);
     });
     "wasi/stream-drop-writable"(pair);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos);
-    pos = builtin::i32_wrap_i64(local.tee t_554("wasi/stream-new"()));
-    pair = builtin::i32_wrap_i64(t_554 >> 32_i64);
+    pos = builtin::i32_wrap_i64(local.tee t_556("wasi/stream-new"()));
+    pair = builtin::i32_wrap_i64(t_556 >> 32_i64);
     pos = "newtype_method_inheritance.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_151(builtin::array_new<u8>(16)), 0, global:newtype_method_inheritance.wado::$const_obj_0, 0, 15);
-    builtin::array_set_u8($sroa_view_repr_151, 15, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(pair, $sroa_view_repr_151);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_153(builtin::array_new<u8>(16)), 0, global:newtype_method_inheritance.wado::$const_obj_0, 0, 15);
+    builtin::array_set_u8($sroa_view_repr_153, 15, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(pair, $sroa_view_repr_153);
     "wasi/stream-drop-writable"(pair);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos);
 }

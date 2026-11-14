@@ -975,6 +975,7 @@ fn "int128.wado/$test_13_literal_and_cast_reach_i128_u128"() {
     let lo: i64;
     let hi: i64;
     let $licm_repr_124: ref Array<u8>;
+    let $deref_value_249: ref "core:prelude/int128.wado//u128";
     b_1 = struct.new "core:prelude/int128.wado//i128" { low: 42_i64, high: 0_i64 };
     c = struct.new "core:prelude/int128.wado//i128" { low: -100_i64, high: -1_i64 };
     $v0_5 = "core:prelude/string.wado/core:prelude/string.wado/String::format<int128.wado/$tmpl$b45d850e9dc9738d,[core:prelude/int128.wado/i128]>$spec0$spec0$sroa[t.h0]"(b_1);
@@ -1174,11 +1175,12 @@ condition: `${x as i128}` == \"500\"
         unreachable;
     }
     multivalue_bind [lo, hi] = i64.add128(10_i64, 0_i64, 5_i64, 0_i64);
+    $deref_value_249 = struct.new "core:prelude/int128.wado//u128" { low: lo, high: hi };
     $v0_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_int128_wado__tmpl_2fe1b60ce5aa1946__core_prelude_int128_wado_u128___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_int128_wado__tmpl_2fe1b60ce5aa1946__core_prelude_int128_wado_u128___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$sroa[f.buf]"(struct.new "core:prelude/int128.wado//u128" { low: lo, high: hi }, $v0_5, 0);
+    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$sroa[f.buf]"($deref_value_249, $v0_5, 0);
     $inline_core_prelude_string_wado_String__format_int128_wado__tmpl_2fe1b60ce5aa1946__core_prelude_int128_wado_u128___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_37: block {
         break $inline_core_prelude_string_wado_String__format_int128_wado__tmpl_2fe1b60ce5aa1946__core_prelude_int128_wado_u128___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_37;
     };

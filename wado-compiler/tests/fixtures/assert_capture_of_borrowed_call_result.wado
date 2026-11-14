@@ -1,0 +1,16 @@
+// Contract checks are not the only lowering that binds a value in place as
+// `{ local = value; local }`: an assert's operand capture does too, and a
+// comparison borrows that block. Only a contract check's binding is passed
+// uncopied; any other takes the value as an assignment does.
+use { PlainDate } from "core:temporal";
+
+export fn run() {
+    let d = PlainDate::new(2023, 11, 14);
+    assert PlainDate::constrain(2023, 2, 31) == PlainDate::new(2023, 2, 28);
+    assert PlainDate { ..d, day: 1 } == PlainDate::new(2023, 11, 1);
+}
+
+__DATA__
+{
+    "stdout": ""
+}

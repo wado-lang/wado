@@ -1,0 +1,70 @@
+// A subscript on a type parameter dispatches through its indexing bounds, as
+// an operator does through its operator trait's bound, whether the parameter
+// is held by value or by reference: a read through `IndexValue`, or through
+// `IndexRef` where only that bound is written, and a write through
+// `IndexAssign`. A `&mut` subscript goes through `IndexRefMut`, or through
+// `IndexRef` where only that bound is written, as on a concrete container, and
+// a shared one with only `IndexValue` written refers to a copy. The bound's key
+// type types the key, so a literal key takes `i64` where the bound names it.
+struct Squares {}
+
+impl IndexValue<i64> for Squares {
+    type Output = i64;
+
+    fn index_value(&self, index: i64) -> i64 {
+        return index * index;
+    }
+}
+
+fn first<B: IndexValue<i32, Output = u8>>(buf: &B) -> u8 {
+    return buf[0];
+}
+
+fn sum<B: IndexValue<i32, Output = u8>>(buf: B, len: i32) -> i32 {
+    let mut total = 0;
+    for let i of 0..<len {
+        total += buf[i] as i32;
+    }
+    return total;
+}
+
+fn at_three<B: IndexValue<i64, Output = i64>>(table: &B) -> i64 {
+    return table[3];
+}
+
+fn first_copy<B: IndexValue<i32, Output = u8>>(buf: &B) -> u8 {
+    let shared = &buf[0];
+    return *shared;
+}
+
+fn put<B: IndexAssign<i32, Output = u8>>(buf: &mut B) {
+    buf[0] = 5;
+}
+
+fn peek<B: IndexRef<i32, Output = String>>(names: &B) -> String {
+    return names[0];
+}
+
+fn grow<B: IndexRefMut<i32, Output = String>>(names: &mut B) {
+    let name = &mut names[0];
+    name.push_str("bc");
+}
+
+fn first_len<B: IndexRef<i32, Output = String>>(names: &mut B) -> i32 {
+    let name = &mut names[0];
+    return name.len();
+}
+
+test {
+    let mut xs: List<u8> = [7, 8, 9];
+    assert first(&xs) == 7;
+    assert sum(xs, 3) == 24;
+    assert first_copy(&xs) == 7;
+    assert at_three(&Squares {}) == 9;
+    put(&mut xs);
+    assert xs[0] == 5;
+    let mut names: List<String> = ["a"];
+    assert peek(&names) == "a";
+    grow(&mut names);
+    assert names[0] == "abc";
+    assert first_len(&mut names) == 3;}

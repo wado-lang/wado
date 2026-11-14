@@ -1,0 +1,47 @@
+// A for-of body's last statement discards its value as any statement does, so
+// an affine value it makes drops each iteration. The desugared body is the arm
+// of a `()` match, whose value the arm's type alone does not decide.
+global mut DROPS: i32 = 0;
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPS += 1;
+    }
+}
+
+fn make(id: i32) -> Tok {
+    return Tok { id };
+}
+
+test "a discarded call" {
+    DROPS = 0;
+    for let i of 0..<3 {
+        make(i);
+    }
+    assert DROPS == 3;
+}
+
+test "let _" {
+    DROPS = 0;
+    let xs: List<i32> = [1, 2, 3];
+    for let i of xs {
+        let _ = make(i);
+    }
+    assert DROPS == 3;
+}
+
+test "a unit match arm" {
+    DROPS = 0;
+    let n: Option<i32> = Some(1);
+    match n {
+        Some(i) => {
+            make(i);
+        },
+        None => {},
+    };
+    assert DROPS == 1;
+}

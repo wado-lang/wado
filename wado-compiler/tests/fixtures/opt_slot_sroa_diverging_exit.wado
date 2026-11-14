@@ -1,0 +1,31 @@
+// Test: a merge whose exits build a struct, one of them by calling a function
+// that never returns, is scalarized without reading a field of that call.
+//
+// Splitting `pick`'s result into one local per field gives each exit's fields
+// to the locals. An exit handing over the aggregate binds it and reads its
+// fields; one of type `!` has no fields to read, and reading one failed to
+// compile.
+
+use { println, Stdout } from "core:cli";
+
+struct Pair { a: i32, b: i32 }
+
+fn fail(n: i32) -> ! {
+    panic(`no pair for ${n}`);
+}
+
+fn pick(n: i32) -> Pair {
+    if n == 0 { return Pair { a: 1, b: 2 }; }
+    if n == 1 { return Pair { a: 3, b: 4 }; }
+    return fail(n);
+}
+
+export fn run() with Stdout {
+    let p = pick(builtin::black_box(1));
+    println(`${p.a + p.b}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n"
+}

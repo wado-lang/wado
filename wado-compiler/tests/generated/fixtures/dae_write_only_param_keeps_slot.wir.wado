@@ -197,7 +197,7 @@ fn "dae_write_only_param_keeps_slot.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let $sroa_t_h0_203: i32;
-    let $sroa_view_repr_607: ref Array<u8>;
+    let $sroa_view_repr_610: ref Array<u8>;
     c_0 = struct.new "dae_write_only_param_keeps_slot.wado//Counter<i32>" { stored: global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0, drops: 0 };
     global:dae_write_only_param_keeps_slot.wado::$effect_core:prelude/types.wado/Future<i32> = struct.new "dae_write_only_param_keeps_slot.wado//$Dispatch_core:prelude/types.wado/Future<i32>" { outer: local.tee $save_core:prelude/types.wado/Future<i32>_9(global:dae_write_only_param_keeps_slot.wado::$effect_core:prelude/types.wado/Future<i32>), op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "dae_write_only_param_keeps_slot.wado//$Closure_0" { $capture_0: c_0 }, func: ref.func "closure/dae_write_only_param_keeps_slot.wado/$closure_wrapper_0" }, op_drop: struct.new "canonical//CanonicalClosure_1" { env: struct.new "dae_write_only_param_keeps_slot.wado//$Closure_3" { $capture_0: c_0 }, func: ref.func "closure/dae_write_only_param_keeps_slot.wado/$closure_wrapper_1" } };
     global:dae_write_only_param_keeps_slot.wado::$effect_core:prelude/types.wado/FutureWritable<i32> = struct.new "dae_write_only_param_keeps_slot.wado//$Dispatch_core:prelude/types.wado/FutureWritable<i32>" { outer: local.tee $save_core:prelude/types.wado/FutureWritable<i32>_12(global:dae_write_only_param_keeps_slot.wado::$effect_core:prelude/types.wado/FutureWritable<i32>), op_write: struct.new "canonical//CanonicalClosure_2" { env: struct.new "dae_write_only_param_keeps_slot.wado//$Closure_4" { $capture_0: c_0 }, func: ref.func "closure/dae_write_only_param_keeps_slot.wado/$closure_wrapper_2" } };
@@ -291,9 +291,9 @@ fn "dae_write_only_param_keeps_slot.wado/run"() with Stdout {
     global:dae_write_only_param_keeps_slot.wado::$effect_core:prelude/types.wado/Future<i32> = $save_core:prelude/types.wado/Future<i32>_9;
     $sroa_t_h0_203 = c_0.drops;
     out_37 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
-    $sroa_view_repr_607 = global:dae_write_only_param_keeps_slot.wado::$const_obj_0;
+    $sroa_view_repr_610 = global:dae_write_only_param_keeps_slot.wado::$const_obj_0;
     out_37.used = local.tee $load_33(6);
-    builtin::array_copy<u8>(local.tee $load_34(out_37.repr), 0, $sroa_view_repr_607, 0, 6);
+    builtin::array_copy<u8>(local.tee $load_34(out_37.repr), 0, $sroa_view_repr_610, 0, 6);
     is_negative_99 = $sroa_t_h0_203 < 0;
     $cm_pair_5_141 = builtin::i64_extend_i32_s($sroa_t_h0_203);
     $cm_pair_5_141 = select i64($cm_pair_5_141 < 0_i64, 0_i64 - $cm_pair_5_141, $cm_pair_5_141);
@@ -373,22 +373,22 @@ fn "dae_write_only_param_keeps_slot.wado/run"() with Stdout {
     }
     is_negative_99 = out_37.used;
     out_37.used = $load_33;
-    $sroa_view_repr_607 = out_37.repr;
+    $sroa_view_repr_610 = out_37.repr;
     $sroa_t_h0_203 = is_negative_99 + $sroa_t_h0_203;
     b34: block {
         l35: loop {
             break_if b34 ($sroa_t_h0_203 - is_negative_99) < 2;
             q = $cm_pair_5_141 /u 100_i64;
             tens = local.tee $load_33(builtin::i32_wrap_i64($cm_pair_5_141 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_607, $sroa_t_h0_203 - 1, (48 + $load_33) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_607, $sroa_t_h0_203 - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_610, $sroa_t_h0_203 - 1, (48 + $load_33) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_610, $sroa_t_h0_203 - 2, 48 + tens);
             $sroa_t_h0_203 = $sroa_t_h0_203 - 2;
             $cm_pair_5_141 = q;
             continue l35;
         };
     };
     if $sroa_t_h0_203 > is_negative_99 {
-        builtin::array_set_u8($sroa_view_repr_607, is_negative_99, 48 + builtin::i32_wrap_i64($cm_pair_5_141 %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_610, is_negative_99, 48 + builtin::i32_wrap_i64($cm_pair_5_141 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
@@ -396,11 +396,11 @@ fn "dae_write_only_param_keeps_slot.wado/run"() with Stdout {
     $sroa_t_h0_203 = builtin::i32_wrap_i64(local.tee $cm_pair_5_141("wasi/stream-new"()));
     $load_33 = builtin::i32_wrap_i64($cm_pair_5_141 >> 32_i64);
     $sroa_t_h0_203 = "dae_write_only_param_keeps_slot.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_203);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_607(builtin::array_new<u8>(local.tee is_negative_99(out_37.used) + 1)), 0, out_37.repr, 0, is_negative_99);
-    builtin::array_set_u8($sroa_view_repr_607, is_negative_99, 10);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_610(builtin::array_new<u8>(local.tee is_negative_99(out_37.used) + 1)), 0, out_37.repr, 0, is_negative_99);
+    builtin::array_set_u8($sroa_view_repr_610, is_negative_99, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         is_negative_99 = is_negative_99 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($load_33, $sroa_view_repr_607, 0, is_negative_99);
+        "core:rt/cm_stream_write_raw_all_u8"($load_33, $sroa_view_repr_610, 0, is_negative_99);
     });
     "wasi/stream-drop-writable"($load_33);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_203);

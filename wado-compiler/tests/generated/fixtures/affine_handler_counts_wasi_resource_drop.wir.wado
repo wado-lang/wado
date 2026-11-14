@@ -127,7 +127,7 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
     let $local_2_107: ref null "core:prelude//$Resource";
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_610: ref Array<u8>;
+    let $sroa_view_repr_613: ref Array<u8>;
     counter = struct.new "affine_handler_counts_wasi_resource_drop.wado//CountingFields" { drops: 0 };
     global:affine_handler_counts_wasi_resource_drop.wado::$effect_wasi:http/types.wado/Fields = struct.new "affine_handler_counts_wasi_resource_drop.wado//$Dispatch_wasi:http/types.wado/Fields" { outer: local.tee $save_wasi:http/types.wado/Fields(global:affine_handler_counts_wasi_resource_drop.wado::$effect_wasi:http/types.wado/Fields), op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "affine_handler_counts_wasi_resource_drop.wado//$Closure_0" { $capture_0: counter }, func: ref.func "closure/affine_handler_counts_wasi_resource_drop.wado/$closure_wrapper_0" }, op_drop: struct.new "canonical//CanonicalClosure_1" { env: struct.new "affine_handler_counts_wasi_resource_drop.wado//$Closure_10" { $capture_0: counter }, func: ref.func "closure/affine_handler_counts_wasi_resource_drop.wado/$closure_wrapper_1" } };
     $local_2_107 = $inline__effect_dispatch__wasi_http_types_wado_Fields__new_1: block -> ref null "core:prelude//$Resource" {
@@ -187,9 +187,9 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
     global:affine_handler_counts_wasi_resource_drop.wado::$effect_wasi:http/types.wado/Fields = $save_wasi:http/types.wado/Fields;
     $cm_handle_3 = counter.drops;
     out_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
-    $sroa_view_repr_610 = global:affine_handler_counts_wasi_resource_drop.wado::$const_obj_1;
+    $sroa_view_repr_613 = global:affine_handler_counts_wasi_resource_drop.wado::$const_obj_1;
     out_12.used = local.tee $load_21(6);
-    builtin::array_copy<u8>(local.tee $load_22(out_12.repr), 0, $sroa_view_repr_610, 0, 6);
+    builtin::array_copy<u8>(local.tee $load_22(out_12.repr), 0, $sroa_view_repr_613, 0, 6);
     is_negative_74 = $cm_handle_3 < 0;
     x = builtin::i64_extend_i32_s($cm_handle_3);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -269,22 +269,22 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
     }
     is_negative_74 = out_12.used;
     out_12.used = $load_21;
-    $sroa_view_repr_610 = out_12.repr;
+    $sroa_view_repr_613 = out_12.repr;
     $cm_handle_3 = is_negative_74 + $cm_handle_3;
     b29: block {
         l30: loop {
             break_if b29 ($cm_handle_3 - is_negative_74) < 2;
             q = x /u 100_i64;
             tens = local.tee $load_21(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_610, $cm_handle_3 - 1, (48 + $load_21) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_610, $cm_handle_3 - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_613, $cm_handle_3 - 1, (48 + $load_21) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_613, $cm_handle_3 - 2, 48 + tens);
             $cm_handle_3 = $cm_handle_3 - 2;
             x = q;
             continue l30;
         };
     };
     if $cm_handle_3 > is_negative_74 {
-        builtin::array_set_u8($sroa_view_repr_610, is_negative_74, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_613, is_negative_74, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
@@ -292,11 +292,11 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
     $cm_handle_3 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $load_21 = builtin::i32_wrap_i64(x >> 32_i64);
     $cm_handle_3 = "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_3);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_610(builtin::array_new<u8>(local.tee is_negative_74(out_12.used) + 1)), 0, out_12.repr, 0, is_negative_74);
-    builtin::array_set_u8($sroa_view_repr_610, is_negative_74, 10);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_613(builtin::array_new<u8>(local.tee is_negative_74(out_12.used) + 1)), 0, out_12.repr, 0, is_negative_74);
+    builtin::array_set_u8($sroa_view_repr_613, is_negative_74, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         is_negative_74 = is_negative_74 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($load_21, $sroa_view_repr_610, 0, is_negative_74);
+        "core:rt/cm_stream_write_raw_all_u8"($load_21, $sroa_view_repr_613, 0, is_negative_74);
     });
     "wasi/stream-drop-writable"($load_21);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($cm_handle_3);
@@ -328,9 +328,9 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
     $cm_handle_3 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $load_21 = builtin::i32_wrap_i64(x >> 32_i64);
     $cm_handle_3 = "affine_handler_counts_wasi_resource_drop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_3);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_610(builtin::array_new<u8>(18)), 0, global:affine_handler_counts_wasi_resource_drop.wado::$const_obj_0, 0, 17);
-    builtin::array_set_u8($sroa_view_repr_610, 17, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($load_21, $sroa_view_repr_610);
+    builtin::array_copy<u8>(local.tee $sroa_view_repr_613(builtin::array_new<u8>(18)), 0, global:affine_handler_counts_wasi_resource_drop.wado::$const_obj_0, 0, 17);
+    builtin::array_set_u8($sroa_view_repr_613, 17, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($load_21, $sroa_view_repr_613);
     "wasi/stream-drop-writable"($load_21);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($cm_handle_3);
 }

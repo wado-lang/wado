@@ -9,7 +9,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::lower::plan::value_copy::analyze::{carries_no_storage, returned_value};
 use crate::lower::plan::value_copy::callgraph;
-use crate::name::LocalMethodName;
+use crate::name::{LocalMethodName, is_contract_arg};
 use crate::tir::{
     BuiltinDeclarations, CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction,
     TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
@@ -504,6 +504,95 @@ pub fn is_place(expr: &TirExpr) -> bool {
 #[must_use]
 pub fn is_source_place(expr: &TirExpr, items: &CompilerItems) -> bool {
     place_walk(expr, Some(items))
+}
+
+/// `{ local = value; local }`, a binding a contract check makes of a call's
+/// argument where the value is evaluated. Nothing but the check and the call
+/// reads the local, so the value may be bound uncopied. An assert's operand
+/// capture makes the same shape, but its local is read again by the failure
+/// branch, so it is no such binding.
+pub struct InPlaceBinding<'e> {
+    pub local: u32,
+    /// The assignment's target, the `local` written.
+    pub target: &'e TirExpr,
+    pub value: &'e TirExpr,
+    /// The trailing read of `local`.
+    pub read: &'e TirExpr,
+}
+
+/// `stmts` as an [`InPlaceBinding`], if they are one.
+#[must_use]
+pub fn in_place_binding(stmts: &[TirStmt]) -> Option<InPlaceBinding<'_>> {
+    let [assign, read] = stmts else {
+        return None;
+    };
+    let (
+        TirStmtKind::Expr(TirExpr {
+            kind: TirExprKind::Assign { target, value },
+            ..
+        }),
+        TirStmtKind::Expr(
+            read @ TirExpr {
+                kind: TirExprKind::Local { index, name },
+                ..
+            },
+        ),
+    ) = (&assign.kind, &read.kind)
+    else {
+        return None;
+    };
+    (is_contract_arg(name)
+        && matches!(target.kind, TirExprKind::Local { index: assigned, .. } if assigned == *index))
+    .then_some(InPlaceBinding {
+        local: *index,
+        target,
+        value,
+        read,
+    })
+}
+
+/// What `&referent` takes the value of: the value an in-place binding binds
+/// ([`in_place_binding`]), or `referent` itself.
+#[must_use]
+pub fn borrowed_value(referent: &TirExpr) -> &TirExpr {
+    match &referent.kind {
+        TirExprKind::Block(block) => {
+            in_place_binding(&block.stmts).map_or(referent, |binding| binding.value)
+        }
+        _ => referent,
+    }
+}
+
+/// The value a shared borrow `&value` takes when `value` names no storage, so
+/// the reference refers to a value of its own.
+#[must_use]
+pub fn borrowed_temporary<'e>(expr: &'e TirExpr, items: &CompilerItems) -> Option<&'e TirExpr> {
+    let TirExprKind::Unary {
+        op: TirUnaryOp::Ref,
+        expr: referent,
+    } = &expr.kind
+    else {
+        return None;
+    };
+    let value = borrowed_value(referent);
+    (!names_storage(value, items)).then_some(value)
+}
+
+/// Whether `value` is storage a reference to it reaches: a source place,
+/// what a reference reads, or a projection of either. A field of a call's
+/// result is none of them, so `&value` there refers to a value of its own.
+#[must_use]
+pub fn names_storage(value: &TirExpr, items: &CompilerItems) -> bool {
+    if is_source_place(value, items) {
+        return true;
+    }
+    match &value.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            ..
+        } => true,
+        _ => projection_base(value).is_some_and(|base| names_storage(base, items)),
+    }
 }
 
 fn place_walk(expr: &TirExpr, source_forms: Option<&CompilerItems>) -> bool {

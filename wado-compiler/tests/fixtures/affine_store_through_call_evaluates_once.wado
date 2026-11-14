@@ -1,0 +1,38 @@
+// A store into a field reached through a call's reference drops what the field
+// held and writes the new value, and the call runs once for both: the
+// reference is read once, as a store through `*r` reads it.
+use { println, Stdout } from "core:cli";
+
+global mut DROPS: List<i32> = [];
+global mut CALLS: i32 = 0;
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        DROPS.push(self.id);
+    }
+}
+
+affine struct Holder {
+    tok: Tok,
+}
+
+fn holder_of(h: &mut Holder) -> &mut Holder {
+    CALLS += 1;
+    return h;
+}
+
+export fn run() with Stdout {
+    let mut h = Holder { tok: Tok { id: 1 } };
+    holder_of(&mut h).tok = Tok { id: 2 };
+    (*holder_of(&mut h)).tok = Tok { id: 3 };
+    println(`calls ${CALLS}, dropped ${DROPS:?}, holds ${h.tok.id}`);
+}
+
+__DATA__
+{
+    "stdout": "calls 2, dropped [1, 2], holds 3\n"
+}

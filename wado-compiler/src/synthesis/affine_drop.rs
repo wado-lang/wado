@@ -1725,7 +1725,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         TirExprKind::Match {
             expr: scrutinee,
             arms,
-        } => elab_match(scrutinee, arms, cx),
+        } => elab_match(scrutinee, arms, cx.yields(type_id), cx),
         TirExprKind::WithHandler { .. } => {
             unreachable!("effect dispatch desugars `with` ahead of drop elaboration")
         }
@@ -2119,6 +2119,31 @@ fn is_place(expr: &TirExpr, cx: &Cx) -> bool {
     }
 }
 
+/// The reference `expr`, a field of an object that reference points to,
+/// reaches it through: a slot that object owns, though no move can empty it.
+/// `None` where `expr` is no such field.
+fn reference_under_field<'a>(expr: &'a mut TirExpr, cx: &Cx) -> Option<&'a mut TirExpr> {
+    let TirExprKind::FieldAccess { expr: object, .. } = &mut expr.kind else {
+        return None;
+    };
+    reference_under_place(object, cx)
+}
+
+/// The reference `object`, or the field chain rooted in it, starts from.
+fn reference_under_place<'a>(object: &'a mut TirExpr, cx: &Cx) -> Option<&'a mut TirExpr> {
+    if cx.affine_types.tt.borrow().is_reference(object.type_id) {
+        return Some(object);
+    }
+    match &mut object.kind {
+        TirExprKind::FieldAccess { expr: inner, .. } => reference_under_place(inner, cx),
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: reference,
+        } => Some(reference),
+        _ => None,
+    }
+}
+
 /// Replace the place `expr` with its value, emptying the place:
 /// `{ let $moved = place; place = null; $moved }`.
 fn take_place(expr: &mut TirExpr, cx: &mut Cx) {
@@ -2326,32 +2351,32 @@ fn elab_store(expr: &mut TirExpr, cx: &mut Cx) {
         unreachable!("`elab_store` takes an assignment");
     };
     let type_id = target.type_id;
+    let field_through_reference = reference_under_field(target, cx).is_some();
     let through = match &target.kind {
         TirExprKind::Unary {
             op: TirUnaryOp::Deref,
             expr: reference,
         } => Some((**reference).clone()),
-        _ if is_place(target, cx) => None,
+        _ if is_place(target, cx) || field_through_reference => None,
         _ => return,
     };
-    let target = (**target).clone();
+    let mut target = (**target).clone();
     let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span);
     let value = std::mem::replace(&mut **value, unit);
     let (local, name) = cx.alloc_local(type_id, "stored");
     let stored = local_ref(local, &name, type_id);
     let mut stmts = vec![let_stmt(&name, local, type_id, value)];
+    // The store reads the place for its drop as well as writing it, so a
+    // reference reaching it is read once, as a store through `*r` reads `r`.
+    if let Some(reference) = reference_under_field(&mut target, cx) {
+        let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span);
+        *reference = read_once(std::mem::replace(reference, unit), &mut stmts, cx);
+    }
     let is_object = cx.affine_types.is_object(type_id);
     match through {
         Some(reference) => {
-            // Read the reference once: dropping a struct reads it per field.
-            let reference = if matches!(reference.kind, TirExprKind::Local { .. }) {
-                reference
-            } else {
-                let ref_ty = reference.type_id;
-                let (local, name) = cx.alloc_local(ref_ty, "store_ref");
-                stmts.push(let_stmt(&name, local, ref_ty, reference));
-                local_ref(local, &name, ref_ty)
-            };
+            // Dropping a struct reads the reference per field.
+            let reference = read_once(reference, &mut stmts, cx);
             let place = common::deref_expr(reference, type_id, span);
             if is_object {
                 stmts.push(refuse_self_store(place.clone(), stored.clone(), cx));
@@ -2376,6 +2401,18 @@ fn elab_store(expr: &mut TirExpr, cx: &mut Cx) {
         TypeTable::UNIT,
         span,
     );
+}
+
+/// `reference` as a local: itself where it is one, else spilled into one by a
+/// statement pushed onto `stmts`.
+fn read_once(reference: TirExpr, stmts: &mut Vec<TirStmt>, cx: &mut Cx) -> TirExpr {
+    if matches!(reference.kind, TirExprKind::Local { .. }) {
+        return reference;
+    }
+    let ref_ty = reference.type_id;
+    let (local, name) = cx.alloc_local(ref_ty, "store_ref");
+    stmts.push(let_stmt(&name, local, ref_ty, reference));
+    local_ref(local, &name, ref_ty)
 }
 
 /// Drop what the object `place` holds and move `stored`'s content into it, so
@@ -2484,7 +2521,9 @@ fn wrap_in_block(expr: &mut TirExpr, build: impl FnOnce(TirExpr) -> Vec<TirStmt>
 /// temporary: the parts no binding takes drop, and the scrutinee is emptied,
 /// before the body runs. A temporary is spilled first, so an arm that does not
 /// consume leaves it for its statement to drop.
-fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
+/// Each arm's value goes where the match's does, `yields`: an arm whose block
+/// ends in a value the match does not take discards it.
+fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], yields: Tail, cx: &mut Cx) {
     // An arm that does not consume the scrutinee owns nothing it binds.
     let bindings: Vec<Vec<Live>> = arms
         .iter()
@@ -2508,7 +2547,6 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
             elab_expr(guard, true, cx);
         }
         let mut block = into_block(&mut arm.body);
-        let yields = cx.yields(arm.body.type_id);
         elab_scope(&mut block, arm_bindings, ScopeKind::Block, yields, cx);
         // Inserted once the body is elaborated: emptying the scrutinee is a
         // move, not a store that drops what it replaces.
@@ -2516,7 +2554,14 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
             let entry = consume_matched(&arm.pattern, place, cx);
             block.stmts.splice(0..0, entry);
         }
-        arm.body = TirExpr::new(TirExprKind::Block(block), arm.body.type_id, arm.body.span);
+        // An arm whose value is discarded may have dropped it, ending in no
+        // value of its own type.
+        let type_id = if yields == Tail::Discarded {
+            tir::block_result_type(&cx.affine_types.tt.borrow(), &block)
+        } else {
+            arm.body.type_id
+        };
+        arm.body = TirExpr::new(TirExprKind::Block(block), type_id, arm.body.span);
     }
 }
 

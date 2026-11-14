@@ -366,17 +366,17 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
     let current_28: i32;
     let value_33: f32;
     let $cm_pair_7: i64;
-    let $sroa_$iter_0_start_74: i32;
-    let $licm_repr_83: ref Array<f32>;
+    let $sroa_$iter_0_start_76: i32;
+    let $licm_repr_85: ref Array<f32>;
     let new_repr: ref Array<u8>;
     ptr = "mem/realloc"(0, 0, 1, 4194304);
     base = black_box(-1_f32);
     before = struct.new "core:prelude/list.wado//List<f32>" { repr: array.new_fixed<f32>(), used: 0 };
-    $sroa_$iter_0_start_74 = 0;
+    $sroa_$iter_0_start_76 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_start_74 >= 64;
-            $sroa_$iter_0_start_74 = local.tee current_28($sroa_$iter_0_start_74) + 1;
+            break_if b0 $sroa_$iter_0_start_76 >= 64;
+            $sroa_$iter_0_start_76 = local.tee current_28($sroa_$iter_0_start_76) + 1;
             value_33 = "wasm:core:libm.wat/libm_expf"(base - (builtin::f32_convert_i32_s(current_28) * 0.25_f32));
             if @unlikely(local.tee current_28(before.used) >= builtin::array_len(before.repr)) {
                 cold_path;
@@ -389,19 +389,19 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
     };
     builtin::memory_fill(ptr, 255, 4194304);
     ptr = 0;
-    $sroa_$iter_0_start_74 = before.used;
-    $licm_repr_83 = before.repr;
+    $sroa_$iter_0_start_76 = before.used;
+    $licm_repr_85 = before.repr;
     b3: block {
         l4: loop {
             break_if b3 ptr >= 64;
             ptr = local.tee current_28(ptr) + 1;
             $v1_10 = "wasm:core:libm.wat/libm_expf"(local.tee value_33(base - (builtin::f32_convert_i32_s(current_28) * 0.25_f32)));
-            if @unlikely(current_28 >= $sroa_$iter_0_start_74) {
+            if @unlikely(current_28 >= $sroa_$iter_0_start_76) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(current_28, $sroa_$iter_0_start_74, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("allocator_asset_memory.wado:17"), used: 30 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(current_28, $sroa_$iter_0_start_76, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("allocator_asset_memory.wado:17"), used: 30 });
                 unreachable;
             }
-            $v3 = builtin::array_get_value<f32>($licm_repr_83, current_28);
+            $v3 = builtin::array_get_value<f32>($licm_repr_85, current_28);
             if @unlikely((($v1_10 == $v3) | (($v1_10 != $v1_10) & ($v3 != $v3))) == 0) {
                 cold_path;
                 "allocator_asset_memory.wado/run$cold0"(before.repr, before.used, current_28, value_33, $v3, $v1_10);
@@ -411,12 +411,12 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
         };
     };
     ptr = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$iter_0_start_74 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_$iter_0_start_76 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     ptr = "allocator_asset_memory.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(ptr);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:allocator_asset_memory.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$iter_0_start_74, new_repr);
-    "wasi/stream-drop-writable"($sroa_$iter_0_start_74);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$iter_0_start_76, new_repr);
+    "wasi/stream-drop-writable"($sroa_$iter_0_start_76);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(ptr);
 }
 

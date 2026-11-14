@@ -464,6 +464,19 @@ test "gzip multi-member" {
     assert inflate_gzip(&multi).unwrap() == expected;
 }
 
+test "gzip member cannot refer into the member before it" {
+    let mut multi = gzip_compress(&b"A");
+    multi.extend(&b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff");
+    // A fixed block whose first symbol is <length 3, distance 1>.
+    multi.extend(&b"\x03\x02\x00");
+    let crc = crc32(crc32_init(), &b"AAA", 0, 3);
+    for let shift of [0, 8, 16, 24] as List<u32> {
+        multi.push((crc >> shift) as u8);
+    }
+    multi.extend(&b"\x03\x00\x00\x00");
+    assert inflate_gzip(&multi) matches { Err(InvalidDeflateData) };
+}
+
 test "DeflateStream one-shot" {
     let data = make_pattern_data(500);
     let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
@@ -1165,7 +1178,9 @@ test "inflate zlib rejects an Adler-32 mismatch (RFC 1950 2.2)" {
 }
 
 // Past 32 KiB a match candidate can fall outside the window, and each level
-// walks its hash chains under its own limits.
+// walks its hash chains under its own limits. Sixty passes over 70 KB, with
+// every linear-memory read contract-checked at -O0, near the default limit on CI.
+#[timeout_ms(30000)]
 test "every level and strategy round-trips input longer than the window" {
     let data = make_wordy(70000);
     for let mut level = 0; level <= 9; level += 1 {

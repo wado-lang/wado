@@ -1,0 +1,13 @@
+// A write through an `IndexAssign` bound checks the key against the bound's key
+// type, as a read through `IndexValue` does.
+fn put<B: IndexAssign<i32, Output = u8>>(buf: &mut B) {
+    buf["bad"] = 5;
+}
+
+test {
+    let mut xs: List<u8> = [7];
+    put(&mut xs);
+}
+
+__DATA__
+{ "compile_error": ":4:9: analysis error: type mismatch: expected 'i32', found 'String'" }

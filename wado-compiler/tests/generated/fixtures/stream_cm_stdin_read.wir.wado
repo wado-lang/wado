@@ -259,7 +259,7 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let $sroa_view_repr_532: ref Array<u8>;
+    let $sroa_view_repr_535: ref Array<u8>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:stream_cm_stdin_read.wado::$modules_initialized);
         cold_path;
@@ -270,9 +270,9 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     self_5 = "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_sized$dae[expected]"(stdin_stream).used;
     "wasi/stream-drop-readable"(stdin_stream.value);
     out_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
-    $sroa_view_repr_532 = global:stream_cm_stdin_read.wado::$const_obj_1;
+    $sroa_view_repr_535 = global:stream_cm_stdin_read.wado::$const_obj_1;
     out_19.used = local.tee $load_2(5);
-    builtin::array_copy<u8>(local.tee $load_3(out_19.repr), 0, $sroa_view_repr_532, 0, 5);
+    builtin::array_copy<u8>(local.tee $load_3(out_19.repr), 0, $sroa_view_repr_535, 0, 5);
     is_negative_81 = self_5 < 0;
     x = builtin::i64_extend_i32_s(self_5);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -352,25 +352,25 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     }
     is_negative_81 = out_19.used;
     out_19.used = $load_2;
-    $sroa_view_repr_532 = out_19.repr;
+    $sroa_view_repr_535 = out_19.repr;
     self_5 = is_negative_81 + self_5;
     b22: block {
         l23: loop {
             break_if b22 (self_5 - is_negative_81) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_532, self_5 - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_532, self_5 - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_535, self_5 - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_535, self_5 - 2, 48 + tens);
             self_5 = self_5 - 2;
             x = q;
             continue l23;
         };
     };
     if self_5 > is_negative_81 {
-        builtin::array_set_u8($sroa_view_repr_532, is_negative_81, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_535, is_negative_81, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $load_3 = global:stream_cm_stdin_read.wado::$const_obj_0;
-    if @unlikely(local.tee self_5($load_2 + 6) > builtin::array_len($sroa_view_repr_532)) {
+    if @unlikely(local.tee self_5($load_2 + 6) > builtin::array_len($sroa_view_repr_535)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_19, self_5);
     }

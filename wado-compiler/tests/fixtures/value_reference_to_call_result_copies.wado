@@ -1,0 +1,171 @@
+// A reference to a call's result, or to a field of one, refers to a value of
+// its own, as a `let` binding it would hold: neither a write through it reaches
+// the storage the call read the value out of, nor a later write to that
+// storage reaches it, wherever the reference is kept.
+struct Item {
+    text: String,
+}
+
+struct Items {
+    items: List<Item>,
+}
+
+impl Items {
+    fn get(&self, i: i32) -> Item {
+        return self.items[i];
+    }
+
+    fn text(&self, i: i32) -> String {
+        return self.items[i].text;
+    }
+}
+
+fn append(s: &mut String) {
+    s.push_str("!");
+}
+
+test "a write through the reference" {
+    let mut n = Items { items: [Item { text: "abc" }] };
+    let r = &mut n.text(0);
+    r.push_str("!");
+    append(&mut n.text(0));
+    let f = &mut n.get(0).text;
+    f.push_str("!");
+    append(&mut n.get(0).text);
+    assert *r == "abc!";
+    assert *f == "abc!";
+    assert n.items[0].text == "abc";
+}
+
+struct Holder {
+    held: &String,
+}
+
+fn keep(r: &String) -> &String {
+    return r;
+}
+
+fn hold(r: &String) -> Holder {
+    return Holder { held: r };
+}
+
+test "a write to the storage" {
+    let mut n = Items { items: [Item { text: "abc" }] };
+    let r = &n.text(0);
+    let f = &n.get(0).text;
+    let tuple = [&n.text(0), 0];
+    let holder = Holder { held: &n.text(0) };
+    let kept = keep(&n.text(0));
+    let held = hold(&n.text(0));
+    let other: String = "x";
+    let mut assigned = &other;
+    assigned = &n.text(0);
+    n.items[0].text.push_str("!");
+    assert *r == "abc";
+    assert *f == "abc";
+    assert *tuple.0 == "abc";
+    assert *holder.held == "abc";
+    assert *kept == "abc";
+    assert *held.held == "abc";
+    assert *assigned == "abc";
+}
+
+impl Items {
+    fn append(&mut self, s: String) -> i32 {
+        self.items[0].text.push_str(s);
+        return 0;
+    }
+}
+
+fn read(r: &String) -> String {
+    return *r;
+}
+
+fn read_after(r: &String, _written: i32) -> String {
+    return *r;
+}
+
+fn read_checked(r: &String, written: i32) -> String
+    contract written == 0
+{
+    return *r;
+}
+
+impl Items {
+    fn append_then_read(&mut self, r: &String) -> String {
+        self.items[0].text.push_str("!");
+        return *r;
+    }
+}
+
+fn append_then_read(n: &mut Items, r: &String) -> String {
+    n.items[0].text.push_str("!");
+    return *r;
+}
+
+fn append_then_read_checked(n: &mut Items, r: &String, written: i32) -> String
+    contract written == 0
+{
+    n.items[0].text.push_str("!");
+    return *r;
+}
+
+test "a write by the callee before it reads the reference" {
+    let mut a = Items { items: [Item { text: "abc" }] };
+    let through_argument = append_then_read(&mut a, &a.text(0));
+    let mut b = Items { items: [Item { text: "abc" }] };
+    let through_receiver = b.append_then_read(&b.text(0));
+    let mut c = Items { items: [Item { text: "abc" }] };
+    let checked = append_then_read_checked(&mut c, &c.text(0), 0);
+    assert through_argument == "abc";
+    assert through_receiver == "abc";
+    assert checked == "abc";
+}
+
+global mut GLOBAL_ITEMS: Items = Items { items: [Item { text: "abc" }] };
+
+fn append_global_then_read(r: &String) -> String {
+    GLOBAL_ITEMS.items[0].text.push_str("!");
+    return *r;
+}
+
+fn append_global_through_callee_then_read(r: &String) -> String {
+    return append_global_then_read(r);
+}
+
+global mut GLOBAL_TEXT: String = "abc";
+
+fn global_text() -> String {
+    return GLOBAL_TEXT;
+}
+
+fn call_then_read(f: fn(), r: &String) -> String {
+    f();
+    return *r;
+}
+
+test "a write by the callee to the global the reference was read from" {
+    let direct = append_global_then_read(&GLOBAL_ITEMS.text(0));
+    let nested = append_global_through_callee_then_read(&GLOBAL_ITEMS.text(0));
+    let through_closure = call_then_read(|| { GLOBAL_ITEMS.items[0].text.push_str("?"); }, &GLOBAL_ITEMS.text(0));
+    let beside_write = read_after(&GLOBAL_ITEMS.text(0), GLOBAL_ITEMS.append("#"));
+    let unhanded = read_after(&global_text(), w: { GLOBAL_TEXT.push_str("!"); 0 });
+    assert unhanded == "abc";
+    assert direct == "abc";
+    assert nested == "abc!";
+    assert through_closure == "abc!!";
+    assert beside_write == "abc!!?";
+    assert GLOBAL_ITEMS.items[0].text == "abc!!?#";
+}
+
+test "a write before the call reads the reference" {
+    let mut n = Items { items: [Item { text: "abc" }] };
+    let r = &n.text(0);
+    n.items[0].text.push_str("!");
+    let read_bound = read(r);
+    let read_beside_write = read_after(&n.text(0), n.append("?"));
+    let read_checked_beside_write = read_checked(&n.text(0), n.append("?"));
+    assert read_bound == "abc";
+    assert read_beside_write == "abc!";
+    assert read_checked_beside_write == "abc!?";
+}

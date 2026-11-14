@@ -189,7 +189,7 @@ fn "affine_handler_sees_scope_exit_drop.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let $sroa_t_h0_154: i32;
-    let $sroa_view_repr_558: ref Array<u8>;
+    let $sroa_view_repr_561: ref Array<u8>;
     c_0 = struct.new "affine_handler_sees_scope_exit_drop.wado//Counter" { stored: global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0, drops: 0 };
     global:affine_handler_sees_scope_exit_drop.wado::$effect_core:prelude/types.wado/Future<i32> = struct.new "affine_handler_sees_scope_exit_drop.wado//$Dispatch_core:prelude/types.wado/Future<i32>" { outer: local.tee $save_core:prelude/types.wado/Future<i32>(global:affine_handler_sees_scope_exit_drop.wado::$effect_core:prelude/types.wado/Future<i32>), op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "affine_handler_sees_scope_exit_drop.wado//$Closure_0" { $capture_0: c_0 }, func: ref.func "closure/affine_handler_sees_scope_exit_drop.wado/$closure_wrapper_0" }, op_drop: struct.new "canonical//CanonicalClosure_1" { env: struct.new "affine_handler_sees_scope_exit_drop.wado//$Closure_3" { $capture_0: c_0 }, func: ref.func "closure/affine_handler_sees_scope_exit_drop.wado/$closure_wrapper_1" } };
     global:affine_handler_sees_scope_exit_drop.wado::$effect_core:prelude/types.wado/FutureWritable<i32> = struct.new "affine_handler_sees_scope_exit_drop.wado//$Dispatch_core:prelude/types.wado/FutureWritable<i32>" { outer: local.tee $save_core:prelude/types.wado/FutureWritable<i32>(global:affine_handler_sees_scope_exit_drop.wado::$effect_core:prelude/types.wado/FutureWritable<i32>), op_write: struct.new "canonical//CanonicalClosure_2" { env: struct.new "affine_handler_sees_scope_exit_drop.wado//$Closure_4" { $capture_0: c_0 }, func: ref.func "closure/affine_handler_sees_scope_exit_drop.wado/$closure_wrapper_2" } };
@@ -249,9 +249,9 @@ fn "affine_handler_sees_scope_exit_drop.wado/run"() with Stdout {
     global:affine_handler_sees_scope_exit_drop.wado::$effect_core:prelude/types.wado/Future<i32> = $save_core:prelude/types.wado/Future<i32>;
     $sroa_t_h0_154 = c_0.drops;
     $mv_arg_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
-    $sroa_view_repr_558 = global:affine_handler_sees_scope_exit_drop.wado::$const_obj_0;
+    $sroa_view_repr_561 = global:affine_handler_sees_scope_exit_drop.wado::$const_obj_0;
     $mv_arg_4.used = local.tee $load_19(6);
-    builtin::array_copy<u8>(local.tee $load_20($mv_arg_4.repr), 0, $sroa_view_repr_558, 0, 6);
+    builtin::array_copy<u8>(local.tee $load_20($mv_arg_4.repr), 0, $sroa_view_repr_561, 0, 6);
     is_negative_95 = $sroa_t_h0_154 < 0;
     $cm_pair_5 = builtin::i64_extend_i32_s($sroa_t_h0_154);
     $cm_pair_5 = select i64($cm_pair_5 < 0_i64, 0_i64 - $cm_pair_5, $cm_pair_5);
@@ -331,22 +331,22 @@ fn "affine_handler_sees_scope_exit_drop.wado/run"() with Stdout {
     }
     is_negative_95 = $mv_arg_4.used;
     $mv_arg_4.used = $load_19;
-    $sroa_view_repr_558 = $mv_arg_4.repr;
+    $sroa_view_repr_561 = $mv_arg_4.repr;
     $sroa_t_h0_154 = is_negative_95 + $sroa_t_h0_154;
     b30: block {
         l31: loop {
             break_if b30 ($sroa_t_h0_154 - is_negative_95) < 2;
             q = $cm_pair_5 /u 100_i64;
             tens = local.tee $load_19(builtin::i32_wrap_i64($cm_pair_5 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_558, $sroa_t_h0_154 - 1, (48 + $load_19) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_558, $sroa_t_h0_154 - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_561, $sroa_t_h0_154 - 1, (48 + $load_19) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_561, $sroa_t_h0_154 - 2, 48 + tens);
             $sroa_t_h0_154 = $sroa_t_h0_154 - 2;
             $cm_pair_5 = q;
             continue l31;
         };
     };
     if $sroa_t_h0_154 > is_negative_95 {
-        builtin::array_set_u8($sroa_view_repr_558, is_negative_95, 48 + builtin::i32_wrap_i64($cm_pair_5 %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_561, is_negative_95, 48 + builtin::i32_wrap_i64($cm_pair_5 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;

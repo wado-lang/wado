@@ -294,7 +294,7 @@ fn "stream_canonical_async_option.wado/run"() with Stdout, Stdin {
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let $sroa_view_repr_594: ref Array<u8>;
+    let $sroa_view_repr_597: ref Array<u8>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:stream_canonical_async_option.wado::$modules_initialized);
         cold_path;
@@ -325,9 +325,9 @@ fn "stream_canonical_async_option.wado/run"() with Stdout, Stdin {
     "wasi/stream-drop-readable"(stdin_stream_0.value);
     handle_24 = chunk_12.items.used;
     out_65 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
-    $sroa_view_repr_594 = global:stream_canonical_async_option.wado::$const_obj_1;
+    $sroa_view_repr_597 = global:stream_canonical_async_option.wado::$const_obj_1;
     out_65.used = local.tee $sroa_slot_161(5);
-    builtin::array_copy<u8>(local.tee $load_12(out_65.repr), 0, $sroa_view_repr_594, 0, 5);
+    builtin::array_copy<u8>(local.tee $load_12(out_65.repr), 0, $sroa_view_repr_597, 0, 5);
     packed = handle_24 < 0;
     x = builtin::i64_extend_i32_s(handle_24);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -407,25 +407,25 @@ fn "stream_canonical_async_option.wado/run"() with Stdout, Stdin {
     }
     packed = out_65.used;
     out_65.used = $sroa_slot_161;
-    $sroa_view_repr_594 = out_65.repr;
+    $sroa_view_repr_597 = out_65.repr;
     handle_24 = packed + handle_24;
     b24: block {
         l25: loop {
             break_if b24 (handle_24 - packed) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_594, handle_24 - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_594, handle_24 - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_597, handle_24 - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_597, handle_24 - 2, 48 + tens);
             handle_24 = handle_24 - 2;
             x = q;
             continue l25;
         };
     };
     if handle_24 > packed {
-        builtin::array_set_u8($sroa_view_repr_594, packed, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_597, packed, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $load_12 = global:stream_canonical_async_option.wado::$const_obj_0;
-    if @unlikely(local.tee handle_24($sroa_slot_161 + 6) > builtin::array_len($sroa_view_repr_594)) {
+    if @unlikely(local.tee handle_24($sroa_slot_161 + 6) > builtin::array_len($sroa_view_repr_597)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_65, handle_24);
     }

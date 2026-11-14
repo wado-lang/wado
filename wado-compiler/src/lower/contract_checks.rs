@@ -19,13 +19,13 @@ use crate::elaborator::trait_env::TraitEnv;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::{
-    is_source_place, place_root, source_place_subscripts_mut,
+    in_place_binding, is_source_place, names_storage, place_root, source_place_subscripts_mut,
 };
 use crate::lower::translate::{convert_function_ref, tir_function_key};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, LocalMethodName, RefKind,
-    contract_report_name, minted_name,
+    CONTRACT_ARG, CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, LocalMethodName,
+    RefKind, contract_report_name, minted_name,
 };
 use crate::rarity::Mark;
 use crate::synthesis::common::{cold_path_stmt, marker_stmt_mark};
@@ -99,7 +99,7 @@ pub fn lower(flat: &mut FlatPackage) {
             func: &mut func,
             site: None,
             expanding: Vec::new(),
-            bound: IndexSet::default(),
+            bound: 0,
             declared: Vec::new(),
         };
         expander.visit_block(&mut body);
@@ -654,8 +654,8 @@ struct Expander<'a> {
     /// The functions whose clauses are being copied, outermost first. A clause
     /// calling its own function back is left to call it.
     expanding: Vec<FunctionId>,
-    /// The locals [`Self::bind`] made.
-    bound: IndexSet<u32>,
+    /// How many locals [`Self::bind`] made, the serial of the next.
+    bound: u32,
     /// The declarations of the locals [`Self::bind`] assigns in place, which
     /// go ahead of the statement being expanded.
     declared: Vec<TirStmt>,
@@ -861,7 +861,7 @@ impl Expander<'_> {
         {
             &mut arg.expr
         } else {
-            return self.bind(&mut arg.expr, sink.reborrow());
+            return self.bind_referent(&mut arg.expr, sink.reborrow());
         };
         let items = self.items;
         for subscript in source_place_subscripts_mut(place, items) {
@@ -888,7 +888,27 @@ impl Expander<'_> {
         if let Some(op) = self.receiver_borrow(&arg.expr, param_type) {
             arg.expr = borrow_of(take(&mut arg.expr), op, param_type);
         }
-        self.bind(&mut arg.expr, Sink::Ahead(stmts))
+        self.bind_referent(&mut arg.expr, Sink::Ahead(stmts))
+    }
+
+    /// [`Self::bind`], except that a shared borrow of a value naming no place
+    /// binds the value and borrows the binding. Bound whole, the borrow would
+    /// hide from lowering whether anything writes the storage the value was
+    /// read out of before the callee is done with it; the binding asks that
+    /// as any other does.
+    fn bind_referent(&mut self, slot: &mut TirExpr, sink: Sink<'_>) -> TirExpr {
+        let TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            expr,
+        } = &mut slot.kind
+        else {
+            return self.bind(slot, sink);
+        };
+        if names_storage(expr, self.items) {
+            return self.bind(slot, sink);
+        }
+        let read = self.bind(expr, sink);
+        borrow_of(read, TirUnaryOp::Ref, slot.type_id)
     }
 
     /// The borrow a receiver passed as its place takes, where the parameter
@@ -911,8 +931,7 @@ impl Expander<'_> {
     /// argument, out of reach of the clauses after it.
     fn bind(&mut self, slot: &mut TirExpr, sink: Sink<'_>) -> TirExpr {
         let index = self.func.locals.len() as u32;
-        // Each binding joins `bound`, so its size is the serial.
-        let name = minted_name("contract_arg", self.bound.len());
+        let name = minted_name(CONTRACT_ARG, self.bound);
         let (type_id, span) = (slot.type_id, slot.span);
         let in_place = matches!(sink, Sink::InPlace);
         self.func.locals.push(TirLocal {
@@ -922,7 +941,7 @@ impl Expander<'_> {
             span,
         });
         self.func.local_count = self.func.locals.len() as u32;
-        self.bound.insert(index);
+        self.bound += 1;
         let read = TirExpr::new(
             TirExprKind::Local {
                 index,
@@ -972,39 +991,18 @@ impl Expander<'_> {
         read
     }
 
-    /// Whether `stmts` is a binding [`Self::bind`] made in place.
-    fn binds(&self, stmts: &[TirStmt]) -> bool {
-        let [assign, read] = stmts else {
-            return false;
-        };
-        let (
-            TirStmtKind::Expr(TirExpr {
-                kind: TirExprKind::Assign { target, .. },
-                ..
-            }),
-            TirStmtKind::Expr(TirExpr {
-                kind: TirExprKind::Local { index, .. },
-                ..
-            }),
-        ) = (&assign.kind, &read.kind)
-        else {
-            return false;
-        };
-        matches!(target.kind, TirExprKind::Local { index: assigned, .. } if assigned == *index)
-            && self.bound.contains(index)
-    }
-
-    /// `expr` read again: each binding made in place in it is its local.
+    /// `expr` read again: each binding [`Self::bind`] made in place in it is
+    /// its local.
     fn read_of(&self, expr: &TirExpr) -> TirExpr {
-        struct Reread<'a>(&'a Expander<'a>);
-        impl TirMutVisitor for Reread<'_> {
+        struct Reread;
+        impl TirMutVisitor for Reread {
             fn visit_expr(&mut self, expr: &mut TirExpr) {
                 if let TirExprKind::Block(block) = &mut expr.kind
-                    && self.0.binds(&block.stmts)
+                    && in_place_binding(&block.stmts).is_some()
                 {
                     let read = block.stmts.pop().expect("a binding ends in its read");
                     let TirStmtKind::Expr(read) = read.kind else {
-                        unreachable!("matched by `binds`");
+                        unreachable!("matched by `in_place_binding`");
                     };
                     *expr = read;
                     return;
@@ -1013,7 +1011,7 @@ impl Expander<'_> {
             }
         }
         let mut read = expr.clone();
-        Reread(self).visit_expr(&mut read);
+        Reread.visit_expr(&mut read);
         read
     }
 }

@@ -509,7 +509,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         // them — running them is otherwise pure per-function allocation, and most
         // functions (scalar/reference-only) hit this path. What a reference
         // leads to counts, which `*r` hands to a call, and so does what a cell
-        // local holds.
+        // local holds, and a borrowed temporary, whose copy the walk decides.
         let needs_copy_analysis = {
             let tt = base.type_table.borrow();
             func.params
@@ -517,6 +517,10 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 .map(|p| p.type_id)
                 .chain(func.locals.iter().map(|l| l.type_id))
                 .any(|tid| value_copy::needs_value_copy(tt.peel_refs(tid), &tt))
+                || func
+                    .body
+                    .as_ref()
+                    .is_some_and(|b| value_copy::last_use::borrows_temporary(b, &tt))
         };
         // One resolver for the body, shared by every question about what an
         // expression names: the ownership walk and the reference-root table.
@@ -899,8 +903,13 @@ impl FunctionTranslator<'_, '_> {
         // storage to a new — possibly mutable — owner, and a write through that
         // owner is one the source observes. Either end being moved keeps the
         // copy.
-        if self.moved_roots.contains(&local_index) || !pass_dump::decides("lower/value_copy/share")
-        {
+        !self.moved_roots.contains(&local_index) && self.source_is_immutable_storage(value)
+    }
+
+    /// Whether `value` is rooted at an immutable local whose storage is never
+    /// moved to a new owner, so nothing writes it while anything aliases it.
+    fn source_is_immutable_storage(&self, value: &TirExpr) -> bool {
+        if !pass_dump::decides("lower/value_copy/share") {
             return false;
         }
         let type_table = self.base.type_table.borrow();
@@ -1199,6 +1208,151 @@ impl FunctionTranslator<'_, '_> {
         } else {
             converted
         }
+    }
+
+    /// [`place::names_storage`].
+    fn names_storage(&self, value: &TirExpr) -> bool {
+        place::names_storage(value, self.base.type_table.borrow().compiler_items())
+    }
+
+    /// What `&mut value` refers to. A value that names no storage, such as a
+    /// call's result, is the reference's own, so it is copied where a `let`
+    /// binding it would be: `&mut n.get(0)` must not write into `n`.
+    fn referent_operand(&self, value: &TirExpr) -> Operand {
+        if self.names_storage(value) {
+            return self.convert_operand(value);
+        }
+        self.assigned_value(value, value.type_id)
+    }
+
+    /// What `&value` refers to. A value that names no storage is the
+    /// reference's own as well, since a later write to the storage it was read
+    /// out of must not reach it, unless that storage is an immutable binding's.
+    /// An in-place binding copies at its assignment.
+    fn shared_referent_operand(&self, value: &TirExpr) -> Operand {
+        if self.names_storage(value)
+            || !std::ptr::eq(place::borrowed_value(value), value)
+            || self.source_is_immutable_storage(value)
+        {
+            return self.convert_operand(value);
+        }
+        self.assigned_value(value, value.type_id)
+    }
+
+    /// Whether `arg`, a shared reference to a value naming no storage, takes
+    /// no copy: the ownership walk found nothing the call evaluates or is
+    /// handed that writes the storage the value was read out of
+    /// ([`tir::ExprMarks::written`]), and the callee keeps it nowhere past
+    /// the call.
+    fn borrowed_for_call(
+        &self,
+        arg: &TirExpr,
+        callee: &FunctionRef,
+        position: usize,
+        arity: usize,
+        result_type: tir::TypeId,
+    ) -> bool {
+        let Some(value) =
+            place::borrowed_temporary(arg, self.base.type_table.borrow().compiler_items())
+        else {
+            return false;
+        };
+        self.args_checked
+            && !arg.marks().written
+            && self.should_wrap_value_copy(value)
+            && !self.call_keeps(callee, arg, position, arity, result_type)
+    }
+
+    /// Whether the call keeps what it is passed at `position` past its return.
+    fn call_keeps(
+        &self,
+        callee: &FunctionRef,
+        arg: &TirExpr,
+        position: usize,
+        arity: usize,
+        result_type: tir::TypeId,
+    ) -> bool {
+        let position = u32::try_from(position).expect("a call has fewer than 2^32 arguments");
+        let type_table = self.base.type_table.borrow();
+        let result_holds = !value_copy::is_scalar_type(result_type, &type_table);
+        let retained = self
+            .base
+            .value_copy
+            .retention
+            .of_call(callee, arity, result_holds);
+        if !retained.keeps(position) {
+            return false;
+        }
+        // Kept only in a result that cannot reach the storage the reference
+        // names, the call keeps only what that storage's references lead to,
+        // which a copy of it would share.
+        let into_result_only = retained.destinations(position).is_some_and(|landings| {
+            landings
+                .iter()
+                .all(|&landing| landing == value_copy::retention::RESULT)
+        });
+        !into_result_only
+            || value_copy::reach::StorageReach::new(
+                &type_table,
+                &self.base.struct_fields_map,
+                &self.base.value_copy.closure_captures,
+            )
+            .reaches(result_type, arg.type_id, true)
+    }
+
+    /// `reference`, a shared borrow nothing keeps past the call reading it,
+    /// taking no copy of what it borrows, an in-place binding's included.
+    fn uncopied_borrow(&self, reference: &TirExpr) -> ExprId {
+        let TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            expr: referent,
+        } = &reference.kind
+        else {
+            unreachable!("only a shared borrow is passed uncopied");
+        };
+        if let TirExprKind::Block(block) = &referent.kind
+            && let Some(binding) = place::in_place_binding(&block.stmts)
+        {
+            return self.uncopied_in_place_borrow(reference, &binding);
+        }
+        self.try_boxing_rewrite(reference).unwrap_or_else(|| {
+            let kind = ExprKind::Unary {
+                op: nir::NirUnaryOp::Ref,
+                expr: self.convert_operand(referent),
+            };
+            self.alloc_expr(kind, reference.type_id, reference.span)
+        })
+    }
+
+    /// `&{ local = value; local }`, the in-place `binding`, assigning `value`
+    /// uncopied.
+    fn uncopied_in_place_borrow(
+        &self,
+        reference: &TirExpr,
+        binding: &place::InPlaceBinding<'_>,
+    ) -> ExprId {
+        let span = reference.span;
+        let local_type = binding.value.type_id;
+        let assign = ExprKind::Assign {
+            target: self.convert_expr(binding.target),
+            value: self.convert_operand(binding.value),
+        };
+        let assign = self.alloc_expr(assign, TypeTable::UNIT, span);
+        let stmts = vec![
+            self.alloc_stmt(StmtKind::Expr(assign.into()), span),
+            self.alloc_stmt(StmtKind::Expr(self.convert_operand(binding.read)), span),
+        ];
+        let block = self.alloc_block(stmts, span);
+        let bound = self.alloc_expr(
+            ExprKind::plain_block(block, local_type, "block"),
+            local_type,
+            span,
+        );
+        let kind = ExprKind::Unary {
+            op: nir::NirUnaryOp::Ref,
+            expr: bound.into(),
+        };
+        self.alloc_expr(kind, reference.type_id, span)
     }
 
     /// Expand `xs[i] = value`, a `List::index_assign` call the ownership walk
@@ -2236,6 +2390,20 @@ impl FunctionTranslator<'_, '_> {
                 op: convert_binary_op(*op),
                 right: self.convert_operand(right),
             },
+            TirExprKind::Unary {
+                op: TirUnaryOp::MutRef,
+                expr,
+            } => ExprKind::Unary {
+                op: nir::NirUnaryOp::MutRef,
+                expr: self.referent_operand(expr),
+            },
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr,
+            } => ExprKind::Unary {
+                op: nir::NirUnaryOp::Ref,
+                expr: self.shared_referent_operand(expr),
+            },
             TirExprKind::Unary { op, expr } => ExprKind::Unary {
                 op: convert_unary_op(*op),
                 expr: self.convert_operand(expr),
@@ -2255,7 +2423,7 @@ impl FunctionTranslator<'_, '_> {
                 func,
                 type_args,
                 args,
-            } => self.convert_call(func, type_args, args),
+            } => self.convert_call(func, type_args, args, result_type),
             TirExprKind::CmRawCall { target, args } => ExprKind::CmRawCall {
                 target: target.clone(),
                 args: args.iter().map(|a| self.convert_operand(a)).collect(),
@@ -2425,6 +2593,7 @@ impl FunctionTranslator<'_, '_> {
         func: &FunctionRef,
         type_args: &[tir::TypeId],
         args: &CallArgs<CallArg>,
+        result_type: tir::TypeId,
     ) -> ExprKind {
         if args.len() == 1
             && let Some(type_id) = value_copy::copy_value_type_arg(func)
@@ -2480,6 +2649,11 @@ impl FunctionTranslator<'_, '_> {
                 ) {
                     ArenaCallArg {
                         expr: self.convert_operand(e),
+                        is_mut: *is_mut,
+                    }
+                } else if self.borrowed_for_call(e, func, i, ordered.len(), result_type) {
+                    ArenaCallArg {
+                        expr: self.uncopied_borrow(e).into(),
                         is_mut: *is_mut,
                     }
                 } else {

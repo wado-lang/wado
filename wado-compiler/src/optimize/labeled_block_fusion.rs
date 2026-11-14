@@ -2758,6 +2758,14 @@ fn scalarize_tails(engine: &mut Engine, tails: &[Tail], plan: &SlotTempSroa) {
 /// The statements handing `exit`'s value to the slots the projections read.
 fn slot_writes(engine: &mut Engine, exit: ExprId, plan: &SlotTempSroa, span: Span) -> Vec<StmtId> {
     let mut out = Vec::new();
+    // A diverging exit hands over nothing: it stays for its effects alone.
+    if engine
+        .type_table()
+        .is_never(engine.body.exprs[exit].type_id)
+    {
+        out.push(engine.alloc_stmt(StmtKind::Expr(Operand::Expr(exit)), span));
+        return out;
+    }
     // Field-carrying exits hand each operand straight to its slot; the rest bind
     // the aggregate first and project. `SlotExitChecker` admitted exactly these.
     let carried: Option<Vec<(u32, Operand)>> = match &engine.body.exprs[exit].kind {

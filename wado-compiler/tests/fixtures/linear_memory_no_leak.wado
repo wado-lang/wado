@@ -1,0 +1,39 @@
+// What a program frees from linear memory comes back under the allocator a CLI
+// program gets. An array a for-of body discards drops each iteration, and
+// inflating, which grows its output block by replacing it through `&mut self`,
+// leaves nothing behind. Either leak ran a benchmark's linear memory out.
+
+use { println, Stdout } from "core:cli";
+use { LinearArray } from "core:linear";
+use { zlib_compress, inflate_zlib } from "core:zlib";
+
+fn growth(step: fn()) -> i32 {
+    step();
+    let settled = builtin::memory_size();
+    for let _ of 0..<40 {
+        step();
+    }
+    return builtin::memory_size() - settled;
+}
+
+export fn run() with Stdout {
+    let mut text = "";
+    for let i of 0..<5000 {
+        text.push_str(`${i % 97} `);
+    }
+    let data = text.as_byte_slice().to_list() as ByteList;
+    let compressed = zlib_compress(&data);
+    let arrays = growth(|| {
+        let _ = LinearArray::<u8>::filled(16384, 0);
+    });
+    let inflates = growth(|| {
+        assert inflate_zlib(&compressed).unwrap() == data;
+    });
+    println(`${arrays} ${inflates}`);
+}
+
+__DATA__
+{
+    "allocator": "freelist",
+    "stdout": "0 0\n"
+}

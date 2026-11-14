@@ -19,7 +19,9 @@ Report a change between two measurements with an improvement as `+%` and a
 regression as `-%`, whichever way the raw number moved.
 
 Each benchmark's `#[workload]` test trains the profile in its `pgo/`.
-`wado test --pgo benchmark package-gale-highlight-html` records them again.
+`mise run update-baselines` records them again before it measures fuel: a
+profile keys each function by its body's hash, so editing one drops its counts
+until then.
 
 Read the `wado-performance` skill before measuring a change, and its section
 "A/B-ing a stdlib change" before comparing two versions of `wado-compiler/lib`.

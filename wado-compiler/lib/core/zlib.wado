@@ -31,7 +31,8 @@
 //! before it is written, so untrusted input cannot expand without bound.
 //!
 
-use { gc_array_to_memory } from "core:rt";
+use { LinearArray } from "core:linear";
+use { i16x8 } from "core:simd";
 
 #[synopsis]
 test {
@@ -217,6 +218,81 @@ pub fn adler32(adler: u32, buf: &ByteList, offset: i32, len: i32) -> u32 {
     return s1 | s2 << 16;
 }
 
+// The 16-byte blocks one run of `adler32_linear` sums in i32 lanes before
+// reducing. A lane summing earlier blocks' sums reaches 4 · 255 · n(n − 1) / 2,
+// which stays below 2^31 up to n = 2052.
+global ADLER_BLOCKS: i32 = 2048;
+
+// `adler32` over bytes in linear memory, a 16-byte block at a time. Where a
+// block starts with s1 = S, its byte k adds S + b_0 + … + b_k to s2, so the
+// block adds 16·S + Σ (16 − k)·b_k to it.
+fn adler32_linear(adler: u32, buf: &LinearArray<u8>, offset: i32, len: i32) -> u32
+    contract 0 <= offset && 0 <= len <= buf.len() - offset
+{
+    let base: u64 = 65521;
+    let mut s1 = (adler & 0xFFFF) as u64;
+    let mut s2 = (adler >> 16 & 0xFFFF) as u64;
+    let mut pos = offset;
+    let end = offset + len;
+    let weights_low: i16x8 = [16, 15, 14, 13, 12, 11, 10, 9];
+    let weights_high: i16x8 = [8, 7, 6, 5, 4, 3, 2, 1];
+    let zero = builtin::i32x4_splat(0);
+    while end - pos >= 16 {
+        let blocks = i32::min(end - pos >> 4, ADLER_BLOCKS);
+        let mut sums = zero;
+        let mut prefix_sums = zero;
+        let mut weighted = zero;
+        for let _ of 0..<blocks {
+            let bytes = unchecked buf.load_at::<v128>(pos);
+            prefix_sums = builtin::i32x4_add(prefix_sums, sums);
+            let pairs = builtin::i16x8_extadd_pairwise_i8x16_u(bytes);
+            sums = builtin::i32x4_add(sums, builtin::i32x4_extadd_pairwise_i16x8_u(pairs));
+            let low = builtin::i32x4_dot_i16x8_s(builtin::i16x8_extend_low_i8x16_u(bytes), weights_low as v128);
+            let high = builtin::i32x4_dot_i16x8_s(builtin::i16x8_extend_high_i8x16_u(bytes), weights_high as v128);
+            weighted = builtin::i32x4_add(weighted, builtin::i32x4_add(low, high));
+            pos += 16;
+        }
+        s2 = (s2 + 16 * blocks as u64 * s1 + 16 * lane_sum(prefix_sums) + lane_sum(weighted)) % base;
+        s1 = (s1 + lane_sum(sums)) % base;
+    }
+    while pos < end {
+        s1 += unchecked buf.at(pos) as u64;
+        s2 += s1;
+        pos += 1;
+    }
+    return (s1 % base | s2 % base << 16) as u32;
+}
+
+test "adler32_linear agrees with adler32" {
+    let mut mixed: ByteList = [];
+    for let i of 0..<70001 {
+        mixed.push((i * 7 + i / 251) as u8);
+    }
+    let full = ByteList::filled(70001, 0xFF);
+    for let bytes of [mixed, full] {
+        let linear = LinearArray::<u8>::of_bytes(&bytes, 0, bytes.len());
+        for let [offset, len] of [
+            [0, 0],
+            [0, 15],
+            [3, 16],
+            [1, 33],
+            [0, 32768],
+            [5, 32791],
+            [0, 70001],
+        ] as List<[i32, i32]> {
+            assert adler32_linear(7, &linear, offset, len) == adler32(7, &bytes, offset, len);
+        }
+    }
+}
+
+// The four lanes of `v`, each non-negative, added.
+fn lane_sum(v: v128) -> u64 {
+    return builtin::i32x4_extract_lane(0, v) as u64 + builtin::i32x4_extract_lane(1, v) as u64 + builtin::i32x4_extract_lane(
+        2,
+        v,
+    ) as u64 + builtin::i32x4_extract_lane(3, v) as u64;
+}
+
 /// Returns the initial Adler-32 checksum value (1).
 pub fn adler32_init() -> u32 {
     return 1;
@@ -278,6 +354,10 @@ fn build_crc_table() -> List<u32> {
 
 /// Computes a CRC-32 checksum over `buf[offset..<offset + len]`, starting from `crc`.
 pub fn crc32(crc: u32, buf: &ByteList, offset: i32, len: i32) -> u32 {
+    return crc32_over(crc, buf, offset, len);
+}
+
+fn crc32_over<affine B: IndexValue<i32, Output = u8>>(crc: u32, buf: &B, offset: i32, len: i32) -> u32 {
     let table = CRC_TABLE;
     let mut c = crc ^ 0xFFFFFFFF;
     for let mut i = 0; i < len; i += 1 {
@@ -442,7 +522,7 @@ fn inflate_table(
     lens: &List<u16>,
     lens_offset: i32,
     codes_count: i32,
-    table: &mut List<i32>,
+    table: &mut LinearArray<i32>,
     table_start: i32,
     bits_in: i32,
     work: &mut List<u16>,
@@ -680,7 +760,7 @@ fn inflate_table(
 // length alphabet given just above, in the order: 16, 17, 18, 0, 8, 7, ...".
 global INFLATE_ORDER: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
 
-struct InflateState {
+affine struct InflateState {
     // input position, and where the input ends
     next: i32,
     end: i32,
@@ -690,7 +770,7 @@ struct InflateState {
     bits: i32,
 
     // code tables
-    codes: List<i32>,
+    codes: LinearArray<i32>,
     lencode_off: i32,  // offset into codes for len/lit table
     distcode_off: i32,  // offset into codes for dist table
     lenbits: i32,
@@ -708,7 +788,7 @@ impl InflateState {
             end,
             hold: 0,
             bits: 0,
-            codes: List::filled(ENOUGH, 0),
+            codes: LinearArray::<i32>::filled(ENOUGH, 0),
             lencode_off: 0,
             distcode_off: 0,
             lenbits: 0,
@@ -759,7 +839,7 @@ impl InflateState {
     // Pulls input bytes until at least `n` bits are held. The whole stream is at
     // hand, so input that ends first is a stream cut short. The buffer holds 64
     // bits, and a pull adds up to 7 past `n`.
-    fn need_bits(&mut self, input: &ByteList, n: i32) -> Result<(), ZlibError>
+    fn need_bits(&mut self, input: &LinearArray<u8>, n: i32) -> Result<(), ZlibError>
         contract n <= 57
     {
         while self.bits < n {
@@ -767,7 +847,7 @@ impl InflateState {
                 builtin::cold_path();
                 return Result::Err(ZlibError::InvalidDeflateData);
             }
-            self.hold |= input[self.next] as u64 << self.bits as u64;
+            self.hold |= unchecked input.at(self.next) as u64 << self.bits as u64;
             self.bits += 8;
             self.next += 1;
         }
@@ -793,7 +873,7 @@ impl InflateState {
     // time until the code's bits are all held. A lookup short of bits may land
     // on another code's entry, but only on one longer than the bits held, since
     // the code is prefix-free.
-    fn decode(&mut self, input: &ByteList, table: i32, root_bits: i32) -> Result<i32, ZlibError> {
+    fn decode(&mut self, input: &LinearArray<u8>, table: i32, root_bits: i32) -> Result<i32, ZlibError> {
         loop {
             let [here, n] = decode_entry(&self.codes, table, root_bits, self.hold);
             if n <= self.bits {
@@ -805,16 +885,8 @@ impl InflateState {
     }
 }
 
-// The input bytes one fast-loop iteration may read: two 4-byte refills.
+// The input bytes one fast-loop iteration may read: one 8-byte refill.
 global FAST_INPUT_MIN: i32 = 8;
-
-fn read_u32_le(input: &ByteList, pos: i32) -> u64 {
-    let b0 = unchecked input[pos] as u64;
-    let b1 = unchecked input[pos + 1] as u64;
-    let b2 = unchecked input[pos + 2] as u64;
-    let b3 = unchecked input[pos + 3] as u64;
-    return b0 | b1 << 8 | b2 << 16 | b3 << 24;
-}
 
 fn low_bits(hold: u64, n: i32) -> i32 {
     return (hold & (1 as u64 << n as u64) - 1) as i32;
@@ -822,59 +894,118 @@ fn low_bits(hold: u64, n: i32) -> i32 {
 
 // The entry for the code at the bottom of `hold`, followed into its sub-table
 // where it has one, and the code's full length in bits.
-fn decode_entry(codes: &List<i32>, table: i32, root_bits: i32, hold: u64) -> [i32, i32] {
-    let here = codes[table + low_bits(hold, root_bits)];
+fn decode_entry(codes: &LinearArray<i32>, table: i32, root_bits: i32, hold: u64) -> [i32, i32] {
+    // inflate_table fills every entry a root index or a sub-table index
+    // reaches, within ENOUGH.
+    let here = unchecked codes.at(table + low_bits(hold, root_bits));
     let op = code_op(here);
     if op != 0 && op & 0xF0 == 0 {
         // A code longer than the root table's bits, which a Huffman code gives
         // only to rare symbols: under 5% of lookups on twitter.json.
         builtin::cold_path();
         let root = code_bits(here);
-        let sub = codes[table + code_val(here) + low_bits(hold >> root as u64, op)];
+        let sub = unchecked codes.at(table + code_val(here) + low_bits(hold >> root as u64, op));
         return [sub, root + code_bits(sub)];
     }
     return [here, code_bits(here)];
 }
 
-fn push_literal(output: &mut ByteList, literal: i32, max_output: i32) -> Result<(), ZlibError> {
-    if output.len() == max_output {
-        builtin::cold_path();
-        return Result::Err(ZlibError::OutputExceedsMax);
-    }
-    output.push(literal as u8);
-    return Result::Ok(());
+// The room one decoded symbol may take: the longest match (RFC 1951 section
+// 3.2.5), and the 7 bytes an 8-byte copy writes past its end.
+global SYMBOL_ROOM: i32 = 258 + 7;
+
+// A decode's output, in linear memory: `len` bytes written, of at most `max`,
+// the stream being decoded from `start` on. The bytes past `len` are room the
+// next symbol writes into.
+affine struct Output {
+    bytes: LinearArray<u8>,
+    start: i32,
+    len: i32,
+    max: i32,
 }
 
-// Appends the back-reference <length, dist> (RFC 1951 section 3.2.5). The
-// output holds the whole decoded stream, so no separate window is needed. A
-// distance before the start of the output is invalid (RFC 1951 section 3.2.3:
-// "a distance cannot refer past the beginning of the output stream").
-fn copy_match(output: &mut ByteList, length: i32, dist: i32, max_output: i32) -> Result<(), ZlibError> {
-    let out_pos = output.len();
-    if dist > out_pos {
-        builtin::cold_path();
-        return Result::Err(ZlibError::InvalidDeflateData);
+impl Output {
+    // A `max` within SYMBOL_ROOM of `i32::MAX` leaves no room an array can
+    // hold past the last symbol.
+    fn new(max: i32) -> Output
+        contract max >= 0
+    {
+        let max = i32::min(max, i32::MAX - SYMBOL_ROOM);
+        return Output { bytes: LinearArray::<u8>::filled(0, 0), start: 0, len: 0, max };
     }
-    if length > max_output - out_pos {
-        builtin::cold_path();
-        return Result::Err(ZlibError::OutputExceedsMax);
+
+    // Grows the room past `len` to at least `n` bytes, doubling, so the output
+    // copies each byte a bounded number of times.
+    fn reserve(&mut self, n: i32) {
+        if self.bytes.len() - self.len < n {
+            builtin::cold_path();
+            let doubled = i32::min(self.bytes.len(), i32::MAX / 2) * 2;
+            self.bytes.lengthen(i32::max(self.len + n, doubled));
+        }
     }
-    output.copy_within_append(out_pos - dist, length);
-    return Result::Ok(());
+
+    // Needs room for one byte.
+    fn literal(&mut self, literal: i32) -> Result<(), ZlibError> {
+        if self.len == self.max {
+            builtin::cold_path();
+            return Result::Err(ZlibError::OutputExceedsMax);
+        }
+        unchecked self.bytes.set(self.len, literal as u8);
+        self.len += 1;
+        return Result::Ok(());
+    }
+
+    // Appends the back-reference <length, dist> (RFC 1951 section 3.2.5), and
+    // needs SYMBOL_ROOM. The output holds the whole decoded stream, so no
+    // separate window is needed. A distance before the start of the stream is
+    // invalid (RFC 1951 section 3.2.3: "a distance cannot refer past the
+    // beginning of the output stream"), a gzip member's included.
+    fn copy_match(&mut self, length: i32, dist: i32) -> Result<(), ZlibError> {
+        if dist > self.len - self.start {
+            builtin::cold_path();
+            return Result::Err(ZlibError::InvalidDeflateData);
+        }
+        if length > self.max - self.len {
+            builtin::cold_path();
+            return Result::Err(ZlibError::OutputExceedsMax);
+        }
+        let mut from = self.len - dist;
+        let mut to = self.len;
+        let end = to + length;
+        if dist >= 8 {
+            // Eight bytes at a time: each word read ends where its write
+            // begins or earlier, so it reads only bytes already written.
+            while to < end {
+                unchecked self.bytes.store_at(to, unchecked self.bytes.load_at::<u64>(from));
+                from += 8;
+                to += 8;
+            }
+        } else {
+            // A run shorter than a word repeats bytes this copy writes.
+            while to < end {
+                unchecked self.bytes.set(to, unchecked self.bytes.at(from));
+                from += 1;
+                to += 1;
+            }
+        }
+        self.len = end;
+        return Result::Ok(());
+    }
+
+    fn to_list(&self) -> ByteList {
+        return self.bytes.to_byte_list(self.len) as ByteList;
+    }
 }
 
 // zlib's inflate_fast: decodes whole length/distance pairs and literals in one
 // iteration, with no mode dispatch and no per-byte refill, while at least
-// FAST_INPUT_MIN input bytes remain. A 4-byte refill whenever fewer than 32 bits
-// are held covers a literal/length code with its extra bits (15 + 5), and a
-// second covers a distance code with its extra bits (15 + 13). True where the
-// block ended, false where the input ran low with the block still open.
-fn inflate_fast(
-    state: &mut InflateState,
-    input: &ByteList,
-    output: &mut ByteList,
-    max_output: i32,
-) -> Result<bool, ZlibError> {
+// FAST_INPUT_MIN input bytes remain. One 8-byte refill per iteration holds at
+// least 56 bits, which covers a literal/length code with its extra bits
+// (15 + 5) and a distance code with its extra bits (15 + 13). The refill counts
+// only the whole bytes that fit; the rest of the word lands where the next
+// refill writes the same bytes again. True where the block ended, false where
+// the input ran low with the block still open.
+fn inflate_fast(state: &mut InflateState, input: &LinearArray<u8>, output: &mut Output) -> Result<bool, ZlibError> {
     let codes = &state.codes;
     let lencode_off = state.lencode_off;
     let distcode_off = state.distcode_off;
@@ -883,22 +1014,23 @@ fn inflate_fast(
     let end = state.end;
     let mut hold = state.hold;
     let mut bits = state.bits;
+    assert bits < 64, "a refill shifts by the bits held, which Wasm takes modulo 64";
     let mut inp = state.next;
     let mut block_ended = false;
 
     while end - inp >= FAST_INPUT_MIN {
-        if bits < 32 {
-            hold |= read_u32_le(input, inp) << bits as u64;
-            inp += 4;
-            bits += 32;
-        }
+        output.reserve(SYMBOL_ROOM);
+        hold |= unchecked input.load_at::<u64>(inp) << bits as u64;
+        let whole = 63 - bits >> 3;
+        inp += whole;
+        bits += whole << 3;
         let [here, here_bits] = decode_entry(codes, lencode_off, lenbits, hold);
         hold >>= here_bits as u64;
         bits -= here_bits;
         let op = code_op(here);
 
         if op == 0 {
-            push_literal(output, code_val(here), max_output)?;
+            output.literal(code_val(here))?;
             continue;
         }
         if op & 16 == 0 {
@@ -914,11 +1046,6 @@ fn inflate_fast(
         hold >>= length_extra as u64;
         bits -= length_extra;
 
-        if bits < 32 {
-            hold |= read_u32_le(input, inp) << bits as u64;
-            inp += 4;
-            bits += 32;
-        }
         let [dist_here, dist_bits] = decode_entry(codes, distcode_off, distbits, hold);
         hold >>= dist_bits as u64;
         bits -= dist_bits;
@@ -932,7 +1059,7 @@ fn inflate_fast(
         hold >>= dist_extra as u64;
         bits -= dist_extra;
 
-        copy_match(output, length, dist, max_output)?;
+        output.copy_match(length, dist)?;
     }
 
     // Hand back the whole bytes read ahead: the caller reports the input it
@@ -944,18 +1071,17 @@ fn inflate_fast(
     return Result::Ok(block_ended);
 }
 
-/// Raw DEFLATE (RFC 1951 3.2.3) decoded from a slice of `input`, and the input bytes
-/// it consumed. The limit is checked before each write, so a bomb never materializes.
+/// Raw DEFLATE (RFC 1951 3.2.3) decoded from a slice of `input` onto `output`, and
+/// the input bytes it consumed. The limit is checked before each write, so a bomb
+/// never materializes.
 fn inflate_raw_ex(
-    input: &ByteList,
+    input: &LinearArray<u8>,
     input_offset: i32,
     input_length: i32,
-    max_output: i32,
-) -> Result<[ByteList, i32], ZlibError>
-    contract max_output >= 0
-{
+    output: &mut Output,
+) -> Result<i32, ZlibError> {
     let mut state = InflateState::new(input_offset, input_offset + input_length);
-    let mut output: ByteList = [];
+    output.start = output.len;
 
     loop {
         state.need_bits(input, 3)?;
@@ -965,7 +1091,7 @@ fn inflate_raw_ex(
         // dynamic Huffman, 11 reserved (error).
         let block_type = state.take_bits(2);
         if block_type == 0 {
-            inflate_stored(&mut state, input, &mut output, max_output)?;
+            inflate_stored(&mut state, input, output)?;
         } else {
             if block_type == 1 {
                 state.load_fixed_tables();
@@ -975,24 +1101,19 @@ fn inflate_raw_ex(
                 builtin::cold_path();
                 return Result::Err(ZlibError::InvalidDeflateData);
             }
-            inflate_codes(&mut state, input, &mut output, max_output)?;
+            inflate_codes(&mut state, input, output)?;
         }
         if last_block {
             break;
         }
     }
     state.drop_to_byte_boundary();
-    return Result::Ok([output, state.next - input_offset]);
+    return Result::Ok(state.next - input_offset);
 }
 
 // A stored block (RFC 1951 section 3.2.4): LEN then NLEN, the one's complement
 // of LEN, then LEN bytes copied from the input.
-fn inflate_stored(
-    state: &mut InflateState,
-    input: &ByteList,
-    output: &mut ByteList,
-    max_output: i32,
-) -> Result<(), ZlibError> {
+fn inflate_stored(state: &mut InflateState, input: &LinearArray<u8>, output: &mut Output) -> Result<(), ZlibError> {
     state.drop_to_byte_boundary();
     state.need_bits(input, 32)?;
     let stored_len = state.take_bits(16);
@@ -1004,7 +1125,7 @@ fn inflate_stored(
         return Result::Err(ZlibError::InvalidDeflateData);
     }
     let copy = i32::min(stored_len, state.end - state.next);
-    if copy > max_output - output.len() {
+    if copy > output.max - output.len {
         builtin::cold_path();
         return Result::Err(ZlibError::OutputExceedsMax);
     }
@@ -1012,14 +1133,16 @@ fn inflate_stored(
         builtin::cold_path();
         return Result::Err(ZlibError::InvalidDeflateData);
     }
-    output.extend_from_slice(input[state.next..<state.next + copy]);
+    output.reserve(copy);
+    output.bytes.copy_from(output.len, input, state.next, copy);
+    output.len += copy;
     state.next += copy;
     return Result::Ok(());
 }
 
 // A dynamic block's header (RFC 1951 section 3.2.7), built into the
 // literal/length and distance tables.
-fn read_dynamic_tables(state: &mut InflateState, input: &ByteList) -> Result<(), ZlibError> {
+fn read_dynamic_tables(state: &mut InflateState, input: &LinearArray<u8>) -> Result<(), ZlibError> {
     // HLIT+257 literal/length codes, HDIST+1 distance codes, HCLEN+4 code
     // length codes. 286/30 are the largest valid counts; 286-287 and 30-31
     // are reserved (RFC 1951 sections 3.2.5 and 3.2.7).
@@ -1110,20 +1233,16 @@ fn read_dynamic_tables(state: &mut InflateState, input: &ByteList) -> Result<(),
 // A Huffman-coded block's literals and length/distance pairs, up to its
 // end-of-block code: `inflate_fast` while the input allows, then one code at a
 // time.
-fn inflate_codes(
-    state: &mut InflateState,
-    input: &ByteList,
-    output: &mut ByteList,
-    max_output: i32,
-) -> Result<(), ZlibError> {
+fn inflate_codes(state: &mut InflateState, input: &LinearArray<u8>, output: &mut Output) -> Result<(), ZlibError> {
     loop {
-        if state.end - state.next >= FAST_INPUT_MIN && inflate_fast(state, input, output, max_output)? {
+        if state.end - state.next >= FAST_INPUT_MIN && inflate_fast(state, input, output)? {
             return Result::Ok(());
         }
+        output.reserve(SYMBOL_ROOM);
         let here = state.decode(input, state.lencode_off, state.lenbits)?;
         let op = code_op(here);
         if op == 0 {
-            push_literal(output, code_val(here), max_output)?;
+            output.literal(code_val(here))?;
             continue;
         }
         if op & 32 != 0 {
@@ -1146,15 +1265,17 @@ fn inflate_codes(
         let dist_extra = dist_op & 15;
         state.need_bits(input, dist_extra)?;
         let dist = code_val(dist_here) + state.take_bits(dist_extra);
-        copy_match(output, length, dist, max_output)?;
+        output.copy_match(length, dist)?;
     }
 }
 
 /// Decompresses raw DEFLATE data (no header/checksum), failing with
 /// `ZlibError::OutputExceedsMax` once the output would pass `max_output`.
 pub fn inflate_raw(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError> {
-    let [output, _consumed] = inflate_raw_ex(input, 0, input.len(), max_output)?;
-    return Result::Ok(output);
+    let linear = LinearArray::<u8>::of_bytes(input, 0, input.len());
+    let mut output = Output::new(max_output);
+    inflate_raw_ex(&linear, 0, linear.len(), &mut output)?;
+    return Result::Ok(output.to_list());
 }
 
 /// Decompresses zlib-wrapped data (RFC 1950: 2-byte header + DEFLATE + 4-byte Adler-32),
@@ -1187,20 +1308,22 @@ pub fn inflate_zlib(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
         return Result::Err(ZlibError::PresetDictionaryNotSupported);
     }
 
-    // Decompress directly from input, skipping the 2-byte header and the
-    // trailing 4-byte Adler-32 (RFC 1950 section 2.2).
-    let [result, _consumed] = inflate_raw_ex(input, 2, input.len() - 6, max_output)?;
+    // The DEFLATE data lies between the 2-byte header and the trailing 4-byte
+    // Adler-32 (RFC 1950 section 2.2).
+    let linear = LinearArray::<u8>::of_bytes(input, 2, input.len() - 6);
+    let mut output = Output::new(max_output);
+    inflate_raw_ex(&linear, 0, linear.len(), &mut output)?;
 
     // Verify the ADLER32 trailer over the uncompressed data (RFC 1950 section
     // 2.2, ADLER32; the checksum stores s2 in the high 16 bits, big-endian).
-    let computed = adler32(adler32_init(), &result, 0, result.len());
+    let computed = adler32_linear(adler32_init(), &output.bytes, 0, output.len);
     let stored = input[input.len() - 4] as u32 << 24 | input[input.len() - 3] as u32 << 16 | input[input.len() - 2] as u32 << 8 | input[input.len() - 1] as u32;
     if computed != stored {
         builtin::cold_path();
         return Result::Err(ZlibError::Adler32Mismatch);
     }
 
-    return Result::Ok(result);
+    return Result::Ok(output.to_list());
 }
 
 
@@ -1390,40 +1513,123 @@ fn hash3_roll(h: i32, next: u8) -> i32 {
     return (h << 5 ^ next as i32) & 32767;
 }
 
-// Bucket the `run - 1` positions a match covers after `pos`, rolling `h`, the
-// hash `pos` was bucketed under. Starting at `pos` would set `prev[pos]` to
-// `pos` and strand every older candidate in that bucket behind the self-link.
-fn insert_hash_run(scratch: i32, head_ptr: i32, prev_ptr: i32, pos: i32, h: i32, run: i32, input_len: i32) {
-    let limit = i32::min(run, input_len - pos - 2);
-    let mut mh = h;
-    for let mut i = 1; i < limit; i += 1 {
-        mh = hash3_roll(mh, builtin::i32_load8_u(scratch + pos + i + 2));
-        builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
-        builtin::i32_store(head_ptr + mh * 4, pos + i);
-    }
+// The positions LZ77 looks back over (RFC 1951 section 2: "at most 32K input
+// bytes"), and the number of 3-byte hashes; a position's chain slot is it
+// modulo the window.
+global WINDOW: i32 = 32768;
+
+// The longest match DEFLATE codes (RFC 1951 section 3.2.5).
+global MAX_MATCH: i32 = 258;
+
+// LZ77's search over an input: the input in linear memory, with a 16-byte zero
+// pad so a `v128` compare reads past a match's end, and the hash chains. `head`
+// holds the latest position under each hash, and `prev` the position before
+// each one under the same hash; -1 ends a chain.
+affine struct Matcher {
+    bytes: LinearArray<u8>,
+    len: i32,
+    head: LinearArray<i32>,
+    prev: LinearArray<i32>,
 }
 
-// Longest common run of `scratch[a..]` and `scratch[b..]`, capped at `max_len`,
-// via 16-byte SIMD compares. The scratch buffer's 16-byte zero pad keeps the
-// trailing `v128.load` past the match end in bounds.
-fn simd_match_len(scratch: i32, a: i32, b: i32, max_len: i32) -> i32 {
-    let mut n = 0;
-    while n < max_len {
-        let eq = builtin::i8x16_bitmask(builtin::i8x16_eq(
-            builtin::v128_load(scratch + a + n),
-            builtin::v128_load(scratch + b + n),
-        ));
-        if eq == 0xFFFF {
-            n += 16;
-        } else {
-            n += builtin::i32_ctz(eq ^ 0xFFFF);
-            break;
+impl Matcher {
+    fn new(input: &ByteList) -> Matcher {
+        let len = input.len();
+        return Matcher {
+            bytes: LinearArray::<u8>::of_bytes(input, 0, len, 16),
+            len,
+            head: LinearArray::<i32>::filled(WINDOW, -1),
+            prev: LinearArray::<i32>::filled(WINDOW, -1),
+        };
+    }
+
+    fn byte(&self, pos: i32) -> u8 {
+        return unchecked self.bytes.at(pos);
+    }
+
+    // The hash of the 3 bytes at `pos`.
+    fn hash(&self, pos: i32) -> i32
+        contract 0 <= pos < self.len - 2
+    {
+        return hash3(self.byte(pos), self.byte(pos + 1), self.byte(pos + 2));
+    }
+
+    // Bucket `pos` under its hash `h`.
+    fn insert(&mut self, pos: i32, h: i32) {
+        unchecked self.prev.set(pos & WINDOW - 1, unchecked self.head.at(h));
+        unchecked self.head.set(h, pos);
+    }
+
+    // Bucket the `run - 1` positions a match covers after `pos`, rolling `h`,
+    // the hash `pos` was bucketed under. Starting at `pos` would set
+    // `prev[pos]` to `pos` and strand every older candidate in that bucket
+    // behind the self-link.
+    fn insert_run(&mut self, pos: i32, h: i32, run: i32) {
+        let limit = i32::min(run, self.len - pos - 2);
+        let mut mh = h;
+        for let mut i = 1; i < limit; i += 1 {
+            mh = hash3_roll(mh, self.byte(pos + i + 2));
+            self.insert(pos + i, mh);
         }
     }
-    if n > max_len {
+
+    // The longest match for `pos` among the `max_chain` latest positions
+    // bucketed under its hash `h`, as [length, distance], stopping at one of
+    // `nice_length`. Only a match longer than `best_len` counts; with none,
+    // [best_len, 0].
+    fn longest_match(&self, pos: i32, h: i32, best_len: i32, max_chain: i32, nice_length: i32) -> [i32, i32] {
+        let mut best_len = best_len;
+        let mut best_dist = 0;
+        let mut chain = unchecked self.head.at(h);
+        let mut chain_count = 0;
+        let max_len = i32::min(self.len - pos, MAX_MATCH);
+        while chain >= 0 && chain_count < max_chain {
+            let dist = pos - chain;
+            if dist > WINDOW || dist <= 0 {
+                break;
+            }
+            // A candidate can only win by matching at `cmp` and `cmp - 1`, so
+            // two loads reject most of the chain before the compare loop. The
+            // floor of 2 makes the test apply before any match is found, a
+            // match being at least 3 bytes.
+            let cmp = i32::max(best_len, 2);
+            if cmp < max_len
+                && (self.byte(chain + cmp) != self.byte(pos + cmp)
+                    || self.byte(chain + cmp - 1) != self.byte(pos + cmp - 1)) {
+                chain = unchecked self.prev.at(chain & WINDOW - 1);
+                chain_count += 1;
+                continue;
+            }
+            let match_len = self.match_len(chain, pos, max_len);
+            if match_len >= 3 && match_len > best_len {
+                best_len = match_len;
+                best_dist = dist;
+                if best_len >= nice_length {
+                    break;
+                }
+            }
+            chain = unchecked self.prev.at(chain & WINDOW - 1);
+            chain_count += 1;
+        }
+        return [best_len, best_dist];
+    }
+
+    // The common run of the bytes at `a` and at `b`, capped at `max_len`,
+    // compared 16 at a time.
+    fn match_len(&self, a: i32, b: i32, max_len: i32) -> i32 {
+        let mut n = 0;
+        while n < max_len {
+            let eq = builtin::i8x16_bitmask(builtin::i8x16_eq(
+                unchecked self.bytes.load_at::<v128>(a + n),
+                unchecked self.bytes.load_at::<v128>(b + n),
+            ));
+            if eq != 0xFFFF {
+                return i32::min(n + builtin::i32_ctz(eq ^ 0xFFFF), max_len);
+            }
+            n += 16;
+        }
         return max_len;
     }
-    return n;
 }
 
 /// Compresses data using DEFLATE with fixed Huffman codes and LZ77 matching.
@@ -1448,56 +1654,19 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
         return bw.output;
     }
 
-    // Hash table for LZ77
-    let mut head: List<i32> = List::filled(32768, -1);
-    let mut prev: List<i32> = List::filled(32768, -1);
+    let mut matcher = Matcher::new(input);
 
     let mut pos = 0;
     while pos < input_len {
         let mut best_len = 0;
         let mut best_dist = 0;
+        let mut h = 0;
 
         // Try to find a match (need at least 3 bytes remaining for hash)
         if pos + 2 < input_len {
-            let h = hash3(input[pos], input[pos + 1], input[pos + 2]);
-            let mut chain = unchecked head[h];
-            let mut chain_count = 0;
-
-            let max_len = i32::min(input_len - pos, 258);
-            while chain >= 0 && chain_count < 128 {
-                let dist = pos - chain;
-                if dist > 32768 || dist <= 0 {
-                    break;
-                }
-
-                // Early termination: skip if can't beat current best
-                if best_len >= 3 && best_len < max_len && input[chain + best_len] != input[pos + best_len] {
-                    chain = unchecked prev[chain & 32767];
-                    chain_count += 1;
-                    continue;
-                }
-
-                // Check match length
-                let mut match_len = 0;
-                while match_len < max_len && input[chain + match_len] == input[pos + match_len] {
-                    match_len += 1;
-                }
-
-                if match_len >= 3 && match_len > best_len {
-                    best_len = match_len;
-                    best_dist = dist;
-                    if best_len >= 258 {
-                        break;
-                    }
-                }
-
-                chain = unchecked prev[chain & 32767];
-                chain_count += 1;
-            }
-
-            // Update hash table
-            prev[pos & 32767] = unchecked head[h];
-            head[h] = pos;
+            h = matcher.hash(pos);
+            [best_len, best_dist] = matcher.longest_match(pos, h, 0, 128, MAX_MATCH);
+            matcher.insert(pos, h);
         }
 
         if best_len >= 3 {
@@ -1517,14 +1686,7 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
                 bw.write_bits((best_dist - DIST_BASE[dcode]) as u32, dist_ebits);
             }
 
-            // Insert hash entries for the rest of the match
-            for let mut i = 1; i < best_len; i += 1 {
-                if pos + i + 2 < input_len {
-                    let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
-                    prev[pos + i & 32767] = head[mh];
-                    head[mh] = pos + i;
-                }
-            }
+            matcher.insert_run(pos, h, best_len);
             pos += best_len;
         } else {
             // Emit literal
@@ -2287,20 +2449,8 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
             }
         }
     } else {
-        // Z_DEFAULT_STRATEGY or Z_FILTERED: full LZ77 matching. head/prev in
-        // linear memory (i32.load has no bounds check, unlike WasmGC array.get);
-        // memory.fill 0xFF sets each i32 slot to -1.
-        let hash_bytes = 32768 * 4;
-        let head_ptr = builtin::realloc(0, 0, 4, hash_bytes);
-        let prev_ptr = builtin::realloc(0, 0, 4, hash_bytes);
-        builtin::memory_fill(head_ptr, 0xFF as u8, hash_bytes);
-        builtin::memory_fill(prev_ptr, 0xFF as u8, hash_bytes);
-        // Mirror input into linear memory for the 16-byte SIMD match compares;
-        // the 16-byte pad keeps the trailing v128.load in bounds.
-        let scratch_size = input_len + 16;
-        let scratch = builtin::realloc(0, 0, 16, scratch_size);
-        gc_array_to_memory(input.internal_raw_data_ref(), 0, scratch, input_len);
-        builtin::memory_fill(scratch + input_len, 0 as u8, 16);
+        // Z_DEFAULT_STRATEGY or Z_FILTERED: full LZ77 matching.
+        let mut matcher = Matcher::new(input);
 
         if config.use_lazy {
             // Lazy matching (levels 4-9)
@@ -2317,64 +2467,20 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
                 let mut h = 0;
 
                 if pos + 2 < input_len {
-                    h = hash3(
-                        builtin::i32_load8_u(scratch + pos),
-                        builtin::i32_load8_u(scratch + pos + 1),
-                        builtin::i32_load8_u(scratch + pos + 2),
-                    );
-                    let mut chain = builtin::i32_load(head_ptr + h * 4);
-                    let mut chain_count = 0;
+                    h = matcher.hash(pos);
                     let max_chain = if match_available && prev_match_len >= config.good_length {
                         config.max_chain >> 2;
                     } else {
                         config.max_chain;
                     };
-
-                    let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
-                    while chain >= 0 && chain_count < max_chain {
-                        let dist = pos - chain;
-                        if dist > 32768 || dist <= 0 {
-                            break;
-                        }
-
-                        // A candidate can only win by matching at `cmp` and
-                        // `cmp - 1`, so two loads reject most of the chain
-                        // before the compare loop. The floor of 2 makes the
-                        // test apply before any match is found, a match being
-                        // at least 3 bytes.
-                        let cmp = if best_len >= 2 { best_len } else { 2 };
-                        if cmp < max_len
-                            && (builtin::i32_load8_u(scratch + chain + cmp) != builtin::i32_load8_u(scratch + pos + cmp)
-                                || builtin::i32_load8_u(scratch + chain + cmp - 1) != builtin::i32_load8_u(
-                                    scratch + pos + cmp - 1,
-                                )) {
-                            chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
-                            chain_count += 1;
-                            continue;
-                        }
-
-                        let match_len = simd_match_len(scratch, chain, pos, max_len);
-
-                        if match_len >= 3 && match_len > best_len {
-                            best_len = match_len;
-                            best_dist = dist;
-                            if best_len >= config.nice_length {
-                                break;
-                            }
-                        }
-
-                        chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
-                        chain_count += 1;
-                    }
-
-                    builtin::i32_store(prev_ptr + (pos & 32767) * 4, builtin::i32_load(head_ptr + h * 4));
-                    builtin::i32_store(head_ptr + h * 4, pos);
+                    [best_len, best_dist] = matcher.longest_match(pos, h, best_len, max_chain, config.nice_length);
+                    matcher.insert(pos, h);
                 }
 
                 if match_available {
                     if best_len > prev_match_len {
                         // Current match is better: emit previous as literal
-                        tokens.push(token_pack(builtin::i32_load8_u(scratch + pos - 1) as i32, 0));
+                        tokens.push(token_pack(matcher.byte(pos - 1) as i32, 0));
                         prev_match_len = best_len;
                         prev_match_dist = best_dist;
                         pos += 1;
@@ -2382,7 +2488,7 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
                         // Previous match was better: emit it
                         tokens.push(token_pack(257 + prev_match_len - 3, prev_match_dist));
                         let skip = prev_match_len - 1;
-                        insert_hash_run(scratch, head_ptr, prev_ptr, pos, h, skip, input_len);
+                        matcher.insert_run(pos, h, skip);
                         pos += skip;
                         match_available = false;
                         prev_match_len = 0;
@@ -2398,13 +2504,13 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
                     } else {
                         // Match is long enough, emit immediately
                         tokens.push(token_pack(257 + best_len - 3, best_dist));
-                        insert_hash_run(scratch, head_ptr, prev_ptr, pos, h, best_len, input_len);
+                        matcher.insert_run(pos, h, best_len);
                         pos += best_len;
                         match_available = false;
                         prev_match_len = 0;
                     }
                 } else {
-                    tokens.push(token_pack(builtin::i32_load8_u(scratch + pos) as i32, 0));
+                    tokens.push(token_pack(matcher.byte(pos) as i32, 0));
                     pos += 1;
                 }
             }
@@ -2421,63 +2527,21 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
                 let mut h = 0;
 
                 if pos + 2 < input_len {
-                    h = hash3(
-                        builtin::i32_load8_u(scratch + pos),
-                        builtin::i32_load8_u(scratch + pos + 1),
-                        builtin::i32_load8_u(scratch + pos + 2),
-                    );
-                    let mut chain = builtin::i32_load(head_ptr + h * 4);
-                    let mut chain_count = 0;
-
-                    let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
-                    while chain >= 0 && chain_count < config.max_chain {
-                        let dist = pos - chain;
-                        if dist > 32768 || dist <= 0 {
-                            break;
-                        }
-
-                        let cmp = if best_len >= 2 { best_len } else { 2 };
-                        if cmp < max_len
-                            && (builtin::i32_load8_u(scratch + chain + cmp) != builtin::i32_load8_u(scratch + pos + cmp)
-                                || builtin::i32_load8_u(scratch + chain + cmp - 1) != builtin::i32_load8_u(
-                                    scratch + pos + cmp - 1,
-                                )) {
-                            chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
-                            chain_count += 1;
-                            continue;
-                        }
-
-                        let match_len = simd_match_len(scratch, chain, pos, max_len);
-
-                        if match_len >= 3 && match_len > best_len {
-                            best_len = match_len;
-                            best_dist = dist;
-                            if best_len >= config.nice_length {
-                                break;
-                            }
-                        }
-
-                        chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
-                        chain_count += 1;
-                    }
-
-                    builtin::i32_store(prev_ptr + (pos & 32767) * 4, builtin::i32_load(head_ptr + h * 4));
-                    builtin::i32_store(head_ptr + h * 4, pos);
+                    h = matcher.hash(pos);
+                    [best_len, best_dist] = matcher.longest_match(pos, h, 0, config.max_chain, config.nice_length);
+                    matcher.insert(pos, h);
                 }
 
                 if best_len >= 3 {
                     tokens.push(token_pack(257 + best_len - 3, best_dist));
-                    insert_hash_run(scratch, head_ptr, prev_ptr, pos, h, best_len, input_len);
+                    matcher.insert_run(pos, h, best_len);
                     pos += best_len;
                 } else {
-                    tokens.push(token_pack(builtin::i32_load8_u(scratch + pos) as i32, 0));
+                    tokens.push(token_pack(matcher.byte(pos) as i32, 0));
                     pos += 1;
                 }
             }
         }
-        builtin::realloc(scratch, scratch_size, 16, 0);
-        builtin::realloc(head_ptr, hash_bytes, 4, 0);
-        builtin::realloc(prev_ptr, hash_bytes, 4, 0);
     }
 
     let sym_count = tokens.len();
@@ -2596,7 +2660,7 @@ fn gzip_parse_header(input: &ByteList, start: i32) -> Result<[GzipHeader, i32], 
     let mut header = GzipHeader::new();
     header.text = flags & GZIP_FTEXT != 0;
     header.hcrc = flags & GZIP_FHCRC != 0;
-    header.time = read_u32_le(input, start + 4) as u32;
+    header.time = u32::from_le_at(input.as_byte_slice(), start + 4);
     header.xflags = input[start + 8] as i32;
     header.os = input[start + 9] as i32;
     let mut pos = start + 10;
@@ -2649,7 +2713,8 @@ fn read_header_string(input: &ByteList, pos: i32) -> [String, i32] {
 /// Decompresses gzip-wrapped data (RFC 1952), concatenating its members and failing
 /// with `ZlibError::OutputExceedsMax` once their output would pass `max_output`.
 pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError> {
-    let mut output: ByteList = [];
+    let linear = LinearArray::<u8>::of_bytes(input, 0, input.len());
+    let mut output = Output::new(max_output);
     let mut member_start = 0;
 
     while member_start < input.len() {
@@ -2669,12 +2734,8 @@ pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
         }
 
         // A malformed DEFLATE member fails here, before `consumed` locates the trailer.
-        let [member_output, consumed] = inflate_raw_ex(
-            input,
-            data_start,
-            input.len() - data_start,
-            max_output - output.len(),
-        )?;
+        let consumed = inflate_raw_ex(&linear, data_start, input.len() - data_start, &mut output)?;
+        let member_len = output.len - output.start;
 
         // The gzip trailer (RFC 1952 section 2.3.1) is CRC32 then ISIZE, each a
         // 4-byte little-endian value, immediately after the DEFLATE member.
@@ -2684,31 +2745,28 @@ pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
             return Result::Err(ZlibError::TruncatedTrailer);
         }
 
-        let stored_crc = read_u32_le(input, trailer_pos) as u32;
-        let computed_crc = crc32(crc32_init(), &member_output, 0, member_output.len());
-        if computed_crc != stored_crc {
+        let computed_crc = crc32_over(crc32_init(), &output.bytes, output.start, member_len);
+        if computed_crc != linear.load_at::<u32>(trailer_pos) {
             builtin::cold_path();
             return Result::Err(ZlibError::Crc32Mismatch);
         }
 
         // ISIZE is the member's size mod 2^32.
-        if read_u32_le(input, trailer_pos + 4) as u32 != member_output.len() as u32 {
+        if linear.load_at::<u32>(trailer_pos + 4) != member_len as u32 {
             builtin::cold_path();
             return Result::Err(ZlibError::IsizeMismatch);
         }
-
-        output.extend(&member_output);
 
         // Move to next member
         member_start = trailer_pos + 8;
     }
 
-    if output.len() == 0 && member_start == 0 {
+    if output.len == 0 && member_start == 0 {
         builtin::cold_path();
         return Result::Err(ZlibError::DataTooShort);
     }
 
-    return Result::Ok(output);
+    return Result::Ok(output.to_list());
 }
 
 

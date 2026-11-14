@@ -409,14 +409,17 @@ mise run test-stdlib "${1:-O2}" \
 """
 
 # Both baselines move with the compiler and the stdlib, so one task rewrites
-# them, and a branch reaching either commits both.
+# them, and a branch reaching either commits both. The profiles go first: a
+# profile keys each function by its body's hash, so an edited function's is
+# dropped until recorded again, and the fuel benchmarks compile with them.
 [tasks.update-baselines]
-description = "Rewrite the baselines CI holds a pull request to: scripts/stdlib-coverage.json (what the stdlib tests leave unrun) and benchmark/fuel.json (the fuel benchmarks)"
+description = "Rewrite the baselines CI holds a pull request to: scripts/stdlib-coverage.json (what the stdlib tests leave unrun) and benchmark/fuel.json (the fuel benchmarks), after recording the benchmarks' profiles again"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 mise run test-stdlib O2 --coverage=lcov,baseline --coverage-include=stdlib
 cp build/coverage/baseline.json scripts/stdlib-coverage.json
+scripts/dev-bin.sh wado test --pgo benchmark package-gale-highlight-html
 ./scripts/exclusive.sh test-fuel node benchmark/fuel.ts write
 """
 

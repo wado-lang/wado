@@ -486,11 +486,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_c
     let x: i64;
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_495: ref Array<u8>;
+    let $sroa_view_repr_497: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
-    $sroa_view_repr_495 = global:core:prelude/string.wado::$const_obj_1;
+    $sroa_view_repr_497 = global:core:prelude/string.wado::$const_obj_1;
     out_3.used = local.tee $load_0(2);
-    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, $sroa_view_repr_495, 0, 2);
+    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, $sroa_view_repr_497, 0, 2);
     is_negative_65 = t < 0;
     x = builtin::i64_extend_i32_s(t);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -570,22 +570,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_c
     }
     is_negative_65 = out_3.used;
     out_3.used = $load_0;
-    $sroa_view_repr_495 = out_3.repr;
+    $sroa_view_repr_497 = out_3.repr;
     t = is_negative_65 + t;
     b77: block {
         l78: loop {
             break_if b77 (t - is_negative_65) < 2;
             q = x /u 100_i64;
             tens = local.tee $load_0(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_495, t - 1, (48 + $load_0) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_495, t - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_497, t - 1, (48 + $load_0) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_497, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l78;
         };
     };
     if t > is_negative_65 {
-        builtin::array_set_u8($sroa_view_repr_495, is_negative_65, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_497, is_negative_65, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;

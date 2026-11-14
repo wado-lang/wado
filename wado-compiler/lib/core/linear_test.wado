@@ -44,6 +44,52 @@ test "read_stream reads a stream to its end" {
     assert array.to_list() == counting(0, 10000);
 }
 
+test "lengthen keeps the bytes, in the block or past it" {
+    // Lengthening to 3 doubles the 2-byte block to 4, which 4 then fits.
+    let mut array = LinearArray::<u8>::filled(2, 1);
+    array.lengthen(3);
+    array.set(2, 7);
+    array.lengthen(4);
+    array.set(3, 9);
+    assert array.to_list() == [1, 1, 7, 9];
+}
+
+test "of_bytes copies a range and pads it with zeros" {
+    let source: ByteList = [1, 2, 3, 4, 5];
+    assert LinearArray::<u8>::of_bytes(&source, 1, 3).to_list() == [2, 3, 4];
+    assert LinearArray::<u8>::of_bytes(&source, 3, 2, 2).to_list() == [4, 5, 0, 0];
+}
+
+test "to_byte_list copies the first bytes" {
+    let source: ByteList = [1, 2, 3];
+    assert LinearArray::<u8>::of_bytes(&source, 0, 3).to_byte_list(2) == [1, 2];
+}
+
+test "load_at and store_at move a value little-endian at any offset" {
+    let mut bytes = LinearArray::<u8>::filled(7, 0);
+    bytes.store_at::<u32>(1, 0x04030201);
+    assert bytes.to_list() == [0, 1, 2, 3, 4, 0, 0];
+    assert bytes.load_at::<u16>(2) == 0x0302;
+    assert bytes.load_at::<u32>(3) == 0x0403;
+}
+
+test "copy_from copies a range, overlapping its source or not" {
+    let source: ByteList = [1, 2, 3, 4, 5, 6];
+    let mut bytes = LinearArray::<u8>::of_bytes(&source, 0, 6);
+    let whole = &bytes;
+    bytes.copy_from(2, whole, 0, 3);
+    assert bytes.to_list() == [1, 2, 1, 2, 3, 6];
+    let other = LinearArray::<u8>::filled(2, 9);
+    bytes.copy_from(4, &other, 0, 2);
+    assert bytes.to_list() == [1, 2, 1, 2, 9, 9];
+}
+
+#[expect_trap]
+test "load_at traps where the value runs past the end" {
+    let bytes = LinearArray::<u8>::filled(4, 0);
+    let _ = bytes.load_at::<u32>(1);
+}
+
 test "a buffer of an array holds its bytes and reads no more" {
     let bytes: List<u8> = [1, 2, 3, 4];
     let mut buffer = LinearBuffer::of(LinearArray::from_slice(&bytes));
