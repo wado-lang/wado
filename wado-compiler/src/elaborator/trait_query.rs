@@ -3329,7 +3329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let scope = self.scope_type_param_ids();
         let tt = self.tysys.type_table.borrow();
         [a, b].iter().all(|&t| {
-            tt.type_params_all_in(t, &scope)
+            tt.type_params_all_in(t, scope.ids())
                 && !tt.contains_assoc_type_projection(t)
                 && !tt.contains_undecided(t)
         })

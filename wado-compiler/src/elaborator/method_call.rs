@@ -2002,9 +2002,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // which admits every candidate.
         let arg_types: Vec<TypeId> = preselected.clone().unwrap_or_default();
 
-        let callee_sig = static_receiver
-            .as_ref()
-            .and_then(|key| self.unique_qualified_method_sig_keyed(key, &static_call.method));
+        let callee_sig = static_receiver.as_ref().and_then(|key| {
+            self.unique_qualified_method_sig_keyed(key, &static_call.method)
+                .or_else(|| {
+                    self.inherited_default_method_sig(key, &static_call.method, SigChoice::Unique)
+                })
+        });
         let resolved = match (&static_receiver, &struct_name_for_lookup) {
             (Some(receiver), Some(name)) => {
                 let name = name.clone();
@@ -2906,7 +2909,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .type_params_all_in(expected, &scope)
+                .type_params_all_in(expected, scope.ids())
             {
                 continue;
             }

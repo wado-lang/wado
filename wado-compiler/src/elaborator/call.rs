@@ -3560,7 +3560,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return inferred;
         }
 
-        let Some(decl) = self.tysys.generic_decl_sig(callee) else {
+        let Some(decl) = self.tysys.generic_decl_sig(callee).cloned() else {
             return vec![];
         };
         let param_ids = decl.type_param_ids();
@@ -4167,7 +4167,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (own_idx, param) in params.iter().enumerate() {
                 let owner_idx = offset + own_idx;
                 let owner_ty = args[owner_idx];
-                let forwarded = scope_params.contains(&owner_ty);
+                let forwarded = scope_params.owns(&self.tysys.type_table.borrow(), owner_ty);
                 if !forwarded && self.tysys.is_unbound_type_param(owner_ty) {
                     continue;
                 }
@@ -4431,8 +4431,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the pin's check to refute. Returns the packs it left open as reached,
     /// which a reporter that only knows `reached` must report too.
     ///
-    /// `slots` are the parameters `declared` writes, as the declaration made
-    /// them.
+    /// `slots` are the parameters `declared` writes, in the space `reached`
+    /// names them in: a method call's moved slots where it moved them.
     pub(super) fn settle_unreached_packs(
         &mut self,
         declared: &[ast::GenericParam],
@@ -4455,9 +4455,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let scope = self.scope_type_param_ids();
         for (i, owner) in real.iter().enumerate() {
-            let owner_open = type_args
-                .get(i)
-                .is_none_or(|&t| !scope.contains(&t) && self.tysys.is_unbound_type_param(t));
+            let owner_open = type_args.get(i).is_none_or(|&t| {
+                !scope.owns(&self.tysys.type_table.borrow(), t)
+                    && self.tysys.is_unbound_type_param(t)
+            });
             if !owner_open {
                 continue;
             }
@@ -4488,17 +4489,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // An argument spelled in the caller's own parameters is the caller
         // forwarding them, which answers the slot.
-        let in_scope = |t: TypeId| scope.contains(&t);
         let unanswered: Vec<usize> = (0..real.len())
             .filter(|&i| unreached(i))
             .filter(|&i| {
                 let arg = type_args[i];
-                (self.tysys.is_unbound_type_param(arg) && !in_scope(arg))
-                    || self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .any_type_pack(arg, &|pack| !in_scope(pack))
+                let table = self.tysys.type_table.borrow();
+                (self.tysys.is_unbound_type_param(arg) && !scope.owns(&table, arg))
+                    || scope.spreads_foreign_pack(&table, arg)
             })
             .collect();
         for pack_pos in unanswered {
@@ -4804,7 +4801,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the receiver declaration's frame: `Self` is the declaration at its own
     /// parameters, which the call infers as it does a block's, and the block's
     /// trait arguments are written in them.
-    fn inherited_default_method_sig(
+    pub(super) fn inherited_default_method_sig(
         &self,
         key: &ImplTargetKey,
         method_name: &str,
@@ -5727,9 +5724,9 @@ impl TypeSystem {
     }
 
     /// The signature of a function with a type parameter to infer.
-    fn generic_decl_sig(&self, callee: &CalleeRef) -> Option<DeclSig> {
+    fn generic_decl_sig(&self, callee: &CalleeRef) -> Option<&DeclSig> {
         let sig = self.signatures.function_sig(callee.def()?)?;
-        (!sig.decl.type_params.is_empty()).then(|| sig.decl.clone())
+        (!sig.decl.type_params.is_empty()).then_some(&sig.decl)
     }
 
     /// The declaration and type arguments of `expected`, where it is an

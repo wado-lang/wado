@@ -1,6 +1,6 @@
 //! Method lookup, operator resolution, and indexing trait dispatch.
 
-use super::scope::{BinderInScope, ParamRef, ScopedBound, trait_params_from_impl};
+use super::scope::{BinderInScope, ParamRef, ScopeParams, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
 use super::trait_query::{DerivedAt, SelfBinding, UnmetImplBound, UnmetKind};
 use super::type_resolution::ParamSpace;
@@ -1687,10 +1687,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.tysys.is_unbound_type_param(receiver_type) {
             return false;
         }
+        let no_scope = ScopeParams::default();
         let has_fillable = method_type_params
             .iter()
             .zip(inferred.iter())
-            .any(|(p, &tid)| p.default.is_some() && self.slot_takes_default(tid, &[]));
+            .any(|(p, &tid)| p.default.is_some() && self.slot_takes_default(tid, &no_scope));
         if !has_fillable {
             return false;
         }
@@ -1708,7 +1709,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let mut filled = false;
         for i in 0..inferred.len() {
-            if self.slot_takes_default(inferred[i], &[])
+            if self.slot_takes_default(inferred[i], &no_scope)
                 && let Some(default_ty) = defaults[i]
                 && default_ty != TypeTable::ERROR
                 && !self
@@ -1859,7 +1860,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let fillable: Vec<bool> = method_type_params
             .iter()
             .zip(known.iter())
-            .map(|(p, &tid)| p.default.is_some() && self.slot_takes_default(tid, &[]))
+            .map(|(p, &tid)| {
+                p.default.is_some() && self.slot_takes_default(tid, &ScopeParams::default())
+            })
             .collect();
         if !fillable.iter().any(|&f| f) {
             return;
@@ -1916,7 +1919,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         reached: &[TypeParamId],
         span: Span,
     ) {
-        let scope = self.scope_type_param_ids();
         let table = self.tysys.type_table.borrow();
         let reached_packs: Vec<(&ast::GenericParam, TypeId, TypeId)> = own_params
             .iter()
@@ -1932,15 +1934,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // caller's own (`[..Bs]`) is the caller forwarding it, settled as the
         // caller's. One deferred to a variable reports itself if nothing
         // answers it.
-        let in_scope = |t: TypeId| scope.contains(&t);
+        let scope = self.scope_type_param_ids();
         let open: Vec<String> = reached_packs
             .into_iter()
             .filter(|&(_, slot, arg)| {
                 arg == slot
                     || (self.tysys.is_unbound_type_param(arg)
-                        && !in_scope(arg)
+                        && !scope.owns(&table, arg)
                         && !self.awaits_report(&table, arg))
-                    || table.any_type_pack(arg, &|pack| !in_scope(pack))
+                    || scope.spreads_foreign_pack(&table, arg)
             })
             .map(|(p, _, _)| p.name.clone())
             .collect();
@@ -2133,7 +2135,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.type_table.borrow().is_infer_var(applied)
                     && !self.awaits_pending_call(applied)
             };
-            if (slots.get(i) == Some(answer) && !scope_params.contains(answer)) || open_var {
+            let unsettled = slots.get(i) == Some(answer)
+                && !scope_params.owns(&self.tysys.type_table.borrow(), *answer);
+            if unsettled || open_var {
                 *answer = inst.vars[i];
             }
         }

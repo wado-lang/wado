@@ -15,7 +15,7 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{TraitRef, TypeId};
+use crate::tir::{TraitRef, TypeId, TypeParamId};
 use crate::type_table::TypeTable;
 
 use super::coercion::PendingLiterals;
@@ -30,6 +30,28 @@ use crate::defs::DefId;
 use crate::name::{FqTraitName, FqTypeName, repeat_pack_name};
 use crate::resolve::{Resolution, Resolutions};
 use crate::token::Span;
+
+/// The parameters an enclosing generic scope owns, held by identity: a pack,
+/// its element and a pack mapped over it are three types of one parameter.
+#[derive(Default)]
+pub(super) struct ScopeParams(Vec<TypeParamId>);
+
+impl ScopeParams {
+    /// Whether `t` is a parameter or pack the scope owns.
+    pub(super) fn owns(&self, table: &TypeTable, t: TypeId) -> bool {
+        table.type_param_id(t).is_some_and(|id| self.0.contains(&id))
+    }
+
+    /// Whether `t` spreads a pack the scope does not own, which only the
+    /// callee's own solve could answer.
+    pub(super) fn spreads_foreign_pack(&self, table: &TypeTable, t: TypeId) -> bool {
+        table.any_type_pack(t, &|pack| !self.owns(table, pack))
+    }
+
+    pub(super) fn ids(&self) -> &[TypeParamId] {
+        &self.0
+    }
+}
 
 /// A type parameter as the declaration `owner` writes it: a method's `U` and
 /// its impl's `U` are two parameters, whatever a frame calls them.
@@ -1152,23 +1174,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.tysys.trait_env.supertrait_closure(&decl)
     }
 
-    /// The type-parameter ids the enclosing generic scope owns: a slot bound to
-    /// one of them is the caller forwarding its generics, not inference giving
-    /// up. A `..P` pack owns its element placeholder `TypeParam { P, index }`
-    /// too — the spelling `make_mapped_type_pack` gives a pack element.
-    pub(super) fn scope_type_param_ids(&self) -> Vec<TypeId> {
-        let mut tt = self.tysys.type_table.borrow_mut();
-        self.annotate_ctx
-            .trait_ctx
-            .binders()
-            .into_iter()
-            .flat_map(|binder| {
-                let elem = tt
-                    .is_type_pack(binder.type_id)
-                    .then(|| tt.pack_placeholder(binder.type_id));
-                std::iter::once(binder.type_id).chain(elem)
-            })
-            .collect()
+    /// The parameters the enclosing generic scope owns: a slot bound to one of
+    /// them is the caller forwarding its generics, not inference giving up.
+    pub(super) fn scope_type_param_ids(&self) -> ScopeParams {
+        let tt = RefCell::borrow(&self.tysys.type_table);
+        ScopeParams(
+            self.annotate_ctx
+                .trait_ctx
+                .binders()
+                .into_iter()
+                .map(|binder| tt.declared_param(binder.type_id))
+                .collect(),
+        )
     }
 
     /// Bind each of `params` written `<F: fn(...)>` that the frame does not

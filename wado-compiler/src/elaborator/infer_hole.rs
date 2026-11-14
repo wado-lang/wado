@@ -14,7 +14,7 @@ use crate::type_table::TypeTable;
 use super::Elaborator;
 use super::call::assoc_target_slot;
 use super::infer::unify;
-use super::scope::ParamRef;
+use super::scope::{ParamRef, ScopeParams};
 use super::trait_query::{SelfBinding, spelled_at};
 use super::type_resolution::ParamSpace;
 use super::types::TypeError;
@@ -393,7 +393,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// parameter or variable, neither one of the enclosing declaration's
     /// `scope_params` nor a variable an enclosing call's pending literals
     /// answer.
-    pub(super) fn slot_unanswered(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
+    pub(super) fn slot_unanswered(&self, t: TypeId, scope_params: &ScopeParams) -> bool {
         self.is_open_slot(t, scope_params) && !self.awaits_pending_call(t)
     }
 
@@ -402,15 +402,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// default then answers in turn (`ident(it.collect())`). A variable an
     /// enclosing call waits at for its literals keeps waiting: one chained to
     /// that call's, or one it took over (`same(wrapd(1), x)`).
-    pub(super) fn slot_takes_default(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
+    pub(super) fn slot_takes_default(&self, t: TypeId, scope_params: &ScopeParams) -> bool {
         let chained = self.apply_infer_holes(t) != t && self.awaits_pending_call(t);
         self.is_open_slot(t, scope_params) && !chained && !self.annotate_ctx.literals_wait_at(t)
     }
 
     /// Whether `t` is a bare parameter or variable that is not one of the
     /// enclosing declaration's `scope_params`.
-    fn is_open_slot(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
-        self.tysys.is_unbound_type_param(t) && !scope_params.contains(&t)
+    fn is_open_slot(&self, t: TypeId, scope_params: &ScopeParams) -> bool {
+        self.tysys.is_unbound_type_param(t)
+            && !scope_params.owns(&self.tysys.type_table.borrow(), t)
     }
 
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {
@@ -430,17 +431,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.type_has_infer_hole(expected) {
             return false;
         }
-        let scope: Vec<TypeId> = self
-            .annotate_ctx
-            .trait_ctx
-            .binders()
-            .into_iter()
-            .map(|binder| binder.type_id)
-            .collect();
+        let scope = self.scope_type_param_ids();
         self.tysys
             .type_table
             .borrow()
-            .type_params_all_in(expected, &scope)
+            .type_params_all_in(expected, scope.ids())
     }
 
     /// Record `answer` as the solution of `var` — the direct form of
@@ -778,7 +773,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let trait_args =
             written.and_then(|written| self.trait_args_at(link.trait_, owner, written));
-        let forwarded = self.scope_type_param_ids().contains(&owner);
+        let forwarded = self
+            .scope_type_param_ids()
+            .owns(&self.tysys.type_table.borrow(), owner);
         let Some(answer) =
             self.bound_projection(owner, forwarded, link.trait_, trait_args, &link.assoc)
         else {

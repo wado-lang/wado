@@ -438,7 +438,7 @@ impl MethodSig {
         bound: &EffectRows,
     ) -> ReceivedSig {
         let renames: IndexMap<TypeParamId, TypeParamId> = {
-            let table = type_table.borrow();
+            let mut table = type_table.borrow_mut();
             self.own_type_params()
                 .iter()
                 .map(|&(_, id)| {
@@ -451,6 +451,7 @@ impl MethodSig {
                         owner: param.owner,
                         index: MOVED_SLOT_BASE + param.index,
                     };
+                    table.move_param(param, moved);
                     (param, moved)
                 })
                 .collect()

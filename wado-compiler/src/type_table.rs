@@ -3459,7 +3459,7 @@ impl TypeTable {
     }
 
     /// Spell the slot `to` a parameter moves into as the parameter itself.
-    fn move_param(&mut self, from: TypeParamId, to: TypeParamId) {
+    pub fn move_param(&mut self, from: TypeParamId, to: TypeParamId) {
         let name = self.param_name(from).to_string();
         self.name_param(to, name);
     }
@@ -4799,10 +4799,7 @@ impl TypeTable {
             ResolvedType::TypeParam { id } => match leaves.params.get(&id) {
                 Some(&filled) => filled,
                 None => match leaves.renames.get(&id) {
-                    Some(&moved) => {
-                        self.move_param(id, moved);
-                        self.type_param_of(moved)
-                    }
+                    Some(&moved) => self.type_param_of(moved),
                     None => type_id,
                 },
             },
@@ -4811,13 +4808,9 @@ impl TypeTable {
                 None => match (leaves.renames.get(&id), mapped_elem) {
                     (Some(&moved), Some(elem)) => {
                         let elem = self.subst_rec(elem, leaves);
-                        self.move_param(id, moved);
                         self.make_mapped_type_pack(moved, elem)
                     }
-                    (Some(&moved), None) => {
-                        self.move_param(id, moved);
-                        self.type_pack_of(moved)
-                    }
+                    (Some(&moved), None) => self.type_pack_of(moved),
                     // A mapped pack the substitution leaves keeps its length,
                     // its element substituted.
                     (None, Some(elem)) => {
@@ -5915,13 +5908,15 @@ impl TypeTable {
     }
 
     /// Whether every `TypeParam` / `TypePack` `id` (recursively) mentions is in
-    /// `allowed` (by `TypeId`). A type with no type parameters trivially holds.
+    /// `allowed`. A type with no type parameters trivially holds.
     /// Used to decide whether an inference hole may be solved against an
     /// expected type: only when that type's parameters are outer-scope generics
     /// (not a callee's own, still-being-inferred method parameters).
-    pub fn type_params_all_in(&self, id: TypeId, allowed: &[TypeId]) -> bool {
+    pub fn type_params_all_in(&self, id: TypeId, allowed: &[TypeParamId]) -> bool {
         match self.get(id) {
-            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => allowed.contains(&id),
+            ResolvedType::TypeParam { id, .. } | ResolvedType::TypePack { id, .. } => {
+                allowed.contains(id)
+            }
             ResolvedType::InferVar(_) => false,
             _ => !self.any_constituent(id, &mut |t| !self.type_params_all_in(t, allowed)),
         }

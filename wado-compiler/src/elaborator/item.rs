@@ -398,7 +398,7 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
 
 /// Everything an impl method's signature resolves against: the impl's
 /// `TypeParam` scheme in its positional slots, the method's own params
-/// numbered after them, and `Self` bound to the impl target.
+/// numbered from 0 under the method, and `Self` bound to the impl target.
 ///
 /// Built in one place so the decl pass (which records the canonical
 /// signature) and the body walk (which resolves the method against it)
@@ -408,7 +408,7 @@ pub(super) struct MethodFrame {
     /// The impl's binders, by name, taken before a method parameter of the
     /// same name shadows one.
     pub(super) declaring_type_params: Vec<(String, TypeId)>,
-    /// The method's own slots, in index order, starting after the impl's.
+    /// The method's own slots, in index order.
     pub(super) method_type_params: Vec<(String, TypeId)>,
 }
 
