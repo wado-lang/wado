@@ -19,6 +19,7 @@ use crate::compiler_host::{
     CompilerHost, DependencyIndex, Diagnostic, LogLevel, ModuleDir, Severity, SourceError,
     SourceReader,
 };
+use crate::compiler_trace;
 use crate::elaborator::liveness::LivenessScope;
 use crate::loader::{LoadResult, ModuleLoader};
 use crate::logger::Logger;
@@ -78,7 +79,7 @@ pub(crate) async fn dependency_snapshot<H: CompilerHost>(
                 .await
                 .filter(|snapshot| reparsed_snapshot_module(snapshot, &load.modules).is_none())
                 .map(Rc::new);
-            crate::compiler_trace!(
+            compiler_trace!(
                 "dependency_snapshot",
                 "{} over {} modules",
                 if snapshot.is_some() {

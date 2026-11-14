@@ -14,6 +14,7 @@ use crate::ast::{
 };
 use crate::ast_index::{AstIndex, FunctionLocation};
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
+use crate::compiler_trace;
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
 use crate::coverage::{CoverageMap, CoverageScope, plan_module, render_plan};
 use crate::defs::DefId;
@@ -1600,7 +1601,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             |snap: &Rc<Semantics>| reparsed_snapshot_module(snap, &load_result.modules).is_none();
         let dependencies = dependencies.filter(parsed_alike);
         if dependencies.is_some() {
-            crate::compiler_trace!("dependency_snapshot", "seeds the compile");
+            compiler_trace!("dependency_snapshot", "seeds the compile");
         }
         dependencies.or_else(|| get_or_init_snapshot(coverage, profile).filter(parsed_alike))
     };
