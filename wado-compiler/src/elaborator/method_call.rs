@@ -3245,6 +3245,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .partition(|&&k| *defs.module(k) == self.current_module_source);
         keys.extend(elsewhere);
+        // A blanket's own body names its receiver by the block's parameter,
+        // which reaches that block itself. A site that passes no type wrote the
+        // parameter's name, which the scope resolves.
+        let binder = receiver_type.or_else(|| {
+            self.annotate_ctx
+                .trait_ctx
+                .type_params
+                .get(struct_name)
+                .map(|b| b.type_id)
+        });
+        if let Some(ty) = binder
+            && let Some(owner) = self
+                .tysys
+                .type_table
+                .borrow()
+                .type_param_id(ty)
+                .map(|p| p.owner)
+            && env.impl_headers.contains_key(&owner)
+            && self.tysys.type_table.borrow().impl_target_whole(owner) == ty
+            && !keys.contains(&owner)
+        {
+            keys.insert(0, owner);
+        }
         // A key naming no declaration holds blocks of different shapes (`&A`
         // and `&B`, `[..T]` and `[A, B, A]`), which no declaration's arguments
         // tell apart, so the receiver is matched against each whole target.
