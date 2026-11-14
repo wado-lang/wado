@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794670742497,
+  "lastUpdate": 1794689449892,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77429,6 +77429,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 434281,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8275b34d42c289bd763c8cfddb2b2d43aedba548",
+          "message": "Merge pull request #2625 from wado-lang/ccr-9fe26c59-gqrsz3\n\nperf(optimize): scalarize a struct's fields across calls that take it `&mut`",
+          "timestamp": "2026-11-15T05:32:32+09:00",
+          "tree_id": "a2e0b764b1a0bd64619bb280da02cde451d81ee4",
+          "url": "https://github.com/wado-lang/wado/commit/8275b34d42c289bd763c8cfddb2b2d43aedba548"
+        },
+        "date": 1794689448726,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7295,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24494,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435516,
             "unit": "bytes"
           }
         ]
