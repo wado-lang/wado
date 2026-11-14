@@ -1030,6 +1030,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.annotate_ctx.trait_ctx.abstract_selections = None;
     }
 
+    /// Leave no `Self` standing: the frame of a declaration that binds none.
+    pub(super) fn clear_self_binding(&mut self) {
+        drop(self.annotate_ctx.take_self_frame());
+    }
+
     /// [`Self::set_self_binding`] for the duration of `body`, restoring the
     /// frame it replaced on return (panic-safe).
     pub(super) fn with_self_binding<R>(

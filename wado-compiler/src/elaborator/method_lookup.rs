@@ -4379,6 +4379,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &param_types,
                 &defaults,
                 defaults_module.clone(),
+                Some(self.tysys.base_self_binding(
+                    output_base_type_id,
+                    method_trait_name.as_ref().and_then(FqTraitName::canonical),
+                )),
                 &type_bindings,
                 ctx,
             );

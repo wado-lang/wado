@@ -946,11 +946,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             bind_nearer(&mut default_type_bindings, own);
         }
+        let self_binding = self.tysys.base_self_binding(
+            base_type_id,
+            trait_name.as_ref().and_then(FqTraitName::canonical),
+        );
         self.fill_trailing_defaults(
             &mut args,
             &expected_param_types,
             &defaults,
             Some(callee_module.clone()),
+            Some(self_binding),
             &default_type_bindings,
             defaults_site.or(call_id),
             ctx,
@@ -2316,11 +2321,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             static_method_module.clone(),
         );
         bind_nearer(&mut static_type_bindings, own);
+        let self_binding = self
+            .tysys
+            .base_self_binding(target_type_id, declaring_trait);
         self.fill_trailing_defaults(
             &mut args,
             &param_types,
             &static_method_defaults,
             static_method_module.clone(),
+            Some(self_binding),
             &static_type_bindings,
             Some(static_call.id),
             ctx,
@@ -2609,6 +2618,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &param_types,
             &static_method_defaults,
             defaults_module.clone(),
+            Some(self_binding),
             &static_type_bindings,
             ctx,
         );
@@ -2818,6 +2828,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &param_types,
             &static_method_defaults,
             defaults_module.clone(),
+            Some(self.tysys.base_self_binding(receiver_type_id, trait_decl)),
             &own_bindings,
             ctx,
         );
@@ -3767,15 +3778,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A signature answers for the method's own slots; a spelling no index
         // has one for — a trait's default body, reached on a type whose `impl`
         // restates nothing — binds no name, and the walk still has to happen.
+        let receiver = match &newtype_dispatch {
+            Some((_, base, _)) => *base,
+            None => receiver_type,
+        };
+        let declaring_trait = callee_sig
+            .as_ref()
+            .and_then(|sig| self.tysys.signatures.declaring_trait(sig));
         let type_bindings = match &callee_sig {
             Some(sig) => {
                 let own_ids = sig.own_type_param_ids();
                 let own_params = sig.own_params.clone();
-                let declaring_trait = self.tysys.signatures.declaring_trait(sig);
-                let receiver = match &newtype_dispatch {
-                    Some((_, base, _)) => *base,
-                    None => receiver_type,
-                };
                 self.value_default_slot_bindings(
                     &own_params,
                     &own_ids,
@@ -3793,6 +3806,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &callee_params.param_types,
             &callee_params.param_defaults,
             defaults_module,
+            Some(self.tysys.base_self_binding(receiver, declaring_trait)),
             &type_bindings,
             ctx,
         );
