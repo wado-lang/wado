@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794644942962,
+  "lastUpdate": 1794659246424,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77277,6 +77277,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/49329baa2326a60321b5e2e3bed731cfaf70e526"
         },
         "date": 1794644942400,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7301,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24478,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434281,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3fe0a81ac4362563f7c7f5f2c7b3537fd72fdaf4",
+          "message": "Merge pull request #2623 from wado-lang/ccr-90954b67-c13smk\n\nperf(optimize): cut param_spec's per-round cost by re-deriving only what a round wrote",
+          "timestamp": "2026-11-14T21:10:22+09:00",
+          "tree_id": "c7d81dff7187f153409affd1e7e3e9da01083c0f",
+          "url": "https://github.com/wado-lang/wado/commit/3fe0a81ac4362563f7c7f5f2c7b3537fd72fdaf4"
+        },
+        "date": 1794659246149,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
