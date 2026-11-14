@@ -19,7 +19,7 @@
 //! - `wado-bundled-icu/src/casemap/fold_classes.rs`, the classes of simple case
 //!   folding, which ICU4X does not invert.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -93,7 +93,7 @@ fn main() {
 /// than one member listed in ascending order, the groups by their first member.
 fn fold_classes() -> String {
     let mapper = icu_casemap::CaseMapper::new();
-    let mut classes = std::collections::BTreeMap::<char, Vec<u32>>::new();
+    let mut classes = BTreeMap::<char, Vec<u32>>::new();
     for ch in (0..=u32::from(char::MAX)).filter_map(char::from_u32) {
         classes
             .entry(mapper.simple_fold(ch))
