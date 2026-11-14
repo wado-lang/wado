@@ -555,11 +555,11 @@ impl Interpreter<'_> {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return Lattice::Unevaluated;
         };
-        let Some(builtin) = self.facts.ctfe_builtins.and_then(|m| m.get(func_id)) else {
+        let Some(builtin) = self.facts.builtin(func_id) else {
             return Lattice::Unevaluated;
         };
         let args = &args[..];
-        match builtin {
+        match &builtin {
             CtfeBuiltin::ArrayLen => {
                 let [arr] = args else {
                     unreachable!("`array_len` takes an array");

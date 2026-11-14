@@ -690,7 +690,7 @@ impl Interpreter<'_> {
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return None;
         };
-        let builtin = *self.facts.ctfe_builtins.and_then(|m| m.get(func_id))?;
+        let builtin = self.facts.builtin(func_id)?;
         let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
         match builtin {
             CtfeBuiltin::ArraySet => Some(self.exec_element_write(body, &args)),

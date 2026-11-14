@@ -158,10 +158,7 @@ impl Interpreter<'_> {
         let ExprKind::Call { func_id, .. } = &body.exprs[e].kind else {
             return false;
         };
-        self.facts
-            .ctfe_builtins
-            .and_then(|m| m.get(func_id))
-            .is_some_and(|b| matches!(b, CtfeBuiltin::ArrayClonePrefix))
+        self.facts.builtin(func_id) == Some(CtfeBuiltin::ArrayClonePrefix)
     }
 
     /// Whether `e` yields an object nothing else in the body reaches, so writing
