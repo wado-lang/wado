@@ -77,18 +77,16 @@ The function takes a list of ranges rather than a `CodePointSet`. Its typical
 input is a set the caller built, such as a regular expression's character
 class, and not a property. A property passes through `ranges(p)` first.
 
-Inside the asset, the closure works over the orbits of `scf`: each orbit is a
-fold target together with every character that folds to it. An orbit with a
-member in the input joins the answer whole. The orbits come from the
-characters that `Changes_When_Casefolded` lists, which include every character
-whose `scf` differs from itself. They are computed on the first call rather than
-generated into a table, so no second copy of ICU's case data must agree with
-the first after an ICU upgrade.
-
-ICU4X's own closure, `CaseMapCloser::add_case_closure_to`, is not used. It
-closes over full case folding and the simple case mappings, so it adds strings
-(`ss` for `ß`) and joins `i` to `İ`. That is the relation `Locale::fold`
-already answers for strings, not the one character matching needs.
+Inside the asset, the closure adds what ICU4X's
+`CaseMapper::add_case_closure_to` adds for each code point of the input,
+keeping the characters and dropping the strings. That closure is documented
+over full case folding and the simple mappings, and it adds strings (`ss` for
+`ß`, `i̇` for `İ`). Without the strings it adds exactly the other members of
+the code point's `scf` class: run over every code point against
+`CaseMapper::simple_fold`, ICU4X 2.3 shows no difference. Nothing promises
+that equality across ICU upgrades, so the test below holds it. Using ICU4X's
+closure keeps one copy of the case data, where a table of `scf` classes
+generated beside it would have to agree with it after each upgrade.
 
 ### What Re builds on it
 
