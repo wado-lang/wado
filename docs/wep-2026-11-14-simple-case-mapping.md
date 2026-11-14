@@ -17,11 +17,10 @@ character at a time, in both directions:
 - It merges what `scf` keeps apart. `İ` (U+0130) full-folds to `i̇`, but its
   `scf` is itself, so under ECMA-262 `/İ/i` matches `İ` alone.
 
-So Re cannot build `i` from what `core:icu` has. The gap is not Re's alone. The
-simple mappings are character properties of the UCD (`Simple_Lowercase_Mapping`,
-`Simple_Uppercase_Mapping`, `Simple_Titlecase_Mapping`, `Simple_Case_Folding`).
-A lexer, a case-insensitive identifier table, or anything else that compares
-text one character at a time needs them, and only ICU knows them.
+So Re cannot build `i` from what `core:icu` has. Re needs `Simple_Case_Folding`
+alone, but it is one of four simple mappings the UCD defines as character
+properties, with `Simple_Lowercase_Mapping`, `Simple_Uppercase_Mapping` and
+`Simple_Titlecase_Mapping`. No package uses the other three today.
 
 Matching asks a second question that no per-character mapping answers cheaply.
 Re compiles each character class to the UTF-8 byte sequences of its code
@@ -69,9 +68,8 @@ may be in any order, overlap, or touch.
 
 The set operation is the second half of the API because the inverse of `scf`
 is the expensive part, and it costs the same for every caller. It runs inside
-the asset. Done in Wado from `simple_fold`, it would
-take one boundary crossing per code point of the input class. A class such as
-`\p{L}` holds more than 100,000.
+the asset. Done in Wado from `simple_fold`, it would ask every code point, each
+a boundary crossing, as Context says.
 
 The function takes a list of ranges rather than a `CodePointSet`. Its typical
 input is a set the caller built, such as a regular expression's character
@@ -103,10 +101,12 @@ Re's parser stops refusing `i`. Under `i`, each atom compiles as follows:
 
 - A character becomes the closure of the set holding it alone.
 - A class becomes the closure of its set. A negated class `[^…]` complements
-  the closure, as `CharacterSetMatcher` (§22.2.2.7) inverts the result of the
+  the closure, as `CharacterSetMatcher` (§22.2.2.7.1) inverts the result of the
   canonicalized membership test.
-- `\w` becomes the closure of `[A-Za-z0-9_]`, which adds U+017F and U+212A, as
-  `WordCharacters` (§22.2.2.9.4) says. `\b` and `\B` test the same set.
+- `\w`, `\b` and `\B` use the closure of `[A-Za-z0-9_]`, which adds U+017F and
+  U+212A. `WordCharacters` (§22.2.2.9.3) states the set differently, as the
+  characters whose `scf` lies in `[A-Za-z0-9_]`. The two are equal because
+  `scf` maps `[A-Za-z0-9_]` into itself.
 
 The closure runs once, when the pattern compiles, so matching decodes and folds
 nothing. Re rejects backreferences, so it never compares two captured strings
