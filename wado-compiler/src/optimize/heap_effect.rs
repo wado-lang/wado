@@ -295,9 +295,9 @@ impl Layouts {
     }
 }
 
-/// The call-graph-wide summaries, kept across the passes of one project's
-/// optimization and re-solved only where a function's write count moved since.
-/// A store position names one function for the whole of it.
+/// The call-graph-wide summaries, kept across passes no DCE separates and
+/// re-solved only where a function's write count moved since. A DCE removes
+/// types, and the summaries read the type table as only growing.
 #[derive(Default)]
 pub(super) struct HeapEffectsCache {
     layouts: Layouts,

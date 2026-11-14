@@ -225,7 +225,6 @@ pub fn optimize(
     // says nothing about its body, so clearing bodies leaves every entry current
     // and only an appended function needs a new one.
     let mut descriptors = dce::DescriptorCache::default();
-    let mut heap_effects = HeapEffectsCache::default();
     match opt_level {
         OptLevel::O0 => {
             // DCE alone: it cuts codegen work, and nothing else may change
@@ -264,7 +263,6 @@ pub fn optimize(
                 &config,
                 profiler,
                 &mut descriptors,
-                &mut heap_effects,
                 &exec,
             );
             // Final DCE: clean up code made dead by optimizations
@@ -312,7 +310,6 @@ pub fn optimize(
                 &config,
                 profiler,
                 &mut descriptors,
-                &mut heap_effects,
                 &exec,
             );
             run_dce(
@@ -354,7 +351,6 @@ pub fn optimize(
                 &config,
                 profiler,
                 &mut descriptors,
-                &mut heap_effects,
                 &exec,
             );
             run_dce(
@@ -367,6 +363,8 @@ pub fn optimize(
         }
     }
 
+    // After the final DCE, which a `HeapEffectsCache` must not outlive.
+    let mut heap_effects = HeapEffectsCache::default();
     // FieldAccess promotion: scalar fields over stable receivers freeze to
     // operands (born-as-operands), so store-load forwarding / cse become
     // operand reads. Runs after the optimization loop (so the struct shape is
@@ -852,7 +850,6 @@ fn run_optimization_passes(
     config: &OptConfig,
     profiler: &dyn SpanEmitter,
     descriptor_cache: &mut dce::DescriptorCache,
-    heap_effects: &mut HeapEffectsCache,
     exec: &Arc<Executor>,
 ) {
     // So `nir/inline` weighs a function by literals that carry only what some
@@ -871,6 +868,7 @@ fn run_optimization_passes(
     // an interprocedural pass scans all functions but reports exactly the ones
     // it touched. Both go through `&mut gate`.
     let mut gate = gate::FunctionGate::new(project, exec);
+    let heap_effects = &mut HeapEffectsCache::default();
     let mut mod_ref_summaries = SummaryCache::default();
     let mut sroa_param_state = SroaParamState::default();
     let mut param_spec_state = param_spec::ParamSpecState::new(config.specializations);
