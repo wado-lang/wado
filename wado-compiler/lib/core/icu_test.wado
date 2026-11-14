@@ -216,6 +216,25 @@ test "folding is full, and Turkic in tr and az" {
     assert !en.eq_ignore_case("a", "b");
 }
 
+test "simple folding maps one character to one, and no locale tailors it" {
+    assert icu::simple_fold('A') == 'a';
+    assert icu::simple_fold('\u{212A}') == 'k';
+    assert icu::simple_fold('ẞ') == 'ß';
+    assert icu::simple_fold('ß') == 'ß';
+    assert icu::simple_fold('İ') == 'İ';
+    assert icu::simple_fold('I') == 'i';
+    assert icu::simple_fold('1') == '1';
+}
+
+test "the simple case mappings answer one character each" {
+    assert icu::simple_lowercase('İ') == 'i';
+    assert icu::simple_uppercase('ß') == 'ß';
+    assert icu::simple_uppercase('ǆ') == 'Ǆ';
+    assert icu::simple_titlecase('ǆ') == 'ǅ';
+    assert icu::simple_lowercase('Ǆ') == 'ǆ';
+    assert icu::simple_uppercase('1') == '1';
+}
+
 test "graphemes are what a reader counts as characters" {
     let text = "e\u{301}👨‍👩‍👧🇯🇵!";
     let mut clusters: List<String> = [];

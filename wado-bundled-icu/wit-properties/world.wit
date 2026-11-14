@@ -26,8 +26,8 @@ interface collation {
   }
 }
 
-// Full case mapping. Only the language selects a tailoring (`tr`, `az`, `lt`,
-// `el`, `nl`, `hy`), so it is the one subtag that crosses.
+// Case mapping. In the full mappings only the language selects a tailoring
+// (`tr`, `az`, `lt`, `el`, `nl`, `hy`), so it is the one subtag that crosses.
 interface casemap {
   uppercase: func(text: string, language: u32) -> string;
   lowercase: func(text: string, language: u32) -> string;
@@ -36,6 +36,13 @@ interface casemap {
   fold: func(text: string, language: u32) -> string;
   /// Whether the two fold to the same text.
   eq-ignore-case: func(left: string, right: string, language: u32) -> bool;
+
+  /// The UCD's simple mappings, one character to one. No locale tailors them.
+  simple-lowercase: func(ch: char) -> char;
+  simple-uppercase: func(ch: char) -> char;
+  simple-titlecase: func(ch: char) -> char;
+  /// `Simple_Case_Folding`: the `C` and `S` entries of `CaseFolding.txt`.
+  simple-fold: func(ch: char) -> char;
 }
 
 // Extended grapheme clusters (UAX #29), which no locale tailors.

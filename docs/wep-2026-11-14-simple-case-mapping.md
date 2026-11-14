@@ -116,7 +116,7 @@ caselessly at match time.
 
 ## Roadmap
 
-- [ ] `simple_lowercase`, `simple_uppercase`, `simple_titlecase` and
+- [x] `simple_lowercase`, `simple_uppercase`, `simple_titlecase` and
   `simple_fold` in the asset and the facade. A test holds `simple_fold` to
   the cases in Context, `ß`, `ẞ` and `İ`, and to the Kelvin sign folding to
   `k`.

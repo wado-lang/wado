@@ -49,6 +49,28 @@ first: `ranges(BinaryProperty::WhiteSpace)`,
 Whether `ch` has the property or property value, without building the
 ranges.
 
+### `pub fn simple_lowercase(ch: char) -> char`
+
+`Simple_Lowercase_Mapping` of `ch`: its lowercase as one character, or `ch`
+where that takes more than one or there is none. No locale tailors it.
+
+### `pub fn simple_uppercase(ch: char) -> char`
+
+`Simple_Uppercase_Mapping` of `ch`, as `simple_lowercase` answers its
+lowercase: `ß` stays `ß`.
+
+### `pub fn simple_titlecase(ch: char) -> char`
+
+`Simple_Titlecase_Mapping` of `ch`, as `simple_lowercase` answers its
+lowercase: `ǆ` becomes `ǅ`.
+
+### `pub fn simple_fold(ch: char) -> char`
+
+`Simple_Case_Folding` of `ch`, the `C` and `S` entries of
+`CaseFolding.txt`: two characters match caselessly, one at a time, when
+their simple foldings are equal. `ẞ` folds to `ß` and `İ` to itself; the
+Turkic `T` entries are not applied. `Locale::fold` folds whole text in full.
+
 ### `pub fn graphemes(text: String) -> Graphemes`
 
 The extended grapheme clusters of `text` (UAX #29), in order: what a reader

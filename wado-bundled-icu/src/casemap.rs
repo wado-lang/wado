@@ -1,4 +1,4 @@
-//! Full case mapping. See `wit-properties/world.wit`.
+//! Case mapping, full and simple. See `wit-properties/world.wit`.
 
 use alloc::borrow::Cow;
 use alloc::string::String;
@@ -38,5 +38,21 @@ impl Guest for Component {
     fn eq_ignore_case(left: String, right: String, language: u32) -> bool {
         let lang = locale::language(language);
         fold(&left, lang) == fold(&right, lang)
+    }
+
+    fn simple_lowercase(ch: char) -> char {
+        CaseMapper::new().simple_lowercase(ch)
+    }
+
+    fn simple_uppercase(ch: char) -> char {
+        CaseMapper::new().simple_uppercase(ch)
+    }
+
+    fn simple_titlecase(ch: char) -> char {
+        CaseMapper::new().simple_titlecase(ch)
+    }
+
+    fn simple_fold(ch: char) -> char {
+        CaseMapper::new().simple_fold(ch)
     }
 }
