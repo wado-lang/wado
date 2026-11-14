@@ -40,7 +40,9 @@ pub fn simple_fold(ch: char) -> char;
 ```
 
 Each answers the UCD property of the same name. A character the property does
-not map answers itself.
+not map answers itself. The three that Re does not use ship with
+`simple_fold`, so that `core:icu` answers the simple mappings as a family
+rather than the one a first consumer needed.
 
 They are free functions, beside `contains` and `ranges`. The
 [`core:icu` WEP](./wep-2026-08-09-core-icu.md#two-api-shapes-chosen-by-what-the-thing-is)
