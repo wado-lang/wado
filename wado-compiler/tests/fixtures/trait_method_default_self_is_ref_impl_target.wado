@@ -1,6 +1,7 @@
 // A trait method's default names the `Self` of the impl the call selected. An
 // `impl Tr for &A` is written for the reference, so there `Self` is `&A`, not
-// the `A` the receiver reads through.
+// the `A` the receiver reads through, nor the `&&A` a receiver read through
+// one more reference is.
 use { println, Stdout } from "core:cli";
 
 trait Shown with () {
@@ -40,10 +41,10 @@ impl Tr for &A {
 export fn run() with Stdout {
     let a = A { v: 1 };
     let r = &a;
-    println(`${r.m()}`);
+    println(`${r.m()} ${Tr::m(&r)}`);
 }
 
 __DATA__
 {
-    "stdout": "2\n"
+    "stdout": "2 2\n"
 }

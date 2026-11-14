@@ -907,12 +907,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // before the receiver's associated types are registered.
         let mut default_type_bindings = impl_type_bindings;
         // The selected impl's own target: a `&A` impl's `Self` is the
-        // reference, which the base type peels.
+        // reference it matched over the base type, which a receiver read
+        // through more references than that does not spell.
+        let self_type = match matched_ref_kind {
+            Some(RefKind::Shared) => self.tysys.type_table.borrow_mut().make_ref(base_type_id),
+            Some(RefKind::Mut) => self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_mut_ref(base_type_id),
+            None => base_type_id,
+        };
         let self_binding = SelfBinding {
-            type_id: match subject {
-                Some(subject) if is_ref_impl => subject,
-                _ => base_type_id,
-            },
+            type_id: self_type,
             declaring_trait: trait_name.as_ref().and_then(FqTraitName::canonical),
         };
         if !method_type_param_ids.is_empty() && defaults.iter().any(|(_, d)| d.is_some()) {
@@ -2315,9 +2322,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // last source is the one the block above cannot reach: it runs only
         // where the declaring block has slots of its own, and a block with none
         // leaves the method's unbound rather than wrong.
-        let self_binding = self
-            .tysys
-            .base_self_binding(target_type_id, declaring_trait);
+        let self_binding = SelfBinding::of_static(target_type_id, declaring_trait);
         let own = self.own_slot_default_bindings(
             &static_method_defaults,
             &own_params,
@@ -2833,7 +2838,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The template is written against the blanket parameter, which the
         // monomorphizer binds to the receiver. A default reads the method's own
         // slots as the call solved them.
-        let self_binding = self.tysys.base_self_binding(receiver_type_id, trait_decl);
+        let self_binding = SelfBinding::of_static(receiver_type_id, trait_decl);
         let own_bindings = self.own_slot_default_bindings(
             &static_method_defaults,
             &own_params,

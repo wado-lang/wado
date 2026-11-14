@@ -2544,7 +2544,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .as_ref()
                         .and_then(|sig| self.tysys.signatures.declaring_trait(sig));
                     let self_binding = ns_receiver_type
-                        .map(|receiver| self.tysys.base_self_binding(receiver, declaring_trait));
+                        .map(|receiver| SelfBinding::of_static(receiver, declaring_trait));
                     let type_bindings = match (sig, self_binding) {
                         (Some(sig), Some(declaring)) => self.own_slot_default_bindings(
                             &param_defaults,
@@ -3453,7 +3453,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     binder,
                     saved.bounds(&table, BoundsOf::Type(binding.type_id)),
                 ))
-            }); // Resolved against the enclosing scope, which the loop below clears.
+            });
+        // Resolved against the enclosing scope, which the loop below clears.
         //
         // A type argument nothing pinned is still an inference variable;
         // standing for one spells the variable into the diagnostic (`unknown
@@ -3946,7 +3947,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             })
             .collect();
-        let self_binding = receiver.map(|receiver| self.tysys.base_self_binding(receiver, None));
+        let self_binding = receiver.map(|receiver| SelfBinding::of_static(receiver, None));
         self.link_deferred_assoc_equalities(&owners, &names, &args, self_binding, span);
     }
 
@@ -4677,7 +4678,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: Option<TypeId>,
         span: token::Span,
     ) {
-        let self_binding = receiver.map(|receiver| self.tysys.base_self_binding(receiver, None));
+        let self_binding = receiver.map(|receiver| SelfBinding::of_static(receiver, None));
         self.enforce_type_arg_bounds(
             &type_args.params,
             &type_args.method_args,
@@ -6210,7 +6211,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The method's own slots, as the turbofish spelled them or the
             // solve above settled them. The receiver is the bound's own
             // parameter, which the monomorphizer binds.
-            let self_binding = self.tysys.base_self_binding(type_param_type_id, trait_decl);
+            let self_binding = SelfBinding::of_static(type_param_type_id, trait_decl);
             let type_bindings = self.own_slot_default_bindings(
                 &param_defaults,
                 &own_params,
