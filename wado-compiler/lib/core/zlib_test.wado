@@ -1178,7 +1178,9 @@ test "inflate zlib rejects an Adler-32 mismatch (RFC 1950 2.2)" {
 }
 
 // Past 32 KiB a match candidate can fall outside the window, and each level
-// walks its hash chains under its own limits.
+// walks its hash chains under its own limits. Sixty passes over 70 KB, with
+// every linear-memory read contract-checked at -O0, near the default limit on CI.
+#[timeout_ms(30000)]
 test "every level and strategy round-trips input longer than the window" {
     let data = make_wordy(70000);
     for let mut level = 0; level <= 9; level += 1 {
