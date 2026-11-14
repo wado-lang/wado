@@ -241,7 +241,7 @@ pub(crate) fn is_snapshot_kind(ms: &ModuleSource) -> bool {
 
 /// The modules `snap` serves: the subset of `snap.tir_modules` of a
 /// [`is_snapshot_kind`] kind.
-pub(crate) fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
+pub(crate) fn snapshot_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
     snap.tir_modules
         .keys()
         .filter(|ms| is_snapshot_kind(ms))
@@ -256,7 +256,7 @@ pub(crate) fn reparsed_snapshot_module<'a>(
     snap: &Semantics,
     modules: &'a IndexMap<ModuleSource, ast::Module>,
 ) -> Option<&'a ModuleSource> {
-    let cached = stdlib_sources(snap);
+    let cached = snapshot_sources(snap);
     modules.iter().find_map(|(ms, module)| {
         let reparsed = cached.contains(ms)
             && snap.space_modules.module_of_space(module.ast_id_space()) != Some(ms);

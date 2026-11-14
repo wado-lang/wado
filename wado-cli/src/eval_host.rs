@@ -562,19 +562,20 @@ impl Worker {
         held: Arc<Mutex<Vec<OwnedSemaphorePermit>>>,
     ) -> oneshot::Receiver<(Compiled, Option<Vec<Input>>)> {
         let (report, compiled) = oneshot::channel();
-        let job = move || {
-            let _held = held;
-            let host = DependencyHost::new(deps);
-            let compiled = current_thread_runtime().block_on(
-                wado_compiler::compile_with_options(&source, &host, Some(EVAL_FILE), options),
-            );
-            let compiled = match compiled {
-                Ok(result) => Compiled::Wasm(result.wasm),
-                Err(_) => Compiled::Failed(compile_failure(&lock(&host.diagnostics))),
+        let job =
+            move || {
+                let _held = held;
+                let host = DependencyHost::new(deps);
+                let compiled = current_thread_runtime().block_on(
+                    wado_compiler::compile_with_options(&source, &host, Some(EVAL_FILE), options),
+                );
+                let compiled = match compiled {
+                    Ok(result) => Compiled::Wasm(result.wasm),
+                    Err(_) => Compiled::Failed(compile_failure(&lock(&host.diagnostics))),
+                };
+                // Past the limit nobody is listening, and the outcome is dropped.
+                let _ = report.send((compiled, host.read.reads()));
             };
-            // Past the limit nobody is listening, and the outcome is dropped.
-            let _ = report.send((compiled, host.read.reads()));
-        };
         self.jobs
             .send(Box::new(job))
             .expect("an idle compile thread takes jobs");

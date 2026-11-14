@@ -764,7 +764,7 @@ Not built:
 - The `Display` host import.
 - Rule (5), visibility judged at the declaring module, and the unenforced parent-visibility bullet above. Both need per-method visibility on resources, which nothing asks for yet.
 - Declaring `linearity = "unrestricted"` on the non-owning token `Waitable`, which still takes its value semantics from the absence of a `dtor`; and generic resources on either side of `extends`.
-- A parent declared by a prebuilt module. The collect pass skips what the stdlib snapshot covers, so a snapshot parent reaches validation without its method names or its arity; rather than accept what it cannot check, the compiler rejects the clause. `wado-lang:web` is a package, never snapshotted, so nothing reaches it yet.
+- A parent declared by a prebuilt module. The collect pass skips what the stdlib snapshot covers, so a snapshot parent reaches validation without its method names or its arity; rather than accept what it cannot check, the compiler rejects the clause. A dependency package declaring an unrestricted resource is never snapshotted, so `wado-lang:web` never reaches it.
 
 ### Known gap: the handle is an index, not a reference
 

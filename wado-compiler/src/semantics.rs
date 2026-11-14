@@ -34,7 +34,7 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner, ParseModules};
 use crate::name::resolve_import_with_entry;
 use crate::pgo::{Applied, MarkMap};
 use crate::resolve::Resolutions;
-use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module, stdlib_sources};
+use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module, snapshot_sources};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol_notation::SymbolNotation;
 use crate::tir::{EffectRows, ResolvedType, TemplateId, TirModule, TypeId};
@@ -1740,7 +1740,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         .map(|(def, name)| (def, name.to_string()))
         .collect();
     let snapshot_modules = snapshot.as_deref().map_or_else(IndexSet::default, |snap| {
-        stdlib_sources(snap)
+        snapshot_sources(snap)
             .into_iter()
             .filter(|source| load_result.modules.contains_key(source))
             .collect()

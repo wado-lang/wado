@@ -6,8 +6,6 @@
 use std::collections::VecDeque;
 use std::sync::{LazyLock, Mutex};
 
-use crate::parallel::lock;
-
 use crate::hashmap::IndexSet;
 
 use crate::hashmap::IndexMap;
@@ -31,11 +29,13 @@ use crate::name::{
     resolve_import_with_invocations, resolve_local_identity, resolve_module_path,
     split_exported_file, wado_identifier,
 };
+use crate::parallel::lock;
 use crate::parser::Parser;
 use crate::path::{is_cwd_relative, normalize};
 use crate::remote::{
     Integrity, PinnedBy, check_digest, is_remote, next_in_pin_order, pin_of, url_fault,
 };
+use crate::token::Span;
 use crate::wit_consume::{ComponentBindings, ExportedInterface, build_bindings};
 use crate::{bind, demanded_imports, hashmap, parser, stdlib};
 
@@ -1624,7 +1624,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         )?;
         for root in std::mem::take(&mut self.roots) {
             let written = root.to_string();
-            let at = DiagnosticSpan::from_span(&crate::Span::default(), Some(&written));
+            let at = DiagnosticSpan::from_span(&Span::default(), Some(&written));
             pending.push_back((root, PathSite { written, at }));
         }
 

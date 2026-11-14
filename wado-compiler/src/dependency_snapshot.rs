@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::affine_move_check::check_affine_moves_semantic;
-use crate::ast::AstIdSpace;
+use crate::ast::{AstIdSpace, Item, declares_unrestricted};
 use crate::compiler_host::{
     CompilerHost, DependencyIndex, Diagnostic, LogLevel, ModuleDir, Severity, SourceError,
     SourceReader,
@@ -54,16 +54,10 @@ pub(crate) async fn dependency_snapshot<H: CompilerHost>(
     load: &LoadResult,
     host: &H,
 ) -> Option<Rc<Semantics>> {
-    let mut key: Key = load
-        .modules
-        .iter()
-        .filter(|(source, _)| matches!(source, ModuleSource::Dependency { .. }))
-        .map(|(source, module)| (source.clone(), module.ast_id_space()))
-        .collect();
+    let key = key_of(load);
     if key.is_empty() || !key.iter().all(|(source, _)| servable(load, source)) {
         return None;
     }
-    key.sort_by_cached_key(|(source, _)| source.to_string());
     let cached = SNAPSHOT.with_borrow(|slot| {
         slot.as_ref()
             .filter(|(built, _)| *built == key)
@@ -76,17 +70,40 @@ pub(crate) async fn dependency_snapshot<H: CompilerHost>(
     crate::compiler_trace!(
         "dependency_snapshot",
         "{} over {} modules",
-        if snapshot.is_some() { "built" } else { "refused" },
+        if snapshot.is_some() {
+            "built"
+        } else {
+            "refused"
+        },
         key.len()
     );
     SNAPSHOT.set(Some((key, snapshot.clone())));
     snapshot
 }
 
+/// The dependency modules `load` holds, ordered by name.
+fn key_of(load: &LoadResult) -> Key {
+    let mut key: Key = load
+        .modules
+        .iter()
+        .filter(|(source, _)| matches!(source, ModuleSource::Dependency { .. }))
+        .map(|(source, module)| (source.clone(), module.ast_id_space()))
+        .collect();
+    key.sort_by_cached_key(|(source, _)| source.to_string());
+    key
+}
+
 /// Whether a snapshot can serve the dependency module `source`: what it is
-/// made of is its own source and what a snapshot serves.
+/// made of is its own source and what a snapshot serves, and it declares no
+/// resource a program could extend, since `extends` validation reads the
+/// parent's methods from a pass a served module skips.
 fn servable(load: &LoadResult, source: &ModuleSource) -> bool {
-    load.modules[source].include_paths().is_empty()
+    let module = &load.modules[source];
+    module.include_paths().is_empty()
+        && !module
+            .items
+            .iter()
+            .any(|item| matches!(item, Item::Resource(decl) if declares_unrestricted(&decl.attrs)))
         && load.imports.get(source).is_none_or(|imported| {
             imported.iter().all(|target| {
                 matches!(
@@ -119,14 +136,7 @@ async fn build<H: CompilerHost>(load: &LoadResult, host: &H, key: &Key) -> Optio
         .load_all("", Some(&entry))
         .await
         .ok()?;
-    let mut built: Key = loaded
-        .modules
-        .iter()
-        .filter(|(source, _)| matches!(source, ModuleSource::Dependency { .. }))
-        .map(|(source, module)| (source.clone(), module.ast_id_space()))
-        .collect();
-    built.sort_by_cached_key(|(source, _)| source.to_string());
-    if built != *key {
+    if key_of(&loaded) != *key {
         return None;
     }
     BUILDING.with(|building| building.set(true));
