@@ -119,7 +119,16 @@ caselessly at match time.
 - [x] `simple_lowercase`, `simple_uppercase`, `simple_titlecase` and
   `simple_fold` in the asset and the facade. A test holds `simple_fold` to
   the cases in Context, `ß`, `ẞ` and `İ`, and to the Kelvin sign folding to
-  `k`.
+  `k`. A program that already maps case pays nothing for them:
+
+  | The program asks                    | Size     |
+  | ----------------------------------- | -------- |
+  | `println("a")`, no `core:icu`       | 4,501 B  |
+  | `simple_fold('A')`                  | 57,173 B |
+  | `Locale::uppercase`, before & after | 84,863 B |
+
+  Each is `wado compile -O2` of a `run` that asks it once and prints the
+  answer.
 - [ ] `simple_fold_closure`, over the table `gen` writes. A Rust test in
   `wado-bundled-icu` checks, for every code point, that the closure of it
   alone holds exactly the code points with the same `simple_fold`.
