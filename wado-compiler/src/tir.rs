@@ -126,8 +126,7 @@ impl TypeParamId {
     pub fn walk_slot(self, walk: u32) -> Self {
         const BASE: u32 = 1 << 30;
         const PACKS_PER_WALK: u32 = 1 << 10;
-        // An impl's list and its method's index one sequence.
-        const _: () = assert!(2 * MAX_GENERIC_PARAMS <= PACKS_PER_WALK as usize);
+        const _: () = assert!(MAX_GENERIC_PARAMS <= PACKS_PER_WALK as usize);
         assert!(
             self.index < PACKS_PER_WALK && walk < BASE / PACKS_PER_WALK - 1,
             "a declaration's parameters and a body's walk nesting are bounded"
@@ -745,7 +744,9 @@ pub enum ResolvedType {
     /// nothing can tell two parameters apart, or take them for one, by name.
     ///
     /// [`TypeTable::param_name`]: crate::type_table::TypeTable::param_name
-    TypeParam { id: TypeParamId },
+    TypeParam {
+        id: TypeParamId,
+    },
     /// Inference variable — a *flexible* variable standing for a type the
     /// solver has yet to determine. Minted when a use site instantiates a
     /// polymorphic signature: where a rigid parameter rejects anything but

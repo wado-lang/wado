@@ -1741,19 +1741,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         declaring_module: Option<ModuleSource>,
     ) -> Vec<Option<TypeId>> {
         // Re-registering the parameters gives a default like `= T` a scope to
-        // resolve against. Number them from the index the declaration gave the
-        // first slot — read off the slot, not counted from the receiver's type
-        // arguments, which overshoots on a concrete or pack-bearing impl.
+        // resolve against.
         let Some(&first) = slots.first() else {
             return vec![None; method_type_params.len()];
         };
-        let TypeParamId { owner, index: base } =
-            self.tysys.type_table.borrow().declared_param(first);
+        let owner = self.tysys.type_table.borrow().declared_param(first).owner;
         self.with_self_binding(declaring, |s| {
             s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.clear_binders();
-                scope.register_generic_params(owner, method_type_params, base);
+                scope.register_generic_params(owner, method_type_params, 0);
                 method_type_params
                     .iter()
                     .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))

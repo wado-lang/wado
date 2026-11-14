@@ -993,8 +993,7 @@ impl TypeSystem {
             // `Self::m()` goes through that bound as `T::m()` does. A blanket's
             // `Self` is its receiver `T`, which the rewrite below keeps reaching
             // the blanket itself.
-            if self.is_trait_self(self_type_id) && ctx.trait_ctx.type_params.contains_key("Self")
-            {
+            if self.is_trait_self(self_type_id) && ctx.trait_ctx.type_params.contains_key("Self") {
                 return self.callee_ident_for_type_param("Self", suffix, self_type_id);
             }
             // `Self` names the receiver, not one of its bounds: an impl
@@ -1014,10 +1013,13 @@ impl TypeSystem {
 
     /// Whether `ty` is a trait's own `Self`.
     fn is_trait_self(&self, ty: TypeId) -> bool {
-        self.type_table.borrow().type_param_id(ty).is_some_and(|id| {
-            self.resolutions.defs().kind(id.owner).is_trait_like()
-                && id == TypeParamId::trait_self(id.owner)
-        })
+        self.type_table
+            .borrow()
+            .type_param_id(ty)
+            .is_some_and(|id| {
+                self.resolutions.defs().kind(id.owner).is_trait_like()
+                    && id == TypeParamId::trait_self(id.owner)
+            })
     }
 
     /// A `Param::method()` call, where `Param` is the type parameter bound to
@@ -4446,7 +4448,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         assert_eq!(real.len(), slots.len(), "one slot per parameter written");
         let ids: Vec<TypeParamId> = {
             let table = self.tysys.type_table.borrow();
-            slots.iter().map(|&slot| table.declared_param(slot)).collect()
+            slots
+                .iter()
+                .map(|&slot| table.declared_param(slot))
+                .collect()
         };
         let scope = self.scope_type_param_ids();
         for (i, owner) in real.iter().enumerate() {

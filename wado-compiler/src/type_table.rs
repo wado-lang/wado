@@ -2,6 +2,7 @@
 //! asked of them.
 
 use std::cell::RefCell;
+use std::hash::Hash;
 use std::sync::Arc;
 
 use rustc_hash::FxBuildHasher;
@@ -29,11 +30,11 @@ use crate::symbol_notation::render;
 use crate::token::{Delimiter, Quote, Span};
 
 use crate::tir::{
-    AnonShape, AssocParamId, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE, ResolvedType,
-    RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole, TemplateShape, TirExpr,
-    TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeArgMap, TypeId, TypeParamId,
-    is_open_row, positional_substitution, projection_arguments, range_item, slots_from_impl_args,
-    solve_row,
+    AnonShape, AssocParamId, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE,
+    ResolvedType, RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole,
+    TemplateShape, TirExpr, TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeArgMap,
+    TypeId, TypeParamId, is_open_row, positional_substitution, projection_arguments, range_item,
+    slots_from_impl_args, solve_row,
 };
 
 #[derive(Debug, Clone)]
@@ -3236,11 +3237,8 @@ impl TypeTable {
         self.intern(ResolvedType::TypeParam { id })
     }
 
-    /// Record how `id`'s declaration spells it. A declaration spells each of
-    /// its parameters once, so a second spelling is two parameters taken for one.
     fn name_param(&mut self, id: TypeParamId, name: String) {
-        let held = self.param_names.entry(id).or_insert_with(|| name.clone());
-        assert_eq!(*held, name, "one parameter has one spelling: {id:?}");
+        spell(&mut self.param_names, id, name);
     }
 
     /// How `id`'s declaration spells it.
@@ -3277,11 +3275,7 @@ impl TypeTable {
                     assoc_name: assoc_name.to_string(),
                     index: index as u32,
                 };
-                let held = self
-                    .assoc_param_names
-                    .entry(id.clone())
-                    .or_insert_with(|| name.clone());
-                assert_eq!(held, name, "one parameter has one spelling: {id:?}");
+                spell(&mut self.assoc_param_names, id.clone(), name.clone());
                 self.intern(ResolvedType::AssocParam(id))
             })
             .collect()
@@ -4853,7 +4847,9 @@ impl TypeTable {
                 }
             }
             ResolvedType::AssocParam(id) => match leaves.family {
-                Some(at) if at.owning_trait == id.owning_trait && at.assoc_name == id.assoc_name => {
+                Some(at)
+                    if at.owning_trait == id.owning_trait && at.assoc_name == id.assoc_name =>
+                {
                     at.args[id.index as usize]
                 }
                 _ => type_id,
@@ -6583,6 +6579,13 @@ impl TypeTable {
             ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
         }
     }
+}
+
+/// Record how a declaration spells parameter `id`. It spells each of its
+/// parameters once, so a second spelling is two parameters taken for one.
+fn spell<K: Hash + Eq>(names: &mut IndexMap<K, String>, id: K, name: String) {
+    let held = names.entry(id).or_insert_with(|| name.clone());
+    assert_eq!(*held, name, "one parameter has one spelling");
 }
 
 /// What an impl block's target writes.

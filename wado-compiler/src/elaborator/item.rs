@@ -2102,7 +2102,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .collect(),
                         declaring_slot_count: decl_slots.len() as u32,
                         // A declaration numbers its own slots densely from
-                        // zero, so the count is also where the method's begin.
+                        // zero, so the count is also one past its last.
                         declaring_slot_end: decl_slots.len() as u32,
                         declaring_impl: None,
                         own_params: own_params_of(&method.type_params),
@@ -2324,7 +2324,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     params: sig_params,
                     declaring_slot_count: decl_slots.len() as u32,
                     // A declaration numbers its own slots densely from zero, so
-                    // the count is also where the method's begin.
+                    // the count is also one past its last.
                     declaring_slot_end: decl_slots.len() as u32,
                     declaring_impl: None,
                     // An `interface` / `resource` operation declares no type
