@@ -69,7 +69,7 @@ may be in any order, overlap, or touch.
 
 The set operation is the second half of the API because the inverse of `scf`
 is the expensive part, and it costs the same for every caller. It runs inside
-the asset, over ICU4X's case data. Done in Wado from `simple_fold`, it would
+the asset. Done in Wado from `simple_fold`, it would
 take one boundary crossing per code point of the input class. A class such as
 `\p{L}` holds more than 100,000.
 
@@ -84,9 +84,9 @@ value. `simple_fold_closure` adds every class with a member in the input. The
 table is generated with the WIT, the Rust tables and the Wado enums, so it
 follows the ICU4X the asset is built from.
 
-| ICU4X | Classes | Code points in them | Of 2 | Of 3 | Of 4 |
-| ----- | ------: | ------------------: | ---: | ---: | ---: |
-| 2.3.0 |    1482 |                2994 | 1455 |   24 |    3 |
+| ICU4X | Classes | Code points in them | Of 2 members | Of 3 | Of 4 |
+| ----- | ------: | ------------------: | -----------: | ---: | ---: |
+| 2.3.0 |    1482 |                2994 |         1455 |   24 |    3 |
 
 A Rust program over `icu_casemap` 2.3.0 that groups every code point by
 `CaseMapper::simple_fold` gives these counts.
