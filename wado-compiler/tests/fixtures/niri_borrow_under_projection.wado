@@ -1,8 +1,9 @@
-// `copy_prop` forwarding `let self = &mut out` into `self.repr` writes
-// `out.repr`, not `(&mut out).repr`. A borrow under a field access names no
-// handle of its own, but the compile-time interpreter took it for one and
-// gave up on `out`, so `apply_case` stopped folding a camelCase key into a
-// constant and the serializer built the key afresh on every call.
+// `copy_prop` forwards `let self = &mut out` into `self.repr` as
+// `(&mut out).repr`, and `const_fold` runs before a peephole round folds it.
+// That borrow names `out.repr`, no handle of its own, but the compile-time
+// interpreter took it for one and gave up on `out`, so `apply_case` stopped
+// folding a camelCase key into a constant and the serializer built the key
+// afresh on every call.
 use { println, Stdout } from "core:cli";
 use { to_bytes } from "core:cbor";
 

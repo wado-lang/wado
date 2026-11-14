@@ -690,7 +690,7 @@ impl Analysis<'_> {
             }
             // A call handed `r` whole takes `&E` in its place where `r` passes whole.
             ExprKind::Call { args, .. } => {
-                for arg in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
+                for arg in args.iter().map(|a| a.expr) {
                     if let Some(ae) = arg.as_expr()
                         && let ExprKind::Local { index, .. } = &body.exprs[ae].kind
                         && refs.get(index).is_some_and(|info| info.passes_whole)

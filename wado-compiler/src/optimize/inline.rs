@@ -1090,17 +1090,24 @@ fn scan_body(
     let cold = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
     let unlikely = unlikely_runs(body, markers, heat_map).exprs(body);
     let looped = looped_exprs(body);
+    let mut copies: Vec<(u32, Operand)> = Vec::new();
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(st) => match &body.stmts[st].kind {
             StmtKind::Let {
                 local_index, value, ..
-            } => scan.lets.push((*local_index, *value)),
+            } => {
+                scan.lets.push((*local_index, *value));
+                copies.push((*local_index, *value));
+            }
             StmtKind::Loop { .. } => scan.loopy = true,
             _ => {}
         },
         NodeRef::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::Assign { target, .. } => {
+            ExprKind::Assign { target, value } => {
                 scan.written.extend(place_root_local(body, *target));
+                if let ExprKind::Local { index, .. } = &body.exprs[*target].kind {
+                    copies.push((*index, *value));
+                }
             }
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
@@ -1146,9 +1153,9 @@ fn scan_body(
         NodeRef::Block(_) | NodeRef::Pat(_) => {}
     });
     // A handle copied out of a place shares the place's object, so a write
-    // through the copy writes the root: `let r = xs.repr; array_set(&mut r, …)`.
-    let handle_copies: Vec<[u32; 2]> = scan
-        .lets
+    // through the copy writes the root: `let r = xs.repr; array_set(&mut r, …)`,
+    // or `r = xs.repr` where LICM reloads a hoisted handle.
+    let handle_copies: Vec<[u32; 2]> = copies
         .iter()
         .filter_map(|&(copy, value)| {
             let e = value.as_expr()?;

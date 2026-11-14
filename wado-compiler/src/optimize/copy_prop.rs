@@ -22,7 +22,6 @@ use crate::type_table::TypeTable;
 
 use super::arena_query::{MutRefAliases, RootMutation, for_each_mutated_root};
 use super::gate::{FunctionGate, GatedPass};
-use super::identity_cast::{FieldThroughRefRule, IdentityDerefRule};
 use super::value_copy::mutation::MutationOracle;
 use crate::optimize::arena_query::{
     bare_promoted_local, buried_promoted_reads, promoted_local_reads, reachable_nodes,
@@ -885,7 +884,13 @@ fn apply_in_expr(
             } => emit_ref(engine, id, NirUnaryOp::MutRef, index, name, inner_type_id),
             CopySource::RefProjection { op, projection, .. } => {
                 let cloned = engine.clone_expr(projection);
-                emit_borrow(engine, id, op, cloned);
+                engine.replace_expr_kind(
+                    id,
+                    ExprKind::Unary {
+                        op,
+                        expr: cloned.into(),
+                    },
+                );
             }
             CopySource::Promoted(v) => {
                 engine.redirect_expr(id, Operand::Value(v));
@@ -915,25 +920,13 @@ fn emit_ref(
 ) {
     let span = engine.body.exprs[id].span;
     let inner = engine.alloc_expr(ExprKind::Local { index, name }, inner_type_id, span);
-    emit_borrow(engine, id, op, inner);
-}
-
-/// Replace `id`, a read of a reference local, with `&place` / `&mut place`,
-/// folded into a field access or deref over it at once: `niri` takes the
-/// borrow in `(&mut x).f` for a handle the frame cannot track, and the next
-/// peephole round, which would fold it, runs after the CTFE in `const_fold`.
-fn emit_borrow(engine: &mut Engine, id: ExprId, op: NirUnaryOp, place: ExprId) {
     engine.replace_expr_kind(
         id,
         ExprKind::Unary {
             op,
-            expr: place.into(),
+            expr: inner.into(),
         },
     );
-    if let Some(NodeRef::Expr(parent)) = engine.parent_of(NodeRef::Expr(id)) {
-        let _ = FieldThroughRefRule.apply_expr(engine, parent)
-            || IdentityDerefRule.apply_expr(engine, parent);
-    }
 }
 
 /// Whole-function copy-propagation fixpoint driven from the engine session

@@ -77,6 +77,14 @@ fn named_place(body: &Body, op: Operand) -> Option<NamedPlace> {
                 });
             }
         };
+        // A borrow a projection or deref reads through names the storage under
+        // it, as `(&mut x).f` names `x.f`: no handle of its own.
+        let step = step.filter(|step| {
+            !matches!(step, Step::Ref { .. })
+                || steps
+                    .last()
+                    .is_none_or(|(outer, _)| matches!(outer, Step::Ref { .. }))
+        });
         if let Some(step) = step {
             if !step.is_wrapper() {
                 named.get_or_insert(e);

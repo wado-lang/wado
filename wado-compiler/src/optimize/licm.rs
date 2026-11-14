@@ -70,7 +70,8 @@ impl FieldWrites {
 /// prevent hoisting field accesses on the other.
 #[derive(Default)]
 struct ModifiedVars {
-    /// Locals that are fully modified (assigned as a whole, passed as &mut, etc.).
+    /// Locals that are fully modified (assigned as a whole, borrowed `&mut`
+    /// outside a call argument, a cell passed `&mut`, etc.).
     /// Membership poisons the whole alias set: a full modification of one alias
     /// may write the shared heap object every alias points at.
     fully: IndexSet<u32>,

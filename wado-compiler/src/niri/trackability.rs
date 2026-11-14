@@ -303,10 +303,15 @@ pub(super) fn aggregate_safe_locals(
     let mut value_reads: IndexSet<ExprId> = IndexSet::default();
     let mut local_mentions: Vec<(ExprId, u32)> = Vec::new();
     let mut disqualified = LocalSet::default();
+    let projected = projected_borrows(body);
     for e in reachable_exprs(body) {
         let node = &body.exprs[e];
         match &node.kind {
             ExprKind::Local { index, .. } => local_mentions.push((e, *index)),
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr,
+            } if projected.contains(&e) => read_value(*expr, &mut value_reads),
             ExprKind::FieldAccess { expr, .. }
             | ExprKind::Match { expr, .. }
             | ExprKind::Switch {
@@ -392,6 +397,36 @@ pub(super) fn aggregate_safe_locals(
     safe
 }
 
+/// The borrows a field access, an index or a deref reads through. Each names
+/// the storage under it rather than a handle (see `named_place`), so the chain
+/// around it is what reads or writes that storage, and is judged instead.
+fn projected_borrows(body: &Body) -> IndexSet<ExprId> {
+    let mut set = IndexSet::default();
+    for e in reachable_exprs(body) {
+        let base = match &body.exprs[e].kind {
+            ExprKind::FieldAccess { expr, .. }
+            | ExprKind::Index { expr, .. }
+            | ExprKind::Unary {
+                op: NirUnaryOp::Deref,
+                expr,
+            } => *expr,
+            _ => continue,
+        };
+        if let Some(b) = base.as_expr()
+            && matches!(
+                body.exprs[b].kind,
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                    ..
+                }
+            )
+        {
+            set.insert(b);
+        }
+    }
+    set
+}
+
 /// Locals of `body` a compile-time frame cannot track: something other than a
 /// write it performs itself can reach them — a `&mut`, a mutable argument, a
 /// method receiver, or an assignment buried inside a larger expression.
@@ -410,6 +445,7 @@ pub(super) fn clobbered_locals(
             set.insert(index);
         }
     }
+    let projected = projected_borrows(body);
     let mut set = LocalSet::default();
     for e in reachable_exprs(body) {
         let node = &body.exprs[e];
@@ -419,6 +455,10 @@ pub(super) fn clobbered_locals(
                     disqualify(body, (*target).into(), &mut set);
                 }
             }
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                ..
+            } if projected.contains(&e) => {}
             // Only a `&mut`. A `&` cannot be written through, so
             // it cannot make the referent stale — which is the same reading
             // [`aggregate_safe_locals`] gives the node, where `&x` counts as a
