@@ -788,9 +788,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // through the return, so closing either empty answers the call first.
         let mut reached = self.tysys.packs_args_reach(&param_types, args_ast.len());
         if expected_type.is_some() {
-            reached.extend(self.tysys.type_table.borrow().pack_names(return_type));
+            reached.extend(self.tysys.type_table.borrow().packs(return_type));
         }
-        self.settle_unreached_packs(&method_own_params, &mut type_args, &reached);
+        self.settle_unreached_packs(
+            &method_own_params,
+            &method_type_param_ids,
+            &mut type_args,
+            &reached,
+        );
 
         self.check_inherent_member_visibility(
             inherent_visibility,
@@ -925,7 +930,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let reached = self
                 .tysys
                 .packs_args_reach(&expected_param_types, args.len());
-            self.settle_unreached_packs(&method_own_params, &mut known, &reached);
+            self.settle_unreached_packs(
+                &method_own_params,
+                &method_type_param_ids,
+                &mut known,
+                &reached,
+            );
             let own = self.value_default_slot_bindings(
                 &method_own_params,
                 &method_type_param_ids,
@@ -1992,9 +2002,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // which admits every candidate.
         let arg_types: Vec<TypeId> = preselected.clone().unwrap_or_default();
 
-        let callee_sig = static_receiver
-            .as_ref()
-            .and_then(|key| self.unique_qualified_method_sig_keyed(key, &static_call.method));
+        let callee_sig = static_receiver.as_ref().and_then(|key| {
+            self.unique_qualified_method_sig_keyed(key, &static_call.method)
+                .or_else(|| {
+                    self.inherited_default_method_sig(key, &static_call.method, SigChoice::Unique)
+                })
+        });
         let resolved = match (&static_receiver, &struct_name_for_lookup) {
             (Some(receiver), Some(name)) => {
                 let name = name.clone();
@@ -2896,7 +2909,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .type_params_all_in(expected, &scope)
+                .type_params_all_in(expected, scope.ids())
             {
                 continue;
             }
@@ -3958,7 +3971,8 @@ impl TypeSystem {
         let table = self.type_table.borrow();
         let slot = table.impl_target_whole(blanket);
         assert!(
-            matches!(table.get(slot), ResolvedType::TypeParam { name, .. } if name == blanket_param),
+            matches!(table.get(slot), ResolvedType::TypeParam { id }
+                if id.owner == blanket && table.param_name(*id) == blanket_param),
             "a blanket impl targets its own parameter"
         );
         slot

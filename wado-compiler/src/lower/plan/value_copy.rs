@@ -539,10 +539,10 @@ fn needs_copy_walked(
             }
             None => true,
         },
-        ResolvedType::AssocParam { index, .. } => {
+        ResolvedType::AssocParam(param) => {
             let frame = env.expect("a family parameter is read under its projection's frame");
             needs_copy_in_env(
-                frame.family[*index as usize],
+                frame.family[param.index as usize],
                 frame.parent,
                 type_table,
                 depth + 1,

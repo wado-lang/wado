@@ -1040,7 +1040,9 @@ impl<'a> Emitter<'a> {
     fn describe_type(&self, id: TypeId) -> String {
         match self.types.get(id) {
             ResolvedType::Function { .. } => "function type".to_string(),
-            ResolvedType::TypeParam { name, .. } => format!("type parameter `{name}`"),
+            ResolvedType::TypeParam { id } => {
+                format!("type parameter `{}`", self.types.param_name(*id))
+            }
             ResolvedType::Unit => "unit `()`".to_string(),
             ResolvedType::Never => "never `!`".to_string(),
             _ => format!("`{}`", self.types.name(id)),

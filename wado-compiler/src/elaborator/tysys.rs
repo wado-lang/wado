@@ -805,7 +805,7 @@ impl TypeSystem {
     /// The name the type parameter or pack in this slot carries, `None` for a
     /// slot holding anything else.
     pub(crate) fn binder_name(&self, type_id: TypeId) -> Option<String> {
-        bound_param_name(&self.type_table.borrow(), type_id).cloned()
+        bound_param_name(&self.type_table.borrow(), type_id).map(str::to_string)
     }
 
     /// [`TypeTable::name`], the one diagnostic spelling of a type.
@@ -1040,17 +1040,12 @@ impl HeldTypes for AffineParams<'_> {
                 .trait_env
                 .assoc_type_decl(owning_trait, assoc_name)
                 .is_some_and(|decl| decl.is_affine),
-            ResolvedType::AssocParam {
-                owning_trait,
-                assoc_name,
-                index,
-                ..
-            } => {
+            ResolvedType::AssocParam(id) => {
                 self.types
                     .trait_env
-                    .assoc_type_decl(owning_trait, assoc_name)
+                    .assoc_type_decl(&id.owning_trait, &id.assoc_name)
                     .expect("a family parameter is minted from its declaration")
-                    .type_params[*index as usize]
+                    .type_params[id.index as usize]
                     .is_affine
             }
             _ => false,

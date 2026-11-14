@@ -316,8 +316,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // monomorphization. Resolve the value-free members here and record a
         // type-param-receiver dispatch that monomorphization redirects to the
         // concrete `Struct^ReflectStruct::method`.
-        let subject = self.tysys.type_table.borrow().get(self_ty).clone();
-        if let ResolvedType::TypeParam { name, .. } = subject {
+        if let Some(name) = self.generic_reflect_subject(self_ty) {
             return self.resolve_generic_reflect_static_call(self_ty, &name, static_call, ctx);
         }
 
@@ -522,6 +521,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         return_type
+    }
+
+    /// The name of the type parameter `ty` is, where a reflect call's subject
+    /// is one and so is only known at monomorphization.
+    fn generic_reflect_subject(&self, ty: TypeId) -> Option<String> {
+        let tt = self.tysys.type_table.borrow();
+        match tt.get(ty) {
+            ResolvedType::TypeParam { id } => Some(tt.param_name(*id).to_string()),
+            _ => None,
+        }
     }
 
     /// The diagnostic for a reflect member on a generic subject `T` that
@@ -1003,8 +1012,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        let subject = self.tysys.type_table.borrow().get(self_ty).clone();
-        if let ResolvedType::TypeParam { name, .. } = subject {
+        if let Some(name) = self.generic_reflect_subject(self_ty) {
             let return_type = if method == methods.members {
                 let Some(members_ty) = self.payload_member_pack_bound_ty(
                     self_ty,
@@ -1095,8 +1103,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Generic subject `T: ReflectVariant`: the concrete variant is unknown
         // until monomorphization; mirror `resolve_reflect_static_call`.
-        let subject = self.tysys.type_table.borrow().get(self_ty).clone();
-        if let ResolvedType::TypeParam { name, .. } = subject {
+        if let Some(name) = self.generic_reflect_subject(self_ty) {
             return self.resolve_generic_reflect_variant_static_call(
                 self_ty,
                 &name,
@@ -1332,8 +1339,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .reflect_structure_head(self_ty);
 
-        let written = self.tysys.type_table.borrow().get(self_ty).clone();
-        if let ResolvedType::TypeParam { name, .. } = written {
+        if let Some(name) = self.generic_reflect_subject(self_ty) {
             return self.resolve_generic_reflect_scalar_static_call(
                 spec,
                 self_ty,

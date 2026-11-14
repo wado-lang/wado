@@ -1,0 +1,29 @@
+// A static trait default the receiver inherits, called with the receiver's
+// turbofish, solves its own parameter from the arguments as the bare spelling
+// does.
+
+trait Conv<A> {
+    fn base(&self) -> A;
+    fn make<C>(c: C) -> [C, i32] {
+        return [c, 7];
+    }
+}
+
+struct Pair<X, Y> {
+    x: X,
+    y: Y,
+}
+
+impl<X, Y> Conv<i64> for Pair<X, Y> {
+    fn base(&self) -> i64 {
+        return 1;
+    }
+}
+
+test "the turbofish spelling solves the method's own parameter" {
+    let [c, k] = Pair::<i32, bool>::make('z');
+    assert c == 'z';
+    assert k == 7;
+    let r: [String, i32] = Pair::<i32, bool>::make("s");
+    assert r.0 == "s";
+}

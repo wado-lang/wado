@@ -1,0 +1,35 @@
+// A caller's type parameter and a callee's own at the same position under the
+// same name are two parameters. `g`'s `B` reaches `pick` through `W<B>`, while
+// `pick`'s own `B` is answered by `7 as i64`: telling them apart by name and
+// position took the one for the other (issue #2585).
+
+struct W<X> {
+    n: i32,
+}
+
+impl<X> W<X> {
+    fn pick<B, ..P>(_x: X, b: B, _rest: [..P]) -> B {
+        return b;
+    }
+}
+
+fn g<A, B>(_a: A, b: B) -> i64 {
+    return W::<B>::pick(b, 7 as i64, [1, "x"]);
+}
+
+// A pack the caller declares under the callee's pack's name reaches the
+// callee through its receiver, and leaves the callee's own pack unreached.
+impl<X> W<X> {
+    fn count<..P>(_x: X) -> i32 {
+        return 1;
+    }
+}
+
+fn forward<..P>(t: [..P]) -> i32 {
+    return W::<[..P]>::count(t);
+}
+
+test "a caller's parameter is not the callee's of the same name" {
+    assert g("a", true) == 7;
+    assert forward([1, "x"]) == 1;
+}

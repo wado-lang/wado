@@ -100,7 +100,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A variable an enclosing call has yet to answer (a closure parameter
         // typed by the callee's own parameter) has no bounds to read here.
         if self.tysys.is_unbound_type_param(receiver)
-            && !self.scope_type_param_ids().contains(&receiver)
+            && !self
+                .scope_type_param_ids()
+                .owns(&self.tysys.type_table.borrow(), receiver)
         {
             return;
         }

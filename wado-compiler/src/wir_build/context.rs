@@ -848,14 +848,13 @@ impl<'a> WirContext<'a> {
             // Flags are bitmasks stored as i32
             ResolvedType::Flags { .. } => WirType::I32,
             // These should never reach codegen — must be resolved by monomorphization
-            ResolvedType::TypeParam { name, id } => {
-                panic!("unsubstituted TypeParam `{name}` ({id:?}) reached codegen")
-            }
-            ResolvedType::AssocParam { name, index, .. } => {
-                panic!("uninstantiated AssocParam `{name}` (index {index}) reached codegen")
-            }
-            ResolvedType::TypePack { name, id, .. } => {
-                panic!("unsubstituted TypePack `..{name}` ({id:?}) reached codegen")
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
+            | ResolvedType::TypePack { .. } => {
+                panic!(
+                    "unsubstituted parameter `{}` reached codegen",
+                    type_table.name(type_id)
+                )
             }
             ResolvedType::PackElement { pack, .. } => {
                 panic!("an element of pack {pack:?} reached codegen, which unrolling substitutes")
