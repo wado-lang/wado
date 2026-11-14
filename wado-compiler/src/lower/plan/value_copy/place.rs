@@ -9,7 +9,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::lower::plan::value_copy::analyze::{carries_no_storage, returned_value};
 use crate::lower::plan::value_copy::callgraph;
-use crate::name::LocalMethodName;
+use crate::name::{LocalMethodName, is_contract_arg};
 use crate::tir::{
     BuiltinDeclarations, CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction,
     TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
@@ -506,8 +506,11 @@ pub fn is_source_place(expr: &TirExpr, items: &CompilerItems) -> bool {
     place_walk(expr, Some(items))
 }
 
-/// `{ local = value; local }`, a binding made where the value is evaluated, as
-/// contract checks bind a call's earlier arguments.
+/// `{ local = value; local }`, a binding a contract check makes of a call's
+/// argument where the value is evaluated. Nothing but the check and the call
+/// reads the local, so the value may be bound uncopied. An assert's operand
+/// capture makes the same shape, but its local is read again by the failure
+/// branch, so it is no such binding.
 pub struct InPlaceBinding<'e> {
     pub local: u32,
     /// The assignment's target, the `local` written.
@@ -530,7 +533,7 @@ pub fn in_place_binding(stmts: &[TirStmt]) -> Option<InPlaceBinding<'_>> {
         }),
         TirStmtKind::Expr(
             read @ TirExpr {
-                kind: TirExprKind::Local { index, .. },
+                kind: TirExprKind::Local { index, name },
                 ..
             },
         ),
@@ -538,7 +541,8 @@ pub fn in_place_binding(stmts: &[TirStmt]) -> Option<InPlaceBinding<'_>> {
     else {
         return None;
     };
-    matches!(target.kind, TirExprKind::Local { index: assigned, .. } if assigned == *index)
+    (is_contract_arg(name)
+        && matches!(target.kind, TirExprKind::Local { index: assigned, .. } if assigned == *index))
         .then_some(InPlaceBinding {
             local: *index,
             target,

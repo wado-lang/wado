@@ -474,8 +474,6 @@ struct FunctionTranslator<'a, 'p> {
     guarded_locals: IndexSet<u32>,
     /// The flag local of each guarded local, minted at its declaration.
     assigned_flags: RefCell<IndexMap<u32, u32>>,
-    /// The locals a contract check binds an argument to in place.
-    contract_args: IndexSet<u32>,
     /// The arena every converter pushes nodes into. `convert_function` takes it
     /// (`into_inner`) as the function's `Body`; `convert_global` wraps the
     /// initializer it builds into a single-statement global-init `Body`.
@@ -611,13 +609,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             args_checked: analyzed,
             guarded_locals,
             assigned_flags: RefCell::new(IndexMap::default()),
-            contract_args: func
-                .locals
-                .iter()
-                .enumerate()
-                .filter(|(_, l)| name::is_contract_arg(&l.name))
-                .map(|(i, _)| u32::try_from(i).unwrap())
-                .collect(),
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -644,7 +635,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             args_checked: false,
             guarded_locals: IndexSet::default(),
             assigned_flags: RefCell::new(IndexMap::default()),
-            contract_args: IndexSet::default(),
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -1341,11 +1331,6 @@ impl FunctionTranslator<'_, '_> {
         reference: &TirExpr,
         binding: &place::InPlaceBinding<'_>,
     ) -> ExprId {
-        // Assigning uncopied is sound only for a local nothing else reads.
-        assert!(
-            self.contract_args.contains(&binding.local),
-            "only a contract check binds an argument in place"
-        );
         let span = reference.span;
         let local_type = binding.value.type_id;
         let assign = ExprKind::Assign {
