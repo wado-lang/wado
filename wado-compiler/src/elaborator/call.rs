@@ -2525,13 +2525,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .and_then(|sig| self.tysys.signatures.declaring_trait(sig));
                     let self_binding = ns_receiver_type
                         .map(|receiver| self.tysys.base_self_binding(receiver, declaring_trait));
-                    let type_bindings = match (sig, ns_receiver_type) {
-                        (Some(sig), Some(receiver)) => self.own_slot_default_bindings(
+                    let type_bindings = match (sig, self_binding) {
+                        (Some(sig), Some(declaring)) => self.own_slot_default_bindings(
                             &param_defaults,
                             &sig.own_params,
                             &sig.own_type_param_ids(),
-                            receiver,
-                            declaring_trait,
+                            declaring,
                             method_type_args.clone(),
                             Some(defaults_module.clone()),
                         ),
@@ -6191,12 +6190,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The method's own slots, as the turbofish spelled them or the
             // solve above settled them. The receiver is the bound's own
             // parameter, which the monomorphizer binds.
+            let self_binding = self.tysys.base_self_binding(type_param_type_id, trait_decl);
             let type_bindings = self.own_slot_default_bindings(
                 &param_defaults,
                 &own_params,
                 &method_slots,
-                type_param_type_id,
-                trait_decl,
+                self_binding,
                 method_type_args_for_defaults,
                 Some(defaults_module.clone()),
             );
@@ -6206,7 +6205,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &param_types,
                 &param_defaults,
                 defaults_module.clone(),
-                Some(self.tysys.base_self_binding(type_param_type_id, trait_decl)),
+                Some(self_binding),
                 &type_bindings,
                 ctx,
             );

@@ -906,6 +906,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Iterator::collect` would otherwise resolve `= List<Self::Item>` here,
         // before the receiver's associated types are registered.
         let mut default_type_bindings = impl_type_bindings;
+        // The selected impl's own target: a `&A` impl's `Self` is the
+        // reference, which the base type peels.
+        let self_binding = SelfBinding {
+            type_id: match subject {
+                Some(subject) if is_ref_impl => subject,
+                _ => base_type_id,
+            },
+            declaring_trait: trait_name.as_ref().and_then(FqTraitName::canonical),
+        };
         if !method_type_param_ids.is_empty() && defaults.iter().any(|(_, d)| d.is_some()) {
             let mut known = if turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
                 let mut infer =
@@ -939,17 +948,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let own = self.value_default_slot_bindings(
                 &method_own_params,
                 &method_type_param_ids,
-                base_type_id,
-                trait_name.as_ref().and_then(FqTraitName::canonical),
+                self_binding,
                 known,
                 defaults_module.clone(),
             );
             bind_nearer(&mut default_type_bindings, own);
         }
-        let self_binding = self.tysys.base_self_binding(
-            base_type_id,
-            trait_name.as_ref().and_then(FqTraitName::canonical),
-        );
         self.fill_trailing_defaults(
             &mut args,
             &expected_param_types,
@@ -2311,19 +2315,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // last source is the one the block above cannot reach: it runs only
         // where the declaring block has slots of its own, and a block with none
         // leaves the method's unbound rather than wrong.
+        let self_binding = self
+            .tysys
+            .base_self_binding(target_type_id, declaring_trait);
         let own = self.own_slot_default_bindings(
             &static_method_defaults,
             &own_params,
             &own_type_param_ids,
-            target_type_id,
-            declaring_trait,
+            self_binding,
             method_type_args.clone(),
             static_method_module.clone(),
         );
         bind_nearer(&mut static_type_bindings, own);
-        let self_binding = self
-            .tysys
-            .base_self_binding(target_type_id, declaring_trait);
         self.fill_trailing_defaults(
             &mut args,
             &param_types,
@@ -2813,12 +2816,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The template is written against the blanket parameter, which the
         // monomorphizer binds to the receiver. A default reads the method's own
         // slots as the call solved them.
+        let self_binding = self.tysys.base_self_binding(receiver_type_id, trait_decl);
         let own_bindings = self.own_slot_default_bindings(
             &static_method_defaults,
             &own_params,
             &slots,
-            receiver_type_id,
-            trait_decl,
+            self_binding,
             method_type_args.clone(),
             Some(defaults_module.clone()),
         );
@@ -2828,7 +2831,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &param_types,
             &static_method_defaults,
             defaults_module.clone(),
-            Some(self.tysys.base_self_binding(receiver_type_id, trait_decl)),
+            Some(self_binding),
             &own_bindings,
             ctx,
         );
@@ -3785,6 +3788,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let declaring_trait = callee_sig
             .as_ref()
             .and_then(|sig| self.tysys.signatures.declaring_trait(sig));
+        let self_binding = self.tysys.base_self_binding(receiver, declaring_trait);
         let type_bindings = match &callee_sig {
             Some(sig) => {
                 let own_ids = sig.own_type_param_ids();
@@ -3792,8 +3796,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.value_default_slot_bindings(
                     &own_params,
                     &own_ids,
-                    receiver,
-                    declaring_trait,
+                    self_binding,
                     method_type_args.to_vec(),
                     Some(defaults_module.clone()),
                 )
@@ -3806,7 +3809,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &callee_params.param_types,
             &callee_params.param_defaults,
             defaults_module,
-            Some(self.tysys.base_self_binding(receiver, declaring_trait)),
+            Some(self_binding),
             &type_bindings,
             ctx,
         );

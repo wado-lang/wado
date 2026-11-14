@@ -1,0 +1,49 @@
+// A trait method's default names the `Self` of the impl the call selected. An
+// `impl Tr for &A` is written for the reference, so there `Self` is `&A`, not
+// the `A` the receiver reads through.
+use { println, Stdout } from "core:cli";
+
+trait Shown with () {
+    fn id() -> i32;
+}
+
+trait Tr: Shown with () {
+    fn m(&self, x: i32 = tag(List::<Self>::with_capacity(0))) -> i32;
+}
+
+fn tag<T: Shown>(_x: List<T>) -> i32 {
+    return T::id();
+}
+
+struct A {
+    v: i32,
+}
+
+impl Shown for A {
+    fn id() -> i32 {
+        return 1;
+    }
+}
+
+impl Shown for &A {
+    fn id() -> i32 {
+        return 2;
+    }
+}
+
+impl Tr for &A {
+    fn m(&self, x: i32) -> i32 {
+        return x;
+    }
+}
+
+export fn run() with Stdout {
+    let a = A { v: 1 };
+    let r = &a;
+    println(`${r.m()}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n"
+}

@@ -1768,8 +1768,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         defaults: &[(String, Option<ast::Expr>)],
         own_params: &[ast::GenericParam],
         own_ids: &[TypeId],
-        receiver: TypeId,
-        declaring_trait: Option<DefId>,
+        declaring: SelfBinding,
         known: Vec<TypeId>,
         declaring_module: Option<ModuleSource>,
     ) -> Vec<DefaultTypeBinding> {
@@ -1777,8 +1776,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.value_default_slot_bindings(
                 own_params,
                 own_ids,
-                receiver,
-                declaring_trait,
+                declaring,
                 known,
                 declaring_module,
             )
@@ -1799,8 +1797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         own_params: &[ast::GenericParam],
         own_ids: &[TypeId],
-        receiver: TypeId,
-        declaring_trait: Option<DefId>,
+        declaring: SelfBinding,
         mut known: Vec<TypeId>,
         declaring_module: Option<ModuleSource>,
     ) -> Vec<DefaultTypeBinding> {
@@ -1809,10 +1806,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if known.len() != own_ids.len() {
             known = own_ids.to_vec();
         }
-        let declaring = SelfBinding {
-            type_id: receiver,
-            declaring_trait,
-        };
         self.method_type_args_for_value_defaults(
             own_params,
             declaring,
@@ -4364,11 +4357,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_else(|| self.current_module_source.clone());
         if omits_a_default(args.len(), &defaults) {
             let mut type_bindings = impl_type_bindings;
+            let self_binding = self.tysys.base_self_binding(
+                output_base_type_id,
+                method_trait_name.as_ref().and_then(FqTraitName::canonical),
+            );
             let own = self.value_default_slot_bindings(
                 &method_own_params,
                 &method_type_param_ids,
-                output_base_type_id,
-                method_trait_name.as_ref().and_then(FqTraitName::canonical),
+                self_binding,
                 type_args.clone(),
                 Some(defaults_module.clone()),
             );
@@ -4379,10 +4375,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &param_types,
                 &defaults,
                 defaults_module.clone(),
-                Some(self.tysys.base_self_binding(
-                    output_base_type_id,
-                    method_trait_name.as_ref().and_then(FqTraitName::canonical),
-                )),
+                Some(self_binding),
                 &type_bindings,
                 ctx,
             );
