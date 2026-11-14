@@ -4942,7 +4942,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             // A builtin shape has no declaration to read parameters off, so
             // the block's own target is the receiver, at the slots it places.
-            let params = self.tysys.type_table.borrow_mut().matched_param_types(target);
+            let params = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .matched_param_types(target);
             (target, params)
         };
         let frame = self.tysys.trait_frame_at(impl_def, receiver);

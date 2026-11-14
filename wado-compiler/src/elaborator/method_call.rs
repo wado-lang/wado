@@ -2035,11 +2035,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.report_unanswered_static(&resolved, &static_call.method, static_call.span) {
             return TypeTable::ERROR;
         }
-        // A reference's blocks share one key whatever they refer to, so the
-        // key names no one signature there: the block the resolution
-        // selected does.
+        // A key naming no declaration holds blocks of several shapes (`&A` and
+        // `&B`, `[A, i32]` and `[A, String]`), so it names no one signature:
+        // the block the resolution selected does.
         let callee_sig = match static_receiver.as_ref() {
-            Some(key) if key.ref_kind().is_some() => resolved
+            Some(key) if key.decl().is_none() => resolved
                 .found()
                 .and_then(|callee| self.selected_static_sig(&callee.method_ref)),
             Some(key) => self
@@ -3231,8 +3231,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The trait impl blocks on the receiver `struct_name` at `receiver_args`,
     /// current-module-first; a block binding it as its own parameter only here.
-    /// A reference's blocks share one bucket whatever they refer to, so there
-    /// the block's target has to match `receiver_type` itself.
     pub(super) fn trait_impls_for_receiver(
         &self,
         struct_name: &str,
