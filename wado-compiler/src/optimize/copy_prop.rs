@@ -22,6 +22,7 @@ use crate::type_table::TypeTable;
 
 use super::arena_query::{MutRefAliases, RootMutation, for_each_mutated_root};
 use super::gate::{FunctionGate, GatedPass};
+use super::identity_cast::{FieldThroughRefRule, IdentityDerefRule};
 use super::value_copy::mutation::MutationOracle;
 use crate::optimize::arena_query::{
     bare_promoted_local, buried_promoted_reads, promoted_local_reads, reachable_nodes,
@@ -917,36 +918,21 @@ fn emit_ref(
     emit_borrow(engine, id, op, inner);
 }
 
-/// Replace `id`, a read of a reference local, with `&place` / `&mut place`. A
-/// field access or a deref over `id` reads through the reference as it reads
-/// the place, so there `place` itself goes in: `(&mut x).f` would leave a
-/// borrow of `x` that names no handle of its own, which `niri` takes for one
-/// the frame cannot track until a peephole round removes it.
+/// Replace `id`, a read of a reference local, with `&place` / `&mut place`,
+/// folded into a field access or deref over it at once: `niri` takes the
+/// borrow in `(&mut x).f` for a handle the frame cannot track, and the next
+/// peephole round, which would fold it, runs after the CTFE in `const_fold`.
 fn emit_borrow(engine: &mut Engine, id: ExprId, op: NirUnaryOp, place: ExprId) {
-    let parent = engine.parent_of(NodeRef::Expr(id)).and_then(|p| match p {
-        NodeRef::Expr(p) => Some(p),
-        NodeRef::Stmt(_) | NodeRef::Block(_) | NodeRef::Pat(_) => None,
-    });
-    match parent.map(|p| (p, &engine.body.exprs[p].kind)) {
-        Some((_, ExprKind::FieldAccess { expr, .. })) if expr.as_expr() == Some(id) => {
-            assert!(engine.redirect_expr(id, place.into()));
-        }
-        Some((
-            deref,
-            ExprKind::Unary {
-                op: NirUnaryOp::Deref,
-                ..
-            },
-        )) => {
-            assert!(engine.redirect_expr(deref, place.into()));
-        }
-        _ => engine.replace_expr_kind(
-            id,
-            ExprKind::Unary {
-                op,
-                expr: place.into(),
-            },
-        ),
+    engine.replace_expr_kind(
+        id,
+        ExprKind::Unary {
+            op,
+            expr: place.into(),
+        },
+    );
+    if let Some(NodeRef::Expr(parent)) = engine.parent_of(NodeRef::Expr(id)) {
+        let _ = FieldThroughRefRule.apply_expr(engine, parent)
+            || IdentityDerefRule.apply_expr(engine, parent);
     }
 }
 

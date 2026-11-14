@@ -1,8 +1,9 @@
 //! Reference elimination: drop the `let self = &arr` bindings inlining leaves
 //! behind, folding each `self.repr` back to `arr.repr`, field-access chains
-//! included, and a `self` handed whole to a call back to `&arr`. `build_ref_elim` classifies every use in one pristine-body
-//! analysis; the referent is then stored unresolved and resolved during the
-//! transform, so a transitive `let r2 = &r1.field` survives `r1`'s removal.
+//! included, and a `self` handed whole to a call back to `&arr`.
+//! `build_ref_elim` classifies every use in one pristine-body analysis; the
+//! referent is then stored unresolved and resolved during the transform, so a
+//! transitive `let r2 = &r1.field` survives `r1`'s removal.
 
 use std::cell::RefCell;
 
