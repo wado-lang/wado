@@ -74,7 +74,7 @@ import fn wasi/task-return from "wasi/task-return";
 
 global global:affine_move_after_divergence.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(53);
 global global:affine_move_after_divergence.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 32, 53);
-global global:affine_move_after_divergence.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 114, 111, 112, 32, 52), used: 6 };
+global global:affine_move_after_divergence.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 32);
 global global:affine_move_after_divergence.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(51);
 global global:affine_move_after_divergence.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 32, 51);
 global global:affine_move_after_divergence.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 32, 50);
@@ -151,10 +151,16 @@ fn "affine_move_after_divergence.wado/run"() with Stdout {
     "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_10_50, new_repr_152);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_10_50);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9_49);
+    local.tee out_166(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }).used = 5;
+    builtin::array_copy<u8>(out_166.repr, 0, global:affine_move_after_divergence.wado::$const_obj_2, 0, 5);
+    $sroa_$pattern_temp_0_0_9_49 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_166, 0, 1);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_166.repr, $sroa_$pattern_temp_0_0_9_49, 4_i64, 1);
+    $inline_after_return_poke_dae_flag__0__$inline_core_prelude_string_wado_String__format_affine_move_after_divergence_wado__tmpl_fb51c04d54491732__i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
+        break $inline_after_return_poke_dae_flag__0__$inline_core_prelude_string_wado_String__format_affine_move_after_divergence_wado__tmpl_fb51c04d54491732__i32___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39;
+    };
     $sroa_$pattern_temp_0_0_9_49 = builtin::i32_wrap_i64(local.tee $cm_pair_7_47("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10_50 = builtin::i32_wrap_i64($cm_pair_7_47 >> 32_i64);
     $sroa_$pattern_temp_0_0_9_49 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9_49);
-    out_166 = global:affine_move_after_divergence.wado::$const_obj_2;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10_50, out_166.repr, out_166.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9_49);
     out_166 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };

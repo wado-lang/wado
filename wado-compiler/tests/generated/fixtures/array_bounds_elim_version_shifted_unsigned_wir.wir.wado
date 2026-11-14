@@ -74,6 +74,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:array_bounds_elim_version_shifted_unsigned_wir.wado::$const_obj_0: ref Array<i32> = array.new_fixed<i32>(1, 2, 3, 4, 5, 6, 7, 8);
 
 fn "array_bounds_elim_version_shifted_unsigned_wir.wado/run"() with Stdout {
+    let $load_8: ref Array<u8>;
     let out_13: ref "core:prelude/string.wado//String";
     let len: u32;
     let ob: u32;
@@ -82,7 +83,6 @@ fn "array_bounds_elim_version_shifted_unsigned_wir.wado/run"() with Stdout {
     let c_24: u32;
     let i_25: u32;
     let x: i64;
-    let arr: ref Array<u8>;
     let q: u64;
     len = black_box(8);
     ob = black_box(2);
@@ -215,22 +215,22 @@ fn "array_bounds_elim_version_shifted_unsigned_wir.wado/run"() with Stdout {
     }
     n_22 = out_13.used;
     out_13.used = len;
-    arr = out_13.repr;
     len = n_22 + ob;
+    $load_8 = out_13.repr;
     b30: block {
         l31: loop {
             break_if b30 (len - n_22) < 2;
             q = x /u 100_i64;
             total = local.tee ob(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, len - 1, (48 + ob) - (total * 10));
-            builtin::array_set_u8(arr, len - 2, 48 + total);
+            builtin::array_set_u8($load_8, len - 1, (48 + ob) - (total * 10));
+            builtin::array_set_u8($load_8, len - 2, 48 + total);
             len = len - 2;
             x = q;
             continue l31;
         };
     };
     if len > n_22 {
-        builtin::array_set_u8(arr, n_22, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($load_8, n_22, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_44: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_44;

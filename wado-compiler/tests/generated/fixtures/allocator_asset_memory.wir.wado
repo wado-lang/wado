@@ -367,22 +367,24 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
     let value_33: f32;
     let $cm_pair_7: i64;
     let $sroa_$iter_0_start_76: i32;
-    let $licm_repr_85: ref Array<f32>;
+    let $licm_repr_84: ref Array<f32>;
     let new_repr: ref Array<u8>;
     ptr = "mem/realloc"(0, 0, 1, 4194304);
     base = black_box(-1_f32);
     before = struct.new "core:prelude/list.wado//List<f32>" { repr: array.new_fixed<f32>(), used: 0 };
     $sroa_$iter_0_start_76 = 0;
+    $licm_repr_84 = before.repr;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_start_76 >= 64;
             $sroa_$iter_0_start_76 = local.tee current_28($sroa_$iter_0_start_76) + 1;
             value_33 = "wasm:core:libm.wat/libm_expf"(base - (builtin::f32_convert_i32_s(current_28) * 0.25_f32));
-            if @unlikely(local.tee current_28(before.used) >= builtin::array_len(before.repr)) {
+            if @unlikely(local.tee current_28(before.used) >= builtin::array_len($licm_repr_84)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<f32>::grow"(before);
+                $licm_repr_84 = before.repr;
             }
-            builtin::array_set<f32>(before.repr, current_28, value_33);
+            builtin::array_set<f32>($licm_repr_84, current_28, value_33);
             before.used = current_28 + 1;
             continue l1;
         };
@@ -390,7 +392,7 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
     builtin::memory_fill(ptr, 255, 4194304);
     ptr = 0;
     $sroa_$iter_0_start_76 = before.used;
-    $licm_repr_85 = before.repr;
+    $licm_repr_84 = before.repr;
     b3: block {
         l4: loop {
             break_if b3 ptr >= 64;
@@ -401,7 +403,7 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
                 "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(current_28, $sroa_$iter_0_start_76, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("allocator_asset_memory.wado:17"), used: 30 });
                 unreachable;
             }
-            $v3 = builtin::array_get_value<f32>($licm_repr_85, current_28);
+            $v3 = builtin::array_get_value<f32>($licm_repr_84, current_28);
             if @unlikely((($v1_10 == $v3) | (($v1_10 != $v1_10) & ($v3 != $v3))) == 0) {
                 cold_path;
                 "allocator_asset_memory.wado/run$cold0"(before.repr, before.used, current_28, value_33, $v3, $v1_10);

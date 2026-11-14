@@ -85,11 +85,11 @@ fn "const_object_globalization_value_arg_call.wado/byte_total"($mv$s$repr, $mv$s
 }
 
 fn "const_object_globalization_value_arg_call.wado/run"() with Stdout {
+    let $load_10: ref Array<u8>;
     let acc: i32;
     let x: i64;
     let $sroa_slot_120: i32;
     let $sroa_$iter_0_start_123: i32;
-    let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     acc = 0;
@@ -202,22 +202,22 @@ fn "const_object_globalization_value_arg_call.wado/run"() with Stdout {
     }
     $sroa_slot_120 = $mv_arg_1.used;
     $mv_arg_1.used = $sroa_$iter_0_start_123;
-    arr = $mv_arg_1.repr;
     acc = $sroa_slot_120 + acc;
+    $load_10 = $mv_arg_1.repr;
     b30: block {
         l31: loop {
             break_if b30 (acc - $sroa_slot_120) < 2;
             q = x /u 100_i64;
             tens = local.tee $sroa_$iter_0_start_123(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, acc - 1, (48 + $sroa_$iter_0_start_123) - (tens * 10));
-            builtin::array_set_u8(arr, acc - 2, 48 + tens);
+            builtin::array_set_u8($load_10, acc - 1, (48 + $sroa_$iter_0_start_123) - (tens * 10));
+            builtin::array_set_u8($load_10, acc - 2, 48 + tens);
             acc = acc - 2;
             x = q;
             continue l31;
         };
     };
     if acc > $sroa_slot_120 {
-        builtin::array_set_u8(arr, $sroa_slot_120, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($load_10, $sroa_slot_120, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_46: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_46;
@@ -225,11 +225,11 @@ fn "const_object_globalization_value_arg_call.wado/run"() with Stdout {
     acc = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $sroa_$iter_0_start_123 = builtin::i32_wrap_i64(x >> 32_i64);
     acc = "const_object_globalization_value_arg_call.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(acc);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee $sroa_slot_120($mv_arg_1.used) + 1)), 0, $mv_arg_1.repr, 0, $sroa_slot_120);
-    builtin::array_set_u8(arr, $sroa_slot_120, 10);
+    builtin::array_copy<u8>(local.tee $load_10(builtin::array_new<u8>(local.tee $sroa_slot_120($mv_arg_1.used) + 1)), 0, $mv_arg_1.repr, 0, $sroa_slot_120);
+    builtin::array_set_u8($load_10, $sroa_slot_120, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         $sroa_slot_120 = $sroa_slot_120 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$iter_0_start_123, arr, 0, $sroa_slot_120);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$iter_0_start_123, $load_10, 0, $sroa_slot_120);
     });
     "wasi/stream-drop-writable"($sroa_$iter_0_start_123);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(acc);
@@ -247,11 +247,10 @@ fn "const_object_globalization_value_arg_call.wado/$cm_export__run"() {
 fn "const_object_globalization_value_arg_call.wado/encode_key$spec0"(name) {
     let $load_1: ref Array<u8>;
     let s_1: ref "core:prelude/string.wado//String";
-    local.tee s_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(2002), used: 0 }).used = 1;
-    builtin::array_set_u8(local.tee $load_1(s_1.repr), 0, 34);
+    builtin::array_set_u8(local.tee $load_1(local.tee s_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(2002), used: 0 }).repr), 0, 34);
     s_1.used = 5;
     builtin::array_copy<u8>($load_1, 1, name.repr, 0, 2);
-    builtin::array_copy<u8>($load_1, 1 + 2, global:const_object_globalization_value_arg_call.wado::$const_obj_1, 0, 2);
+    builtin::array_copy<u8>($load_1, 3, global:const_object_globalization_value_arg_call.wado::$const_obj_1, 0, 2);
     return s_1;
 }
 

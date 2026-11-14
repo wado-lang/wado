@@ -423,28 +423,28 @@ fn "spec_modules_visibility.wado/$test_0"() {
     let result: ref "core:prelude/list.wado//List<i32>";
     let item_37: i32;
     let used_40: i32;
-    let $sroa_self_repr_70: ref Array<i32>;
-    let $sroa_self_index_71: i32;
+    let $licm_repr_65: ref Array<i32>;
+    let $sroa_self_index_72: i32;
     $v0_9 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_modules_visibility.wado//$Closure_0" {}, inspect: ref.func "closure/spec_modules_visibility.wado/$closure_inspect_wrapper_0", func: ref.func "closure/spec_modules_visibility.wado/$closure_wrapper_0" };
-    $sroa_self_repr_70 = global:spec_modules_visibility.wado::$const_obj_2;
-    $sroa_self_index_71 = 0;
-    result = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $sroa_self_index_72 = 0;
+    $licm_repr_65 = local.tee result(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b0: block {
         l1: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__11: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__12: block {
-                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__12 $sroa_self_index_71 >= 2;
-                    item_37 = builtin::array_get_value<i32>($sroa_self_repr_70, $sroa_self_index_71);
-                    $sroa_self_index_71 = $sroa_self_index_71 + 1;
+                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__12 $sroa_self_index_72 >= 2;
+                    item_37 = builtin::array_get_value<i32>(global:spec_modules_visibility.wado::$const_obj_2, $sroa_self_index_72);
+                    $sroa_self_index_72 = $sroa_self_index_72 + 1;
                     item_37 = block -> i32 {
                         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($v0_9)).env, item_37);
                     };
-                    if @unlikely(local.tee used_40(result.used) >= builtin::array_len(result.repr)) {
+                    if @unlikely(local.tee used_40(result.used) >= builtin::array_len($licm_repr_65)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result);
+                        $licm_repr_65 = result.repr;
                     }
-                    builtin::array_set<i32>(result.repr, used_40, item_37);
+                    builtin::array_set<i32>($licm_repr_65, used_40, item_37);
                     result.used = used_40 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__11;
                 };
@@ -454,27 +454,27 @@ fn "spec_modules_visibility.wado/$test_0"() {
         };
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_i32__18: block -> bool {
-        if local.tee $sroa_self_index_71(result.used) != 2 {
+        if local.tee $sroa_self_index_72(result.used) != 2 {
             break $inline_core_prelude_array_wado_seq_eq_i32__18: 0;
         }
         item_37 = 0;
-        $sroa_self_repr_70 = result.repr;
+        $licm_repr_65 = result.repr;
         b6: block {
             l7: loop {
-                break_if b6 (builtin::i64_extend_i32_s(item_37) + 3_i64) >= builtin::i64_extend_i32_s($sroa_self_index_71);
-                if builtin::array_get_value<i32>($sroa_self_repr_70, item_37) != builtin::array_get_value<i32>(global:spec_modules_visibility.wado::$const_obj_1, item_37) {
+                break_if b6 (builtin::i64_extend_i32_s(item_37) + 3_i64) >= builtin::i64_extend_i32_s($sroa_self_index_72);
+                if builtin::array_get_value<i32>($licm_repr_65, item_37) != builtin::array_get_value<i32>(global:spec_modules_visibility.wado::$const_obj_1, item_37) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__18: 0;
                 }
                 item_37 = item_37 + 1;
-                if builtin::array_get_value<i32>($sroa_self_repr_70, item_37) != builtin::array_get_value<i32>(global:spec_modules_visibility.wado::$const_obj_1, item_37) {
+                if builtin::array_get_value<i32>($licm_repr_65, item_37) != builtin::array_get_value<i32>(global:spec_modules_visibility.wado::$const_obj_1, item_37) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__18: 0;
                 }
                 item_37 = item_37 + 1;
-                if builtin::array_get_value<i32>($sroa_self_repr_70, item_37) != builtin::array_get_value<i32>(global:spec_modules_visibility.wado::$const_obj_1, item_37) {
+                if builtin::array_get_value<i32>($licm_repr_65, item_37) != builtin::array_get_value<i32>(global:spec_modules_visibility.wado::$const_obj_1, item_37) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__18: 0;
                 }
                 item_37 = item_37 + 1;
-                if builtin::array_get_value<i32>($sroa_self_repr_70, item_37) != builtin::array_get_value<i32>(global:spec_modules_visibility.wado::$const_obj_1, item_37) {
+                if builtin::array_get_value<i32>($licm_repr_65, item_37) != builtin::array_get_value<i32>(global:spec_modules_visibility.wado::$const_obj_1, item_37) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__18: 0;
                 }
                 item_37 = item_37 + 1;
@@ -483,8 +483,8 @@ fn "spec_modules_visibility.wado/$test_0"() {
         };
         b12: block {
             l13: loop {
-                break_if b12 item_37 >= $sroa_self_index_71;
-                if builtin::array_get_value<i32>($sroa_self_repr_70, item_37) != builtin::array_get_value<i32>(global:spec_modules_visibility.wado::$const_obj_1, item_37) {
+                break_if b12 item_37 >= $sroa_self_index_72;
+                if builtin::array_get_value<i32>($licm_repr_65, item_37) != builtin::array_get_value<i32>(global:spec_modules_visibility.wado::$const_obj_1, item_37) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__18: 0;
                 }
                 item_37 = item_37 + 1;

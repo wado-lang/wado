@@ -80,16 +80,15 @@ fn "select_bool_arms_to_bitwise.wado/run"() with Stdout {
     let out: ref "core:prelude/string.wado//String";
     let item: u8;
     let $cm_pair_7: i64;
+    let new_repr: ref Array<u8>;
     let self_38: i32;
-    let $sroa_$iter_0_repr_47: ref Array<u8>;
     let $sroa_$iter_0_index_48: i32;
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    $sroa_$iter_0_repr_47 = global:select_bool_arms_to_bitwise.wado::$const_obj_0;
     $sroa_$iter_0_index_48 = 0;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_index_48 >= 6;
-            item = builtin::array_get_value<u8>($sroa_$iter_0_repr_47, $sroa_$iter_0_index_48);
+            item = builtin::array_get_value<u8>(global:select_bool_arms_to_bitwise.wado::$const_obj_0, $sroa_$iter_0_index_48);
             $sroa_$iter_0_index_48 = $sroa_$iter_0_index_48 + 1;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, select char("select_bool_arms_to_bitwise.wado/plain"(item), 112, 45));
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, select char("select_bool_arms_to_bitwise.wado/stop"(item), 115, 45));
@@ -99,11 +98,11 @@ fn "select_bool_arms_to_bitwise.wado/run"() with Stdout {
     $sroa_$iter_0_index_48 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     item = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_$iter_0_index_48 = "select_bool_arms_to_bitwise.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_index_48);
-    builtin::array_copy<u8>(local.tee $sroa_$iter_0_repr_47(builtin::array_new<u8>(local.tee self_38(out.used) + 1)), 0, out.repr, 0, self_38);
-    builtin::array_set_u8($sroa_$iter_0_repr_47, self_38, 10);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee self_38(out.used) + 1)), 0, out.repr, 0, self_38);
+    builtin::array_set_u8(new_repr, self_38, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         self_38 = self_38 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(item, $sroa_$iter_0_repr_47, 0, self_38);
+        "core:rt/cm_stream_write_raw_all_u8"(item, new_repr, 0, self_38);
     });
     "wasi/stream-drop-writable"(item);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_index_48);
@@ -230,9 +229,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
-    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -249,26 +248,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_0: block -> i32 {
-        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c);
+            builtin::array_set_u8(self.repr, new_used, c);
             break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_0: 3;
         }
-        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
+        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_0: 4;
     };
 }

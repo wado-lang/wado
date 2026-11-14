@@ -309,13 +309,14 @@ fn "shared_escape_tuple_pattern.wado/run"() with Stdout {
     let row_4: ref "tuple//[core:prelude/list.wado/List<f64>, core:prelude/list.wado/List<f64>, [i32,i32,i32,core:prelude/list.wado/List<f64>]]";
     let current: i32;
     let $sroa_$iter_0_start_120: i32;
-    let message_124: ref "core:prelude/string.wado//String";
+    let $licm_repr_122: ref "Array<[core:prelude/list.wado/List<f64>,core:prelude/list.wado/List<f64>,[i32,i32,i32,core:prelude/list.wado/List<f64>]]>";
+    let message_125: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_1_14: i32;
-    let $sroa_$iter_1_repr_139: ref "Array<[core:prelude/list.wado/List<f64>,core:prelude/list.wado/List<f64>,[i32,i32,i32,core:prelude/list.wado/List<f64>]]>";
     n = black_box(2);
     rows = struct.new "core:prelude/list.wado//List<[core:prelude/list.wado/List<f64>,core:prelude/list.wado/List<f64>,[i32,i32,i32,core:prelude/list.wado/List<f64>]]>" { repr: array.new_fixed<ref "tuple//[core:prelude/list.wado/List<f64>, core:prelude/list.wado/List<f64>, [i32,i32,i32,core:prelude/list.wado/List<f64>]]">(), used: 0 };
     $sroa_$iter_0_start_120 = 0;
+    $licm_repr_122 = rows.repr;
     b3: block {
         l4: loop {
             break_if b3 $sroa_$iter_0_start_120 >= n;
@@ -323,11 +324,12 @@ fn "shared_escape_tuple_pattern.wado/run"() with Stdout {
             local.tee row_4(struct.new "tuple//[core:prelude/list.wado/List<f64>, core:prelude/list.wado/List<f64>, [i32,i32,i32,core:prelude/list.wado/List<f64>]]" { 0: struct.new "core:prelude/list.wado//List<f64>" { repr: builtin::array_new<f64>(current + 1), used: 0 }, 1: struct.new "core:prelude/list.wado//List<f64>" { repr: builtin::array_new<f64>(current + 1), used: 0 }, 2: struct.new "tuple//[i32, i32, i32, core:prelude/list.wado/List<f64>]" { 0: current, 1: current, 2: current, 3: struct.new "core:prelude/list.wado//List<f64>" { repr: array.new_fixed<f64>(), used: 0 } } }).0 = struct.new "core:prelude/list.wado//List<f64>" { repr: array.new_fixed<f64>(3), used: 1 };
             row_4.1 = struct.new "core:prelude/list.wado//List<f64>" { repr: array.new_fixed<f64>(3), used: 1 };
             row_4.2.3 = struct.new "core:prelude/list.wado//List<f64>" { repr: array.new_fixed<f64>(3), used: 1 };
-            if @unlikely(local.tee current(rows.used) >= builtin::array_len(rows.repr)) {
+            if @unlikely(local.tee current(rows.used) >= builtin::array_len($licm_repr_122)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/list.wado/List<f64>,core:prelude/list.wado/List<f64>,[i32,i32,i32,core:prelude/list.wado/List<f64>]]>::grow"(rows);
+                $licm_repr_122 = rows.repr;
             }
-            builtin::array_set<ref "tuple//[core:prelude/list.wado/List<f64>, core:prelude/list.wado/List<f64>, [i32,i32,i32,core:prelude/list.wado/List<f64>]]">(rows.repr, current, row_4);
+            builtin::array_set<ref "tuple//[core:prelude/list.wado/List<f64>, core:prelude/list.wado/List<f64>, [i32,i32,i32,core:prelude/list.wado/List<f64>]]">($licm_repr_122, current, row_4);
             rows.used = current + 1;
             continue l4;
         };
@@ -354,14 +356,14 @@ fn "shared_escape_tuple_pattern.wado/run"() with Stdout {
     }
     "shared_escape_tuple_pattern.wado/write_nested$dae[v]"(builtin::array_get_value<ref "tuple//[core:prelude/list.wado/List<f64>, core:prelude/list.wado/List<f64>, [i32,i32,i32,core:prelude/list.wado/List<f64>]]">(rows.repr, 0));
     n = rows.used;
-    $sroa_$iter_1_repr_139 = rows.repr;
+    $licm_repr_122 = rows.repr;
     $sroa_$iter_0_start_120 = 0;
     b9: block {
         l10: loop {
             break_if b9 $sroa_$iter_0_start_120 >= n;
-            row_4 = builtin::array_get_value<ref "tuple//[core:prelude/list.wado/List<f64>, core:prelude/list.wado/List<f64>, [i32,i32,i32,core:prelude/list.wado/List<f64>]]">($sroa_$iter_1_repr_139, $sroa_$iter_0_start_120);
+            row_4 = builtin::array_get_value<ref "tuple//[core:prelude/list.wado/List<f64>, core:prelude/list.wado/List<f64>, [i32,i32,i32,core:prelude/list.wado/List<f64>]]">($licm_repr_122, $sroa_$iter_0_start_120);
             $sroa_$iter_0_start_120 = $sroa_$iter_0_start_120 + 1;
-            message_124 = block -> ref "core:prelude/string.wado//String" {
+            message_125 = block -> ref "core:prelude/string.wado//String" {
                 let $mv_field_1: f64;
                 current = local.tee $load_16(row_4.0).used;
                 if @unlikely(0 >= current) {
@@ -391,7 +393,7 @@ fn "shared_escape_tuple_pattern.wado/run"() with Stdout {
             current = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
             $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
             current = "shared_escape_tuple_pattern.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(current);
-            "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, message_124.repr, message_124.used);
+            "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, message_125.repr, message_125.used);
             "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(current);
             continue l10;
         };
@@ -1168,9 +1170,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_u
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
-    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -1187,26 +1189,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_0: block -> i32 {
-        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c);
+            builtin::array_set_u8(self.repr, new_used, c);
             break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_0: 3;
         }
-        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
+        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_0: 4;
     };
 }
@@ -1594,29 +1595,26 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<shared_esca
     let out_3: ref "core:prelude/string.wado//String";
     let new_used_100: i32;
     let start_101: i32;
-    let $sroa_view_repr_226: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_26: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_26;
     };
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"($mv$t$h0, out_3);
-    $sroa_view_repr_226 = global:core:prelude/string.wado::$const_obj_19;
     if @unlikely(local.tee new_used_100(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_100);
     }
     start_101 = out_3.used;
     out_3.used = new_used_100;
-    builtin::array_copy<u8>(out_3.repr, start_101, $sroa_view_repr_226, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, start_101, global:core:prelude/string.wado::$const_obj_19, 0, 1);
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"($mv$t$h1, out_3);
-    $sroa_view_repr_226 = global:core:prelude/string.wado::$const_obj_19;
     if @unlikely(local.tee new_used_100(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_100);
     }
     start_101 = out_3.used;
     out_3.used = new_used_100;
-    builtin::array_copy<u8>(out_3.repr, start_101, $sroa_view_repr_226, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, start_101, global:core:prelude/string.wado::$const_obj_19, 0, 1);
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"($mv$t$h2, out_3);
     $inline_core_prelude_string_wado_String__internal_push_view_77: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_77;

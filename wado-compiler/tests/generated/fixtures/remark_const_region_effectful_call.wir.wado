@@ -90,6 +90,7 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 fn "remark_const_region_effectful_call.wado/run"() with Stdout, Environment {
+    let $load_14: ref Array<u8>;
     let $temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___5_0: ref "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>";
     let self_23: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let item: ref "core:prelude/string.wado//String";
@@ -97,19 +98,20 @@ fn "remark_const_region_effectful_call.wado/run"() with Stdout, Environment {
     let used_35: i32;
     let is_negative_96: bool;
     let x: i64;
-    let arr: ref Array<u8>;
+    let $licm_repr_133: ref "Array<core:prelude/string.wado/String>";
     let q: u64;
     let tens: i32;
-    let start_197: i32;
-    used_35 = $temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___5_0 = struct.new "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: local.tee self_23("remark_const_region_effectful_call.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"()).repr, index: 0, end: self_23.used }, remaining: 1 }; self_23 = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }; b0: block {
+    let start_199: i32;
+    used_35 = $temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___5_0 = struct.new "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: local.tee self_23("remark_const_region_effectful_call.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"()).repr, index: 0, end: self_23.used }, remaining: 1 }; $licm_repr_133 = local.tee self_23(struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }).repr; b0: block {
         l1: loop {
             if ref.is_null(local.tee $local_3("core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::next"($temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___5_0))) == 0 {
                 item = ref.as_non_null($local_3);
-                if @unlikely(local.tee used_35(self_23.used) >= builtin::array_len(self_23.repr)) {
+                if @unlikely(local.tee used_35(self_23.used) >= builtin::array_len($licm_repr_133)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_23);
+                    $licm_repr_133 = self_23.repr;
                 }
-                builtin::array_set<ref "core:prelude/string.wado//String">(self_23.repr, used_35, item);
+                builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_133, used_35, item);
                 self_23.used = used_35 + 1;
             } else {
                 break b0;
@@ -189,33 +191,33 @@ fn "remark_const_region_effectful_call.wado/run"() with Stdout, Environment {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(item, is_negative_96);
         }
-        start_197 = item.used;
+        start_199 = item.used;
         item.used = is_negative_96;
-        builtin::array_set_u8(item.repr, start_197, 45);
+        builtin::array_set_u8(item.repr, start_199, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_96(item.used + used_35) > builtin::array_len(item.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(item, is_negative_96);
     }
-    start_197 = item.used;
+    start_199 = item.used;
     item.used = is_negative_96;
-    arr = item.repr;
-    used_35 = start_197 + used_35;
+    used_35 = start_199 + used_35;
+    $load_14 = item.repr;
     b26: block {
         l27: loop {
-            break_if b26 (used_35 - start_197) < 2;
+            break_if b26 (used_35 - start_199) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_96(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, used_35 - 1, (48 + is_negative_96) - (tens * 10));
-            builtin::array_set_u8(arr, used_35 - 2, 48 + tens);
+            builtin::array_set_u8($load_14, used_35 - 1, (48 + is_negative_96) - (tens * 10));
+            builtin::array_set_u8($load_14, used_35 - 2, 48 + tens);
             used_35 = used_35 - 2;
             x = q;
             continue l27;
         };
     };
-    if used_35 > start_197 {
-        builtin::array_set_u8(arr, start_197, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if used_35 > start_199 {
+        builtin::array_set_u8($load_14, start_199, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_53: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_53;
@@ -223,11 +225,11 @@ fn "remark_const_region_effectful_call.wado/run"() with Stdout, Environment {
     used_35 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_96 = builtin::i32_wrap_i64(x >> 32_i64);
     used_35 = "remark_const_region_effectful_call.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_35);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_197(item.used) + 1)), 0, item.repr, 0, start_197);
-    builtin::array_set_u8(arr, start_197, 10);
+    builtin::array_copy<u8>(local.tee $load_14(builtin::array_new<u8>(local.tee start_199(item.used) + 1)), 0, item.repr, 0, start_199);
+    builtin::array_set_u8($load_14, start_199, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_197 = start_197 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_96, arr, 0, start_197);
+        start_199 = start_199 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_96, $load_14, 0, start_199);
     });
     "wasi/stream-drop-writable"(is_negative_96);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_35);
@@ -247,10 +249,12 @@ fn "remark_const_region_effectful_call.wado/$cm_binding__wasi:cli/environment@0.
     let $str_ptr: i32;
     let $lifted_string: ref "core:prelude/string.wado//String";
     let arr_15: ref Array<u8>;
+    let $licm_repr_25: ref "Array<core:prelude/string.wado/String>";
     "wasi/$wasi:cli/environment@0.3.0#get-arguments"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
+    $licm_repr_25 = $result.repr;
     b30: block {
         l31: loop {
             break_if b30 $i >= $count;
@@ -260,11 +264,12 @@ fn "remark_const_region_effectful_call.wado/$cm_binding__wasi:cli/environment@0.
             if $elem_addr > 0 {
                 drop("mem/realloc"($str_ptr, $elem_addr, 1, 0));
             }
-            if @unlikely(local.tee $elem_addr($result.used) >= builtin::array_len($result.repr)) {
+            if @unlikely(local.tee $elem_addr($result.used) >= builtin::array_len($licm_repr_25)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"($result);
+                $licm_repr_25 = $result.repr;
             }
-            builtin::array_set<ref "core:prelude/string.wado//String">($result.repr, $elem_addr, $lifted_string);
+            builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_25, $elem_addr, $lifted_string);
             $result.used = $elem_addr + 1;
             $i = $i + 1;
             continue l31;

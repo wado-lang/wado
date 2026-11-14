@@ -1480,6 +1480,7 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
     let $result_15: ref "core:prelude/list.wado//List<u8>";
     let ptr_19: i32;
     let arr: ref Array<u8>;
+    let $licm_repr_39: ref "Array<core:prelude/list.wado/List<u8>>";
     ptr_19 = "mem/realloc"(0, 0, 1, 10);
     "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(name.repr, ptr_19);
     ptr_19 = builtin::i32_wrap_i64(local.tee $name_packed(builtin::i64_extend_i32_u(ptr_19) | 42949672960_i64));
@@ -1492,6 +1493,7 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
     ptr_19 = builtin::load_i32($outptr);
     $result_10 = struct.new "core:prelude/list.wado//List<wasi:http/types.wado/FieldValue>" { repr: builtin::array_new<ref "core:prelude/list.wado//List<u8>">(local.tee $name_flat1(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
+    $licm_repr_39 = $result_10.repr;
     b157: block {
         l158: loop {
             break_if b157 $i >= $name_flat1;
@@ -1501,11 +1503,12 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
             if $elem_addr > 0 {
                 drop("mem/realloc"($base_13, $elem_addr, 1, 0));
             }
-            if @unlikely(local.tee $elem_addr($result_10.used) >= builtin::array_len($result_10.repr)) {
+            if @unlikely(local.tee $elem_addr($result_10.used) >= builtin::array_len($licm_repr_39)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"($result_10);
+                $licm_repr_39 = $result_10.repr;
             }
-            builtin::array_set<ref "core:prelude/list.wado//List<u8>">($result_10.repr, $elem_addr, $result_15);
+            builtin::array_set<ref "core:prelude/list.wado//List<u8>">($licm_repr_39, $elem_addr, $result_15);
             $result_10.used = $elem_addr + 1;
             $i = $i + 1;
             continue l158;
@@ -1529,6 +1532,7 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
     let $result_15: ref "core:prelude/list.wado//List<u8>";
     let ptr_19: i32;
     let arr: ref Array<u8>;
+    let $licm_repr_39: ref "Array<core:prelude/list.wado/List<u8>>";
     ptr_19 = "mem/realloc"(0, 0, 1, 1);
     "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec1$dae[len]"(name.repr, ptr_19);
     ptr_19 = builtin::i32_wrap_i64(local.tee $name_packed(builtin::i64_extend_i32_u(ptr_19) | 4294967296_i64));
@@ -1541,6 +1545,7 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
     ptr_19 = builtin::load_i32($outptr);
     $result_10 = struct.new "core:prelude/list.wado//List<wasi:http/types.wado/FieldValue>" { repr: builtin::array_new<ref "core:prelude/list.wado//List<u8>">(local.tee $name_flat1(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
+    $licm_repr_39 = $result_10.repr;
     b163: block {
         l164: loop {
             break_if b163 $i >= $name_flat1;
@@ -1550,11 +1555,12 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
             if $elem_addr > 0 {
                 drop("mem/realloc"($base_13, $elem_addr, 1, 0));
             }
-            if @unlikely(local.tee $elem_addr($result_10.used) >= builtin::array_len($result_10.repr)) {
+            if @unlikely(local.tee $elem_addr($result_10.used) >= builtin::array_len($licm_repr_39)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"($result_10);
+                $licm_repr_39 = $result_10.repr;
             }
-            builtin::array_set<ref "core:prelude/list.wado//List<u8>">($result_10.repr, $elem_addr, $result_15);
+            builtin::array_set<ref "core:prelude/list.wado//List<u8>">($licm_repr_39, $elem_addr, $result_15);
             $result_10.used = $elem_addr + 1;
             $i = $i + 1;
             continue l164;

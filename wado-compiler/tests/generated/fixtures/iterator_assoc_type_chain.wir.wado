@@ -243,26 +243,27 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "iterator_assoc_type_chain.wado/run"() {
-    let $load_5: ref Array<i32>;
     let $temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___2_0: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>";
     let self_22: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let pred: ref "iterator_assoc_type_chain.wado//$Closure_0";
     let result: ref "core:prelude/list.wado//List<i32>";
+    let $licm_repr_61: ref Array<i32>;
     self_22 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), index: 0, end: 5 };
     pred = struct.new "iterator_assoc_type_chain.wado//$Closure_0" {};
     $temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___2_0 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_22, pred: struct.new "canonical//CanonicalClosure_0" { env: pred, func: ref.func "closure/iterator_assoc_type_chain.wado/$closure_wrapper_0" } };
-    result = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_61 = local.tee result(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b0: block {
         l1: loop {
             let $mv$$local_3$0: i32;
             let $mv$$local_3$1: i32;
             multivalue_bind [$mv$$local_3$0, $mv$$local_3$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"($temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___2_0);
             if $mv$$local_3$0 == 1 {
-                if @unlikely(local.tee $mv$$local_3$0(result.used) >= builtin::array_len(result.repr)) {
+                if @unlikely(local.tee $mv$$local_3$0(result.used) >= builtin::array_len($licm_repr_61)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result);
+                    $licm_repr_61 = result.repr;
                 }
-                builtin::array_set<i32>(result.repr, $mv$$local_3$0, $mv$$local_3$1);
+                builtin::array_set<i32>($licm_repr_61, $mv$$local_3$0, $mv$$local_3$1);
                 result.used = $mv$$local_3$0 + 1;
             } else {
                 break b0;
@@ -280,7 +281,7 @@ fn "iterator_assoc_type_chain.wado/run"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $mv$$local_3$0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("iterator_assoc_type_chain.wado:8"), used: 32 });
         unreachable;
     }
-    if @unlikely(local.tee $mv$$local_3$1(builtin::array_get_value<i32>(local.tee $load_5(result.repr), 0)) != 2) {
+    if @unlikely(local.tee $mv$$local_3$1(builtin::array_get_value<i32>(local.tee $licm_repr_61(result.repr), 0)) != 2) {
         cold_path;
         "iterator_assoc_type_chain.wado/run$cold1"($mv$$local_3$1);
         unreachable;
@@ -290,7 +291,7 @@ fn "iterator_assoc_type_chain.wado/run"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, $mv$$local_3$0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("iterator_assoc_type_chain.wado:9"), used: 32 });
         unreachable;
     }
-    if @unlikely(local.tee $mv$$local_3$0(builtin::array_get_value<i32>($load_5, 1)) != 4) {
+    if @unlikely(local.tee $mv$$local_3$0(builtin::array_get_value<i32>($licm_repr_61, 1)) != 4) {
         cold_path;
         "iterator_assoc_type_chain.wado/run$cold0"($mv$$local_3$0);
         unreachable;

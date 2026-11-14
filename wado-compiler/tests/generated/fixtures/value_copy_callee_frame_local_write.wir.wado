@@ -86,7 +86,7 @@ fn "value_copy_callee_frame_local_write.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let $sroa_t_h0_139: i64;
-    let start_178: i32;
+    let start_179: i32;
     builtin::array_set_u8(local.tee bytes(builtin::array_new<u8>(4)), 0, 1);
     builtin::array_set_u8(bytes, 1, 2);
     builtin::array_set_u8(bytes, 2, 3);
@@ -163,22 +163,22 @@ fn "value_copy_callee_frame_local_write.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, is_negative_77);
         }
-        start_178 = out_14.used;
+        start_179 = out_14.used;
         out_14.used = is_negative_77;
-        builtin::array_set_u8(out_14.repr, start_178, 45);
+        builtin::array_set_u8(out_14.repr, start_179, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_77(out_14.used + digit_count_79) > builtin::array_len(out_14.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, is_negative_77);
     }
-    start_178 = out_14.used;
+    start_179 = out_14.used;
     out_14.used = is_negative_77;
+    is_negative_77 = start_179 + digit_count_79;
     bytes = out_14.repr;
-    is_negative_77 = start_178 + digit_count_79;
     b22: block {
         l23: loop {
-            break_if b22 (is_negative_77 - start_178) < 2;
+            break_if b22 (is_negative_77 - start_179) < 2;
             q = $sroa_t_h0_139 /u 100_i64;
             tens = local.tee digit_count_79(builtin::i32_wrap_i64($sroa_t_h0_139 - (q * 100_i64))) / 10;
             builtin::array_set_u8(bytes, is_negative_77 - 1, (48 + digit_count_79) - (tens * 10));
@@ -188,8 +188,8 @@ fn "value_copy_callee_frame_local_write.wado/run"() with Stdout {
             continue l23;
         };
     };
-    if is_negative_77 > start_178 {
-        builtin::array_set_u8(bytes, start_178, 48 + builtin::i32_wrap_i64($sroa_t_h0_139 %u 10_i64));
+    if is_negative_77 > start_179 {
+        builtin::array_set_u8(bytes, start_179, 48 + builtin::i32_wrap_i64($sroa_t_h0_139 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
@@ -197,11 +197,11 @@ fn "value_copy_callee_frame_local_write.wado/run"() with Stdout {
     is_negative_77 = builtin::i32_wrap_i64(local.tee $sroa_t_h0_139("wasi/stream-new"()));
     digit_count_79 = builtin::i32_wrap_i64($sroa_t_h0_139 >> 32_i64);
     is_negative_77 = "value_copy_callee_frame_local_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_77);
-    builtin::array_copy<u8>(local.tee bytes(builtin::array_new<u8>(local.tee start_178(out_14.used) + 1)), 0, out_14.repr, 0, start_178);
-    builtin::array_set_u8(bytes, start_178, 10);
+    builtin::array_copy<u8>(local.tee bytes(builtin::array_new<u8>(local.tee start_179(out_14.used) + 1)), 0, out_14.repr, 0, start_179);
+    builtin::array_set_u8(bytes, start_179, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_178 = start_178 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(digit_count_79, bytes, 0, start_178);
+        start_179 = start_179 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(digit_count_79, bytes, 0, start_179);
     });
     "wasi/stream-drop-writable"(digit_count_79);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_77);
@@ -332,24 +332,27 @@ fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write
     let value_5: i64;
     let used_6: i32;
     let $licm_repr_11: ref Array<u8>;
-    let $hfs_pos_12: i32;
+    let $licm_repr_12: ref Array<i64>;
+    let $hfs_pos_13: i32;
     out = struct.new "core:prelude/list.wado//List<i64>" { repr: array.new_fixed<i64>(), used: 0 };
     $licm_repr_11 = self.repr;
-    $hfs_pos_12 = self.pos;
+    $licm_repr_12 = out.repr;
+    $hfs_pos_13 = self.pos;
     b43: block {
         l44: loop {
-            if $hfs_pos_12 >= 4 {
-                self.pos = $hfs_pos_12;
+            if $hfs_pos_13 >= 4 {
+                self.pos = $hfs_pos_13;
                 break b43;
             }
-            value_5 = builtin::i64_extend_i32_u(builtin::array_get_value_u8($licm_repr_11, $hfs_pos_12));
-            if @unlikely(local.tee used_6(out.used) >= builtin::array_len(out.repr)) {
+            value_5 = builtin::i64_extend_i32_u(builtin::array_get_value_u8($licm_repr_11, $hfs_pos_13));
+            if @unlikely(local.tee used_6(out.used) >= builtin::array_len($licm_repr_12)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i64>::grow"(out);
+                $licm_repr_12 = out.repr;
             }
-            builtin::array_set<i64>(out.repr, used_6, value_5);
+            builtin::array_set<i64>($licm_repr_12, used_6, value_5);
             out.used = used_6 + 1;
-            $hfs_pos_12 = $hfs_pos_12 + 1;
+            $hfs_pos_13 = $hfs_pos_13 + 1;
             continue l44;
         };
     };
@@ -362,27 +365,27 @@ fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write
     let sum: i64;
     let end: i32;
     let item: i64;
-    let $sroa_$iter_0_repr_16: ref Array<i64>;
     let $sroa_$iter_0_index_17: i32;
+    let $licm_repr_19: ref Array<i64>;
     raw = self.repr;
     digits = "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::take_digits"(self);
     sum = 0_i64;
     end = digits.used;
-    $sroa_$iter_0_repr_16 = digits.repr;
     $sroa_$iter_0_index_17 = 0;
+    $licm_repr_19 = digits.repr;
     b47: block {
         l48: loop {
             break_if b47 (builtin::i64_extend_i32_s($sroa_$iter_0_index_17) + 3_i64) >= builtin::i64_extend_i32_s(end);
-            item = builtin::array_get_value<i64>($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            item = builtin::array_get_value<i64>($licm_repr_19, $sroa_$iter_0_index_17);
             $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
             sum = sum + item;
-            item = builtin::array_get_value<i64>($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            item = builtin::array_get_value<i64>($licm_repr_19, $sroa_$iter_0_index_17);
             $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
             sum = sum + item;
-            item = builtin::array_get_value<i64>($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            item = builtin::array_get_value<i64>($licm_repr_19, $sroa_$iter_0_index_17);
             $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
             sum = sum + item;
-            item = builtin::array_get_value<i64>($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            item = builtin::array_get_value<i64>($licm_repr_19, $sroa_$iter_0_index_17);
             $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
             sum = sum + item;
             continue l48;
@@ -391,7 +394,7 @@ fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write
     b49: block {
         l50: loop {
             break_if b49 $sroa_$iter_0_index_17 >= end;
-            item = builtin::array_get_value<i64>($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            item = builtin::array_get_value<i64>($licm_repr_19, $sroa_$iter_0_index_17);
             $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
             sum = sum + item;
             continue l50;

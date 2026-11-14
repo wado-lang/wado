@@ -91,14 +91,13 @@ fn "value_copy_callee_writes_handle_field.wado/run"() with Stdout {
     digit_count_112 = "core:prelude/primitive.wado/count_digits_u64"(local.tee before(select i64(before < 0_i64, 0_i64 - before, before)));
     $array_clone_len_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_42, $array_clone_len_3, digit_count_112);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee bytes(out_42.repr), $array_clone_len_3, before, digit_count_112);
-    $array_clone_dst_2 = global:value_copy_callee_writes_handle_field.wado::$const_obj_0;
     if @unlikely(local.tee $array_clone_len_3(out_42.used + 1) > builtin::array_len(bytes)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_42, $array_clone_len_3);
     }
     digit_count_112 = out_42.used;
     out_42.used = $array_clone_len_3;
-    builtin::array_copy<u8>(out_42.repr, digit_count_112, $array_clone_dst_2, 0, 1);
+    builtin::array_copy<u8>(out_42.repr, digit_count_112, global:value_copy_callee_writes_handle_field.wado::$const_obj_0, 0, 1);
     $array_clone_len_3 = $sroa_t_h1_267 < 0_i64;
     digit_count_112 = "core:prelude/primitive.wado/count_digits_u64"(local.tee before(select i64($sroa_t_h1_267 < 0_i64, 0_i64 - $sroa_t_h1_267, $sroa_t_h1_267)));
     $array_clone_len_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_42, $array_clone_len_3, digit_count_112);

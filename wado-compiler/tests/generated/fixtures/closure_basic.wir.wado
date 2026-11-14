@@ -598,17 +598,20 @@ fn "closure_basic.wado/$test_31_loop_scope_c_style_for"() {
     let i: i32;
     let get_i: ref struct;
     let used_47: i32;
+    let $licm_repr_97: ref Array<fn(i32)->i32>;
     closures = struct.new "core:prelude/list.wado//List<fn(i32)->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i = 0;
+    $licm_repr_97 = closures.repr;
     b0: block {
         l1: loop {
             break_if b0 i >= 5;
             get_i = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_basic.wado//$Closure_50" { $capture_0: i }, inspect: ref.func "closure/closure_basic.wado/$closure_inspect_wrapper_0", func: ref.func "closure/closure_basic.wado/$closure_wrapper_0" };
-            if @unlikely(local.tee used_47(closures.used) >= builtin::array_len(closures.repr)) {
+            if @unlikely(local.tee used_47(closures.used) >= builtin::array_len($licm_repr_97)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>::grow"(closures);
+                $licm_repr_97 = closures.repr;
             }
-            builtin::array_set<ref struct>(closures.repr, used_47, get_i);
+            builtin::array_set<ref struct>($licm_repr_97, used_47, get_i);
             closures.used = used_47 + 1;
             i = i + 1;
             continue l1;
@@ -722,40 +725,41 @@ fn "closure_basic.wado/$test_32_loop_scope_for_of"() {
     let closures: ref "core:prelude/list.wado//List<fn(i32)->i32>";
     let get_item: ref struct;
     let item_55: i32;
-    let $sroa_$iter_0_repr_113: ref Array<i32>;
-    let $sroa_$iter_0_index_114: i32;
+    let $licm_repr_113: ref Array<fn(i32)->i32>;
+    let $sroa_$iter_0_index_115: i32;
     closures = struct.new "core:prelude/list.wado//List<fn(i32)->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
-    $sroa_$iter_0_repr_113 = global:closure_basic.wado::$const_obj_0;
-    $sroa_$iter_0_index_114 = 0;
+    $sroa_$iter_0_index_115 = 0;
+    $licm_repr_113 = closures.repr;
     b18: block {
         l19: loop {
-            break_if b18 $sroa_$iter_0_index_114 >= 5;
-            item_55 = builtin::array_get_value<i32>($sroa_$iter_0_repr_113, $sroa_$iter_0_index_114);
-            $sroa_$iter_0_index_114 = $sroa_$iter_0_index_114 + 1;
+            break_if b18 $sroa_$iter_0_index_115 >= 5;
+            item_55 = builtin::array_get_value<i32>(global:closure_basic.wado::$const_obj_0, $sroa_$iter_0_index_115);
+            $sroa_$iter_0_index_115 = $sroa_$iter_0_index_115 + 1;
             get_item = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_basic.wado//$Closure_51" { $capture_0: item_55 }, inspect: ref.func "closure/closure_basic.wado/$closure_inspect_wrapper_1", func: ref.func "closure/closure_basic.wado/$closure_wrapper_1" };
-            if @unlikely(local.tee item_55(closures.used) >= builtin::array_len(closures.repr)) {
+            if @unlikely(local.tee item_55(closures.used) >= builtin::array_len($licm_repr_113)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>::grow"(closures);
+                $licm_repr_113 = closures.repr;
             }
-            builtin::array_set<ref struct>(closures.repr, item_55, get_item);
+            builtin::array_set<ref struct>($licm_repr_113, item_55, get_item);
             closures.used = item_55 + 1;
             continue l19;
         };
     };
-    $sroa_$iter_0_index_114 = closures.used;
-    if @unlikely(0 >= $sroa_$iter_0_index_114) {
+    $sroa_$iter_0_index_115 = closures.used;
+    if @unlikely(0 >= $sroa_$iter_0_index_115) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $sroa_$iter_0_index_114, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:455"), used: 22 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $sroa_$iter_0_index_115, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:455"), used: 22 });
         unreachable;
     }
     get_item = builtin::array_get_value<ref struct>(closures.repr, 0);
-    if @unlikely(local.tee $sroa_$iter_0_index_114(block -> i32 {
+    if @unlikely(local.tee $sroa_$iter_0_index_115(block -> i32 {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(get_item)).env, 0);
     }) != 10) {
         cold_path;
         let $mv_arg_2: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<closure_basic.wado/$tmpl$db7b22729ec4df1b,[fn(i32)->i32,i32]>"(struct.new "closure_basic.wado//$tmpl$db7b22729ec4df1b" { h0: get_item, h1: $sroa_$iter_0_index_114, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:455
+        "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<closure_basic.wado/$tmpl$db7b22729ec4df1b,[fn(i32)->i32,i32]>"(struct.new "closure_basic.wado//$tmpl$db7b22729ec4df1b" { h0: get_item, h1: $sroa_$iter_0_index_115, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:455
 condition: call_fn(closures[0], 0) == 10
 closures[0]: "), used: 127 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:455
 condition: call_fn(closures[0], 0) == 10
@@ -764,18 +768,18 @@ call_fn(closures[0], 0): "), used: 26 }, r1: struct.new "core:prelude/string.wad
 call_fn(closures[0], 0): "), used: 26 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_2.used);
         unreachable;
     }
-    $sroa_$iter_0_index_114 = closures.used;
-    if @unlikely(1 >= $sroa_$iter_0_index_114) {
+    $sroa_$iter_0_index_115 = closures.used;
+    if @unlikely(1 >= $sroa_$iter_0_index_115) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, $sroa_$iter_0_index_114, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:456"), used: 22 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, $sroa_$iter_0_index_115, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:456"), used: 22 });
         unreachable;
     }
     get_item = builtin::array_get_value<ref struct>(closures.repr, 1);
-    if @unlikely(local.tee $sroa_$iter_0_index_114(block -> i32 {
+    if @unlikely(local.tee $sroa_$iter_0_index_115(block -> i32 {
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(get_item)).env, 0);
     }) != 20) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<closure_basic.wado/$tmpl$db7b22729ec4df1b,[fn(i32)->i32,i32]>"(struct.new "closure_basic.wado//$tmpl$db7b22729ec4df1b" { h0: get_item, h1: $sroa_$iter_0_index_114, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:456
+        "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<closure_basic.wado/$tmpl$db7b22729ec4df1b,[fn(i32)->i32,i32]>"(struct.new "closure_basic.wado//$tmpl$db7b22729ec4df1b" { h0: get_item, h1: $sroa_$iter_0_index_115, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:456
 condition: call_fn(closures[1], 0) == 20
 closures[1]: "), used: 127 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:456
 condition: call_fn(closures[1], 0) == 20
@@ -784,18 +788,18 @@ call_fn(closures[1], 0): "), used: 26 }, r1: struct.new "core:prelude/string.wad
 call_fn(closures[1], 0): "), used: 26 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_2.used);
         unreachable;
     }
-    $sroa_$iter_0_index_114 = closures.used;
-    if @unlikely(2 >= $sroa_$iter_0_index_114) {
+    $sroa_$iter_0_index_115 = closures.used;
+    if @unlikely(2 >= $sroa_$iter_0_index_115) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(2, $sroa_$iter_0_index_114, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:457"), used: 22 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(2, $sroa_$iter_0_index_115, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:457"), used: 22 });
         unreachable;
     }
     get_item = builtin::array_get_value<ref struct>(closures.repr, 2);
-    if @unlikely(local.tee $sroa_$iter_0_index_114(block -> i32 {
+    if @unlikely(local.tee $sroa_$iter_0_index_115(block -> i32 {
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(get_item)).env, 0);
     }) != 30) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<closure_basic.wado/$tmpl$db7b22729ec4df1b,[fn(i32)->i32,i32]>"(struct.new "closure_basic.wado//$tmpl$db7b22729ec4df1b" { h0: get_item, h1: $sroa_$iter_0_index_114, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:457
+        "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<closure_basic.wado/$tmpl$db7b22729ec4df1b,[fn(i32)->i32,i32]>"(struct.new "closure_basic.wado//$tmpl$db7b22729ec4df1b" { h0: get_item, h1: $sroa_$iter_0_index_115, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:457
 condition: call_fn(closures[2], 0) == 30
 closures[2]: "), used: 127 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:457
 condition: call_fn(closures[2], 0) == 30
@@ -804,18 +808,18 @@ call_fn(closures[2], 0): "), used: 26 }, r1: struct.new "core:prelude/string.wad
 call_fn(closures[2], 0): "), used: 26 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_2.used);
         unreachable;
     }
-    $sroa_$iter_0_index_114 = closures.used;
-    if @unlikely(3 >= $sroa_$iter_0_index_114) {
+    $sroa_$iter_0_index_115 = closures.used;
+    if @unlikely(3 >= $sroa_$iter_0_index_115) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(3, $sroa_$iter_0_index_114, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:458"), used: 22 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(3, $sroa_$iter_0_index_115, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:458"), used: 22 });
         unreachable;
     }
     get_item = builtin::array_get_value<ref struct>(closures.repr, 3);
-    if @unlikely(local.tee $sroa_$iter_0_index_114(block -> i32 {
+    if @unlikely(local.tee $sroa_$iter_0_index_115(block -> i32 {
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(get_item)).env, 0);
     }) != 40) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<closure_basic.wado/$tmpl$db7b22729ec4df1b,[fn(i32)->i32,i32]>"(struct.new "closure_basic.wado//$tmpl$db7b22729ec4df1b" { h0: get_item, h1: $sroa_$iter_0_index_114, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:458
+        "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<closure_basic.wado/$tmpl$db7b22729ec4df1b,[fn(i32)->i32,i32]>"(struct.new "closure_basic.wado//$tmpl$db7b22729ec4df1b" { h0: get_item, h1: $sroa_$iter_0_index_115, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:458
 condition: call_fn(closures[3], 0) == 40
 closures[3]: "), used: 127 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:458
 condition: call_fn(closures[3], 0) == 40
@@ -824,18 +828,18 @@ call_fn(closures[3], 0): "), used: 26 }, r1: struct.new "core:prelude/string.wad
 call_fn(closures[3], 0): "), used: 26 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_2.used);
         unreachable;
     }
-    $sroa_$iter_0_index_114 = closures.used;
-    if @unlikely(4 >= $sroa_$iter_0_index_114) {
+    $sroa_$iter_0_index_115 = closures.used;
+    if @unlikely(4 >= $sroa_$iter_0_index_115) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(4, $sroa_$iter_0_index_114, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:459"), used: 22 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(4, $sroa_$iter_0_index_115, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:459"), used: 22 });
         unreachable;
     }
     get_item = builtin::array_get_value<ref struct>(closures.repr, 4);
-    if @unlikely(local.tee $sroa_$iter_0_index_114(block -> i32 {
+    if @unlikely(local.tee $sroa_$iter_0_index_115(block -> i32 {
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(get_item)).env, 0);
     }) != 50) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<closure_basic.wado/$tmpl$db7b22729ec4df1b,[fn(i32)->i32,i32]>"(struct.new "closure_basic.wado//$tmpl$db7b22729ec4df1b" { h0: get_item, h1: $sroa_$iter_0_index_114, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:459
+        "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<closure_basic.wado/$tmpl$db7b22729ec4df1b,[fn(i32)->i32,i32]>"(struct.new "closure_basic.wado//$tmpl$db7b22729ec4df1b" { h0: get_item, h1: $sroa_$iter_0_index_115, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:459
 condition: call_fn(closures[4], 0) == 50
 closures[4]: "), used: 127 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_32_loop_scope_for_of at closure_basic.wado:459
 condition: call_fn(closures[4], 0) == 50
@@ -936,28 +940,29 @@ fn "closure_basic.wado/$test_38_iterator_chain"() {
 }
 
 fn "closure_basic.wado/$test_39_iterator_filter"() {
-    let $load_5: ref Array<i32>;
     let $temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___1_0: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>";
     let self_40: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let pred_41: ref "closure_basic.wado//$Closure_60";
     let result_52: ref "core:prelude/list.wado//List<i32>";
     let pred_82: ref "closure_basic.wado//$Closure_61";
-    let $sroa_nums_repr_120: ref Array<i32>;
-    self_40 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: local.tee $sroa_nums_repr_120(array.new_fixed<i32>(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)), index: 0, end: 10 };
+    let $licm_repr_120: ref Array<i32>;
+    let $sroa_nums_repr_122: ref Array<i32>;
+    self_40 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: local.tee $sroa_nums_repr_122(array.new_fixed<i32>(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)), index: 0, end: 10 };
     pred_41 = struct.new "closure_basic.wado//$Closure_60" {};
     $temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___1_0 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_40, pred: struct.new "canonical//CanonicalClosure_3" { env: pred_41, func: ref.func "closure/closure_basic.wado/$closure_wrapper_3" } };
-    result_52 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_120 = local.tee result_52(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b51: block {
         l52: loop {
             let $mv$$local_3_54$0: i32;
             let $mv$$local_3_54$1: i32;
             multivalue_bind [$mv$$local_3_54$0, $mv$$local_3_54$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"($temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___1_0);
             if $mv$$local_3_54$0 == 1 {
-                if @unlikely(local.tee $mv$$local_3_54$0(result_52.used) >= builtin::array_len(result_52.repr)) {
+                if @unlikely(local.tee $mv$$local_3_54$0(result_52.used) >= builtin::array_len($licm_repr_120)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_52);
+                    $licm_repr_120 = result_52.repr;
                 }
-                builtin::array_set<i32>(result_52.repr, $mv$$local_3_54$0, $mv$$local_3_54$1);
+                builtin::array_set<i32>($licm_repr_120, $mv$$local_3_54$0, $mv$$local_3_54$1);
                 result_52.used = $mv$$local_3_54$0 + 1;
             } else {
                 break b51;
@@ -975,7 +980,7 @@ fn "closure_basic.wado/$test_39_iterator_filter"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $mv$$local_3_54$0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:560"), used: 22 });
         unreachable;
     }
-    if @unlikely(local.tee $mv$$local_3_54$1(builtin::array_get_value<i32>(local.tee $load_5(result_52.repr), 0)) != 2) {
+    if @unlikely(local.tee $mv$$local_3_54$1(builtin::array_get_value<i32>(local.tee $licm_repr_120(result_52.repr), 0)) != 2) {
         cold_path;
         "closure_basic.wado/$test_39_iterator_filter$cold4"($mv$$local_3_54$1);
         unreachable;
@@ -985,24 +990,25 @@ fn "closure_basic.wado/$test_39_iterator_filter"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(4, $mv$$local_3_54$0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:561"), used: 22 });
         unreachable;
     }
-    if @unlikely(local.tee $mv$$local_3_54$0(builtin::array_get_value<i32>($load_5, 4)) != 10) {
+    if @unlikely(local.tee $mv$$local_3_54$0(builtin::array_get_value<i32>($licm_repr_120, 4)) != 10) {
         cold_path;
         "closure_basic.wado/$test_39_iterator_filter$cold3"($mv$$local_3_54$0);
         unreachable;
     }
-    self_40 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_nums_repr_120, index: 0, end: 10 };
+    self_40 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_nums_repr_122, index: 0, end: 10 };
     pred_82 = struct.new "closure_basic.wado//$Closure_61" { $capture_0: 5 };
     $temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___1_0 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_40, pred: struct.new "canonical//CanonicalClosure_3" { env: pred_82, func: ref.func "closure/closure_basic.wado/$closure_wrapper_4" } };
-    result_52 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $sroa_nums_repr_122 = local.tee result_52(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b60: block {
         l61: loop {
             multivalue_bind [$mv$$local_3_54$0, $mv$$local_3_54$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"($temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___1_0);
             if $mv$$local_3_54$0 == 1 {
-                if @unlikely(local.tee $mv$$local_3_54$0(result_52.used) >= builtin::array_len(result_52.repr)) {
+                if @unlikely(local.tee $mv$$local_3_54$0(result_52.used) >= builtin::array_len($sroa_nums_repr_122)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_52);
+                    $sroa_nums_repr_122 = result_52.repr;
                 }
-                builtin::array_set<i32>(result_52.repr, $mv$$local_3_54$0, $mv$$local_3_54$1);
+                builtin::array_set<i32>($sroa_nums_repr_122, $mv$$local_3_54$0, $mv$$local_3_54$1);
                 result_52.used = $mv$$local_3_54$0 + 1;
             } else {
                 break b60;
@@ -1020,7 +1026,7 @@ fn "closure_basic.wado/$test_39_iterator_filter"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $mv$$local_3_54$0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:566"), used: 22 });
         unreachable;
     }
-    if @unlikely(local.tee $mv$$local_3_54$1(builtin::array_get_value<i32>(local.tee $sroa_nums_repr_120(result_52.repr), 0)) != 6) {
+    if @unlikely(local.tee $mv$$local_3_54$1(builtin::array_get_value<i32>(local.tee $sroa_nums_repr_122(result_52.repr), 0)) != 6) {
         cold_path;
         "closure_basic.wado/$test_39_iterator_filter$cold1"($mv$$local_3_54$1);
         unreachable;
@@ -1030,7 +1036,7 @@ fn "closure_basic.wado/$test_39_iterator_filter"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(4, $mv$$local_3_54$0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_basic.wado:567"), used: 22 });
         unreachable;
     }
-    if @unlikely(local.tee $mv$$local_3_54$0(builtin::array_get_value<i32>($sroa_nums_repr_120, 4)) != 10) {
+    if @unlikely(local.tee $mv$$local_3_54$0(builtin::array_get_value<i32>($sroa_nums_repr_122, 4)) != 10) {
         cold_path;
         "closure_basic.wado/$test_39_iterator_filter$cold0"($mv$$local_3_54$0);
         unreachable;
@@ -2464,9 +2470,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
-    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -2488,26 +2494,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_8: block -> i32 {
-        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c);
+            builtin::array_set_u8(self.repr, new_used, c);
             break $inline_encode_char_8: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_8: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_8: 3;
         }
-        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
+        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_8: 4;
     };
 }

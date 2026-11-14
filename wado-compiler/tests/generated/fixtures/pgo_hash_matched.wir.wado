@@ -61,14 +61,14 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 fn "pgo_hash_matched.wado/run"() with Stdout {
+    let $load_8: ref Array<u8>;
     let out_12: ref "core:prelude/string.wado//String";
     let x_18: i32;
     let is_negative_75: bool;
     let x_79: i64;
-    let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_176: i32;
+    let start_177: i32;
     x_18 = $inline_step_3: block -> i32 {
         if @unlikely(local.tee x_18(black_box(4)) < 0) {
             cold_path;
@@ -148,33 +148,33 @@ fn "pgo_hash_matched.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, is_negative_75);
         }
-        start_176 = out_12.used;
+        start_177 = out_12.used;
         out_12.used = is_negative_75;
-        builtin::array_set_u8(out_12.repr, start_176, 45);
+        builtin::array_set_u8(out_12.repr, start_177, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_75(out_12.used + x_18) > builtin::array_len(out_12.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, is_negative_75);
     }
-    start_176 = out_12.used;
+    start_177 = out_12.used;
     out_12.used = is_negative_75;
-    arr = out_12.repr;
-    x_18 = start_176 + x_18;
+    x_18 = start_177 + x_18;
+    $load_8 = out_12.repr;
     b23: block {
         l24: loop {
-            break_if b23 (x_18 - start_176) < 2;
+            break_if b23 (x_18 - start_177) < 2;
             q = x_79 /u 100_i64;
             tens = local.tee is_negative_75(builtin::i32_wrap_i64(x_79 - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, x_18 - 1, (48 + is_negative_75) - (tens * 10));
-            builtin::array_set_u8(arr, x_18 - 2, 48 + tens);
+            builtin::array_set_u8($load_8, x_18 - 1, (48 + is_negative_75) - (tens * 10));
+            builtin::array_set_u8($load_8, x_18 - 2, 48 + tens);
             x_18 = x_18 - 2;
             x_79 = q;
             continue l24;
         };
     };
-    if x_18 > start_176 {
-        builtin::array_set_u8(arr, start_176, 48 + builtin::i32_wrap_i64(x_79 %u 10_i64));
+    if x_18 > start_177 {
+        builtin::array_set_u8($load_8, start_177, 48 + builtin::i32_wrap_i64(x_79 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;
@@ -182,11 +182,11 @@ fn "pgo_hash_matched.wado/run"() with Stdout {
     x_18 = builtin::i32_wrap_i64(local.tee x_79("wasi/stream-new"()));
     is_negative_75 = builtin::i32_wrap_i64(x_79 >> 32_i64);
     x_18 = "pgo_hash_matched.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(x_18);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_176(out_12.used) + 1)), 0, out_12.repr, 0, start_176);
-    builtin::array_set_u8(arr, start_176, 10);
+    builtin::array_copy<u8>(local.tee $load_8(builtin::array_new<u8>(local.tee start_177(out_12.used) + 1)), 0, out_12.repr, 0, start_177);
+    builtin::array_set_u8($load_8, start_177, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_176 = start_176 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_75, arr, 0, start_176);
+        start_177 = start_177 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_75, $load_8, 0, start_177);
     });
     "wasi/stream-drop-writable"(is_negative_75);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(x_18);

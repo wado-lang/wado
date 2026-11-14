@@ -181,10 +181,12 @@ fn "wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-environment"() wit
     let $lifted_string_11: ref "core:prelude/string.wado//String";
     let arr_18: ref Array<u8>;
     let value_30: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
+    let $licm_repr_36: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
     "wasi/$wasi:cli/environment@0.3.0#get-environment"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude/list.wado//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
+    $licm_repr_36 = $result.repr;
     b0: block {
         l1: loop {
             break_if b0 $i >= $count;
@@ -201,11 +203,12 @@ fn "wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-environment"() wit
                 drop("mem/realloc"($str_ptr_6, $elem_addr, 1, 0));
             }
             value_30 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: $lifted_string_8, 1: $lifted_string_11 };
-            if @unlikely(local.tee $elem_addr($result.used) >= builtin::array_len($result.repr)) {
+            if @unlikely(local.tee $elem_addr($result.used) >= builtin::array_len($licm_repr_36)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow"($result);
+                $licm_repr_36 = $result.repr;
             }
-            builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($result.repr, $elem_addr, value_30);
+            builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_36, $elem_addr, value_30);
             $result.used = $elem_addr + 1;
             $i = $i + 1;
             continue l1;
@@ -228,10 +231,12 @@ fn "wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"() with 
     let $str_ptr: i32;
     let $lifted_string: ref "core:prelude/string.wado//String";
     let arr_15: ref Array<u8>;
+    let $licm_repr_25: ref "Array<core:prelude/string.wado/String>";
     "wasi/$wasi:cli/environment@0.3.0#get-arguments"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
+    $licm_repr_25 = $result.repr;
     b6: block {
         l7: loop {
             break_if b6 $i >= $count;
@@ -241,11 +246,12 @@ fn "wasi_cli.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"() with 
             if $elem_addr > 0 {
                 drop("mem/realloc"($str_ptr, $elem_addr, 1, 0));
             }
-            if @unlikely(local.tee $elem_addr($result.used) >= builtin::array_len($result.repr)) {
+            if @unlikely(local.tee $elem_addr($result.used) >= builtin::array_len($licm_repr_25)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"($result);
+                $licm_repr_25 = $result.repr;
             }
-            builtin::array_set<ref "core:prelude/string.wado//String">($result.repr, $elem_addr, $lifted_string);
+            builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_25, $elem_addr, $lifted_string);
             $result.used = $elem_addr + 1;
             $i = $i + 1;
             continue l7;
@@ -613,11 +619,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<wasi_cli.wa
     let x: i64;
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_497: ref Array<u8>;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(59), used: 0 };
-    $sroa_view_repr_497 = global:core:prelude/string.wado::$const_obj_5;
-    out_3.used = local.tee $load_0(43);
-    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, $sroa_view_repr_497, 0, 43);
+    local.tee out_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(59), used: 0 }).used = local.tee $load_0(43);
+    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, global:core:prelude/string.wado::$const_obj_5, 0, 43);
     is_negative_65 = t < 0;
     x = builtin::i64_extend_i32_s(t);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -697,22 +700,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<wasi_cli.wa
     }
     is_negative_65 = out_3.used;
     out_3.used = $load_0;
-    $sroa_view_repr_497 = out_3.repr;
     t = is_negative_65 + t;
+    $load_1 = out_3.repr;
     b85: block {
         l86: loop {
             break_if b85 (t - is_negative_65) < 2;
             q = x /u 100_i64;
             tens = local.tee $load_0(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_497, t - 1, (48 + $load_0) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_497, t - 2, 48 + tens);
+            builtin::array_set_u8($load_1, t - 1, (48 + $load_0) - (tens * 10));
+            builtin::array_set_u8($load_1, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l86;
         };
     };
     if t > is_negative_65 {
-        builtin::array_set_u8($sroa_view_repr_497, is_negative_65, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($load_1, is_negative_65, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;
@@ -728,11 +731,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<wasi_cli.wa
     let x: i64;
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_497: ref Array<u8>;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(57), used: 0 };
-    $sroa_view_repr_497 = global:core:prelude/string.wado::$const_obj_6;
-    out_3.used = local.tee $load_0(41);
-    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, $sroa_view_repr_497, 0, 41);
+    local.tee out_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(57), used: 0 }).used = local.tee $load_0(41);
+    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, global:core:prelude/string.wado::$const_obj_6, 0, 41);
     is_negative_65 = t < 0;
     x = builtin::i64_extend_i32_s(t);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -812,22 +812,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<wasi_cli.wa
     }
     is_negative_65 = out_3.used;
     out_3.used = $load_0;
-    $sroa_view_repr_497 = out_3.repr;
     t = is_negative_65 + t;
+    $load_1 = out_3.repr;
     b110: block {
         l111: loop {
             break_if b110 (t - is_negative_65) < 2;
             q = x /u 100_i64;
             tens = local.tee $load_0(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_497, t - 1, (48 + $load_0) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_497, t - 2, 48 + tens);
+            builtin::array_set_u8($load_1, t - 1, (48 + $load_0) - (tens * 10));
+            builtin::array_set_u8($load_1, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l111;
         };
     };
     if t > is_negative_65 {
-        builtin::array_set_u8($sroa_view_repr_497, is_negative_65, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($load_1, is_negative_65, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;

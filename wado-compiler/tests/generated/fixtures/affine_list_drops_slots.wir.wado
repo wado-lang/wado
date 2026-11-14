@@ -1854,15 +1854,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::push"(self, value) {
+    let $load_2: ref null "Array<core:prelude/types.wado/Stream<u8>>";
     let used: i32;
-    let $arg_4: ref null "Array<core:prelude/types.wado/Stream<u8>>";
     let $held_7: ref null "core:prelude//$Resource";
     if @unlikely(local.tee used(self.used) >= builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(self);
     }
-    if ref.is_null(local.tee $held_7(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee $arg_4(self.repr), used))) {
-        builtin::array_set<ref null "core:prelude//$Resource">($arg_4, used, value);
+    if ref.is_null(local.tee $held_7(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee $load_2(self.repr), used))) {
+        builtin::array_set<ref null "core:prelude//$Resource">($load_2, used, value);
     } else {
         "wasi/stream-drop-readable"($held_7.value);
         $held_7.value = value.value;
@@ -2399,7 +2399,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     block {
         l293: loop {
             $load_1 = pending.used;
-            ptr_18 = builtin::i32_wrap_i64(ptr_18 = "mem/realloc"(0, 0, 1, $load_1); $mv$data$repr = pending.repr; i = 0; $licm_arith_7 = $load_1 - 8; b294: block {
+            ptr_18 = builtin::i32_wrap_i64(ptr_18 = "mem/realloc"(0, 0, 1, $load_1); i = 0; $licm_arith_7 = $load_1 - 8; $mv$data$repr = pending.repr; b294: block {
                 l295: loop {
                     break_if b294 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
                     w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, i + 7)) << 56_i64);

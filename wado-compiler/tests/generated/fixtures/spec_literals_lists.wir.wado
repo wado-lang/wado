@@ -846,44 +846,48 @@ global global:core:prelude/primitive.wado::$const_obj_18: ref "core:prelude/stri
 global global:core:prelude/primitive.wado::$const_obj_20: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
 fn "spec_literals_lists.wado/$test_0"() {
-    let $load_2: i32;
-    let $load_6: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $load_5: i32;
+    let $load_9: i32;
     let map_14: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>";
     let $local_5: ref null "tuple//[core:prelude/string.wado/String, i32]";
     let v_32: ref "tuple//[core:prelude/string.wado/String, i32]";
     let v_33: ref "core:prelude/string.wado//String";
     let existing: i32;
-    let b: i32;
-    let $sroa_$iter_0_repr_69: ref "Array<[core:prelude/string.wado/String,i32]>";
-    let $sroa_$iter_0_index_70: i32;
+    let $licm_log_69: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $licm_values_70: ref Array<i32>;
+    let $licm_keys_71: ref "Array<core:prelude/string.wado/String>";
+    let $sroa_$iter_0_index_73: i32;
     map_14 = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<i32>(0), alive: builtin::array_new<bool>(0), count: 0, deleted_count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
-    $sroa_$iter_0_repr_69 = global:spec_literals_lists.wado::$const_obj_1;
-    $sroa_$iter_0_index_70 = 0;
+    $sroa_$iter_0_index_73 = 0;
+    $licm_values_70 = local.tee $licm_log_69(map_14.log).values;
+    $licm_keys_71 = $licm_log_69.keys;
     b0: block {
         l1: loop {
             if ref.is_null(local.tee $local_5($inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_13: block -> ref null "tuple//[core:prelude/string.wado/String, i32]" {
-                if $sroa_$iter_0_index_70 >= 2 {
+                if $sroa_$iter_0_index_73 >= 2 {
                     break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_13: ref.null none;
                 }
-                v_32 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: v_33 = local.tee v_32(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($sroa_$iter_0_repr_69, $sroa_$iter_0_index_70)).0; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_33.repr; $load_2 = v_33.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 }, 1: v_32.1 };
-                $sroa_$iter_0_index_70 = $sroa_$iter_0_index_70 + 1;
+                v_32 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: v_33 = local.tee v_32(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(global:spec_literals_lists.wado::$const_obj_1, $sroa_$iter_0_index_73)).0; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_33.repr; $load_5 = v_33.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_5)), 0, $array_clone_src_1, 0, $load_5); $array_clone_dst_2, used: $load_5 }, 1: v_32.1 };
+                $sroa_$iter_0_index_73 = $sroa_$iter_0_index_73 + 1;
                 break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_13: v_32;
             })) == 0 {
                 v_33 = local.tee v_32(ref.as_non_null($local_5)).0;
-                $load_2 = v_32.1;
+                $load_5 = v_32.1;
                 $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_16: block {
-                    if local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map_14, v_33, local.tee $load_6(map_14.log).count)) >= 0 {
-                        builtin::array_set<i32>($load_6.values, existing, $load_2);
+                    if local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map_14, v_33, local.tee $load_9($licm_log_69.count))) >= 0 {
+                        builtin::array_set<i32>($licm_values_70, existing, $load_5);
                         break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_16;
                     }
-                    if @unlikely(local.tee existing($load_6.count) == builtin::array_len($load_6.keys)) {
+                    if @unlikely($load_9 == builtin::array_len($licm_keys_71)) {
                         cold_path;
-                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($load_6, b = existing * 2; select i32(4 > b, 4, b));
+                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($licm_log_69, existing = $load_9 * 2; select i32(4 > existing, 4, existing));
+                        $licm_values_70 = $licm_log_69.values;
+                        $licm_keys_71 = $licm_log_69.keys;
                     }
-                    builtin::array_set<ref "core:prelude/string.wado//String">($load_6.keys, existing, v_33);
-                    builtin::array_set<i32>($load_6.values, existing, $load_2);
-                    builtin::array_set<bool>($load_6.alive, existing, 1);
-                    $load_6.count = existing + 1;
+                    builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_71, $load_9, v_33);
+                    builtin::array_set<i32>($licm_values_70, $load_9, $load_5);
+                    builtin::array_set<bool>($licm_log_69.alive, $load_9, 1);
+                    $licm_log_69.count = $load_9 + 1;
                 };
             } else {
                 break b0;
@@ -891,13 +895,13 @@ fn "spec_literals_lists.wado/$test_0"() {
             continue l1;
         };
     };
-    if @unlikely(local.tee $load_2(local.tee $sroa_$iter_0_index_70(v_33 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("height"), used: 6 }; if @unlikely(local.tee $sroa_$iter_0_index_70("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"(local.tee $load_6(map_14.log), map_14.slots, map_14.nkeys, map_14.kids, map_14.lens, map_14.root, map_14.height, v_33.repr, 6)) < 0) {
+    if @unlikely(local.tee $load_5(local.tee $sroa_$iter_0_index_73(v_33 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("height"), used: 6 }; if @unlikely(local.tee $sroa_$iter_0_index_73("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"(local.tee $licm_log_69(map_14.log), map_14.slots, map_14.nkeys, map_14.kids, map_14.lens, map_14.root, map_14.height, v_33.repr, 6)) < 0) {
         cold_path;
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(v_33);
         unreachable;
-    }; builtin::array_get_value<i32>($load_6.values, $sroa_$iter_0_index_70)) == 1080) == 0) {
+    }; builtin::array_get_value<i32>($licm_log_69.values, $sroa_$iter_0_index_73)) == 1080) == 0) {
         cold_path;
-        "spec_literals_lists.wado/$test_0$cold0$dae[$v0,$v1,$v2_seen,$v3_seen]"($sroa_$iter_0_index_70, $load_2);
+        "spec_literals_lists.wado/$test_0$cold0$dae[$v0,$v1,$v2_seen,$v3_seen]"($sroa_$iter_0_index_73, $load_5);
         unreachable;
     }
 }
@@ -1222,13 +1226,11 @@ fn "spec_literals_lists.wado/$test_7_implicit_conversion"() {
 }
 
 fn "spec_literals_lists.wado/$test_8_spread"() {
-    let $load_2: i32;
-    let $load_6: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $load_5: i32;
+    let $load_9: i32;
+    let $load_61: ref Array<i32>;
     let $load_62: ref Array<i32>;
-    let $load_63: ref "Array<core:prelude/string.wado/String>";
-    let $load_64: ref Array<i32>;
-    let $load_65: ref Array<i32>;
-    let $load_69: ref Array<i32>;
+    let $load_66: ref Array<i32>;
     let $v2: i32;
     let $v2_seen: bool;
     let $v3: bool;
@@ -1249,37 +1251,43 @@ fn "spec_literals_lists.wado/$test_8_spread"() {
     let v_46: ref "tuple//[core:prelude/string.wado/String, i32]";
     let v_47: ref "core:prelude/string.wado//String";
     let existing_51: i32;
-    let b_61: i32;
     let map_72: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>";
-    let $sroa_$iter_0_index_194: i32;
+    let $licm_log_189: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $licm_values_196: ref Array<i32>;
+    let $licm_keys_197: ref "Array<core:prelude/string.wado/String>";
+    let $sroa_$iter_0_index_203: i32;
     entries_27 = array.new_fixed<ref "tuple//[core:prelude/string.wado/String, i32]">(struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 1: 1 }, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, 1: 2 });
     map_28 = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<i32>(0), alive: builtin::array_new<bool>(0), count: 0, deleted_count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
-    $sroa_$iter_0_index_194 = 0;
+    $sroa_$iter_0_index_203 = 0;
+    $licm_values_196 = local.tee $licm_log_189(map_28.log).values;
+    $licm_keys_197 = $licm_log_189.keys;
     b68: block {
         l69: loop {
             if ref.is_null(local.tee $local_5_32($inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_12: block -> ref null "tuple//[core:prelude/string.wado/String, i32]" {
-                if $sroa_$iter_0_index_194 >= 2 {
+                if $sroa_$iter_0_index_203 >= 2 {
                     break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_12: ref.null none;
                 }
-                v_46 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: v_47 = local.tee v_46(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(entries_27, $sroa_$iter_0_index_194)).0; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_47.repr; $load_2 = v_47.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 }, 1: v_46.1 };
-                $sroa_$iter_0_index_194 = $sroa_$iter_0_index_194 + 1;
+                v_46 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: v_47 = local.tee v_46(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(entries_27, $sroa_$iter_0_index_203)).0; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_47.repr; $load_5 = v_47.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_5)), 0, $array_clone_src_1, 0, $load_5); $array_clone_dst_2, used: $load_5 }, 1: v_46.1 };
+                $sroa_$iter_0_index_203 = $sroa_$iter_0_index_203 + 1;
                 break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_12: v_46;
             })) == 0 {
                 v_47 = local.tee v_46(ref.as_non_null($local_5_32)).0;
-                $load_2 = v_46.1;
+                $load_5 = v_46.1;
                 $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_15: block {
-                    if local.tee existing_51("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map_28, v_47, local.tee $load_6(map_28.log).count)) >= 0 {
-                        builtin::array_set<i32>($load_6.values, existing_51, $load_2);
+                    if local.tee existing_51("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map_28, v_47, local.tee $load_9($licm_log_189.count))) >= 0 {
+                        builtin::array_set<i32>($licm_values_196, existing_51, $load_5);
                         break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_15;
                     }
-                    if @unlikely(local.tee existing_51($load_6.count) == builtin::array_len($load_6.keys)) {
+                    if @unlikely($load_9 == builtin::array_len($licm_keys_197)) {
                         cold_path;
-                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($load_6, b_61 = existing_51 * 2; select i32(4 > b_61, 4, b_61));
+                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($licm_log_189, existing_51 = $load_9 * 2; select i32(4 > existing_51, 4, existing_51));
+                        $licm_values_196 = $licm_log_189.values;
+                        $licm_keys_197 = $licm_log_189.keys;
                     }
-                    builtin::array_set<ref "core:prelude/string.wado//String">($load_6.keys, existing_51, v_47);
-                    builtin::array_set<i32>($load_6.values, existing_51, $load_2);
-                    builtin::array_set<bool>($load_6.alive, existing_51, 1);
-                    $load_6.count = existing_51 + 1;
+                    builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_197, $load_9, v_47);
+                    builtin::array_set<i32>($licm_values_196, $load_9, $load_5);
+                    builtin::array_set<bool>($licm_log_189.alive, $load_9, 1);
+                    $licm_log_189.count = $load_9 + 1;
                 };
             } else {
                 break b68;
@@ -1288,33 +1296,36 @@ fn "spec_literals_lists.wado/$test_8_spread"() {
         };
     };
     map_72 = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<i32>(0), alive: builtin::array_new<bool>(0), count: 0, deleted_count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
-    entries_27 = global:spec_literals_lists.wado::$const_obj_8;
-    $sroa_$iter_0_index_194 = 0;
+    $sroa_$iter_0_index_203 = 0;
+    $licm_values_196 = local.tee $licm_log_189(map_72.log).values;
+    $licm_keys_197 = $licm_log_189.keys;
     b74: block {
         l75: loop {
             if ref.is_null(local.tee $local_5_32($inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_35: block -> ref null "tuple//[core:prelude/string.wado/String, i32]" {
-                if $sroa_$iter_0_index_194 >= 2 {
+                if $sroa_$iter_0_index_203 >= 2 {
                     break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_35: ref.null none;
                 }
-                v_46 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = local.tee v_47(local.tee v_46(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(entries_27, $sroa_$iter_0_index_194)).0).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $load_2(v_47.used))), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 }, 1: v_46.1 };
-                $sroa_$iter_0_index_194 = $sroa_$iter_0_index_194 + 1;
+                v_46 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = local.tee v_47(local.tee v_46(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(global:spec_literals_lists.wado::$const_obj_8, $sroa_$iter_0_index_203)).0).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $load_5(v_47.used))), 0, $array_clone_src_1, 0, $load_5); $array_clone_dst_2, used: $load_5 }, 1: v_46.1 };
+                $sroa_$iter_0_index_203 = $sroa_$iter_0_index_203 + 1;
                 break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_35: v_46;
             })) == 0 {
                 v_47 = local.tee v_46(ref.as_non_null($local_5_32)).0;
-                $load_2 = v_46.1;
+                $load_5 = v_46.1;
                 $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_38: block {
-                    if local.tee existing_51("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map_72, v_47, local.tee $load_6(map_72.log).count)) >= 0 {
-                        builtin::array_set<i32>($load_6.values, existing_51, $load_2);
+                    if local.tee existing_51("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map_72, v_47, local.tee $load_9($licm_log_189.count))) >= 0 {
+                        builtin::array_set<i32>($licm_values_196, existing_51, $load_5);
                         break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_38;
                     }
-                    if @unlikely(local.tee existing_51($load_6.count) == builtin::array_len($load_6.keys)) {
+                    if @unlikely($load_9 == builtin::array_len($licm_keys_197)) {
                         cold_path;
-                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($load_6, b_61 = existing_51 * 2; select i32(4 > b_61, 4, b_61));
+                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($licm_log_189, existing_51 = $load_9 * 2; select i32(4 > existing_51, 4, existing_51));
+                        $licm_values_196 = $licm_log_189.values;
+                        $licm_keys_197 = $licm_log_189.keys;
                     }
-                    builtin::array_set<ref "core:prelude/string.wado//String">($load_6.keys, existing_51, v_47);
-                    builtin::array_set<i32>($load_6.values, existing_51, $load_2);
-                    builtin::array_set<bool>($load_6.alive, existing_51, 1);
-                    $load_6.count = existing_51 + 1;
+                    builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_197, $load_9, v_47);
+                    builtin::array_set<i32>($licm_values_196, $load_9, $load_5);
+                    builtin::array_set<bool>($licm_log_189.alive, $load_9, 1);
+                    $licm_log_189.count = $load_9 + 1;
                 };
             } else {
                 break b74;
@@ -1324,33 +1335,36 @@ fn "spec_literals_lists.wado/$test_8_spread"() {
     };
     "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/LiteralSpread::spread_literal"(map_28, map_72.log, map_72.slots, map_72.nkeys, map_72.kids, map_72.lens, map_72.nodes, map_72.root, map_72.height);
     map_72 = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<i32>(0), alive: builtin::array_new<bool>(0), count: 0, deleted_count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
-    entries_27 = global:spec_literals_lists.wado::$const_obj_7;
-    $sroa_$iter_0_index_194 = 0;
+    $sroa_$iter_0_index_203 = 0;
+    $licm_values_196 = local.tee $licm_log_189(map_72.log).values;
+    $licm_keys_197 = $licm_log_189.keys;
     b80: block {
         l81: loop {
             if ref.is_null(local.tee $local_5_32($inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_58: block -> ref null "tuple//[core:prelude/string.wado/String, i32]" {
-                if $sroa_$iter_0_index_194 >= 1 {
+                if $sroa_$iter_0_index_203 >= 1 {
                     break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_58: ref.null none;
                 }
-                v_46 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = local.tee v_47(local.tee v_46(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(entries_27, $sroa_$iter_0_index_194)).0).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $load_2(v_47.used))), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 }, 1: v_46.1 };
-                $sroa_$iter_0_index_194 = $sroa_$iter_0_index_194 + 1;
+                v_46 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = local.tee v_47(local.tee v_46(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(global:spec_literals_lists.wado::$const_obj_7, $sroa_$iter_0_index_203)).0).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $load_5(v_47.used))), 0, $array_clone_src_1, 0, $load_5); $array_clone_dst_2, used: $load_5 }, 1: v_46.1 };
+                $sroa_$iter_0_index_203 = $sroa_$iter_0_index_203 + 1;
                 break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_58: v_46;
             })) == 0 {
                 v_47 = local.tee v_46(ref.as_non_null($local_5_32)).0;
-                $load_2 = v_46.1;
+                $load_5 = v_46.1;
                 $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_61: block {
-                    if local.tee existing_51("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map_72, v_47, local.tee $load_6(map_72.log).count)) >= 0 {
-                        builtin::array_set<i32>($load_6.values, existing_51, $load_2);
+                    if local.tee existing_51("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map_72, v_47, local.tee $load_9($licm_log_189.count))) >= 0 {
+                        builtin::array_set<i32>($licm_values_196, existing_51, $load_5);
                         break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_61;
                     }
-                    if @unlikely(local.tee existing_51($load_6.count) == builtin::array_len($load_6.keys)) {
+                    if @unlikely($load_9 == builtin::array_len($licm_keys_197)) {
                         cold_path;
-                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($load_6, b_61 = existing_51 * 2; select i32(4 > b_61, 4, b_61));
+                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($licm_log_189, existing_51 = $load_9 * 2; select i32(4 > existing_51, 4, existing_51));
+                        $licm_values_196 = $licm_log_189.values;
+                        $licm_keys_197 = $licm_log_189.keys;
                     }
-                    builtin::array_set<ref "core:prelude/string.wado//String">($load_6.keys, existing_51, v_47);
-                    builtin::array_set<i32>($load_6.values, existing_51, $load_2);
-                    builtin::array_set<bool>($load_6.alive, existing_51, 1);
-                    $load_6.count = existing_51 + 1;
+                    builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_197, $load_9, v_47);
+                    builtin::array_set<i32>($licm_values_196, $load_9, $load_5);
+                    builtin::array_set<bool>($licm_log_189.alive, $load_9, 1);
+                    $licm_log_189.count = $load_9 + 1;
                 };
             } else {
                 break b80;
@@ -1359,19 +1373,21 @@ fn "spec_literals_lists.wado/$test_8_spread"() {
         };
     };
     "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/LiteralSpread::spread_literal"(map_28, map_72.log, map_72.slots, map_72.nkeys, map_72.kids, map_72.lens, map_72.nodes, map_72.root, map_72.height);
-    b_61 = local.tee existing_51(v_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }; if @unlikely(local.tee existing_51("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"(local.tee $load_6(map_28.log), local.tee $load_62(map_28.slots), local.tee $load_63(map_28.nkeys), local.tee $load_64(map_28.kids), local.tee $load_65(map_28.lens), local.tee $sroa_$iter_0_index_194(map_28.root), local.tee $load_2(map_28.height), v_47.repr, 1)) < 0) {
+    v_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
+    if @unlikely(local.tee $load_9("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"(local.tee $licm_log_189(map_28.log), local.tee $licm_values_196(map_28.slots), local.tee $licm_keys_197(map_28.nkeys), local.tee $load_61(map_28.kids), local.tee $load_62(map_28.lens), local.tee $sroa_$iter_0_index_203(map_28.root), local.tee $load_5(map_28.height), v_47.repr, 1)) < 0) {
         cold_path;
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(v_47);
         unreachable;
-    }; builtin::array_get_value<i32>(local.tee $load_69($load_6.values), existing_51)) == 9;
+    }
+    existing_51 = local.tee $load_9(builtin::array_get_value<i32>(local.tee $load_66($licm_log_189.values), $load_9)) == 9;
     $v2_seen = 0;
     $v3_seen = 0;
-    $v4 = (if b_61 -> i32 {
-        $v3 = v_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }; if @unlikely(local.tee $v2_seen("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($load_6, $load_62, $load_63, $load_64, $load_65, $sroa_$iter_0_index_194, $load_2, v_47.repr, 1)) < 0) {
+    $v4 = (if existing_51 -> i32 {
+        $v3 = v_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }; if @unlikely(local.tee $v2_seen("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($licm_log_189, $licm_values_196, $licm_keys_197, $load_61, $load_62, $sroa_$iter_0_index_203, $load_5, v_47.repr, 1)) < 0) {
             cold_path;
             "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(v_47);
             unreachable;
-        }; $v2 = builtin::array_get_value<i32>($load_69, $v2_seen); $v2_seen = 1; $v2 == 2;
+        }; $v2 = builtin::array_get_value<i32>($load_66, $v2_seen); $v2_seen = 1; $v2 == 2;
         $v3_seen = 1;
         $v3;
     } else {
@@ -1380,11 +1396,11 @@ fn "spec_literals_lists.wado/$test_8_spread"() {
     $v5_seen = 0;
     $v6_seen = 0;
     $v7 = (if $v4 -> i32 {
-        $v6 = v_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }; if @unlikely(local.tee $v5_seen("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($load_6, $load_62, $load_63, $load_64, $load_65, $sroa_$iter_0_index_194, $load_2, v_47.repr, 1)) < 0) {
+        $v6 = v_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }; if @unlikely(local.tee $v5_seen("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($licm_log_189, $licm_values_196, $licm_keys_197, $load_61, $load_62, $sroa_$iter_0_index_203, $load_5, v_47.repr, 1)) < 0) {
             cold_path;
             "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(v_47);
             unreachable;
-        }; $v5 = builtin::array_get_value<i32>($load_69, $v5_seen); $v5_seen = 1; $v5 == 3;
+        }; $v5 = builtin::array_get_value<i32>($load_66, $v5_seen); $v5_seen = 1; $v5 == 3;
         $v6_seen = 1;
         $v6;
     } else {
@@ -1393,18 +1409,18 @@ fn "spec_literals_lists.wado/$test_8_spread"() {
     $v8_seen = 0;
     $v9_seen = 0;
     if @unlikely((if $v7 -> i32 {
-        $v9 = v_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100), used: 1 }; if @unlikely(local.tee $sroa_$iter_0_index_194("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($load_6, $load_62, $load_63, $load_64, $load_65, $sroa_$iter_0_index_194, $load_2, v_47.repr, 1)) < 0) {
+        $v9 = v_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100), used: 1 }; if @unlikely(local.tee $sroa_$iter_0_index_203("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index"($licm_log_189, $licm_values_196, $licm_keys_197, $load_61, $load_62, $sroa_$iter_0_index_203, $load_5, v_47.repr, 1)) < 0) {
             cold_path;
             "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::found$cold0$dae[self,e]"(v_47);
             unreachable;
-        }; $v8 = builtin::array_get_value<i32>($load_69, $sroa_$iter_0_index_194); $v8_seen = 1; $v8 == 4;
+        }; $v8 = builtin::array_get_value<i32>($load_66, $sroa_$iter_0_index_203); $v8_seen = 1; $v8 == 4;
         $v9_seen = 1;
         $v9;
     } else {
         0;
     }) == 0) {
         cold_path;
-        "spec_literals_lists.wado/$test_8_spread$cold0"(existing_51, b_61, $v2, $v2_seen, $v3, $v3_seen, $v4, $v5, $v5_seen, $v6, $v6_seen, $v7, $v8, $v8_seen, $v9, $v9_seen);
+        "spec_literals_lists.wado/$test_8_spread$cold0"($load_9, existing_51, $v2, $v2_seen, $v3, $v3_seen, $v4, $v5, $v5_seen, $v6, $v6_seen, $v7, $v8, $v8_seen, $v9, $v9_seen);
         unreachable;
     }
 }
@@ -4480,15 +4496,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<spec_litera
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/LiteralSpread::spread_literal"(self, $mv$base$log, $mv$base$slots, $mv$base$nkeys, $mv$base$kids, $mv$base$lens, $mv$base$nodes, $mv$base$root, $mv$base$height) {
-    let $load_6: i32;
+    let $load_8: i32;
     let $iter_0: ref "core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado/String,i32>";
     let k: ref "core:prelude/string.wado//String";
     let v_4: ref "core:prelude//$Cell<i32>";
     let $match_5: ref null "tuple//[&core:prelude/string.wado/String, &i32]";
     let existing: i32;
-    let $av_35: i32;
+    let $licm_values_34: ref Array<i32>;
+    let $licm_keys_35: ref "Array<core:prelude/string.wado/String>";
+    let $av_37: i32;
     $iter_0 = struct.new "core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado/String,i32>" { log: $mv$base$log, index: 0 };
-    $mv$base$log = self.log;
+    $licm_values_34 = local.tee $mv$base$log(self.log).values;
+    $licm_keys_35 = $mv$base$log.keys;
     b716: block {
         l717: loop {
             if ref.is_null(local.tee $match_5("core:collections/entries.wado/core:collections/entries.wado/MapEntriesRefIter<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/Iterator::next"($iter_0))) == 0 {
@@ -4496,21 +4515,23 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                 k = local.tee $variant_payload_1(ref.as_non_null($match_5)).0;
                 v_4 = $variant_payload_1.1;
                 $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_3: block {
-                    $av_35 = k.used;
-                    k = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = k.repr; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_35)), 0, $array_clone_src_2, 0, $av_35); $array_clone_dst_3, used: $av_35 };
-                    $av_35 = v_4.value;
-                    if local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(self, k, local.tee $load_6($mv$base$log.count))) >= 0 {
-                        builtin::array_set<i32>($mv$base$log.values, existing, $av_35);
+                    $av_37 = k.used;
+                    k = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = k.repr; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_37)), 0, $array_clone_src_2, 0, $av_37); $array_clone_dst_3, used: $av_37 };
+                    $av_37 = v_4.value;
+                    if local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(self, k, local.tee $load_8($mv$base$log.count))) >= 0 {
+                        builtin::array_set<i32>($licm_values_34, existing, $av_37);
                         break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_3;
                     }
-                    if @unlikely($load_6 == builtin::array_len($mv$base$log.keys)) {
+                    if @unlikely($load_8 == builtin::array_len($licm_keys_35)) {
                         cold_path;
-                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($mv$base$log, existing = $load_6 * 2; select i32(4 > existing, 4, existing));
+                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($mv$base$log, existing = $load_8 * 2; select i32(4 > existing, 4, existing));
+                        $licm_values_34 = $mv$base$log.values;
+                        $licm_keys_35 = $mv$base$log.keys;
                     }
-                    builtin::array_set<ref "core:prelude/string.wado//String">($mv$base$log.keys, $load_6, k);
-                    builtin::array_set<i32>($mv$base$log.values, $load_6, $av_35);
-                    builtin::array_set<bool>($mv$base$log.alive, $load_6, 1);
-                    $mv$base$log.count = $load_6 + 1;
+                    builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_35, $load_8, k);
+                    builtin::array_set<i32>($licm_values_34, $load_8, $av_37);
+                    builtin::array_set<bool>($mv$base$log.alive, $load_8, 1);
+                    $mv$base$log.count = $load_8 + 1;
                 };
             } else {
                 break b716;

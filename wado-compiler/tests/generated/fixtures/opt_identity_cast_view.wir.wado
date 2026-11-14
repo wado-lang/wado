@@ -218,21 +218,21 @@ fn "opt_identity_cast_view.wado/$cm_export__run"() {
     let n: i32;
     let i: i32;
     let end: i32;
-    let $sroa_view_repr_24: ref Array<u8>;
+    let $licm_repr_27: ref Array<u8>;
     end = local.tee text(black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 })).used;
-    $sroa_view_repr_24 = text.repr;
     n = 0;
     i = 0;
+    $licm_repr_27 = text.repr;
     b6: block {
         l7: loop {
             break_if b6 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(end);
-            n = n + (builtin::array_get_value<u8>($sroa_view_repr_24, i) == 97);
+            n = n + (builtin::array_get_value<u8>($licm_repr_27, i) == 97);
             i = i + 1;
-            n = n + (builtin::array_get_value<u8>($sroa_view_repr_24, i) == 97);
+            n = n + (builtin::array_get_value<u8>($licm_repr_27, i) == 97);
             i = i + 1;
-            n = n + (builtin::array_get_value<u8>($sroa_view_repr_24, i) == 97);
+            n = n + (builtin::array_get_value<u8>($licm_repr_27, i) == 97);
             i = i + 1;
-            n = n + (builtin::array_get_value<u8>($sroa_view_repr_24, i) == 97);
+            n = n + (builtin::array_get_value<u8>($licm_repr_27, i) == 97);
             i = i + 1;
             continue l7;
         };
@@ -240,7 +240,7 @@ fn "opt_identity_cast_view.wado/$cm_export__run"() {
     b8: block {
         l9: loop {
             break_if b8 i >= end;
-            n = n + (builtin::array_get_value<u8>($sroa_view_repr_24, i) == 97);
+            n = n + (builtin::array_get_value<u8>($licm_repr_27, i) == 97);
             i = i + 1;
             continue l9;
         };

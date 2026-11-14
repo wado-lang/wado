@@ -172,7 +172,7 @@ fn "retain_array_copy_elements.wado/run"() {
     let staged: ref "Array<retain_array_copy_elements.wado/Slot>";
     let value_19: ref "retain_array_copy_elements.wado//Slot";
     let used_20: i32;
-    let $sroa_$iter_2_index_36: i32;
+    let $sroa_$iter_2_index_37: i32;
     x = struct.new "retain_array_copy_elements.wado//Data" { v: black_box(7) };
     direct = builtin::array_new<ref "retain_array_copy_elements.wado//Slot">(1);
     builtin::array_set<ref "retain_array_copy_elements.wado//Slot">(local.tee staged(builtin::array_new<ref "retain_array_copy_elements.wado//Slot">(1)), 0, struct.new "retain_array_copy_elements.wado//Slot" { d: x });
@@ -200,15 +200,17 @@ fn "retain_array_copy_elements.wado/run"() {
     }
     grown = struct.new "core:prelude/list.wado//List<retain_array_copy_elements.wado/Slot>" { repr: array.new_fixed<ref "retain_array_copy_elements.wado//Slot">(), used: 0 };
     $array_clone_i_6 = 0;
+    direct = grown.repr;
     b3: block {
         l4: loop {
             break_if b3 $array_clone_i_6 >= 5;
             value_19 = struct.new "retain_array_copy_elements.wado//Slot" { d: x };
-            if @unlikely(local.tee used_20(grown.used) >= builtin::array_len(grown.repr)) {
+            if @unlikely(local.tee used_20(grown.used) >= builtin::array_len(direct)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<retain_array_copy_elements.wado/Slot>::grow"(grown);
+                direct = grown.repr;
             }
-            builtin::array_set<ref "retain_array_copy_elements.wado//Slot">(grown.repr, used_20, value_19);
+            builtin::array_set<ref "retain_array_copy_elements.wado//Slot">(direct, used_20, value_19);
             grown.used = used_20 + 1;
             $array_clone_i_6 = $array_clone_i_6 + 1;
             continue l4;
@@ -217,30 +219,30 @@ fn "retain_array_copy_elements.wado/run"() {
     $array_clone_i_6 = 0;
     used_20 = grown.used;
     direct = grown.repr;
-    $sroa_$iter_2_index_36 = 0;
+    $sroa_$iter_2_index_37 = 0;
     b6: block {
         l7: loop {
-            break_if b6 (builtin::i64_extend_i32_s($sroa_$iter_2_index_36) + 3_i64) >= builtin::i64_extend_i32_s(used_20);
-            x = builtin::array_get_value<ref "retain_array_copy_elements.wado//Slot">(direct, $sroa_$iter_2_index_36).d;
-            $sroa_$iter_2_index_36 = $sroa_$iter_2_index_36 + 1;
+            break_if b6 (builtin::i64_extend_i32_s($sroa_$iter_2_index_37) + 3_i64) >= builtin::i64_extend_i32_s(used_20);
+            x = builtin::array_get_value<ref "retain_array_copy_elements.wado//Slot">(direct, $sroa_$iter_2_index_37).d;
+            $sroa_$iter_2_index_37 = $sroa_$iter_2_index_37 + 1;
             $array_clone_i_6 = $array_clone_i_6 + x.v;
-            x = builtin::array_get_value<ref "retain_array_copy_elements.wado//Slot">(direct, $sroa_$iter_2_index_36).d;
-            $sroa_$iter_2_index_36 = $sroa_$iter_2_index_36 + 1;
+            x = builtin::array_get_value<ref "retain_array_copy_elements.wado//Slot">(direct, $sroa_$iter_2_index_37).d;
+            $sroa_$iter_2_index_37 = $sroa_$iter_2_index_37 + 1;
             $array_clone_i_6 = $array_clone_i_6 + x.v;
-            x = builtin::array_get_value<ref "retain_array_copy_elements.wado//Slot">(direct, $sroa_$iter_2_index_36).d;
-            $sroa_$iter_2_index_36 = $sroa_$iter_2_index_36 + 1;
+            x = builtin::array_get_value<ref "retain_array_copy_elements.wado//Slot">(direct, $sroa_$iter_2_index_37).d;
+            $sroa_$iter_2_index_37 = $sroa_$iter_2_index_37 + 1;
             $array_clone_i_6 = $array_clone_i_6 + x.v;
-            x = builtin::array_get_value<ref "retain_array_copy_elements.wado//Slot">(direct, $sroa_$iter_2_index_36).d;
-            $sroa_$iter_2_index_36 = $sroa_$iter_2_index_36 + 1;
+            x = builtin::array_get_value<ref "retain_array_copy_elements.wado//Slot">(direct, $sroa_$iter_2_index_37).d;
+            $sroa_$iter_2_index_37 = $sroa_$iter_2_index_37 + 1;
             $array_clone_i_6 = $array_clone_i_6 + x.v;
             continue l7;
         };
     };
     b8: block {
         l9: loop {
-            break_if b8 $sroa_$iter_2_index_36 >= used_20;
-            x = builtin::array_get_value<ref "retain_array_copy_elements.wado//Slot">(direct, $sroa_$iter_2_index_36).d;
-            $sroa_$iter_2_index_36 = $sroa_$iter_2_index_36 + 1;
+            break_if b8 $sroa_$iter_2_index_37 >= used_20;
+            x = builtin::array_get_value<ref "retain_array_copy_elements.wado//Slot">(direct, $sroa_$iter_2_index_37).d;
+            $sroa_$iter_2_index_37 = $sroa_$iter_2_index_37 + 1;
             $array_clone_i_6 = $array_clone_i_6 + x.v;
             continue l9;
         };

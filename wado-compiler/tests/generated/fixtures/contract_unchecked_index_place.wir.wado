@@ -82,7 +82,6 @@ fn "contract_unchecked_index_place.wado/run"() with Stdout {
     let out_208: ref "core:prelude/string.wado//String";
     let is_negative_275: bool;
     let x_279: i64;
-    let $sroa_view_repr_205: ref Array<u8>;
     let $sroa_t_h0_430: i32;
     let $sroa_t_h1_431: i32;
     builtin::array_get_value<ref "contract_unchecked_index_place.wado//P">(local.tee elements(array.new_fixed<ref "contract_unchecked_index_place.wado//P">(struct.new "contract_unchecked_index_place.wado//P" { x: 1 }, struct.new "contract_unchecked_index_place.wado//P" { x: 2 })), 0).x = 9;
@@ -97,14 +96,13 @@ fn "contract_unchecked_index_place.wado/run"() with Stdout {
     $sroa_t_h0_430 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_279(x_279 = builtin::i64_extend_i32_s($sroa_t_h0_430); select i64(x_279 < 0_i64, 0_i64 - x_279, x_279)));
     is_negative_275 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_208, is_negative_275, $sroa_t_h0_430);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_1(out_208.repr), is_negative_275, x_279, $sroa_t_h0_430);
-    $sroa_view_repr_205 = global:contract_unchecked_index_place.wado::$const_obj_0;
     if @unlikely(local.tee $sroa_t_h0_430(out_208.used + 1) > builtin::array_len($load_1)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_208, $sroa_t_h0_430);
     }
     is_negative_275 = out_208.used;
     out_208.used = $sroa_t_h0_430;
-    builtin::array_copy<u8>(out_208.repr, is_negative_275, $sroa_view_repr_205, 0, 1);
+    builtin::array_copy<u8>(out_208.repr, is_negative_275, global:contract_unchecked_index_place.wado::$const_obj_0, 0, 1);
     $sroa_t_h0_430 = $sroa_t_h1_431 < 0;
     $sroa_t_h1_431 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_279(x_279 = builtin::i64_extend_i32_s($sroa_t_h1_431); select i64(x_279 < 0_i64, 0_i64 - x_279, x_279)));
     $sroa_t_h0_430 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_208, $sroa_t_h0_430, $sroa_t_h1_431);

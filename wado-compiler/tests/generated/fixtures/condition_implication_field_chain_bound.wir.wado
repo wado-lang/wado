@@ -70,15 +70,15 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "condition_implication_field_chain_bound.wado/run"() with Stdout {
+    let $load_8: ref Array<u8>;
     let r: i32;
     let repr_5: ref Array<u16>;
     let out_18: ref "core:prelude/string.wado//String";
     let is_negative_80: bool;
     let x: i64;
-    let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_169: i32;
+    let start_170: i32;
     builtin::array_fill<u16>(local.tee repr_5(builtin::array_new<u16>(16)), 0, 7, 16);
     r = "condition_implication_field_chain_bound.wado/loop_guard_field_chain_bound$sroa[c.size]$spec0$sroa[src.repr]"(4, repr_5);
     out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -153,33 +153,33 @@ fn "condition_implication_field_chain_bound.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_80);
         }
-        start_169 = out_18.used;
+        start_170 = out_18.used;
         out_18.used = is_negative_80;
-        builtin::array_set_u8(out_18.repr, start_169, 45);
+        builtin::array_set_u8(out_18.repr, start_170, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_80(out_18.used + r) > builtin::array_len(out_18.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_80);
     }
-    start_169 = out_18.used;
+    start_170 = out_18.used;
     out_18.used = is_negative_80;
-    arr = out_18.repr;
-    r = start_169 + r;
+    r = start_170 + r;
+    $load_8 = out_18.repr;
     b22: block {
         l23: loop {
-            break_if b22 (r - start_169) < 2;
+            break_if b22 (r - start_170) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_80(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, r - 1, (48 + is_negative_80) - (tens * 10));
-            builtin::array_set_u8(arr, r - 2, 48 + tens);
+            builtin::array_set_u8($load_8, r - 1, (48 + is_negative_80) - (tens * 10));
+            builtin::array_set_u8($load_8, r - 2, 48 + tens);
             r = r - 2;
             x = q;
             continue l23;
         };
     };
-    if r > start_169 {
-        builtin::array_set_u8(arr, start_169, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if r > start_170 {
+        builtin::array_set_u8($load_8, start_170, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;

@@ -712,13 +712,12 @@ s: "), used: 122 }, s1: struct.new "core:prelude/string.wado//String" { repr: ar
     }
     i_19 = $v1_1.used;
     $v1_1.used = $load_1;
-    builtin::array_copy<u8>($v1_1.repr, i_19, global:mut_param.wado::$const_obj_3, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_0($v1_1.repr), i_19, global:mut_param.wado::$const_obj_3, 0, 1);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__15: block -> bool {
-        if local.tee $load_1($v1_1.used) != 6 {
+        if $load_1 != 6 {
             break $inline_core_prelude_array_wado_seq_eq_u8__15: 0;
         }
         i_19 = 0;
-        $load_0 = $v1_1.repr;
         b24: block {
             l25: loop {
                 break_if b24 (builtin::i64_extend_i32_s(i_19) + 3_i64) >= builtin::i64_extend_i32_s($load_1);
@@ -860,8 +859,8 @@ fn "mut_param.wado/$test_6_rebinding__writing_and_appending_to_a_list_param"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(arr_100);
     }
     builtin::array_set<i32>(arr_100.repr, used_39, 0);
-    arr_100.used = used_39 + 1;
-    if @unlikely(local.tee $v0_2(arr_100.used) != 4) {
+    arr_100.used = local.tee $v0_2(used_39 + 1);
+    if @unlikely($v0_2 != 4) {
         cold_path;
         "mut_param.wado/$test_6_rebinding__writing_and_appending_to_a_list_param$cold1"($v0_2);
         unreachable;
@@ -880,15 +879,16 @@ fn "mut_param.wado/$test_8_a_mut_param_as_a_loop_counter"() {
     let used_10: i32;
     let $licm_repr_29: ref Array<i32>;
     n = local.tee start(black_box(3));
-    seen = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_29 = local.tee seen(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b53: block {
         l54: loop {
             break_if b53 n <= 0;
-            if @unlikely(local.tee used_10(seen.used) >= builtin::array_len(seen.repr)) {
+            if @unlikely(local.tee used_10(seen.used) >= builtin::array_len($licm_repr_29)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(seen);
+                $licm_repr_29 = seen.repr;
             }
-            builtin::array_set<i32>(seen.repr, used_10, n);
+            builtin::array_set<i32>($licm_repr_29, used_10, n);
             seen.used = used_10 + 1;
             n = n - 1;
             continue l54;

@@ -76,7 +76,6 @@ fn "builtin_returns_owned.wado/run"() with Stdout {
     let out_36: ref "core:prelude/string.wado//String";
     let is_negative_103: bool;
     let x_107: i64;
-    let $sroa_view_repr_204: ref Array<u8>;
     let $sroa_t_h1_257: i32;
     builtin::array_fill<i32>(local.tee src(builtin::array_new<i32>(3)), 0, 7, 3);
     let $array_clone_len_3: i32;
@@ -94,14 +93,13 @@ fn "builtin_returns_owned.wado/run"() with Stdout {
     $array_clone_len_3 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_107(x_107 = builtin::i64_extend_i32_s($array_clone_len_3); select i64(x_107 < 0_i64, 0_i64 - x_107, x_107)));
     is_negative_103 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_36, is_negative_103, $array_clone_len_3);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_36.repr), is_negative_103, x_107, $array_clone_len_3);
-    $sroa_view_repr_204 = global:builtin_returns_owned.wado::$const_obj_0;
     if @unlikely(local.tee $array_clone_len_3(out_36.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_36, $array_clone_len_3);
     }
     is_negative_103 = out_36.used;
     out_36.used = $array_clone_len_3;
-    builtin::array_copy<u8>(out_36.repr, is_negative_103, $sroa_view_repr_204, 0, 1);
+    builtin::array_copy<u8>(out_36.repr, is_negative_103, global:builtin_returns_owned.wado::$const_obj_0, 0, 1);
     $array_clone_len_3 = $sroa_t_h1_257 < 0;
     $sroa_t_h1_257 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_107(x_107 = builtin::i64_extend_i32_s($sroa_t_h1_257); select i64(x_107 < 0_i64, 0_i64 - x_107, x_107)));
     $array_clone_len_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_36, $array_clone_len_3, $sroa_t_h1_257);

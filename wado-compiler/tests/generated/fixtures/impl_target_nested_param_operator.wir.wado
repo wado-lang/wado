@@ -3154,7 +3154,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 fn "impl_target_nested_param_operator.wado/impl_target_nested_param_operator.wado/Pair<core:prelude/list.wado/List<core:prelude/string.wado/String>,i32>^core:prelude/traits.wado/Add::add$spec0$sroa[self.a,rhs.a]$spec0"($mv$self$repr, $mv$self$used, $mv$rhs$repr, $mv$rhs$used) {
     let a: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let v_13: ref "core:prelude/string.wado//String";
-    let $av_26: i32;
+    let $av_27: i32;
     a = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: let $array_clone_dst_2: ref "Array<core:prelude/string.wado/String>"; $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(1); let $array_clone_i_4: i32; $array_clone_i_4 = 0; let $array_clone_elem_5: ref null "core:prelude/string.wado//String"; $array_clone_deep_prefix: block {
         l452: loop {
             break_if $array_clone_deep_prefix $array_clone_i_4 >= 1;
@@ -3169,18 +3169,20 @@ fn "impl_target_nested_param_operator.wado/impl_target_nested_param_operator.wad
         };
     }; $array_clone_dst_2, used: 1 };
     $array_clone_i_4 = 0;
+    $mv$self$repr = a.repr;
     b454: block {
         l455: loop {
             break_if b454 $array_clone_i_4 >= 1;
-            $av_26 = local.tee v_13(builtin::array_get_value<ref "core:prelude/string.wado//String">($mv$rhs$repr, $array_clone_i_4)).used;
-            v_13 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_6: ref Array<u8>; $array_clone_src_6 = v_13.repr; let $array_clone_dst_7: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>($av_26)), 0, $array_clone_src_6, 0, $av_26); $array_clone_dst_7, used: $av_26 };
+            $av_27 = local.tee v_13(builtin::array_get_value<ref "core:prelude/string.wado//String">($mv$rhs$repr, $array_clone_i_4)).used;
+            v_13 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_6: ref Array<u8>; $array_clone_src_6 = v_13.repr; let $array_clone_dst_7: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>($av_27)), 0, $array_clone_src_6, 0, $av_27); $array_clone_dst_7, used: $av_27 };
             $array_clone_i_4 = $array_clone_i_4 + 1;
-            if @unlikely(local.tee $av_26(a.used) >= builtin::array_len(a.repr)) {
+            if @unlikely(local.tee $av_27(a.used) >= builtin::array_len($mv$self$repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(a);
+                $mv$self$repr = a.repr;
             }
-            builtin::array_set<ref "core:prelude/string.wado//String">(a.repr, $av_26, v_13);
-            a.used = $av_26 + 1;
+            builtin::array_set<ref "core:prelude/string.wado//String">($mv$self$repr, $av_27, v_13);
+            a.used = $av_27 + 1;
             continue l455;
         };
     };

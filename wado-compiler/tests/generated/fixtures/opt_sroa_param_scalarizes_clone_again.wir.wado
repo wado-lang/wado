@@ -938,9 +938,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
-    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -957,26 +957,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_7: block -> i32 {
-        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c);
+            builtin::array_set_u8(self.repr, new_used, c);
             break $inline_encode_char_7: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_7: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_7: 3;
         }
-        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
+        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_7: 4;
     };
 }
@@ -1617,8 +1616,8 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
     let q: u64;
     let tens: i32;
     let $sroa_$iter_0_index_109: i32;
-    let start_143: i32;
-    let $hfs_call_521: ref null "core:serde//SerializeError";
+    let start_144: i32;
+    let $hfs_call_523: ref null "core:serde//SerializeError";
     if @unlikely(local.tee new_used_25(s.used + 1) > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_25);
@@ -1715,9 +1714,9 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
                     $load_4 = s.repr;
                     new_used_25 = s.used;
                 }
-                start_143 = new_used_25;
+                start_144 = new_used_25;
                 new_used_25 = start_49;
-                builtin::array_set_u8($load_4, start_143, 45);
+                builtin::array_set_u8($load_4, start_144, 45);
             } else {
             }
             if @unlikely(local.tee start_49(new_used_25 + ref_val) > builtin::array_len($load_4)) {
@@ -1727,12 +1726,12 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
                 $load_4 = s.repr;
                 new_used_25 = s.used;
             }
-            start_143 = new_used_25;
+            start_144 = new_used_25;
             new_used_25 = start_49;
-            ref_val = start_143 + ref_val;
+            ref_val = start_144 + ref_val;
             b191: block {
                 l192: loop {
-                    break_if b191 (ref_val - start_143) < 2;
+                    break_if b191 (ref_val - start_144) < 2;
                     q = x /u 100_i64;
                     tens = local.tee start_49(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
                     builtin::array_set_u8($load_4, ref_val - 1, (48 + start_49) - (tens * 10));
@@ -1742,17 +1741,17 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
                     continue l192;
                 };
             };
-            if ref_val > start_143 {
-                builtin::array_set_u8($load_4, start_143, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+            if ref_val > start_144 {
+                builtin::array_set_u8($load_4, start_144, 48 + builtin::i32_wrap_i64(x %u 10_i64));
             }
             start_26 = start_26 + 1;
             if @likely(ref.is_null(ref.null none)) {
             } else {
                 $qm_e_8 = ref.as_non_null(ref.null none);
                 cold_path;
-                $hfs_call_521 = $qm_e_8;
+                $hfs_call_523 = $qm_e_8;
                 s.used = new_used_25;
-                return $hfs_call_521;
+                return $hfs_call_523;
             }
             s.used = new_used_25;
             continue l166;

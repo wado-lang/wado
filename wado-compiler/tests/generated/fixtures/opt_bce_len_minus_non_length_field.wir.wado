@@ -101,16 +101,13 @@ fn "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"(s) with Std
     let x: i64;
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_509: ref Array<u8>;
     if @unlikely(local.tee idx(s - 1) >= s) {
         cold_path;
         "opt_bce_len_minus_non_length_field.wado/f$cold0$dae[s]"();
         unreachable;
     }
-    out_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
-    $sroa_view_repr_509 = global:opt_bce_len_minus_non_length_field.wado::$const_obj_0;
-    out_14.used = local.tee s(3);
-    builtin::array_copy<u8>(local.tee $load_1(out_14.repr), 0, $sroa_view_repr_509, 0, 3);
+    local.tee out_14(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }).used = local.tee s(3);
+    builtin::array_copy<u8>(local.tee $load_1(out_14.repr), 0, global:opt_bce_len_minus_non_length_field.wado::$const_obj_0, 0, 3);
     is_negative_76 = idx < 0;
     x = builtin::i64_extend_i32_s(idx);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -190,22 +187,22 @@ fn "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"(s) with Std
     }
     is_negative_76 = out_14.used;
     out_14.used = s;
-    $sroa_view_repr_509 = out_14.repr;
     s = is_negative_76 + idx;
+    $load_1 = out_14.repr;
     b23: block {
         l24: loop {
             break_if b23 (s - is_negative_76) < 2;
             q = x /u 100_i64;
             tens = local.tee idx(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_509, s - 1, (48 + idx) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_509, s - 2, 48 + tens);
+            builtin::array_set_u8($load_1, s - 1, (48 + idx) - (tens * 10));
+            builtin::array_set_u8($load_1, s - 2, 48 + tens);
             s = s - 2;
             x = q;
             continue l24;
         };
     };
     if s > is_negative_76 {
-        builtin::array_set_u8($sroa_view_repr_509, is_negative_76, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($load_1, is_negative_76, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;

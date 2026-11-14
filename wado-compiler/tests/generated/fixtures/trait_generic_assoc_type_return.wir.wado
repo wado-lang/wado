@@ -83,7 +83,6 @@ fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let $deref_value_652: ref "core:prelude/string.wado//StrSlice";
-    let $sroa_view_repr_660: ref Array<u8>;
     $deref_value_652 = struct.new "core:prelude/string.wado//StrSlice" { repr: array.new_data<u8>("xyz123abc"), start: 3, end: 6 };
     $inline_i32_core_prelude_traits_wado_FromStr__from_str__core_prelude_string_wado_StrSlice__sroa_return__17: block {
         $sroa_slot_175 = 0;
@@ -101,10 +100,8 @@ fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
         break $inline_i32_core_prelude_traits_wado_FromStr__from_str__core_prelude_string_wado_StrSlice__sroa_return__17;
     };
     if $sroa_slot_175 == 0 {
-        out_84 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
-        $sroa_view_repr_660 = global:trait_generic_assoc_type_return.wado::$const_obj_1;
-        out_84.used = local.tee $sroa_slot_175(4);
-        builtin::array_copy<u8>(local.tee $load_2(out_84.repr), 0, $sroa_view_repr_660, 0, 4);
+        local.tee out_84(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }).used = local.tee $sroa_slot_175(4);
+        builtin::array_copy<u8>(local.tee $load_2(out_84.repr), 0, global:trait_generic_assoc_type_return.wado::$const_obj_1, 0, 4);
         is_negative_146 = $mv$$vr_17$0 < 0;
         $mv$$vr_17$1 = builtin::i64_extend_i32_s($mv$$vr_17$0);
         $mv$$vr_17$1 = select i64($mv$$vr_17$1 < 0_i64, 0_i64 - $mv$$vr_17$1, $mv$$vr_17$1);
@@ -184,22 +181,22 @@ fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
         }
         is_negative_146 = out_84.used;
         out_84.used = $sroa_slot_175;
-        $sroa_view_repr_660 = out_84.repr;
         $sroa_slot_175 = is_negative_146 + $mv$$vr_17$0;
+        $load_2 = out_84.repr;
         b25: block {
             l26: loop {
                 break_if b25 ($sroa_slot_175 - is_negative_146) < 2;
                 q = $mv$$vr_17$1 /u 100_i64;
                 tens = local.tee $mv$$vr_17$0(builtin::i32_wrap_i64($mv$$vr_17$1 - (q * 100_i64))) / 10;
-                builtin::array_set_u8($sroa_view_repr_660, $sroa_slot_175 - 1, (48 + $mv$$vr_17$0) - (tens * 10));
-                builtin::array_set_u8($sroa_view_repr_660, $sroa_slot_175 - 2, 48 + tens);
+                builtin::array_set_u8($load_2, $sroa_slot_175 - 1, (48 + $mv$$vr_17$0) - (tens * 10));
+                builtin::array_set_u8($load_2, $sroa_slot_175 - 2, 48 + tens);
                 $sroa_slot_175 = $sroa_slot_175 - 2;
                 $mv$$vr_17$1 = q;
                 continue l26;
             };
         };
         if $sroa_slot_175 > is_negative_146 {
-            builtin::array_set_u8($sroa_view_repr_660, is_negative_146, 48 + builtin::i32_wrap_i64($mv$$vr_17$1 %u 10_i64));
+            builtin::array_set_u8($load_2, is_negative_146, 48 + builtin::i32_wrap_i64($mv$$vr_17$1 %u 10_i64));
         }
         $inline_core_prelude_string_wado_String__internal_push_view_60: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_60;
@@ -207,11 +204,11 @@ fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
         $sroa_slot_175 = builtin::i32_wrap_i64(local.tee $mv$$vr_17$1("wasi/stream-new"()));
         $mv$$vr_17$0 = builtin::i32_wrap_i64($mv$$vr_17$1 >> 32_i64);
         $sroa_slot_175 = "trait_generic_assoc_type_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_175);
-        builtin::array_copy<u8>(local.tee $sroa_view_repr_660(builtin::array_new<u8>(local.tee is_negative_146(out_84.used) + 1)), 0, out_84.repr, 0, is_negative_146);
-        builtin::array_set_u8($sroa_view_repr_660, is_negative_146, 10);
+        builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(local.tee is_negative_146(out_84.used) + 1)), 0, out_84.repr, 0, is_negative_146);
+        builtin::array_set_u8($load_2, is_negative_146, 10);
         drop(block -> "core:prelude/types.wado//enum:CopyResult" {
             is_negative_146 = is_negative_146 + 1;
-            "core:rt/cm_stream_write_raw_all_u8"($mv$$vr_17$0, $sroa_view_repr_660, 0, is_negative_146);
+            "core:rt/cm_stream_write_raw_all_u8"($mv$$vr_17$0, $load_2, 0, is_negative_146);
         });
         "wasi/stream-drop-writable"($mv$$vr_17$0);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_175);
@@ -219,9 +216,9 @@ fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
         $sroa_slot_175 = builtin::i32_wrap_i64(local.tee $mv$$vr_17$1("wasi/stream-new"()));
         $mv$$vr_17$0 = builtin::i32_wrap_i64($mv$$vr_17$1 >> 32_i64);
         $sroa_slot_175 = "trait_generic_assoc_type_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_175);
-        builtin::array_copy<u8>(local.tee $sroa_view_repr_660(builtin::array_new<u8>(4)), 0, global:trait_generic_assoc_type_return.wado::$const_obj_0, 0, 3);
-        builtin::array_set_u8($sroa_view_repr_660, 3, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($mv$$vr_17$0, $sroa_view_repr_660));
+        builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(4)), 0, global:trait_generic_assoc_type_return.wado::$const_obj_0, 0, 3);
+        builtin::array_set_u8($load_2, 3, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($mv$$vr_17$0, $load_2));
         "wasi/stream-drop-writable"($mv$$vr_17$0);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_175);
     }

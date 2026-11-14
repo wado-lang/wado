@@ -517,22 +517,25 @@ fn "pack_in_tuple_argument_reaches_callee_list.wado/pack_in_tuple_argument_reach
     let end: i32;
     let item: ref "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B]>";
     let used_16: i32;
-    let $sroa_$iter_0_repr_24: ref "Array<pack_in_tuple_argument_reaches_callee_list.wado/Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B]>>";
-    let $sroa_$iter_0_index_25: i32;
+    let $licm_repr_24: ref "Array<pack_in_tuple_argument_reaches_callee_list.wado/Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B]>>";
+    let $sroa_$iter_0_index_26: i32;
+    let $licm_repr_28: ref "Array<pack_in_tuple_argument_reaches_callee_list.wado/Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B]>>";
     copied = struct.new "core:prelude/list.wado//List<pack_in_tuple_argument_reaches_callee_list.wado/Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B]>>" { repr: array.new_fixed<ref "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B]>">(), used: 0 };
     end = xs.used;
-    $sroa_$iter_0_repr_24 = xs.repr;
-    $sroa_$iter_0_index_25 = 0;
+    $sroa_$iter_0_index_26 = 0;
+    $licm_repr_24 = copied.repr;
+    $licm_repr_28 = xs.repr;
     b14: block {
         l15: loop {
-            break_if b14 $sroa_$iter_0_index_25 >= end;
-            item = struct.new "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B]>" { v: builtin::array_get_value<ref "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B]>">($sroa_$iter_0_repr_24, $sroa_$iter_0_index_25).v };
-            $sroa_$iter_0_index_25 = $sroa_$iter_0_index_25 + 1;
-            if @unlikely(local.tee used_16(copied.used) >= builtin::array_len(copied.repr)) {
+            break_if b14 $sroa_$iter_0_index_26 >= end;
+            item = struct.new "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B]>" { v: builtin::array_get_value<ref "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B]>">($licm_repr_28, $sroa_$iter_0_index_26).v };
+            $sroa_$iter_0_index_26 = $sroa_$iter_0_index_26 + 1;
+            if @unlikely(local.tee used_16(copied.used) >= builtin::array_len($licm_repr_24)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<pack_in_tuple_argument_reaches_callee_list.wado/Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B]>>::grow"(copied);
+                $licm_repr_24 = copied.repr;
             }
-            builtin::array_set<ref "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B]>">(copied.repr, used_16, item);
+            builtin::array_set<ref "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B]>">($licm_repr_24, used_16, item);
             copied.used = used_16 + 1;
             continue l15;
         };
@@ -545,22 +548,25 @@ fn "pack_in_tuple_argument_reaches_callee_list.wado/pack_in_tuple_argument_reach
     let end: i32;
     let item: ref "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B,pack_in_tuple_argument_reaches_callee_list.wado/C]>";
     let used_16: i32;
-    let $sroa_$iter_0_repr_24: ref "Array<pack_in_tuple_argument_reaches_callee_list.wado/Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B,pack_in_tuple_argument_reaches_callee_list.wado/C]>>";
-    let $sroa_$iter_0_index_25: i32;
+    let $licm_repr_24: ref "Array<pack_in_tuple_argument_reaches_callee_list.wado/Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B,pack_in_tuple_argument_reaches_callee_list.wado/C]>>";
+    let $sroa_$iter_0_index_26: i32;
+    let $licm_repr_28: ref "Array<pack_in_tuple_argument_reaches_callee_list.wado/Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B,pack_in_tuple_argument_reaches_callee_list.wado/C]>>";
     copied = struct.new "core:prelude/list.wado//List<pack_in_tuple_argument_reaches_callee_list.wado/Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B,pack_in_tuple_argument_reaches_callee_list.wado/C]>>" { repr: array.new_fixed<ref "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B,pack_in_tuple_argument_reaches_callee_list.wado/C]>">(), used: 0 };
     end = xs.used;
-    $sroa_$iter_0_repr_24 = xs.repr;
-    $sroa_$iter_0_index_25 = 0;
+    $sroa_$iter_0_index_26 = 0;
+    $licm_repr_24 = copied.repr;
+    $licm_repr_28 = xs.repr;
     b17: block {
         l18: loop {
-            break_if b17 $sroa_$iter_0_index_25 >= end;
-            item = struct.new "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B,pack_in_tuple_argument_reaches_callee_list.wado/C]>" { v: builtin::array_get_value<ref "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B,pack_in_tuple_argument_reaches_callee_list.wado/C]>">($sroa_$iter_0_repr_24, $sroa_$iter_0_index_25).v };
-            $sroa_$iter_0_index_25 = $sroa_$iter_0_index_25 + 1;
-            if @unlikely(local.tee used_16(copied.used) >= builtin::array_len(copied.repr)) {
+            break_if b17 $sroa_$iter_0_index_26 >= end;
+            item = struct.new "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B,pack_in_tuple_argument_reaches_callee_list.wado/C]>" { v: builtin::array_get_value<ref "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B,pack_in_tuple_argument_reaches_callee_list.wado/C]>">($licm_repr_28, $sroa_$iter_0_index_26).v };
+            $sroa_$iter_0_index_26 = $sroa_$iter_0_index_26 + 1;
+            if @unlikely(local.tee used_16(copied.used) >= builtin::array_len($licm_repr_24)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<pack_in_tuple_argument_reaches_callee_list.wado/Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B,pack_in_tuple_argument_reaches_callee_list.wado/C]>>::grow"(copied);
+                $licm_repr_24 = copied.repr;
             }
-            builtin::array_set<ref "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B,pack_in_tuple_argument_reaches_callee_list.wado/C]>">(copied.repr, used_16, item);
+            builtin::array_set<ref "pack_in_tuple_argument_reaches_callee_list.wado//Tag<[pack_in_tuple_argument_reaches_callee_list.wado/A,pack_in_tuple_argument_reaches_callee_list.wado/B,pack_in_tuple_argument_reaches_callee_list.wado/C]>">($licm_repr_24, used_16, item);
             copied.used = used_16 + 1;
             continue l18;
         };

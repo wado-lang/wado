@@ -190,10 +190,7 @@ fn "auto_deref_template.wado/run"() with Stdout {
     let out_18: ref "core:prelude/string.wado//String";
     let i_118: i32;
     let $cm_pair_7: i64;
-    let $sroa_view_repr_1336: ref Array<u8>;
-    out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
-    $sroa_view_repr_1336 = global:auto_deref_template.wado::$const_obj_7;
-    builtin::array_copy<u8>(local.tee $load_1(out_18.repr), 0, $sroa_view_repr_1336, 0, 7);
+    builtin::array_copy<u8>(local.tee $load_1(local.tee out_18(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }).repr), 0, global:auto_deref_template.wado::$const_obj_7, 0, 7);
     out_18.used = local.tee $load_2(9);
     "core:prelude/primitive.wado/write_decimal_digits"($load_1, 7, 42_i64, 2);
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
@@ -246,9 +243,7 @@ condition: s1 == \"value: 42\"
 s1: "), used: 88 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_18.used);
         unreachable;
     }
-    out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
-    $sroa_view_repr_1336 = global:auto_deref_template.wado::$const_obj_5;
-    builtin::array_copy<u8>(local.tee $load_1(out_18.repr), 0, $sroa_view_repr_1336, 0, 8);
+    builtin::array_copy<u8>(local.tee $load_1(local.tee out_18(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }).repr), 0, global:auto_deref_template.wado::$const_obj_5, 0, 8);
     out_18.used = local.tee $load_2(10);
     "core:prelude/primitive.wado/write_decimal_digits"($load_1, 8, 42_i64, 2);
     $inline_core_prelude_string_wado_String__internal_push_view_87: block {
@@ -301,10 +296,8 @@ condition: s2 == \"double: 42\"
 s2: "), used: 89 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_18.used);
         unreachable;
     }
-    out_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
-    $sroa_view_repr_1336 = global:auto_deref_template.wado::$const_obj_3;
-    out_18.used = 6;
-    builtin::array_copy<u8>(local.tee $load_1(out_18.repr), 0, $sroa_view_repr_1336, 0, 6);
+    local.tee out_18(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }).used = 6;
+    builtin::array_copy<u8>(local.tee $load_1(out_18.repr), 0, global:auto_deref_template.wado::$const_obj_3, 0, 6);
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec1_sroa_self_buf__2: block {
         out_18.used = 10;
         builtin::array_copy<u8>($load_1, 6, global:auto_deref_template.wado::$const_obj_2, 0, 4);
@@ -363,9 +356,9 @@ s4: "), used: 89 }, s1: struct.new "core:prelude/string.wado//String" { repr: ar
     $load_2 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     i_118 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $load_2 = "auto_deref_template.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_2);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_1336(builtin::array_new<u8>(3)), 0, global:auto_deref_template.wado::$const_obj_0, 0, 2);
-    builtin::array_set_u8($sroa_view_repr_1336, 2, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(i_118, $sroa_view_repr_1336);
+    builtin::array_copy<u8>(local.tee $load_1(builtin::array_new<u8>(3)), 0, global:auto_deref_template.wado::$const_obj_0, 0, 2);
+    builtin::array_set_u8($load_1, 2, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(i_118, $load_1);
     "wasi/stream-drop-writable"(i_118);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_2);
 }
@@ -823,9 +816,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_u
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
-    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -842,26 +835,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_7: block -> i32 {
-        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c);
+            builtin::array_set_u8(self.repr, new_used, c);
             break $inline_encode_char_7: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_7: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_7: 3;
         }
-        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
+        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_7: 4;
     };
 }

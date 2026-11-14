@@ -485,7 +485,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<tuple_patte
     let n_247: i32;
     let new_used_251: i32;
     let start_252: i32;
-    let $sroa_view_repr_765: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_22;
@@ -506,14 +505,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<tuple_patte
         };
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__30;
     };
-    $sroa_view_repr_765 = global:core:prelude/string.wado::$const_obj_15;
     if @unlikely(local.tee n_247(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, n_247);
     }
     new_used_251 = out_3.used;
     out_3.used = n_247;
-    builtin::array_copy<u8>(out_3.repr, new_used_251, $sroa_view_repr_765, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, new_used_251, global:core:prelude/string.wado::$const_obj_15, 0, 1);
     n_247 = $mv$t$h1 < 0;
     $mv$t$h1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_170(x_170 = builtin::i64_extend_i32_s($mv$t$h1); select i64(x_170 < 0_i64, 0_i64 - x_170, x_170)));
     n_247 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, n_247, $mv$t$h1);

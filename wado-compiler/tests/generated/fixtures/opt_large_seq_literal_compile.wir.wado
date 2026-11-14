@@ -281,8 +281,8 @@ fn "opt_large_seq_literal_compile.wado/run"() {
     let self_15: ref "core:prelude/list.wado//List<i32>";
     let end: i32;
     let ref_val: i32;
-    let $sroa_$iter_0_repr_32: ref Array<i32>;
     let $sroa_$iter_0_index_33: i32;
+    let $licm_repr_35: ref Array<i32>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_large_seq_literal_compile.wado::$modules_initialized);
         cold_path;
@@ -290,21 +290,21 @@ fn "opt_large_seq_literal_compile.wado/run"() {
     };
     s = 0;
     end = local.tee self_15(global:opt_large_seq_literal_compile.wado::G).used;
-    $sroa_$iter_0_repr_32 = self_15.repr;
     $sroa_$iter_0_index_33 = 0;
+    $licm_repr_35 = self_15.repr;
     b0: block {
         l1: loop {
             break_if b0 (builtin::i64_extend_i32_s($sroa_$iter_0_index_33) + 3_i64) >= builtin::i64_extend_i32_s(end);
-            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_32, $sroa_$iter_0_index_33);
+            ref_val = builtin::array_get_value<i32>($licm_repr_35, $sroa_$iter_0_index_33);
             $sroa_$iter_0_index_33 = $sroa_$iter_0_index_33 + 1;
             s = s + ref_val;
-            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_32, $sroa_$iter_0_index_33);
+            ref_val = builtin::array_get_value<i32>($licm_repr_35, $sroa_$iter_0_index_33);
             $sroa_$iter_0_index_33 = $sroa_$iter_0_index_33 + 1;
             s = s + ref_val;
-            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_32, $sroa_$iter_0_index_33);
+            ref_val = builtin::array_get_value<i32>($licm_repr_35, $sroa_$iter_0_index_33);
             $sroa_$iter_0_index_33 = $sroa_$iter_0_index_33 + 1;
             s = s + ref_val;
-            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_32, $sroa_$iter_0_index_33);
+            ref_val = builtin::array_get_value<i32>($licm_repr_35, $sroa_$iter_0_index_33);
             $sroa_$iter_0_index_33 = $sroa_$iter_0_index_33 + 1;
             s = s + ref_val;
             continue l1;
@@ -313,7 +313,7 @@ fn "opt_large_seq_literal_compile.wado/run"() {
     b2: block {
         l3: loop {
             break_if b2 $sroa_$iter_0_index_33 >= end;
-            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_32, $sroa_$iter_0_index_33);
+            ref_val = builtin::array_get_value<i32>($licm_repr_35, $sroa_$iter_0_index_33);
             $sroa_$iter_0_index_33 = $sroa_$iter_0_index_33 + 1;
             s = s + ref_val;
             continue l3;

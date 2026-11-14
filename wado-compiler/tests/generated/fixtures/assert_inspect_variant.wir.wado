@@ -105,38 +105,34 @@ fn "assert_inspect_variant.wado/$cm_export__run"() {
 }
 
 fn "assert_inspect_variant.wado/run$cold0"(v, expected) {
+    let $load_11: ref Array<u8>;
     let out_8: ref "core:prelude/string.wado//String";
     let new_used_111: i32;
     let start_112: i32;
-    let $sroa_view_repr_165: ref Array<u8>;
     if ref.is_null(global:assert_inspect_variant.wado::$const_obj_2) {
         global:assert_inspect_variant.wado::$const_obj_2 = array.new_data<u8>("Assertion failed in run at assert_inspect_variant.wado:7
 condition: v == expected
 v: ");
     }
-    out_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(129), used: 0 };
-    $sroa_view_repr_165 = global:assert_inspect_variant.wado::$const_obj_2;
-    out_8.used = 85;
-    builtin::array_copy<u8>(out_8.repr, 0, $sroa_view_repr_165, 0, 85);
+    local.tee out_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(129), used: 0 }).used = 85;
+    builtin::array_copy<u8>(out_8.repr, 0, global:assert_inspect_variant.wado::$const_obj_2, 0, 85);
     "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]"(v, out_8);
-    $sroa_view_repr_165 = global:assert_inspect_variant.wado::$const_obj_1;
     if @unlikely(local.tee new_used_111(out_8.used + 11) > builtin::array_len(out_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_8, new_used_111);
     }
     start_112 = out_8.used;
     out_8.used = new_used_111;
-    builtin::array_copy<u8>(out_8.repr, start_112, $sroa_view_repr_165, 0, 11);
+    builtin::array_copy<u8>(out_8.repr, start_112, global:assert_inspect_variant.wado::$const_obj_1, 0, 11);
     "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]"(expected, out_8);
-    $sroa_view_repr_165 = global:assert_inspect_variant.wado::$const_obj_0;
     if @unlikely(local.tee new_used_111(out_8.used + 1) > builtin::array_len(out_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_8, new_used_111);
     }
     start_112 = out_8.used;
     out_8.used = new_used_111;
-    builtin::array_copy<u8>(out_8.repr, start_112, $sroa_view_repr_165, 0, 1);
-    "core:rt/panic"(out_8.repr, out_8.used);
+    builtin::array_copy<u8>(local.tee $load_11(out_8.repr), start_112, global:assert_inspect_variant.wado::$const_obj_0, 0, 1);
+    "core:rt/panic"($load_11, new_used_111);
     unreachable;
 }
 
@@ -457,8 +453,8 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/tr
         }
         start_293 = f.used;
         f.used = new_used_72;
-        $load_5 = f.repr;
         start_73 = start_293 + start_73;
+        $load_5 = f.repr;
         b53: block {
             l54: loop {
                 break_if b53 (start_73 - start_293) < 2;

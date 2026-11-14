@@ -545,29 +545,29 @@ fn "struct_basic.wado/$test_14_destructure_in_a_for_of_binding"() {
     let $match_11: ref null "struct_basic.wado//SDPoint";
     let v_23: ref "struct_basic.wado//SDPoint";
     let $licm_repr_79: ref Array<i32>;
-    let $sroa_$iter_0_repr_83: ref "Array<struct_basic.wado/SDPoint>";
-    let $sroa_$iter_0_index_84: i32;
+    let $sroa_$iter_0_index_86: i32;
     sums = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
-    $sroa_$iter_0_repr_83 = global:struct_basic.wado::$const_obj_8;
-    $sroa_$iter_0_index_84 = 0;
+    $sroa_$iter_0_index_86 = 0;
+    $licm_repr_79 = sums.repr;
     b0: block {
         l1: loop {
             if ref.is_null(local.tee $match_11($inline_core_prelude_slice_wado_SliceValueIter_struct_basic_wado_SDPoint__core_prelude_traits_wado_Iterator__next_4: block -> ref null "struct_basic.wado//SDPoint" {
-                if $sroa_$iter_0_index_84 >= 3 {
+                if $sroa_$iter_0_index_86 >= 3 {
                     break $inline_core_prelude_slice_wado_SliceValueIter_struct_basic_wado_SDPoint__core_prelude_traits_wado_Iterator__next_4: ref.null none;
                 }
-                v_23 = struct.new "struct_basic.wado//SDPoint" { x: local.tee v_23(builtin::array_get_value<ref "struct_basic.wado//SDPoint">($sroa_$iter_0_repr_83, $sroa_$iter_0_index_84)).x, y: v_23.y };
-                $sroa_$iter_0_index_84 = $sroa_$iter_0_index_84 + 1;
+                v_23 = struct.new "struct_basic.wado//SDPoint" { x: local.tee v_23(builtin::array_get_value<ref "struct_basic.wado//SDPoint">(global:struct_basic.wado::$const_obj_8, $sroa_$iter_0_index_86)).x, y: v_23.y };
+                $sroa_$iter_0_index_86 = $sroa_$iter_0_index_86 + 1;
                 break $inline_core_prelude_slice_wado_SliceValueIter_struct_basic_wado_SDPoint__core_prelude_traits_wado_Iterator__next_4: v_23;
             })) == 0 {
                 x = local.tee v_23(ref.as_non_null($match_11)).x;
                 y = v_23.y;
                 x = x + y;
-                if @unlikely(local.tee y(sums.used) >= builtin::array_len(sums.repr)) {
+                if @unlikely(local.tee y(sums.used) >= builtin::array_len($licm_repr_79)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(sums);
+                    $licm_repr_79 = sums.repr;
                 }
-                builtin::array_set<i32>(sums.repr, y, x);
+                builtin::array_set<i32>($licm_repr_79, y, x);
                 sums.used = y + 1;
             } else {
                 break b0;
@@ -576,14 +576,14 @@ fn "struct_basic.wado/$test_14_destructure_in_a_for_of_binding"() {
         };
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_i32__11: block -> bool {
-        if local.tee $sroa_$iter_0_index_84(sums.used) != 3 {
+        if local.tee $sroa_$iter_0_index_86(sums.used) != 3 {
             break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
         }
         x = 0;
         $licm_repr_79 = sums.repr;
         b7: block {
             l8: loop {
-                break_if b7 (builtin::i64_extend_i32_s(x) + 3_i64) >= builtin::i64_extend_i32_s($sroa_$iter_0_index_84);
+                break_if b7 (builtin::i64_extend_i32_s(x) + 3_i64) >= builtin::i64_extend_i32_s($sroa_$iter_0_index_86);
                 if builtin::array_get_value<i32>($licm_repr_79, x) != builtin::array_get_value<i32>(global:struct_basic.wado::$const_obj_7, x) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
                 }
@@ -605,7 +605,7 @@ fn "struct_basic.wado/$test_14_destructure_in_a_for_of_binding"() {
         };
         b13: block {
             l14: loop {
-                break_if b13 x >= $sroa_$iter_0_index_84;
+                break_if b13 x >= $sroa_$iter_0_index_86;
                 if builtin::array_get_value<i32>($licm_repr_79, x) != builtin::array_get_value<i32>(global:struct_basic.wado::$const_obj_7, x) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
                 }
@@ -625,26 +625,27 @@ sums: "), used: 122 }, s1: struct.new "core:prelude/string.wado//String" { repr:
         unreachable;
     }
     sums = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
-    $sroa_$iter_0_repr_83 = global:struct_basic.wado::$const_obj_8;
-    $sroa_$iter_0_index_84 = 0;
+    $sroa_$iter_0_index_86 = 0;
+    $licm_repr_79 = sums.repr;
     b16: block {
         l17: loop {
             if ref.is_null(local.tee $match_11($inline_core_prelude_slice_wado_SliceValueIter_struct_basic_wado_SDPoint__core_prelude_traits_wado_Iterator__next_15: block -> ref null "struct_basic.wado//SDPoint" {
-                if $sroa_$iter_0_index_84 >= 3 {
+                if $sroa_$iter_0_index_86 >= 3 {
                     break $inline_core_prelude_slice_wado_SliceValueIter_struct_basic_wado_SDPoint__core_prelude_traits_wado_Iterator__next_15: ref.null none;
                 }
-                v_23 = struct.new "struct_basic.wado//SDPoint" { x: local.tee v_23(builtin::array_get_value<ref "struct_basic.wado//SDPoint">($sroa_$iter_0_repr_83, $sroa_$iter_0_index_84)).x, y: v_23.y };
-                $sroa_$iter_0_index_84 = $sroa_$iter_0_index_84 + 1;
+                v_23 = struct.new "struct_basic.wado//SDPoint" { x: local.tee v_23(builtin::array_get_value<ref "struct_basic.wado//SDPoint">(global:struct_basic.wado::$const_obj_8, $sroa_$iter_0_index_86)).x, y: v_23.y };
+                $sroa_$iter_0_index_86 = $sroa_$iter_0_index_86 + 1;
                 break $inline_core_prelude_slice_wado_SliceValueIter_struct_basic_wado_SDPoint__core_prelude_traits_wado_Iterator__next_15: v_23;
             })) == 0 {
                 x = local.tee v_23(ref.as_non_null($match_11)).x;
                 y = v_23.y;
                 x = x * y;
-                if @unlikely(local.tee y(sums.used) >= builtin::array_len(sums.repr)) {
+                if @unlikely(local.tee y(sums.used) >= builtin::array_len($licm_repr_79)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(sums);
+                    $licm_repr_79 = sums.repr;
                 }
-                builtin::array_set<i32>(sums.repr, y, x);
+                builtin::array_set<i32>($licm_repr_79, y, x);
                 sums.used = y + 1;
             } else {
                 break b16;
@@ -653,14 +654,14 @@ sums: "), used: 122 }, s1: struct.new "core:prelude/string.wado//String" { repr:
         };
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_i32__22: block -> bool {
-        if local.tee $sroa_$iter_0_index_84(sums.used) != 3 {
+        if local.tee $sroa_$iter_0_index_86(sums.used) != 3 {
             break $inline_core_prelude_array_wado_seq_eq_i32__22: 0;
         }
         x = 0;
         $licm_repr_79 = sums.repr;
         b23: block {
             l24: loop {
-                break_if b23 (builtin::i64_extend_i32_s(x) + 3_i64) >= builtin::i64_extend_i32_s($sroa_$iter_0_index_84);
+                break_if b23 (builtin::i64_extend_i32_s(x) + 3_i64) >= builtin::i64_extend_i32_s($sroa_$iter_0_index_86);
                 if builtin::array_get_value<i32>($licm_repr_79, x) != builtin::array_get_value<i32>(global:struct_basic.wado::$const_obj_6, x) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__22: 0;
                 }
@@ -682,7 +683,7 @@ sums: "), used: 122 }, s1: struct.new "core:prelude/string.wado//String" { repr:
         };
         b29: block {
             l30: loop {
-                break_if b29 x >= $sroa_$iter_0_index_84;
+                break_if b29 x >= $sroa_$iter_0_index_86;
                 if builtin::array_get_value<i32>($licm_repr_79, x) != builtin::array_get_value<i32>(global:struct_basic.wado::$const_obj_6, x) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__22: 0;
                 }
@@ -2265,9 +2266,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
-    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -2289,26 +2290,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_8: block -> i32 {
-        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c);
+            builtin::array_set_u8(self.repr, new_used, c);
             break $inline_encode_char_8: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_8: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_8: 3;
         }
-        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
+        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_8: 4;
     };
 }

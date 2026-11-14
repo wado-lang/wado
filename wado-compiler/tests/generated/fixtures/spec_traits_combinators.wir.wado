@@ -417,22 +417,23 @@ fn "spec_traits_combinators.wado/$test_0"() {
     let pred_52: ref "spec_traits_combinators.wado//$Closure_1";
     let result_58: ref "core:prelude/list.wado//List<i32>";
     let pred_103: ref "spec_traits_combinators.wado//$Closure_3";
-    let $licm_repr_153: ref Array<i32>;
+    let $licm_repr_154: ref Array<i32>;
     self_51 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: local.tee elements_9(array.new_fixed<i32>(1, 2, 3, 4, 5)), index: 0, end: 5 };
     pred_52 = struct.new "spec_traits_combinators.wado//$Closure_1" {};
     $temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___15_0 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_51, pred: struct.new "canonical//CanonicalClosure_1" { env: pred_52, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_0" } };
-    result_58 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_154 = local.tee result_58(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b0: block {
         l1: loop {
             let $mv$$local_3_60$0: i32;
             let $mv$$local_3_60$1: i32;
             multivalue_bind [$mv$$local_3_60$0, $mv$$local_3_60$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"($temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___15_0);
             if $mv$$local_3_60$0 == 1 {
-                if @unlikely(local.tee $mv$$local_3_60$0(result_58.used) >= builtin::array_len(result_58.repr)) {
+                if @unlikely(local.tee $mv$$local_3_60$0(result_58.used) >= builtin::array_len($licm_repr_154)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_58);
+                    $licm_repr_154 = result_58.repr;
                 }
-                builtin::array_set<i32>(result_58.repr, $mv$$local_3_60$0, $mv$$local_3_60$1);
+                builtin::array_set<i32>($licm_repr_154, $mv$$local_3_60$0, $mv$$local_3_60$1);
                 result_58.used = $mv$$local_3_60$0 + 1;
             } else {
                 break b0;
@@ -445,23 +446,23 @@ fn "spec_traits_combinators.wado/$test_0"() {
             break $inline_core_prelude_array_wado_seq_eq_i32__26: 0;
         }
         $mv$$local_3_60$1 = 0;
-        $licm_repr_153 = result_58.repr;
+        $licm_repr_154 = result_58.repr;
         b6: block {
             l7: loop {
                 break_if b6 (builtin::i64_extend_i32_s($mv$$local_3_60$1) + 3_i64) >= builtin::i64_extend_i32_s($mv$$local_3_60$0);
-                if builtin::array_get_value<i32>($licm_repr_153, $mv$$local_3_60$1) != builtin::array_get_value<i32>(global:spec_traits_combinators.wado::$const_obj_2, $mv$$local_3_60$1) {
+                if builtin::array_get_value<i32>($licm_repr_154, $mv$$local_3_60$1) != builtin::array_get_value<i32>(global:spec_traits_combinators.wado::$const_obj_2, $mv$$local_3_60$1) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__26: 0;
                 }
                 $mv$$local_3_60$1 = $mv$$local_3_60$1 + 1;
-                if builtin::array_get_value<i32>($licm_repr_153, $mv$$local_3_60$1) != builtin::array_get_value<i32>(global:spec_traits_combinators.wado::$const_obj_2, $mv$$local_3_60$1) {
+                if builtin::array_get_value<i32>($licm_repr_154, $mv$$local_3_60$1) != builtin::array_get_value<i32>(global:spec_traits_combinators.wado::$const_obj_2, $mv$$local_3_60$1) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__26: 0;
                 }
                 $mv$$local_3_60$1 = $mv$$local_3_60$1 + 1;
-                if builtin::array_get_value<i32>($licm_repr_153, $mv$$local_3_60$1) != builtin::array_get_value<i32>(global:spec_traits_combinators.wado::$const_obj_2, $mv$$local_3_60$1) {
+                if builtin::array_get_value<i32>($licm_repr_154, $mv$$local_3_60$1) != builtin::array_get_value<i32>(global:spec_traits_combinators.wado::$const_obj_2, $mv$$local_3_60$1) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__26: 0;
                 }
                 $mv$$local_3_60$1 = $mv$$local_3_60$1 + 1;
-                if builtin::array_get_value<i32>($licm_repr_153, $mv$$local_3_60$1) != builtin::array_get_value<i32>(global:spec_traits_combinators.wado::$const_obj_2, $mv$$local_3_60$1) {
+                if builtin::array_get_value<i32>($licm_repr_154, $mv$$local_3_60$1) != builtin::array_get_value<i32>(global:spec_traits_combinators.wado::$const_obj_2, $mv$$local_3_60$1) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__26: 0;
                 }
                 $mv$$local_3_60$1 = $mv$$local_3_60$1 + 1;
@@ -471,7 +472,7 @@ fn "spec_traits_combinators.wado/$test_0"() {
         b12: block {
             l13: loop {
                 break_if b12 $mv$$local_3_60$1 >= $mv$$local_3_60$0;
-                if builtin::array_get_value<i32>($licm_repr_153, $mv$$local_3_60$1) != builtin::array_get_value<i32>(global:spec_traits_combinators.wado::$const_obj_2, $mv$$local_3_60$1) {
+                if builtin::array_get_value<i32>($licm_repr_154, $mv$$local_3_60$1) != builtin::array_get_value<i32>(global:spec_traits_combinators.wado::$const_obj_2, $mv$$local_3_60$1) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__26: 0;
                 }
                 $mv$$local_3_60$1 = $mv$$local_3_60$1 + 1;

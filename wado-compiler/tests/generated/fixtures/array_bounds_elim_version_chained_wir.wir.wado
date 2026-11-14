@@ -72,13 +72,13 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "array_bounds_elim_version_chained_wir.wado/run"() with Stdout {
+    let $load_8: ref Array<u8>;
     let xs_0: ref Array<i32>;
     let out_13: ref "core:prelude/string.wado//String";
     let x: i64;
     let used: i32;
     let limit: i32;
     let i_115: i32;
-    let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
     xs_0 = builtin::array_new<i32>(11);
@@ -211,22 +211,22 @@ fn "array_bounds_elim_version_chained_wir.wado/run"() with Stdout {
     }
     i_115 = out_13.used;
     out_13.used = limit;
-    arr = out_13.repr;
     used = i_115 + used;
+    $load_8 = out_13.repr;
     b31: block {
         l32: loop {
             break_if b31 (used - i_115) < 2;
             q = x /u 100_i64;
             tens = local.tee limit(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, used - 1, (48 + limit) - (tens * 10));
-            builtin::array_set_u8(arr, used - 2, 48 + tens);
+            builtin::array_set_u8($load_8, used - 1, (48 + limit) - (tens * 10));
+            builtin::array_set_u8($load_8, used - 2, 48 + tens);
             used = used - 2;
             x = q;
             continue l32;
         };
     };
     if used > i_115 {
-        builtin::array_set_u8(arr, i_115, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($load_8, i_115, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;

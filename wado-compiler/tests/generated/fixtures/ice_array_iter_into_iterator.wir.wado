@@ -64,18 +64,16 @@ fn "ice_array_iter_into_iterator.wado/run"() with Stdout {
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_70: i32;
     let $sroa_$pattern_temp_0_1_71: i32;
-    let $sroa_slice_repr_82: ref Array<u8>;
-    let self_90: i32;
-    $sroa_slice_repr_82 = global:ice_array_iter_into_iterator.wado::$const_obj_0;
-    s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee out(builtin::array_new<u8>(5)), 0, $sroa_slice_repr_82, 0, 5); out, used: 5 };
+    let self_91: i32;
+    s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee out(builtin::array_new<u8>(5)), 0, global:ice_array_iter_into_iterator.wado::$const_obj_0, 0, 5); out, used: 5 };
     $sroa_$pattern_temp_0_0_70 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_71 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_$pattern_temp_0_0_70 = "ice_array_iter_into_iterator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_70);
-    builtin::array_copy<u8>(local.tee $sroa_slice_repr_82(builtin::array_new<u8>(local.tee self_90(s.used) + 1)), 0, s.repr, 0, self_90);
-    builtin::array_set_u8($sroa_slice_repr_82, self_90, 10);
+    builtin::array_copy<u8>(local.tee out(builtin::array_new<u8>(local.tee self_91(s.used) + 1)), 0, s.repr, 0, self_91);
+    builtin::array_set_u8(out, self_91, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        self_90 = self_90 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_71, $sroa_slice_repr_82, 0, self_90);
+        self_91 = self_91 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_71, out, 0, self_91);
     });
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_71);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_70);

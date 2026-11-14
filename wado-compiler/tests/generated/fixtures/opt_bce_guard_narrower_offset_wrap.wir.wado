@@ -91,7 +91,6 @@ fn "opt_bce_guard_narrower_offset_wrap.wado/g$spec0$dae[arr]"(i) with Stdout {
     let x: i64;
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_518: ref Array<u8>;
     if @unlikely((i + 1) >= 3) {
         cold_path;
         "core:rt/panic"(array.new_data<u8>("offset guard"), 12);
@@ -102,10 +101,8 @@ fn "opt_bce_guard_narrower_offset_wrap.wado/g$spec0$dae[arr]"(i) with Stdout {
         "core:rt/panic"(array.new_data<u8>("plain guard"), 11);
         unreachable;
     }
-    out_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
-    $sroa_view_repr_518 = global:opt_bce_guard_narrower_offset_wrap.wado::$const_obj_0;
-    out_15.used = local.tee $load_0(3);
-    builtin::array_copy<u8>(local.tee $load_1(out_15.repr), 0, $sroa_view_repr_518, 0, 3);
+    local.tee out_15(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }).used = local.tee $load_0(3);
+    builtin::array_copy<u8>(local.tee $load_1(out_15.repr), 0, global:opt_bce_guard_narrower_offset_wrap.wado::$const_obj_0, 0, 3);
     is_negative_77 = i < 0;
     x = builtin::i64_extend_i32_s(i);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -185,22 +182,22 @@ fn "opt_bce_guard_narrower_offset_wrap.wado/g$spec0$dae[arr]"(i) with Stdout {
     }
     is_negative_77 = out_15.used;
     out_15.used = $load_0;
-    $sroa_view_repr_518 = out_15.repr;
     i = is_negative_77 + i;
+    $load_1 = out_15.repr;
     b24: block {
         l25: loop {
             break_if b24 (i - is_negative_77) < 2;
             q = x /u 100_i64;
             tens = local.tee $load_0(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_518, i - 1, (48 + $load_0) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_518, i - 2, 48 + tens);
+            builtin::array_set_u8($load_1, i - 1, (48 + $load_0) - (tens * 10));
+            builtin::array_set_u8($load_1, i - 2, 48 + tens);
             i = i - 2;
             x = q;
             continue l25;
         };
     };
     if i > is_negative_77 {
-        builtin::array_set_u8($sroa_view_repr_518, is_negative_77, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($load_1, is_negative_77, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;

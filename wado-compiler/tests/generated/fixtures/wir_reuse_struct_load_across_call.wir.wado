@@ -271,29 +271,38 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "wir_reuse_struct_load_across_call.wado/fill"(n) {
-    let $load_0: ref "core:prelude/list.wado//List<i32>";
     let b: ref "wir_reuse_struct_load_across_call.wado//Rows";
     let current: i32;
     let i_18: i32;
     let used_27: i32;
     let $sroa_$iter_0_start_45: i32;
+    let $licm_tag_47: ref "core:prelude/list.wado//List<i32>";
+    let $licm_id_48: ref "core:prelude/list.wado//List<i32>";
+    let $licm_repr_49: ref Array<i32>;
+    let $licm_repr_50: ref Array<i32>;
     b = struct.new "wir_reuse_struct_load_across_call.wado//Rows" { tag: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }, id: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 } };
     $sroa_$iter_0_start_45 = 0;
+    $licm_tag_47 = b.tag;
+    $licm_id_48 = b.id;
+    $licm_repr_49 = $licm_tag_47.repr;
+    $licm_repr_50 = $licm_id_48.repr;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_start_45 >= n;
             $sroa_$iter_0_start_45 = local.tee current($sroa_$iter_0_start_45) + 1;
             i_18 = current * 2;
-            if @unlikely(local.tee $load_0(b.tag).used >= builtin::array_len($load_0.repr)) {
+            if @unlikely($licm_tag_47.used >= builtin::array_len($licm_repr_49)) {
                 cold_path;
                 "wir_reuse_struct_load_across_call.wado/wir_reuse_struct_load_across_call.wado/Rows::push_row$cold0$dae[t,i]"(b);
+                $licm_repr_49 = $licm_tag_47.repr;
+                $licm_repr_50 = $licm_id_48.repr;
             }
-            used_27 = local.tee $load_0(b.tag).used;
-            builtin::array_set<i32>($load_0.repr, used_27, current);
-            $load_0.used = used_27 + 1;
-            current = local.tee $load_0(b.id).used;
-            builtin::array_set<i32>($load_0.repr, current, i_18);
-            $load_0.used = current + 1;
+            used_27 = $licm_tag_47.used;
+            builtin::array_set<i32>($licm_repr_49, used_27, current);
+            $licm_tag_47.used = used_27 + 1;
+            current = $licm_id_48.used;
+            builtin::array_set<i32>($licm_repr_50, current, i_18);
+            $licm_id_48.used = current + 1;
             continue l1;
         };
     };

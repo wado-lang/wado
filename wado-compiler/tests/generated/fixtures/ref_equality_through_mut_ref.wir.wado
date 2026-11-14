@@ -357,9 +357,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(127)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0$spec0" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String") -> bool;  // TypeId(128)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(128)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(129)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0$spec0$sroa[other.repr]" = fn(ref Array<u8>, i32, ref Array<u8>) -> bool;  // TypeId(129)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(130)
 
@@ -406,22 +406,20 @@ fn "ref_equality_through_mut_ref.wado/$template_segment$ref_equality_through_mut
 
 fn "ref_equality_through_mut_ref.wado/$cm_export__$test_0_a_mutable_reference_to_a_string_equals_the_string_it_names"() {
     let s: ref "core:prelude/string.wado//String";
-    let other_5: ref "core:prelude/string.wado//String";
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
-    other_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
     if @unlikely(block -> bool {
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0$spec0"(s.repr, 1, other_5);
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0$spec0$sroa[other.repr]"(s.repr, 1, array.new_fixed<u8>(120));
     } == 0) {
         cold_path;
         "ref_equality_through_mut_ref.wado/$test_0_a_mutable_reference_to_a_string_equals_the_string_it_names$cold1"(s);
         unreachable;
     }
-    if @unlikely((other_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }; block -> bool {
+    if @unlikely((block -> bool {
         let $mv_field_4: ref Array<u8>;
         $mv_field_4 = s.repr;
         let $mv_field_6: i32;
         $mv_field_6 = s.used;
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0$spec0"($mv_field_4, $mv_field_6, other_5);
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0$spec0$sroa[other.repr]"($mv_field_4, $mv_field_6, array.new_fixed<u8>(121));
     } == 0) == 0) {
         cold_path;
         "ref_equality_through_mut_ref.wado/$test_0_a_mutable_reference_to_a_string_equals_the_string_it_names$cold0"(s);
@@ -2184,10 +2182,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, 5);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0$spec0"($mv$self$repr, $mv$self$end, other) {
+fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($mv$self$repr, $mv$self$start, end) {
+    return struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$self$repr, start: $mv$self$start, end: $mv$self$start + end };
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0$spec0$sroa[other.repr]"($mv$self$repr, $mv$self$end, other) {
     let i: i32;
-    let $sroa_b_repr_21: ref Array<u8>;
-    $sroa_b_repr_21 = other.repr;
     if $mv$self$end != 1 {
         return 0;
     }
@@ -2195,19 +2195,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:pre
     b271: block {
         l272: loop {
             break_if b271 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$self$end);
-            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>($sroa_b_repr_21, i) {
+            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>(other, i) {
                 return 0;
             }
             i = i + 1;
-            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>($sroa_b_repr_21, i) {
+            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>(other, i) {
                 return 0;
             }
             i = i + 1;
-            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>($sroa_b_repr_21, i) {
+            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>(other, i) {
                 return 0;
             }
             i = i + 1;
-            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>($sroa_b_repr_21, i) {
+            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>(other, i) {
                 return 0;
             }
             i = i + 1;
@@ -2217,7 +2217,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:pre
     b277: block {
         l278: loop {
             break_if b277 i >= $mv$self$end;
-            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>($sroa_b_repr_21, i) {
+            if builtin::array_get_value<u8>($mv$self$repr, i) != builtin::array_get_value<u8>(other, i) {
                 return 0;
             }
             i = i + 1;
@@ -2225,10 +2225,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:pre
         };
     };
     return 1;
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($mv$self$repr, $mv$self$start, end) {
-    return struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$self$repr, start: $mv$self$start, end: $mv$self$start + end };
 }
 
 export fn "ref_equality_through_mut_ref.wado/$cm_export__$test_0_a_mutable_reference_to_a_string_equals_the_string_it_names" as "$test_0_a_mutable_reference_to_a_string_equals_the_string_it_names"

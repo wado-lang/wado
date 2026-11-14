@@ -555,7 +555,7 @@ fn "unrestricted_handle_generic.wado/$test_2_inspect_shows_the_handle"() {
     let $load_3: ref Array<u8>;
     let t_13: u64;
     let out_16: ref "core:prelude/string.wado//String";
-    let $local_2: f64;
+    let $h: f64;
     let new_used_151: i32;
     let start_152: i32;
     t_13 = builtin::i64_reinterpret_f64(black_box(1.5));
@@ -563,7 +563,7 @@ fn "unrestricted_handle_generic.wado/$test_2_inspect_shows_the_handle"() {
     $inline_core_prelude_string_wado_String__format_unrestricted_handle_generic_wado__tmpl_459af2aff6ac66d3__unrestricted_handle_generic_wado_Buf_i32____spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_unrestricted_handle_generic_wado__tmpl_459af2aff6ac66d3__unrestricted_handle_generic_wado_Buf_i32____spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    $local_2 = builtin::f64_reinterpret_i64(t_13);
+    $h = builtin::f64_reinterpret_i64(t_13);
     if @unlikely(local.tee new_used_151(0 + 8) > builtin::array_len(out_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, new_used_151);
@@ -581,23 +581,22 @@ fn "unrestricted_handle_generic.wado/$test_2_inspect_shows_the_handle"() {
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:unrestricted_handle_generic.wado::$const_obj_5;
     "core:prelude/traits.wado/struct_field$spec0$spec0$sroa[f.buf]$dae[first]"(out_16, $mv_arg_2.repr, $mv_arg_2.used);
-    "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]$spec0$sroa[f.buf]"($local_2, out_16);
+    "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]$spec0$sroa[f.buf]"($h, out_16);
     if @unlikely(local.tee new_used_151(out_16.used + 2) > builtin::array_len(out_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, new_used_151);
     }
     start_152 = out_16.used;
     out_16.used = new_used_151;
-    builtin::array_copy<u8>(out_16.repr, start_152, global:unrestricted_handle_generic.wado::$const_obj_4, 0, 2);
+    builtin::array_copy<u8>(local.tee $load_3(out_16.repr), start_152, global:unrestricted_handle_generic.wado::$const_obj_4, 0, 2);
     $inline_core_prelude_string_wado_String__format_unrestricted_handle_generic_wado__tmpl_459af2aff6ac66d3__unrestricted_handle_generic_wado_Buf_i32____spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_115: block {
         break $inline_core_prelude_string_wado_String__format_unrestricted_handle_generic_wado__tmpl_459af2aff6ac66d3__unrestricted_handle_generic_wado_Buf_i32____spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_115;
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        if local.tee new_used_151(out_16.used) != 24 {
+        if new_used_151 != 24 {
             break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
         }
         start_152 = 0;
-        $load_3 = out_16.repr;
         b6: block {
             l7: loop {
                 break_if b6 (builtin::i64_extend_i32_s(start_152) + 3_i64) >= builtin::i64_extend_i32_s(new_used_151);
@@ -2874,9 +2873,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_u
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
-    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -2898,26 +2897,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_8: block -> i32 {
-        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c);
+            builtin::array_set_u8(self.repr, new_used, c);
             break $inline_encode_char_8: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_8: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_8: 3;
         }
-        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
+        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_8: 4;
     };
 }
@@ -3077,7 +3075,7 @@ fn "unrestricted_handle_generic.wado/unrestricted_handle_generic.wado/Buf<i32>^c
     let start_63: i32;
     let new_used_176: i32;
     let start_177: i32;
-    let $licm_repr_225: ref Array<u8>;
+    let $licm_repr_223: ref Array<u8>;
     $h = builtin::f64_reinterpret_i64(self);
     $inline_struct_open_1: block {
         if f.alternate {
@@ -3124,18 +3122,18 @@ fn "unrestricted_handle_generic.wado/unrestricted_handle_generic.wado/Buf<i32>^c
             "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 10);
             new_used_62 = 0;
             start_63 = f.indent;
-            $licm_repr_225 = local.tee self_50(f.buf).repr;
+            $licm_repr_223 = local.tee self_50(f.buf).repr;
             b405: block {
                 l406: loop {
                     break_if b405 new_used_62 >= start_63;
-                    if @unlikely(local.tee new_used_176(self_50.used + 2) > builtin::array_len($licm_repr_225)) {
+                    if @unlikely(local.tee new_used_176(self_50.used + 2) > builtin::array_len($licm_repr_223)) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_50, new_used_176);
-                        $licm_repr_225 = self_50.repr;
+                        $licm_repr_223 = self_50.repr;
                     }
                     start_177 = self_50.used;
                     self_50.used = new_used_176;
-                    builtin::array_copy<u8>($licm_repr_225, start_177, global:unrestricted_handle_generic.wado::$const_obj_9, 0, 2);
+                    builtin::array_copy<u8>($licm_repr_223, start_177, global:unrestricted_handle_generic.wado::$const_obj_9, 0, 2);
                     new_used_62 = new_used_62 + 1;
                     continue l406;
                 };

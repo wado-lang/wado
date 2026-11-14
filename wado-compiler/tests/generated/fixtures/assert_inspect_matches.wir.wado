@@ -259,25 +259,21 @@ fn "assert_inspect_matches.wado/run$cold0"(s) {
     let out_6: ref "core:prelude/string.wado//String";
     let new_used_84: i32;
     let start_85: i32;
-    let $sroa_view_repr_107: ref Array<u8>;
     if ref.is_null(global:assert_inspect_matches.wado::$const_obj_14) {
         global:assert_inspect_matches.wado::$const_obj_14 = array.new_data<u8>("Assertion failed in run at assert_inspect_matches.wado:12
 condition: s matches { Rectangle(_) }
 s: ");
     }
-    out_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(116), used: 0 };
-    $sroa_view_repr_107 = global:assert_inspect_matches.wado::$const_obj_14;
-    out_6.used = 99;
-    builtin::array_copy<u8>(out_6.repr, 0, $sroa_view_repr_107, 0, 99);
+    local.tee out_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(116), used: 0 }).used = 99;
+    builtin::array_copy<u8>(out_6.repr, 0, global:assert_inspect_matches.wado::$const_obj_14, 0, 99);
     "core:prelude/traits.wado/assert_inspect_matches.wado/Shape^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]"(s, out_6);
-    $sroa_view_repr_107 = global:assert_inspect_matches.wado::$const_obj_13;
     if @unlikely(local.tee new_used_84(out_6.used + 1) > builtin::array_len(out_6.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_6, new_used_84);
     }
     start_85 = out_6.used;
     out_6.used = new_used_84;
-    builtin::array_copy<u8>(local.tee $load_6(out_6.repr), start_85, $sroa_view_repr_107, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_6(out_6.repr), start_85, global:assert_inspect_matches.wado::$const_obj_13, 0, 1);
     "core:rt/panic"($load_6, new_used_84);
     unreachable;
 }
@@ -1081,9 +1077,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_23: i32;
-    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -1100,26 +1096,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_2: block -> i32 {
-        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c);
+            builtin::array_set_u8(self.repr, new_used, c);
             break $inline_encode_char_2: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_2: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_2: 3;
         }
-        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
+        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_2: 4;
     };
 }

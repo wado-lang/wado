@@ -237,7 +237,6 @@ fn "coalesce_multivalue_bind_targets.wado/run"() with Stdout {
     let chunks: i32;
     let top_digits: i32;
     let digit_count_178: i32;
-    let arr: ref Array<u8>;
     let start_229: i32;
     self_1 = black_box(struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: -9223372036854775808_i64 });
     other_2 = black_box(struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: -1_i64 });
@@ -322,15 +321,14 @@ fn "coalesce_multivalue_bind_targets.wado/run"() with Stdout {
     }
     start_229 = out_48.used;
     out_48.used = is_neg;
-    arr = out_48.repr;
     is_neg = start_229 + digit_count_178;
     if chunks == 3 {
-        "core:prelude/primitive.wado/write_decimal_digits"(arr, is_neg - 38, hi_19, 19);
+        "core:prelude/primitive.wado/write_decimal_digits"(out_48.repr, is_neg - 38, hi_19, 19);
     }
     if chunks > 1 {
-        "core:prelude/primitive.wado/write_decimal_digits"(arr, is_neg - 19, bottom, 19);
+        "core:prelude/primitive.wado/write_decimal_digits"(out_48.repr, is_neg - 19, bottom, 19);
     }
-    "core:prelude/primitive.wado/write_decimal_digits"(arr, start_229, $load_0, top_digits);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_48.repr, start_229, $load_0, top_digits);
     $inline_core_prelude_string_wado_String__internal_push_view_71: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_71;
     };
@@ -924,9 +922,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_9: ref Array<u8>;
     let new_used: i32;
     let start_9: i32;
-    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -943,26 +941,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
     self.used = local.tee new_used(self.used) + $inline_encode_char_0: block -> i32 {
-        repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c);
+            builtin::array_set_u8(self.repr, new_used, c);
             break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 192 | (c >>u 6));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
+            builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 224 | (c >>u 12));
+            builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8($load_9, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_0: 3;
         }
-        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
+        builtin::array_set_u8(local.tee $load_9(self.repr), new_used, 240 | (c >>u 18));
+        builtin::array_set_u8($load_9, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8($load_9, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8($load_9, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_0: 4;
     };
 }
