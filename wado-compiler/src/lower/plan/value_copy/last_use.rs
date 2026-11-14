@@ -875,8 +875,9 @@ impl<'a> Analyzer<'a> {
                     live: live.clone(),
                 });
             }
-            // Storage no local of this frame names, such as a global's, as a
-            // callee's own write to it counts in `ModRef`.
+            // A write to storage no local names, a global's say, lands beyond
+            // what calls are handed, as a callee's own such write does in
+            // `ModRef`.
             if self.mutations.len() == recorded {
                 self.beyond_handed_writes += 1;
             }

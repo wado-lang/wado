@@ -1015,8 +1015,13 @@ pub const LICM_HOIST: &str = "licm";
 /// session the hoists an earlier one left.
 #[must_use]
 pub fn is_licm_hoist(name: &str) -> bool {
+    is_minted(name, LICM_HOIST)
+}
+
+/// Whether `name` is one [`minted_name`] gave under `what`.
+fn is_minted(name: &str, what: &str) -> bool {
     name.strip_prefix(INTERNAL_PREFIX)
-        .and_then(|rest| rest.strip_prefix(LICM_HOIST))
+        .and_then(|rest| rest.strip_prefix(what))
         .is_some_and(|rest| rest.starts_with('_'))
 }
 
@@ -1026,9 +1031,7 @@ pub const CONTRACT_ARG: &str = "contract_arg";
 /// Whether `name` is one minted under [`CONTRACT_ARG`].
 #[must_use]
 pub fn is_contract_arg(name: &str) -> bool {
-    name.strip_prefix(INTERNAL_PREFIX)
-        .and_then(|rest| rest.strip_prefix(CONTRACT_ARG))
-        .is_some_and(|rest| rest.starts_with('_'))
+    is_minted(name, CONTRACT_ARG)
 }
 
 /// The local a derived `Eq` binds `side`'s payload of variant case `case` to.

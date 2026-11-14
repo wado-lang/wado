@@ -24,8 +24,8 @@ use crate::lower::plan::value_copy::place::{
 use crate::lower::translate::{convert_function_ref, tir_function_key};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, LocalMethodName, RefKind,
-    CONTRACT_ARG, contract_report_name, minted_name,
+    CONTRACT_ARG, CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, LocalMethodName,
+    RefKind, contract_report_name, minted_name,
 };
 use crate::rarity::Mark;
 use crate::synthesis::common::{cold_path_stmt, marker_stmt_mark};
