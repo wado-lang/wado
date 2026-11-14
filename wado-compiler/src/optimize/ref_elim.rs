@@ -34,9 +34,10 @@ struct RefInfo {
     inherited: bool,
     /// The borrow `r` was bound with, which a whole use of `r` takes again.
     borrow: NirUnaryOp,
-    /// Whether a whole use of `r` as a call argument folds to `&E`: the
-    /// reference is the handle of a place, not a cell, so borrowing the place
-    /// again yields the same handle.
+    /// Whether a whole use of `r` as a call argument folds to `&E`: `E` is a
+    /// local, not a cell, so borrowing it again yields the same handle at no
+    /// cost. Over a field, each fold would load the field again where `r`
+    /// held it in a local.
     passes_whole: bool,
 }
 
@@ -627,7 +628,7 @@ impl Analysis<'_> {
                         eliminable: true,
                         inherited: false,
                         borrow: *op,
-                        passes_whole: is_place
+                        passes_whole: matches!(body.exprs[referent_e].kind, ExprKind::Local { .. })
                             && self.type_table.cell_payload(reference_type).is_none(),
                     },
                 );
