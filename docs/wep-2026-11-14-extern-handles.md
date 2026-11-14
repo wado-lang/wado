@@ -71,7 +71,10 @@ place.
 
 One fact decides how `==` lowers. On V8 no host value passes `ref.test eqref`
 once internalized: not a DOM object, a plain object, a function or a string. A
-guest struct does.
+guest struct does. The specification says the same of every engine. The JS API
+turns a JavaScript object that is not an exported Wasm object into `ref.host`
+(`ToWebAssemblyValue`), and the core specification types that as `ref any`, so
+`ref.eq` never accepts one.
 
 The host replaces the functions through jco's `instantiation` mode, which hands
 the embedder each core module and its imports before instantiating it.
@@ -161,6 +164,11 @@ let back = builtin::minted::<SurfaceElement>(&node);   // Option<&mut SurfaceEle
 A node of `SurfaceDom` is then collected like any other value, and the handler
 keeps no table either.
 
+A handler may mint a handle for one value any number of times. Each is the same
+handle to the program: `==` compares the values minted from, not the structs
+around them. A handler therefore has no duty to remember the handle it gave
+out, which it could only break silently.
+
 ### Narrowing asks for the class once
 
 The class numbering of
@@ -200,16 +208,20 @@ owns it. There is no index to write beside it.
 
 ### `==` is identity
 
-Two handles are equal when they are one object.
+Two handles are equal when they are one object. The guest decides in this
+order:
 
-- Where both pass `ref.test eqref`, the guest compares them with `ref.eq`.
-- Where neither does, the guest calls the import `same`, which answers
-  JavaScript's `===`.
-- Where one does, they differ.
+1. Two null references are equal, and a null differs from anything else. This
+   is `None == None` for an `Option<R>`, and it calls no import.
+2. Two minted handles are equal when `ref.eq` holds of the values they were
+   minted from.
+3. Two handles neither of which is minted are the host's objects. The guest
+   calls the import `same`, which answers JavaScript's `===`.
+4. A minted handle and one that is not differ.
 
-This is correct whatever an engine answers for a host object, since `ref.eq` on
-two references that pass the test is identity too. On V8 the second case is
-every pair of host objects.
+A handle is minted exactly when it passes `ref.test` for the minted struct's
+type, which no host object does. Under a handler every handle is minted, so
+`same` is never called where only a trap would answer it.
 
 ### A closure crosses as itself
 
@@ -255,8 +267,8 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
 
 ## Known gaps
 
-- Only V8 was measured. No test runs in Firefox or Safari, and a host object's
-  answer to `ref.test eqref` is known for V8 alone.
+- Only V8 was measured. No test runs in Firefox or Safari, so collection across
+  the two heaps is known for V8 alone.
 - A list of handles and a record holding one have no crossing form, since both
   spill to linear memory. `sequence<Node>` waits on this.
 - `Promise<T>` has no crossing form. A `Future<T>` is a canonical ABI handle,
