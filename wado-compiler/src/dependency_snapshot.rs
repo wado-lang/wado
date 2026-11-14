@@ -29,8 +29,8 @@ use crate::semantics::{Semantics, semantics_with_logger};
 use crate::stdlib_snapshot::reparsed_snapshot_module;
 
 /// The dependency modules a snapshot serves, each with the parse it was built
-/// over, in a fixed order.
-type Key = Vec<(ModuleSource, AstIdSpace)>;
+/// over and what its imports resolved to, in a fixed order.
+type Key = Vec<(ModuleSource, AstIdSpace, Vec<ModuleSource>)>;
 
 /// What this thread knows of the dependency modules it last compiled over.
 enum Slot {
@@ -64,7 +64,7 @@ pub(crate) async fn dependency_snapshot<H: CompilerHost>(
     host: &H,
 ) -> Option<Rc<Semantics>> {
     let key = key_of(load);
-    if key.is_empty() || !key.iter().all(|(source, _)| servable(load, source)) {
+    if key.is_empty() || !key.iter().all(|(source, ..)| servable(load, source)) {
         return None;
     }
     let (slot, snapshot) = match SNAPSHOT.take() {
@@ -102,9 +102,12 @@ fn key_of(load: &LoadResult) -> Key {
         .modules
         .iter()
         .filter(|(source, _)| matches!(source, ModuleSource::Dependency { .. }))
-        .map(|(source, module)| (source.clone(), module.ast_id_space()))
+        .map(|(source, module)| {
+            let imports = load.imports.get(source).cloned().unwrap_or_default();
+            (source.clone(), module.ast_id_space(), imports)
+        })
         .collect();
-    key.sort_by_cached_key(|(source, _)| source.to_string());
+    key.sort_by_cached_key(|(source, ..)| source.to_string());
     key
 }
 
@@ -145,7 +148,7 @@ async fn build<H: CompilerHost>(load: &LoadResult, host: &H, key: &Key) -> Optio
     } else {
         format!("{dir}/{INTERNAL_PREFIX}dependencies.wado")
     };
-    let roots = key.iter().map(|(source, _)| source.clone()).collect();
+    let roots = key.iter().map(|(source, ..)| source.clone()).collect();
     let loaded = ModuleLoader::new(&host, LogLevel::Off)
         .with_roots(roots)
         .load_all("", Some(&entry))
