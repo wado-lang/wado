@@ -131,8 +131,9 @@ impl Interpreter<'_> {
         // A backing array is storage, not a value: it reaches the IR as its
         // container's field, where the length says how much of it is live.
         // Writing a literal over the `array_new` that opens a buffer would hand
-        // the writes that follow a data segment's worth of zeros instead.
-        if matches!(value, Value::Seq { .. }) {
+        // the writes that follow a data segment's worth of zeros instead. A
+        // clone is the exception: every element it copies is live.
+        if matches!(value, Value::Seq { .. }) && !self.is_array_clone(sink.body(), e) {
             compiler_trace!("region_seed", "commit {e:?}: a bare backing array");
             return false;
         }
@@ -151,6 +152,16 @@ impl Interpreter<'_> {
             self.frame.scratch_folds.insert(e, value);
         }
         committed
+    }
+
+    fn is_array_clone(&self, body: &Body, e: ExprId) -> bool {
+        let ExprKind::Call { func_id, .. } = &body.exprs[e].kind else {
+            return false;
+        };
+        self.facts
+            .ctfe_builtins
+            .and_then(|m| m.get(func_id))
+            .is_some_and(|b| matches!(b, CtfeBuiltin::ArrayClonePrefix))
     }
 
     /// Whether `e` yields an object nothing else in the body reaches, so writing
