@@ -195,7 +195,6 @@ fn "hfs_nested_loop_no_call_no_sync.wado/run"() with Stdout {
     let $licm_arith_36: i32;
     let out_40: ref "core:prelude/string.wado//String";
     let x_111: i64;
-    let $sroa_view_repr_205: ref Array<u8>;
     let $hfs_hold_270: u32;
     let $hfs_bits_271: i32;
     "hfs_nested_loop_no_call_no_sync.wado/arm"(local.tee state(struct.new "hfs_nested_loop_no_call_no_sync.wado//Reader" { hold: 0, bits: 0 }));
@@ -273,14 +272,13 @@ fn "hfs_nested_loop_no_call_no_sync.wado/run"() with Stdout {
     out_2 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_111(x_111 = builtin::i64_extend_i32_s(out_2); select i64(x_111 < 0_i64, 0_i64 - x_111, x_111)));
     $hfs_hold_270 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_40, $hfs_hold_270, out_2);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_5(out_40.repr), $hfs_hold_270, x_111, out_2);
-    $sroa_view_repr_205 = global:hfs_nested_loop_no_call_no_sync.wado::$const_obj_0;
     if @unlikely(local.tee out_2(out_40.used + 1) > builtin::array_len($load_5)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_40, out_2);
     }
     $hfs_hold_270 = out_40.used;
     out_40.used = out_2;
-    builtin::array_copy<u8>(out_40.repr, $hfs_hold_270, $sroa_view_repr_205, 0, 1);
+    builtin::array_copy<u8>(out_40.repr, $hfs_hold_270, global:hfs_nested_loop_no_call_no_sync.wado::$const_obj_0, 0, 1);
     out_2 = round < 0;
     round = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_111(x_111 = builtin::i64_extend_i32_s(round); select i64(x_111 < 0_i64, 0_i64 - x_111, x_111)));
     out_2 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_40, out_2, round);

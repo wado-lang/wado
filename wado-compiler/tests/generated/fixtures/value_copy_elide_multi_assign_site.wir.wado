@@ -220,7 +220,6 @@ fn "value_copy_elide_multi_assign_site.wado/run"() with Stdout {
     let i: i32;
     let out_57: ref "core:prelude/string.wado//String";
     let x_128: i64;
-    let $sroa_view_repr_205: ref Array<u8>;
     result = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(0, 1), used: 2 };
     i = 0;
     b0: block {
@@ -275,14 +274,13 @@ fn "value_copy_elide_multi_assign_site.wado/run"() with Stdout {
     i = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_128(x_128 = builtin::i64_extend_i32_s(i); select i64(x_128 < 0_i64, 0_i64 - x_128, x_128)));
     $mv$self_18$2 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_57, $mv$self_18$2, i);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_57.repr), $mv$self_18$2, x_128, i);
-    $sroa_view_repr_205 = global:value_copy_elide_multi_assign_site.wado::$const_obj_0;
     if @unlikely(local.tee i(out_57.used + 1) > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_57, i);
     }
     $mv$self_18$2 = out_57.used;
     out_57.used = i;
-    builtin::array_copy<u8>(out_57.repr, $mv$self_18$2, $sroa_view_repr_205, 0, 1);
+    builtin::array_copy<u8>(out_57.repr, $mv$self_18$2, global:value_copy_elide_multi_assign_site.wado::$const_obj_0, 0, 1);
     i = $mv$self_18$0 < 0;
     $mv$self_18$0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_128(x_128 = builtin::i64_extend_i32_s($mv$self_18$0); select i64(x_128 < 0_i64, 0_i64 - x_128, x_128)));
     i = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_57, i, $mv$self_18$0);

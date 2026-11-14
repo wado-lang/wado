@@ -192,13 +192,15 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:pgo_cold_path_stands.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "pgo_cold_path_stands.wado/walk"(n) {
-    let $load_1: ref Array<i32>;
     let xs_1: ref "core:prelude/list.wado//List<i32>";
-    let self_29: i32;
     let current: i32;
     let $sroa_$iter_0_start_43: i32;
+    let $licm_used_45: i32;
+    let $licm_repr_46: ref Array<i32>;
     xs_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(0), used: 1 };
     $sroa_$iter_0_start_43 = 0;
+    $licm_used_45 = 1;
+    $licm_repr_46 = xs_1.repr;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_start_43 >= n;
@@ -206,13 +208,15 @@ fn "pgo_cold_path_stands.wado/walk"(n) {
             if @unlikely((current % 33) == 0) {
                 cold_path;
                 "pgo_cold_path_stands.wado/step$cold0"(xs_1, current);
+                $licm_used_45 = xs_1.used;
+                $licm_repr_46 = xs_1.repr;
             }
-            current = self_29 = xs_1.used; if @unlikely(0 >= self_29) {
+            current = if @unlikely(0 >= $licm_used_45) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, self_29, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("pgo_cold_path_stands.wado:12"), used: 28 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $licm_used_45, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("pgo_cold_path_stands.wado:12"), used: 28 });
                 unreachable;
-            }; builtin::array_get_value<i32>(local.tee $load_1(xs_1.repr), 0) + current;
-            builtin::array_set<i32>($load_1, 0, current);
+            }; builtin::array_get_value<i32>($licm_repr_46, 0) + current;
+            builtin::array_set<i32>($licm_repr_46, 0, current);
             continue l1;
         };
     };
@@ -226,7 +230,6 @@ fn "pgo_cold_path_stands.wado/run"() with Stdout {
     let out_32: ref "core:prelude/string.wado//String";
     let is_negative_99: bool;
     let x_103: i64;
-    let $sroa_view_repr_205: ref Array<u8>;
     let $sroa_t_h1_255: i32;
     $load_0 = local.tee xs("pgo_cold_path_stands.wado/walk"(black_box(100))).used;
     if @unlikely(0 >= $load_0) {
@@ -243,14 +246,13 @@ fn "pgo_cold_path_stands.wado/run"() with Stdout {
     $load_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_103(x_103 = builtin::i64_extend_i32_s($load_0); select i64(x_103 < 0_i64, 0_i64 - x_103, x_103)));
     is_negative_99 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_32, is_negative_99, $load_0);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_32.repr), is_negative_99, x_103, $load_0);
-    $sroa_view_repr_205 = global:pgo_cold_path_stands.wado::$const_obj_0;
     if @unlikely(local.tee $load_0(out_32.used + 1) > builtin::array_len($load_2)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_32, $load_0);
     }
     is_negative_99 = out_32.used;
     out_32.used = $load_0;
-    builtin::array_copy<u8>(out_32.repr, is_negative_99, $sroa_view_repr_205, 0, 1);
+    builtin::array_copy<u8>(out_32.repr, is_negative_99, global:pgo_cold_path_stands.wado::$const_obj_0, 0, 1);
     $load_0 = $sroa_t_h1_255 < 0;
     $sroa_t_h1_255 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_103(x_103 = builtin::i64_extend_i32_s($sroa_t_h1_255); select i64(x_103 < 0_i64, 0_i64 - x_103, x_103)));
     $load_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_32, $load_0, $sroa_t_h1_255);

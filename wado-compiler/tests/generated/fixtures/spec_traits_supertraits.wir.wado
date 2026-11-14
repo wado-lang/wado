@@ -714,35 +714,42 @@ dedup_sorted([ Id { n: 1 }, Id { n: 1 }, Id { n: 2 }, ]).len(): "), used: 206 },
 }
 
 fn "spec_traits_supertraits.wado/spec_traits_supertraits.wado/dedup_sorted<spec_traits_supertraits.wado/Id>$spec0"($mv$items$repr, $mv$items$used) {
-    let $load_1: i32;
     let out: ref "core:prelude/list.wado//List<spec_traits_supertraits.wado/Id>";
     let $contract_arg_0: i32;
     let item: ref "spec_traits_supertraits.wado//Id";
-    let $sroa_$iter_0_index_42: i32;
-    let $av_44: i32;
+    let $licm_repr_41: ref "Array<spec_traits_supertraits.wado/Id>";
+    let $sroa_$iter_0_index_43: i32;
+    let $hfs_used_45: i32;
+    let $av_46: i32;
     out = struct.new "core:prelude/list.wado//List<spec_traits_supertraits.wado/Id>" { repr: array.new_fixed<ref "spec_traits_supertraits.wado//Id">(), used: 0 };
-    $sroa_$iter_0_index_42 = 0;
+    $sroa_$iter_0_index_43 = 0;
+    $licm_repr_41 = out.repr;
+    $hfs_used_45 = 0;
     b42: block {
         l43: loop {
-            break_if b42 $sroa_$iter_0_index_42 >= 3;
-            item = struct.new "spec_traits_supertraits.wado//Id" { n: local.tee $av_44(builtin::array_get_value<ref "spec_traits_supertraits.wado//Id">($mv$items$repr, $sroa_$iter_0_index_42).n) };
-            $sroa_$iter_0_index_42 = $sroa_$iter_0_index_42 + 1;
-            if (if local.tee $load_1(out.used) == 0 -> i32 {
+            break_if b42 $sroa_$iter_0_index_43 >= 3;
+            item = struct.new "spec_traits_supertraits.wado//Id" { n: local.tee $av_46(builtin::array_get_value<ref "spec_traits_supertraits.wado//Id">($mv$items$repr, $sroa_$iter_0_index_43).n) };
+            $sroa_$iter_0_index_43 = $sroa_$iter_0_index_43 + 1;
+            if (if $hfs_used_45 == 0 -> i32 {
                 1;
             } else {
-                $contract_arg_0 = $load_1 - 1; if @unlikely(0 > $contract_arg_0) {
+                $contract_arg_0 = $hfs_used_45 - 1; if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 < $hfs_used_45)) == 0) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<spec_traits_supertraits.wado/Id>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, $load_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("spec_traits_supertraits.wado:29"), used: 31 });
+                    "core:prelude/list.wado/core:prelude/list.wado/List<spec_traits_supertraits.wado/Id>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, $hfs_used_45, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("spec_traits_supertraits.wado:29"), used: 31 });
                     unreachable;
-                }; builtin::array_get_value<ref "spec_traits_supertraits.wado//Id">(out.repr, $contract_arg_0).n == $av_44 == 0;
+                }; builtin::array_get_value<ref "spec_traits_supertraits.wado//Id">($licm_repr_41, $contract_arg_0).n == $av_46 == 0;
             }) {
-                if @unlikely($load_1 >= builtin::array_len(out.repr)) {
+                if @unlikely($hfs_used_45 >= builtin::array_len($licm_repr_41)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<spec_traits_supertraits.wado/Id>::grow"(out);
+                    $licm_repr_41 = out.repr;
+                } else {
                 }
-                builtin::array_set<ref "spec_traits_supertraits.wado//Id">(out.repr, $load_1, item);
-                out.used = $load_1 + 1;
+                builtin::array_set<ref "spec_traits_supertraits.wado//Id">($licm_repr_41, $hfs_used_45, item);
+                $hfs_used_45 = $hfs_used_45 + 1;
+            } else {
             }
+            out.used = $hfs_used_45;
             continue l43;
         };
     };

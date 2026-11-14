@@ -551,22 +551,24 @@ global global:core:prelude/primitive.wado::$const_obj_36: ref Array<u8> = array.
 global global:core:prelude/primitive.wado::$const_obj_37: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 };
 
 fn "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop"() {
-    let $load_5: ref Array<i32>;
     let digits: ref "core:prelude/list.wado//List<i32>";
     let v: u64;
     let value_42: i32;
     let used_43: i32;
+    let $licm_repr_84: ref Array<i32>;
     digits = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     v = 12345_i64;
+    $licm_repr_84 = digits.repr;
     b0: block {
         l1: loop {
             break_if b0 v <=u 0_i64;
             value_42 = builtin::i32_wrap_i64(v %u 10_i64);
-            if @unlikely(local.tee used_43(digits.used) >= builtin::array_len(digits.repr)) {
+            if @unlikely(local.tee used_43(digits.used) >= builtin::array_len($licm_repr_84)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(digits);
+                $licm_repr_84 = digits.repr;
             }
-            builtin::array_set<i32>(digits.repr, used_43, value_42);
+            builtin::array_set<i32>($licm_repr_84, used_43, value_42);
             digits.used = used_43 + 1;
             v = v /u 10_i64;
             continue l1;
@@ -582,7 +584,7 @@ fn "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, value_42, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("int_arithmetic.wado:364"), used: 23 });
         unreachable;
     }
-    if @unlikely(local.tee used_43(builtin::array_get_value<i32>(local.tee $load_5(digits.repr), 0)) != 5) {
+    if @unlikely(local.tee used_43(builtin::array_get_value<i32>(local.tee $licm_repr_84(digits.repr), 0)) != 5) {
         cold_path;
         "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold4"(used_43);
         unreachable;
@@ -592,7 +594,7 @@ fn "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, value_42, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("int_arithmetic.wado:365"), used: 23 });
         unreachable;
     }
-    if @unlikely(local.tee used_43(builtin::array_get_value<i32>($load_5, 1)) != 4) {
+    if @unlikely(local.tee used_43(builtin::array_get_value<i32>($licm_repr_84, 1)) != 4) {
         cold_path;
         "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold3"(used_43);
         unreachable;
@@ -602,7 +604,7 @@ fn "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(2, value_42, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("int_arithmetic.wado:366"), used: 23 });
         unreachable;
     }
-    if @unlikely(local.tee used_43(builtin::array_get_value<i32>($load_5, 2)) != 3) {
+    if @unlikely(local.tee used_43(builtin::array_get_value<i32>($licm_repr_84, 2)) != 3) {
         cold_path;
         "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold2"(used_43);
         unreachable;
@@ -612,7 +614,7 @@ fn "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(3, value_42, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("int_arithmetic.wado:367"), used: 23 });
         unreachable;
     }
-    if @unlikely(local.tee used_43(builtin::array_get_value<i32>($load_5, 3)) != 2) {
+    if @unlikely(local.tee used_43(builtin::array_get_value<i32>($licm_repr_84, 3)) != 2) {
         cold_path;
         "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold1"(used_43);
         unreachable;
@@ -622,7 +624,7 @@ fn "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(4, value_42, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("int_arithmetic.wado:368"), used: 23 });
         unreachable;
     }
-    if @unlikely(local.tee value_42(builtin::array_get_value<i32>($load_5, 4)) != 1) {
+    if @unlikely(local.tee value_42(builtin::array_get_value<i32>($licm_repr_84, 4)) != 1) {
         cold_path;
         "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold0"(value_42);
         unreachable;

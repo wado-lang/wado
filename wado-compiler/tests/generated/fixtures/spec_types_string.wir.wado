@@ -452,19 +452,21 @@ global global:core:prelude/primitive.wado::$const_obj_14: ref "core:prelude/stri
 fn "spec_types_string.wado/$test_0_access"() {
     let $temp_inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_char___11_0: ref "core:prelude/string.wado//StrCharIter";
     let result_52: ref "core:prelude/list.wado//List<char>";
+    let $licm_repr_79: ref Array<char>;
     $temp_inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_char___11_0 = struct.new "core:prelude/string.wado//StrCharIter" { repr: array.new_data<u8>("Hello世界"), used: 11, byte_index: 0 };
-    result_52 = struct.new "core:prelude/list.wado//List<char>" { repr: array.new_fixed<char>(), used: 0 };
+    $licm_repr_79 = local.tee result_52(struct.new "core:prelude/list.wado//List<char>" { repr: array.new_fixed<char>(), used: 0 }).repr;
     b0: block {
         l1: loop {
             let $mv$$local_3_54$0: i32;
             let $mv$$local_3_54$1: char;
             multivalue_bind [$mv$$local_3_54$0, $mv$$local_3_54$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]$spec0"($temp_inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_char___11_0);
             if $mv$$local_3_54$0 == 1 {
-                if @unlikely(local.tee $mv$$local_3_54$0(result_52.used) >= builtin::array_len(result_52.repr)) {
+                if @unlikely(local.tee $mv$$local_3_54$0(result_52.used) >= builtin::array_len($licm_repr_79)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<char>::grow"(result_52);
+                    $licm_repr_79 = result_52.repr;
                 }
-                builtin::array_set<char>(result_52.repr, $mv$$local_3_54$0, $mv$$local_3_54$1);
+                builtin::array_set<char>($licm_repr_79, $mv$$local_3_54$0, $mv$$local_3_54$1);
                 result_52.used = $mv$$local_3_54$0 + 1;
             } else {
                 break b0;
@@ -592,44 +594,42 @@ out: "), used: 98 }, s1: struct.new "core:prelude/string.wado//String" { repr: a
 fn "spec_types_string.wado/$test_2_building"() {
     let $load_1: ref Array<u8>;
     let builder: ref "core:prelude/string.wado//String";
-    let offset_17: i32;
+    let i_33: i32;
     local.tee builder(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }).used = 13;
     builtin::array_copy<u8>(local.tee $load_1(builder.repr), 0, global:spec_types_string.wado::$const_obj_6, 0, 5);
-    offset_17 = 0 + 5;
-    builtin::array_copy<u8>($load_1, offset_17, global:spec_types_string.wado::$const_obj_5, 0, 2);
-    offset_17 = 0 + 7;
-    builtin::array_copy<u8>($load_1, offset_17, global:spec_types_string.wado::$const_obj_4, 0, 6);
+    builtin::array_copy<u8>($load_1, 5, global:spec_types_string.wado::$const_obj_5, 0, 2);
+    builtin::array_copy<u8>($load_1, 7, global:spec_types_string.wado::$const_obj_4, 0, 6);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
-        offset_17 = 0;
+        i_33 = 0;
         b26: block {
             l27: loop {
-                break_if b26 (builtin::i64_extend_i32_s(offset_17) + 3_i64) >= builtin::i64_extend_i32_s(13);
-                if builtin::array_get_value<u8>($load_1, offset_17) != builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_3, offset_17) {
+                break_if b26 (builtin::i64_extend_i32_s(i_33) + 3_i64) >= builtin::i64_extend_i32_s(13);
+                if builtin::array_get_value<u8>($load_1, i_33) != builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_3, i_33) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                offset_17 = offset_17 + 1;
-                if builtin::array_get_value<u8>($load_1, offset_17) != builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_3, offset_17) {
+                i_33 = i_33 + 1;
+                if builtin::array_get_value<u8>($load_1, i_33) != builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_3, i_33) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                offset_17 = offset_17 + 1;
-                if builtin::array_get_value<u8>($load_1, offset_17) != builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_3, offset_17) {
+                i_33 = i_33 + 1;
+                if builtin::array_get_value<u8>($load_1, i_33) != builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_3, i_33) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                offset_17 = offset_17 + 1;
-                if builtin::array_get_value<u8>($load_1, offset_17) != builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_3, offset_17) {
+                i_33 = i_33 + 1;
+                if builtin::array_get_value<u8>($load_1, i_33) != builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_3, i_33) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                offset_17 = offset_17 + 1;
+                i_33 = i_33 + 1;
                 continue l27;
             };
         };
         b32: block {
             l33: loop {
-                break_if b32 offset_17 >= 13;
-                if builtin::array_get_value<u8>($load_1, offset_17) != builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_3, offset_17) {
+                break_if b32 i_33 >= 13;
+                if builtin::array_get_value<u8>($load_1, i_33) != builtin::array_get_value<u8>(global:spec_types_string.wado::$const_obj_3, i_33) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                offset_17 = offset_17 + 1;
+                i_33 = i_33 + 1;
                 continue l33;
             };
         };

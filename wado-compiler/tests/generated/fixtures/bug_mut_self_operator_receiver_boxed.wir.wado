@@ -117,7 +117,6 @@ fn "bug_mut_self_operator_receiver_boxed.wado/run"() with Stdout {
     let message_174: ref "core:prelude/string.wado//String";
     let $cm_pair_7_181: i64;
     let is_negative_337: bool;
-    let $sroa_view_repr_204: ref Array<u8>;
     drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"(local.tee $sroa_t_value_165(struct.new "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: 1, 1: 2 } })).payload_0.0);
     v_18 = drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"(local.tee $sroa_t_value_165(struct.new "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: 5, 1: ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($sroa_t_value_165).payload_0.1 } })).payload_0.0); ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($sroa_t_value_165).payload_0.1 + 4;
     x_19 = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($sroa_t_value_165).payload_0.0;
@@ -183,14 +182,13 @@ fn "bug_mut_self_operator_receiver_boxed.wado/run"() with Stdout {
     v_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_181($cm_pair_7_181 = builtin::i64_extend_i32_s(v_18); select i64($cm_pair_7_181 < 0_i64, 0_i64 - $cm_pair_7_181, $cm_pair_7_181)));
     is_negative_337 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(message_174, is_negative_337, v_18);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_12(message_174.repr), is_negative_337, $cm_pair_7_181, v_18);
-    $sroa_view_repr_204 = global:bug_mut_self_operator_receiver_boxed.wado::$const_obj_0;
     if @unlikely(local.tee v_18(message_174.used + 1) > builtin::array_len($load_12)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(message_174, v_18);
     }
     is_negative_337 = message_174.used;
     message_174.used = v_18;
-    builtin::array_copy<u8>(message_174.repr, is_negative_337, $sroa_view_repr_204, 0, 1);
+    builtin::array_copy<u8>(message_174.repr, is_negative_337, global:bug_mut_self_operator_receiver_boxed.wado::$const_obj_0, 0, 1);
     v_18 = x_19 < 0;
     x_19 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_181($cm_pair_7_181 = builtin::i64_extend_i32_s(x_19); select i64($cm_pair_7_181 < 0_i64, 0_i64 - $cm_pair_7_181, $cm_pair_7_181)));
     v_18 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(message_174, v_18, x_19);

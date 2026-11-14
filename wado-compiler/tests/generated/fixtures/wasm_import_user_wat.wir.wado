@@ -206,12 +206,9 @@ fn "wasm_import_user_wat.wado/run"() with Stdout {
     let tens: i32;
     let $sroa_t_h0_222: i32;
     let $sroa_t_h0_233: f64;
-    let $sroa_view_repr_837: ref Array<u8>;
     $sroa_t_h0_222 = "wasm:sub/wasm_import_user.wat/add_one"(41);
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 };
-    $sroa_view_repr_837 = global:wasm_import_user_wat.wado::$const_obj_4;
-    out_3.used = local.tee $load_0(14);
-    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, $sroa_view_repr_837, 0, 14);
+    local.tee out_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 }).used = local.tee $load_0(14);
+    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, global:wasm_import_user_wat.wado::$const_obj_4, 0, 14);
     is_negative_65 = $sroa_t_h0_222 < 0;
     x_69 = builtin::i64_extend_i32_s($sroa_t_h0_222);
     x_69 = select i64(x_69 < 0_i64, 0_i64 - x_69, x_69);
@@ -291,22 +288,22 @@ fn "wasm_import_user_wat.wado/run"() with Stdout {
     }
     is_negative_65 = out_3.used;
     out_3.used = $load_0;
-    $sroa_view_repr_837 = out_3.repr;
+    $load_1 = out_3.repr;
     $sroa_t_h0_222 = is_negative_65 + $sroa_t_h0_222;
     b22: block {
         l23: loop {
             break_if b22 ($sroa_t_h0_222 - is_negative_65) < 2;
             q = x_69 /u 100_i64;
             tens = local.tee $load_0(builtin::i32_wrap_i64(x_69 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_837, $sroa_t_h0_222 - 1, (48 + $load_0) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_837, $sroa_t_h0_222 - 2, 48 + tens);
+            builtin::array_set_u8($load_1, $sroa_t_h0_222 - 1, (48 + $load_0) - (tens * 10));
+            builtin::array_set_u8($load_1, $sroa_t_h0_222 - 2, 48 + tens);
             $sroa_t_h0_222 = $sroa_t_h0_222 - 2;
             x_69 = q;
             continue l23;
         };
     };
     if $sroa_t_h0_222 > is_negative_65 {
-        builtin::array_set_u8($sroa_view_repr_837, is_negative_65, 48 + builtin::i32_wrap_i64(x_69 %u 10_i64));
+        builtin::array_set_u8($load_1, is_negative_65, 48 + builtin::i32_wrap_i64(x_69 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
@@ -317,10 +314,8 @@ fn "wasm_import_user_wat.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"($load_0, out_3.repr, out_3.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_222);
     $sroa_t_h0_233 = "wasm:sub/wasm_import_user.wat/twice"(1.5);
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
-    $sroa_view_repr_837 = global:wasm_import_user_wat.wado::$const_obj_3;
-    out_3.used = 13;
-    builtin::array_copy<u8>(out_3.repr, 0, $sroa_view_repr_837, 0, 13);
+    local.tee out_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }).used = 13;
+    builtin::array_copy<u8>(out_3.repr, 0, global:wasm_import_user_wat.wado::$const_obj_3, 0, 13);
     $inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__1: block {
         $inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__1__$inline_check_special_45: block {
             if local.tee x_69(builtin::i64_reinterpret_f64($sroa_t_h0_233)) == 0_i64 {

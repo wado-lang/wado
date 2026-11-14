@@ -2472,16 +2472,19 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<list_from_le_bytes_newtyp
     let out: ref "core:prelude/list.wado//List<list_from_le_bytes_newtype_impl.wado/Kelvin>";
     let i: i32;
     let used: i32;
+    let $licm_repr_27: ref Array<f32>;
     out = struct.new "core:prelude/list.wado//List<list_from_le_bytes_newtype_impl.wado/Kelvin>" { repr: builtin::array_new<f32>(local.tee bytes(bytes / 4)), used: 0 };
     i = 0;
+    $licm_repr_27 = out.repr;
     b294: block {
         l295: loop {
             break_if b294 i >= bytes;
-            if @unlikely(local.tee used(out.used) >= builtin::array_len(out.repr)) {
+            if @unlikely(local.tee used(out.used) >= builtin::array_len($licm_repr_27)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<list_from_le_bytes_newtype_impl.wado/Celsius>::grow"(out);
+                $licm_repr_27 = out.repr;
             }
-            builtin::array_set<f32>(out.repr, used, 100_f32);
+            builtin::array_set<f32>($licm_repr_27, used, 100_f32);
             out.used = used + 1;
             i = i + 1;
             continue l295;

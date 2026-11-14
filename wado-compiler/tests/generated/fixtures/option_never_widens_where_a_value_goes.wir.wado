@@ -307,7 +307,7 @@ type "functype//option_never_widens_where_a_value_goes.wado/$template_segment$op
 
 type "functype//option_never_widens_where_a_value_goes.wado/$template_segment$option_never_widens_where_a_value_goes.wado/$tmpl$7954a5aa98c73673$spec1$dae[index]" = fn(ref "option_never_widens_where_a_value_goes.wado//$tmpl$7954a5aa98c73673") -> ref "core:prelude/string.wado//String";  // TypeId(58)
 
-type "functype//option_never_widens_where_a_value_goes.wado/$widen$core:prelude/list.wado/List<core:prelude/types.wado/Option<!>>$core:prelude/list.wado/List<core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>>$spec0$sroa[v.repr]" = fn(ref "Array<core:prelude/types.wado/Option<!>>") -> ref "core:prelude/list.wado//List<core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>>";  // TypeId(59)
+type "functype//option_never_widens_where_a_value_goes.wado/$widen$core:prelude/list.wado/List<core:prelude/types.wado/Option<!>>$core:prelude/list.wado/List<core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>>$spec0$sroa[v.repr]" = fn(ref "Array<core:prelude/types.wado/Option<!>>") -> [ref "Array<core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>>", i32];  // TypeId(59)
 
 type "functype//core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(60)
 
@@ -616,8 +616,7 @@ global global:core:prelude/traits.wado::$const_obj_26: ref "core:prelude/string.
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<!>$0: ref "core:prelude/types.wado//Option<!>" = struct.new "core:prelude/types.wado//Option<!>" { 0 };
 
 fn "option_never_widens_where_a_value_goes.wado/$test_0_an_option____value_widens_to_the_option_t__it_goes_to"() {
-    let $load_14: ref "Array<core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>>";
-    let $load_19: ref "Array<[core:prelude/types.wado/Option<!>,i32]>";
+    let $load_18: ref "Array<[core:prelude/types.wado/Option<!>,i32]>";
     let $v1_3: ref "core:prelude//$Cell<core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>>";
     let $v2_4: i32;
     let $v3: bool;
@@ -715,21 +714,24 @@ tuple().1 == 4: "), used: 17 }, s6: struct.new "core:prelude/string.wado//String
         "option_never_widens_where_a_value_goes.wado/$test_0_an_option____value_widens_to_the_option_t__it_goes_to$cold7"($v2_4);
         unreachable;
     }
-    if @unlikely(local.tee $v2_4(local.tee u_241("option_never_widens_where_a_value_goes.wado/$widen$core:prelude/list.wado/List<core:prelude/types.wado/Option<!>>$core:prelude/list.wado/List<core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>>$spec0$sroa[v.repr]"(array.new_fixed<ref "core:prelude/types.wado//Option<!>">(global:core:builtin::$unit_case$core:prelude/types.wado//Option<!>$0, global:core:builtin::$unit_case$core:prelude/types.wado//Option<!>$0))).used) >= builtin::array_len(u_241.repr)) {
+    let $mv_repr_3: ref "Array<core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>>";
+    multivalue_bind [$mv_repr_3, $v2_4] = "option_never_widens_where_a_value_goes.wado/$widen$core:prelude/list.wado/List<core:prelude/types.wado/Option<!>>$core:prelude/list.wado/List<core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>>$spec0$sroa[v.repr]"(array.new_fixed<ref "core:prelude/types.wado//Option<!>">(global:core:builtin::$unit_case$core:prelude/types.wado//Option<!>$0, global:core:builtin::$unit_case$core:prelude/types.wado//Option<!>$0));
+    u_241 = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>>" { repr: $mv_repr_3, used: $v2_4 };
+    if @unlikely($v2_4 >= builtin::array_len(u_241.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>>::grow"(u_241);
     }
-    builtin::array_set<ref null "option_never_widens_where_a_value_goes.wado//T">(local.tee $load_14(u_241.repr), $v2_4, struct.new "option_never_widens_where_a_value_goes.wado//T" { n: 5 });
+    builtin::array_set<ref null "option_never_widens_where_a_value_goes.wado//T">(local.tee $mv_repr_3(u_241.repr), $v2_4, struct.new "option_never_widens_where_a_value_goes.wado//T" { n: 5 });
     u_241.used = local.tee $v2_4($v2_4 + 1);
     if @unlikely(local.tee $v2_4((if @unlikely(2 >= $v2_4) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>>^core:prelude/traits.wado/IndexRef<i32>::index_ref$contract_report0"(0, $v2_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("option_never_widens_where_a_value_goes.wado:125"), used: 47 });
         unreachable;
-    }; (if ref.is_null(local.tee o_65(builtin::array_get_value<ref null "option_never_widens_where_a_value_goes.wado//T">($load_14, 0))) == 0 -> i32 {
+    }; (if ref.is_null(local.tee o_65(builtin::array_get_value<ref null "option_never_widens_where_a_value_goes.wado//T">($mv_repr_3, 0))) == 0 -> i32 {
         o_65.n;
     } else {
         -1;
-    }) + (if ref.is_null(local.tee o_65(builtin::array_get_value<ref null "option_never_widens_where_a_value_goes.wado//T">($load_14, 2))) == 0 -> i32 {
+    }) + (if ref.is_null(local.tee o_65(builtin::array_get_value<ref null "option_never_widens_where_a_value_goes.wado//T">($mv_repr_3, 2))) == 0 -> i32 {
         o_65.n;
     } else {
         -1;
@@ -743,10 +745,10 @@ tuple().1 == 4: "), used: 17 }, s6: struct.new "core:prelude/string.wado//String
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/types.wado/Option<!>,i32]>::grow"(t_280);
     }
-    builtin::array_set<ref "tuple//[core:prelude/types.wado/Option<!>, i32]">(local.tee $load_19(t_280.repr), 0, struct.new "tuple//[core:prelude/types.wado/Option<!>, i32]" { 0: global:core:builtin::$unit_case$core:prelude/types.wado//Option<!>$0, 1: 6 });
+    builtin::array_set<ref "tuple//[core:prelude/types.wado/Option<!>, i32]">(local.tee $load_18(t_280.repr), 0, struct.new "tuple//[core:prelude/types.wado/Option<!>, i32]" { 0: global:core:builtin::$unit_case$core:prelude/types.wado//Option<!>$0, 1: 6 });
     t_280.used = local.tee $v2_4(1);
     let $mv$u_281$repr: ref "Array<[core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>,i32]>";
-    multivalue_bind [$mv$u_281$repr, $v2_4] = "option_never_widens_where_a_value_goes.wado/$widen$core:prelude/list.wado/List<[core:prelude/types.wado/Option<!>,i32]>$core:prelude/list.wado/List<[core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>,i32]>"($load_19, $v2_4);
+    multivalue_bind [$mv$u_281$repr, $v2_4] = "option_never_widens_where_a_value_goes.wado/$widen$core:prelude/list.wado/List<[core:prelude/types.wado/Option<!>,i32]>$core:prelude/list.wado/List<[core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>,i32]>"($load_18, $v2_4);
     if @unlikely(local.tee $v2_4((if @unlikely(0 >= $v2_4) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>,i32]>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $v2_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("option_never_widens_where_a_value_goes.wado:132"), used: 47 });
@@ -1315,7 +1317,7 @@ fn "option_never_widens_where_a_value_goes.wado/$widen$core:prelude/list.wado/Li
             continue l127;
         };
     };
-    return struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Option<option_never_widens_where_a_value_goes.wado/T>>" { repr: out, used: 2 };
+    return out, 2;
 }
 
 fn "core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, $mv$v$s2, $mv$v$r2, $mv$v$s3, $mv$v$r3, index) {

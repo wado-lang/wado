@@ -123,10 +123,14 @@ fn "opt_value_copy_ref_broken_out_of_block.wado/build$dae[n]"() {
     let used_16: i32;
     let v_30: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let $sroa_op_value_38: ref "opt_value_copy_ref_broken_out_of_block.wado//Op";
+    let $licm_repr_39: ref "Array<opt_value_copy_ref_broken_out_of_block.wado/Held>";
+    let $licm_repr_40: ref "Array<opt_value_copy_ref_broken_out_of_block.wado/Op>";
     ops = struct.new "core:prelude/list.wado//List<opt_value_copy_ref_broken_out_of_block.wado/Op>" { repr: array.new_fixed<ref "opt_value_copy_ref_broken_out_of_block.wado//Op">(), used: 0 };
     held = struct.new "core:prelude/list.wado//List<opt_value_copy_ref_broken_out_of_block.wado/Held>" { repr: array.new_fixed<ref "opt_value_copy_ref_broken_out_of_block.wado//Held">(), used: 0 };
     tagged = 0;
     i_3 = 0;
+    $licm_repr_39 = held.repr;
+    $licm_repr_40 = ops.repr;
     b0: block {
         l1: loop {
             break_if b0 i_3 >= 4;
@@ -144,11 +148,12 @@ fn "opt_value_copy_ref_broken_out_of_block.wado/build$dae[n]"() {
                         break pick: rep;
                     }
                 });
-                if @unlikely(local.tee used_16(held.used) >= builtin::array_len(held.repr)) {
+                if @unlikely(local.tee used_16(held.used) >= builtin::array_len($licm_repr_39)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_ref_broken_out_of_block.wado/Held>::grow"(held);
+                    $licm_repr_39 = held.repr;
                 }
-                builtin::array_set<ref "opt_value_copy_ref_broken_out_of_block.wado//Held">(held.repr, used_16, struct.new "opt_value_copy_ref_broken_out_of_block.wado//Held" {});
+                builtin::array_set<ref "opt_value_copy_ref_broken_out_of_block.wado//Held">($licm_repr_39, used_16, struct.new "opt_value_copy_ref_broken_out_of_block.wado//Held" {});
                 held.used = used_16 + 1;
                 tagged = tagged + rep.tags.used;
             } else {
@@ -172,11 +177,12 @@ fn "opt_value_copy_ref_broken_out_of_block.wado/build$dae[n]"() {
                     };
                 }; $array_clone_dst_2, used: used_16 } } };
             });
-            if @unlikely(local.tee used_16(ops.used) >= builtin::array_len(ops.repr)) {
+            if @unlikely(local.tee used_16(ops.used) >= builtin::array_len($licm_repr_40)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_ref_broken_out_of_block.wado/Op>::grow"(ops);
+                $licm_repr_40 = ops.repr;
             }
-            builtin::array_set<ref "opt_value_copy_ref_broken_out_of_block.wado//Op">(ops.repr, used_16, $sroa_op_value_38);
+            builtin::array_set<ref "opt_value_copy_ref_broken_out_of_block.wado//Op">($licm_repr_40, used_16, $sroa_op_value_38);
             ops.used = used_16 + 1;
             i_3 = i_3 + 1;
             continue l1;

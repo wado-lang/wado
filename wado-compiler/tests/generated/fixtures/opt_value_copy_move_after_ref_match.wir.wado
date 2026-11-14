@@ -109,9 +109,11 @@ fn "opt_value_copy_move_after_ref_match.wado/build$dae[n]"() {
     let rep: ref "opt_value_copy_move_after_ref_match.wado//Rep";
     let used_13: i32;
     let $sroa_op_value_20: ref "opt_value_copy_move_after_ref_match.wado//Op";
+    let $licm_repr_21: ref "Array<opt_value_copy_move_after_ref_match.wado/Op>";
     ops = struct.new "core:prelude/list.wado//List<opt_value_copy_move_after_ref_match.wado/Op>" { repr: array.new_fixed<ref "opt_value_copy_move_after_ref_match.wado//Op">(), used: 0 };
     tagged = 0;
     i_2 = 0;
+    $licm_repr_21 = ops.repr;
     b0: block {
         l1: loop {
             break_if b0 i_2 >= 4;
@@ -125,11 +127,12 @@ fn "opt_value_copy_move_after_ref_match.wado/build$dae[n]"() {
                 tagged = tagged + rep.tags.used;
             } else {
             }
-            if @unlikely(local.tee used_13(ops.used) >= builtin::array_len(ops.repr)) {
+            if @unlikely(local.tee used_13(ops.used) >= builtin::array_len($licm_repr_21)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_move_after_ref_match.wado/Op>::grow"(ops);
+                $licm_repr_21 = ops.repr;
             }
-            builtin::array_set<ref "opt_value_copy_move_after_ref_match.wado//Op">(ops.repr, used_13, $sroa_op_value_20);
+            builtin::array_set<ref "opt_value_copy_move_after_ref_match.wado//Op">($licm_repr_21, used_13, $sroa_op_value_20);
             ops.used = used_13 + 1;
             i_2 = i_2 + 1;
             continue l1;

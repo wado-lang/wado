@@ -530,7 +530,6 @@ fn "opt_variant_payload_of_constant_construct.wado/run"() with Stdout {
     let $sroa_input_repr_42: ref Array<u8>;
     let is_negative_117: bool;
     let start_240: i32;
-    let $sroa_view_repr_572: ref Array<u8>;
     let $sroa_t_h1_641: ref null "core:prelude/string.wado//String";
     $sroa_input_repr_42 = array.new_data<u8>("{\"id\":7}");
     $mv$$vr_6$0 = local.tee v_11($thread_$inline_core_json_from_bytes_opt_variant_payload_of_constant_construct_wado_Record_core_prelude_bytes_wado_ByteSlice__3: block -> ref "opt_variant_payload_of_constant_construct.wado//Record" {
@@ -588,14 +587,13 @@ fn "opt_variant_payload_of_constant_construct.wado/run"() with Stdout {
     start_240 = $mv_message_2.used;
     $mv_message_2.used = is_negative_117;
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $sroa_input_repr_42($mv_message_2.repr), start_240, $mv_offset_3, $mv$$vr_6$0);
-    $sroa_view_repr_572 = global:opt_variant_payload_of_constant_construct.wado::$const_obj_1;
     if @unlikely(local.tee $mv$$vr_6$0(is_negative_117 + 1) > builtin::array_len($sroa_input_repr_42)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_message_2, $mv$$vr_6$0);
     }
     is_negative_117 = $mv_message_2.used;
     $mv_message_2.used = $mv$$vr_6$0;
-    builtin::array_copy<u8>($mv_message_2.repr, is_negative_117, $sroa_view_repr_572, 0, 1);
+    builtin::array_copy<u8>($mv_message_2.repr, is_negative_117, global:opt_variant_payload_of_constant_construct.wado::$const_obj_1, 0, 1);
     "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]"(struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: $sroa_t_h1_641 }, $mv_message_2);
     $inline_core_prelude_string_wado_String__format_opt_variant_payload_of_constant_construct_wado__tmpl_2515b412a61a65aa__i32_core_prelude_types_wado_Option_core_prelude_string_wado_String____spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_60: block {
         break $inline_core_prelude_string_wado_String__format_opt_variant_payload_of_constant_construct_wado__tmpl_2515b412a61a65aa__i32_core_prelude_types_wado_Option_core_prelude_string_wado_String____spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_60;
@@ -681,17 +679,19 @@ fn "core:json/integral_digits$sroa[return]"($mv$n$neg, $mv$n$int_digits, $mv$n$e
         }
         $mv$n$neg = builtin::i32_wrap_i64($mv$n$exp);
         $mv$n$int_digits = 0;
+        $mv$input$repr = digits.repr;
         b17: block {
             l18: loop {
                 break_if b17 $mv$n$int_digits >= $mv$n$neg;
                 $mv$n$int_digits = $mv$n$int_digits + 1;
-                if @unlikely(local.tee $mv$n$mantissa_start(digits.used + 1) > builtin::array_len(digits.repr)) {
+                if @unlikely(local.tee $mv$n$mantissa_start(digits.used + 1) > builtin::array_len($mv$input$repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(digits, $mv$n$mantissa_start);
+                    $mv$input$repr = digits.repr;
                 }
                 $mv$n$mantissa_end = digits.used;
                 digits.used = $mv$n$mantissa_start;
-                builtin::array_set_u8(digits.repr, $mv$n$mantissa_end, 48);
+                builtin::array_set_u8($mv$input$repr, $mv$n$mantissa_end, 48);
                 continue l18;
             };
         };

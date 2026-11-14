@@ -219,22 +219,24 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "array_bounds_elim_oob_loop_dynamic.wado/run"() {
-    let $load_5: ref Array<i32>;
     let arr: ref "core:prelude/list.wado//List<i32>";
     let i: i32;
     let value_31: i32;
     let used_32: i32;
+    let $licm_repr_65: ref Array<i32>;
     arr = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     i = 0;
+    $licm_repr_65 = arr.repr;
     b0: block {
         l1: loop {
             break_if b0 i >= 3;
             value_31 = i * 10;
-            if @unlikely(local.tee used_32(arr.used) >= builtin::array_len(arr.repr)) {
+            if @unlikely(local.tee used_32(arr.used) >= builtin::array_len($licm_repr_65)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(arr);
+                $licm_repr_65 = arr.repr;
             }
-            builtin::array_set<i32>(arr.repr, used_32, value_31);
+            builtin::array_set<i32>($licm_repr_65, used_32, value_31);
             arr.used = used_32 + 1;
             i = i + 1;
             continue l1;
@@ -246,7 +248,7 @@ fn "array_bounds_elim_oob_loop_dynamic.wado/run"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, i, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_oob_loop_dynamic.wado:11"), used: 42 });
         unreachable;
     }
-    if @unlikely((local.tee value_31(builtin::array_get_value<i32>(local.tee $load_5(arr.repr), 0)) == 0) == 0) {
+    if @unlikely((local.tee value_31(builtin::array_get_value<i32>(local.tee $licm_repr_65(arr.repr), 0)) == 0) == 0) {
         cold_path;
         "array_bounds_elim_oob_loop_dynamic.wado/run$cold2"(value_31);
         unreachable;
@@ -256,7 +258,7 @@ fn "array_bounds_elim_oob_loop_dynamic.wado/run"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, i, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_oob_loop_dynamic.wado:12"), used: 42 });
         unreachable;
     }
-    if @unlikely(local.tee value_31(builtin::array_get_value<i32>($load_5, 1)) != 10) {
+    if @unlikely(local.tee value_31(builtin::array_get_value<i32>($licm_repr_65, 1)) != 10) {
         cold_path;
         "array_bounds_elim_oob_loop_dynamic.wado/run$cold1"(value_31);
         unreachable;
@@ -266,7 +268,7 @@ fn "array_bounds_elim_oob_loop_dynamic.wado/run"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(2, i, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_oob_loop_dynamic.wado:13"), used: 42 });
         unreachable;
     }
-    if @unlikely(local.tee value_31(builtin::array_get_value<i32>($load_5, 2)) != 20) {
+    if @unlikely(local.tee value_31(builtin::array_get_value<i32>($licm_repr_65, 2)) != 20) {
         cold_path;
         "array_bounds_elim_oob_loop_dynamic.wado/run$cold0"(value_31);
         unreachable;
@@ -276,7 +278,7 @@ fn "array_bounds_elim_oob_loop_dynamic.wado/run"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(3, i, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_oob_loop_dynamic.wado:15"), used: 42 });
         unreachable;
     }
-    drop(builtin::array_get_value<i32>($load_5, 3));
+    drop(builtin::array_get_value<i32>($licm_repr_65, 3));
 }
 
 fn "array_bounds_elim_oob_loop_dynamic.wado/$template_segment$array_bounds_elim_oob_loop_dynamic.wado/$tmpl$ebaa20f4a908b504"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {

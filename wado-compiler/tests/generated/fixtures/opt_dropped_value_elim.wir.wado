@@ -75,16 +75,19 @@ fn "opt_dropped_value_elim.wado/drain"(n) {
     let xs: ref "core:prelude/list.wado//List<i32>";
     let i: i32;
     let used_7: i32;
+    let $licm_repr_19: ref Array<i32>;
     xs = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     i = 0;
+    $licm_repr_19 = xs.repr;
     b0: block {
         l1: loop {
             break_if b0 i >= n;
-            if @unlikely(local.tee used_7(xs.used) >= builtin::array_len(xs.repr)) {
+            if @unlikely(local.tee used_7(xs.used) >= builtin::array_len($licm_repr_19)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs);
+                $licm_repr_19 = xs.repr;
             }
-            builtin::array_set<i32>(xs.repr, used_7, i);
+            builtin::array_set<i32>($licm_repr_19, used_7, i);
             xs.used = used_7 + 1;
             i = i + 1;
             continue l1;

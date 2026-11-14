@@ -77,19 +77,17 @@ type "functype//effect_handler_early_return.wado/effect_handler_early_return.wad
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(30)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_early_return.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0" = fn(i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(31)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(32)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(33)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(33)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(34)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
+type "functype//effect_handler_early_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(35)
 
-type "functype//effect_handler_early_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(36)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(37)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(36)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -106,63 +104,82 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter: ref null "effect_handler_early_return.wado//$Dispatch_effect_handler_early_return.wado/Counter" = ref.null none;
-global global:effect_handler_early_return.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 97, 110, 100, 108, 101, 114, 32, 105, 110, 115, 116, 97, 108, 108, 101, 100, 32, 102, 111, 114, 32, 96, 67, 111, 117, 110, 116, 101, 114, 58, 58, 110, 101, 120, 116, 96), used: 40 };
-global global:core:prelude/string.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(44, 32, 97, 102, 116, 101, 114, 61);
-global global:core:prelude/string.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(104, 101, 108, 112, 101, 114, 61);
+global global:effect_handler_early_return.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(44, 32, 97, 102, 116, 101, 114, 61);
+global global:effect_handler_early_return.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(104, 101, 108, 112, 101, 114, 61);
+global global:effect_handler_early_return.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 97, 110, 100, 108, 101, 114, 32, 105, 110, 115, 116, 97, 108, 108, 101, 100, 32, 102, 111, 114, 32, 96, 67, 111, 117, 110, 116, 101, 114, 58, 58, 110, 101, 120, 116, 96), used: 40 };
 
 fn "effect_handler_early_return.wado/run"() with Stdout {
+    let $load_14: ref Array<u8>;
     let outer: ref "effect_handler_early_return.wado//Outer";
     let $save_effect_handler_early_return.wado/Counter: ref null "effect_handler_early_return.wado//$Dispatch_effect_handler_early_return.wado/Counter";
     let $local_2_8: i32;
-    let $cm_pair_7: i64;
+    let is_negative_94: bool;
+    let x_98: i64;
     let inner: ref "effect_handler_early_return.wado//Inner";
-    let $local_2_26: ref null "effect_handler_early_return.wado//$Dispatch_effect_handler_early_return.wado/Counter";
-    let $local_0_29: ref null "effect_handler_early_return.wado//$Dispatch_effect_handler_early_return.wado/Counter";
-    let $local_1_30: ref "effect_handler_early_return.wado//$Dispatch_effect_handler_early_return.wado/Counter";
-    let $local_2_31: i32;
+    let $local_2_257: ref null "effect_handler_early_return.wado//$Dispatch_effect_handler_early_return.wado/Counter";
+    let $local_0_260: ref null "effect_handler_early_return.wado//$Dispatch_effect_handler_early_return.wado/Counter";
+    let $local_1_261: ref "effect_handler_early_return.wado//$Dispatch_effect_handler_early_return.wado/Counter";
+    let $local_2_262: i32;
     outer = struct.new "effect_handler_early_return.wado//Outer" {};
     global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = struct.new "effect_handler_early_return.wado//$Dispatch_effect_handler_early_return.wado/Counter" { outer: local.tee $save_effect_handler_early_return.wado/Counter(global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_early_return.wado//$Closure_1" { $capture_0: outer }, func: ref.func "closure/effect_handler_early_return.wado/$closure_wrapper_1" } };
     inner = struct.new "effect_handler_early_return.wado//Inner" {};
-    global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = struct.new "effect_handler_early_return.wado//$Dispatch_effect_handler_early_return.wado/Counter" { outer: local.tee $local_2_26(global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_early_return.wado//$Closure_0" { $capture_0: inner }, func: ref.func "closure/effect_handler_early_return.wado/$closure_wrapper_0" } };
-    $local_2_31 = $inline_helper_0__$inline__effect_dispatch__effect_handler_early_return_wado_Counter__next_0: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0_29(global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter)) == 0) {
-            global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = local.tee $local_1_30(ref.as_non_null($local_0_29)).outer;
-            $local_2_31 = block -> i32 {
+    global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = struct.new "effect_handler_early_return.wado//$Dispatch_effect_handler_early_return.wado/Counter" { outer: local.tee $local_2_257(global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_early_return.wado//$Closure_0" { $capture_0: inner }, func: ref.func "closure/effect_handler_early_return.wado/$closure_wrapper_0" } };
+    $local_2_262 = $inline_helper_0__$inline__effect_dispatch__effect_handler_early_return_wado_Counter__next_0: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0_260(global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter)) == 0) {
+            global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = local.tee $local_1_261(ref.as_non_null($local_0_260)).outer;
+            $local_2_262 = block -> i32 {
                 let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_30.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_261.op_next)).env);
             };
-            global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = $local_0_29;
-            break $inline_helper_0__$inline__effect_dispatch__effect_handler_early_return_wado_Counter__next_0: $local_2_31;
+            global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = $local_0_260;
+            break $inline_helper_0__$inline__effect_dispatch__effect_handler_early_return_wado_Counter__next_0: $local_2_262;
         } else {
             let $mv_arg_1: ref "core:prelude/string.wado//String";
-            "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_early_return.wado::$const_obj_0).repr, $mv_arg_1.used);
+            "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_early_return.wado::$const_obj_2).repr, $mv_arg_1.used);
             unreachable;
         }
         unreachable;
     };
-    global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = $local_2_26;
+    global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = $local_2_257;
     $local_2_8 = $inline__effect_dispatch__effect_handler_early_return_wado_Counter__next_1: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_2_26(global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter)) == 0) {
-            global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = local.tee $local_1_30(ref.as_non_null($local_2_26)).outer;
+        if @likely(ref.is_null(local.tee $local_2_257(global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter)) == 0) {
+            global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = local.tee $local_1_261(ref.as_non_null($local_2_257)).outer;
             $local_2_8 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_30.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_261.op_next)).env);
             };
-            global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = $local_2_26;
+            global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = $local_2_257;
             break $inline__effect_dispatch__effect_handler_early_return_wado_Counter__next_1: $local_2_8;
         } else {
-            "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_early_return.wado::$const_obj_0).repr, $mv_arg_1.used);
+            "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_early_return.wado::$const_obj_2).repr, $mv_arg_1.used);
             unreachable;
         }
         unreachable;
     };
-    $mv_arg_1 = block -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_early_return.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($local_2_31, $local_2_8);
+    local.tee $mv_arg_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(47), used: 0 }).used = 7;
+    builtin::array_copy<u8>($mv_arg_1.repr, 0, global:effect_handler_early_return.wado::$const_obj_1, 0, 7);
+    is_negative_94 = $local_2_262 < 0;
+    $local_2_262 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_98(x_98 = builtin::i64_extend_i32_s($local_2_262); select i64(x_98 < 0_i64, 0_i64 - x_98, x_98)));
+    is_negative_94 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($mv_arg_1, is_negative_94, $local_2_262);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_14($mv_arg_1.repr), is_negative_94, x_98, $local_2_262);
+    if @unlikely(local.tee $local_2_262($mv_arg_1.used + 8) > builtin::array_len($load_14)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_1, $local_2_262);
+    }
+    is_negative_94 = $mv_arg_1.used;
+    $mv_arg_1.used = $local_2_262;
+    builtin::array_copy<u8>($mv_arg_1.repr, is_negative_94, global:effect_handler_early_return.wado::$const_obj_0, 0, 8);
+    $local_2_262 = $local_2_8 < 0;
+    $local_2_8 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_98(x_98 = builtin::i64_extend_i32_s($local_2_8); select i64(x_98 < 0_i64, 0_i64 - x_98, x_98)));
+    $local_2_262 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($mv_arg_1, $local_2_262, $local_2_8);
+    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_1.repr, $local_2_262, x_98, $local_2_8);
+    $inline_core_prelude_string_wado_String__format_effect_handler_early_return_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70: block {
+        break $inline_core_prelude_string_wado_String__format_effect_handler_early_return_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70;
     };
-    $local_2_31 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $local_2_8 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $local_2_31 = "effect_handler_early_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($local_2_31);
+    $local_2_262 = builtin::i32_wrap_i64(local.tee x_98("wasi/stream-new"()));
+    $local_2_8 = builtin::i32_wrap_i64(x_98 >> 32_i64);
+    $local_2_262 = "effect_handler_early_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($local_2_262);
     "core:rt/write_string_to_stream$dae[add_newline]"($local_2_8, $mv_arg_1.repr, $mv_arg_1.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($local_2_31);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($local_2_262);
     global:effect_handler_early_return.wado::$effect_effect_handler_early_return.wado/Counter = $save_effect_handler_early_return.wado/Counter;
 }
 
@@ -425,38 +442,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     digit_count = self.used;
     self.used = is_negative;
     return digit_count;
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_early_return.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($mv$t$h0, $mv$t$h1) {
-    let out_3: ref "core:prelude/string.wado//String";
-    let is_negative_70: bool;
-    let x_74: i64;
-    let $sroa_view_repr_194: ref Array<u8>;
-    let $sroa_view_repr_204: ref Array<u8>;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(47), used: 0 };
-    $sroa_view_repr_194 = global:core:prelude/string.wado::$const_obj_3;
-    out_3.used = 7;
-    builtin::array_copy<u8>(out_3.repr, 0, $sroa_view_repr_194, 0, 7);
-    is_negative_70 = $mv$t$h0 < 0;
-    $mv$t$h0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h0); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
-    is_negative_70 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_70, $mv$t$h0);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $sroa_view_repr_194(out_3.repr), is_negative_70, x_74, $mv$t$h0);
-    $sroa_view_repr_204 = global:core:prelude/string.wado::$const_obj_2;
-    if @unlikely(local.tee $mv$t$h0(out_3.used + 8) > builtin::array_len($sroa_view_repr_194)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
-    }
-    is_negative_70 = out_3.used;
-    out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(out_3.repr, is_negative_70, $sroa_view_repr_204, 0, 8);
-    $mv$t$h0 = $mv$t$h1 < 0;
-    $mv$t$h1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h1); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
-    $mv$t$h0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, $mv$t$h0, $mv$t$h1);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, $mv$t$h0, x_74, $mv$t$h1);
-    $inline_core_prelude_string_wado_String__internal_push_view_70: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_70;
-    };
-    return out_3;
 }
 
 fn "closure/effect_handler_early_return.wado/$closure_wrapper_0"($env) {

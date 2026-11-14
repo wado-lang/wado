@@ -3296,9 +3296,11 @@ fn "generic_assoc_type_axis_packs.wado/generic_assoc_type_axis_packs.wado/Cpu^ge
     let $sroa_$iter_0_start_120: i32;
     let $sroa_$iter_1_start_124: i32;
     let $sroa_$iter_2_start_128: i32;
+    let $licm_repr_138: ref Array<f32>;
     self.calls = self.calls + 1;
     data = struct.new "core:prelude/list.wado//List<f32>" { repr: array.new_fixed<f32>(), used: 0 };
     $sroa_$iter_0_start_120 = 0;
+    $licm_repr_138 = data.repr;
     b392: block {
         l393: loop {
             break_if b392 $sroa_$iter_0_start_120 >= 1;
@@ -3327,11 +3329,12 @@ fn "generic_assoc_type_axis_packs.wado/generic_assoc_type_axis_packs.wado/Cpu^ge
                             continue l397;
                         };
                     };
-                    if @unlikely(local.tee current_73(data.used) >= builtin::array_len(data.repr)) {
+                    if @unlikely(local.tee current_73(data.used) >= builtin::array_len($licm_repr_138)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<f32>::grow"(data);
+                        $licm_repr_138 = data.repr;
                     }
-                    builtin::array_set<f32>(data.repr, current_73, sum);
+                    builtin::array_set<f32>($licm_repr_138, current_73, sum);
                     data.used = current_73 + 1;
                     continue l395;
                 };

@@ -242,7 +242,6 @@ fn "licm_reload_after_field_writer_only.wado/run"() with Stdout {
     let out_21: ref "core:prelude/string.wado//String";
     let is_negative_88: bool;
     let x_92: i64;
-    let $sroa_view_repr_205: ref Array<u8>;
     let $sroa_t_h0_243: i32;
     let $sroa_t_h1_244: i32;
     $sroa_t_h0_243 = "licm_reload_after_field_writer_only.wado/scan"(local.tee a(struct.new "licm_reload_after_field_writer_only.wado//Acc" { items: ref.as_non_null(black_box(global:licm_reload_after_field_writer_only.wado::$const_obj_2)), misses: 0 }), black_box(8));
@@ -255,14 +254,13 @@ fn "licm_reload_after_field_writer_only.wado/run"() with Stdout {
     $sroa_t_h0_243 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s($sroa_t_h0_243); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
     is_negative_88 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_21, is_negative_88, $sroa_t_h0_243);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_1(out_21.repr), is_negative_88, x_92, $sroa_t_h0_243);
-    $sroa_view_repr_205 = global:licm_reload_after_field_writer_only.wado::$const_obj_1;
     if @unlikely(local.tee $sroa_t_h0_243(out_21.used + 1) > builtin::array_len($load_1)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_21, $sroa_t_h0_243);
     }
     is_negative_88 = out_21.used;
     out_21.used = $sroa_t_h0_243;
-    builtin::array_copy<u8>(out_21.repr, is_negative_88, $sroa_view_repr_205, 0, 1);
+    builtin::array_copy<u8>(out_21.repr, is_negative_88, global:licm_reload_after_field_writer_only.wado::$const_obj_1, 0, 1);
     $sroa_t_h0_243 = $sroa_t_h1_244 < 0;
     $sroa_t_h1_244 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s($sroa_t_h1_244); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
     $sroa_t_h0_243 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_21, $sroa_t_h0_243, $sroa_t_h1_244);

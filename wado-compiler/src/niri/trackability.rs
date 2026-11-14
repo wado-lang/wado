@@ -13,8 +13,8 @@ use crate::nir_arena::{
 };
 
 use super::place::{
-    is_array_place, lvalue_root_local, peel_wrappers, place_of, referenced_place_operand,
-    write_root_local,
+    is_array_place, lvalue_root_local, peel_wrappers, place_of, projected_borrows,
+    referenced_place_operand, write_root_local,
 };
 use crate::nir_visitor::reachable_exprs;
 use crate::type_table::TypeTable;
@@ -303,10 +303,15 @@ pub(super) fn aggregate_safe_locals(
     let mut value_reads: IndexSet<ExprId> = IndexSet::default();
     let mut local_mentions: Vec<(ExprId, u32)> = Vec::new();
     let mut disqualified = LocalSet::default();
+    let projected = projected_borrows(body);
     for e in reachable_exprs(body) {
         let node = &body.exprs[e];
         match &node.kind {
             ExprKind::Local { index, .. } => local_mentions.push((e, *index)),
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr,
+            } if projected.contains(&e) => read_value(*expr, &mut value_reads),
             ExprKind::FieldAccess { expr, .. }
             | ExprKind::Match { expr, .. }
             | ExprKind::Switch {
@@ -410,6 +415,7 @@ pub(super) fn clobbered_locals(
             set.insert(index);
         }
     }
+    let projected = projected_borrows(body);
     let mut set = LocalSet::default();
     for e in reachable_exprs(body) {
         let node = &body.exprs[e];
@@ -419,6 +425,10 @@ pub(super) fn clobbered_locals(
                     disqualify(body, (*target).into(), &mut set);
                 }
             }
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                ..
+            } if projected.contains(&e) => {}
             // Only a `&mut`. A `&` cannot be written through, so
             // it cannot make the referent stale — which is the same reading
             // [`aggregate_safe_locals`] gives the node, where `&x` counts as a

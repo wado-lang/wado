@@ -1575,7 +1575,7 @@ fn "sub/wir_xmodule_return_parser.wado/line_col"($mv$chars$repr, $mv$chars$used,
 
 fn "sub/wir_xmodule_return_parser.wado/tree_build_node"($mv$events$repr, $mv$events$used, pos) {
     let $load_0: i32;
-    let $load_4: i32;
+    let $load_5: i32;
     let info: ref "tuple//[i32, i32]";
     let kind: i32;
     let start_4: i32;
@@ -1584,6 +1584,7 @@ fn "sub/wir_xmodule_return_parser.wado/tree_build_node"($mv$events$repr, $mv$eve
     let child: ref "sub/wir_xmodule_return_parser.wado//CstNode";
     let $match_24: ref "sub/wir_xmodule_return_parser.wado//BuildEvent";
     let value_43: ref "sub/wir_xmodule_return_parser.wado//CstChild";
+    let $licm_repr_74: ref "Array<sub/wir_xmodule_return_parser.wado/CstChild>";
     if @unlikely(local.tee $load_0(pos.value) >=u $mv$events$used) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($load_0, $mv$events$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:819"), used: 38 });
@@ -1597,72 +1598,77 @@ fn "sub/wir_xmodule_return_parser.wado/tree_build_node"($mv$events$repr, $mv$eve
         $load_0 = kind == -1;
         kind = -1;
         end_8 = start_4;
+        $licm_repr_74 = children.repr;
         b164: block {
             l165: loop {
-                break_if b164 local.tee $load_4(pos.value) >= $mv$events$used;
-                if @unlikely($load_4 >=u $mv$events$used) {
+                break_if b164 local.tee $load_5(pos.value) >= $mv$events$used;
+                if @unlikely($load_5 >=u $mv$events$used) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($load_4, $mv$events$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:831"), used: 38 });
+                    "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/BuildEvent>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($load_5, $mv$events$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:831"), used: 38 });
                     unreachable;
                 }
-                if ref.test "sub/wir_xmodule_return_parser.wado//BuildEvent::Close"(local.tee $match_24(builtin::array_get_value<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">($mv$events$repr, $load_4))) {
+                if ref.test "sub/wir_xmodule_return_parser.wado//BuildEvent::Close"(local.tee $match_24(builtin::array_get_value<ref "sub/wir_xmodule_return_parser.wado//BuildEvent">($mv$events$repr, $load_5))) {
                     end_8 = ref.cast "sub/wir_xmodule_return_parser.wado//BuildEvent::Close"($match_24).payload_0;
-                    break b164: pos.value = $load_4 + 1;
+                    break b164: pos.value = $load_5 + 1;
                 } else {
                 }
                 if ref.test "sub/wir_xmodule_return_parser.wado//BuildEvent::Open"($match_24) {
                     if (local.tee child("sub/wir_xmodule_return_parser.wado/tree_build_node"($mv$events$repr, $mv$events$used, pos)).flags & 1) != 0 {
                         $load_0 = $load_0 | 1;
                     }
-                    if local.tee $load_4(child.span.end) > end_8 {
-                        end_8 = $load_4;
+                    if local.tee $load_5(child.span.end) > end_8 {
+                        end_8 = $load_5;
                     }
                     value_43 = struct.new "sub/wir_xmodule_return_parser.wado//CstChild::Node" { discriminant: 3, payload_0: child };
-                    if @unlikely(local.tee $load_4(children.used) >= builtin::array_len(children.repr)) {
+                    if @unlikely(local.tee $load_5(children.used) >= builtin::array_len($licm_repr_74)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/CstChild>::grow"(children);
+                        $licm_repr_74 = children.repr;
                     }
-                    builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//CstChild">(children.repr, $load_4, value_43);
-                    children.used = $load_4 + 1;
+                    builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//CstChild">($licm_repr_74, $load_5, value_43);
+                    children.used = $load_5 + 1;
                 } else {
                     if ref.test "sub/wir_xmodule_return_parser.wado//BuildEvent::Tok"($match_24) {
-                        $load_4 = ref.cast "sub/wir_xmodule_return_parser.wado//BuildEvent::Tok"($match_24).payload_0;
-                        value_43 = struct.new "sub/wir_xmodule_return_parser.wado//CstChild::Token" { discriminant: 0, payload_0: $load_4 };
-                        if @unlikely(local.tee $load_4(children.used) >= builtin::array_len(children.repr)) {
+                        $load_5 = ref.cast "sub/wir_xmodule_return_parser.wado//BuildEvent::Tok"($match_24).payload_0;
+                        value_43 = struct.new "sub/wir_xmodule_return_parser.wado//CstChild::Token" { discriminant: 0, payload_0: $load_5 };
+                        if @unlikely(local.tee $load_5(children.used) >= builtin::array_len($licm_repr_74)) {
                             cold_path;
                             "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/CstChild>::grow"(children);
+                            $licm_repr_74 = children.repr;
                         }
-                        builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//CstChild">(children.repr, $load_4, value_43);
-                        children.used = $load_4 + 1;
+                        builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//CstChild">($licm_repr_74, $load_5, value_43);
+                        children.used = $load_5 + 1;
                         pos.value = pos.value + 1;
                     } else {
                         if ref.test "sub/wir_xmodule_return_parser.wado//BuildEvent::Miss"($match_24) {
-                            $load_4 = ref.cast "sub/wir_xmodule_return_parser.wado//BuildEvent::Miss"($match_24).payload_0;
-                            value_43 = struct.new "sub/wir_xmodule_return_parser.wado//CstChild::Missing" { discriminant: 1, payload_0: $load_4 };
-                            if @unlikely(local.tee $load_4(children.used) >= builtin::array_len(children.repr)) {
+                            $load_5 = ref.cast "sub/wir_xmodule_return_parser.wado//BuildEvent::Miss"($match_24).payload_0;
+                            value_43 = struct.new "sub/wir_xmodule_return_parser.wado//CstChild::Missing" { discriminant: 1, payload_0: $load_5 };
+                            if @unlikely(local.tee $load_5(children.used) >= builtin::array_len($licm_repr_74)) {
                                 cold_path;
                                 "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/CstChild>::grow"(children);
+                                $licm_repr_74 = children.repr;
                             }
-                            builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//CstChild">(children.repr, $load_4, value_43);
-                            children.used = $load_4 + 1;
+                            builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//CstChild">($licm_repr_74, $load_5, value_43);
+                            children.used = $load_5 + 1;
                             $load_0 = ($load_0 | 2) | 1;
                             pos.value = pos.value + 1;
                         } else {
                             if ref.test "sub/wir_xmodule_return_parser.wado//BuildEvent::Skip"($match_24) {
-                                $load_4 = ref.cast "sub/wir_xmodule_return_parser.wado//BuildEvent::Skip"($match_24).payload_0;
-                                value_43 = struct.new "sub/wir_xmodule_return_parser.wado//CstChild::Skipped" { discriminant: 2, payload_0: $load_4 };
-                                if @unlikely(local.tee $load_4(children.used) >= builtin::array_len(children.repr)) {
+                                $load_5 = ref.cast "sub/wir_xmodule_return_parser.wado//BuildEvent::Skip"($match_24).payload_0;
+                                value_43 = struct.new "sub/wir_xmodule_return_parser.wado//CstChild::Skipped" { discriminant: 2, payload_0: $load_5 };
+                                if @unlikely(local.tee $load_5(children.used) >= builtin::array_len($licm_repr_74)) {
                                     cold_path;
                                     "core:prelude/list.wado/core:prelude/list.wado/List<sub/wir_xmodule_return_parser.wado/CstChild>::grow"(children);
+                                    $licm_repr_74 = children.repr;
                                 }
-                                builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//CstChild">(children.repr, $load_4, value_43);
-                                children.used = $load_4 + 1;
+                                builtin::array_set<ref "sub/wir_xmodule_return_parser.wado//CstChild">($licm_repr_74, $load_5, value_43);
+                                children.used = $load_5 + 1;
                                 $load_0 = $load_0 | 1;
                                 pos.value = pos.value + 1;
                             } else {
                                 if ref.test "sub/wir_xmodule_return_parser.wado//BuildEvent::SetAlt"($match_24) {
                                     kind = ref.cast "sub/wir_xmodule_return_parser.wado//BuildEvent::SetAlt"($match_24).payload_0;
-                                    pos.value = $load_4 + 1;
+                                    pos.value = $load_5 + 1;
                                 } else {
                                 }
                             }
@@ -1768,7 +1774,7 @@ fn "sub/wir_xmodule_return_parser.wado/try_WS"($mv$chars$repr, $mv$chars$used, s
 }
 
 fn "sub/wir_xmodule_return_parser.wado/tokenize"($mv$input$repr, $mv$input$used) {
-    let $load_14: ref "core:prelude/list.wado//List<i32>";
+    let $load_5: ref "core:prelude/list.wado//List<i32>";
     let ts: ref "sub/wir_xmodule_return_parser.wado//TokenStream";
     let best_end: i32;
     let best_kind: i32;
@@ -1776,19 +1782,23 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize"($mv$input$repr, $mv$input$used)
     let $temp_inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_char___1_0: ref "core:prelude/string.wado//StrCharIter";
     let result: ref "core:prelude/list.wado//List<char>";
     let cap: i32;
-    let $licm_repr_121: ref Array<char>;
+    let $licm_repr_119: ref Array<char>;
+    let $licm_triv_starts_122: ref "core:prelude/list.wado//List<i32>";
+    let $licm_triv_ends_123: ref "core:prelude/list.wado//List<i32>";
+    let $licm_triv_chans_124: ref "core:prelude/list.wado//List<i32>";
     $temp_inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_char___1_0 = struct.new "core:prelude/string.wado//StrCharIter" { repr: $mv$input$repr, used: $mv$input$used, byte_index: 0 };
-    result = struct.new "core:prelude/list.wado//List<char>" { repr: array.new_fixed<char>(), used: 0 };
+    $licm_repr_119 = local.tee result(struct.new "core:prelude/list.wado//List<char>" { repr: array.new_fixed<char>(), used: 0 }).repr;
     b197: block {
         l198: loop {
             let $mv$$local_3$1: char;
             multivalue_bind [$mv$input$used, $mv$$local_3$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"($temp_inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_char___1_0);
             if $mv$input$used == 1 {
-                if @unlikely(local.tee $mv$input$used(result.used) >= builtin::array_len(result.repr)) {
+                if @unlikely(local.tee $mv$input$used(result.used) >= builtin::array_len($licm_repr_119)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<char>::grow"(result);
+                    $licm_repr_119 = result.repr;
                 }
-                builtin::array_set<char>(result.repr, $mv$input$used, $mv$$local_3$1);
+                builtin::array_set<char>($licm_repr_119, $mv$input$used, $mv$$local_3$1);
                 result.used = $mv$input$used + 1;
             } else {
                 break b197;
@@ -1797,8 +1807,11 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize"($mv$input$repr, $mv$input$used)
         };
     };
     $mv$input$used = 0;
-    cap = local.tee ts(struct.new "sub/wir_xmodule_return_parser.wado//TokenStream" { kinds: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(local.tee cap((local.tee $mv$$local_3$1(result.used) / 4) + 1)), used: 0 }, starts: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, ends: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, triv_lo: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, triv_hi: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, chars: result, triv_kinds: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, triv_starts: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, triv_ends: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, triv_chans: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, flags: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 } }).triv_kinds.used;
-    $licm_repr_121 = result.repr;
+    cap = local.tee $load_5(local.tee ts(struct.new "sub/wir_xmodule_return_parser.wado//TokenStream" { kinds: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(local.tee cap((local.tee $mv$$local_3$1(result.used) / 4) + 1)), used: 0 }, starts: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, ends: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, triv_lo: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, triv_hi: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, chars: result, triv_kinds: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, triv_starts: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, triv_ends: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, triv_chans: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 }, flags: struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(cap), used: 0 } }).triv_kinds).used;
+    $licm_triv_starts_122 = ts.triv_starts;
+    $licm_triv_ends_123 = ts.triv_ends;
+    $licm_triv_chans_124 = ts.triv_chans;
+    $licm_repr_119 = result.repr;
     b201: block {
         l202: loop {
             break_if b201 $mv$input$used >= $mv$$local_3$1;
@@ -1809,7 +1822,7 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize"($mv$input$repr, $mv$input$used)
                 "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv$input$used, $mv$$local_3$1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:1147"), used: 39 });
                 unreachable;
             }
-            if (((local.tee first_char(builtin::array_get_value<char>($licm_repr_121, $mv$input$used)) == 9) | (first_char == 10)) | (first_char == 13)) | (first_char == 32) {
+            if (((local.tee first_char(builtin::array_get_value<char>($licm_repr_119, $mv$input$used)) == 9) | (first_char == 10)) | (first_char == 13)) | (first_char == 32) {
                 if local.tee first_char("sub/wir_xmodule_return_parser.wado/try_WS"(result.repr, result.used, $mv$input$used)) > -1 {
                     best_end = first_char;
                     best_kind = 1;
@@ -1823,7 +1836,7 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize"($mv$input$repr, $mv$input$used)
                             cold_path;
                             "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv$input$used, $mv$$local_3$1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:1128"), used: 39 });
                             unreachable;
-                        }; builtin::array_get_value<char>($licm_repr_121, $mv$input$used) != 40;
+                        }; builtin::array_get_value<char>($licm_repr_119, $mv$input$used) != 40;
                     }) {
                         break $inline_try_lit_lparen_0: -1;
                     }
@@ -1841,7 +1854,7 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize"($mv$input$repr, $mv$input$used)
                             cold_path;
                             "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv$input$used, $mv$$local_3$1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:1134"), used: 39 });
                             unreachable;
-                        }; builtin::array_get_value<char>($licm_repr_121, $mv$input$used) != 41;
+                        }; builtin::array_get_value<char>($licm_repr_119, $mv$input$used) != 41;
                     }) {
                         break $inline_try_lit_rparen_1: -1;
                     }
@@ -1860,38 +1873,38 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize"($mv$input$repr, $mv$input$used)
                 best_kind = 0;
             }
             if best_end <= $mv$input$used {
-                "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/TokenStream::push_token_flagged$dae[flags,return]"(ts, 3, $mv$input$used, $mv$input$used + 1, cap, local.tee $load_14(ts.triv_kinds).used);
-                cap = $load_14.used;
+                "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/TokenStream::push_token_flagged$dae[flags,return]"(ts, 3, $mv$input$used, $mv$input$used + 1, cap, $load_5.used);
+                cap = $load_5.used;
                 $mv$input$used = $mv$input$used + 1;
             } else {
                 if best_kind == 1 {
-                    if @unlikely(local.tee first_char(local.tee $load_14(ts.triv_kinds).used) >= builtin::array_len($load_14.repr)) {
+                    if @unlikely(local.tee first_char($load_5.used) >= builtin::array_len($load_5.repr)) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_14);
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_5);
                     }
-                    builtin::array_set<i32>($load_14.repr, first_char, best_kind);
-                    $load_14.used = first_char + 1;
-                    if @unlikely(local.tee best_kind(local.tee $load_14(ts.triv_starts).used) >= builtin::array_len($load_14.repr)) {
+                    builtin::array_set<i32>($load_5.repr, first_char, best_kind);
+                    $load_5.used = first_char + 1;
+                    if @unlikely(local.tee best_kind($licm_triv_starts_122.used) >= builtin::array_len($licm_triv_starts_122.repr)) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_14);
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($licm_triv_starts_122);
                     }
-                    builtin::array_set<i32>($load_14.repr, best_kind, $mv$input$used);
-                    $load_14.used = best_kind + 1;
-                    if @unlikely(local.tee $mv$input$used(local.tee $load_14(ts.triv_ends).used) >= builtin::array_len($load_14.repr)) {
+                    builtin::array_set<i32>($licm_triv_starts_122.repr, best_kind, $mv$input$used);
+                    $licm_triv_starts_122.used = best_kind + 1;
+                    if @unlikely(local.tee $mv$input$used($licm_triv_ends_123.used) >= builtin::array_len($licm_triv_ends_123.repr)) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_14);
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($licm_triv_ends_123);
                     }
-                    builtin::array_set<i32>($load_14.repr, $mv$input$used, best_end);
-                    $load_14.used = $mv$input$used + 1;
-                    if @unlikely(local.tee $mv$input$used(local.tee $load_14(ts.triv_chans).used) >= builtin::array_len($load_14.repr)) {
+                    builtin::array_set<i32>($licm_triv_ends_123.repr, $mv$input$used, best_end);
+                    $licm_triv_ends_123.used = $mv$input$used + 1;
+                    if @unlikely(local.tee $mv$input$used($licm_triv_chans_124.used) >= builtin::array_len($licm_triv_chans_124.repr)) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_14);
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($licm_triv_chans_124);
                     }
-                    builtin::array_set<i32>($load_14.repr, $mv$input$used, 0);
-                    $load_14.used = $mv$input$used + 1;
+                    builtin::array_set<i32>($licm_triv_chans_124.repr, $mv$input$used, 0);
+                    $licm_triv_chans_124.used = $mv$input$used + 1;
                 } else {
-                    "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/TokenStream::push_token_flagged$dae[flags,return]"(ts, best_kind, $mv$input$used, best_end, cap, local.tee $load_14(ts.triv_kinds).used);
-                    cap = $load_14.used;
+                    "sub/wir_xmodule_return_parser.wado/sub/wir_xmodule_return_parser.wado/TokenStream::push_token_flagged$dae[flags,return]"(ts, best_kind, $mv$input$used, best_end, cap, $load_5.used);
+                    cap = $load_5.used;
                 }
                 $mv$input$used = best_end;
             }
@@ -4067,11 +4080,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<sub/wir_xmo
     let n_268: i32;
     let new_used_272: i32;
     let start_273: i32;
-    let $sroa_view_repr_942: ref Array<u8>;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 };
-    $sroa_view_repr_942 = global:core:prelude/string.wado::$const_obj_9;
-    out_3.used = 9;
-    builtin::array_copy<u8>(out_3.repr, 0, $sroa_view_repr_942, 0, 9);
+    local.tee out_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 }).used = 9;
+    builtin::array_copy<u8>(out_3.repr, 0, global:core:prelude/string.wado::$const_obj_9, 0, 9);
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
@@ -4088,14 +4098,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<sub/wir_xmo
         };
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0;
     };
-    $sroa_view_repr_942 = global:core:prelude/string.wado::$const_obj_8;
     if @unlikely(local.tee n_268(out_3.used + 7) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, n_268);
     }
     new_used_272 = out_3.used;
     out_3.used = n_268;
-    builtin::array_copy<u8>(local.tee $load_11(out_3.repr), new_used_272, $sroa_view_repr_942, 0, 7);
+    builtin::array_copy<u8>(local.tee $load_11(out_3.repr), new_used_272, global:core:prelude/string.wado::$const_obj_8, 0, 7);
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__2: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__3: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__3__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
@@ -4112,14 +4121,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<sub/wir_xmo
         };
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__2;
     };
-    $sroa_view_repr_942 = global:core:prelude/string.wado::$const_obj_7;
     if @unlikely(local.tee n_268(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, n_268);
     }
     new_used_272 = out_3.used;
     out_3.used = n_268;
-    builtin::array_copy<u8>(out_3.repr, new_used_272, $sroa_view_repr_942, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, new_used_272, global:core:prelude/string.wado::$const_obj_7, 0, 1);
     return out_3;
 }
 

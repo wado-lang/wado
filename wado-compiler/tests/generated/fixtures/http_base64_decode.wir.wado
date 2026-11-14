@@ -818,17 +818,18 @@ result: "), used: 126 }, s1: struct.new "core:prelude/string.wado//String" { rep
         $arg_spill_1 = $mv_arg_3.repr;
         $sroa_$pattern_temp_0_0_254 = $mv_arg_3.used;
         i = 0;
-        $mv_arg_2 = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
+        out = local.tee $mv_arg_2(struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }).repr;
         b17: block {
             l18: loop {
                 break_if b17 i >= $sroa_$pattern_temp_0_0_254;
                 $mv$scalar$code = builtin::array_get_value<u8>($arg_spill_1, i);
                 i = i + 1;
-                if @unlikely(local.tee $mv$scalar$advance($mv_arg_2.used) >= builtin::array_len($mv_arg_2.repr)) {
+                if @unlikely(local.tee $mv$scalar$advance($mv_arg_2.used) >= builtin::array_len(out)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"($mv_arg_2);
+                    out = $mv_arg_2.repr;
                 }
-                builtin::array_set_u8($mv_arg_2.repr, $mv$scalar$advance, $mv$scalar$code);
+                builtin::array_set_u8(out, $mv$scalar$advance, $mv$scalar$code);
                 $mv_arg_2.used = $mv$scalar$advance + 1;
                 continue l18;
             };
@@ -2001,6 +2002,7 @@ fn "core:base64/decode_impl$dae[canonical]$spec0$sroa[input.repr]"(input, $mv$ta
     let $m_1_38: i32;
     let $m_1_48: i32;
     let $m_1_58: i32;
+    let $licm_repr_351: ref Array<u8>;
     end = 4;
     b231: block {
         l232: loop {
@@ -2030,6 +2032,7 @@ fn "core:base64/decode_impl$dae[canonical]$spec0$sroa[input.repr]"(input, $mv$ta
     }
     out = struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_new<u8>($contract_arg_0), used: 0 };
     $contract_arg_0 = 0;
+    $licm_repr_351 = out.repr;
     if (((((builtin::i64_extend_i32_s(end) + -4_i64) + 3_i64) < 4_i64) & ($contract_arg_0 >= 0)) & ($contract_arg_0 <= 2147483644)) & (end <= 2147483643) {
         b239: block {
             l240: loop {
@@ -2073,26 +2076,29 @@ fn "core:base64/decode_impl$dae[canonical]$spec0$sroa[input.repr]"(input, $mv$ta
                     return ref.null none;
                 }
                 $m_1_28 = (($m_1_28 << 2) | ($contract_arg_2 >> 4)) & 255;
-                if @unlikely(local.tee $m_1_58(out.used) >= builtin::array_len(out.repr)) {
+                if @unlikely(local.tee $m_1_58(out.used) >= builtin::array_len($licm_repr_351)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
+                    $licm_repr_351 = out.repr;
                 }
-                builtin::array_set_u8(out.repr, $m_1_58, $m_1_28);
-                out.used = $m_1_58 + 1;
-                $m_1_28 = ((($contract_arg_2 & 15) << 4) | ($m_1_38 >> 2)) & 255;
-                if @unlikely(local.tee $contract_arg_2(out.used) >= builtin::array_len(out.repr)) {
+                builtin::array_set_u8($licm_repr_351, $m_1_58, $m_1_28);
+                out.used = local.tee $m_1_28($m_1_58 + 1);
+                $contract_arg_2 = ((($contract_arg_2 & 15) << 4) | ($m_1_38 >> 2)) & 255;
+                if @unlikely($m_1_28 >= builtin::array_len($licm_repr_351)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
+                    $licm_repr_351 = out.repr;
                 }
-                builtin::array_set_u8(out.repr, $contract_arg_2, $m_1_28);
-                out.used = $contract_arg_2 + 1;
-                $m_1_28 = ((($m_1_38 & 3) << 6) | $m_1_48) & 255;
-                if @unlikely(local.tee $contract_arg_2(out.used) >= builtin::array_len(out.repr)) {
+                builtin::array_set_u8($licm_repr_351, $m_1_28, $contract_arg_2);
+                out.used = local.tee $m_1_28($m_1_28 + 1);
+                $contract_arg_2 = ((($m_1_38 & 3) << 6) | $m_1_48) & 255;
+                if @unlikely($m_1_28 >= builtin::array_len($licm_repr_351)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
+                    $licm_repr_351 = out.repr;
                 }
-                builtin::array_set_u8(out.repr, $contract_arg_2, $m_1_28);
-                out.used = $contract_arg_2 + 1;
+                builtin::array_set_u8($licm_repr_351, $m_1_28, $contract_arg_2);
+                out.used = $m_1_28 + 1;
                 $contract_arg_0 = $contract_arg_0 + 4;
                 continue l240;
             };
@@ -2145,26 +2151,29 @@ fn "core:base64/decode_impl$dae[canonical]$spec0$sroa[input.repr]"(input, $mv$ta
                     return ref.null none;
                 }
                 $m_1_28 = (($m_1_28 << 2) | ($contract_arg_2 >> 4)) & 255;
-                if @unlikely(local.tee $m_1_58(out.used) >= builtin::array_len(out.repr)) {
+                if @unlikely(local.tee $m_1_58(out.used) >= builtin::array_len($licm_repr_351)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
+                    $licm_repr_351 = out.repr;
                 }
-                builtin::array_set_u8(out.repr, $m_1_58, $m_1_28);
-                out.used = $m_1_58 + 1;
-                $m_1_28 = ((($contract_arg_2 & 15) << 4) | ($m_1_38 >> 2)) & 255;
-                if @unlikely(local.tee $contract_arg_2(out.used) >= builtin::array_len(out.repr)) {
+                builtin::array_set_u8($licm_repr_351, $m_1_58, $m_1_28);
+                out.used = local.tee $m_1_28($m_1_58 + 1);
+                $contract_arg_2 = ((($contract_arg_2 & 15) << 4) | ($m_1_38 >> 2)) & 255;
+                if @unlikely($m_1_28 >= builtin::array_len($licm_repr_351)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
+                    $licm_repr_351 = out.repr;
                 }
-                builtin::array_set_u8(out.repr, $contract_arg_2, $m_1_28);
-                out.used = $contract_arg_2 + 1;
-                $m_1_28 = ((($m_1_38 & 3) << 6) | $m_1_48) & 255;
-                if @unlikely(local.tee $contract_arg_2(out.used) >= builtin::array_len(out.repr)) {
+                builtin::array_set_u8($licm_repr_351, $m_1_28, $contract_arg_2);
+                out.used = local.tee $m_1_28($m_1_28 + 1);
+                $contract_arg_2 = ((($m_1_38 & 3) << 6) | $m_1_48) & 255;
+                if @unlikely($m_1_28 >= builtin::array_len($licm_repr_351)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
+                    $licm_repr_351 = out.repr;
                 }
-                builtin::array_set_u8(out.repr, $contract_arg_2, $m_1_28);
-                out.used = $contract_arg_2 + 1;
+                builtin::array_set_u8($licm_repr_351, $m_1_28, $contract_arg_2);
+                out.used = $m_1_28 + 1;
                 $contract_arg_0 = $contract_arg_0 + 4;
                 continue l250;
             };

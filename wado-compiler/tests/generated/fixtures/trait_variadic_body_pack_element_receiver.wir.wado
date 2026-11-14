@@ -1721,7 +1721,8 @@ fn "trait_variadic_body_pack_element_receiver.wado/[i32,i32]^trait_variadic_body
     let elements_23: ref Array<i32>;
     let item_29: i32;
     let $sroa_element_value_59: i32;
-    let $sroa_$iter_1_index_66: i32;
+    let $licm_repr_63: ref Array<[i32,i32]>;
+    let $sroa_$iter_1_index_68: i32;
     out = struct.new "core:prelude/list.wado//List<[i32,i32]>" { repr: builtin::array_new<ref "tuple//[i32, i32]">(4), used: 0 };
     $sroa_element_value_59 = self.0;
     $sroa_element_value_59 = local.tee self_19($inline_i32_trait_variadic_body_pack_element_receiver_wado_Shrink__shrink_sroa_self_value__2: block -> ref "core:prelude/list.wado//List<i32>" {
@@ -1732,18 +1733,20 @@ fn "trait_variadic_body_pack_element_receiver.wado/[i32,i32]^trait_variadic_body
         break $inline_i32_trait_variadic_body_pack_element_receiver_wado_Shrink__shrink_sroa_self_value__2: struct.new "core:prelude/list.wado//List<i32>" { repr: elements_23, used: $sroa_element_value_59 };
     }).used;
     elements_23 = self_19.repr;
-    $sroa_$iter_1_index_66 = 0;
+    $sroa_$iter_1_index_68 = 0;
+    $licm_repr_63 = out.repr;
     b211: block {
         l212: loop {
-            break_if b211 $sroa_$iter_1_index_66 >= $sroa_element_value_59;
-            item_29 = builtin::array_get_value<i32>(elements_23, $sroa_$iter_1_index_66);
-            $sroa_$iter_1_index_66 = $sroa_$iter_1_index_66 + 1;
+            break_if b211 $sroa_$iter_1_index_68 >= $sroa_element_value_59;
+            item_29 = builtin::array_get_value<i32>(elements_23, $sroa_$iter_1_index_68);
+            $sroa_$iter_1_index_68 = $sroa_$iter_1_index_68 + 1;
             local.tee replaced_7(struct.new "tuple//[i32, i32]" { 0: self.0, 1: self.1 }).0 = item_29;
-            if @unlikely(local.tee item_29(out.used) >= builtin::array_len(out.repr)) {
+            if @unlikely(local.tee item_29(out.used) >= builtin::array_len($licm_repr_63)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<[i32,i32]>::grow"(out);
+                $licm_repr_63 = out.repr;
             }
-            builtin::array_set<ref "tuple//[i32, i32]">(out.repr, item_29, replaced_7);
+            builtin::array_set<ref "tuple//[i32, i32]">($licm_repr_63, item_29, replaced_7);
             out.used = item_29 + 1;
             continue l212;
         };
@@ -1757,18 +1760,20 @@ fn "trait_variadic_body_pack_element_receiver.wado/[i32,i32]^trait_variadic_body
         break $inline_i32_trait_variadic_body_pack_element_receiver_wado_Shrink__shrink_sroa_self_value__12: struct.new "core:prelude/list.wado//List<i32>" { repr: elements_23, used: $sroa_element_value_59 };
     }).used;
     elements_23 = self_19.repr;
-    $sroa_$iter_1_index_66 = 0;
+    $sroa_$iter_1_index_68 = 0;
+    $licm_repr_63 = out.repr;
     b215: block {
         l216: loop {
-            break_if b215 $sroa_$iter_1_index_66 >= $sroa_element_value_59;
-            item_29 = builtin::array_get_value<i32>(elements_23, $sroa_$iter_1_index_66);
-            $sroa_$iter_1_index_66 = $sroa_$iter_1_index_66 + 1;
+            break_if b215 $sroa_$iter_1_index_68 >= $sroa_element_value_59;
+            item_29 = builtin::array_get_value<i32>(elements_23, $sroa_$iter_1_index_68);
+            $sroa_$iter_1_index_68 = $sroa_$iter_1_index_68 + 1;
             local.tee replaced_7(struct.new "tuple//[i32, i32]" { 0: self.0, 1: self.1 }).1 = item_29;
-            if @unlikely(local.tee item_29(out.used) >= builtin::array_len(out.repr)) {
+            if @unlikely(local.tee item_29(out.used) >= builtin::array_len($licm_repr_63)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<[i32,i32]>::grow"(out);
+                $licm_repr_63 = out.repr;
             }
-            builtin::array_set<ref "tuple//[i32, i32]">(out.repr, item_29, replaced_7);
+            builtin::array_set<ref "tuple//[i32, i32]">($licm_repr_63, item_29, replaced_7);
             out.used = item_29 + 1;
             continue l216;
         };

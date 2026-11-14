@@ -236,53 +236,56 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "closure_capture_boxed_local_beside_ref_to_ref.wado/run"() {
-    let $load_0: i32;
+    let $load_1: i32;
     let fs: ref "core:prelude/list.wado//List<fn()->i32>";
     let i: ref "core:prelude//$Cell<i32>";
     let value_23: ref "closure_capture_boxed_local_beside_ref_to_ref.wado//$Closure_1";
+    let $licm_repr_44: ref Array<fn()->i32>;
     fs = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i = struct.new "core:prelude//$Cell<i32>" { value: 0 };
+    $licm_repr_44 = fs.repr;
     b0: block {
         l1: loop {
-            break_if b0 local.tee $load_0(i.value) >= 3;
-            i.value = $load_0 + 1;
+            break_if b0 local.tee $load_1(i.value) >= 3;
+            i.value = $load_1 + 1;
             value_23 = struct.new "closure_capture_boxed_local_beside_ref_to_ref.wado//$Closure_1" { $capture_0: i };
-            if @unlikely(local.tee $load_0(fs.used) >= builtin::array_len(fs.repr)) {
+            if @unlikely(local.tee $load_1(fs.used) >= builtin::array_len($licm_repr_44)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(fs);
+                $licm_repr_44 = fs.repr;
             }
-            builtin::array_set<ref struct>(fs.repr, $load_0, struct.new "canonical//CanonicalClosure_0" { env: value_23, func: ref.func "closure/closure_capture_boxed_local_beside_ref_to_ref.wado/$closure_wrapper_0" });
-            fs.used = $load_0 + 1;
+            builtin::array_set<ref struct>($licm_repr_44, $load_1, struct.new "canonical//CanonicalClosure_0" { env: value_23, func: ref.func "closure/closure_capture_boxed_local_beside_ref_to_ref.wado/$closure_wrapper_0" });
+            fs.used = $load_1 + 1;
             local.tee i(struct.new "core:prelude//$Cell<i32>" { value: i.value }).value = i.value + 1;
             continue l1;
         };
     };
-    if @unlikely(local.tee $load_0(fs.used) != 2) {
+    if @unlikely(local.tee $load_1(fs.used) != 2) {
         cold_path;
-        "closure_capture_boxed_local_beside_ref_to_ref.wado/run$cold2"($load_0);
+        "closure_capture_boxed_local_beside_ref_to_ref.wado/run$cold2"($load_1);
         unreachable;
     }
-    if @unlikely(local.tee $load_0(block -> i32 {
+    if @unlikely(local.tee $load_1(block -> i32 {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(0 >= $load_0) {
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(0 >= $load_1) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_boxed_local_beside_ref_to_ref.wado:17"), used: 53 });
+            "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $load_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_boxed_local_beside_ref_to_ref.wado:17"), used: 53 });
             unreachable;
         }; builtin::array_get_value<ref struct>(fs.repr, 0))).env);
     }) != 1) {
         cold_path;
-        "closure_capture_boxed_local_beside_ref_to_ref.wado/run$cold1"($load_0);
+        "closure_capture_boxed_local_beside_ref_to_ref.wado/run$cold1"($load_1);
         unreachable;
     }
-    if @unlikely(local.tee $load_0(block -> i32 {
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($load_0 = fs.used; if @unlikely(1 >= $load_0) {
+    if @unlikely(local.tee $load_1(block -> i32 {
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($load_1 = fs.used; if @unlikely(1 >= $load_1) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_boxed_local_beside_ref_to_ref.wado:18"), used: 53 });
+            "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, $load_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_boxed_local_beside_ref_to_ref.wado:18"), used: 53 });
             unreachable;
         }; builtin::array_get_value<ref struct>(fs.repr, 1))).env);
     }) != 3) {
         cold_path;
-        "closure_capture_boxed_local_beside_ref_to_ref.wado/run$cold0"($load_0);
+        "closure_capture_boxed_local_beside_ref_to_ref.wado/run$cold0"($load_1);
         unreachable;
     }
 }

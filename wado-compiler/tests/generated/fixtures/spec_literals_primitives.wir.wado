@@ -980,16 +980,13 @@ fn "spec_literals_primitives.wado/$test_19_multiline"() {
     let n_244: i32;
     let new_used_248: i32;
     let start_249: i32;
-    let $sroa_view_repr_524: ref Array<u8>;
     $sroa_poem_repr_115 = array.new_data<u8>("Roses are red,
 Violets are blue,
 Wado is great,
 And so are you!");
     $sroa_t_h0_117 = global:spec_literals_primitives.wado::$const_obj_10;
-    out_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(54), used: 0 };
-    $sroa_view_repr_524 = global:spec_literals_primitives.wado::$const_obj_9;
-    out_9.used = 5;
-    builtin::array_copy<u8>(out_9.repr, 0, $sroa_view_repr_524, 0, 5);
+    local.tee out_9(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(54), used: 0 }).used = 5;
+    builtin::array_copy<u8>(out_9.repr, 0, global:spec_literals_primitives.wado::$const_obj_9, 0, 5);
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
@@ -1006,14 +1003,13 @@ And so are you!");
         };
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0;
     };
-    $sroa_view_repr_524 = global:spec_literals_primitives.wado::$const_obj_8;
     if @unlikely(local.tee n_244(out_9.used + 33) > builtin::array_len(out_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_9, n_244);
     }
     new_used_248 = out_9.used;
     out_9.used = n_244;
-    builtin::array_copy<u8>(local.tee $load_11(out_9.repr), new_used_248, $sroa_view_repr_524, 0, 33);
+    builtin::array_copy<u8>(local.tee $load_11(out_9.repr), new_used_248, global:spec_literals_primitives.wado::$const_obj_8, 0, 33);
     $temp_inline_core_prelude_string_wado_StrLinesIter_core_prelude_traits_wado_Iterator__count_40_0 = struct.new "core:prelude/string.wado//StrLinesIter" { repr: $sroa_poem_repr_115, used: 63, pos: 0, finished: 0 };
     new_used_248 = 0;
     b22: block {

@@ -1068,7 +1068,12 @@ fn revisit_moved_reads(
     }
 }
 
-fn scan_body(func: &NirFunction, markers: MarkerBuiltins, heat_map: &HeatMap) -> BodyScan {
+fn scan_body(
+    func: &NirFunction,
+    markers: MarkerBuiltins,
+    heat_map: &HeatMap,
+    type_table: &TypeTable,
+) -> BodyScan {
     // A site's arguments are keyed by position and the callee's writes by
     // local index.
     assert!(
@@ -1085,17 +1090,24 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins, heat_map: &HeatMap) ->
     let cold = RareRuns::of(body, markers, Rarity::Cold).exprs(body);
     let unlikely = unlikely_runs(body, markers, heat_map).exprs(body);
     let looped = looped_exprs(body);
+    let mut copies: Vec<(u32, Operand)> = Vec::new();
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(st) => match &body.stmts[st].kind {
             StmtKind::Let {
                 local_index, value, ..
-            } => scan.lets.push((*local_index, *value)),
+            } => {
+                scan.lets.push((*local_index, *value));
+                copies.push((*local_index, *value));
+            }
             StmtKind::Loop { .. } => scan.loopy = true,
             _ => {}
         },
         NodeRef::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::Assign { target, .. } => {
+            ExprKind::Assign { target, value } => {
                 scan.written.extend(place_root_local(body, *target));
+                if let ExprKind::Local { index, .. } = &body.exprs[*target].kind {
+                    copies.push((*index, *value));
+                }
             }
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
@@ -1140,6 +1152,28 @@ fn scan_body(func: &NirFunction, markers: MarkerBuiltins, heat_map: &HeatMap) ->
         },
         NodeRef::Block(_) | NodeRef::Pat(_) => {}
     });
+    // A handle copied out of a place shares the place's object, so a write
+    // through the copy writes the root: `let r = xs.repr; array_set(&mut r, …)`,
+    // or `r = xs.repr` where LICM reloads a hoisted handle.
+    let handle_copies: Vec<[u32; 2]> = copies
+        .iter()
+        .filter_map(|&(copy, value)| {
+            let e = value.as_expr()?;
+            if type_table.is_primitive_like(body.exprs[e].type_id) {
+                return None;
+            }
+            Some([copy, place_root_local(body, e)?])
+        })
+        .collect();
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for &[copy, root] in &handle_copies {
+            if scan.written.contains(&copy) {
+                grew |= scan.written.insert(root);
+            }
+        }
+    }
     scan
 }
 
@@ -2588,7 +2622,12 @@ fn inline_round(
     } = scans;
     let inline_threshold = thresholds.plain;
     let heat_map = &project.heat_map;
-    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, markers, heat_map));
+    let scans = {
+        let type_table = &*project.type_table.borrow();
+        bodies.refresh(project, gate.exec(), |f| {
+            scan_body(f, markers, heat_map, type_table)
+        })
+    };
     let sites = argument_sites(scans, &live);
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.

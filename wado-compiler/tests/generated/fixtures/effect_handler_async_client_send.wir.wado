@@ -1813,9 +1813,9 @@ fn "effect_handler_async_client_send.wado/$cm_task_entry__handle"(request) {
     let is_negative_277: bool;
     let result: ref "core:prelude/list.wado//List<u8>";
     let $sroa_$pattern_temp_0_1_325: i32;
+    let $licm_repr_335: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_755: ref Array<u8>;
     mock = struct.new "effect_handler_async_client_send.wado//MockClient" { calls: 0, ends: used_204 = builtin::array_len(local.tee elements_203(array.new_fixed<ref null "core:prelude//$Resource">())); struct.new "core:prelude/list.wado//List<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>" { repr: elements_203, used: used_204 } };
     global:effect_handler_async_client_send.wado::$effect_wasi:http/client.wado/Client = struct.new "effect_handler_async_client_send.wado//$Dispatch_wasi:http/client.wado/Client" { outer: local.tee $local_13(global:effect_handler_async_client_send.wado::$effect_wasi:http/client.wado/Client), op_send: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_async_client_send.wado//$Closure_3" { $capture_0: ref.as_non_null(mock) }, func: ref.func "closure/effect_handler_async_client_send.wado/$closure_wrapper_2" } };
     $local_15 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: "effect_handler_async_client_send.wado/fetch_upstream"() };
@@ -1848,10 +1848,8 @@ mock.calls: "), used: 110 }, s1: struct.new "core:prelude/string.wado//String" {
     $cm_handle_3 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"(struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_18 }).payload_0.value;
     "wasi/task-return:handle"(0, $cm_handle_3, 0, 0_i64, 0, 0, 0, 0);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
-        $sroa_view_repr_755 = global:effect_handler_async_client_send.wado::$const_obj_5;
-        $mv_arg_1.used = local.tee $cm_handle_3(9);
-        builtin::array_copy<u8>(local.tee $load_10($mv_arg_1.repr), 0, $sroa_view_repr_755, 0, 9);
+        local.tee $mv_arg_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }).used = local.tee $cm_handle_3(9);
+        builtin::array_copy<u8>(local.tee $load_10($mv_arg_1.repr), 0, global:effect_handler_async_client_send.wado::$const_obj_5, 0, 9);
         is_negative_277 = used_204 < 0;
         $cm_pair_198 = builtin::i64_extend_i32_s(used_204);
         $cm_pair_198 = select i64($cm_pair_198 < 0_i64, 0_i64 - $cm_pair_198, $cm_pair_198);
@@ -1931,40 +1929,41 @@ mock.calls: "), used: 110 }, s1: struct.new "core:prelude/string.wado//String" {
         }
         is_negative_277 = $mv_arg_1.used;
         $mv_arg_1.used = $cm_handle_3;
-        $sroa_view_repr_755 = $mv_arg_1.repr;
+        $load_10 = $mv_arg_1.repr;
         used_204 = is_negative_277 + used_204;
         b202: block {
             l203: loop {
                 break_if b202 (used_204 - is_negative_277) < 2;
                 q = $cm_pair_198 /u 100_i64;
                 tens = local.tee $cm_handle_3(builtin::i32_wrap_i64($cm_pair_198 - (q * 100_i64))) / 10;
-                builtin::array_set_u8($sroa_view_repr_755, used_204 - 1, (48 + $cm_handle_3) - (tens * 10));
-                builtin::array_set_u8($sroa_view_repr_755, used_204 - 2, 48 + tens);
+                builtin::array_set_u8($load_10, used_204 - 1, (48 + $cm_handle_3) - (tens * 10));
+                builtin::array_set_u8($load_10, used_204 - 2, 48 + tens);
                 used_204 = used_204 - 2;
                 $cm_pair_198 = q;
                 continue l203;
             };
         };
         if used_204 > is_negative_277 {
-            builtin::array_set_u8($sroa_view_repr_755, is_negative_277, 48 + builtin::i32_wrap_i64($cm_pair_198 %u 10_i64));
+            builtin::array_set_u8($load_10, is_negative_277, 48 + builtin::i32_wrap_i64($cm_pair_198 %u 10_i64));
         }
         $inline_core_prelude_string_wado_String__internal_push_view_44: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_44;
         };
-        $sroa_view_repr_755 = $mv_arg_1.repr;
+        $load_10 = $mv_arg_1.repr;
         used_204 = $mv_arg_1.used;
         $cm_handle_3 = 0;
-        result = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
+        $licm_repr_335 = local.tee result(struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }).repr;
         b205: block {
             l206: loop {
                 break_if b205 $cm_handle_3 >= used_204;
-                is_negative_277 = builtin::array_get_value<u8>($sroa_view_repr_755, $cm_handle_3);
+                is_negative_277 = builtin::array_get_value<u8>($load_10, $cm_handle_3);
                 $cm_handle_3 = $cm_handle_3 + 1;
-                if @unlikely(local.tee tens(result.used) >= builtin::array_len(result.repr)) {
+                if @unlikely(local.tee tens(result.used) >= builtin::array_len($licm_repr_335)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(result);
+                    $licm_repr_335 = result.repr;
                 }
-                builtin::array_set_u8(result.repr, tens, is_negative_277);
+                builtin::array_set_u8($licm_repr_335, tens, is_negative_277);
                 result.used = tens + 1;
                 continue l206;
             };

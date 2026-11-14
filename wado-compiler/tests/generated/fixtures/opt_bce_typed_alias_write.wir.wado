@@ -1300,8 +1300,10 @@ fn "opt_bce_typed_alias_write.wado/opt_bce_typed_alias_write.wado/Buf::tripled$s
     let current: i32;
     let used: i32;
     let $sroa_$iter_0_start_46: i32;
+    let $licm_repr_51: ref Array<i32>;
     out = struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(self), used: 0 };
     $sroa_$iter_0_start_46 = 0;
+    $licm_repr_51 = out.repr;
     b173: block {
         l174: loop {
             break_if b173 $sroa_$iter_0_start_46 >= self;
@@ -1311,11 +1313,12 @@ fn "opt_bce_typed_alias_write.wado/opt_bce_typed_alias_write.wado/Buf::tripled$s
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(current, 3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_bce_typed_alias_write.wado:15"), used: 33 });
                 unreachable;
             }; builtin::array_get_value<i32>(global:opt_bce_typed_alias_write.wado::$const_obj_11, current) * 3;
-            if @unlikely(local.tee used(out.used) >= builtin::array_len(out.repr)) {
+            if @unlikely(local.tee used(out.used) >= builtin::array_len($licm_repr_51)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
+                $licm_repr_51 = out.repr;
             }
-            builtin::array_set<i32>(out.repr, used, current);
+            builtin::array_set<i32>($licm_repr_51, used, current);
             out.used = used + 1;
             continue l174;
         };

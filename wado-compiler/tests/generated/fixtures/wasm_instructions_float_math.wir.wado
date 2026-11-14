@@ -247,19 +247,17 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     let f32_sqrt: f32;
     let f32_min: f32;
     let f32_max: f32;
+    let new_repr: ref Array<u8>;
     let out_499: ref "core:prelude/string.wado//String";
     let bits_597: u64;
     let start_618: i32;
     let $sroa_slot_52_635: bool;
     let $sroa_slot_53_636: bool;
     let $sroa_slot_54_637: "core:prelude/fpfmt.wado//enum:SpecialKind";
-    let $sroa_view_repr_165_661: ref Array<u8>;
     abs_neg = builtin::f64_abs(-3.5);
     abs_pos = builtin::f64_abs(3.5);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_88;
-    out_499.used = 16;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 16);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }).used = 16;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_88, 0, 16);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec0_sroa_t_h0__0__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec0_sroa_t_h0__0__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_neg)) == 0_i64 {
@@ -316,10 +314,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_85;
-    out_499.used = 15;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 15);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 }).used = 15;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_85, 0, 15);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec1_sroa_t_h0__1__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec1_sroa_t_h0__1__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_pos)) == 0_i64 {
@@ -376,10 +372,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
     abs_neg32 = builtin::f32_abs(-2.5_f32);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_82;
-    out_499.used = 16;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 16);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }).used = 16;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_82, 0, 16);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_7621807b10960aa2__f32___spec0_spec0_sroa_t_h0__2__$inline_f32__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_7621807b10960aa2__f32___spec0_spec0_sroa_t_h0__2__$inline_f32__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_1: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(builtin::f64_promote_f32(abs_neg32))) == 0_i64 {
@@ -438,10 +432,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     abs_neg = builtin::f64_ceil(2.3);
     abs_pos = builtin::f64_ceil(-2.3);
     ceil3 = builtin::f64_ceil(2);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_79;
-    out_499.used = 16;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 16);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }).used = 16;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_79, 0, 16);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec2_sroa_t_h0__3__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec2_sroa_t_h0__3__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_neg)) == 0_i64 {
@@ -497,10 +489,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_76;
-    out_499.used = 17;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 17);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }).used = 17;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_76, 0, 17);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec3_sroa_t_h0__4__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec3_sroa_t_h0__4__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_pos)) == 0_i64 {
@@ -556,10 +546,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_73;
-    out_499.used = 16;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 16);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }).used = 16;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_73, 0, 16);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec4_sroa_t_h0__5__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec4_sroa_t_h0__5__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(ceil3)) == 0_i64 {
@@ -618,10 +606,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     abs_neg = builtin::f64_floor(2.7);
     abs_pos = builtin::f64_floor(-2.7);
     ceil3 = builtin::f64_floor(2);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_70;
-    out_499.used = 17;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 17);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }).used = 17;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_70, 0, 17);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec5_sroa_t_h0__6__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec5_sroa_t_h0__6__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_neg)) == 0_i64 {
@@ -677,10 +663,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_67;
-    out_499.used = 18;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 18);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }).used = 18;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_67, 0, 18);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec6_sroa_t_h0__7__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec6_sroa_t_h0__7__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_pos)) == 0_i64 {
@@ -736,10 +720,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_64;
-    out_499.used = 17;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 17);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }).used = 17;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_64, 0, 17);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec7_sroa_t_h0__8__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec7_sroa_t_h0__8__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(ceil3)) == 0_i64 {
@@ -797,10 +779,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
     abs_neg = builtin::f64_trunc(2.9);
     abs_pos = builtin::f64_trunc(-2.9);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_61;
-    out_499.used = 17;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 17);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }).used = 17;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_61, 0, 17);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec8_sroa_t_h0__9__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec8_sroa_t_h0__9__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_neg)) == 0_i64 {
@@ -856,10 +836,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_58;
-    out_499.used = 18;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 18);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }).used = 18;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_58, 0, 18);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec9_sroa_t_h0__10__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec9_sroa_t_h0__10__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_pos)) == 0_i64 {
@@ -919,10 +897,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     abs_pos = builtin::f64_nearest(3.5);
     ceil3 = builtin::f64_nearest(2.3);
     near4 = builtin::f64_nearest(2.7);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_55;
-    out_499.used = 19;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 19);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }).used = 19;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_55, 0, 19);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec10_sroa_t_h0__11__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec10_sroa_t_h0__11__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_neg)) == 0_i64 {
@@ -978,10 +954,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_52;
-    out_499.used = 19;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 19);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }).used = 19;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_52, 0, 19);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec11_sroa_t_h0__12__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec11_sroa_t_h0__12__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_pos)) == 0_i64 {
@@ -1037,10 +1011,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_49;
-    out_499.used = 19;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 19);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }).used = 19;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_49, 0, 19);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec12_sroa_t_h0__13__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec12_sroa_t_h0__13__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(ceil3)) == 0_i64 {
@@ -1096,10 +1068,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_46;
-    out_499.used = 19;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 19);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }).used = 19;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_46, 0, 19);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec13_sroa_t_h0__14__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec13_sroa_t_h0__14__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(near4)) == 0_i64 {
@@ -1158,10 +1128,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     abs_neg = builtin::f64_sqrt(4);
     abs_pos = builtin::f64_sqrt(9);
     ceil3 = builtin::f64_sqrt(2);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_43;
-    out_499.used = 16;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 16);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }).used = 16;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_43, 0, 16);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec14_sroa_t_h0__15__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec14_sroa_t_h0__15__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_neg)) == 0_i64 {
@@ -1217,10 +1185,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_40;
-    out_499.used = 16;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 16);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }).used = 16;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_40, 0, 16);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec15_sroa_t_h0__16__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec15_sroa_t_h0__16__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_pos)) == 0_i64 {
@@ -1280,9 +1246,9 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
         $sroa_slot_52_635 = builtin::i32_wrap_i64(local.tee bits_597("wasi/stream-new"()));
         $sroa_slot_53_636 = builtin::i32_wrap_i64(bits_597 >> 32_i64);
         $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
-        builtin::array_copy<u8>(local.tee $sroa_view_repr_165_661(builtin::array_new<u8>(25)), 0, global:wasm_instructions_float_math.wado::$const_obj_37, 0, 24);
-        builtin::array_set_u8($sroa_view_repr_165_661, 24, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_slot_53_636, $sroa_view_repr_165_661);
+        builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(25)), 0, global:wasm_instructions_float_math.wado::$const_obj_37, 0, 24);
+        builtin::array_set_u8(new_repr, 24, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_slot_53_636, new_repr);
         "wasi/stream-drop-writable"($sroa_slot_53_636);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
     }
@@ -1290,10 +1256,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     abs_pos = f64.min(-1, 1);
     ceil3 = f64.max(3, 5);
     near4 = f64.max(-1, 1);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_36;
-    out_499.used = 20;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 20);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }).used = 20;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_36, 0, 20);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec16_sroa_t_h0__17__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec16_sroa_t_h0__17__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_neg)) == 0_i64 {
@@ -1349,10 +1313,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_33;
-    out_499.used = 21;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 21);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 }).used = 21;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_33, 0, 21);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec17_sroa_t_h0__18__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec17_sroa_t_h0__18__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_pos)) == 0_i64 {
@@ -1408,10 +1370,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_30;
-    out_499.used = 20;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 20);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }).used = 20;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_30, 0, 20);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec18_sroa_t_h0__19__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec18_sroa_t_h0__19__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(ceil3)) == 0_i64 {
@@ -1467,10 +1427,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_27;
-    out_499.used = 21;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 21);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 }).used = 21;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_27, 0, 21);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec19_sroa_t_h0__20__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec19_sroa_t_h0__20__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(near4)) == 0_i64 {
@@ -1529,10 +1487,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     abs_neg = f64.copysign(3, -1);
     abs_pos = f64.copysign(-3, 1);
     ceil3 = f64.copysign(5, 5);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(42), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_24;
-    out_499.used = 26;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 26);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(42), used: 0 }).used = 26;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_24, 0, 26);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec20_sroa_t_h0__21__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec20_sroa_t_h0__21__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_neg)) == 0_i64 {
@@ -1588,10 +1544,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(42), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_21;
-    out_499.used = 26;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 26);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(42), used: 0 }).used = 26;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_21, 0, 26);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec21_sroa_t_h0__22__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec21_sroa_t_h0__22__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(abs_pos)) == 0_i64 {
@@ -1647,10 +1601,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(41), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_18;
-    out_499.used = 25;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 25);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(41), used: 0 }).used = 25;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_18, 0, 25);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec22_sroa_t_h0__23__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_deffd0c459369bf8__f64___spec0_spec22_sroa_t_h0__23__$inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_0: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(ceil3)) == 0_i64 {
@@ -1711,10 +1663,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     f32_sqrt = builtin::f32_sqrt(4_f32);
     f32_min = f32.min(3_f32, 5_f32);
     f32_max = f32.max(3_f32, 5_f32);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_15;
-    out_499.used = 16;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 16);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }).used = 16;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_15, 0, 16);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_7621807b10960aa2__f32___spec0_spec1_sroa_t_h0__24__$inline_f32__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_7621807b10960aa2__f32___spec0_spec1_sroa_t_h0__24__$inline_f32__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_1: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(builtin::f64_promote_f32(abs_neg32))) == 0_i64 {
@@ -1770,10 +1720,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_12;
-    out_499.used = 17;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 17);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }).used = 17;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_12, 0, 17);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_7621807b10960aa2__f32___spec0_spec2_sroa_t_h0__25__$inline_f32__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_7621807b10960aa2__f32___spec0_spec2_sroa_t_h0__25__$inline_f32__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_1: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(builtin::f64_promote_f32(f32_floor))) == 0_i64 {
@@ -1829,10 +1777,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_9;
-    out_499.used = 16;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 16);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }).used = 16;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_9, 0, 16);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_7621807b10960aa2__f32___spec0_spec3_sroa_t_h0__26__$inline_f32__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_7621807b10960aa2__f32___spec0_spec3_sroa_t_h0__26__$inline_f32__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_1: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(builtin::f64_promote_f32(f32_sqrt))) == 0_i64 {
@@ -1888,10 +1834,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_6;
-    out_499.used = 20;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 20);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }).used = 20;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_6, 0, 20);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_7621807b10960aa2__f32___spec0_spec4_sroa_t_h0__27__$inline_f32__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_7621807b10960aa2__f32___spec0_spec4_sroa_t_h0__27__$inline_f32__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_1: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(builtin::f64_promote_f32(f32_min))) == 0_i64 {
@@ -1947,10 +1891,8 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     $sroa_slot_52_635 = "wasm_instructions_float_math.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_52_635);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_53_636, out_499.repr, out_499.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_52_635);
-    out_499 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
-    $sroa_view_repr_165_661 = global:wasm_instructions_float_math.wado::$const_obj_3;
-    out_499.used = 20;
-    builtin::array_copy<u8>(out_499.repr, 0, $sroa_view_repr_165_661, 0, 20);
+    local.tee out_499(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }).used = 20;
+    builtin::array_copy<u8>(out_499.repr, 0, global:wasm_instructions_float_math.wado::$const_obj_3, 0, 20);
     $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_7621807b10960aa2__f32___spec0_spec5_sroa_t_h0__28__$inline_f32__fmt_into_sroa_self_value__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_wasm_instructions_float_math_wado__tmpl_7621807b10960aa2__f32___spec0_spec5_sroa_t_h0__28__$inline_f32__fmt_into_sroa_self_value__spec0_sroa_f_buf__0__$inline_check_special_1: block {
             if local.tee bits_597(builtin::i64_reinterpret_f64(builtin::f64_promote_f32(f32_max))) == 0_i64 {

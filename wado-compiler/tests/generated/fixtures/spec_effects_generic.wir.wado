@@ -517,23 +517,26 @@ fn "spec_effects_generic.wado/spec_effects_generic.wado/map<i32,i32>$spec0"($mv$
     let out: ref "core:prelude/list.wado//List<i32>";
     let item: i32;
     let used_16: i32;
-    let $sroa_$iter_0_index_23: i32;
+    let $licm_repr_22: ref Array<i32>;
+    let $sroa_$iter_0_index_24: i32;
     out = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
-    $sroa_$iter_0_index_23 = 0;
+    $sroa_$iter_0_index_24 = 0;
+    $licm_repr_22 = out.repr;
     b18: block {
         l19: loop {
-            break_if b18 $sroa_$iter_0_index_23 >= 2;
-            item = builtin::array_get_value<i32>($mv$arr$repr, $sroa_$iter_0_index_23);
-            $sroa_$iter_0_index_23 = $sroa_$iter_0_index_23 + 1;
+            break_if b18 $sroa_$iter_0_index_24 >= 2;
+            item = builtin::array_get_value<i32>($mv$arr$repr, $sroa_$iter_0_index_24);
+            $sroa_$iter_0_index_24 = $sroa_$iter_0_index_24 + 1;
             item = block -> i32 {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_0";
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f)).env, item);
             };
-            if @unlikely(local.tee used_16(out.used) >= builtin::array_len(out.repr)) {
+            if @unlikely(local.tee used_16(out.used) >= builtin::array_len($licm_repr_22)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
+                $licm_repr_22 = out.repr;
             }
-            builtin::array_set<i32>(out.repr, used_16, item);
+            builtin::array_set<i32>($licm_repr_22, used_16, item);
             out.used = used_16 + 1;
             continue l19;
         };

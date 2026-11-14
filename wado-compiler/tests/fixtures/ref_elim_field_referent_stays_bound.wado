@@ -1,0 +1,38 @@
+// `ref_elim` hands a reference back whole to a call only when it borrows a
+// local. Over a field, `emit(out, &r.name)` at each call would load `r.name`
+// again where `s` holds it, and the writing call between them keeps the WIR
+// from sharing those loads.
+use { println, Stdout } from "core:cli";
+
+struct Rec {
+    name: String,
+    tag: i32,
+}
+
+#[inline("never")]
+fn emit(out: &mut String, s: &String) {
+    out.push_str(s);
+}
+
+fn write_twice(out: &mut String, s: &String) -> i32 {
+    emit(out, s);
+    let b = s.len();
+    emit(out, s);
+    return b + s.len();
+}
+
+export fn run() with Stdout {
+    let rs: List<Rec> = builtin::black_box([Rec { name: "abc", tag: 1 }]);
+    let mut out = "";
+    let r = rs[0];
+    let n = write_twice(&mut out, &r.name);
+    println(`${out} ${n}`);
+}
+
+__DATA__
+{
+    "stdout": "abcabc 6\n",
+    "wir_contrast": {"O2": [{"let n = write_twice(&mut out, &r.name);": "emit(&mut out, &r.name);\n    let b = r.name.len();\n    emit(&mut out, &r.name);\n    let n = b + r.name.len();"}]},
+    "wir_scope": "ref_elim_field_referent_stays_bound.wado/run",
+    "wir_not_expect:O2": ["(r.name)"]
+}

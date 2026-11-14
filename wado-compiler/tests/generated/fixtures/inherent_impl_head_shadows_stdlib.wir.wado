@@ -434,45 +434,49 @@ global global:core:prelude/traits.wado::$const_obj_14: ref "core:prelude/string.
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "inherent_impl_head_shadows_stdlib.wado/$test_0_a_local_head_shadowing_a_stdlib_one_keeps_its_own_inherent_impl"() {
-    let $load_2: i32;
-    let $load_6: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $load_5: i32;
+    let $load_9: i32;
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>";
     let $local_5: ref null "tuple//[core:prelude/string.wado/String, i32]";
     let v_27: ref "tuple//[core:prelude/string.wado/String, i32]";
     let v_28: ref "core:prelude/string.wado//String";
     let existing: i32;
-    let b: i32;
     let self_58: ref "core:prelude/types.wado//Option<i32>";
-    let $sroa_$iter_0_repr_67: ref "Array<[core:prelude/string.wado/String,i32]>";
-    let $sroa_$iter_0_index_68: i32;
+    let $licm_log_67: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>";
+    let $licm_values_68: ref Array<i32>;
+    let $licm_keys_69: ref "Array<core:prelude/string.wado/String>";
+    let $sroa_$iter_0_index_71: i32;
     map = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<i32>(0), alive: builtin::array_new<bool>(0), count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
-    $sroa_$iter_0_repr_67 = global:inherent_impl_head_shadows_stdlib.wado::$const_obj_2;
-    $sroa_$iter_0_index_68 = 0;
+    $sroa_$iter_0_index_71 = 0;
+    $licm_values_68 = local.tee $licm_log_67(map.log).values;
+    $licm_keys_69 = $licm_log_67.keys;
     b0: block {
         l1: loop {
             if ref.is_null(local.tee $local_5($inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_13: block -> ref null "tuple//[core:prelude/string.wado/String, i32]" {
-                if $sroa_$iter_0_index_68 >= 1 {
+                if $sroa_$iter_0_index_71 >= 1 {
                     break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_13: ref.null none;
                 }
-                v_27 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: v_28 = local.tee v_27(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($sroa_$iter_0_repr_67, $sroa_$iter_0_index_68)).0; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_28.repr; $load_2 = v_28.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 }, 1: v_27.1 };
-                $sroa_$iter_0_index_68 = $sroa_$iter_0_index_68 + 1;
+                v_27 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: v_28 = local.tee v_27(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(global:inherent_impl_head_shadows_stdlib.wado::$const_obj_2, $sroa_$iter_0_index_71)).0; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_28.repr; $load_5 = v_28.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_5)), 0, $array_clone_src_1, 0, $load_5); $array_clone_dst_2, used: $load_5 }, 1: v_27.1 };
+                $sroa_$iter_0_index_71 = $sroa_$iter_0_index_71 + 1;
                 break $inline_core_prelude_slice_wado_SliceValueIter__core_prelude_string_wado_String_i32___core_prelude_traits_wado_Iterator__next_13: v_27;
             })) == 0 {
                 v_28 = local.tee v_27(ref.as_non_null($local_5)).0;
-                $load_2 = v_27.1;
+                $load_5 = v_27.1;
                 $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_16: block {
-                    if local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, v_28, local.tee $load_6(map.log).count)) >= 0 {
-                        builtin::array_set<i32>($load_6.values, existing, $load_2);
+                    if local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::place"(map, v_28, local.tee $load_9($licm_log_67.count))) >= 0 {
+                        builtin::array_set<i32>($licm_values_68, existing, $load_5);
                         break $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_i32___insert_16;
                     }
-                    if @unlikely(local.tee existing($load_6.count) == builtin::array_len($load_6.keys)) {
+                    if @unlikely($load_9 == builtin::array_len($licm_keys_69)) {
                         cold_path;
-                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($load_6, b = existing * 2; select i32(4 > b, 4, b));
+                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,i32>::grow"($licm_log_67, existing = $load_9 * 2; select i32(4 > existing, 4, existing));
+                        $licm_values_68 = $licm_log_67.values;
+                        $licm_keys_69 = $licm_log_67.keys;
                     }
-                    builtin::array_set<ref "core:prelude/string.wado//String">($load_6.keys, existing, v_28);
-                    builtin::array_set<i32>($load_6.values, existing, $load_2);
-                    builtin::array_set<bool>($load_6.alive, existing, 1);
-                    $load_6.count = existing + 1;
+                    builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_69, $load_9, v_28);
+                    builtin::array_set<i32>($licm_values_68, $load_9, $load_5);
+                    builtin::array_set<bool>($licm_log_67.alive, $load_9, 1);
+                    $licm_log_67.count = $load_9 + 1;
                 };
             } else {
                 break b0;
@@ -481,23 +485,23 @@ fn "inherent_impl_head_shadows_stdlib.wado/$test_0_a_local_head_shadowing_a_stdl
         };
     };
     $inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_i32___value_at_sroa_return__25: block {
-        if local.tee $sroa_$iter_0_index_68(block -> i32 {
+        if local.tee $sroa_$iter_0_index_71(block -> i32 {
             $array_clone_src_1 = global:inherent_impl_head_shadows_stdlib.wado::$const_obj_1;
             "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,i32>::find_index$spec0$sroa[key.repr]"(map.log, map.slots, map.nkeys, map.kids, map.lens, map.root, map.height, $array_clone_src_1);
         }) < 0 {
-            $load_2 = 0;
-            $sroa_$iter_0_index_68 = 0;
+            $load_5 = 0;
+            $sroa_$iter_0_index_71 = 0;
             break $inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_i32___value_at_sroa_return__25;
         }
-        $load_2 = 1;
-        $sroa_$iter_0_index_68 = builtin::array_get_value<i32>(map.log.values, $sroa_$iter_0_index_68);
+        $load_5 = 1;
+        $sroa_$iter_0_index_71 = builtin::array_get_value<i32>(map.log.values, $sroa_$iter_0_index_71);
         break $inline_core_collections_entries_wado_EntryLog_core_prelude_string_wado_String_i32___value_at_sroa_return__25;
     };
     if @unlikely($inline_core_prelude_types_wado_Option_i32__core_prelude_traits_wado_Eq__eq_sroa_self_value_other_value__27: block -> bool {
-        if local.tee self_58((if $load_2 == 0 -> ref "core:prelude/types.wado//Option<i32>" {
+        if local.tee self_58((if $load_5 == 0 -> ref "core:prelude/types.wado//Option<i32>" {
             global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0;
         } else {
-            struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $sroa_$iter_0_index_68 };
+            struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $sroa_$iter_0_index_71 };
         })).discriminant == 0 {
             break $inline_core_prelude_types_wado_Option_i32__core_prelude_traits_wado_Eq__eq_sroa_self_value_other_value__27: 0;
         } else {
@@ -506,10 +510,10 @@ fn "inherent_impl_head_shadows_stdlib.wado/$test_0_a_local_head_shadowing_a_stdl
         unreachable;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee v_28("core:prelude/string.wado/core:prelude/string.wado/String::format<inherent_impl_head_shadows_stdlib.wado/$tmpl$c4c0fa392eab2b1b,[core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>]>"(struct.new "inherent_impl_head_shadows_stdlib.wado//$tmpl$c4c0fa392eab2b1b" { h0: (if $load_2 == 0 -> ref "core:prelude/types.wado//Option<i32>" {
+        "core:rt/panic"(local.tee v_28("core:prelude/string.wado/core:prelude/string.wado/String::format<inherent_impl_head_shadows_stdlib.wado/$tmpl$c4c0fa392eab2b1b,[core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>]>"(struct.new "inherent_impl_head_shadows_stdlib.wado//$tmpl$c4c0fa392eab2b1b" { h0: (if $load_5 == 0 -> ref "core:prelude/types.wado//Option<i32>" {
             global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0;
         } else {
-            struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $sroa_$iter_0_index_68 };
+            struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $sroa_$iter_0_index_71 };
         }), h1: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 1 }, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_local_head_shadowing_a_stdlib_one_keeps_its_own_inherent_impl at inherent_impl_head_shadows_stdlib.wado:26
 condition: s.get(\"a\") == Option::Some(1)
 s.get(\"a\"): "), used: 190 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_local_head_shadowing_a_stdlib_one_keeps_its_own_inherent_impl at inherent_impl_head_shadows_stdlib.wado:26

@@ -157,17 +157,19 @@ fn "opt_bce_local_list_index_boxed.wado/sum_to"(n) {
     let v: ref "core:prelude/list.wado//List<i32>";
     let k: i32;
     let used_13: i32;
-    let $licm_repr_27: ref Array<i32>;
+    let $licm_repr_26: ref Array<i32>;
     v = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     k = 0;
+    $licm_repr_26 = v.repr;
     b0: block {
         l1: loop {
             break_if b0 k >= n;
-            if @unlikely(local.tee used_13(v.used) >= builtin::array_len(v.repr)) {
+            if @unlikely(local.tee used_13(v.used) >= builtin::array_len($licm_repr_26)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(v);
+                $licm_repr_26 = v.repr;
             }
-            builtin::array_set<i32>(v.repr, used_13, k);
+            builtin::array_set<i32>($licm_repr_26, used_13, k);
             v.used = used_13 + 1;
             k = k + 1;
             continue l1;
@@ -176,17 +178,17 @@ fn "opt_bce_local_list_index_boxed.wado/sum_to"(n) {
     n = 0;
     k = 0;
     used_13 = v.used;
-    $licm_repr_27 = v.repr;
+    $licm_repr_26 = v.repr;
     b3: block {
         l4: loop {
             break_if b3 (builtin::i64_extend_i32_s(k) + 3_i64) >= builtin::i64_extend_i32_s(used_13);
-            n = n + builtin::array_get_value<i32>($licm_repr_27, k);
+            n = n + builtin::array_get_value<i32>($licm_repr_26, k);
             k = k + 1;
-            n = n + builtin::array_get_value<i32>($licm_repr_27, k);
+            n = n + builtin::array_get_value<i32>($licm_repr_26, k);
             k = k + 1;
-            n = n + builtin::array_get_value<i32>($licm_repr_27, k);
+            n = n + builtin::array_get_value<i32>($licm_repr_26, k);
             k = k + 1;
-            n = n + builtin::array_get_value<i32>($licm_repr_27, k);
+            n = n + builtin::array_get_value<i32>($licm_repr_26, k);
             k = k + 1;
             continue l4;
         };
@@ -194,7 +196,7 @@ fn "opt_bce_local_list_index_boxed.wado/sum_to"(n) {
     b5: block {
         l6: loop {
             break_if b5 k >= used_13;
-            n = n + builtin::array_get_value<i32>($licm_repr_27, k);
+            n = n + builtin::array_get_value<i32>($licm_repr_26, k);
             k = k + 1;
             continue l6;
         };

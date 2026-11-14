@@ -3776,32 +3776,41 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<bf16>^co
     let end: i32;
     let item: u16;
     let $sroa_set_inner_25: ref "core:collections/hashmap.wado//HashMap<bf16,()>";
-    let self_29: ref "core:collections/entries.wado//EntryLog<bf16,()>";
     let e: i32;
     let b: i32;
-    let $hfs_index_45: i32;
+    let $licm_log_45: ref "core:collections/entries.wado//EntryLog<bf16,()>";
+    let $licm_keys_46: ref Array<bf16>;
+    let $licm_values_47: ref Array<()>;
+    let $licm_alive_48: ref Array<bool>;
+    let $hfs_index_49: i32;
     v = struct.new "core:collections/hashmap.wado//HashSeed" { k0: local.tee v(global:core:collections/hashmap.wado::DEFAULT_HASH_SEED).k0, k1: v.k1 };
     $sroa_set_inner_25 = struct.new "core:collections/hashmap.wado//HashMap<bf16,()>" { log: struct.new "core:collections/entries.wado//EntryLog<bf16,()>" { keys: builtin::array_new<u16>(0), values: builtin::array_new<()>(0), alive: builtin::array_new<bool>(0), count: 0, size: 0 }, fps: builtin::array_new<i32>(0), table: builtin::array_new<i32>(0), shift: 32, seed: v };
     end = builtin::array_len(elements);
     elements = local.tee $iter_0(struct.new "core:prelude/slice.wado//SliceValueIter<bf16>" { repr: elements, index: 0, end: end }).repr;
-    $hfs_index_45 = 0;
+    $licm_keys_46 = local.tee $licm_log_45($sroa_set_inner_25.log).keys;
+    $licm_values_47 = $licm_log_45.values;
+    $licm_alive_48 = $licm_log_45.alive;
+    $hfs_index_49 = 0;
     b437: block {
         l438: loop {
-            break_if b437 $hfs_index_45 >= end;
-            item = builtin::array_get_value<u16>(elements, $hfs_index_45);
-            $hfs_index_45 = $hfs_index_45 + 1;
+            break_if b437 $hfs_index_49 >= end;
+            item = builtin::array_get_value<u16>(elements, $hfs_index_49);
+            $hfs_index_49 = $hfs_index_49 + 1;
             $inline_core_collections_hashmap_wado_HashMap_bf16______try_insert_14: block {
-                $iter_0.index = $hfs_index_45;
+                $iter_0.index = $hfs_index_49;
                 break_if $inline_core_collections_hashmap_wado_HashMap_bf16______try_insert_14 "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<bf16,()>::place$sroa[key.value]"($sroa_set_inner_25, item) >= 0;
-                if @unlikely(local.tee e(local.tee self_29($sroa_set_inner_25.log).count) == builtin::array_len(self_29.keys)) {
+                if @unlikely(local.tee e($licm_log_45.count) == builtin::array_len($licm_keys_46)) {
                     cold_path;
-                    "core:collections/entries.wado/core:collections/entries.wado/EntryLog<bf16,()>::grow"(self_29, b = e * 2; select i32(4 > b, 4, b));
+                    "core:collections/entries.wado/core:collections/entries.wado/EntryLog<bf16,()>::grow"($licm_log_45, b = e * 2; select i32(4 > b, 4, b));
+                    $licm_keys_46 = $licm_log_45.keys;
+                    $licm_values_47 = $licm_log_45.values;
+                    $licm_alive_48 = $licm_log_45.alive;
                 }
-                builtin::array_set<u16>(self_29.keys, e, item);
-                builtin::array_set<()>(self_29.values, e, nop);
-                builtin::array_set<bool>(self_29.alive, e, 1);
-                self_29.count = e + 1;
-                self_29.size = self_29.size + 1;
+                builtin::array_set<u16>($licm_keys_46, e, item);
+                builtin::array_set<()>($licm_values_47, e, nop);
+                builtin::array_set<bool>($licm_alive_48, e, 1);
+                $licm_log_45.count = e + 1;
+                $licm_log_45.size = $licm_log_45.size + 1;
                 break $inline_core_collections_hashmap_wado_HashMap_bf16______try_insert_14;
             };
             continue l438;
@@ -3816,32 +3825,41 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f16>^cor
     let end: i32;
     let item: u16;
     let $sroa_set_inner_25: ref "core:collections/hashmap.wado//HashMap<f16,()>";
-    let self_29: ref "core:collections/entries.wado//EntryLog<f16,()>";
     let e: i32;
     let b: i32;
-    let $hfs_index_45: i32;
+    let $licm_log_45: ref "core:collections/entries.wado//EntryLog<f16,()>";
+    let $licm_keys_46: ref Array<f16>;
+    let $licm_values_47: ref Array<()>;
+    let $licm_alive_48: ref Array<bool>;
+    let $hfs_index_49: i32;
     v = struct.new "core:collections/hashmap.wado//HashSeed" { k0: local.tee v(global:core:collections/hashmap.wado::DEFAULT_HASH_SEED).k0, k1: v.k1 };
     $sroa_set_inner_25 = struct.new "core:collections/hashmap.wado//HashMap<f16,()>" { log: struct.new "core:collections/entries.wado//EntryLog<f16,()>" { keys: builtin::array_new<u16>(0), values: builtin::array_new<()>(0), alive: builtin::array_new<bool>(0), count: 0, size: 0 }, fps: builtin::array_new<i32>(0), table: builtin::array_new<i32>(0), shift: 32, seed: v };
     end = builtin::array_len(elements);
     elements = local.tee $iter_0(struct.new "core:prelude/slice.wado//SliceValueIter<f16>" { repr: elements, index: 0, end: end }).repr;
-    $hfs_index_45 = 0;
+    $licm_keys_46 = local.tee $licm_log_45($sroa_set_inner_25.log).keys;
+    $licm_values_47 = $licm_log_45.values;
+    $licm_alive_48 = $licm_log_45.alive;
+    $hfs_index_49 = 0;
     b440: block {
         l441: loop {
-            break_if b440 $hfs_index_45 >= end;
-            item = builtin::array_get_value<u16>(elements, $hfs_index_45);
-            $hfs_index_45 = $hfs_index_45 + 1;
+            break_if b440 $hfs_index_49 >= end;
+            item = builtin::array_get_value<u16>(elements, $hfs_index_49);
+            $hfs_index_49 = $hfs_index_49 + 1;
             $inline_core_collections_hashmap_wado_HashMap_f16______try_insert_14: block {
-                $iter_0.index = $hfs_index_45;
+                $iter_0.index = $hfs_index_49;
                 break_if $inline_core_collections_hashmap_wado_HashMap_f16______try_insert_14 "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<f16,()>::place$sroa[key.value]"($sroa_set_inner_25, item) >= 0;
-                if @unlikely(local.tee e(local.tee self_29($sroa_set_inner_25.log).count) == builtin::array_len(self_29.keys)) {
+                if @unlikely(local.tee e($licm_log_45.count) == builtin::array_len($licm_keys_46)) {
                     cold_path;
-                    "core:collections/entries.wado/core:collections/entries.wado/EntryLog<f16,()>::grow"(self_29, b = e * 2; select i32(4 > b, 4, b));
+                    "core:collections/entries.wado/core:collections/entries.wado/EntryLog<f16,()>::grow"($licm_log_45, b = e * 2; select i32(4 > b, 4, b));
+                    $licm_keys_46 = $licm_log_45.keys;
+                    $licm_values_47 = $licm_log_45.values;
+                    $licm_alive_48 = $licm_log_45.alive;
                 }
-                builtin::array_set<u16>(self_29.keys, e, item);
-                builtin::array_set<()>(self_29.values, e, nop);
-                builtin::array_set<bool>(self_29.alive, e, 1);
-                self_29.count = e + 1;
-                self_29.size = self_29.size + 1;
+                builtin::array_set<u16>($licm_keys_46, e, item);
+                builtin::array_set<()>($licm_values_47, e, nop);
+                builtin::array_set<bool>($licm_alive_48, e, 1);
+                $licm_log_45.count = e + 1;
+                $licm_log_45.size = $licm_log_45.size + 1;
                 break $inline_core_collections_hashmap_wado_HashMap_f16______try_insert_14;
             };
             continue l441;
@@ -3874,32 +3892,41 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashSet<f32>^cor
     let end: i32;
     let item: f32;
     let $sroa_set_inner_25: ref "core:collections/hashmap.wado//HashMap<f32,()>";
-    let self_29: ref "core:collections/entries.wado//EntryLog<f32,()>";
     let e: i32;
     let b: i32;
-    let $hfs_index_45: i32;
+    let $licm_log_45: ref "core:collections/entries.wado//EntryLog<f32,()>";
+    let $licm_keys_46: ref Array<f32>;
+    let $licm_values_47: ref Array<()>;
+    let $licm_alive_48: ref Array<bool>;
+    let $hfs_index_49: i32;
     v = struct.new "core:collections/hashmap.wado//HashSeed" { k0: local.tee v(global:core:collections/hashmap.wado::DEFAULT_HASH_SEED).k0, k1: v.k1 };
     $sroa_set_inner_25 = struct.new "core:collections/hashmap.wado//HashMap<f32,()>" { log: struct.new "core:collections/entries.wado//EntryLog<f32,()>" { keys: builtin::array_new<f32>(0), values: builtin::array_new<()>(0), alive: builtin::array_new<bool>(0), count: 0, size: 0 }, fps: builtin::array_new<i32>(0), table: builtin::array_new<i32>(0), shift: 32, seed: v };
     end = builtin::array_len(elements);
     elements = local.tee $iter_0(struct.new "core:prelude/slice.wado//SliceValueIter<f32>" { repr: elements, index: 0, end: end }).repr;
-    $hfs_index_45 = 0;
+    $licm_keys_46 = local.tee $licm_log_45($sroa_set_inner_25.log).keys;
+    $licm_values_47 = $licm_log_45.values;
+    $licm_alive_48 = $licm_log_45.alive;
+    $hfs_index_49 = 0;
     b443: block {
         l444: loop {
-            break_if b443 $hfs_index_45 >= end;
-            item = builtin::array_get_value<f32>(elements, $hfs_index_45);
-            $hfs_index_45 = $hfs_index_45 + 1;
+            break_if b443 $hfs_index_49 >= end;
+            item = builtin::array_get_value<f32>(elements, $hfs_index_49);
+            $hfs_index_49 = $hfs_index_49 + 1;
             $inline_core_collections_hashmap_wado_HashMap_f32______try_insert_14: block {
-                $iter_0.index = $hfs_index_45;
+                $iter_0.index = $hfs_index_49;
                 break_if $inline_core_collections_hashmap_wado_HashMap_f32______try_insert_14 "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<f32,()>::place$sroa[key.value]"($sroa_set_inner_25, item) >= 0;
-                if @unlikely(local.tee e(local.tee self_29($sroa_set_inner_25.log).count) == builtin::array_len(self_29.keys)) {
+                if @unlikely(local.tee e($licm_log_45.count) == builtin::array_len($licm_keys_46)) {
                     cold_path;
-                    "core:collections/entries.wado/core:collections/entries.wado/EntryLog<f32,()>::grow"(self_29, b = e * 2; select i32(4 > b, 4, b));
+                    "core:collections/entries.wado/core:collections/entries.wado/EntryLog<f32,()>::grow"($licm_log_45, b = e * 2; select i32(4 > b, 4, b));
+                    $licm_keys_46 = $licm_log_45.keys;
+                    $licm_values_47 = $licm_log_45.values;
+                    $licm_alive_48 = $licm_log_45.alive;
                 }
-                builtin::array_set<f32>(self_29.keys, e, item);
-                builtin::array_set<()>(self_29.values, e, nop);
-                builtin::array_set<bool>(self_29.alive, e, 1);
-                self_29.count = e + 1;
-                self_29.size = self_29.size + 1;
+                builtin::array_set<f32>($licm_keys_46, e, item);
+                builtin::array_set<()>($licm_values_47, e, nop);
+                builtin::array_set<bool>($licm_alive_48, e, 1);
+                $licm_log_45.count = e + 1;
+                $licm_log_45.size = $licm_log_45.size + 1;
                 break $inline_core_collections_hashmap_wado_HashMap_f32______try_insert_14;
             };
             continue l444;

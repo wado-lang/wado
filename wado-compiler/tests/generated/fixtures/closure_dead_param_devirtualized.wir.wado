@@ -120,9 +120,11 @@ fn "closure_dead_param_devirtualized.wado/table$$Closure_1$sroa[at.$capture_0]"(
     let current_23: i32;
     let $sroa_$iter_0_start_46: i32;
     let $sroa_$iter_1_start_50: i32;
-    let $cse_56: i32;
+    let $licm_repr_56: ref Array<i32>;
+    let $cse_57: i32;
     out = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     $sroa_$iter_0_start_46 = 0;
+    $licm_repr_56 = out.repr;
     b1: block {
         l2: loop {
             break_if b1 $sroa_$iter_0_start_46 >= rows;
@@ -132,14 +134,15 @@ fn "closure_dead_param_devirtualized.wado/table$$Closure_1$sroa[at.$capture_0]"(
                 l4: loop {
                     break_if b3 $sroa_$iter_1_start_50 >= cols;
                     $sroa_$iter_1_start_50 = local.tee current_23($sroa_$iter_1_start_50) + 1;
-                    $cse_56 = current_23 + 1;
-                    current_23 = select i32(current_23 < cols, current_23 * at, 0) + (select i32($cse_56 < cols, $cse_56 * at, 0) * 2);
-                    if @unlikely(local.tee $cse_56(out.used) >= builtin::array_len(out.repr)) {
+                    $cse_57 = current_23 + 1;
+                    current_23 = select i32(current_23 < cols, current_23 * at, 0) + (select i32($cse_57 < cols, $cse_57 * at, 0) * 2);
+                    if @unlikely(local.tee $cse_57(out.used) >= builtin::array_len($licm_repr_56)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
+                        $licm_repr_56 = out.repr;
                     }
-                    builtin::array_set<i32>(out.repr, $cse_56, current_23);
-                    out.used = $cse_56 + 1;
+                    builtin::array_set<i32>($licm_repr_56, $cse_57, current_23);
+                    out.used = $cse_57 + 1;
                     continue l4;
                 };
             };

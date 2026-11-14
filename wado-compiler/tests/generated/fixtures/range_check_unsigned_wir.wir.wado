@@ -187,17 +187,14 @@ fn "range_check_unsigned_wir.wado/run"() with Stdout {
     let $licm_used_151: i32;
     let message_154: ref "core:prelude/string.wado//String";
     let $cm_pair_7_161: i64;
-    let $sroa_$iter_0_repr_199: ref Array<i32>;
     let $sroa_$iter_0_index_200: i32;
-    let $sroa_$iter_2_repr_202: ref Array<i64>;
     xs_0 = black_box(global:range_check_unsigned_wir.wado::$const_obj_2);
-    $sroa_$iter_0_repr_199 = global:range_check_unsigned_wir.wado::$const_obj_1;
     $sroa_$iter_0_index_200 = 0;
     $licm_used_151 = xs_0.used;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_index_200 >= 6;
-            item_24 = builtin::array_get_value<i32>($sroa_$iter_0_repr_199, $sroa_$iter_0_index_200);
+            item_24 = builtin::array_get_value<i32>(global:range_check_unsigned_wir.wado::$const_obj_1, $sroa_$iter_0_index_200);
             $sroa_$iter_0_index_200 = $sroa_$iter_0_index_200 + 1;
             item_24 = black_box(item_24);
             message_154 = block -> ref "core:prelude/string.wado//String" {
@@ -215,12 +212,11 @@ fn "range_check_unsigned_wir.wado/run"() with Stdout {
             continue l1;
         };
     };
-    $sroa_$iter_2_repr_202 = global:range_check_unsigned_wir.wado::$const_obj_0;
     $sroa_$iter_0_index_200 = 0;
     b3: block {
         l4: loop {
             break_if b3 $sroa_$iter_0_index_200 >= 4;
-            $cm_pair_7_161 = builtin::array_get_value<i64>($sroa_$iter_2_repr_202, $sroa_$iter_0_index_200);
+            $cm_pair_7_161 = builtin::array_get_value<i64>(global:range_check_unsigned_wir.wado::$const_obj_0, $sroa_$iter_0_index_200);
             $sroa_$iter_0_index_200 = $sroa_$iter_0_index_200 + 1;
             message_154 = block -> ref "core:prelude/string.wado//String" {
                 $licm_used_151 = black_box($cm_pair_7_161) <=u 9_i64;
@@ -1324,7 +1320,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<range_check
     let pair: i32;
     let tens: i32;
     let start_295: i32;
-    let $sroa_view_repr_1200: ref Array<u8>;
     let $sroa_slot_1228: ref null Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(51), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_26: block {
@@ -1426,14 +1421,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<range_check
     if $mv$t$h0 > start_295 {
         builtin::array_set_u8($load_8, start_295, 48 + builtin::i32_wrap_i64(x_83 %u 10_i64));
     }
-    $sroa_view_repr_1200 = global:core:prelude/string.wado::$const_obj_4;
     if @unlikely(local.tee $mv$t$h0(is_negative_79 + 2) > builtin::array_len($load_8)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
     }
     is_negative_79 = out_3.used;
     out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(local.tee $load_8(out_3.repr), is_negative_79, $sroa_view_repr_1200, 0, 2);
+    builtin::array_copy<u8>(local.tee $load_8(out_3.repr), is_negative_79, global:core:prelude/string.wado::$const_obj_4, 0, 2);
     if $mv$t$h1 {
         $sroa_slot_1228 = array.new_fixed<u8>(116, 114, 117, 101);
         $mv$t$h1 = 4;
@@ -1454,14 +1448,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<range_check
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
     };
-    $load_8 = global:core:prelude/string.wado::$const_obj_3;
     if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
     }
     $mv$t$h1 = out_3.used;
     out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_1200(out_3.repr), $mv$t$h1, $load_8, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_8(out_3.repr), $mv$t$h1, global:core:prelude/string.wado::$const_obj_3, 0, 1);
     if $mv$t$h2 {
         $sroa_slot_1228 = array.new_fixed<u8>(116, 114, 117, 101);
         $mv$t$h1 = 4;
@@ -1472,7 +1465,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<range_check
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
             break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__2__$inline_core_prelude_string_wado_String__internal_push_string_2 $mv$t$h1 == 0;
-            if @unlikely(local.tee $mv$t$h0($mv$t$h0 + $mv$t$h1) > builtin::array_len($sroa_view_repr_1200)) {
+            if @unlikely(local.tee $mv$t$h0($mv$t$h0 + $mv$t$h1) > builtin::array_len($load_8)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
             }
@@ -1497,7 +1490,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<range_check
     let pair: i32;
     let tens: i32;
     let start_215: i32;
-    let $sroa_view_repr_856: ref Array<u8>;
     let $sroa_slot_872: ref null Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
@@ -1598,14 +1590,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<range_check
     if digit_count_73 > start_215 {
         builtin::array_set_u8($load_8, start_215, 48 + builtin::i32_wrap_i64($mv$t$h0 %u 10_i64));
     }
-    $sroa_view_repr_856 = global:core:prelude/string.wado::$const_obj_4;
     if @unlikely(local.tee is_negative_71(is_negative_71 + 2) > builtin::array_len($load_8)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_71);
     }
     digit_count_73 = out_3.used;
     out_3.used = is_negative_71;
-    builtin::array_copy<u8>(local.tee $load_8(out_3.repr), digit_count_73, $sroa_view_repr_856, 0, 2);
+    builtin::array_copy<u8>(local.tee $load_8(out_3.repr), digit_count_73, global:core:prelude/string.wado::$const_obj_4, 0, 2);
     if $mv$t$h1 {
         $sroa_slot_872 = array.new_fixed<u8>(116, 114, 117, 101);
         $mv$t$h1 = 4;
