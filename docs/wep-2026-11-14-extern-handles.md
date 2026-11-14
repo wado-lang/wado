@@ -173,7 +173,27 @@ test on a class. What changes is where the class comes from.
   answers the class of the nearest ancestor the slice declares.
 
 A `match` with any number of type-pattern arms reads the class once. Narrowing
-the host's object costs one call where it cost none.
+the host's object costs one call where it cost none. One import per target type
+was the alternative: it needs no numbering, but a `match` then calls once per
+arm.
+
+The slice will grow to the whole web platform, well past a thousand classes, so
+the cost of `class-of` must not grow with the slice. The glue keeps a map from
+each declared interface's prototype to its class, and walks the object's
+prototype chain until the map answers. The walk is as long as the object's
+inheritance chain. It finds the nearest declared ancestor of an object whose own
+interface the slice leaves out, as the `instanceof` scan of today's glue does.
+
+Both were run over jsdom objects with the slice padded to 1507 classes, the
+real ones last in the scan's order:
+
+| `class-of` by                    | Relative time |
+| -------------------------------- | ------------- |
+| `instanceof` scan, deepest first | 773           |
+| Prototype chain into a map       | 1             |
+
+They agreed on every object tried, an `HTMLDivElement` and a `Text` outside the
+slice included.
 
 `Inspect` reads the class the same way and writes the name of the resource that
 owns it. There is no index to write beside it.
@@ -246,6 +266,9 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
   lowered one was not tried.
 - `class-of` costs a call for each narrowing of a host object. It was not
   measured against the range test it replaces.
+- `class-of` reads prototypes of the glue's own realm. An object from another
+  realm, such as an element of an `iframe`'s document, has other prototypes and
+  matches none.
 - The loader rests on jco's `instantiation` mode handing over each core
   module's imports. Nothing in jco's documentation promises the shape.
 - No host other than a JavaScript engine and a Wado handler can answer a web
