@@ -484,14 +484,15 @@ fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: 
 
 /// Whether `stmt` is `local = …`, a store whose value is read before it lands.
 fn assigns_local(body: &Body, stmt: StmtId, local: u32) -> bool {
-    assign_of(body, stmt).is_some_and(|(target, _)| local_of(body, target) == Some(local))
+    assign_of(body, stmt).is_some_and(|(target, _)| assigned_local(body, target) == Some(local))
 }
 
 /// Whether `stmt` is `x = x`, which copy propagation leaves of `let t = x; …;
 /// x = t`.
 fn assigns_itself(body: &Body, stmt: StmtId) -> bool {
     assign_of(body, stmt).is_some_and(|(target, value)| {
-        local_of(body, target).is_some_and(|t| value.as_expr().and_then(|v| local_of(body, v)) == Some(t))
+        assigned_local(body, target)
+            .is_some_and(|t| body.local_read(value).map(|(v, _)| v) == Some(t))
     })
 }
 
@@ -505,11 +506,8 @@ fn assign_of(body: &Body, stmt: StmtId) -> Option<(ExprId, Operand)> {
     }
 }
 
-fn local_of(body: &Body, e: ExprId) -> Option<u32> {
-    match body.exprs[e].kind {
-        ExprKind::Local { index, .. } => Some(index),
-        _ => None,
-    }
+fn assigned_local(body: &Body, target: ExprId) -> Option<u32> {
+    body.local_read(target.into()).map(|(index, _)| index)
 }
 
 /// Stability for a `RefProjection` source rooted at `root`, bound at statement

@@ -367,7 +367,8 @@ impl Interpreter<'_> {
                 // Past the aliases, the binding copies what it reads. A reference
                 // the frame cannot name a place for would copy its referent, which
                 // a later write leaves stale, unless nothing writes the referent.
-                if self.type_table.is_reference(type_id) && !self.frame.const_views.contains(index) {
+                if self.type_table.is_reference(type_id) && !self.frame.const_views.contains(index)
+                {
                     return Flow::Bail;
                 }
                 if self.binds_unnamed_written_handle(body, index, value) {
