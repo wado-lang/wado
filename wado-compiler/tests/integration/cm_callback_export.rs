@@ -18,30 +18,21 @@ use crate::common::{
 const DECLARATIONS: &str = r#"
 use { MonotonicClock } from "wasi:clocks";
 
-#[cm("example:demo/target", linearity = "unrestricted", repr = "externref", classes = "0..=0")]
-resource Target {
-    #[cm("example:demo/target#listen")]
-    #[cm_params("self", "listener")]
-    fn listen(&self, listener: fn mut(i32) with Demo);
-    #[cm("example:demo/target#listen-f64")]
-    #[cm_params("self", "listener")]
-    fn listen_f64(&self, listener: fn mut(f64) with Demo);
-    #[cm("example:demo/target#listen-target")]
-    #[cm_params("self", "listener")]
-    fn listen_target(&self, listener: fn mut(Target) with Demo);
-}
-
 #[cm("example:demo/global")]
 interface Demo {
-    #[cm("example:demo/global#target")]
-    fn target() -> Target;
+    #[cm("example:demo/global#listen")]
+    #[cm_params("listener")]
+    fn listen(listener: fn mut(i32) with Demo);
+    #[cm("example:demo/global#listen-f64")]
+    #[cm_params("listener")]
+    fn listen_f64(listener: fn mut(f64) with Demo);
     #[cm("example:demo/global#report")]
     fn report(total: i32);
 }
 
 fn listen_summing() with Demo {
     let mut total = 0;
-    Demo::target().listen(|v: i32| {
+    Demo::listen(|v: i32| {
         total += v;
         Demo::report(total);
     });
@@ -58,16 +49,14 @@ type Shared = Arc<Mutex<Host>>;
 
 fn add_demo_to_linker(linker: &mut Linker<WasiState>, host: &Shared) -> anyhow::Result<()> {
     let mut global = linker.instance("example:demo/global")?;
-    global.func_wrap("target", |_, (): ()| Ok((0.0_f64,)))?;
     let reports = Arc::clone(host);
     global.func_wrap("report", move |_, (total,): (i32,)| {
         reports.lock().unwrap().reports.push(total);
         Ok(())
     })?;
-    let mut target = linker.instance("example:demo/target")?;
-    for listen in ["listen", "listen-f64", "listen-target"] {
+    for listen in ["listen", "listen-f64"] {
         let listeners = Arc::clone(host);
-        target.func_wrap(listen, move |_, (_target, key): (f64, u32)| {
+        global.func_wrap(listen, move |_, (key,): (u32,)| {
             listeners.lock().unwrap().listeners.push(key);
             Ok(())
         })?;
@@ -184,27 +173,25 @@ fn a_callback_enters_while_run_is_suspended() {
     assert_eq!(host.reports, vec![5, -1]);
 }
 
-/// A handle crosses as an `f64` but is no `f64` in the guest, so a closure
-/// taking one has an export of its own.
+/// Each argument type has an export of its own.
 #[test]
-fn a_handle_argument_and_an_f64_argument_call_back_apart() {
+fn an_i32_argument_and_an_f64_argument_call_back_apart() {
     let host = with_program(
         "export fn run() with Demo {
-            let target = Demo::target();
-            target.listen_f64(|v: f64| Demo::report(v as i32));
-            target.listen_target(|t: Target| Demo::report(if t == Demo::target() { 100 } else { -100 }));
+            Demo::listen(|v: i32| Demo::report(v));
+            Demo::listen_f64(|v: f64| Demo::report((v * 2.0) as i32));
         }",
         async |store, command, instance, host| {
             run_to_completion(store, command).await?;
-            let [of_f64, of_target] = listeners(host)[..] else {
+            let [of_i32, of_f64] = listeners(host)[..] else {
                 panic!("the program listens twice");
             };
+            let call_i32 = callback_export::<(u32, i32), ()>(store, instance, "call-i32")?;
+            call_i32.call_async(&mut *store, (of_i32, 3)).await?;
             let call_f64 = callback_export::<(u32, f64), ()>(store, instance, "call-f64")?;
-            call_f64.call_async(&mut *store, (of_f64, 3.0)).await?;
-            let call_handle = callback_export::<(u32, f64), ()>(store, instance, "call-handle")?;
-            call_handle.call_async(&mut *store, (of_target, 0.0)).await?;
+            call_f64.call_async(&mut *store, (of_f64, 1.5)).await?;
             Ok(())
         },
     );
-    assert_eq!(host.reports, vec![3, 100]);
+    assert_eq!(host.reports, vec![3, 3]);
 }

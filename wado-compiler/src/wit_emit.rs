@@ -511,7 +511,7 @@ impl<'a> Emitter<'a> {
             }
             // Interfaces referenced by this interface's function signatures.
             for info in infos.iter().filter(|i| i.path == fq) {
-                for func in &info.functions {
+                for func in component_imports(registry, &info.functions) {
                     for (_, _, ty) in &func.params {
                         collect_named_type_sources(ty, registry, &mut work);
                     }
@@ -641,7 +641,7 @@ impl<'a> Emitter<'a> {
         let mut resource_funcs: BTreeMap<String, Vec<ResourceFunc>> = BTreeMap::new();
         let mut free_funcs: Vec<StandaloneFunc> = Vec::new();
         for info in infos.iter().filter(|i| i.path == fq) {
-            for func in one_per_cm_name(&info.functions) {
+            for func in one_per_cm_name(component_imports(registry, &info.functions)) {
                 if let Some((kind, resource, member)) = parse_resource_func(&func.wasi_func_name) {
                     let rf = self.build_resource_func(func, kind, member, fq, &mut uses)?;
                     resource_funcs
@@ -798,16 +798,6 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    /// The universal handle an extern-handle-backed resource crosses as. It
-    /// names no WIT type, so `&handle` renders as the handle, not a `borrow`.
-    fn extern_handle(&self, named: &NamedType) -> Option<Type> {
-        let registry = self.cm_interface_registry?;
-        let source = registry.source_interface(named)?;
-        registry
-            .is_unrestricted_resource(&source, &named.name)
-            .then_some(Type::F64)
-    }
-
     /// Render an AST leaf: primitive, named CM type, or `&Resource` borrow.
     fn map_ast_leaf(
         &self,
@@ -817,9 +807,6 @@ impl<'a> Emitter<'a> {
     ) -> Result<Type, WitEmitError> {
         match ty {
             AstType::Named(named) => {
-                if let Some(handle) = self.extern_handle(named) {
-                    return Ok(handle);
-                }
                 if let Some(base) = self
                     .cm_interface_registry
                     .and_then(|registry| registry.type_decls().newtype_base(named))
@@ -835,9 +822,6 @@ impl<'a> Emitter<'a> {
             // transparent (already peeled by `classify_ast`).
             AstType::Reference(inner) | AstType::MutReference(inner) => {
                 if let AstType::Named(named) = inner.as_ref() {
-                    if let Some(handle) = self.extern_handle(named) {
-                        return Ok(handle);
-                    }
                     Ok(Type::borrow(self.cm_type_name(named, current_fq, uses)))
                 } else {
                     self.map_ast_type(inner, current_fq, uses)
@@ -1249,6 +1233,17 @@ fn use_target(current_fq: &str, source_fq: &str) -> String {
         (_, Some(src)) => src.to_fq(),
         _ => source_fq.to_string(),
     }
+}
+
+/// The functions of an interface a component imports: a web import is the main
+/// module's, so no WIT lists it.
+fn component_imports<'a>(
+    registry: &'a CmInterfaceRegistry,
+    functions: &'a [CmFunctionInfo],
+) -> impl Iterator<Item = &'a CmFunctionInfo> {
+    functions
+        .iter()
+        .filter(|func| !registry.is_extern_import(func))
 }
 
 /// The package declaring `callbacks`, which no registry holds; `None` without any.

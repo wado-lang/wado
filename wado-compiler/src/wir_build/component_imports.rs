@@ -100,10 +100,10 @@ pub fn resolve_import_plan(
             // export's signature references its types (e.g. a handler returning
             // `Result<Response, ErrorCode>` that constructs no request/response
             // itself still needs the response/error-code types).
-            let has_used_function = interface_info.functions.iter().any(|func| {
-                registry.is_function_supported(func)
-                    && project.used_wasi_functions.contains(&func.cm_identifier())
-            });
+            let has_used_function = interface_info
+                .functions
+                .iter()
+                .any(|func| project.emits_cm_function(func));
             if has_used_function || export_referenced_interfaces.contains(&interface_info.path) {
                 push(
                     &mut entries,
@@ -119,10 +119,7 @@ pub fn resolve_import_plan(
         let used: Vec<_> = interface_info
             .functions
             .iter()
-            .filter(|func| {
-                registry.is_function_supported(func)
-                    && project.used_wasi_functions.contains(&func.cm_identifier())
-            })
+            .filter(|func| project.emits_cm_function(func))
             .collect();
         if used.is_empty() {
             continue;

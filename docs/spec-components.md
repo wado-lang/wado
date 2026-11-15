@@ -421,13 +421,47 @@ A `#[cm(...)]` resource may declare what may be done with its handle: `linearity
 
 `repr = "externref"` declares how the handle is represented: one reference to a host object, which the collector reclaims. Nothing runs when such a handle dies, so it requires `linearity = "unrestricted"`. An unrestricted resource has no representation of its own, so it requires `repr = "externref"` in turn.
 
-> Not yet implemented: an unrestricted handle is still the `f64` the paragraphs below describe. [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md) replaces it.
-
 An affine resource is move-only and carries a drop obligation (see [Affine Types](./spec-affine.md)). An unrestricted one owns nothing, so it is an ordinary copyable value. Assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
 
-The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain `f64` the host interprets (see [Handle Encoding](#handle-encoding)). `as` converts an unrestricted handle to or from `f64`, keeping every bit, or upcasts it to a resource it extends. No other cast accepts one, so an affine resource and an unrestricted one never convert into each other.
+An affine resource crosses the Component Model boundary as an `own` / `borrow` handle. A resource declared `repr = "externref"` is an extern handle, which [Extern Handles](#extern-handles) describes. `as` upcasts an extern handle to a resource it extends. No other cast accepts one, so an affine resource and an extern handle never convert into each other, and neither converts to a number.
 
-An unrestricted resource is not a Component Model `resource`. Its operations are plain CM functions that take the handle as an ordinary parameter, so a `#[cm(...)]` name written in the `[constructor]T`, `[method]T.m` or `[static]T.m` form is an error on one. `classes = "..."` (see [Resource Inheritance](#resource-inheritance)) is accepted only beside `repr = "externref"`.
+An extern resource is not a Component Model `resource`. Its operations are plain functions that take the handle as an ordinary parameter, so a `#[cm(...)]` name written in the `[constructor]T`, `[method]T.m` or `[static]T.m` form is an error on one. `classes = "..."` (see [Resource Inheritance](#resource-inheritance)) is accepted only beside `repr = "externref"`.
+
+#### Extern Handles
+
+An extern handle is one Wasm `externref`. It is either an object of the host, or backed by a value of the guest. `Option<R>` of an extern handle type `R` is the same reference, nullable.
+
+Every extern handle type implements `ExternHandle`, a marker the compiler states, and through it `Backing`:
+
+- `R::backed_by(&value)` makes a handle of type `R` that `value` stands behind. The handle keeps the reference, not a copy. Its class is `R`'s own.
+- `handle.backing::<T>()` is the value behind the handle, as `Option<&mut T>`. It is `None` for an object of the host, and for a handle a value of another type backs.
+
+A backed handle is how a guest answers an import itself, as a handler in a test does.
+
+<!-- {"fixture":"spec_components_backed_handle.wado"} -->
+
+```wado
+struct Tag {
+    name: String,
+    uses: i32,
+}
+
+test {
+    let mut tag = Tag { name: "div", uses: 0 };
+    let node: Node = Element::backed_by(&tag);   // an upcast keeps the backing
+    let Some(back) = node.backing::<Tag>() else {
+        panic("a Tag backs the handle");
+    };
+    back.uses += 1;
+    assert tag.uses == 1;                        // the handle holds `tag` itself
+    assert node.backing::<String>() matches { None };
+    assert node == Element::backed_by(&tag);     // one value, one handle
+}
+```
+
+An import whose signature names an extern handle is a web import. The handle crosses as the reference itself where it is a whole parameter or result, or an `Option` of one. A web import is not part of the component's world, and an extern handle in the signature of an `export fn` is an error: a reference to a host object does not cross a component boundary.
+
+> Not yet implemented: no host serves a web import yet, so calling one traps unless a handler answers it. An extern handle inside a list, a record or another variant is not yet lowered, and an import taking one is rejected. A type pattern or `==` on an object of the host traps, since the class and the identity of one are not yet read. [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md) lists the work.
 
 ### Resource Ownership
 
@@ -468,7 +502,7 @@ fn use_it(w: Widget) {
 }
 
 test {
-    let w = 137438953472.0 as Widget;   // class 1, object 0
+    let w = Widget::backed_by(&"button");
     let t: Target = w;
     assert t == w && t matches { _: Widget };
 }
@@ -509,9 +543,9 @@ A method call resolves statically. `recv.m()` gathers every `m` declared along `
 - Static methods (no `&self`) are not inherited.
 - `Self` in an inherited method names the resource that declares it, not the receiver's type.
 
-#### Handle Encoding
+#### Handle Classes
 
-An unrestricted handle is a number the host mints: an integer-valued `f64` below 2^53, equal to `class * 2^37 + index`. The class takes 16 bits and the index into the host's object table takes 37. The host hands out one handle per object, and tags each object with the class of the nearest ancestor of its runtime type that the program declares. A type the program does not name therefore reads as its nearest named ancestor.
+Every extern handle of an `extends` tree carries a class, a 16-bit number naming its runtime type. A backed handle carries the class of the resource `backed_by` was called on. An object of the host carries the class of the nearest ancestor of its runtime type that the program declares, so a type the program does not name reads as its nearest named ancestor.
 
 `classes = "lo..=hi"` on the `#[cm(...)]` numbers the classes of an `extends` tree. A resource's own class is `lo`, and the resources extending it hold the rest of the range:
 
@@ -520,11 +554,11 @@ An unrestricted handle is a number the host mints: an integer-valued `f64` below
 - A tree declares `classes` on every resource or on none.
 - A range may leave gaps, which stand for classes the program does not declare.
 
-A type pattern narrowing to `T` tests whether the handle's class lies in `T`'s range. A negative value, an infinity and a NaN lie in no range. A type pattern narrows only to a resource that declares `classes`.
+A type pattern narrowing to `T` tests whether the handle's class lies in `T`'s range. A type pattern narrows only to a resource that declares `classes`.
 
 #### Traits on Handles
 
-- `Eq`: every unrestricted resource is `Eq`, so a type holding one derives `Eq` too. `==` and `!=` compare two handles when one type extends the other. Equal handles name one object (see [Handle Encoding](#handle-encoding)). Handles compare by bits, so a NaN handle equals itself and `-0.0` differs from `0.0`.
+- `Eq`: every extern resource is `Eq`, so a type holding one derives `Eq` too. `==` and `!=` compare two handles when one type extends the other. Two handles are equal when they are one object of the host, or one value of the guest backs both. A host object never equals a backed handle.
 - `Ord`: none. Handles have no order.
 - `Inspect`: `${x:?}` renders the dynamic type the handle's class names, as [Inspect Output](./spec-literals.md#inspect-output) states.
 - `Serialize` and `Deserialize`: a resource, and a struct or variant that holds one, cannot derive either. A handle means something only inside its running instance. A hand-written impl may serialize what it reads from the host object.

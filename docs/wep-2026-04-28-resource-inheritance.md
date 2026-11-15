@@ -777,9 +777,9 @@ Implemented, with tests in `wado-compiler/tests/integration/unrestricted_resourc
 - The registry reads that newtype two ways. `resolve_type` peels the handle to its `f64`, the view the boundary decides with: the flat ABI, the canonical options, the emitted WIT. `value_type` keeps the resource's own type, the view the guest holds. A binding's signature takes the second, because `Option<Element>` and `Option<f64>` are distinct GC types (`tests/integration/web_dom.rs`). A module outside the stdlib declares such a resource as the stdlib would: it is not a local newtype, so no instance exports it as a named type.
 
 - Type patterns. `p: T` is a pattern wherever one stands, and a `let` annotation is that pattern. An ascription `T` strictly extending the subject's type narrows: a plain `let` rejects it as refutable, and a `match` over one needs a final `_` and reports an arm an earlier ancestor arm shadows. The test compares the handle against `T`'s class range, and a target without `classes` is rejected.
-- `Eq`. `==` / `!=` on two handles one of whose types extends the other compares their bits (`tests/fixtures/unrestricted_handle_bits.wado`). The trait holds of every unrestricted resource, so `Option<Node>` or a struct holding one derives it too (`tests/fixtures/resource_eq_through_option.wado`).
-- `as` between a handle and anything but `f64` or a handle type it upcasts to is rejected (`tests/fixtures/error_unrestricted_resource_cast.wado`).
-- `Inspect` renders the dynamic type (`tests/fixtures/inspect_unrestricted_handle.wado`).
+- `Eq`. `==` / `!=` compares two handles one of whose types extends the other, as [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md) now defines it (`tests/fixtures/extern_handle_backed.wado`). The trait holds of every unrestricted resource, so `Option<Node>` or a struct holding one derives it too (`tests/fixtures/resource_eq_through_option.wado`).
+- `as` between a handle and anything but a handle type it upcasts to is rejected (`tests/fixtures/error_extern_handle_cast.wado`).
+- `Inspect` renders the dynamic type (`tests/fixtures/inspect_extern_handle.wado`).
 
 Not built:
 

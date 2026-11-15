@@ -1908,6 +1908,20 @@ impl CmInterfaceRegistry {
             .any(|ty| self.mentions_extern_handle(ty))
     }
 
+    /// Whether the component imports `func`: the registry can lower it, and it
+    /// is no web import, which the main module imports instead.
+    #[must_use]
+    pub fn is_component_import(&self, func: &CmFunctionInfo) -> bool {
+        self.is_function_supported(func) && !self.is_extern_import(func)
+    }
+
+    /// Whether `func` is a web import no lowering is built for yet, so a call
+    /// of it is refused.
+    #[must_use]
+    pub fn is_unbuilt_extern_import(&self, func: &CmFunctionInfo) -> bool {
+        self.is_extern_import(func) && !self.extern_handles_cross(func)
+    }
+
     /// Whether every extern handle in `func`'s signature crosses as an
     /// `externref` of its own. One inside a list, a record or another variant
     /// would cross as a slot of the handle table, which is not built yet.

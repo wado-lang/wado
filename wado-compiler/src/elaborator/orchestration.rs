@@ -1199,7 +1199,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // Every stdlib module is walked too: an absence the prelude declares is
         // one a user module calls.
-        let unavailable = collect_unavailable(modules, resolutions.defs());
+        let unavailable =
+            collect_unavailable(modules, resolutions.defs(), &cm_interface_registry);
 
         // Intern every declaration in the TypeTable so `find_named_type_by_def`
         // (used by `register_symbol_key_type_indices` below) resolves for every

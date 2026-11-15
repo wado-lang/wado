@@ -120,12 +120,12 @@ Everything below follows from `repr`, and nothing from `linearity`.
   names no representation and is an error, until a copyable canonical ABI
   token gives it one (see [Known gaps](#known-gaps)).
 
-### An extern handle is a nullable `externref`
+### An extern handle is an `externref`
 
-An extern handle is one Wasm value, `(ref null extern)`. Every type in an
-`extends` tree is that one value, so an upcast and an inherited method's
-receiver stay no-ops. `Option<R>` of an extern handle type `R` is the same
-value, with `None` as the null reference.
+An extern handle is one Wasm value, `(ref extern)`. Every type in an `extends`
+tree is that one value, so an upcast and an inherited method's receiver stay
+no-ops. `Option<R>` of an extern handle type `R` is `(ref null extern)`, with
+`None` as the null reference: the niche every `Option` of a reference takes.
 
 The handle is no longer a number. `as` converts a handle only to a resource it
 extends, and nothing converts one to or from `f64`.
@@ -210,6 +210,10 @@ could only break silently.
 
 Any code may call either function. A backed handle that reaches a real host is
 no object of that host's, and the host rejects it as it would any wrong value.
+
+The two functions are the trait `Backing`, implemented once for every type the
+compiler states `ExternHandle` of. A bound `R: ExternHandle` therefore offers
+both.
 
 ### Narrowing asks for the class once
 
@@ -347,21 +351,26 @@ no number of its own, and giving it one is the last step of the roadmap.
 
 ## Roadmap
 
-Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
+Each step lands with `SurfaceDom`'s tests passing. The jsdom run fails from the
+representation step until the loader step, since an `externref` does not pass
+through the canonical ABI the present glue is called through.
 
 - [x] `repr = "externref"` on `#[cm]`, validated beside `linearity`, `extends` and
   `classes`, and declared by `wado-from-idl` on every resource of the slice
-- [ ] The representation: an extern handle is `(ref null extern)` in
-  the guest, `Option<R>` is the nullable reference, and the `f64` cast is gone
-- [ ] Backed handles: `backed_by` and `backing` on every extern handle type,
+- [x] The representation: an extern handle is `(ref extern)` in the guest,
+  `Option<R>` is the nullable reference, and the `f64` cast is gone
+- [x] Backed handles: `backed_by` and `backing` on every extern handle type,
   narrowing and `Inspect` reading a backed handle's class, and `==` by `ref.eq`
   of the backing values
-- [ ] `SurfaceDom` backs its handles with its own nodes and keeps no table, and
+- [x] `SurfaceDom` backs its handles with its own nodes and keeps no table, and
   `wado-from-idl` stops emitting the class globals
-- [ ] The boundary: a web import is a core import, the synthesized trapping
-  module satisfies it, and the component validates and runs on wasmtime
+- [x] The boundary: a web import is a core import, the synthesized trapping
+  module satisfies it, and the component validates and runs on wasmtime. An
+  extern handle in an `export fn` signature is an error
 - [ ] The glue: `wado-from-idl` generates shims over core signatures, reading
-  strings from memory, with `class-of` and `same` and no handle table
+  strings from memory, with no handle table. `class-of` and `same` become
+  imports, which narrowing, `Inspect` and `==` call for a host object where
+  they trap today
 - [ ] The loader: the jco transpile runs in `instantiation` mode and replaces
   the trapping module's functions with the glue
 - [ ] Closures cross as `externref`, called back through unlifted core exports,
@@ -400,6 +409,12 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
   that moment, not those of its registration.
 - `class-of` costs a call for each narrowing of a host object. It was not
   measured against the range test it replaces.
+- A `match` reads the class once for each type-pattern arm, not once for the
+  `match`.
+- Until the handle table lands, an import with an extern handle inside a list, a
+  record or a variant other than `Option`, or with so many parameters that they
+  are passed through memory, is rejected as unsupported. So is an `async` web
+  import.
 - `class-of` reads prototypes of the glue's own realm. An object from another
   realm, such as an element of an `iframe`'s document, has other prototypes and
   matches none.
