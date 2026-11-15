@@ -24,8 +24,15 @@ from ECMA-262's tables or from an engine, `core:icu` is right.
 - `src/charset.wado` — code point sets, and what each named set holds.
 - `src/utf8.wado` — a code point range as the UTF-8 byte sequences encoding it.
 - `src/program.wado` — the tree compiled to Pike VM instructions over bytes.
-- `src/pike.wado` — the Pike VM.
-- `src/regex.wado` — `Regex`, its searches, `replace` and `split`.
+- `src/pike.wado` — the Pike VM, which runs every program.
+- `src/dfa.wado` — the lazy DFA, which finds a match's bounds for the programs
+  it runs.
+- `src/backtrack.wado` — the backtracker, which reads the groups of a short
+  span the DFAs found.
+- `src/regex.wado` — `Regex`, its searches, `replace` and `split`, and which
+  engine answers each.
+- `benchmark/` — the comparison with Node's `RegExp`, and the fuel test that
+  tells two versions of Re apart; its `README.md` says how to run both.
 - `src/template.wado` — the tags `re` and `rex`, and `PatternPart`.
 
 ## Tests

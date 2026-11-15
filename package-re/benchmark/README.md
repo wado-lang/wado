@@ -39,12 +39,22 @@ Linux x86_64. Best of three runs, picked by `benchmark/pick.ts`.
 
 | Case                  |     Node.js |          Re | Node.js ms/iter | Re ms/iter | Re vs Node.js |
 | --------------------- | ----------: | ----------: | --------------: | ---------: | ------------- |
-| `literal`             |   4.00 GB/s |   4.76 MB/s |           0.016 |     13.802 | 863x slower   |
-| `literal-ignore-case` |   1.25 GB/s |   1.28 MB/s |           0.053 |     51.164 | 965x slower   |
-| `email`               |  86.00 MB/s | 444.58 KB/s |           0.764 |    147.726 | 193x slower   |
-| `uri`                 | 115.01 MB/s | 388.60 KB/s |           0.571 |    169.004 | 296x slower   |
-| `timestamp-captures`  | 886.59 MB/s |   2.90 MB/s |           0.074 |     22.619 | 306x slower   |
-| `pathological`        |  164.49 B/s | 459.20 KB/s |         145.908 |      0.052 | 2806x faster  |
+| `literal`             |   3.54 GB/s | 550.33 MB/s |           0.019 |      0.119 | 6.4x slower   |
+| `literal-ignore-case` |   1.15 GB/s | 224.22 MB/s |           0.057 |      0.292 | 5.1x slower   |
+| `email`               |  91.33 MB/s | 185.65 MB/s |           0.719 |      0.353 | 2.0x faster   |
+| `uri`                 | 107.33 MB/s | 149.15 MB/s |           0.612 |      0.440 | 1.4x faster   |
+| `timestamp-captures`  | 870.83 MB/s | 251.53 MB/s |           0.075 |      0.261 | 3.5x slower   |
+| `pathological`        |  162.84 B/s | 167.27 MB/s |         147.380 |    < 0.001 | 10⁶x faster   |
+
+## Fuel
+
+`re.wado`'s `test "fuel"` measures each case once with the DFA's states built,
+and `re/first-search` holds what building them costs. Fuel does not move with
+the host, so it is what tells two versions of Re apart:
+
+```sh
+wado test -O2 --allocator freelist --report-fuel --test-name fuel package-re/benchmark/re.wado
+```
 
 ## Files
 
