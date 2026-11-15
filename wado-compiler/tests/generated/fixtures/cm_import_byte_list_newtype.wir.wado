@@ -1357,7 +1357,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at$unch
     $mv$bytes$start = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_invalid_len"($mv$bytes$repr, $mv$bytes$start, prefix);
     if @unlikely(((1 <= $mv$bytes$start) & ($mv$bytes$start <= 3)) == 0) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::invalid$contract_report0"($mv$bytes$start, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1083"), used: 29 });
+        "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::invalid$contract_report0"($mv$bytes$start, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1077"), used: 29 });
         unreachable;
     }
     return struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $mv$bytes$start } };
@@ -1730,28 +1730,12 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-<<<<<<< HEAD
-    b171: block {
-        l172: loop {
-            break_if b171 i >= n;
-||||||| 982cc2b8b
-    b172: block {
-        l173: loop {
-            break_if b172 i >= n;
-=======
-    b189: block {
-        l190: loop {
-            break_if b189 i >= n;
->>>>>>> origin/main
+    b188: block {
+        l189: loop {
+            break_if b188 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-<<<<<<< HEAD
-            continue l172;
-||||||| 982cc2b8b
-            continue l173;
-=======
-            continue l190;
->>>>>>> origin/main
+            continue l189;
         };
     };
 }
@@ -1852,91 +1836,43 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$
     let i: i32;
     let b0: u8;
     i = 0;
-<<<<<<< HEAD
-    b179: block {
-        l180: loop {
-            break_if b179 i >= $mv$bytes$end;
-||||||| 982cc2b8b
-    b180: block {
-        l181: loop {
-            break_if b180 i >= $mv$bytes$end;
-=======
-    b197: block {
-        l198: loop {
-            break_if b197 i >= $mv$bytes$end;
->>>>>>> origin/main
+    b196: block {
+        l197: loop {
+            break_if b196 i >= $mv$bytes$end;
             if local.tee b0(builtin::array_get_value<u8>($mv$bytes$repr, i)) <u 128 {
                 i = i + 1;
-<<<<<<< HEAD
-                b182: block {
-                    l183: loop {
-                        break_if b182 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$bytes$end);
-                        break_if b182 (builtin::i64_extend_i32_s(i) + 3_i64) >=u builtin::i64_extend_i32_u(builtin::array_len($mv$bytes$repr));
-                        break_if b182 (((builtin::array_get_value<u8>($mv$bytes$repr, i) >=u 128) | (builtin::array_get_value<u8>($mv$bytes$repr, i + 1) >=u 128)) | (builtin::array_get_value<u8>($mv$bytes$repr, i + 2) >=u 128)) | (builtin::array_get_value<u8>($mv$bytes$repr, i + 3) >=u 128);
+                b199: block {
+                    l200: loop {
+                        break_if b199 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$bytes$end);
+                        break_if b199 (builtin::i64_extend_i32_s(i) + 3_i64) >=u builtin::i64_extend_i32_u(builtin::array_len($mv$bytes$repr));
+                        break_if b199 (((builtin::array_get_value<u8>($mv$bytes$repr, i) >=u 128) | (builtin::array_get_value<u8>($mv$bytes$repr, i + 1) >=u 128)) | (builtin::array_get_value<u8>($mv$bytes$repr, i + 2) >=u 128)) | (builtin::array_get_value<u8>($mv$bytes$repr, i + 3) >=u 128);
                         i = i + 4;
-                        continue l183;
+                        continue l200;
                     };
                 };
-                b184: block {
-                    l185: loop {
-                        break_if b184 (if i < $mv$bytes$end -> i32 {
+                b201: block {
+                    l202: loop {
+                        break_if b201 (if i < $mv$bytes$end -> i32 {
                             builtin::array_get_value<u8>($mv$bytes$repr, i) <u 128;
-||||||| 982cc2b8b
-                b183: block {
-                    l184: loop {
-                        break_if b183 (if (i + 4) <= $mv$bytes$end -> i32 {
-                            ((((((builtin::array_get_value<u8>($mv$bytes$repr, i) | builtin::array_get_value<u8>($mv$bytes$repr, i + 1)) & 255) | builtin::array_get_value<u8>($mv$bytes$repr, i + 2)) & 255) | builtin::array_get_value<u8>($mv$bytes$repr, i + 3)) & 255) <u 128;
-=======
-                b200: block {
-                    l201: loop {
-                        break_if b200 (if (i + 4) <= $mv$bytes$end -> i32 {
-                            ((((((builtin::array_get_value<u8>($mv$bytes$repr, i) | builtin::array_get_value<u8>($mv$bytes$repr, i + 1)) & 255) | builtin::array_get_value<u8>($mv$bytes$repr, i + 2)) & 255) | builtin::array_get_value<u8>($mv$bytes$repr, i + 3)) & 255) <u 128;
->>>>>>> origin/main
                         } else {
                             0;
                         }) == 0;
-<<<<<<< HEAD
                         i = i + 1;
-                        continue l185;
-||||||| 982cc2b8b
-                        i = i + 4;
-                        continue l184;
-=======
-                        i = i + 4;
-                        continue l201;
->>>>>>> origin/main
+                        continue l202;
                     };
                 };
-<<<<<<< HEAD
-                continue l180;
-||||||| 982cc2b8b
-                continue l181;
-=======
-                continue l198;
->>>>>>> origin/main
+                continue l197;
             }
             if (((b0 >=u 225) & (b0 <u 240)) & (b0 != 237)) & ((i + 2) < $mv$bytes$end) {
                 if (((builtin::array_get_value<u8>($mv$bytes$repr, i + 1) ^ 128) & 255) | ((builtin::array_get_value<u8>($mv$bytes$repr, i + 2) ^ 128) & 255)) <u 64 {
                     i = i + 3;
-<<<<<<< HEAD
-                    continue l180;
-||||||| 982cc2b8b
-                    continue l181;
-=======
-                    continue l198;
->>>>>>> origin/main
+                    continue l197;
                 }
             }
             if ((b0 >=u 194) & (b0 <u 224)) & ((i + 1) < $mv$bytes$end) {
                 if ((builtin::array_get_value<u8>($mv$bytes$repr, i + 1) ^ 128) & 255) <u 64 {
                     i = i + 2;
-<<<<<<< HEAD
-                    continue l180;
-||||||| 982cc2b8b
-                    continue l181;
-=======
-                    continue l198;
->>>>>>> origin/main
+                    continue l197;
                 }
             }
             if @unlikely(local.tee b0("core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len$spec0$sroa[bytes.repr]"($mv$bytes$repr, i, $mv$bytes$end)) <= 0) {
@@ -1944,13 +1880,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$
                 return select i32(b0 < 0, i, -1 - i);
             }
             i = i + b0;
-<<<<<<< HEAD
-            continue l180;
-||||||| 982cc2b8b
-            continue l181;
-=======
-            continue l198;
->>>>>>> origin/main
+            continue l197;
         };
     };
     return $mv$bytes$end;
@@ -1968,68 +1898,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, 4);
 }
 
-<<<<<<< HEAD
-fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_invalid_len$spec0$sroa[bytes.repr]"(bytes, start) {
-    let b0: u8;
-    if (local.tee b0(builtin::array_get_value<u8>(bytes, start)) <u 194) | (b0 >=u 245) {
-        return 1;
-    }
-    if "core:prelude/string.wado/utf8_second_byte_ok"(b0, builtin::array_get_value<u8>(bytes, start + 1)) == 0 {
-        return 1;
-    }
-    if (builtin::array_get_value<u8>(bytes, start + 2) & 192) != 128 {
-        return 2;
-    }
-    return 3;
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at$unchecked$spec0$sroa[bytes.repr]"(bytes, prefix) {
-    let $contract_arg_1: i32;
-    if prefix >= 0 {
-        return struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0 };
-    }
-    prefix = -1 - prefix;
-    $contract_arg_1 = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_invalid_len$spec0$sroa[bytes.repr]"(bytes, prefix);
-    if @unlikely(((1 <= $contract_arg_1) & ($contract_arg_1 <= 3)) == 0) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::invalid$contract_report0"($contract_arg_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1077"), used: 29 });
-        unreachable;
-    }
-    return struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $contract_arg_1 } };
-}
-
-||||||| 982cc2b8b
-fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_invalid_len$spec0$sroa[bytes.repr]"(bytes, start) {
-    let b0: u8;
-    if (local.tee b0(builtin::array_get_value<u8>(bytes, start)) <u 194) | (b0 >=u 245) {
-        return 1;
-    }
-    if "core:prelude/string.wado/utf8_second_byte_ok"(b0, builtin::array_get_value<u8>(bytes, start + 1)) == 0 {
-        return 1;
-    }
-    if (builtin::array_get_value<u8>(bytes, start + 2) & 192) != 128 {
-        return 2;
-    }
-    return 3;
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at$unchecked$spec0$sroa[bytes.repr]"(bytes, prefix) {
-    let $contract_arg_1: i32;
-    if prefix >= 0 {
-        return struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0 };
-    }
-    prefix = -1 - prefix;
-    $contract_arg_1 = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_invalid_len$spec0$sroa[bytes.repr]"(bytes, prefix);
-    if @unlikely(((1 <= $contract_arg_1) & ($contract_arg_1 <= 3)) == 0) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::invalid$contract_report0"($contract_arg_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1083"), used: 29 });
-        unreachable;
-    }
-    return struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $contract_arg_1 } };
-}
-
-=======
->>>>>>> origin/main
 fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len$spec0$sroa[bytes.repr]"(bytes, start, len) {
     let b0_3: u8;
     let b1_21: u8;
