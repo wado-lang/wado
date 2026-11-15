@@ -614,6 +614,11 @@ struct FrameState {
     /// See [`Trackability::reassigned`]. Read when a `let mut` binds a reference,
     /// to tell a binding that can be displaced from one that cannot.
     reassigned: LocalSet,
+    /// Pairs of places a store left holding one array handle: the frame holds
+    /// each by value, so a write landing on one leaves the other stale. The
+    /// write unbinds the other's local, and rebinding either local ends the
+    /// pair.
+    handle_twins: Vec<[(u32, Vec<u32>); 2]>,
 }
 
 /// What the engine knows beyond the body in front of it. Every field is
@@ -938,6 +943,9 @@ impl<'a> Interpreter<'a> {
     pub fn bind_local(&mut self, index: u32, lattice: Lattice) {
         self.frame.place_aliases.swap_remove(&index);
         self.frame.array_aliases.swap_remove(&index);
+        self.frame
+            .handle_twins
+            .retain(|twins| twins.iter().all(|(root, _)| *root != index));
         self.frame.replace_place(index, &[]);
         self.frame
             .place_fields

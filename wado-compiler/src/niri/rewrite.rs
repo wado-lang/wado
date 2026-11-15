@@ -754,6 +754,21 @@ impl Interpreter<'_> {
                 }
                 changed
             }
+            // A container written as a literal has its backing cut to the
+            // length, so a read of the backing itself would see the cut
+            // capacity. The receiver keeps its node; only what it reads reduces.
+            ExprKind::FieldAccess {
+                expr: Operand::Expr(receiver),
+                field_index,
+                ..
+            } if *field_index == SeqField::Backing.index()
+                && self
+                    .type_table
+                    .is_seq_container(body.exprs[*receiver].type_id) =>
+            {
+                let receiver = *receiver;
+                self.reduce_children(body, receiver)
+            }
             _ => self.walk_children(body, NodeRef::Expr(e)),
         }
     }

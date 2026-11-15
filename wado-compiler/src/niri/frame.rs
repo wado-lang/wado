@@ -330,7 +330,7 @@ impl Interpreter<'_> {
                 type_id,
                 ..
             } => {
-                let (index, value) = (*local_index, *value);
+                let (index, value, type_id) = (*local_index, *value, *type_id);
                 // A fresh binding forks the local's storage; an alias taken
                 // over the same index would keep pointing at the old one.
                 if self
@@ -342,7 +342,7 @@ impl Interpreter<'_> {
                 {
                     return Flow::Bail;
                 }
-                if body.declares_without_value(*type_id, value) {
+                if body.declares_without_value(type_id, value) {
                     self.bind_local(index, Lattice::Unevaluated);
                     return Flow::Fallthrough(Lattice::Unevaluated);
                 }
@@ -364,10 +364,16 @@ impl Interpreter<'_> {
                         return flow;
                     }
                 }
-                // Past the aliases, the binding copies what it reads.
-                if self.binds_written_array_handle(body, index, value) {
+                // Past the aliases, the binding copies what it reads. A reference
+                // the frame cannot name a place for would copy its referent, which
+                // a later write leaves stale, unless nothing writes the referent.
+                if self.type_table.is_reference(type_id) && !self.frame.const_views.contains(index) {
                     return Flow::Bail;
                 }
+                if self.binds_unnamed_written_handle(body, index, value) {
+                    return Flow::Bail;
+                }
+                let handle_source = self.array_handle_source(body, value);
                 let lattice = match value.as_expr().and_then(|e| self.exec_call_stmt(body, e)) {
                     Some(Flow::Fallthrough(lattice)) => lattice,
                     Some(Flow::Bail | Flow::Return(_) | Flow::Break { .. } | Flow::Continue) => {
@@ -377,7 +383,7 @@ impl Interpreter<'_> {
                 };
                 match lattice {
                     lattice @ Lattice::Const(_) => {
-                        self.bind_ctfe_local(index, lattice);
+                        self.bind_handle_copy(index, lattice, handle_source);
                         Flow::Fallthrough(Lattice::Unevaluated)
                     }
                     lattice @ (Lattice::NonConst | Lattice::Unevaluated) => {
@@ -646,20 +652,52 @@ impl Interpreter<'_> {
         let Some((root, path)) = self.frame_place_of(body, target.into()) else {
             return Flow::Bail;
         };
+        if self.binds_unnamed_written_handle(body, root, value) {
+            return Flow::Bail;
+        }
+        let handle_source = self.array_handle_source(body, value);
         let Lattice::Const(value) = self.eval_operand(body, value) else {
             return Flow::Bail;
         };
         if path.is_empty() {
-            self.bind_ctfe_local(root, Lattice::Const(value));
+            self.bind_handle_copy(root, Lattice::Const(value), handle_source);
             return Flow::Fallthrough(Lattice::Unevaluated);
         }
         self.frame.replace_place(root, &path);
-        match self.update_place(root, &path, |place| {
-            *place = value;
-            Some(())
-        }) {
-            Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
-            None => Flow::Bail,
+        if self
+            .update_place(root, &path, |place| {
+                *place = value;
+                Some(())
+            })
+            .is_none()
+        {
+            return Flow::Bail;
+        }
+        if let Some(source) = handle_source {
+            self.frame.handle_twins.push([(root, path), source]);
+        }
+        Flow::Fallthrough(Lattice::Unevaluated)
+    }
+
+    /// The place an array-typed `value` reads its handle from, which a binding
+    /// of it leaves shared.
+    fn array_handle_source(&self, body: &Body, value: Operand) -> Option<(u32, Vec<u32>)> {
+        if !self.names_array(body, value) {
+            return None;
+        }
+        self.frame_place_of(body, value)
+    }
+
+    /// Bind `index` to `lattice`, read off `handle_source` where it names one.
+    fn bind_handle_copy(
+        &mut self,
+        index: u32,
+        lattice: Lattice,
+        handle_source: Option<(u32, Vec<u32>)>,
+    ) {
+        self.bind_ctfe_local(index, lattice);
+        if let Some(source) = handle_source {
+            self.frame.handle_twins.push([(index, Vec::new()), source]);
         }
     }
 
@@ -677,10 +715,40 @@ impl Interpreter<'_> {
         if self.frame.holds_place_field(root, path) {
             return None;
         }
+        let stale = self.stale_twins(root, path)?;
         let Lattice::Const(container) = self.frame.env.get_mut(&root)? else {
             return None;
         };
-        update(container.place_mut(path)?)
+        update(container.place_mut(path)?)?;
+        for index in stale {
+            self.bind_local(index, Lattice::Unevaluated);
+        }
+        Some(())
+    }
+
+    /// The locals a write at `(root, path)` leaves stale: each holding the
+    /// array handle a place the write overlaps holds too. `None` when a twin
+    /// lives in `root` itself, which unbinding would take the write down with.
+    fn stale_twins(&self, root: u32, path: &[u32]) -> Option<Vec<u32>> {
+        let mut stale = Vec::new();
+        for [a, b] in &self.frame.handle_twins {
+            for (written, other) in [(a, b), (b, a)] {
+                if places_overlap((written.0, &written.1), (root, path)) {
+                    if other.0 == root {
+                        return None;
+                    }
+                    stale.push(other.0);
+                }
+            }
+        }
+        Some(stale)
+    }
+
+    fn names_array(&self, body: &Body, op: Operand) -> bool {
+        matches!(
+            self.type_table.get(body.operand_type(op)),
+            ResolvedType::BuiltinArray(_)
+        )
     }
 
     /// Perform a builtin at statement position, updating the frame's value for
@@ -716,9 +784,6 @@ impl Interpreter<'_> {
         let [seq, index, element] = *args else {
             return Flow::Bail;
         };
-        let Some((root, path)) = self.frame_place_of(body, seq) else {
-            return Flow::Bail;
-        };
         let (Lattice::Const(index), Lattice::Const(element)) = (
             self.eval_operand(body, index),
             self.eval_operand(body, element),
@@ -728,19 +793,44 @@ impl Interpreter<'_> {
         let Some((index, _)) = index.as_int() else {
             return Flow::Bail;
         };
-        match self.update_place(root, &path, |seq| seq.set_element(index, element)) {
+        self.land_write(body, seq, |seq| seq.set_element(index, element))
+    }
+
+    /// Apply `update` to the array `destination` names: a place the frame
+    /// holds, or a fresh array nothing else reaches, where the write only has
+    /// to be shown not to trap.
+    fn land_write(
+        &mut self,
+        body: &mut Body,
+        destination: Operand,
+        update: impl FnOnce(&mut Value) -> Option<()>,
+    ) -> Flow {
+        let landed = if let Some((root, path)) = self.frame_place_of(body, destination) {
+            self.update_place(root, &path, update)
+        } else if self.is_fresh_array(body, destination)
+            && let Lattice::Const(mut fresh) = self.eval_operand(body, destination)
+        {
+            update(&mut fresh)
+        } else {
+            None
+        };
+        match landed {
             Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
             None => Flow::Bail,
         }
+    }
+
+    fn is_fresh_array(&self, body: &Body, op: Operand) -> bool {
+        op.as_expr().is_some_and(|e| {
+            matches!(&body.exprs[e].kind, ExprKind::Call { func_id, .. }
+                if self.facts.builtin(func_id) == Some(CtfeBuiltin::ArrayNew))
+        })
     }
 
     /// Splices `len` of `src`'s elements into the destination. A run either
     /// side cannot supply is left to trap at run time.
     fn exec_run_write(&mut self, body: &mut Body, args: &[Operand]) -> Flow {
         let [destination, at, source, from, len] = *args else {
-            return Flow::Bail;
-        };
-        let Some((root, path)) = self.frame_place_of(body, destination) else {
             return Flow::Bail;
         };
         let (Lattice::Const(at), Lattice::Const(source), Lattice::Const(from), Lattice::Const(len)) = (
@@ -756,12 +846,9 @@ impl Interpreter<'_> {
         else {
             return Flow::Bail;
         };
-        match self.update_place(root, &path, |destination| {
+        self.land_write(body, destination, |destination| {
             destination.set_run(at, &source, from, len)
-        }) {
-            Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
-            None => Flow::Bail,
-        }
+        })
     }
 
     /// Reducing in place first is what lets a nested call fold before the
@@ -860,34 +947,23 @@ impl Interpreter<'_> {
             .then_some(value)
     }
 
-    /// Whether `let index = value` binds a second handle to an array that the
-    /// body writes through either handle. An array is one object every handle
-    /// shares, and the frame holds it by value, so the copy the `let` makes
-    /// would miss those writes.
-    fn binds_written_array_handle(&self, body: &Body, index: u32, value: Operand) -> bool {
-        if !matches!(
-            self.type_table.get(body.operand_type(value)),
-            ResolvedType::BuiltinArray(_)
-        ) {
+    /// Whether binding `index` to `value` leaves a second handle to an array
+    /// whose source place the frame cannot name, and that the body writes
+    /// through either handle. An array is one object every handle shares, and
+    /// the frame holds it by value, so the copy would miss those writes; a
+    /// source it can name becomes a [`FrameState::handle_twins`] pair instead.
+    fn binds_unnamed_written_handle(&self, body: &Body, index: u32, value: Operand) -> bool {
+        if !self.names_array(body, value) || self.frame_place_of(body, value).is_some() {
             return false;
         }
         let Some(source_root) = write_root_local(body, value) else {
             return false;
         };
-        let source = self.frame_place_of(body, value);
         write_targets_under(body, NodeRef::Block(body.root()))
             .into_iter()
             .any(|target| {
                 let target_root = write_root_local(body, target);
-                if target_root == Some(index) {
-                    return true;
-                }
-                match (self.frame_place_of(body, target), &source) {
-                    (Some((root, path)), Some((source_root, source_path))) => {
-                        places_overlap((root, &path), (*source_root, source_path))
-                    }
-                    _ => target_root == Some(source_root),
-                }
+                target_root == Some(index) || target_root == Some(source_root)
             })
     }
 
