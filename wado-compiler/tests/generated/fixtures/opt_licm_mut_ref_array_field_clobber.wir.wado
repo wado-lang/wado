@@ -828,11 +828,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -970,12 +966,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b103: block {
-        l104: loop {
-            break_if b103 i >= n;
+    b102: block {
+        l103: loop {
+            break_if b102 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l104;
+            continue l103;
         };
     };
 }
@@ -996,11 +992,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
 }
 
 fn "opt_licm_mut_ref_array_field_clobber.wado/opt_licm_mut_ref_array_field_clobber.wado/Buf::go$sroa[&mut(self.arr)]"(self) {
-    b106: block {
-        l107: loop {
-            break_if b106 builtin::array_get_value<i32>(self, 0) >= 5;
+    b105: block {
+        l106: loop {
+            break_if b105 builtin::array_get_value<i32>(self, 0) >= 5;
             "opt_licm_mut_ref_array_field_clobber.wado/bump"(self);
-            continue l107;
+            continue l106;
         };
     };
 }

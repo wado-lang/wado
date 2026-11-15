@@ -1032,11 +1032,6 @@ impl String {
     /// complete. ASCII and the common 2- and 3-byte sequences are tested here,
     /// `utf8_sequence_len` being a call; it takes the leads whose second byte
     /// is restricted (`E0`, `ED`), 4-byte sequences, and every failure.
-    ///
-    /// After an ASCII byte the run goes on four bytes per test: the four
-    /// `array.get`s of one block share their bounds checks, the cost of a byte
-    /// here. Only an ASCII byte enters a block, so text of multibyte
-    /// characters reads no byte twice.
     internal fn utf8_valid_prefix(bytes: &ByteSlice) -> i32 {
         let len = bytes.len();
         let mut i = 0;
@@ -1044,9 +1039,8 @@ impl String {
             let b0 = unchecked bytes[i];
             if b0 < 0x80 {
                 i += 1;
-                while i + 4 <= len
-                    && unchecked bytes[i] | unchecked bytes[i + 1] | unchecked bytes[i + 2] | unchecked bytes[i + 3] < 0x80 {
-                    i += 4;
+                while i < len && unchecked bytes[i] < 0x80 {
+                    i += 1;
                 }
                 continue;
             }
@@ -1421,13 +1415,22 @@ impl StrSlice {
         if pat_len == 0 {
             return Option::Some(0);
         }
-        let limit = self.len() - pat_len;
-        for let mut i = 0; i <= limit; i += 1 {
-            if bytes_match_at(self.repr, self.start + i, p.repr, p.start, pat_len) {
-                return Option::Some(i);
+        let first = p.repr[p.start];
+        // Where the last candidate starts, as an index into `repr`.
+        let last = self.end - pat_len;
+        let mut at = self.start;
+        loop {
+            while at <= last && self.repr[at] != first {
+                at += 1;
             }
+            if at > last {
+                return null;
+            }
+            if bytes_match_at(self.repr, at + 1, p.repr, p.start + 1, pat_len - 1) {
+                return Option::Some(at - self.start);
+            }
+            at += 1;
         }
-        return null;
     }
 
     /// The byte index of the last occurrence of `pat`, counted from the view's

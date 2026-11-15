@@ -990,6 +990,26 @@ impl WirFunction {
     pub fn declared_locals(&self) -> WirLocals {
         WirLocals::scan(self.body.as_deref().unwrap_or(&[]))
     }
+
+    /// Every name the body can read with its type: the parameters, typed by
+    /// the function type in `types`, then the declared locals.
+    pub fn typed_locals(&self, types: &[WirTypeDef]) -> WirLocals {
+        let params = &types[self.type_id.index() as usize].expect_func().params;
+        assert_eq!(params.len(), self.param_names.len());
+        let mut locals: WirLocals = self
+            .param_names
+            .iter()
+            .cloned()
+            .zip(params.iter().cloned())
+            .collect();
+        for (name, ty) in self.declared_locals().iter() {
+            locals
+                .types
+                .entry(name.to_string())
+                .or_insert_with(|| ty.clone());
+        }
+        locals
+    }
 }
 
 /// A function's declared locals, keyed by name: in declaration order when

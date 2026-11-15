@@ -33,11 +33,7 @@ struct Threads {
 
 impl Threads {
     fn new(size: i32) -> Threads {
-        let mut seen: List<i32> = [];
-        for let _i of 0..<size {
-            seen.push(-1);
-        }
-        return Threads { list: [], seen, stamp: 0 };
+        return Threads { list: [], seen: List::filled(size, -1), stamp: 0 };
     }
 
     fn clear(&mut self) {
@@ -47,26 +43,36 @@ impl Threads {
 }
 
 /// What a search works in, kept across the searches of one iterator so that
-/// each costs time in the text it reads, not in the program's size.
+/// each costs time in the text it reads, not in the program's size. Each part
+/// is sized by the first search that uses it: one the DFAs answer uses none.
 internal struct Cache {
     current: Threads,
     next: Threads,
     /// Every slot unset.
     fresh: List<i32>,
+    /// The backtracker's: a bit for each state at each position, and the
+    /// threads it has yet to run.
+    internal visited: List<i32>,
+    internal stack: List<i32>,
 }
 
 impl Cache {
-    internal fn new(program: &Program) -> Cache {
-        let size = program.state_base[program.insts.len()];
-        let mut fresh: List<i32> = [];
-        for let _i of 0..<program.slots {
-            fresh.push(-1);
-        }
+    internal fn new() -> Cache {
         return Cache {
-            current: Threads::new(size),
-            next: Threads::new(size),
-            fresh,
+            current: Threads::new(0),
+            next: Threads::new(0),
+            fresh: [],
+            visited: [],
+            stack: [],
         };
+    }
+
+    /// The slots of `program`, every one unset.
+    internal fn unset_slots(&mut self, program: &Program) -> List<i32> {
+        if self.fresh.is_empty() {
+            self.fresh = List::filled(program.slots, -1);
+        }
+        return self.fresh;
     }
 }
 
@@ -78,22 +84,47 @@ internal enum Goal {
     Any,
 }
 
+/// Where a search looks for a match.
+internal variant Within {
+    /// Starting anywhere at or after the search's start.
+    Text,
+    /// Starting at the search's start and reading no further than this
+    /// offset, which is where the leftmost-first match there ends.
+    Span(i32),
+}
+
 /// The capture slots of the leftmost-first match at or after `start`, which
 /// lies on a character boundary of `text`; an unset slot is -1. Under
 /// `Goal::Any`, those of whichever match is found first.
-internal fn search(program: &Program, cache: &mut Cache, text: StrSlice, start: i32, goal: Goal) -> Option<List<i32>> {
+internal fn search(
+    program: &Program,
+    cache: &mut Cache,
+    text: StrSlice,
+    start: i32,
+    within: Within,
+    goal: Goal,
+) -> Option<List<i32>> {
+    if cache.current.seen.is_empty() {
+        let size = program.state_base[program.insts.len()];
+        cache.current = Threads::new(size);
+        cache.next = Threads::new(size);
+    }
+    let fresh = cache.unset_slots(program);
     cache.current.clear();
-    let len = text.len();
+    let [len, anchored] = match within {
+        Text => [text.len(), false],
+        Span(end) => [end, true],
+    };
     let mut matched: Option<List<i32>> = null;
     let mut pos = start;
     loop {
         // A new start has the lowest priority, and none is tried once a match
         // is found, since any match it led to would lie further right.
         let found = matched matches { Some(_) };
-        if !found && text.is_char_boundary(pos) {
-            add(program, text, &mut cache.current, 0, cache.fresh, pos);
+        if !found && (pos == start || !anchored) && text.is_char_boundary(pos) {
+            add(program, text, &mut cache.current, 0, fresh, pos);
         }
-        if cache.current.list.is_empty() && (found || pos >= len) {
+        if cache.current.list.is_empty() && (found || anchored || pos >= len) {
             return matched;
         }
         cache.next.clear();
@@ -183,7 +214,7 @@ fn add(program: &Program, text: StrSlice, to: &mut Threads, pc: i32, slots: List
     }
 }
 
-fn holds(look: Look, text: StrSlice, pos: i32) -> bool {
+internal fn holds(look: Look, text: StrSlice, pos: i32) -> bool {
     return match look {
         StartText => pos == 0,
         EndText => pos == text.len(),

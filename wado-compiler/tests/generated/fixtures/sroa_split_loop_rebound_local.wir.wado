@@ -1525,11 +1525,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -1685,12 +1681,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b231: block {
-        l232: loop {
-            break_if b231 i >= n;
+    b230: block {
+        l231: loop {
+            break_if b230 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l232;
+            continue l231;
         };
     };
 }
@@ -1781,19 +1777,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSplitIter^core:prelude/
     i = self.pos;
     $load_3 = self.repr;
     $licm_sep_repr_24 = self.sep_repr;
-    b239: block {
-        l240: loop {
-            break_if b239 i > limit;
+    b238: block {
+        l239: loop {
+            break_if b238 i > limit;
             if $inline_bytes_match_at_0: block -> bool {
                 j = 0;
-                b242: block {
-                    l243: loop {
-                        break_if b242 j >= 1;
+                b241: block {
+                    l242: loop {
+                        break_if b241 j >= 1;
                         if builtin::array_get_value<u8>($load_3, i + j) != builtin::array_get_value<u8>($licm_sep_repr_24, j) {
                             break $inline_bytes_match_at_0: 0;
                         }
                         j = j + 1;
-                        continue l243;
+                        continue l242;
                     };
                 };
                 break $inline_bytes_match_at_0: 1;
@@ -1805,7 +1801,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSplitIter^core:prelude/
                 return part_3;
             }
             i = i + 1;
-            continue l240;
+            continue l239;
         };
     };
     self.finished = 1;

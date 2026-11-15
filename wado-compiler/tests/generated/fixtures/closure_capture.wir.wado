@@ -2739,7 +2739,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/stri
         $v1 = self.end - local.tee $load_1(self.start);
         if @unlikely(((0 <= index) & (index < $v1)) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1769"), used: 29 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1772"), used: 29 });
             unreachable;
         }
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked"(self.repr, $load_1, index);
@@ -3084,11 +3084,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -3449,9 +3445,9 @@ fn "closure_capture.wado/closure_capture.wado/$Closure_33::$call"(self, r) {
         end = local.tee $load_0(self.$capture_0).used;
         $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_repr_20 = $load_0.repr;
         $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_index_21 = 0;
-        b386: block {
-            l387: loop {
-                break_if b386 (builtin::i64_extend_i32_s($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_index_21) + 3_i64) >= builtin::i64_extend_i32_s(end);
+        b385: block {
+            l386: loop {
+                break_if b385 (builtin::i64_extend_i32_s($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_index_21) + 3_i64) >= builtin::i64_extend_i32_s(end);
                 item_13 = builtin::array_get_value<i32>($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_repr_20, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_index_21);
                 $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_index_21 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_index_21 + 1;
                 if item_13 == r {
@@ -3472,18 +3468,18 @@ fn "closure_capture.wado/closure_capture.wado/$Closure_33::$call"(self, r) {
                 if item_13 == r {
                     break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0: 1;
                 }
-                continue l387;
+                continue l386;
             };
         };
-        b392: block {
-            l393: loop {
-                break_if b392 $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_index_21 >= end;
+        b391: block {
+            l392: loop {
+                break_if b391 $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_index_21 >= end;
                 item_13 = builtin::array_get_value<i32>($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_repr_20, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_index_21);
                 $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_index_21 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0_0_index_21 + 1;
                 if item_13 == r {
                     break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0: 1;
                 }
-                continue l393;
+                continue l392;
             };
         };
         break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__any__Closure_34_0: 0;
@@ -3511,12 +3507,12 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<closure_captu
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b398: block {
-        l399: loop {
-            break_if b398 i >= n;
+    b397: block {
+        l398: loop {
+            break_if b397 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l399;
+            continue l398;
         };
     };
 }

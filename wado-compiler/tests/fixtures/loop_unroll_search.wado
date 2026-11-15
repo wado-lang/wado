@@ -1,0 +1,113 @@
+// A loop that searches a GC array, leaving on what it reads, is unrolled as a
+// counting loop is: the copy tests several elements for each test of the
+// bound, and the original loop finds which one ended it. The copy reads ahead
+// of where the loop would have stopped, so it reads only what lies inside the
+// array: a bound past the array's end is the program's to trap on, and only
+// where the loop itself would have read there.
+use { println, Stdout } from "core:cli";
+
+fn first_of(x: &Array<u8>, n: i32, needle: u8) -> i32 {
+    let mut i = 0;
+    while i < n && x[i] != needle {
+        i += 1;
+    }
+    return i;
+}
+
+fn first_of_from(x: &Array<u8>, base: i32, n: i32, needle: u8) -> i32 {
+    let mut i = 0;
+    while i < n && x[base + i] != needle {
+        i += 1;
+    }
+    return i;
+}
+
+// The byte read indexes a table, which holds any byte when it holds 256.
+fn first_marked(x: &Array<u8>, n: i32, marked: &Array<u8>) -> i32 {
+    let mut i = 0;
+    while i < n && marked[x[i] as i32] == 0 {
+        i += 1;
+    }
+    return i;
+}
+
+// The byte is tested twice, so it is read once into a temporary.
+fn first_of_either(x: &Array<u8>, n: i32) -> i32 {
+    let mut i = 0;
+    while i < n && x[i] != 7 && x[i] != 9 {
+        i += 1;
+    }
+    return i;
+}
+
+fn neither(c: u8) -> bool {
+    return c != 7 && c != 9;
+}
+
+fn first_of_either_called(x: &Array<u8>, n: i32) -> i32 {
+    let mut i = 0;
+    while i < n && neither(x[i]) {
+        i += 1;
+    }
+    return i;
+}
+
+export fn run() with Stdout {
+    let mut either: List<i32> = [];
+    for let at of 0..=11 {
+        let mut x = Array::<u8>::filled(builtin::black_box(11), 0);
+        if at < 11 {
+            x[at] = (7 + at % 2 * 2) as u8;
+        }
+        either.push(first_of_either(&x, 11));
+        assert first_of_either_called(&x, 11) == at;
+    }
+    println(`${either:?}`);
+
+    let mut marked = Array::<u8>::filled(builtin::black_box(256), 0);
+    marked[7] = 1;
+    let mut by_table: List<i32> = [];
+    for let at of 0..=11 {
+        let mut x = Array::<u8>::filled(builtin::black_box(11), 0);
+        if at < 11 {
+            x[at] = 7;
+        }
+        by_table.push(first_marked(&x, 11, &marked));
+    }
+    println(`${by_table:?}`);
+    // A table too short for a byte is read only where the loop reads it.
+    let narrow = Array::<u8>::filled(builtin::black_box(8), 0);
+    let low = Array::<u8>::filled(builtin::black_box(9), 3);
+    println(`${first_marked(&low, 9, &narrow)}`);
+
+    let len = builtin::black_box(11);
+    let mut found: List<i32> = [];
+    for let at of 0..=len {
+        let mut x = Array::<u8>::filled(len, 0);
+        if at < len {
+            x[at] = 7;
+        }
+        found.push(first_of(&x, len, 7));
+        found.push(first_of_from(&x, 2, len - 2, 7));
+    }
+    println(`${found:?}`);
+
+    // The bound lies past the array, and the needle before the array's end.
+    let mut short = Array::<u8>::filled(builtin::black_box(6), 0);
+    short[1] = 7;
+    println(`${first_of(&short, 100, 7)} ${first_of_from(&short, 1, 100, 7)}`);
+    short[1] = 0;
+    short[5] = 7;
+    println(`${first_of(&short, 100, 7)} ${first_of_from(&short, 1, 100, 7)}`);
+}
+
+__DATA__
+{
+    "stdout": "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]\n[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]\n9\n[0, 9, 1, 9, 2, 0, 3, 1, 4, 2, 5, 3, 6, 4, 7, 5, 8, 6, 9, 7, 10, 8, 11, 9]\n1 0\n5 4\n",
+    "wir_pass": {"O2": ["wir/unroll_array_loops"]},
+    "wir_expect:O2": [
+        " + 3_i64) >=u builtin::i64_extend_i32_u(builtin::array_len(",
+        ") <u 256)",
+        " == 7) | (builtin::array_get_value<u8>("
+    ]
+}

@@ -2650,7 +2650,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/stri
         $v1 = self.end - local.tee $load_1(self.start);
         if @unlikely(((0 <= index) & (index < $v1)) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1769"), used: 29 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1772"), used: 29 });
             unreachable;
         }
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked"(self.repr, $load_1, index);
@@ -2989,11 +2989,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -3387,9 +3383,9 @@ fn "spec_effects_install.wado/spec_effects_install.wado/$Closure_3::$call$dae[se
     let used_9: i32;
     let $licm_arith_14: i32;
     let $licm_repr_15: ref Array<u8>;
-    return out = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }, i = 0, $licm_arith_14 = builtin::i32_wrap_i64(max_len), $licm_repr_15 = out.repr, b411: block {
-        l412: loop {
-            break_if b411 i >= $licm_arith_14;
+    return out = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }, i = 0, $licm_arith_14 = builtin::i32_wrap_i64(max_len), $licm_repr_15 = out.repr, b410: block {
+        l411: loop {
+            break_if b410 i >= $licm_arith_14;
             if @unlikely(local.tee used_9(out.used) >= builtin::array_len($licm_repr_15)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
@@ -3398,7 +3394,7 @@ fn "spec_effects_install.wado/spec_effects_install.wado/$Closure_3::$call$dae[se
             builtin::array_set_u8($licm_repr_15, used_9, 0);
             out.used = used_9 + 1;
             i = i + 1;
-            continue l412;
+            continue l411;
         };
     }, out;
 }
@@ -3414,12 +3410,12 @@ fn "spec_effects_install.wado/spec_effects_install.wado/$Closure_6::$call$dae[se
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b414: block {
-        l415: loop {
-            break_if b414 i >= n;
+    b413: block {
+        l414: loop {
+            break_if b413 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l415;
+            continue l414;
         };
     };
 }
@@ -3575,9 +3571,9 @@ fn "core:uuid/core:uuid/Uuid::write_to$sroa[self.bytes]"(self, out) {
     let $hfs_used_49: i32;
     i = 0;
     $hfs_used_49 = out.used;
-    b433: block {
-        l434: loop {
-            break_if b433 i >= 16;
+    b432: block {
+        l433: loop {
+            break_if b432 i >= 16;
             if (((i == 4) | (i == 6)) | (i == 8)) | (i == 10) {
                 if @unlikely(local.tee $hfs_used_49($hfs_used_49 + 1) > builtin::array_len(out.repr)) {
                     cold_path;
@@ -3595,69 +3591,69 @@ fn "core:uuid/core:uuid/Uuid::write_to$sroa[self.bytes]"(self, out) {
                 builtin::array_set_u8(out.repr, start_18, 45);
             } else {
             }
-            start_18 = b438: block -> i32 {
-                b439: block {
-                    b440: block {
-                        b441: block {
-                            b442: block {
-                                b443: block {
-                                    b444: block {
-                                        b445: block {
-                                            b446: block {
-                                                b447: block {
-                                                    b448: block {
-                                                        b449: block {
-                                                            b450: block {
-                                                                b451: block {
-                                                                    b452: block {
-                                                                        b453: block {
-                                                                            b454: block {
+            start_18 = b437: block -> i32 {
+                b438: block {
+                    b439: block {
+                        b440: block {
+                            b441: block {
+                                b442: block {
+                                    b443: block {
+                                        b444: block {
+                                            b445: block {
+                                                b446: block {
+                                                    b447: block {
+                                                        b448: block {
+                                                            b449: block {
+                                                                b450: block {
+                                                                    b451: block {
+                                                                        b452: block {
+                                                                            b453: block {
                                                                                 br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                             };
                                                                             i8x16.extract_lane_u(15, self);
-                                                                            break b438;
+                                                                            break b437;
                                                                         };
                                                                         i8x16.extract_lane_u(0, self);
-                                                                        break b438;
+                                                                        break b437;
                                                                     };
                                                                     i8x16.extract_lane_u(1, self);
-                                                                    break b438;
+                                                                    break b437;
                                                                 };
                                                                 i8x16.extract_lane_u(2, self);
-                                                                break b438;
+                                                                break b437;
                                                             };
                                                             i8x16.extract_lane_u(3, self);
-                                                            break b438;
+                                                            break b437;
                                                         };
                                                         i8x16.extract_lane_u(4, self);
-                                                        break b438;
+                                                        break b437;
                                                     };
                                                     i8x16.extract_lane_u(5, self);
-                                                    break b438;
+                                                    break b437;
                                                 };
                                                 i8x16.extract_lane_u(6, self);
-                                                break b438;
+                                                break b437;
                                             };
                                             i8x16.extract_lane_u(7, self);
-                                            break b438;
+                                            break b437;
                                         };
                                         i8x16.extract_lane_u(8, self);
-                                        break b438;
+                                        break b437;
                                     };
                                     i8x16.extract_lane_u(9, self);
-                                    break b438;
+                                    break b437;
                                 };
                                 i8x16.extract_lane_u(10, self);
-                                break b438;
+                                break b437;
                             };
                             i8x16.extract_lane_u(11, self);
-                            break b438;
+                            break b437;
                         };
                         i8x16.extract_lane_u(12, self);
-                        break b438;
+                        break b437;
                     };
                     i8x16.extract_lane_u(13, self);
-                    break b438;
+                    break b437;
                 };
                 i8x16.extract_lane_u(14, self);
             };
@@ -3666,7 +3662,7 @@ fn "core:uuid/core:uuid/Uuid::write_to$sroa[self.bytes]"(self, out) {
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, $hfs_used_49 = start_18 & 15; select char($hfs_used_49 < 10, (48 + ($hfs_used_49 & 255)) & 255, (97 + (($hfs_used_49 - 10) & 255)) & 255));
             i = i + 1;
             $hfs_used_49 = out.used;
-            continue l434;
+            continue l433;
         };
     };
 }
