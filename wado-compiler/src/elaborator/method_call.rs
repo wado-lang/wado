@@ -3068,6 +3068,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
+    /// The name that keys the impl indices for the newtype chain's link
+    /// `link`, and the head its statics are hosted under.
+    pub(super) fn link_receiver_names(&self, link: TypeId) -> (String, FqTypeName) {
+        if self.is_declaring_link(link) {
+            let link_name = self.tysys.type_table.borrow().name(link);
+            let link_fq = self.qualified_receiver_name(&link_name, link);
+            return (link_name, link_fq);
+        }
+        let table = self.tysys.type_table.borrow();
+        // `impl … for &Point` hosts its functions under the whole reference,
+        // which the base's head leaves out.
+        if RefKind::from_resolved(table.get(link)).is_some() {
+            return (table.name(link), table.fq_type_name(link));
+        }
+        drop(table);
+        let link_name = self.tysys.get_ultimate_base_struct_name(link);
+        (link_name, self.tysys.fq_receiver_head(link))
+    }
+
     /// A static method's signature, in the declaration's own frame — its slots
     /// still `TypeParam`, for the caller to substitute after inference.
     ///
@@ -3566,14 +3585,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The written name keys the impl indices; the fq form names the method.
         let (actual_struct_name, actual_struct_fq, actual_mangled_name) = match owner {
             Some((newtype, link)) => {
-                let (link_name, link_fq) = if self.is_declaring_link(link) {
-                    let link_name = self.tysys.type_table.borrow().name(link);
-                    let link_fq = self.qualified_receiver_name(&link_name, link);
-                    (link_name, link_fq)
-                } else {
-                    let link_name = self.tysys.get_ultimate_base_struct_name(link);
-                    (link_name, self.tysys.fq_receiver_head(link))
-                };
+                let (link_name, link_fq) = self.link_receiver_names(link);
                 let mangled = MethodName::format_local(&link_fq, None, method_name);
                 let link_args = self
                     .tysys
@@ -3606,7 +3618,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // its own.
         let (link_receiver, link_type) = match &newtype_dispatch {
             Some((_, base_type_id, _)) => (
-                ReceiverId::keyed(self.impl_target_of(*base_type_id), None),
+                ReceiverId::keyed(self.receiver_of(*base_type_id).key().clone(), None),
                 *base_type_id,
             ),
             None => (call_receiver.clone(), receiver_type),

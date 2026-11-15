@@ -2407,6 +2407,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             || FqTypeName::shape(&struct_module, type_name),
                             |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),
                         )
+                    } else if let Some(inherited) = inherited {
+                        self.link_receiver_names(inherited.base).1
                     } else {
                         FqTypeName::shape(&struct_module, &method_ref.type_name)
                     };

@@ -605,9 +605,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .receiver
                 .ty
                 .and_then(|ty| self.tysys.type_table.borrow().get_newtype_base(ty));
+            // A link keyed by no declaration (`&Point`) is told apart from the
+            // key's other blocks by its whole type alone, which the chain
+            // writes where the call knows none.
+            let shaped = link_key.decl().is_none().then_some(declared);
             owner.head = query.receiver.ty;
             owner.declared = Some(declared);
-            owner.receiver = ReceiverId::keyed(link_key, link_type.or(owner.receiver.ty));
+            owner.receiver =
+                ReceiverId::keyed(link_key, link_type.or(owner.receiver.ty).or(shaped));
         }
     }
 

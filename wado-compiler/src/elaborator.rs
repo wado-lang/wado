@@ -738,7 +738,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         };
         let newtype = self.newtype_self_type(*def)?;
         let link = self.tysys.type_table.borrow().get_newtype_base(newtype)?;
-        Some((self.impl_target_of(link), link))
+        Some((self.receiver_of(link).key().clone(), link))
     }
 
     /// The declaring node of `receiver::method_name` written qualified.
