@@ -3752,18 +3752,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     {
                         return None;
                     }
-                    if let ImplTargetKey::TypeParam(_, binder) =
-                        header.referent_key(&s.tysys.resolutions)?
-                    {
-                        let slot = header
-                            .type_params
-                            .iter()
-                            .filter(|p| p.is_real_type_param())
-                            .position(|p| p.name == binder)?;
-                        let id = TypeParamId {
-                            owner: impl_ref.0,
-                            index: slot as u32,
-                        };
+                    let binder = {
+                        let table = s.tysys.type_table.borrow();
+                        let referent = table
+                            .ref_pointee(table.impl_target_whole(impl_ref.0))
+                            .expect("a reference key's blocks target a reference");
+                        table.type_param_id(referent)
+                    };
+                    if let Some(id) = binder {
                         slots = TypeArgMap::from_iter([(id, pointee)]);
                     }
                 }

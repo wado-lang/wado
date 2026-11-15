@@ -2423,7 +2423,7 @@ fn trait_method_impls(tysys: &TypeSystem) -> IndexMap<ast::AstId, IndexSet<ast::
     // monomorphization never sees the block it has to yield to.
     for headers in by_trait.values() {
         for generic in headers.iter().filter(|header| !header.is_concrete()) {
-            let covers_every_head = matches!(generic.target, ImplTargetKey::TypeParam(..));
+            let covers_every_head = matches!(generic.target, ImplTargetKey::TypeParam { .. });
             let specifics = headers.iter().filter(|other| {
                 !std::ptr::eq(**other, *generic)
                     && (covers_every_head

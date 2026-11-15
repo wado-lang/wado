@@ -2947,18 +2947,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .flat_map(|(trait_name, impls)| impls.iter().map(move |b| (trait_name, b)))
             .filter(|(_, b)| b.receiver == BlanketReceiver::Value)
-            // The index is keyed by the receiver *param*, which every blanket in
-            // a module shares (`Serialize` beside `Deserialize`, both over `T`),
-            // so an entry speaks for this blanket only if this impl block
-            // declares the method. The header alone would match an instance
-            // method of the same name; both indices together will not.
             .filter(|(_, b)| {
-                let header = &self.tysys.trait_env.impl_headers[&b.def];
-                self.static_method_entries(
-                    &ImplTargetKey::TypeParam(b.module.clone(), b.param.clone()),
-                    method_name,
-                )
-                .any(|e| header.methods.iter().any(|m| m.def == e.method_id))
+                let target = ImplTargetKey::TypeParam {
+                    owner: b.def,
+                    name: b.param.clone(),
+                };
+                self.static_method_entries(&target, method_name)
+                    .next()
+                    .is_some()
             })
             // The trait comes off the impl's own header, so the blanket
             // index's bare-name key never reaches a mangled name.
