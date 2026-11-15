@@ -582,7 +582,9 @@ fn stride(step: &WirInstr, var: &str) -> Option<i32> {
 /// What `var` holds `times` steps on, as one sum.
 fn stepped(step: &WirInstr, var: &str, times: usize) -> Option<WirInstr> {
     let times = i32::try_from(times).expect("an unroll factor fits i32");
-    let ahead = stride(step, var)?.wrapping_mul(times);
+    let ahead = stride(step, var)?
+        .checked_mul(times)
+        .expect("a stride within MAX_STRIDE, unrolled, fits i32");
     let mut stepped = step.clone();
     stepped.for_each_boxed_child_mut(&mut |operand| {
         if let WirInstr::I32Const(c) = operand {
