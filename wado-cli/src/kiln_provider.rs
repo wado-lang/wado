@@ -60,6 +60,7 @@ use crate::compile::{KilnRun, run_nested_pipeline};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::fingerprint::{Input, compiler_digest};
 use crate::kiln_wit::options_descriptor_from_component;
+use crate::knobs::cores;
 use crate::manifest::package_root;
 use crate::oci;
 use crate::remote::locked_pin;
@@ -476,8 +477,7 @@ impl CliGeneratorProvider {
                     // compile, so it takes the whole machine rather than the
                     // one-thread share `wado test` gives each file. The output
                     // does not depend on the thread count, so the cache holds.
-                    parallelism: std::thread::available_parallelism()
-                        .map_or(1, std::num::NonZero::get),
+                    parallelism: cores(),
                     ..generator_compile_options(invocations)
                 };
                 let rt = tokio::runtime::Builder::new_current_thread()
