@@ -230,13 +230,11 @@ fn poll_to_completion<F: Future>(fut: F) -> F::Output {
 /// is, and compares equal to any other whatever its filename, so the check
 /// keeps a compile's entry from matching a snapshot's synthetic one.
 pub(crate) fn is_snapshot_kind(ms: &ModuleSource) -> bool {
-    matches!(
-        ms,
-        ModuleSource::Core { .. }
-            | ModuleSource::Binding { .. }
-            | ModuleSource::Wasm { .. }
-            | ModuleSource::Dependency { .. }
-    )
+    ms.keeps_parse()
+        || matches!(
+            ms,
+            ModuleSource::Core { .. } | ModuleSource::Binding { .. } | ModuleSource::Wasm { .. }
+        )
 }
 
 /// The modules `snap` serves: the subset of `snap.tir_modules` of a
