@@ -354,11 +354,9 @@ pub struct Unparser<'a> {
     /// The name each listed identifier is written under instead of its own:
     /// a trait's clause shown on an impl reads the impl's parameter names.
     renames: Option<&'a IndexMap<AstId, String>>,
-    /// Whether a struct literal printed now needs parentheses: true where the
-    /// parser restricts them, an expression a `{` block follows (a condition,
-    /// a `match` scrutinee, a `for … of` iterable, a `contract` clause), and
-    /// false again inside any delimiter, as the parser's depth check reads it.
-    struct_literals_restricted: bool,
+    /// The struct literals printed in parentheses: those the parser would read
+    /// the `{` of as the block that follows, by [`unenclosed_struct_literals`].
+    parenthesized_struct_literals: IndexSet<AstId>,
 }
 
 /// Where a list entry's line-end comment is found.
@@ -1722,15 +1720,14 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_condition(&mut self, cond: &Condition) {
-        self.with_struct_literals(true, |s| s.unparse_condition_operands(cond));
-    }
-
-    fn unparse_condition_operands(&mut self, cond: &Condition) {
         match cond {
             Condition::Expr(expr) => {
-                self.unparse_expr(expr);
+                self.unparse_expr_before_block(expr);
             }
             Condition::LetChain { elements, .. } => {
+                for elem in elements {
+                    self.restrict_struct_literals(elem.expr());
+                }
                 let snap = self.snapshot();
                 self.comma_sep_with(" && ", elements, Self::unparse_chain_element);
                 if self.added_since(snap).contains('\n') || self.exceeds_width_since(snap) {
@@ -1779,7 +1776,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str("; ");
 
         if let Some(update) = &f.update {
-            self.unparse_expr(update);
+            self.unparse_expr_before_block(update);
         }
 
         self.braced_block(f.span.start, &f.body);
@@ -1910,12 +1907,8 @@ impl<'a> Unparser<'a> {
             }
             Expr::Cast(c) => self.unparse_cast(c),
             Expr::StructLiteral(s) => self.unparse_struct_literal(s),
-            Expr::TupleLiteral(t) => {
-                self.with_struct_literals(false, |s| s.unparse_bracketed(&t.elements, t.span));
-            }
-            Expr::TupleComprehension(c) => {
-                self.with_struct_literals(false, |s| s.unparse_tuple_comprehension(c));
-            }
+            Expr::TupleLiteral(t) => self.unparse_bracketed(&t.elements, t.span),
+            Expr::TupleComprehension(c) => self.unparse_tuple_comprehension(c),
             Expr::LabeledBlock(lb) => self.unparse_labeled_block_expr(lb),
             Expr::TryOp(qm) => {
                 self.unparse_postfix_base(&qm.expr);
@@ -1958,7 +1951,7 @@ impl<'a> Unparser<'a> {
         self.unparse_pattern(&m.pattern);
         if let Some(guard) = &m.guard {
             self.output.push_str(" && ");
-            self.with_struct_literals(false, |s| s.unparse_expr(guard));
+            self.unparse_expr(guard);
         }
         self.output.push_str(" }");
     }
@@ -1975,7 +1968,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str("[for let ");
         self.unparse_pattern(&c.binding);
         self.output.push_str(" of ");
-        self.unparse_expr(&c.iterable);
+        self.unparse_expr_before_block(&c.iterable);
         // A comment anywhere in the comprehension forces the body onto its own
         // line; the one-line form has no slot for one and would drop it.
         if self.has_comment_in_range(c.span.start, c.span.end) {
@@ -2302,17 +2295,6 @@ impl<'a> Unparser<'a> {
     /// comment wraps too. One holding none never does: wrapping it shortens
     /// nothing.
     fn unparse_call_args(&mut self, args: &[Expr], has_trailing_comma: bool, span: Span) {
-        self.with_struct_literals(false, |s| {
-            s.unparse_call_args_allowing_struct_literals(args, has_trailing_comma, span)
-        });
-    }
-
-    fn unparse_call_args_allowing_struct_literals(
-        &mut self,
-        args: &[Expr],
-        has_trailing_comma: bool,
-        span: Span,
-    ) {
         // Multiline-with-trailing-comma is requested explicitly by the source;
         // in that case we skip the single-line attempt entirely, as does a
         // caller that has measured the line and needs this call to wrap.
@@ -2366,7 +2348,7 @@ impl<'a> Unparser<'a> {
         }
         self.unparse_postfix_base(&i.expr);
         self.output.push('[');
-        self.with_struct_literals(false, |s| s.unparse_expr(&i.index));
+        self.unparse_expr(&i.index);
         self.output.push(']');
     }
 
@@ -2405,7 +2387,7 @@ impl<'a> Unparser<'a> {
     /// A block after its `{` line: the statements one level in, and the `}`.
     fn block_rest(&mut self, b: &Block, floor: usize) {
         self.indent_level += 1;
-        self.with_struct_literals(false, |s| s.unparse_block(b, floor));
+        self.unparse_block(b, floor);
         self.indent_level -= 1;
         self.write_indent();
         self.output.push('}');
@@ -2548,12 +2530,6 @@ impl<'a> Unparser<'a> {
 
     /// Emit `pattern [&& guard] => body` (without leading indent or trailing comma).
     fn emit_match_arm_body(&mut self, arm: &MatchArm) {
-        self.with_struct_literals(false, |s| {
-            s.emit_match_arm_body_allowing_struct_literals(arm)
-        });
-    }
-
-    fn emit_match_arm_body_allowing_struct_literals(&mut self, arm: &MatchArm) {
         self.unparse_pattern(&arm.pattern);
         if let Some(guard) = &arm.guard {
             self.output.push_str(" && ");
@@ -2718,7 +2694,7 @@ impl<'a> Unparser<'a> {
                     // `${`, or a comment trailing the previous one would move
                     // to this expression.
                     self.open_entry_line(open.start, expr.span().start);
-                    self.with_struct_literals(false, |s| s.unparse_expr(expr));
+                    self.unparse_expr(expr);
                     if let Some(fmt) = format {
                         self.output.push(':');
                         self.output.push_str(&fmt.spec);
@@ -2739,8 +2715,8 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_struct_literal(&mut self, s: &StructLiteralExpr) {
-        let restricted = self.struct_literals_restricted;
-        self.with_parens_if(restricted, |u| u.unparse_struct_literal_bare(s));
+        let parenthesized = self.parenthesized_struct_literals.contains(&s.id);
+        self.with_parens_if(parenthesized, |u| u.unparse_struct_literal_bare(s));
     }
 
     fn unparse_struct_literal_bare(&mut self, s: &StructLiteralExpr) {
@@ -2854,24 +2830,22 @@ impl<'a> Unparser<'a> {
     {
         if cond {
             self.output.push('(');
-            self.with_struct_literals(false, f);
+        }
+        f(self);
+        if cond {
             self.output.push(')');
-        } else {
-            f(self);
         }
     }
 
-    /// Run `f` with struct literals restricted or allowed, as
-    /// [`Self::struct_literals_restricted`] says where each holds.
-    fn with_struct_literals(&mut self, restricted: bool, f: impl FnOnce(&mut Self)) {
-        let saved = std::mem::replace(&mut self.struct_literals_restricted, restricted);
-        f(self);
-        self.struct_literals_restricted = saved;
+    /// An expression a `{` block follows: the parser restricts struct
+    /// literals there.
+    fn unparse_expr_before_block(&mut self, expr: &Expr) {
+        self.restrict_struct_literals(expr);
+        self.unparse_expr(expr);
     }
 
-    /// An expression a `{` block follows.
-    fn unparse_expr_before_block(&mut self, expr: &Expr) {
-        self.with_struct_literals(true, |s| s.unparse_expr(expr));
+    fn restrict_struct_literals(&mut self, expr: &Expr) {
+        unenclosed_struct_literals(expr, &mut self.parenthesized_struct_literals);
     }
 
     /// Emit each attribute on a binder written mid-line — a parameter, a type
@@ -3680,6 +3654,65 @@ fn prefix_turbofish_split(ident: &IdentExpr) -> Option<(&str, &str)> {
 
 fn unparse_expr_into(expr: &Expr, output: &mut String) {
     output.push_str(&unparse_expr_source(expr));
+}
+
+/// The struct literals in `expr` that no delimiter encloses. The parser lifts
+/// its struct-literal restriction inside any `(`, `[` or `{`, so these are the
+/// ones it would read the `{` of as the block that follows `expr`.
+fn unenclosed_struct_literals(expr: &Expr, out: &mut IndexSet<AstId>) {
+    let mut visit = |e: &Expr| unenclosed_struct_literals(e, out);
+    match expr {
+        Expr::StructLiteral(s) => {
+            out.insert(s.id);
+        }
+        Expr::Binary(b) => {
+            visit(&b.left);
+            visit(&b.right);
+        }
+        Expr::ComparisonChain(chain) => {
+            visit(&chain.first);
+            chain.comparisons.iter().for_each(|c| visit(&c.right));
+        }
+        Expr::Range(r) => {
+            visit(&r.start);
+            visit(&r.end);
+        }
+        Expr::Assign(a) => {
+            if let AssignTarget::Place(place) = &a.target {
+                visit(place);
+            }
+            visit(&a.value);
+        }
+        Expr::CompoundAssign(a) => {
+            visit(&a.target);
+            visit(&a.value);
+        }
+        Expr::Unary(u) => visit(&u.expr),
+        Expr::Cast(c) => visit(&c.expr),
+        Expr::Call(c) => visit(&c.callee),
+        Expr::MethodCall(m) => visit(&m.receiver),
+        Expr::FieldAccess(f) => visit(&f.expr),
+        Expr::Index(i) => visit(&i.expr),
+        Expr::TryOp(q) => visit(&q.expr),
+        Expr::Spread(inner, _) => visit(inner),
+        Expr::TaggedTemplate(t) => visit(&t.tag),
+        Expr::Matches(m) => visit(&m.expr),
+        Expr::Closure(c) => visit(&c.body),
+        Expr::WithHandler(w) => w.handlers.iter().for_each(|h| visit(&h.handler)),
+        // Every part is inside a delimiter, or is a slot that restricts
+        // struct literals itself (an `if` condition, a `match` scrutinee).
+        Expr::Ident(_)
+        | Expr::Literal(_)
+        | Expr::StaticMethodCall(_)
+        | Expr::Block(_)
+        | Expr::If(_)
+        | Expr::Match(_)
+        | Expr::TemplateString(_)
+        | Expr::TupleLiteral(_)
+        | Expr::TupleComprehension(_)
+        | Expr::LabeledBlock(_)
+        | Expr::Error(_) => {}
+    }
 }
 
 /// A let-chain operand, a `let`'s scrutinee included, is parenthesized as the

@@ -204,7 +204,8 @@ titlecase entry under [Bugs in ANTLR4 itself](#bugs-in-antlr4-itself).
 
 A range whose bounds are letters of different case, as `[Z-a]`, is kept as
 written, so the other case of the letters it spans does not match. Gale warns
-on every such range (`case-mixed-range`). The jar's warning 185 covers only
+on every such range the grammar writes out (`case-mixed-range`), though not on
+the runs a `\p{…}` expands to. The jar's warning 185 covers only
 ranges reaching across the ASCII gap between `Z` and `a`.
 
 ### EOF in parse trees

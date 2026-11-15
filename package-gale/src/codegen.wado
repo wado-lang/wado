@@ -28,7 +28,7 @@ use {
     lexer_grammar_run_action_ids,
     lexer_mode_attr_use,
     splice_suffixed_alternations,
-    case_mixed_ranges,
+    is_case_mixed,
     resolve_ci,
 } from "./lexer_gen.wado";
 use { gen_parser } from "./parser_gen.wado";
@@ -487,20 +487,15 @@ fn warn_superclass_refused<S: AsStrSlice, S1: AsStrSlice>(diagnostics: &mut Diag
     );
 }
 
-/// Loud safety net for lexer `{ ... }` actions codegen does not execute:
-/// nested-in-group / mid-element actions, multi-alt-rule actions, actions in
-/// a `mode` grammar, and fragment actions. Predicates never warn (they run at
-/// every position). Without this a dropped lexer action vanished with no
-/// diagnostic — silent, against the "loud, never silent" contract. Gated on
-/// `emit_actions`, so a `language = Java` grammar warns nothing — except under
-/// a `superClass`, whose base-call rewrite runs actions the host translator
-/// never sees, leaving the rest to report.
 fn warn_case_mixed_ranges(grammar: &Grammar, diagnostics: &mut Diagnostics) {
     for let rule of &grammar.lexer_rules {
         if !resolve_ci(&grammar.options, &rule.options) {
             continue;
         }
-        for let r of &case_mixed_ranges(&rule.body) {
+        for let r of &rule.written_ranges {
+            if !is_case_mixed(r) {
+                continue;
+            }
             diagnostics.warn(
                 &DiagnosticOwner { site: DiagnosticSite::LexerRule(rule.name) },
                 DiagnosticKind::CaseMixedRange,
@@ -510,6 +505,14 @@ fn warn_case_mixed_ranges(grammar: &Grammar, diagnostics: &mut Diagnostics) {
     }
 }
 
+/// Loud safety net for lexer `{ ... }` actions codegen does not execute:
+/// nested-in-group / mid-element actions, multi-alt-rule actions, actions in
+/// a `mode` grammar, and fragment actions. Predicates never warn (they run at
+/// every position). Without this a dropped lexer action vanished with no
+/// diagnostic — silent, against the "loud, never silent" contract. Gated on
+/// `emit_actions`, so a `language = Java` grammar warns nothing — except under
+/// a `superClass`, whose base-call rewrite runs actions the host translator
+/// never sees, leaving the rest to report.
 fn warn_unhandled_lexer_actions(grammar: &Grammar, settings: &GenSettings, diagnostics: &mut Diagnostics) {
     if !settings.emit_actions && !settings.has_superclass() {
         return;

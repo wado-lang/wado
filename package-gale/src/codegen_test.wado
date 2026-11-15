@@ -1870,10 +1870,15 @@ test "a caseInsensitive range whose letter bounds differ in case warns" {
 options { caseInsensitive = true; }
 A : [Z-a] ;
 B : [0-z] ;
-C options { caseInsensitive = false; } : [A-z] ;";
+C options { caseInsensitive = false; } : [A-z] ;
+D : [\\p{L}_]+ ;
+E : 'A'..'\\u00AA' ;";
     let messages: List<String> = gen(input).diagnostics.into_iter().map(|d| `${d.owner.label()}: ${d.message}`).collect();
+    // `\\p{L}` holds runs such as Ø..ö, which no one wrote. `ª` is lowercase
+    // with no case mapping.
     assert messages == [
         "lexer rule 'A': range Z..a is kept as written, not widened by caseInsensitive: its bounds are letters of different case",
+        "lexer rule 'E': range A..ª is kept as written, not widened by caseInsensitive: its bounds are letters of different case",
     ];
 }
 

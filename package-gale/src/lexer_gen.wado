@@ -105,10 +105,8 @@ pub fn resolve_ci(grammar_opts: &List<GrammarOption>, rule_opts: &List<GrammarOp
     return false;
 }
 
-/// Whether `start..=end`, widened as `fold_range_ci` widens it under `ci`,
-/// holds `c`.
-pub fn folded_range_contains(start: char, end: char, ci: bool, c: char) -> bool {
-    return folded_class(start, end, ci).ranges.iter_ref().any(|r: &CharRange| r.start <= c <= r.end);
+fn class_holds(cc: &CharClass, c: char) -> bool {
+    return cc.negated != cc.ranges.iter_ref().any(|r: &CharRange| r.start <= c <= r.end);
 }
 
 /// The ranges `start..=end` matches under `caseInsensitive`: itself, and, where
@@ -142,38 +140,11 @@ pub fn fold_range_ci(start: char, end: char, out: &mut List<CharRange>) {
     }
 }
 
-/// The ranges in `alts` whose bounds are letters of different case, which
-/// `caseInsensitive` keeps as written.
-pub fn case_mixed_ranges(alts: &List<LexerAlternative>) -> List<CharRange> {
-    let mut out: List<CharRange> = [];
-    for let alt of alts {
-        for let elem of &alt.elements {
-            collect_case_mixed_ranges(elem, &mut out);
-        }
-    }
-    return out;
-}
-
-fn collect_case_mixed_ranges(elem: &LexerElement, out: &mut List<CharRange>) {
-    let mut ranges: List<CharRange> = [];
-    match elem {
-        CharRange(pair) => ranges.push(CharRange { start: pair.0, end: pair.1 }),
-        CharClass(cc) => ranges.extend(&cc.ranges),
-        Group(alts) => out.extend(&case_mixed_ranges(alts)),
-        Repeat(rep) => collect_case_mixed_ranges(&rep.element, out),
-        Not(n) => collect_case_mixed_ranges(&n.element, out),
-        Literal(_) | AnyChar | RuleRef(_) => {
-        },
-    }
-    for let r of &ranges {
-        if is_cased(r.start) && is_cased(r.end) && !bounds_share_case(r.start, r.end) {
-            out.push(*r);
-        }
-    }
-}
-
-fn is_cased(c: char) -> bool {
-    return simple_lowercase(c) != c || simple_uppercase(c) != c;
+/// Whether `r`'s bounds are letters of different case, which `caseInsensitive`
+/// keeps as written.
+pub fn is_case_mixed(r: &CharRange) -> bool {
+    let cased = |c: char| contains(BinaryProperty::Cased, c);
+    return cased(r.start) && cased(r.end) && !bounds_share_case(r.start, r.end);
 }
 
 /// Whether a range's bounds are both lowercase or both not, the test under
@@ -4259,13 +4230,13 @@ fn keyword_elem_ends(
     let len = kw.text.len();
     match elem {
         Literal(s) => {
-            let cs: List<char> = s.chars().collect();
+            let classes: List<CharClass> = s.chars().map(|c| folded_class(c, c, ci)).collect();
             return starts.iter_ref().filter(
-                |p| *p + cs.len() <= len
-                    && (0..<cs.len()).all(
-                        |i| keyword_chars_admitted(kw, *p + i, reading, |c| folded_range_contains(cs[i], cs[i], ci, c)),
+                |p| *p + classes.len() <= len
+                    && (0..<classes.len()).all(
+                        |i| keyword_chars_admitted(kw, *p + i, reading, |c| class_holds(&classes[i], c)),
                     ),
-            ).map(|p| *p + cs.len()).collect();
+            ).map(|p| *p + classes.len()).collect();
         },
         RuleRef(name) => {
             let callee = find_lexer_rule(all_rules, name);
@@ -4319,18 +4290,14 @@ fn keyword_elem_ends(
             }
         },
         CharRange(pair) => {
+            let folded = folded_class(pair.0, pair.1, ci);
             return starts.iter_ref().filter(
-                |p| *p < len
-                    && keyword_chars_admitted(kw, *p, reading, |c| folded_range_contains(pair.0, pair.1, ci, c)),
+                |p| *p < len && keyword_chars_admitted(kw, *p, reading, |c| class_holds(&folded, c)),
             ).map(|p| *p + 1).collect();
         },
         CharClass(cc) => {
-            let admits = |c: char| cc.negated != cc.ranges.iter_ref().any(|r| folded_range_contains(
-                r.start,
-                r.end,
-                ci,
-                c,
-            ));
+            let folded = folded_char_class(cc, ci);
+            let admits = |c: char| class_holds(&folded, c);
             return starts.iter_ref().filter(|p| *p < len && keyword_chars_admitted(kw, *p, reading, admits)).map(
                 |p| *p + 1,
             ).collect();
