@@ -1435,7 +1435,7 @@ fn emit_decoded(
     w.line(`    let finished = typed::<${bk}, bool, [Slots]>(backend, &state[${count + 1}]);`);
     let logits_axes = axis_list(&checked.shapes[axes.logits]);
     w.line(
-        `    let next = stepped::<${bk}, [${logits_axes}]>(backend, &${logits}, decoding, &tokens, &finished, step);`,
+        `    let next = stepped::<${bk}, ${checked.primitives[axes.logits]}, [${logits_axes}]>(backend, &${logits}, decoding, &tokens, &finished, step);`,
     );
     w.line(
         `    let at = row_binary::<${bk}>(backend, Binary::Add, &decoding.position, &shared::<${bk}>(backend, step));`,

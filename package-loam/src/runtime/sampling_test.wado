@@ -48,6 +48,20 @@ test "greedy picks each row's greatest logit" {
     ], &Sampling {}, 0) == [1, 0];
 }
 
+test "a half's logits pick what the f32 they widen to picks" {
+    let halves: Tensor<f16, [Slots, One, Vocabulary]> = {
+        data: [0.5, 2.0, 1.0, 3.0, 1.0, 2.0],
+        extents: [2, 1, 3],
+    };
+    assert Sampling {}.first_tokens(&halves, 0) == [1, 0];
+    let sampling = Sampling { temperature: 1.0, seed: 5 };
+    let widened: List<f32> = halves.data.into_iter().map(|h| f32::from(h)).collect();
+    for let at of 0..<20 {
+        let wide = Tensor::<f32, [Slots, One, Vocabulary]> { data: widened, extents: halves.extents };
+        assert sampling.first_tokens(&halves, at as i64) == sampling.first_tokens(&wide, at as i64);
+    }
+}
+
 test "a draw follows the probabilities its temperature leaves" {
     let row: List<f32> = [0.0, f32::ln(3.0)];
     let counts = drawn(row, &Sampling { temperature: 1.0, seed: 5 }, 400);
@@ -136,7 +150,7 @@ test "an ended row keeps returning its first end token" {
         data: [at],
         extents: [],
     };
-    let first = stepped::<Cpu, [Slots, One, Vocabulary]>(
+    let first = stepped::<Cpu, f32, [Slots, One, Vocabulary]>(
         &mut cpu,
         &scores,
         &decoding,
@@ -150,7 +164,7 @@ test "an ended row keeps returning its first end token" {
         [0.0, 1.0, 0.0, 0.0],
         [0.0, 0.0, 0.0, 1.0],
     ]);
-    let second = stepped::<Cpu, [Slots, One, Vocabulary]>(
+    let second = stepped::<Cpu, f32, [Slots, One, Vocabulary]>(
         &mut cpu,
         &later,
         &decoding,
@@ -202,7 +216,7 @@ fn drawn_at(at: List<i64>, rows: i32, steps: i32) -> List<i64> {
     let mut tokens = decoding.tokens;
     let mut finished = decoding.finished;
     for let step of 0..<steps {
-        let next = stepped::<Cpu, [Slots, One, Vocabulary]>(
+        let next = stepped::<Cpu, f32, [Slots, One, Vocabulary]>(
             &mut cpu,
             &even,
             &decoding,

@@ -675,7 +675,10 @@ fn pairwise(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
 
 fn clip(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
     let mut steps: List<[String, String]> = [];
-    for let [index, bound, op] of [[1, "min", "Max"], [2, "max", "Min"]] {
+    for let [index, bound, op] of [
+        [1, "min", "Max"],
+        [2, "max", "Min"],
+    ] {
         if node.has_operand(index) {
             steps.push([op, node.inputs[index]]);
         } else if node.attr(bound) matches { Some(_) } {
