@@ -404,6 +404,10 @@ test "Conv with padding and a bias" {
     assert_agrees(#include_bytes("./operators/Conv.onnx"), #include_str("./operators/Conv.txt"));
 }
 
+test "Conv of halves adds a bias to a result past a half's range" {
+    assert_agrees(#include_bytes("./operators/ConvHalfBiased.onnx"), #include_str("./operators/ConvHalfBiased.txt"));
+}
+
 test "Conv with strides and dilations" {
     assert_agrees(
         #include_bytes("./operators/ConvStridedDilated.onnx"),

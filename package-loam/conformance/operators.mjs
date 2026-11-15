@@ -207,6 +207,18 @@ add('ConvGrouped', {
   inputs: { A: float([1, 4, 3, 3]), W: float([2, 2, 2, 2]) },
   nodes: [node('Conv', ['A', 'W'], 'Y', { group: 2 })],
 });
+// A Conv of halves adds its bias in f32 to a result past a half's range.
+const halfConv = (output) => [
+  node('Cast', ['A'], 'HA', { to: FLOAT16 }),
+  node('Cast', ['W'], 'HW', { to: FLOAT16 }),
+  node('Cast', ['B'], 'HB', { to: FLOAT16 }),
+  node('Conv', ['HA', 'HW', 'HB'], output),
+];
+add('ConvHalfBiased', {
+  inputs: { A: float([1, 1, 1, 2], [256, 1]), W: float([1, 1, 1, 1], [256]), B: float([1], [-32768]) },
+  nodes: [...halfConv('H'), node('Cast', ['H'], 'Y', { to: FLOAT })],
+  oracle: { nodes: halfConv('Y'), out: FLOAT16 },
+});
 add('ConvDepthwise', {
   inputs: { A: float([1, 3, 4, 4]), W: float([3, 1, 3, 3]), B: float([3]) },
   nodes: [node('Conv', ['A', 'W', 'B'], 'Y', { group: 3, pads: [1, 1, 1, 1] })],

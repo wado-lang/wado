@@ -203,6 +203,40 @@ fn stretched(
     return Result::Ok(`&${broadcast_call(&element, &shape, out, &exprs.reference(tensor), trailing, symbols)?}`);
 }
 
+/// The element a node of `element` computes in: f32 for a half whose node
+/// takes several steps, so that neither a value past a half's range nor a
+/// scalar no half holds is rounded on the way, and the result rounds once.
+struct Computed {
+    element: String,
+    wide: bool,
+}
+
+impl Computed {
+    fn new(element: String, several_steps: bool) -> Computed {
+        return Computed { element, wide: (element == "f16" || element == "bf16") && several_steps };
+    }
+
+    fn element(&self) -> String {
+        return if self.wide { "f32" } else { self.element };
+    }
+
+    /// `operand`, of axes `shape`, in the element computed in.
+    fn operand(&self, operand: String, shape: &Shape) -> String {
+        if !self.wide {
+            return operand;
+        }
+        return `&backend.convert::<${self.element}, f32, [${axis_list(shape)}]>(${operand})`;
+    }
+
+    /// `call`, of axes `shape`, in the node's own element.
+    fn result(&self, call: String, shape: &Shape) -> String {
+        if !self.wide {
+            return call;
+        }
+        return `backend.convert::<f32, ${self.element}, [${axis_list(shape)}]>(&${call})`;
+    }
+}
+
 /// The f32s `operand` refers to, of axes `shape`, times `factor`.
 fn scaled(operand: &String, shape: &Shape, factor: f32, symbols: &mut Symbols) -> Result<String, EmitError> {
     let axes = axis_list(shape);
@@ -286,28 +320,20 @@ fn built_matmul(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
 /// `Gemm`'s `alpha * A' * B' + beta * C`: `dot_general` contracting the axes
 /// `transA` and `transB` choose, its scalars, and its bias broadcast to the
 /// output, whose axes the bias may rename where they meet at an extent of 1.
-/// Halves are computed in f32 and rounded once, so neither a product past a
-/// half's range nor a scalar no half holds is rounded on the way.
 fn built_gemm(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     let [alpha, beta, trans_a, trans_b] = settled(gemm_options(node));
     let product = gemm_product(node, shapes);
-    let element = checked.primitives[node.outputs[0]];
-    let wide = (element == "f16" || element == "bf16") && (alpha != 1.0 || has_bias(node));
-    let computed = if wide { "f32" } else { element };
-    let widened = |operand: String, shape: &Shape| {
-        if !wide {
-            return operand;
-        }
-        return `&backend.convert::<${element}, f32, [${axis_list(shape)}]>(${operand})`;
-    };
+    let computed = Computed::new(checked.primitives[node.outputs[0]], alpha != 1.0 || has_bias(node));
+    let element = computed.element();
+    let operand = |index: i32| computed.operand(exprs.reference(&node.inputs[index]), &shapes[node.inputs[index]]);
     let mut call = dot_call(
-        &computed,
+        &element,
         &shapes[node.inputs[0]],
         &shapes[node.inputs[1]],
         &product,
-        &widened(exprs.reference(&node.inputs[0]), &shapes[node.inputs[0]]),
-        &widened(exprs.reference(&node.inputs[1]), &shapes[node.inputs[1]]),
+        &operand(0),
+        &operand(1),
         [],
         [if trans_a { 0 } else { 1 }, if trans_b { 1 } else { 0 }],
         symbols,
@@ -318,18 +344,15 @@ fn built_gemm(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
     let out = if has_bias(node) { shapes[node.outputs[0]] } else { product };
     if has_bias(node) {
         if !same_axes(&product, &out) {
-            call = broadcast_call(&computed, &product, &out, &`&${call}`, 0, symbols)?;
+            call = broadcast_call(&element, &product, &out, &`&${call}`, 0, symbols)?;
         }
-        let mut bias = widened(stretched(checked, exprs, symbols, &node.inputs[2], &out, 0)?, &out);
+        let mut bias = computed.operand(stretched(checked, exprs, symbols, &node.inputs[2], &out, 0)?, &out);
         if beta != 1.0 {
             bias = `&${scaled(&bias, &out, beta, symbols)?}`;
         }
-        call = `backend.binary::<${computed}, [${axis_list(&out)}]>(Binary::Add, &${call}, ${bias})`;
+        call = `backend.binary::<${element}, [${axis_list(&out)}]>(Binary::Add, &${call}, ${bias})`;
     }
-    if !wide {
-        return Result::Ok(call);
-    }
-    return Result::Ok(`backend.convert::<f32, ${element}, [${axis_list(&out)}]>(&${call})`);
+    return Result::Ok(computed.result(call, &out));
 }
 
 /// A `Conv` as `convolution`, its bias broadcast along the output's channels.
@@ -349,22 +372,26 @@ fn built_conv(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
     let conv = `&Convolution { window_strides: ${window.strides}, padding: [${pads.join(
         ", ",
     )}], rhs_dilation: ${window.dilations}, feature_group_count: ${settled(conv_group(node, &w))} }`;
-    let element = checked.primitives[node.outputs[0]];
-    let call = `backend.convolution::<${element}, [${axis_list(&x)}], [${axis_list(&w)}], [${axis_list(&y)}]>(${exprs.reference(
-        &node.inputs[0],
-    )}, ${exprs.reference(&node.inputs[1])}, ${conv})`;
+    let computed = Computed::new(checked.primitives[node.outputs[0]], has_bias(node));
+    let element = computed.element();
+    let call = `backend.convolution::<${element}, [${axis_list(&x)}], [${axis_list(&w)}], [${axis_list(&y)}]>(${computed.operand(
+        exprs.reference(&node.inputs[0]),
+        &x,
+    )}, ${computed.operand(exprs.reference(&node.inputs[1]), &w)}, ${conv})`;
     if !has_bias(node) {
         return Result::Ok(call);
     }
+    let b = shapes[node.inputs[2]];
     let bias = broadcast_call(
         &element,
-        &shapes[node.inputs[2]],
+        &b,
         &y,
-        &exprs.reference(&node.inputs[2]),
+        &computed.operand(exprs.reference(&node.inputs[2]), &b),
         spatial,
         symbols,
     )?;
-    return Result::Ok(`backend.binary::<${element}, [${axis_list(&y)}]>(Binary::Add, &${call}, &${bias})`);
+    let sum = `backend.binary::<${element}, [${axis_list(&y)}]>(Binary::Add, &${call}, &${bias})`;
+    return Result::Ok(computed.result(sum, &y));
 }
 
 /// A `MaxPool` as `reduce_window` by the greatest, the batch and channel axes
