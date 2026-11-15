@@ -1090,21 +1090,14 @@ fn generate_struct_default_slot_fn(
         span,
     );
 
-    // One tuple literal reads as large to the cost heuristic, but a caller
-    // passes a constant index, and every other arm folds away once inlined.
-    let mut function = make_synthetic_method(
+    make_synthetic_method(
         qualified_name,
         method_info,
         params,
         slots_tuple_type,
         body,
         locals,
-    );
-    // A caller keeps one slot of the tuple (`default_slot(i)[i]`), so the
-    // splice folds to that field's default, but the inliner prices the whole
-    // tuple and keeps the call once a struct has a few fields.
-    function.inline_hint = InlineHint::Always;
-    function
+    )
 }
 
 /// Build `S^ReflectStruct::empty_slots() -> [Option<F_0>, …]`:

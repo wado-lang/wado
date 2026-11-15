@@ -1,7 +1,7 @@
 // An inlined `push` binds `let self = &mut out` and hands `self` whole to the
 // cold `grow(self)`. Folding that argument back to `&mut out` drops the alias,
-// so `field_scalarize` keeps `out.used` in a local across the loop instead of
-// loading and storing the field on every push.
+// so `sroa` keeps `out.used` in a local across the loop instead of loading and
+// storing the field on every push, and only `grow` gets the object.
 
 use { println, Stdout } from "core:cli";
 
@@ -29,6 +29,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "100 0 2 99 8217\n",
-    "wir_pass": {"O2": ["nir/peephole", "nir/field_scalarize"]},
-    "wir_expect:O2": ["let $hfs_used_"]
+    "wir_pass": {"O2": ["nir/peephole", "nir/sroa"]},
+    "wir_expect:O2": ["$sroa_out_used_{u} = $sroa_out_used_{u} + 1;"]
 }

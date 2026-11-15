@@ -63,18 +63,19 @@ import fn wasi/task-return from "wasi/task-return";
 global global:mut_ref_literal_coercion.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(109, 117, 116, 32, 114, 101, 102, 32, 108, 105, 116, 101, 114, 97, 108, 32, 99, 111, 101, 114, 99, 105, 111, 110, 58, 32, 111, 107);
 
 fn "mut_ref_literal_coercion.wado/run"() with Stdout {
-    let $temp_inline_grow_11_0: ref "core:prelude/list.wado//List<i32>";
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_85: i32;
     let $sroa_$pattern_temp_0_1_86: i32;
     let new_repr: ref Array<u8>;
-    $temp_inline_grow_11_0 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    if @unlikely(3 >= builtin::array_len($temp_inline_grow_11_0.repr)) {
+    let $sroa_$temp_inline_grow_11_0_repr_102: ref Array<i32>;
+    let $sroa_write_back_106: ref "core:prelude/list.wado//List<i32>";
+    $sroa_$temp_inline_grow_11_0_repr_102 = array.new_fixed<i32>(1, 2, 3);
+    if @unlikely(3 >= builtin::array_len($sroa_$temp_inline_grow_11_0_repr_102)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($temp_inline_grow_11_0);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_106(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$temp_inline_grow_11_0_repr_102, used: 3 }));
+        $sroa_$temp_inline_grow_11_0_repr_102 = $sroa_write_back_106.repr;
     }
-    builtin::array_set<i32>($temp_inline_grow_11_0.repr, 3, 4);
-    $temp_inline_grow_11_0.used = 4;
+    builtin::array_set<i32>($sroa_$temp_inline_grow_11_0_repr_102, 3, 4);
     $sroa_$pattern_temp_0_0_85 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_86 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_$pattern_temp_0_0_85 = "mut_ref_literal_coercion.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_85);

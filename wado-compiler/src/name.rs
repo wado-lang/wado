@@ -1469,7 +1469,6 @@ impl Receiver {
                 TypeHead::Binder { name, .. } => Some(name),
                 TypeHead::Declared(_)
                 | TypeHead::Shape { .. }
-                | TypeHead::ParamBucket { .. }
                 | TypeHead::Builtin(_)
                 | TypeHead::Unresolved(_)
                 | TypeHead::Infer { .. }
@@ -3557,10 +3556,6 @@ pub enum TypeHead {
         signature: Vec<FqTypeName>,
         effects: Vec<tir::EffectRef>,
     },
-    /// The index bucket one module's `impl` blocks binding a parameter of this
-    /// spelling share. Its own head: spelled as a shape, an `impl` on an
-    /// undeclared type of the same name would land in a blanket's bucket.
-    ParamBucket { module: ModuleSource, name: String },
     /// A template's own type-parameter binder (`T`, a pack member `F`), with
     /// the `impl` block that binds it. Without `owner`, `impl<T: A> Tr for T`
     /// and `impl<T: B> Tr for T` share one template and one silently replaces
@@ -3614,7 +3609,6 @@ impl TypeHead {
         match self {
             Self::Declared(head) => head.name(),
             Self::Shape { name, .. }
-            | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
             | Self::Unresolved(name)
             | Self::Infer { name, .. }
@@ -3625,15 +3619,14 @@ impl TypeHead {
         }
     }
 
-    /// The spelling a mangle embeds — the head alone. What a binder's owner and
-    /// a bucket's module add to it, [`FqTypeName::to_mangled`] adds, as it adds
-    /// a projection's base.
+    /// The spelling a mangle embeds — the head alone. What a binder's owner
+    /// adds to it, [`FqTypeName::to_mangled`] adds, as it adds a projection's
+    /// base.
     #[must_use]
     pub fn mangled(&self) -> &str {
         match self {
             Self::Declared(head) => head.mangled(),
             Self::Shape { name, .. }
-            | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
             | Self::Unresolved(name)
             | Self::Infer { name, .. }
@@ -3651,7 +3644,6 @@ impl TypeHead {
         match self {
             Self::Declared(head) => Some(head.def()),
             Self::Shape { .. }
-            | Self::ParamBucket { .. }
             | Self::Builtin(_)
             | Self::Unresolved(_)
             | Self::Infer { .. }
@@ -3667,7 +3659,7 @@ impl TypeHead {
     pub fn module(&self) -> Option<&ModuleSource> {
         match self {
             Self::Declared(head) => Some(head.module()),
-            Self::Shape { module, .. } | Self::ParamBucket { module, .. } => Some(module),
+            Self::Shape { module, .. } => Some(module),
             Self::Builtin(_)
             | Self::Unresolved(_)
             | Self::Infer { .. }
@@ -3763,17 +3755,6 @@ impl FqTypeName {
                 defs.ast_id(def),
                 assoc,
             )),
-        })
-    }
-
-    /// The index bucket holding every `impl` in `module` whose target is a type
-    /// parameter spelled `name`. Keyed by the spelling, since that is the
-    /// question it answers; not a binder, which is one parameter of one item.
-    #[must_use]
-    pub fn param_bucket(module: &ModuleSource, name: &str) -> Self {
-        Self::of_head_kind(TypeHead::ParamBucket {
-            module: module.clone(),
-            name: name.to_string(),
         })
     }
 
@@ -3959,7 +3940,6 @@ impl FqTypeName {
             TypeHead::Projection(_) => true,
             TypeHead::Declared(_)
             | TypeHead::Shape { .. }
-            | TypeHead::ParamBucket { .. }
             | TypeHead::Builtin(_)
             | TypeHead::Unresolved(_)
             | TypeHead::Infer { .. }
@@ -4048,11 +4028,6 @@ impl FqTypeName {
                 out.push_str(&mangle_declared(head.module(), head.mangled()));
             }
             TypeHead::Shape { module, name } => out.push_str(&mangle_declared(module, name)),
-            // A bucket keys an index and heads no function name; spelled apart
-            // from a shape's so the two cannot be read as one.
-            TypeHead::ParamBucket { module, name } => {
-                out.push_str(&format!("{module}/{name}#param"));
-            }
             TypeHead::Builtin(name) | TypeHead::Unresolved(name) | TypeHead::Infer { name, .. } => {
                 out.push_str(name);
             }

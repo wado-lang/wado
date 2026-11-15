@@ -846,13 +846,8 @@ impl<'a> Reify<'a> {
 
     /// A [`TypeLookup`] from the current module, without annotate's use→def recording.
     fn type_lookup(&self) -> TypeLookup<'_> {
-        // A function-local item is reached by declaration through the local data tables:
-        // annotate clears `fn_local_items`, and reify never refills it.
-        self.tysys.type_lookup(
-            &self.current_module_source,
-            &self.sem.imports.namespace_imports,
-            &self.sem.decls,
-        )
+        self.tysys
+            .type_lookup(&self.sem.imports.namespace_imports, &self.sem.decls)
     }
 
     /// A function type's effects, read off the sites the resolve walk answered.
@@ -7864,15 +7859,18 @@ impl<'a> Reify<'a> {
             && let Some(pos) = ident.name.find("::")
             && !ident.name[pos + 2..].contains("::")
         {
-            let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
 
-            let owner = ident.owner_segment().map(|seg| seg.id);
+            // The call's own type names the flags declaration, whatever the
+            // receiver was written as: a `Self` binder names none at its site.
+            let owner = self.tysys.type_table.borrow().nominal_def(recorded_type);
+            let lookup = self.type_lookup();
             // A newtype reaches its base's constants and keeps its own type.
-            let through_newtype = self.newtype_member_owner(owner, prefix);
+            let through_newtype =
+                owner.and_then(|def| newtype_member_owner(&lookup, &self.tysys, def));
             let flags = match through_newtype {
-                Some((base, _)) => self.type_lookup().flags_members_of(base).cloned(),
-                None => self.type_lookup().flags_members_at(owner, prefix).cloned(),
+                Some((base, _)) => lookup.flags_members_of(base).cloned(),
+                None => owner.and_then(|def| lookup.flags_members_of(def).cloned()),
             };
             if let Some(flags_info) = flags
                 && matches!(suffix, "none" | "all")
@@ -8981,18 +8979,6 @@ impl<'a> Reify<'a> {
                 span: site,
             }
         }
-    }
-
-    /// [`super::types::newtype_member_owner`] for the declaration `prefix`
-    /// names at `site`.
-    pub(super) fn newtype_member_owner(
-        &self,
-        site: Option<ast::AstId>,
-        prefix: &str,
-    ) -> Option<(DefId, TypeId)> {
-        let lookup = self.type_lookup();
-        let def = lookup.declaration_at(site, prefix)?;
-        newtype_member_owner(&lookup, &self.tysys, def)
     }
 
     /// Discriminant index of `case_name` when `scrutinee_type` is an enum that

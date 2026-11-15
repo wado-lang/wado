@@ -969,6 +969,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     }
 
     /// Look up a symbol in a specific module
+    #[expect(clippy::disallowed_methods, reason = "the table's lookup, re-exported")]
     pub fn lookup_in_module(&self, module_source: &ModuleSource, name: &str) -> Option<&Symbol> {
         self.symbols.lookup_in_module(module_source, name)
     }
@@ -1402,6 +1403,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
     /// Imports `lookup_name` from `module_source` into `from` as `import_name`,
     /// or reports why it cannot.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "an import names its member in the module it imports from, before any walk"
+    )]
     fn import_symbol(
         &mut self,
         from: &ModuleSource,
@@ -1673,6 +1678,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     /// the package already publishes under another name (an `export` on its
     /// declaration publishes it under its own), or a struct with a field WIT
     /// could not show.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "an `export use` names its member in the module it adopts from, before any walk"
+    )]
     fn check_adoption(
         &mut self,
         from: &ModuleSource,

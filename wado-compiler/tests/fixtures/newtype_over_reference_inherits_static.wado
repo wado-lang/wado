@@ -1,0 +1,28 @@
+// A newtype over a reference inherits the statics the reference's own impls
+// declare: the link below it is keyed as a reference, as `impl … for &Point`
+// is indexed, and named whole, as the impl hosts its functions.
+use { println, Stdout } from "core:cli";
+use m from "./sub/newtype_over_reference_target.wado";
+use { Make } from "./sub/newtype_over_reference_target.wado";
+
+struct Point {
+    x: i32,
+}
+
+impl Make for &Point {
+    fn make() -> i32 {
+        return 3;
+    }
+}
+
+type Wrapped = &Point;
+
+export fn run() with Stdout {
+    println(`${Wrapped::make()}`);
+    println(`${m::Wrapped::make()}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n4\n"
+}

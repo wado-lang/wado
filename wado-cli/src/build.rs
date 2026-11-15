@@ -12,7 +12,6 @@
 
 use std::fmt::Write as _;
 use std::io::Write as _;
-use std::num::NonZero;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -30,6 +29,7 @@ use crate::input_cache::{InputCache, Slot};
 use crate::kiln_provider::hex32;
 use crate::knobs::{
     CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions, EmbedPolicy, HostKnobOpt, HostKnobs,
+    cores,
 };
 use crate::manifest::{self, EntryPointKind, openable_dir};
 use crate::metadata_embed::embed_metadata_sections;
@@ -410,12 +410,12 @@ pub async fn build_world_components(
     embed: EmbedOptions,
 ) -> Result<(), CliExit> {
     assert!(!targets.is_empty(), "every caller has a world to build");
-    let cores = std::thread::available_parallelism().map_or(1, NonZero::get);
+    let cpus = cores();
     let mut knobs = knobs.clone();
     knobs
         .opt_threads
-        .get_or_insert((cores / targets.len()).max(1));
-    let slots = Arc::new(Semaphore::new(cores));
+        .get_or_insert((cpus / targets.len()).max(1));
+    let slots = Arc::new(Semaphore::new(cpus));
     let mut builds = JoinSet::<Result<(), CliExit>>::new();
     for target in targets {
         let slot = Arc::clone(&slots)

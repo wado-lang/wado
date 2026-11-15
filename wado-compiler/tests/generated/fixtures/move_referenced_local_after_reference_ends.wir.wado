@@ -169,20 +169,21 @@ fn "move_referenced_local_after_reference_ends.wado/refill"(m) {
 }
 
 fn "move_referenced_local_after_reference_ends.wado/ref_held_in_a_local"() with Stdout {
-    let $load_0: ref Array<i32>;
-    let t: ref "core:prelude/list.wado//List<i32>";
     let u: ref "core:prelude/list.wado//List<i32>";
     let message_13: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
-    u = struct.new "core:prelude/list.wado//List<i32>" { repr: $load_0 = local.tee t(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }).repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(1)), 0, $load_0, 0, 1); $array_clone_dst_2, used: 1 };
-    if @unlikely(1 >= builtin::array_len($load_0)) {
+    let $sroa_t_repr_28: ref Array<i32>;
+    let $sroa_write_back_30: ref "core:prelude/list.wado//List<i32>";
+    $sroa_t_repr_28 = array.new_fixed<i32>(1);
+    u = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(1)), 0, $sroa_t_repr_28, 0, 1); $array_clone_dst_2, used: 1 };
+    if @unlikely(1 >= builtin::array_len($sroa_t_repr_28)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(t);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_30(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_t_repr_28, used: 1 }));
+        $sroa_t_repr_28 = $sroa_write_back_30.repr;
     }
-    builtin::array_set<i32>(t.repr, 1, 2);
-    t.used = 2;
+    builtin::array_set<i32>($sroa_t_repr_28, 1, 2);
     message_13 = "core:prelude/string.wado/core:prelude/string.wado/String::format<move_referenced_local_after_reference_ends.wado/$tmpl$7ab51489603b688b,[core:prelude/list.wado/List<i32>]>$spec0$spec0$sroa[t.h0]"(u);
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
@@ -192,20 +193,21 @@ fn "move_referenced_local_after_reference_ends.wado/ref_held_in_a_local"() with 
 }
 
 fn "move_referenced_local_after_reference_ends.wado/ref_held_in_a_struct"() with Stdout {
-    let $load_0: ref Array<i32>;
-    let t: ref "core:prelude/list.wado//List<i32>";
     let u: ref "core:prelude/list.wado//List<i32>";
     let message_13: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
-    u = struct.new "core:prelude/list.wado//List<i32>" { repr: $load_0 = local.tee t(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }).repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(1)), 0, $load_0, 0, 1); $array_clone_dst_2, used: 1 };
-    if @unlikely(1 >= builtin::array_len($load_0)) {
+    let $sroa_t_repr_28: ref Array<i32>;
+    let $sroa_write_back_30: ref "core:prelude/list.wado//List<i32>";
+    $sroa_t_repr_28 = array.new_fixed<i32>(1);
+    u = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(1)), 0, $sroa_t_repr_28, 0, 1); $array_clone_dst_2, used: 1 };
+    if @unlikely(1 >= builtin::array_len($sroa_t_repr_28)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(t);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_30(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_t_repr_28, used: 1 }));
+        $sroa_t_repr_28 = $sroa_write_back_30.repr;
     }
-    builtin::array_set<i32>(t.repr, 1, 2);
-    t.used = 2;
+    builtin::array_set<i32>($sroa_t_repr_28, 1, 2);
     message_13 = "core:prelude/string.wado/core:prelude/string.wado/String::format<move_referenced_local_after_reference_ends.wado/$tmpl$7ab51489603b688b,[core:prelude/list.wado/List<i32>]>$spec0$spec0$sroa[t.h0]"(u);
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);

@@ -60,6 +60,7 @@ use crate::compile::{KilnRun, run_nested_pipeline};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::fingerprint::{Input, compiler_digest};
 use crate::kiln_wit::options_descriptor_from_component;
+use crate::knobs::cores;
 use crate::manifest::package_root;
 use crate::oci;
 use crate::remote::locked_pin;
@@ -472,6 +473,11 @@ impl CliGeneratorProvider {
                 };
                 let options = CompilerOptions {
                     log_level: Some(log_level),
+                    // Every file that uses the generator waits on this
+                    // compile, so it takes the whole machine rather than the
+                    // one-thread share `wado test` gives each file. The output
+                    // does not depend on the thread count, so the cache holds.
+                    parallelism: cores(),
                     ..generator_compile_options(invocations)
                 };
                 let rt = tokio::runtime::Builder::new_current_thread()
@@ -1136,7 +1142,8 @@ impl GeneratorProvider for CliGeneratorProvider {
         let Some(run) = &self.run else {
             return self.resolve_unpinned(module).await;
         };
-        if let Some(pinned) = run.generators().get(&self.run_key(module), run) {
+        let key = self.run_key(module);
+        if let Some(pinned) = run.generators().get(&key, run) {
             return Ok(pinned);
         }
         // Resolved through a view of its own, so the reads it took are kept
@@ -1149,9 +1156,7 @@ impl GeneratorProvider for CliGeneratorProvider {
             .await?;
         // Two fixtures can resolve one generator at once; whichever lands
         // first is the run's.
-        Ok(run
-            .generators()
-            .pin(self.run_key(module), resolved, &resolution, run))
+        Ok(run.generators().pin(key, resolved, &resolution, run))
     }
 }
 
@@ -1171,16 +1176,23 @@ impl CliGeneratorProvider {
 }
 
 impl CliGeneratorProvider {
-    /// Run-cache key. A run can span projects, and a module path means nothing
-    /// without the root it is relative to.
+    /// Run-cache key. A run can span projects: a spec means what the project's
+    /// manifest and lock say, so its key carries the root. A local generator
+    /// compiles from its own file alone, so every project reaching that file
+    /// shares one key.
     fn run_key(&self, module: &GeneratorModule) -> String {
-        let module = match module {
-            GeneratorModule::Spec(spec) => {
-                format!("spec:{}@{:?}#{:?}", spec.spec, spec.version, spec.registry)
+        match module {
+            GeneratorModule::Spec(spec) => format!(
+                "{}\u{1}spec:{}@{:?}#{:?}",
+                self.manifest_root.display(),
+                spec.spec,
+                spec.version,
+                spec.registry
+            ),
+            GeneratorModule::LocalPath(path) => {
+                format!("path:{}", self.resolve_path(path.as_str()).display())
             }
-            GeneratorModule::LocalPath(path) => format!("path:{}", path.as_str()),
-        };
-        format!("{}\u{1}{module}", self.manifest_root.display())
+        }
     }
 }
 
@@ -1203,6 +1215,18 @@ mod tests {
     use super::*;
     use crate::kiln_provider::make_relative_sources;
     use wado_compiler::kiln::InvocationPath;
+
+    const VERBOSE_GENERATOR: &str = "\
+use { Request, Response, Error } from \"core:kiln\";\n\
+\n\
+export struct Options {\n\
+    pub verbose: bool,\n\
+}\n\
+\n\
+export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
+    let _ = req.options.verbose;\n\
+    return Result::Ok(Response { files: [] });\n\
+}\n";
 
     fn runtime() -> tokio::runtime::Runtime {
         tokio::runtime::Builder::new_current_thread()
@@ -1348,20 +1372,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
 
-        let generator_src = "\
-use { Request, Response, Error } from \"core:kiln\";\n\
-\n\
-export struct Options {\n\
-    pub verbose: bool,\n\
-}\n\
-\n\
-export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
-    let _ = req.options.verbose;\n\
-    return Result::Ok(Response { files: [] });\n\
-}\n";
-
         let gen_path = tmp.join("generator.wado");
-        std::fs::write(&gen_path, generator_src).unwrap();
+        std::fs::write(&gen_path, VERBOSE_GENERATOR).unwrap();
 
         let provider = CliGeneratorProvider::new(tmp.clone());
         let module = GeneratorModule::LocalPath(InvocationPath::normalize("./generator.wado"));
@@ -1447,21 +1459,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
         ));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(
-            tmp.join("generator.wado"),
-            "\
-use { Request, Response, Error } from \"core:kiln\";\n\
-\n\
-export struct Options {\n\
-    pub verbose: bool,\n\
-}\n\
-\n\
-export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
-    let _ = req.options.verbose;\n\
-    return Result::Ok(Response { files: [] });\n\
-}\n",
-        )
-        .unwrap();
+        std::fs::write(tmp.join("generator.wado"), VERBOSE_GENERATOR).unwrap();
         let provider = CliGeneratorProvider::new(tmp.clone());
         let module = GeneratorModule::LocalPath(InvocationPath::normalize("./generator.wado"));
         runtime()
@@ -1549,6 +1547,30 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// A generator two packages of one run reach by their own relative paths
+    /// is one file, and compiles once.
+    #[test]
+    fn one_run_compiles_a_generator_once_for_every_consumer() {
+        let tmp = tempfile::tempdir().unwrap();
+        let generator = tmp.path().join("gen");
+        std::fs::create_dir(&generator).unwrap();
+        std::fs::write(generator.join("generator.wado"), VERBOSE_GENERATOR).unwrap();
+        let run = Arc::new(RunCache::new());
+        let consumer = |name: &str| {
+            let root = tmp.path().join(name);
+            std::fs::create_dir(&root).unwrap();
+            CliGeneratorProvider::new(root).with_run_cache(Arc::clone(&run))
+        };
+        let [a, b] = [consumer("a"), consumer("b")];
+        let module = GeneratorModule::LocalPath(InvocationPath::normalize("../gen/generator.wado"));
+        for provider in [&a, &b] {
+            runtime()
+                .block_on(async { provider.resolve(&module).await })
+                .unwrap_or_else(|e| panic!("resolve: {e:?}"));
+        }
+        assert_eq!(a.compile_count() + b.compile_count(), 1);
     }
 
     /// Which file a dependency's module names is the dependency's manifest's

@@ -1,0 +1,32 @@
+// A qualified static reaches a value blanket by the bound its parameter
+// meets, not by how the parameter is spelled: one spelled like the receiver's
+// declaration is still a blanket, as it is for the method form.
+use { println, Stdout } from "core:cli";
+
+struct Box {
+    v: i32,
+}
+
+trait Mark with () {}
+
+impl Mark for Box {}
+
+trait Tr with () {
+    fn k() -> i32;
+}
+
+#[allow(shadowed_name)]
+impl<Box: Mark> Tr for Box {
+    fn k() -> i32 {
+        return 7;
+    }
+}
+
+export fn run() with Stdout {
+    println(`${Tr::<Box>::k()} ${Box::k()}`);
+}
+
+__DATA__
+{
+    "stdout": "7 7\n"
+}

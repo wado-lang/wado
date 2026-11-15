@@ -2,3 +2,20 @@ disallowed-types = [
     { path = "std::collections::HashMap", reason = "Use crate::hashmap::IndexMap for deterministic iteration order with FxHash" },
     { path = "std::collections::HashSet", reason = "Use crate::hashmap::IndexSet for deterministic iteration order with FxHash" },
 ]
+
+# What still turns a name into a declaration (WEP 2026-08-12). A new caller
+# takes the reference site instead; one that has none carries an `expect`
+# naming why.
+disallowed-methods = [
+    { path = "wado_compiler::resolve::Resolutions::resolve_in", reason = "resolve the reference site instead of a spelling" },
+    { path = "wado_compiler::resolve::Resolutions::imported_as", reason = "resolve the reference site instead of a spelling" },
+    { path = "wado_compiler::resolve::Resolutions::prelude_decl", reason = "resolve the reference site instead of a spelling" },
+    { path = "wado_compiler::elaborator::Elaborator::namespace_member", reason = "resolve the reference site instead of a spelling" },
+    { path = "wado_compiler::elaborator::Elaborator::symbol_named", reason = "resolve the reference site instead of a spelling" },
+    { path = "wado_compiler::elaborator::Elaborator::decl_in_module", reason = "resolve the reference site instead of a spelling" },
+    { path = "wado_compiler::elaborator::Elaborator::impl_target_decl_key", reason = "read the declaration off the block or the type" },
+    { path = "wado_compiler::symbol::SymbolTable::imported", reason = "resolve the reference site instead of a spelling" },
+    { path = "wado_compiler::symbol::SymbolTable::lookup_in_module", reason = "resolve the reference site instead of a spelling" },
+    { path = "wado_compiler::analyze::Analyzer::lookup_in_module", reason = "resolve the reference site instead of a spelling" },
+    { path = "wado_compiler::type_table::TypeTable::cm_decl_in", reason = "resolve the CM name once at the boundary" },
+]

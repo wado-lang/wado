@@ -1,7 +1,9 @@
 // A cold call passing a whole object is free where it stands but not where it
 // reaches: while `special` reads `style.width`, `write` needs the whole `Style`
-// and `emit` builds one per value on its hot path. A clone binding that constant
-// field folds `pad` away, so only `buf` is left and `sroa_param` takes the rest.
+// and `emit` builds one per value on its hot path. Here `sroa` splits `style`
+// and rebuilds it for the cold call alone, so the hot path builds no `Style`,
+// and `param_spec` mints no clone of `special` for an object only the cold
+// path builds.
 
 use { println, Stdout } from "core:cli";
 
@@ -53,8 +55,9 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "1nan2\n",
-    "wir_pass": {"O2": ["nir/param_spec"]},
-    "wir_not_expect:O2": [
-        ".wado//Style\" { width"
-    ]
+    "wir_pass": {"O2": ["nir/sroa"]},
+    "wir_expect:O2": [
+        "\"param_spec_cold_call_binds_field.wado/special\"(struct.new \"param_spec_cold_call_binds_field.wado//Style\" { width: -1"
+    ],
+    "wir_not_expect:O2": ["special$spec"]
 }

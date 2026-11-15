@@ -227,15 +227,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<const_object_globalization_long_literal_ref.wado/$tmpl$9735897fc7613ff0,[i32,core:prelude/string.wado/String]>$spec0$spec0"($mv$t$h0, $mv$t$h1) {
-    let $load_8: ref Array<u8>;
-    let out_3: ref "core:prelude/string.wado//String";
     let is_negative_70: bool;
     let x_74: i64;
     let q: u64;
-    let pair: i32;
     let tens: i32;
-    let start_270: i32;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
+    let start_325: i32;
+    let $sroa_out_repr_1193: ref Array<u8>;
+    let $sroa_out_used_1194: i32;
+    let $sroa_write_back_1197: ref "core:prelude/string.wado//String";
+    $sroa_out_repr_1193 = builtin::array_new<u8>(33);
+    $sroa_out_used_1194 = 0;
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_22;
     };
@@ -303,56 +304,53 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<const_objec
         break $inline_count_digits_u64_3: 20;
     };
     if is_negative_70 {
-        if @unlikely(local.tee is_negative_70(0 + 1) > builtin::array_len(out_3.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_70);
-        }
-        start_270 = out_3.used;
-        out_3.used = is_negative_70;
-        builtin::array_set_u8(out_3.repr, start_270, 45);
+        $sroa_out_used_1194 = 1;
+        builtin::array_set_u8($sroa_out_repr_1193, 0, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_70(out_3.used + $mv$t$h0) > builtin::array_len(out_3.repr)) {
+    if @unlikely(local.tee is_negative_70($sroa_out_used_1194 + $mv$t$h0) > 33) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_70);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_1197(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1193, used: $sroa_out_used_1194 }), is_negative_70);
+        $sroa_out_repr_1193 = $sroa_write_back_1197.repr;
     }
-    start_270 = out_3.used;
-    out_3.used = is_negative_70;
-    $load_8 = out_3.repr;
-    $mv$t$h0 = start_270 + $mv$t$h0;
-    b44: block {
-        l45: loop {
-            break_if b44 ($mv$t$h0 - start_270) < 2;
+    start_325 = $sroa_out_used_1194;
+    $sroa_out_used_1194 = is_negative_70;
+    $mv$t$h0 = start_325 + $mv$t$h0;
+    b43: block {
+        l44: loop {
+            break_if b43 ($mv$t$h0 - start_325) < 2;
             q = x_74 /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(x_74 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_8, $mv$t$h0 - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($load_8, $mv$t$h0 - 2, 48 + tens);
+            tens = local.tee is_negative_70(builtin::i32_wrap_i64(x_74 - (q * 100_i64))) / 10;
+            builtin::array_set_u8($sroa_out_repr_1193, $mv$t$h0 - 1, (48 + is_negative_70) - (tens * 10));
+            builtin::array_set_u8($sroa_out_repr_1193, $mv$t$h0 - 2, 48 + tens);
             $mv$t$h0 = $mv$t$h0 - 2;
             x_74 = q;
-            continue l45;
+            continue l44;
         };
     };
-    if $mv$t$h0 > start_270 {
-        builtin::array_set_u8($load_8, start_270, 48 + builtin::i32_wrap_i64(x_74 %u 10_i64));
+    if $mv$t$h0 > start_325 {
+        builtin::array_set_u8($sroa_out_repr_1193, start_325, 48 + builtin::i32_wrap_i64(x_74 %u 10_i64));
     }
-    if @unlikely(local.tee $mv$t$h0(is_negative_70 + 1) > builtin::array_len($load_8)) {
+    if @unlikely(local.tee $mv$t$h0($sroa_out_used_1194 + 1) > builtin::array_len($sroa_out_repr_1193)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_1197(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1193, used: $sroa_out_used_1194 }), $mv$t$h0);
+        $sroa_out_repr_1193 = $sroa_write_back_1197.repr;
     }
-    is_negative_70 = out_3.used;
-    out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(local.tee $load_8(out_3.repr), is_negative_70, global:core:prelude/string.wado::$const_obj_1, 0, 1);
+    is_negative_70 = $sroa_out_used_1194;
+    $sroa_out_used_1194 = $mv$t$h0;
+    builtin::array_copy<u8>($sroa_out_repr_1193, is_negative_70, global:core:prelude/string.wado::$const_obj_1, 0, 1);
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__60: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee is_negative_70($mv$t$h1.used) == 0;
-                if @unlikely(local.tee $mv$t$h0($mv$t$h0 + is_negative_70) > builtin::array_len($load_8)) {
+                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee $mv$t$h0($mv$t$h1.used) == 0;
+                if @unlikely(local.tee is_negative_70($sroa_out_used_1194 + $mv$t$h0) > builtin::array_len($sroa_out_repr_1193)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_1197(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1193, used: $sroa_out_used_1194 }), is_negative_70);
+                    $sroa_out_repr_1193 = $sroa_write_back_1197.repr;
                 }
-                start_270 = out_3.used;
-                out_3.used = $mv$t$h0;
-                builtin::array_copy<u8>(out_3.repr, start_270, $mv$t$h1.repr, 0, is_negative_70);
+                start_325 = $sroa_out_used_1194;
+                $sroa_out_used_1194 = is_negative_70;
+                builtin::array_copy<u8>($sroa_out_repr_1193, start_325, $mv$t$h1.repr, 0, $mv$t$h0);
             };
             break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
         };
@@ -361,7 +359,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<const_objec
     $inline_core_prelude_string_wado_String__internal_push_view_72: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_72;
     };
-    return out_3;
+    return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1193, used: $sroa_out_used_1194 };
 }
 
 export fn "const_object_globalization_long_literal_ref.wado/$cm_export__run" as "run"

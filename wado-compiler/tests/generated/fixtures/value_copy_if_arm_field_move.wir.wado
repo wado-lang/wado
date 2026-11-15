@@ -46,37 +46,35 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//value_copy_if_arm_field_move.wado/lift" = fn(i32) -> ref "core:prelude/list.wado//List<i32>";  // TypeId(15)
+type "functype//value_copy_if_arm_field_move.wado/settle" = fn(ref null "value_copy_if_arm_field_move.wado//Started") -> ref "value_copy_if_arm_field_move.wado//Chunk";  // TypeId(15)
 
-type "functype//value_copy_if_arm_field_move.wado/settle" = fn(ref null "value_copy_if_arm_field_move.wado//Started") -> ref "value_copy_if_arm_field_move.wado//Chunk";  // TypeId(16)
+type "functype//value_copy_if_arm_field_move.wado/run" = fn();  // TypeId(16)
 
-type "functype//value_copy_if_arm_field_move.wado/run" = fn();  // TypeId(17)
+type "functype//value_copy_if_arm_field_move.wado/$cm_export__run" = fn();  // TypeId(17)
 
-type "functype//value_copy_if_arm_field_move.wado/$cm_export__run" = fn();  // TypeId(18)
+type "functype//core:rt/unreachable" = fn();  // TypeId(18)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(19)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(19)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
+type "functype//core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0$sroa[f.buf]$dae[limit]" = fn(ref Array<i32>, i32, ref "core:prelude/string.wado//String");  // TypeId(20)
 
-type "functype//core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0$sroa[f.buf]$dae[limit]" = fn(ref Array<i32>, i32, ref "core:prelude/string.wado//String");  // TypeId(21)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(22)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(22)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(23)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(24)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_if_arm_field_move.wado/$tmpl$371b18f4f8e45a8d,[core:prelude/list.wado/List<i32>,core:prelude/list.wado/List<i32>,i32]>$spec0$spec0" = fn(ref "core:prelude/list.wado//List<i32>", ref "core:prelude/list.wado//List<i32>", i32) -> ref "core:prelude/string.wado//String";  // TypeId(24)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_if_arm_field_move.wado/$tmpl$371b18f4f8e45a8d,[core:prelude/list.wado/List<i32>,core:prelude/list.wado/List<i32>,i32]>$spec0$spec0" = fn(ref "core:prelude/list.wado//List<i32>", ref "core:prelude/list.wado//List<i32>", i32) -> ref "core:prelude/string.wado//String";  // TypeId(25)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(27)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(28)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
-
-type "functype//value_copy_if_arm_field_move.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(30)
+type "functype//value_copy_if_arm_field_move.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(29)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -96,45 +94,41 @@ global global:value_copy_if_arm_field_move.wado::$const_obj_1: ref "core:prelude
 global global:core:prelude/array.wado::$const_obj_9: ref Array<u8> = array.new_fixed<u8>(44, 32);
 global global:core:prelude/string.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>(32);
 
-fn "value_copy_if_arm_field_move.wado/lift"(n) {
-    let out: ref "core:prelude/list.wado//List<i32>";
-    let current: i32;
-    let used_16: i32;
-    let $sroa_$iter_0_start_26: i32;
-    let $licm_repr_28: ref Array<i32>;
-    out = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
-    $sroa_$iter_0_start_26 = 0;
-    $licm_repr_28 = out.repr;
-    b0: block {
-        l1: loop {
-            break_if b0 $sroa_$iter_0_start_26 >= n;
-            $sroa_$iter_0_start_26 = local.tee current($sroa_$iter_0_start_26) + 1;
-            if @unlikely(local.tee used_16(out.used) >= builtin::array_len($licm_repr_28)) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
-                $licm_repr_28 = out.repr;
-            }
-            builtin::array_set<i32>($licm_repr_28, used_16, current);
-            out.used = used_16 + 1;
-            continue l1;
-        };
-    };
-    return out;
-}
-
 fn "value_copy_if_arm_field_move.wado/settle"(s) {
     let $load_0: ref null "value_copy_if_arm_field_move.wado//Buffer";
     let $load_2: i32;
     let $drop_spill_5: ref "value_copy_if_arm_field_move.wado//Chunk";
+    let current: i32;
+    let $sroa_out_repr_24: ref Array<i32>;
+    let $sroa_out_used_25: i32;
+    let $sroa_$iter_0_start_28: i32;
+    let $sroa_write_back_30: ref "core:prelude/list.wado//List<i32>";
     local.tee $load_0(s.buffer).count = local.tee $load_2(black_box($load_0.count));
     $drop_spill_5 = struct.new "value_copy_if_arm_field_move.wado//Chunk" { items: (if $load_2 == 0 -> ref "core:prelude/list.wado//List<i32>" {
         s.items;
     } else {
-        "value_copy_if_arm_field_move.wado/lift"($load_2);
+        $sroa_out_repr_24 = array.new_fixed<i32>();
+        $sroa_out_used_25 = 0;
+        $sroa_$iter_0_start_28 = 0;
+        b1: block {
+            l2: loop {
+                break_if b1 $sroa_$iter_0_start_28 >= $load_2;
+                $sroa_$iter_0_start_28 = local.tee current($sroa_$iter_0_start_28) + 1;
+                if @unlikely($sroa_out_used_25 >= builtin::array_len($sroa_out_repr_24)) {
+                    cold_path;
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_30(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_24, used: $sroa_out_used_25 }));
+                    $sroa_out_repr_24 = $sroa_write_back_30.repr;
+                }
+                builtin::array_set<i32>($sroa_out_repr_24, $sroa_out_used_25, current);
+                $sroa_out_used_25 = $sroa_out_used_25 + 1;
+                continue l2;
+            };
+        };
+        struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_24, used: $sroa_out_used_25 };
     }), count: $load_2 };
     if ref.is_null(s) == 0 {
-        if ref.is_null($load_0) == 0 {
-            drop(black_box($load_2));
+        if ref.is_null(local.tee $load_0(s.buffer)) == 0 {
+            drop(black_box($load_0.count));
         }
         s.buffer = ref.null none;
     }

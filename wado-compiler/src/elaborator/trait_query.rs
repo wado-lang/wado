@@ -3714,13 +3714,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let auto_derive = self.tysys.auto_derive_by_trait(trait_);
         let written = rhs
             .and_then(|rhs| {
-                self.find_arithmetic_trait_impl(
-                    struct_name,
-                    lookup_type_id,
-                    trait_,
-                    method_name,
-                    Some(rhs),
-                )
+                self.find_arithmetic_trait_impl(lookup_type_id, trait_, method_name, Some(rhs))
             })
             .or_else(|| {
                 if let Some((item, _)) = auto_derive
@@ -3734,13 +3728,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return None;
                 }
-                self.find_arithmetic_trait_impl(
-                    struct_name,
-                    lookup_type_id,
-                    trait_,
-                    method_name,
-                    None,
-                )
+                self.find_arithmetic_trait_impl(lookup_type_id, trait_, method_name, None)
             });
         if let Some(info) = written {
             let found = OperatorImpl {

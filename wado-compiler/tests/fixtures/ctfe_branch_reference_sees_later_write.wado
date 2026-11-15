@@ -1,0 +1,38 @@
+// A reference a branch yields names its place, so a write after the binding is
+// what a read through it sees: compile-time evaluation must not bind the
+// reference to a copy of the value it pointed at.
+use { println, Stdout } from "core:cli";
+
+struct T {
+    v: i32,
+}
+
+fn read(t: &T) -> i32 {
+    return t.v;
+}
+
+fn field_written(flag: bool) -> i32 {
+    let mut t = T { v: 1 };
+    let u = T { v: 2 };
+    let r = if flag { &t } else { &u };
+    t.v = 3;
+    return read(r);
+}
+
+fn whole_written(flag: bool) -> i32 {
+    let mut t = T { v: 1 };
+    let u = T { v: 2 };
+    let r = if flag { &t } else { &u };
+    t = T { v: 4 };
+    return read(r);
+}
+
+export fn run() with Stdout {
+    println(`${field_written(true)} ${field_written(false)}`);
+    println(`${whole_written(true)} ${whole_written(false)}`);
+}
+
+__DATA__
+{
+    "stdout": "3 2\n4 2\n"
+}

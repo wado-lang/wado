@@ -15,6 +15,12 @@ pub use wado_host::options::{
     CompileKnobOpt, HostKnobOpt, OptLevel, RuntimeKnobOpt, RuntimeKnobs, parse_opt_level_arg,
 };
 
+/// The cores this process may run on, one where the platform cannot say.
+#[must_use]
+pub fn cores() -> usize {
+    std::thread::available_parallelism().map_or(1, std::num::NonZero::get)
+}
+
 /// Every knob a compiling subcommand parses and forwards to the compile core.
 ///
 /// `allocator` stays `Option` so the target world picks the default
@@ -94,9 +100,7 @@ impl CompileKnobs {
     /// worlds under `wado build` and `wado publish`.
     #[must_use]
     pub fn optimize_threads(&self) -> usize {
-        self.opt_threads.unwrap_or_else(|| {
-            std::thread::available_parallelism().map_or(1, std::num::NonZero::get)
-        })
+        self.opt_threads.unwrap_or_else(cores)
     }
 
     /// The compiler options these knobs set, the rest at their defaults.

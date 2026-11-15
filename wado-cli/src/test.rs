@@ -31,7 +31,7 @@ use crate::eval_host::{EvalHost, EvalSession, TestClock};
 use crate::fingerprint::Input;
 use crate::fuel_host::{self, FuelRegion};
 use crate::knobs::{
-    CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs,
+    CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs, cores,
 };
 use crate::manifest::package_root;
 use crate::rss::summary_line;
@@ -575,12 +575,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     // Default to CPU count to saturate compile/execute. Load derives a
     // lower cap internally (Cranelift JIT is multi-threaded; see `run`).
     // `.max(2)` covers single-core environments.
-    let mut jobs = jobs
-        .unwrap_or_else(|| {
-            let cpus = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
-            cpus.max(2)
-        })
-        .min(MAX_JOBS);
+    let mut jobs = jobs.unwrap_or_else(|| cores().max(2)).min(MAX_JOBS);
 
     if matches!(profile, ProfileMode::Guest(_)) {
         if no_run {
