@@ -289,11 +289,13 @@ impl AnalysisCtx<'_> {
 /// indices. `mut_indices` holds each local's sorted mutating statements: a
 /// binding at `k` is source-scope-stable iff its source has none after `k`, and
 /// the full list answers the projection check's open-interval question.
-/// `first_read` is the earliest read, which guards against backward reads.
+/// `first_read` is the earliest read, which guards against backward reads, and
+/// `last_read` the latest, past which a source may change freely.
 #[derive(Default)]
 struct BlockScan {
     mut_indices: IndexMap<u32, Vec<usize>>,
     first_read: IndexMap<u32, usize>,
+    last_read: IndexMap<u32, usize>,
 }
 
 /// Build every block's [`BlockScan`] in ONE top-down walk, recording each read /
@@ -354,26 +356,19 @@ fn scan_node(
             body.values.collect_opaque_locals(v, &mut promoted);
         }
     });
-    for index in &promoted {
+    let record_read = |scans: &mut IndexMap<BlockId, BlockScan>, index: u32| {
         for &(b, i) in frames.iter() {
-            scans
-                .get_mut(&b)
-                .expect("enclosing block was scanned")
-                .first_read
-                .entry(*index)
-                .or_insert(i);
+            let scan = scans.get_mut(&b).expect("enclosing block was scanned");
+            scan.first_read.entry(index).or_insert(i);
+            scan.last_read.insert(index, i);
         }
+    };
+    for index in &promoted {
+        record_read(scans, *index);
     }
     if let NodeRef::Expr(id) = node {
         if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
-            for &(b, i) in frames.iter() {
-                scans
-                    .get_mut(&b)
-                    .expect("enclosing block was scanned")
-                    .first_read
-                    .entry(*index)
-                    .or_insert(i);
-            }
+            record_read(scans, *index);
         }
         for_each_mutated_root(body, id, type_table, oracle, aliases, &mut |rm| {
             let l = rm.local();
@@ -462,15 +457,21 @@ fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: 
                         // A target read at or before the binding is a
                         // backward / cross-iteration read the "mutations
                         // after `k`" interval cannot reason about — the same
-                        // guard the `RefProjection` path applies.
+                        // guard the `RefProjection` path applies. A mutation
+                        // past the target's last read reaches no read of it;
+                        // one at that read must be `src = …`, which reads
+                        // before it writes.
+                        let last_read = scan.last_read.get(&binding.target_local).copied();
                         scan.first_read
                             .get(&binding.target_local)
                             .is_none_or(|&u| u > k)
-                            && scan
-                                .mut_indices
-                                .get(&src)
-                                .and_then(|v| v.last())
-                                .is_none_or(|&i| i <= k)
+                            && scan.mut_indices.get(&src).is_none_or(|muts| {
+                                muts.iter().filter(|&&i| i > k).all(|&i| {
+                                    last_read.is_some_and(|u| {
+                                        i > u || (i == u && assigns_local(body, stmts[i], src))
+                                    })
+                                })
+                            })
                     }
                     None => true,
                 },
@@ -478,6 +479,36 @@ fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: 
             result.bindings.push(binding);
         }
         analyze_stmt(body, stmt, result, ctx);
+    }
+}
+
+/// Whether `stmt` is `local = …`, a store whose value is read before it lands.
+fn assigns_local(body: &Body, stmt: StmtId, local: u32) -> bool {
+    assign_of(body, stmt).is_some_and(|(target, _)| local_of(body, target) == Some(local))
+}
+
+/// Whether `stmt` is `x = x`, which copy propagation leaves of `let t = x; …;
+/// x = t`.
+fn assigns_itself(body: &Body, stmt: StmtId) -> bool {
+    assign_of(body, stmt).is_some_and(|(target, value)| {
+        local_of(body, target).is_some_and(|t| value.as_expr().and_then(|v| local_of(body, v)) == Some(t))
+    })
+}
+
+fn assign_of(body: &Body, stmt: StmtId) -> Option<(ExprId, Operand)> {
+    let StmtKind::Expr(op) = &body.stmts[stmt].kind else {
+        return None;
+    };
+    match &body.exprs[op.as_expr()?].kind {
+        ExprKind::Assign { target, value } => Some((*target, *value)),
+        _ => None,
+    }
+}
+
+fn local_of(body: &Body, e: ExprId) -> Option<u32> {
+    match body.exprs[e].kind {
+        ExprKind::Local { index, .. } => Some(index),
+        _ => None,
     }
 }
 
@@ -810,9 +841,14 @@ fn apply_in_block(
     engine.set_block_stmts(block, kept);
 
     let stmts = engine.body.blocks[block].stmts.clone();
-    for stmt in stmts {
+    for &stmt in &stmts {
         apply_in_node(engine, NodeRef::Stmt(stmt), substitutions, dead_locals);
     }
+    let kept: Vec<StmtId> = stmts
+        .into_iter()
+        .filter(|&s| !assigns_itself(engine.body, s))
+        .collect();
+    engine.set_block_stmts(block, kept);
 }
 
 fn apply_in_node(
