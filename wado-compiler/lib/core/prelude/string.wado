@@ -1421,13 +1421,34 @@ impl StrSlice {
         if pat_len == 0 {
             return Option::Some(0);
         }
-        let limit = self.len() - pat_len;
-        for let mut i = 0; i <= limit; i += 1 {
-            if bytes_match_at(self.repr, self.start + i, p.repr, p.start, pat_len) {
-                return Option::Some(i);
+        let first = p.repr[p.start];
+        // Where the last candidate starts, as an index into `repr`.
+        let last = self.end - pat_len;
+        let mut at = self.start;
+        loop {
+            // To the next byte that could start `pat`, four bytes for each
+            // bounds check: reads of one array in one block share it.
+            while at + 3 <= last {
+                let a = self.repr[at];
+                let b = self.repr[at + 1];
+                let c = self.repr[at + 2];
+                let d = self.repr[at + 3];
+                if (a == first) | (b == first) | (c == first) | (d == first) {
+                    break;
+                }
+                at += 4;
             }
+            while at <= last && self.repr[at] != first {
+                at += 1;
+            }
+            if at > last {
+                return null;
+            }
+            if bytes_match_at(self.repr, at + 1, p.repr, p.start + 1, pat_len - 1) {
+                return Option::Some(at - self.start);
+            }
+            at += 1;
         }
-        return null;
     }
 
     /// The byte index of the last occurrence of `pat`, counted from the view's

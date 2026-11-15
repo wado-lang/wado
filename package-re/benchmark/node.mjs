@@ -50,6 +50,13 @@ function countMatches(regex, text) {
   return n;
 }
 
+// What `literal` counts, by `indexOf` and no regular expression.
+function countFinds(text, needle) {
+  let n = 0;
+  for (let at = text.indexOf(needle); at !== -1; at = text.indexOf(needle, at + needle.length)) n++;
+  return n;
+}
+
 // The sum of every timestamp's hour, so that each match's groups are read.
 function sumHours(regex, text) {
   regex.lastIndex = 0;
@@ -86,6 +93,7 @@ const pathological = /(?:x+x+)+y/u;
 
 console.log(`re (Node.js RegExp): ${Buffer.byteLength(INPUT)} bytes`);
 bench("literal", INPUT, 223, () => countMatches(literal, INPUT));
+bench("literal-find", INPUT, 223, () => countFinds(INPUT, "Sherlock Holmes"));
 bench("literal-ignore-case", INPUT, 452, () => countMatches(literalIgnoreCase, INPUT));
 bench("email", INPUT, 176, () => countMatches(email, INPUT));
 bench("uri", INPUT, 176, () => countMatches(uri, INPUT));

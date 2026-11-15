@@ -23,9 +23,14 @@ Each arm compiles the pattern once, outside the timed loop, and checks its
 result against a count both arms hold. Node reads each pattern with the `u`
 flag, as Re does.
 
+`literal-find` uses no regular expression. It searches for the literal with
+each side's substring search, `StrSlice::find` and `String.prototype.indexOf`,
+which is the bar a literal pattern is held to.
+
 | Case                  | Pattern                                                        | What is timed                     |
 | --------------------- | -------------------------------------------------------------- | --------------------------------- |
 | `literal`             | `Sherlock Holmes`                                              | counting every match              |
+| `literal-find`        | none: the text `Sherlock Holmes`                               | counting every occurrence         |
 | `literal-ignore-case` | `(?i:sherlock holmes)`                                         | counting every match              |
 | `email`               | `[\w.+-]+@[\w-]+(?:\.[\w-]+)+`                                 | counting every match              |
 | `uri`                 | `[a-z][a-z0-9+.-]*://[^\s/?#]+[^\s?#]*(?:\?[^\s#]*)?(?:#\S*)?` | counting every match              |
