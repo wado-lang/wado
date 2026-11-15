@@ -87,9 +87,7 @@ fn "value_copy_iterator_fresh_elision.wado/run"() with Stdout {
     let v: ref "value_copy_iterator_fresh_elision.wado//Point";
     let message_18: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
-    let $sroa_$iter_0_repr_33: ref "Array<value_copy_iterator_fresh_elision.wado/Point>";
     let $sroa_$iter_0_index_34: i32;
-    $sroa_$iter_0_repr_33 = global:value_copy_iterator_fresh_elision.wado::$const_obj_0;
     $sroa_$iter_0_index_34 = 0;
     b0: block {
         l1: loop {
@@ -97,7 +95,7 @@ fn "value_copy_iterator_fresh_elision.wado/run"() with Stdout {
                 if $sroa_$iter_0_index_34 >= 2 {
                     break $inline_core_prelude_slice_wado_SliceValueIter_value_copy_iterator_fresh_elision_wado_Point__core_prelude_traits_wado_Iterator__next_4: ref.null none;
                 }
-                v = struct.new "value_copy_iterator_fresh_elision.wado//Point" { x: local.tee v(builtin::array_get_value<ref "value_copy_iterator_fresh_elision.wado//Point">($sroa_$iter_0_repr_33, $sroa_$iter_0_index_34)).x, y: v.y };
+                v = struct.new "value_copy_iterator_fresh_elision.wado//Point" { x: local.tee v(builtin::array_get_value<ref "value_copy_iterator_fresh_elision.wado//Point">(global:value_copy_iterator_fresh_elision.wado::$const_obj_0, $sroa_$iter_0_index_34)).x, y: v.y };
                 $sroa_$iter_0_index_34 = $sroa_$iter_0_index_34 + 1;
                 break $inline_core_prelude_slice_wado_SliceValueIter_value_copy_iterator_fresh_elision_wado_Point__core_prelude_traits_wado_Iterator__next_4: v;
             })) == 0 {
@@ -359,7 +357,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_70: bool;
     let x_74: i64;
-    let $sroa_view_repr_204: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_22;
@@ -368,14 +365,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_
     $mv$t$h0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h0); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
     is_negative_70 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_70, $mv$t$h0);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_3.repr), is_negative_70, x_74, $mv$t$h0);
-    $sroa_view_repr_204 = global:core:prelude/string.wado::$const_obj_1;
     if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
     }
     is_negative_70 = out_3.used;
     out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(out_3.repr, is_negative_70, $sroa_view_repr_204, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, is_negative_70, global:core:prelude/string.wado::$const_obj_1, 0, 1);
     $mv$t$h0 = $mv$t$h1 < 0;
     $mv$t$h1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h1); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
     $mv$t$h0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, $mv$t$h0, $mv$t$h1);

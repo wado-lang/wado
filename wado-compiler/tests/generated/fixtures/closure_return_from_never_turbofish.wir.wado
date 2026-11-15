@@ -509,18 +509,21 @@ fn "closure_return_from_never_turbofish.wado/closure_return_from_never_turbofish
     let current: i32;
     let used_17: i32;
     let $sroa_$iter_0_start_30: i32;
+    let $licm_repr_31: ref Array<i32>;
     out = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     $sroa_$iter_0_start_30 = 0;
+    $licm_repr_31 = out.repr;
     b12: block {
         l13: loop {
             break_if b12 $sroa_$iter_0_start_30 >= 3;
             $sroa_$iter_0_start_30 = local.tee current($sroa_$iter_0_start_30) + 1;
             current = current * 2;
-            if @unlikely(local.tee used_17(out.used) >= builtin::array_len(out.repr)) {
+            if @unlikely(local.tee used_17(out.used) >= builtin::array_len($licm_repr_31)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(out);
+                $licm_repr_31 = out.repr;
             }
-            builtin::array_set<i32>(out.repr, used_17, current);
+            builtin::array_set<i32>($licm_repr_31, used_17, current);
             out.used = used_17 + 1;
             continue l13;
         };

@@ -284,7 +284,6 @@ global global:serde_json_multi_type_deser.wado::$const_obj_1: ref Array<u8> = ar
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "serde_json_multi_type_deser.wado/run"() with Stdout {
-    let $load_1: ref Array<u8>;
     let de_8: ref "core:json//JsonDeserializer";
     let lead: i32;
     let out_34: ref "core:prelude/string.wado//String";
@@ -324,14 +323,12 @@ fn "serde_json_multi_type_deser.wado/run"() with Stdout {
         break $inline_core_json_from_bytes_i32_core_prelude_bytes_wado_ByteSlice__sroa_return__2;
     };
     if @likely(lead == 0) {
-        out_34 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-        $sroa_input_repr_309 = global:serde_json_multi_type_deser.wado::$const_obj_1;
-        out_34.used = local.tee lead(5);
-        builtin::array_copy<u8>(local.tee $load_1(out_34.repr), 0, $sroa_input_repr_309, 0, 5);
+        local.tee out_34(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }).used = local.tee lead(5);
+        builtin::array_copy<u8>(local.tee $sroa_input_repr_309(out_34.repr), 0, global:serde_json_multi_type_deser.wado::$const_obj_1, 0, 5);
         is_negative_96 = $mv$$vr_6_12$1 < 0;
         $mv$$vr_6_12$1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($mv$$vr_6_12$1); select i64(x < 0_i64, 0_i64 - x, x)));
         if is_negative_96 {
-            if @unlikely(local.tee lead(lead + 1) > builtin::array_len($load_1)) {
+            if @unlikely(local.tee lead(lead + 1) > builtin::array_len($sroa_input_repr_309)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_34, lead);
             }
@@ -388,10 +385,8 @@ fn "serde_json_multi_type_deser.wado/run"() with Stdout {
     };
     if @likely(lead == 0) {
         out_34 = ref.as_non_null($mv$$vr_6_133$1);
-        out_154 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
-        $sroa_input_repr_309 = global:serde_json_multi_type_deser.wado::$const_obj_0;
-        out_154.used = 8;
-        builtin::array_copy<u8>(out_154.repr, 0, $sroa_input_repr_309, 0, 8);
+        local.tee out_154(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }).used = 8;
+        builtin::array_copy<u8>(out_154.repr, 0, global:serde_json_multi_type_deser.wado::$const_obj_0, 0, 8);
         $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__104: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
                 $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
@@ -488,17 +483,19 @@ fn "core:json/integral_digits$sroa[return]$dae[start]"($mv$n$neg, $mv$n$int_digi
         }
         $mv$n$neg = builtin::i32_wrap_i64($mv$n$exp);
         $mv$n$int_digits = 0;
+        $mv$input$repr = digits.repr;
         b23: block {
             l24: loop {
                 break_if b23 $mv$n$int_digits >= $mv$n$neg;
                 $mv$n$int_digits = $mv$n$int_digits + 1;
-                if @unlikely(local.tee $mv$n$mantissa_start(digits.used + 1) > builtin::array_len(digits.repr)) {
+                if @unlikely(local.tee $mv$n$mantissa_start(digits.used + 1) > builtin::array_len($mv$input$repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(digits, $mv$n$mantissa_start);
+                    $mv$input$repr = digits.repr;
                 }
                 $mv$n$mantissa_end = digits.used;
                 digits.used = $mv$n$mantissa_start;
-                builtin::array_set_u8(digits.repr, $mv$n$mantissa_end, 48);
+                builtin::array_set_u8($mv$input$repr, $mv$n$mantissa_end, 48);
                 continue l24;
             };
         };

@@ -332,24 +332,27 @@ fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write
     let value_5: i64;
     let used_6: i32;
     let $licm_repr_11: ref Array<u8>;
-    let $hfs_pos_12: i32;
+    let $licm_repr_12: ref Array<i64>;
+    let $hfs_pos_13: i32;
     out = struct.new "core:prelude/list.wado//List<i64>" { repr: array.new_fixed<i64>(), used: 0 };
     $licm_repr_11 = self.repr;
-    $hfs_pos_12 = self.pos;
+    $licm_repr_12 = out.repr;
+    $hfs_pos_13 = self.pos;
     b43: block {
         l44: loop {
-            if $hfs_pos_12 >= 4 {
-                self.pos = $hfs_pos_12;
+            if $hfs_pos_13 >= 4 {
+                self.pos = $hfs_pos_13;
                 break b43;
             }
-            value_5 = builtin::i64_extend_i32_u(builtin::array_get_value_u8($licm_repr_11, $hfs_pos_12));
-            if @unlikely(local.tee used_6(out.used) >= builtin::array_len(out.repr)) {
+            value_5 = builtin::i64_extend_i32_u(builtin::array_get_value_u8($licm_repr_11, $hfs_pos_13));
+            if @unlikely(local.tee used_6(out.used) >= builtin::array_len($licm_repr_12)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i64>::grow"(out);
+                $licm_repr_12 = out.repr;
             }
-            builtin::array_set<i64>(out.repr, used_6, value_5);
+            builtin::array_set<i64>($licm_repr_12, used_6, value_5);
             out.used = used_6 + 1;
-            $hfs_pos_12 = $hfs_pos_12 + 1;
+            $hfs_pos_13 = $hfs_pos_13 + 1;
             continue l44;
         };
     };

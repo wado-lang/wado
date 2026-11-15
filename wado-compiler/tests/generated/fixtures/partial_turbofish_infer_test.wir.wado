@@ -4277,10 +4277,11 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bytes_body$sroa[return]"(self, ar
     let end_51: i32;
     let a_65: i32;
     let new_used_80: i32;
-    let n_93: i32;
-    let end_97: i32;
-    let $sroa_other_repr_42_131: ref Array<u8>;
-    let $hfs_call_137: ref null "core:prelude/list.wado//List<u8>";
+    let $licm_repr_89: ref Array<u8>;
+    let n_94: i32;
+    let end_98: i32;
+    let $sroa_other_repr_42_132: ref Array<u8>;
+    let $hfs_call_138: ref null "core:prelude/list.wado//List<u8>";
     out_3 = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
     if indef == 0 {
         $thread_$inline_core_cbor_CborDeserializer__append_bytes_0: block {
@@ -4291,9 +4292,9 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bytes_body$sroa[return]"(self, ar
                 cold_path;
                 return 1, ref.null none, $qm_e_5;
             }
-            n_93 = builtin::i32_wrap_i64(arg);
+            n_94 = builtin::i32_wrap_i64(arg);
             $inline_core_cbor_CborDeserializer__append_bytes_0__$inline_core_prelude_list_wado_List_u8___extend_from_slice_0: block {
-                end_97 = indef + n_93;
+                end_98 = indef + n_94;
                 $load_2 = $load_2 - $load_3;
                 if @unlikely(0 > $load_2) {
                     cold_path;
@@ -4305,52 +4306,53 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bytes_body$sroa[return]"(self, ar
                     "core:prelude/primitive.wado/i32::clamp$contract_report0"(indef, $load_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/slice.wado:107"), used: 27 });
                     unreachable;
                 }
-                $load_2 = select i32(end_97 < $load_2, local.tee end_97(select i32(end_97 > indef, end_97, indef)), $load_2);
-                $sroa_other_repr_42_131 = $load_1.repr;
+                $load_2 = select i32(end_98 < $load_2, local.tee end_98(select i32(end_98 > indef, end_98, indef)), $load_2);
+                $sroa_other_repr_42_132 = $load_1.repr;
                 indef = $load_3 + indef;
                 break_if $inline_core_cbor_CborDeserializer__append_bytes_0__$inline_core_prelude_list_wado_List_u8___extend_from_slice_0 local.tee $load_2(($load_3 + $load_2) - indef) == 0;
                 if @unlikely(local.tee $load_3(out_3.used + $load_2) > builtin::array_len(out_3.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(out_3, $load_3);
                 }
-                builtin::array_copy<u8>(out_3.repr, out_3.used, $sroa_other_repr_42_131, indef, $load_2);
+                builtin::array_copy<u8>(out_3.repr, out_3.used, $sroa_other_repr_42_132, indef, $load_2);
                 out_3.used = $load_3;
             };
-            self.pos = self.pos + n_93;
+            self.pos = self.pos + n_94;
             break $thread_$inline_core_cbor_CborDeserializer__append_bytes_0;
         };
         return 0, out_3, ref.null none;
     }
     indef = local.tee $load_1(self.input).end;
     $load_2 = $load_1.start;
-    $sroa_other_repr_42_131 = $load_1.repr;
+    $sroa_other_repr_42_132 = $load_1.repr;
     $load_3 = indef - $load_2;
     indef = indef - $load_2;
-    n_93 = 0 > indef;
-    end_97 = self.pos;
+    $licm_repr_89 = out_3.repr;
+    n_94 = 0 > indef;
+    end_98 = self.pos;
     block {
         l620: loop {
-            if if @unlikely(end_97 >= $load_3) {
+            if if @unlikely(end_98 >= $load_3) {
                 cold_path;
-                $qm_e_5 = "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(end_97));
+                $qm_e_5 = "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(end_98));
                 cold_path;
                 return 1, ref.null none, $qm_e_5;
-            }; if @unlikely(((0 <= end_97) & (end_97 < $load_3)) == 0) {
+            }; if @unlikely(((0 <= end_98) & (end_98 < $load_3)) == 0) {
                 cold_path;
-                "core:cbor/core:cbor/CborDeserializer::peek_byte$cold0$sroa[self.pos]"(end_97, $load_3);
+                "core:cbor/core:cbor/CborDeserializer::peek_byte$cold0$sroa[self.pos]"(end_98, $load_3);
                 unreachable;
-            }; builtin::array_get_value<u8>($sroa_other_repr_42_131, $load_2 + end_97) == 255 {
-                end_97 = end_97 + 1;
-                $hfs_call_137 = out_3;
-                self.pos = end_97;
-                return 0, $hfs_call_137, ref.null none;
+            }; builtin::array_get_value<u8>($sroa_other_repr_42_132, $load_2 + end_98) == 255 {
+                end_98 = end_98 + 1;
+                $hfs_call_138 = out_3;
+                self.pos = end_98;
+                return 0, $hfs_call_138, ref.null none;
             }
             let $mv$$vr_20$1: ref null "tuple//[u8, u8, u64, bool]";
             let $mv$$vr_20$2: ref null "core:serde//DeserializeError";
-            multivalue_bind [end_97, $mv$$vr_20$1, $mv$$vr_20$2] = "core:cbor/core:cbor/CborDeserializer::read_head$sroa[return]"(self);
-            end_97 = local.tee $pattern_temp_0((if @likely(end_97 == 0) -> ref "tuple//[u8, u8, u64, bool]" {
+            multivalue_bind [end_98, $mv$$vr_20$1, $mv$$vr_20$2] = "core:cbor/core:cbor/CborDeserializer::read_head$sroa[return]"(self);
+            end_98 = local.tee $pattern_temp_0((if @likely(end_98 == 0) -> ref "tuple//[u8, u8, u64, bool]" {
                 ref.as_non_null($mv$$vr_20$1);
-            } else if @likely(end_97 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
+            } else if @likely(end_98 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
                 cold_path;
                 $qm_e_5 = ref.as_non_null($mv$$vr_20$2);
                 cold_path;
@@ -4359,28 +4361,28 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bytes_body$sroa[return]"(self, ar
                 unreachable;
             })).0;
             arg = $pattern_temp_0.2;
-            if @unlikely(select i32(end_97 != 2, 1, $pattern_temp_0.3)) {
+            if @unlikely(select i32(end_98 != 2, 1, $pattern_temp_0.3)) {
                 cold_path;
-                end_97 = self.pos;
-                return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid chunk in indefinite byte string"), used: 39 }, builtin::i64_extend_i32_s(end_97));
+                end_98 = self.pos;
+                return 1, ref.null none, "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid chunk in indefinite byte string"), used: 39 }, builtin::i64_extend_i32_s(end_98));
             }
             $thread_$inline_core_cbor_CborDeserializer__append_bytes_0: block {
-                end_97 = self.pos;
-                if @unlikely(arg >u builtin::i64_extend_i32_s(indef - end_97)) {
+                end_98 = self.pos;
+                if @unlikely(arg >u builtin::i64_extend_i32_s(indef - end_98)) {
                     cold_path;
-                    $qm_e_5 = "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(end_97));
+                    $qm_e_5 = "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(end_98));
                     cold_path;
                     return 1, ref.null none, $qm_e_5;
                 }
                 n_47 = builtin::i32_wrap_i64(arg);
                 $inline_core_cbor_CborDeserializer__append_bytes_0__$inline_core_prelude_list_wado_List_u8___extend_from_slice_0: block {
-                    end_51 = end_97 + n_47;
-                    if @unlikely(n_93) {
+                    end_51 = end_98 + n_47;
+                    if @unlikely(n_94) {
                         cold_path;
                         "core:prelude/primitive.wado/i32::clamp$contract_report0"(0, indef, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/slice.wado:106"), used: 27 });
                         unreachable;
                     }
-                    if @unlikely(local.tee a_65(select i32(a_65 < indef, local.tee a_65(select i32(end_97 > 0, end_97, 0)), indef)) > indef) {
+                    if @unlikely(local.tee a_65(select i32(a_65 < indef, local.tee a_65(select i32(end_98 > 0, end_98, 0)), indef)) > indef) {
                         cold_path;
                         "core:prelude/primitive.wado/i32::clamp$contract_report0"(a_65, indef, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/slice.wado:107"), used: 27 });
                         unreachable;
@@ -4388,17 +4390,18 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bytes_body$sroa[return]"(self, ar
                     end_51 = select i32(end_51 < indef, local.tee end_51(select i32(end_51 > a_65, end_51, a_65)), indef);
                     a_65 = $load_2 + a_65;
                     break_if $inline_core_cbor_CborDeserializer__append_bytes_0__$inline_core_prelude_list_wado_List_u8___extend_from_slice_0 local.tee end_51(($load_2 + end_51) - a_65) == 0;
-                    if @unlikely(local.tee new_used_80(out_3.used + end_51) > builtin::array_len(out_3.repr)) {
+                    if @unlikely(local.tee new_used_80(out_3.used + end_51) > builtin::array_len($licm_repr_89)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(out_3, new_used_80);
+                        $licm_repr_89 = out_3.repr;
                     }
-                    builtin::array_copy<u8>(out_3.repr, out_3.used, $sroa_other_repr_42_131, a_65, end_51);
+                    builtin::array_copy<u8>($licm_repr_89, out_3.used, $sroa_other_repr_42_132, a_65, end_51);
                     out_3.used = new_used_80;
                 };
-                end_97 = end_97 + n_47;
+                end_98 = end_98 + n_47;
                 break $thread_$inline_core_cbor_CborDeserializer__append_bytes_0;
             };
-            self.pos = end_97;
+            self.pos = end_98;
             continue l620;
         };
     };
@@ -5912,13 +5915,13 @@ fn "core:serde/partial_turbofish_infer_test.wado/Blob^core:serde/Deserialize::de
     let $qm_e_60: ref "core:serde//DeserializeError";
     let $pattern_temp_0_64: ref "tuple//[i64, bool, i32]";
     let $sroa_slots_0_106: ref null "core:prelude/list.wado//List<i32>";
-    let $sroa_$sroa_slots_1_107_0_110: i32;
-    let $sroa_$sroa_slots_1_107_1_111: i32;
-    let $sroa_fields_0_112: ref "core:prelude/list.wado//List<i32>";
-    let $deref_value_117: ref "core:prelude/string.wado//String";
+    let $sroa_$sroa_slots_1_107_0_112: i32;
+    let $sroa_$sroa_slots_1_107_1_113: i32;
+    let $sroa_fields_0_114: ref "core:prelude/list.wado//List<i32>";
+    let $deref_value_119: ref "core:prelude/string.wado//String";
     $sroa_slots_0_106 = ref.null none;
-    $sroa_$sroa_slots_1_107_0_110 = 0;
-    $sroa_$sroa_slots_1_107_1_111 = 0;
+    $sroa_$sroa_slots_1_107_0_112 = 0;
+    $sroa_$sroa_slots_1_107_1_113 = 0;
     let $mv$$vr_9$0: i32;
     let $mv$$vr_9$1: ref null "tuple//[i64, bool, i32]";
     let $mv$$vr_9$2: ref null "core:serde//DeserializeError";
@@ -5934,14 +5937,16 @@ fn "core:serde/partial_turbofish_infer_test.wado/Blob^core:serde/Deserialize::de
     } else {
         unreachable;
     });
-    sd = struct.new "core:cbor//CborStructAccess" { de: d, depth: $pattern_temp_0_64.2, remaining: $pattern_temp_0_64.0, indef: $pattern_temp_0_64.1 };
+    d = local.tee sd(struct.new "core:cbor//CborStructAccess" { de: d, depth: $pattern_temp_0_64.2, remaining: $pattern_temp_0_64.0, indef: $pattern_temp_0_64.1 }).de;
+    $mv$$vr_9$0 = sd.depth;
     b869: block {
         l870: loop {
+            let $mv$$vr_52$0: i32;
             let $vr_discriminant_$mv$$vr_52$1: i32;
             let $vr_payload_0_$mv$$vr_52$1: i32;
-            multivalue_bind [$mv$$vr_9$0, $vr_discriminant_$mv$$vr_52$1, $vr_payload_0_$mv$$vr_52$1, $mv$$vr_9$2] = "core:cbor/core:cbor/CborStructAccess^core:serde/DeserializeStruct::next_field<partial_turbofish_infer_test.wado/Blob>$sroa[return]"(sd);
-            if @likely($mv$$vr_9$0 == 0) {
-            } else if @likely($mv$$vr_9$0 == 1) {
+            multivalue_bind [$mv$$vr_52$0, $vr_discriminant_$mv$$vr_52$1, $vr_payload_0_$mv$$vr_52$1, $mv$$vr_9$2] = "core:cbor/core:cbor/CborStructAccess^core:serde/DeserializeStruct::next_field<partial_turbofish_infer_test.wado/Blob>$sroa[return]"(sd);
+            if @likely($mv$$vr_52$0 == 0) {
+            } else if @likely($mv$$vr_52$0 == 1) {
                 cold_path;
                 $qm_e_60 = ref.as_non_null($mv$$vr_9$2);
                 cold_path;
@@ -5950,18 +5955,18 @@ fn "core:serde/partial_turbofish_infer_test.wado/Blob^core:serde/Deserialize::de
                 unreachable;
             }
             if $vr_discriminant_$mv$$vr_52$1 == 1 {
-                $mv$$vr_9$0 = 0;
+                $mv$$vr_52$0 = 0;
                 if $vr_payload_0_$mv$$vr_52$1 == 0 {
                     if ref.is_null($sroa_slots_0_106) == 0 {
-                        $deref_value_117 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
-                        $qm_e_60 = struct.new "core:serde//DeserializeError" { kind: 3, message: "core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>$spec0$spec0$sroa[t.h0]"($deref_value_117), offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
+                        $deref_value_119 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
+                        $qm_e_60 = struct.new "core:serde//DeserializeError" { kind: 3, message: "core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>$spec0$spec0$sroa[t.h0]"($deref_value_119), offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
                         return 1, ref.null none, $qm_e_60;
                     }
-                    local.tee d(sd.de).depth = sd.depth;
-                    multivalue_bind [$mv$$vr_9$0, $sroa_slots_0_106, $mv$$vr_9$2] = "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserialize<core:cbor/CborDeserializer>$sroa[return]"(d);
-                    $sroa_slots_0_106 = (if @likely($mv$$vr_9$0 == 0) -> ref "core:prelude/list.wado//List<i32>" {
+                    d.depth = $mv$$vr_9$0;
+                    multivalue_bind [$mv$$vr_52$0, $sroa_slots_0_106, $mv$$vr_9$2] = "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserialize<core:cbor/CborDeserializer>$sroa[return]"(d);
+                    $sroa_slots_0_106 = (if @likely($mv$$vr_52$0 == 0) -> ref "core:prelude/list.wado//List<i32>" {
                         ref.as_non_null($sroa_slots_0_106);
-                    } else if @likely($mv$$vr_9$0 == 1) -> ref "core:prelude/list.wado//List<i32>" {
+                    } else if @likely($mv$$vr_52$0 == 1) -> ref "core:prelude/list.wado//List<i32>" {
                         cold_path;
                         $qm_e_60 = ref.as_non_null($mv$$vr_9$2);
                         cold_path;
@@ -5969,18 +5974,18 @@ fn "core:serde/partial_turbofish_infer_test.wado/Blob^core:serde/Deserialize::de
                     } else {
                         unreachable;
                     });
-                    $mv$$vr_9$0 = 1;
+                    $mv$$vr_52$0 = 1;
                 } else if $vr_payload_0_$mv$$vr_52$1 == 1 {
-                    if $sroa_$sroa_slots_1_107_0_110 == 1 {
-                        $deref_value_117 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110), used: 1 };
-                        $qm_e_60 = struct.new "core:serde//DeserializeError" { kind: 3, message: "core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>$spec0$spec0$sroa[t.h0]"($deref_value_117), offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
+                    if $sroa_$sroa_slots_1_107_0_112 == 1 {
+                        $deref_value_119 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110), used: 1 };
+                        $qm_e_60 = struct.new "core:serde//DeserializeError" { kind: 3, message: "core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>$spec0$spec0$sroa[t.h0]"($deref_value_119), offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
                         return 1, ref.null none, $qm_e_60;
                     }
-                    local.tee d(sd.de).depth = sd.depth;
-                    multivalue_bind [$sroa_$sroa_slots_1_107_0_110, $sroa_$sroa_slots_1_107_1_111, $mv$$vr_9$2] = "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_i32$sroa[return]"(d);
-                    $sroa_$sroa_slots_1_107_1_111 = (if @likely($sroa_$sroa_slots_1_107_0_110 == 0) -> i32 {
-                        $sroa_$sroa_slots_1_107_1_111;
-                    } else if @likely($sroa_$sroa_slots_1_107_0_110 == 1) -> i32 {
+                    d.depth = $mv$$vr_9$0;
+                    multivalue_bind [$sroa_$sroa_slots_1_107_0_112, $sroa_$sroa_slots_1_107_1_113, $mv$$vr_9$2] = "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_i32$sroa[return]"(d);
+                    $sroa_$sroa_slots_1_107_1_113 = (if @likely($sroa_$sroa_slots_1_107_0_112 == 0) -> i32 {
+                        $sroa_$sroa_slots_1_107_1_113;
+                    } else if @likely($sroa_$sroa_slots_1_107_0_112 == 1) -> i32 {
                         cold_path;
                         $qm_e_60 = ref.as_non_null($mv$$vr_9$2);
                         cold_path;
@@ -5988,12 +5993,12 @@ fn "core:serde/partial_turbofish_infer_test.wado/Blob^core:serde/Deserialize::de
                     } else {
                         unreachable;
                     });
-                    $sroa_$sroa_slots_1_107_0_110 = 1;
-                    $mv$$vr_9$0 = 1;
+                    $sroa_$sroa_slots_1_107_0_112 = 1;
+                    $mv$$vr_52$0 = 1;
                 } else {
                 }
-                if $mv$$vr_9$0 == 0 {
-                    if @likely(ref.is_null(local.tee $mv$$vr_9$2("core:cbor/core:cbor/CborDeserializer::skip_item"(sd.de, sd.depth)))) {
+                if $mv$$vr_52$0 == 0 {
+                    if @likely(ref.is_null(local.tee $mv$$vr_9$2("core:cbor/core:cbor/CborDeserializer::skip_item"(d, $mv$$vr_9$0)))) {
                     } else {
                         $qm_e_60 = ref.as_non_null($mv$$vr_9$2);
                         cold_path;
@@ -6006,17 +6011,17 @@ fn "core:serde/partial_turbofish_infer_test.wado/Blob^core:serde/Deserialize::de
             continue l870;
         };
     };
-    return 0, $sroa_fields_0_112 = (if ref.is_null($sroa_slots_0_106) == 0 -> ref "core:prelude/list.wado//List<i32>" {
+    return 0, $sroa_fields_0_114 = (if ref.is_null($sroa_slots_0_106) == 0 -> ref "core:prelude/list.wado//List<i32>" {
         ref.as_non_null($sroa_slots_0_106);
     } else {
         return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing field: a"), used: 16 }, offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-    }); $sroa_$sroa_slots_1_107_0_110 = (if $sroa_$sroa_slots_1_107_0_110 == 1 -> i32 {
-        $sroa_$sroa_slots_1_107_1_111;
-    } else if @likely($sroa_$sroa_slots_1_107_0_110 == 0) -> i32 {
+    }); $sroa_$sroa_slots_1_107_0_112 = (if $sroa_$sroa_slots_1_107_0_112 == 1 -> i32 {
+        $sroa_$sroa_slots_1_107_1_113;
+    } else if @likely($sroa_$sroa_slots_1_107_0_112 == 0) -> i32 {
         return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing field: n"), used: 16 }, offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     } else {
         unreachable;
-    }); struct.new "partial_turbofish_infer_test.wado//Blob" { a: $sroa_fields_0_112, n: $sroa_$sroa_slots_1_107_0_110 }, ref.null none;
+    }); struct.new "partial_turbofish_infer_test.wado//Blob" { a: $sroa_fields_0_114, n: $sroa_$sroa_slots_1_107_0_112 }, ref.null none;
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/$tmpl$916608dc3c99bb2c^core:prelude/traits.wado/ReflectTemplate::tail"(t) {
@@ -6838,10 +6843,12 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::slice"($mv$self$r
 }
 
 fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserialize<core:cbor/CborDeserializer>$sroa[return]"(d) {
-    let $load_11: ref "core:prelude/slice.wado//Slice<u8>";
+    let $load_0: ref Array<i32>;
     let $qm_e_2: ref "core:serde//DeserializeError";
     let seq: ref "core:cbor//CborSeqAccess";
     let items: ref "core:prelude/list.wado//List<i32>";
+    let $licm_input_81: ref "core:prelude/slice.wado//Slice<u8>";
+    let $licm_repr_84: ref Array<u8>;
     let $mv$$vr_19$0: i32;
     let $mv$$vr_19$1: ref null "core:cbor//CborSeqAccess";
     let $mv$$vr_19$2: ref null "core:serde//DeserializeError";
@@ -6869,13 +6876,21 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserial
         unreachable;
     }
     if $vr_discriminant_$mv$$vr_20$1 == 1 {
-        builtin::array_set<i32>(local.tee items(struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(2), used: 0 }).repr, 0, $vr_payload_0_$mv$$vr_20$1);
+        builtin::array_set<i32>(local.tee $load_0(local.tee items(struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_new<i32>(2), used: 0 }).repr), 0, $vr_payload_0_$mv$$vr_20$1);
         items.used = 1;
+        $mv$$vr_19$0 = seq.indef;
+        $vr_discriminant_$mv$$vr_20$1 = local.tee $licm_input_81(local.tee d(seq.de).input).end;
+        $vr_payload_0_$mv$$vr_20$1 = $licm_input_81.start;
+        $licm_repr_84 = $licm_input_81.repr;
+        $vr_discriminant_$mv$$vr_20$1 = $vr_discriminant_$mv$$vr_20$1 - $vr_payload_0_$mv$$vr_20$1;
         block {
             l1006: loop {
-                multivalue_bind [$mv$$vr_19$0, $vr_discriminant_$mv$$vr_20$1, $vr_payload_0_$mv$$vr_20$1, $mv$$vr_19$2] = "core:cbor/core:cbor/CborSeqAccess^core:serde/DeserializeSeq::next_element<i32>$sroa[return]"(seq);
-                if @likely($mv$$vr_19$0 == 0) {
-                } else if @likely($mv$$vr_19$0 == 1) {
+                let $mv$$vr_21$0: i32;
+                let $vr_discriminant_$mv$$vr_21$1: i32;
+                let $vr_payload_0_$mv$$vr_21$1: i32;
+                multivalue_bind [$mv$$vr_21$0, $vr_discriminant_$mv$$vr_21$1, $vr_payload_0_$mv$$vr_21$1, $mv$$vr_19$2] = "core:cbor/core:cbor/CborSeqAccess^core:serde/DeserializeSeq::next_element<i32>$sroa[return]"(seq);
+                if @likely($mv$$vr_21$0 == 0) {
+                } else if @likely($mv$$vr_21$0 == 1) {
                     cold_path;
                     $qm_e_2 = ref.as_non_null($mv$$vr_19$2);
                     cold_path;
@@ -6883,41 +6898,42 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserial
                 } else {
                     unreachable;
                 }
-                if $vr_discriminant_$mv$$vr_20$1 == 1 {
-                    if @unlikely(local.tee $mv$$vr_19$0(items.used) >= builtin::array_len(items.repr)) {
+                if $vr_discriminant_$mv$$vr_21$1 == 1 {
+                    if @unlikely(local.tee $mv$$vr_21$0(items.used) >= builtin::array_len($load_0)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(items);
+                        $load_0 = items.repr;
                     }
-                    builtin::array_set<i32>(items.repr, $mv$$vr_19$0, $vr_payload_0_$mv$$vr_20$1);
-                    items.used = $mv$$vr_19$0 + 1;
+                    builtin::array_set<i32>($load_0, $mv$$vr_21$0, $vr_payload_0_$mv$$vr_21$1);
+                    items.used = $mv$$vr_21$0 + 1;
                 } else {
                     $thread_$inline_core_cbor_CborSeqAccess_core_serde_DeserializeSeq__end_0: block {
                         break_if $thread_$inline_core_cbor_CborSeqAccess_core_serde_DeserializeSeq__end_0 seq.done;
-                        if seq.indef {
-                            if @unlikely(if @unlikely(local.tee $mv$$vr_19$0(local.tee d(seq.de).pos) >= (local.tee $vr_discriminant_$mv$$vr_20$1(local.tee $load_11(d.input).end) - local.tee $vr_payload_0_$mv$$vr_20$1($load_11.start))) {
+                        if $mv$$vr_19$0 {
+                            if @unlikely(if @unlikely(local.tee $mv$$vr_19$0(d.pos) >= $vr_discriminant_$mv$$vr_20$1) {
                                 cold_path;
                                 $qm_e_2 = "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($mv$$vr_19$0));
                                 cold_path;
                                 cold_path;
                                 return 1, ref.null none, $qm_e_2;
-                            }; $vr_discriminant_$mv$$vr_20$1 = $vr_discriminant_$mv$$vr_20$1 - $vr_payload_0_$mv$$vr_20$1; if @unlikely(((0 <= $mv$$vr_19$0) & ($mv$$vr_19$0 < $vr_discriminant_$mv$$vr_20$1)) == 0) {
+                            }; if @unlikely(((0 <= $mv$$vr_19$0) & ($mv$$vr_19$0 < $vr_discriminant_$mv$$vr_20$1)) == 0) {
                                 cold_path;
                                 "core:cbor/core:cbor/CborDeserializer::peek_byte$cold0$sroa[self.pos]"($mv$$vr_19$0, $vr_discriminant_$mv$$vr_20$1);
                                 unreachable;
-                            }; builtin::array_get_value<u8>($load_11.repr, $vr_payload_0_$mv$$vr_20$1 + $mv$$vr_19$0) != 255) {
+                            }; builtin::array_get_value<u8>($licm_repr_84, $vr_payload_0_$mv$$vr_20$1 + $mv$$vr_19$0) != 255) {
                                 cold_path;
                                 let $mv_message_10: ref "core:prelude/string.wado//String";
                                 let $mv_offset_11: i64;
                                 let $mv_path_12: ref "core:prelude/string.wado//String";
-                                multivalue_bind [$mv$$vr_19$0, $mv_message_10, $mv_offset_11, $mv_path_12] = "core:serde/core:serde/DeserializeError::invalid_value<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array has more elements than expected"), used: 37 }, builtin::i64_extend_i32_s(d.pos));
+                                multivalue_bind [$mv$$vr_19$0, $mv_message_10, $mv_offset_11, $mv_path_12] = "core:serde/core:serde/DeserializeError::invalid_value<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array has more elements than expected"), used: 37 }, builtin::i64_extend_i32_s($mv$$vr_19$0));
                                 $qm_e_2 = struct.new "core:serde//DeserializeError" { kind: $mv$$vr_19$0, message: $mv_message_10, offset: $mv_offset_11, path: $mv_path_12 };
                                 cold_path;
                                 return 1, ref.null none, $qm_e_2;
                             }
-                            d.pos = d.pos + 1;
+                            d.pos = $mv$$vr_19$0 + 1;
                         } else if @unlikely(seq.remaining > 0_i64) {
                             cold_path;
-                            multivalue_bind [$mv$$vr_19$0, $mv_message_10, $mv_offset_11, $mv_path_12] = "core:serde/core:serde/DeserializeError::invalid_value<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array has more elements than expected"), used: 37 }, builtin::i64_extend_i32_s(seq.de.pos));
+                            multivalue_bind [$mv$$vr_19$0, $mv_message_10, $mv_offset_11, $mv_path_12] = "core:serde/core:serde/DeserializeError::invalid_value<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array has more elements than expected"), used: 37 }, builtin::i64_extend_i32_s(d.pos));
                             $qm_e_2 = struct.new "core:serde//DeserializeError" { kind: $mv$$vr_19$0, message: $mv_message_10, offset: $mv_offset_11, path: $mv_path_12 };
                             cold_path;
                             return 1, ref.null none, $qm_e_2;
@@ -6933,7 +6949,7 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserial
         $thread_$inline_core_cbor_CborSeqAccess_core_serde_DeserializeSeq__end_0: block {
             break_if $thread_$inline_core_cbor_CborSeqAccess_core_serde_DeserializeSeq__end_0 seq.done;
             if seq.indef {
-                if @unlikely(if @unlikely(local.tee $mv$$vr_19$0(local.tee d(seq.de).pos) >= (local.tee $vr_discriminant_$mv$$vr_20$1(local.tee $load_11(d.input).end) - local.tee $vr_payload_0_$mv$$vr_20$1($load_11.start))) {
+                if @unlikely(if @unlikely(local.tee $mv$$vr_19$0(local.tee d(seq.de).pos) >= (local.tee $vr_discriminant_$mv$$vr_20$1(local.tee $licm_input_81(d.input).end) - local.tee $vr_payload_0_$mv$$vr_20$1($licm_input_81.start))) {
                     cold_path;
                     $qm_e_2 = "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($mv$$vr_19$0));
                     cold_path;
@@ -6943,7 +6959,7 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserial
                     cold_path;
                     "core:cbor/core:cbor/CborDeserializer::peek_byte$cold0$sroa[self.pos]"($mv$$vr_19$0, $vr_discriminant_$mv$$vr_20$1);
                     unreachable;
-                }; builtin::array_get_value<u8>($load_11.repr, $vr_payload_0_$mv$$vr_20$1 + $mv$$vr_19$0) != 255) {
+                }; builtin::array_get_value<u8>($licm_input_81.repr, $vr_payload_0_$mv$$vr_20$1 + $mv$$vr_19$0) != 255) {
                     cold_path;
                     multivalue_bind [$mv$$vr_19$0, $mv_message_10, $mv_offset_11, $mv_path_12] = "core:serde/core:serde/DeserializeError::invalid_value<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array has more elements than expected"), used: 37 }, builtin::i64_extend_i32_s(d.pos));
                     $qm_e_2 = struct.new "core:serde//DeserializeError" { kind: $mv$$vr_19$0, message: $mv_message_10, offset: $mv_offset_11, path: $mv_path_12 };

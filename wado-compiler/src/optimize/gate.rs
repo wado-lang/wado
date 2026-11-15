@@ -10,7 +10,6 @@
 //! each function's write count (`super::body_memo`), not the gate's.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use cranelift_entity::EntityRef;
 
@@ -105,16 +104,12 @@ impl CallGraph {
 
 /// Per-function dirty-set gate. See the module docs.
 pub struct FunctionGate {
-    id: u64,
     revision: Vec<u64>,
     watermarks: [Vec<u64>; GatedPass::COUNT],
     graph: CallGraph,
     /// The threads a sweep's visits run on.
     exec: Arc<Executor>,
 }
-
-/// Tells one gate's state from another's.
-static NEXT_GATE_ID: AtomicU64 = AtomicU64::new(0);
 
 impl FunctionGate {
     /// Build the gate for one optimizer run, its sweeps running on `exec`.
@@ -127,18 +122,11 @@ impl FunctionGate {
 
     fn with_graph(n: usize, graph: CallGraph, exec: Arc<Executor>) -> Self {
         Self {
-            id: NEXT_GATE_ID.fetch_add(1, Ordering::Relaxed),
             revision: vec![1; n],
             watermarks: std::array::from_fn(|_| vec![0; n]),
             graph,
             exec,
         }
-    }
-
-    /// Which gate this is, so state kept for one optimizer run is never read
-    /// against another's.
-    pub fn id(&self) -> u64 {
-        self.id
     }
 
     /// The threads this gate's sweeps run on, for the whole-program walks a

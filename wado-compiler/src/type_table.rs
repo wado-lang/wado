@@ -3198,6 +3198,14 @@ impl TypeTable {
         self.intern(ResolvedType::MutRef(inner))
     }
 
+    /// A reference of `kind` to `inner`.
+    pub fn make_ref_of(&mut self, kind: RefKind, inner: TypeId) -> TypeId {
+        match kind {
+            RefKind::Shared => self.make_ref(inner),
+            RefKind::Mut => self.make_mut_ref(inner),
+        }
+    }
+
     /// Build the `(binding_type, value)` for one unrolled tuple-for-of element.
     ///
     /// By value (`by_ref == false`), the element is the field access itself,
@@ -5884,6 +5892,24 @@ impl TypeTable {
             self.type_params_matched_in(t, params);
             false
         });
+    }
+
+    /// The parameters matching `id` binds, in the order `id` places them, each
+    /// as the type that spells it: a pack as its identity pack.
+    pub fn matched_param_types(&mut self, id: TypeId) -> Vec<TypeId> {
+        let mut params = IndexSet::default();
+        self.type_params_matched_in(id, &mut params);
+        let packs = self.packs(id);
+        params
+            .into_iter()
+            .map(|param| {
+                if packs.contains(&param) {
+                    self.type_pack_of(param)
+                } else {
+                    self.type_param_of(param)
+                }
+            })
+            .collect()
     }
 
     /// Whether `id` names a parameter `owner` does not declare, looking also

@@ -1,0 +1,49 @@
+// A static on a generic impl for a builtin shape is selected by the whole
+// receiver, since no declaration's arguments tell the shape's impls apart:
+// `[A, i32]` and `[A, String]` share the tuple's impls, and `Array<T>` and
+// `&Array<T>` inherit the trait's body at their own parameters.
+use { println, Stdout } from "core:cli";
+
+trait Tr with () {
+    fn k() -> i32 {
+        return 4;
+    }
+    fn j() -> i32;
+}
+
+impl<T> Tr for Array<T> {
+    fn j() -> i32 {
+        return 1;
+    }
+}
+
+impl<T> Tr for &Array<T> {
+    fn j() -> i32 {
+        return 2;
+    }
+}
+
+impl<A> Tr for [A, i32] {
+    fn k() -> i32 {
+        return 5;
+    }
+    fn j() -> i32 {
+        return 3;
+    }
+}
+
+impl<A> Tr for [A, String] {
+    fn j() -> i32 {
+        return 6;
+    }
+}
+
+export fn run() with Stdout {
+    println(`${Tr::<Array<i32>>::k()} ${Tr::<&Array<bool>>::k()} ${Tr::<Array<i32>>::j()} ${Tr::<&Array<bool>>::j()}`);
+    println(`${Tr::<[bool, i32]>::k()} ${Tr::<[bool, String]>::k()} ${Tr::<[bool, i32]>::j()} ${Tr::<[bool, String]>::j()}`);
+}
+
+__DATA__
+{
+    "stdout": "4 4 1 2\n5 4 3 6\n"
+}

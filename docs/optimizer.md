@@ -147,7 +147,8 @@ Variants and references:
 - `slot_temp_sroa` — split the aggregate an inlined helper leaves where fusion
   cannot reach, or a `match`, `if` or `switch` leaves when each arm builds it.
 - `closure_devirt` — call a closure directly when its callee is known.
-- `ref_elim` — replace a reference read only through fields with its source.
+- `ref_elim` — replace a reference read only through fields, or handed whole to
+  a call, with its source.
 - `aggregate_forward` — hand a freshly built aggregate to its consumer directly.
 - `known_case` — decide a `match` over a variant whose case is known.
 - `tuple_projection` — `[a, b, c].1` → `b`.

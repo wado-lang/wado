@@ -603,14 +603,16 @@ t: "), used: 152 }, s1: struct.new "core:prelude/string.wado//String" { repr: ar
 }
 
 fn "value_copy_field_read_again_keeps_copy.wado/$test_2_a_whole_read_after_the_field_is_overwritten_takes_the_new_value"() {
+    let $load_1: ref Array<i32>;
+    let $load_2: i32;
     let t: ref "core:prelude/list.wado//List<i32>";
     let $v2: ref null "core:prelude/list.wado//List<i32>";
+    let $v3: bool;
     let $v3_seen: bool;
     let $v2_text: ref "core:prelude/string.wado//String";
     let $v3_text: ref "core:prelude/string.wado//String";
     let a_end_30: i32;
     let i_35: i32;
-    let i_48: i32;
     let $sroa_p_x_49: ref "core:prelude/list.wado//List<i32>";
     let $licm_repr_55: ref Array<i32>;
     t = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
@@ -619,8 +621,8 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_2_a_whole_read_after_the_f
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_p_x_49);
     }
-    builtin::array_set<i32>($sroa_p_x_49.repr, 0, 9);
-    $sroa_p_x_49.used = 1;
+    builtin::array_set<i32>(local.tee $load_1($sroa_p_x_49.repr), 0, 9);
+    $sroa_p_x_49.used = local.tee $load_2(1);
     a_end_30 = $inline_core_prelude_array_wado_seq_eq_i32__9: block -> bool {
         if local.tee a_end_30(t.used) != 1 {
             break $inline_core_prelude_array_wado_seq_eq_i32__9: 0;
@@ -664,50 +666,50 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_2_a_whole_read_after_the_f
     i_35 = 0;
     $v3_seen = 0;
     if @unlikely((if a_end_30 -> i32 {
-        $v2 = struct.new "core:prelude/list.wado//List<i32>" { repr: $licm_repr_55 = $sroa_p_x_49.repr; i_35 = $sroa_p_x_49.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(i_35)), 0, $licm_repr_55, 0, i_35); $array_clone_dst_2, used: i_35 };
+        $v2 = struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_copy<i32>(local.tee $licm_repr_55(builtin::array_new<i32>($load_2)), 0, $load_1, 0, $load_2); $licm_repr_55, used: $load_2 };
         i_35 = 1;
-        i_48 = $inline_core_prelude_array_wado_seq_eq_i32__13: block -> bool {
-            if local.tee $v3_seen($v2.used) != 1 {
+        $v3 = $inline_core_prelude_array_wado_seq_eq_i32__13: block -> bool {
+            if local.tee $load_2($v2.used) != 1 {
                 break $inline_core_prelude_array_wado_seq_eq_i32__13: 0;
             }
-            i_48 = 0;
-            $licm_repr_55 = $v2.repr;
+            $v3_seen = 0;
+            $load_1 = $v2.repr;
             b38: block {
                 l39: loop {
-                    break_if b38 (builtin::i64_extend_i32_s(i_48) + 3_i64) >= builtin::i64_extend_i32_s($v3_seen);
-                    if builtin::array_get_value<i32>($licm_repr_55, i_48) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_3, i_48) {
+                    break_if b38 (builtin::i64_extend_i32_s($v3_seen) + 3_i64) >= builtin::i64_extend_i32_s($load_2);
+                    if builtin::array_get_value<i32>($load_1, $v3_seen) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_3, $v3_seen) {
                         break $inline_core_prelude_array_wado_seq_eq_i32__13: 0;
                     }
-                    i_48 = i_48 + 1;
-                    if builtin::array_get_value<i32>($licm_repr_55, i_48) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_3, i_48) {
+                    $v3_seen = $v3_seen + 1;
+                    if builtin::array_get_value<i32>($load_1, $v3_seen) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_3, $v3_seen) {
                         break $inline_core_prelude_array_wado_seq_eq_i32__13: 0;
                     }
-                    i_48 = i_48 + 1;
-                    if builtin::array_get_value<i32>($licm_repr_55, i_48) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_3, i_48) {
+                    $v3_seen = $v3_seen + 1;
+                    if builtin::array_get_value<i32>($load_1, $v3_seen) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_3, $v3_seen) {
                         break $inline_core_prelude_array_wado_seq_eq_i32__13: 0;
                     }
-                    i_48 = i_48 + 1;
-                    if builtin::array_get_value<i32>($licm_repr_55, i_48) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_3, i_48) {
+                    $v3_seen = $v3_seen + 1;
+                    if builtin::array_get_value<i32>($load_1, $v3_seen) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_3, $v3_seen) {
                         break $inline_core_prelude_array_wado_seq_eq_i32__13: 0;
                     }
-                    i_48 = i_48 + 1;
+                    $v3_seen = $v3_seen + 1;
                     continue l39;
                 };
             };
             b44: block {
                 l45: loop {
-                    break_if b44 i_48 >= $v3_seen;
-                    if builtin::array_get_value<i32>($licm_repr_55, i_48) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_3, i_48) {
+                    break_if b44 $v3_seen >= $load_2;
+                    if builtin::array_get_value<i32>($load_1, $v3_seen) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_3, $v3_seen) {
                         break $inline_core_prelude_array_wado_seq_eq_i32__13: 0;
                     }
-                    i_48 = i_48 + 1;
+                    $v3_seen = $v3_seen + 1;
                     continue l45;
                 };
             };
             break $inline_core_prelude_array_wado_seq_eq_i32__13: 1;
         };
         $v3_seen = 1;
-        i_48;
+        $v3;
     } else {
         0;
     }) == 0) {
@@ -718,7 +720,7 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_2_a_whole_read_after_the_f
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
         });
         $v3_text = (if $v3_seen -> ref "core:prelude/string.wado//String" {
-            "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_field_read_again_keeps_copy.wado/$tmpl$ce9bda9252f81986,[bool]>"(struct.new "value_copy_field_read_again_keeps_copy.wado//$tmpl$ce9bda9252f81986" { h0: i_48, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+            "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_field_read_again_keeps_copy.wado/$tmpl$ce9bda9252f81986,[bool]>"(struct.new "value_copy_field_read_again_keeps_copy.wado//$tmpl$ce9bda9252f81986" { h0: $v3, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
         });
@@ -738,34 +740,39 @@ p.x == [9]: "), used: 13 }, s4: struct.new "core:prelude/string.wado//String" { 
 }
 
 fn "value_copy_field_read_again_keeps_copy.wado/$test_3_the_next_iteration_reads_the_field_before_it_is_overwritten"() {
-    let $load_1: i32;
+    let $load_3: i32;
     let taken: ref "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>";
     let t: ref "core:prelude/list.wado//List<i32>";
     let current: i32;
     let $sroa_p_y_49: ref "core:prelude/list.wado//List<i32>";
     let $sroa_$iter_0_start_52: i32;
-    let i_73: i32;
-    let $licm_repr_76: ref "Array<core:prelude/list.wado/List<i32>>";
+    let $licm_repr_56: ref "Array<core:prelude/list.wado/List<i32>>";
+    let i_74: i32;
+    let $licm_repr_77: ref Array<i32>;
     $sroa_p_y_49 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(2), used: 1 };
     taken = struct.new "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude/list.wado//List<i32>">(), used: 0 };
     $sroa_$iter_0_start_52 = 0;
+    $licm_repr_56 = taken.repr;
+    $licm_repr_77 = $sroa_p_y_49.repr;
     b49: block {
         l50: loop {
             break_if b49 $sroa_$iter_0_start_52 >= 3;
             $sroa_$iter_0_start_52 = local.tee current($sroa_$iter_0_start_52) + 1;
-            t = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $sroa_p_y_49.repr; $load_1 = $sroa_p_y_49.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
-            if @unlikely(local.tee $load_1(taken.used) >= builtin::array_len(taken.repr)) {
+            t = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $sroa_p_y_49.repr; $load_3 = $sroa_p_y_49.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_3)), 0, $array_clone_src_1, 0, $load_3); $array_clone_dst_2, used: $load_3 };
+            if @unlikely(local.tee $load_3(taken.used) >= builtin::array_len($licm_repr_56)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>::grow"(taken);
+                $licm_repr_56 = taken.repr;
             }
-            builtin::array_set<ref "core:prelude/list.wado//List<i32>">(taken.repr, $load_1, t);
-            taken.used = $load_1 + 1;
-            if @unlikely(local.tee $load_1($sroa_p_y_49.used) >= builtin::array_len($sroa_p_y_49.repr)) {
+            builtin::array_set<ref "core:prelude/list.wado//List<i32>">($licm_repr_56, $load_3, t);
+            taken.used = $load_3 + 1;
+            if @unlikely(local.tee $load_3($sroa_p_y_49.used) >= builtin::array_len($licm_repr_77)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_p_y_49);
+                $licm_repr_77 = $sroa_p_y_49.repr;
             }
-            builtin::array_set<i32>($sroa_p_y_49.repr, $load_1, current);
-            $sroa_p_y_49.used = $load_1 + 1;
+            builtin::array_set<i32>($licm_repr_77, $load_3, current);
+            $sroa_p_y_49.used = $load_3 + 1;
             continue l50;
         };
     };
@@ -774,46 +781,46 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_3_the_next_iteration_reads
             break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0: 0;
         }
         current = 0;
-        $licm_repr_76 = taken.repr;
+        $licm_repr_56 = taken.repr;
         b55: block {
             l56: loop {
                 break_if b55 current >= $sroa_$iter_0_start_52;
-                if $sroa_p_y_49 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($licm_repr_76, current); t = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_5, current); $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: block -> bool {
-                    if local.tee $load_1($sroa_p_y_49.used) != t.used {
+                if $sroa_p_y_49 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($licm_repr_56, current); t = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_5, current); $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: block -> bool {
+                    if local.tee $load_3($sroa_p_y_49.used) != t.used {
                         break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: 0;
                     }
-                    i_73 = 0;
-                    $array_clone_src_1 = $sroa_p_y_49.repr;
-                    $array_clone_dst_2 = t.repr;
+                    i_74 = 0;
+                    $licm_repr_77 = $sroa_p_y_49.repr;
+                    $array_clone_src_1 = t.repr;
                     b59: block {
                         l60: loop {
-                            break_if b59 (builtin::i64_extend_i32_s(i_73) + 3_i64) >= builtin::i64_extend_i32_s($load_1);
-                            if builtin::array_get_value<i32>($array_clone_src_1, i_73) != builtin::array_get_value<i32>($array_clone_dst_2, i_73) {
+                            break_if b59 (builtin::i64_extend_i32_s(i_74) + 3_i64) >= builtin::i64_extend_i32_s($load_3);
+                            if builtin::array_get_value<i32>($licm_repr_77, i_74) != builtin::array_get_value<i32>($array_clone_src_1, i_74) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: 0;
                             }
-                            i_73 = i_73 + 1;
-                            if builtin::array_get_value<i32>($array_clone_src_1, i_73) != builtin::array_get_value<i32>($array_clone_dst_2, i_73) {
+                            i_74 = i_74 + 1;
+                            if builtin::array_get_value<i32>($licm_repr_77, i_74) != builtin::array_get_value<i32>($array_clone_src_1, i_74) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: 0;
                             }
-                            i_73 = i_73 + 1;
-                            if builtin::array_get_value<i32>($array_clone_src_1, i_73) != builtin::array_get_value<i32>($array_clone_dst_2, i_73) {
+                            i_74 = i_74 + 1;
+                            if builtin::array_get_value<i32>($licm_repr_77, i_74) != builtin::array_get_value<i32>($array_clone_src_1, i_74) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: 0;
                             }
-                            i_73 = i_73 + 1;
-                            if builtin::array_get_value<i32>($array_clone_src_1, i_73) != builtin::array_get_value<i32>($array_clone_dst_2, i_73) {
+                            i_74 = i_74 + 1;
+                            if builtin::array_get_value<i32>($licm_repr_77, i_74) != builtin::array_get_value<i32>($array_clone_src_1, i_74) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: 0;
                             }
-                            i_73 = i_73 + 1;
+                            i_74 = i_74 + 1;
                             continue l60;
                         };
                     };
                     b65: block {
                         l66: loop {
-                            break_if b65 i_73 >= $load_1;
-                            if builtin::array_get_value<i32>($array_clone_src_1, i_73) != builtin::array_get_value<i32>($array_clone_dst_2, i_73) {
+                            break_if b65 i_74 >= $load_3;
+                            if builtin::array_get_value<i32>($licm_repr_77, i_74) != builtin::array_get_value<i32>($array_clone_src_1, i_74) {
                                 break $inline_core_prelude_array_wado_seq_eq_core_prelude_list_wado_List_i32___0__$inline_core_prelude_array_wado_seq_eq_i32__1: 0;
                             }
-                            i_73 = i_73 + 1;
+                            i_74 = i_74 + 1;
                             continue l66;
                         };
                     };

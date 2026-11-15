@@ -448,7 +448,6 @@ global global:closure_capture_for_header_body_write.wado::$const_obj_54: ref Arr
 global global:core:prelude/primitive.wado::$const_obj_61: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "closure_capture_for_header_body_write.wado/run"() {
-    let $load_176: ref "Array<closure_capture_for_header_body_write.wado/Held>";
     let untaken: ref "core:prelude/list.wado//List<fn()->i32>";
     let i_1: i32;
     let i_9: ref "core:prelude//$Cell<i32>";
@@ -465,10 +464,12 @@ fn "closure_capture_for_header_body_write.wado/run"() {
     let value_659: ref "closure_capture_for_header_body_write.wado//$Closure_12";
     let value_809: ref "closure_capture_for_header_body_write.wado//$Closure_15";
     let $fused_slot_903: i32;
-    let $licm_repr_953: ref Array<i32>;
-    let $sroa_self_repr_1099: ref Array<fn()->i32>;
+    let $licm_repr_951: ref Array<fn()->i32>;
+    let $licm_repr_954: ref Array<i32>;
+    let $licm_repr_1087: ref "Array<closure_capture_for_header_body_write.wado/Held>";
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i_1 = 0;
+    $licm_repr_951 = untaken.repr;
     b0: block {
         l1: loop {
             break_if b0 i_1 >= 2;
@@ -476,36 +477,38 @@ fn "closure_capture_for_header_body_write.wado/run"() {
                 i_1 = 5;
             }
             value_95 = struct.new "closure_capture_for_header_body_write.wado//$Closure_1" { $capture_0: i_1 };
-            if @unlikely(local.tee used_96(untaken.used) >= builtin::array_len(untaken.repr)) {
+            if @unlikely(local.tee used_96(untaken.used) >= builtin::array_len($licm_repr_951)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                $licm_repr_951 = untaken.repr;
             }
-            builtin::array_set<ref struct>(untaken.repr, used_96, struct.new "canonical//CanonicalClosure_0" { env: value_95, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_0", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_0" });
+            builtin::array_set<ref struct>($licm_repr_951, used_96, struct.new "canonical//CanonicalClosure_0" { env: value_95, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_0", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_0" });
             untaken.used = used_96 + 1;
             i_1 = i_1 + 1;
             continue l1;
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b4: block {
         l5: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__12: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_13: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_13 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__12;
                 };
@@ -519,23 +522,23 @@ fn "closure_capture_for_header_body_write.wado/run"() {
             break $inline_core_prelude_array_wado_seq_eq_i32__19: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b10: block {
             l11: loop {
                 break_if b10 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__19: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__19: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__19: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__19: 0;
                 }
                 used_96 = used_96 + 1;
@@ -545,7 +548,7 @@ fn "closure_capture_for_header_body_write.wado/run"() {
         b16: block {
             l17: loop {
                 break_if b16 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__19: 0;
                 }
                 used_96 = used_96 + 1;
@@ -567,39 +570,42 @@ called(untaken): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
     }
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i_1 = 0;
+    $licm_repr_951 = untaken.repr;
     b19: block {
         l20: loop {
             break_if b19 i_1 >= 20;
             value_143 = struct.new "closure_capture_for_header_body_write.wado//$Closure_2" { $capture_0: local.tee i_1(i_1 + 10) };
-            if @unlikely(local.tee used_96(untaken.used) >= builtin::array_len(untaken.repr)) {
+            if @unlikely(local.tee used_96(untaken.used) >= builtin::array_len($licm_repr_951)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                $licm_repr_951 = untaken.repr;
             }
-            builtin::array_set<ref struct>(untaken.repr, used_96, struct.new "canonical//CanonicalClosure_0" { env: value_143, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_1", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_1" });
+            builtin::array_set<ref struct>($licm_repr_951, used_96, struct.new "canonical//CanonicalClosure_0" { env: value_143, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_1", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_1" });
             untaken.used = used_96 + 1;
             i_1 = i_1 + 1;
             continue l20;
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b22: block {
         l23: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__31: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_32: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_32 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__31;
                 };
@@ -613,23 +619,23 @@ called(untaken): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
             break $inline_core_prelude_array_wado_seq_eq_i32__38: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b28: block {
             l29: loop {
                 break_if b28 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__38: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__38: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__38: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__38: 0;
                 }
                 used_96 = used_96 + 1;
@@ -639,7 +645,7 @@ called(untaken): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
         b34: block {
             l35: loop {
                 break_if b34 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__38: 0;
                 }
                 used_96 = used_96 + 1;
@@ -660,15 +666,17 @@ called(before): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
     }
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i_9 = struct.new "core:prelude//$Cell<i32>" { value: 0 };
+    $licm_repr_951 = untaken.repr;
     b37: block {
         l38: loop {
             break_if b37 i_9.value >= 20;
             item_120 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_body_write.wado//$Closure_3" { $capture_0: i_9 }, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_2", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_2" };
-            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len(untaken.repr)) {
+            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len($licm_repr_951)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                $licm_repr_951 = untaken.repr;
             }
-            builtin::array_set<ref struct>(untaken.repr, i_1, item_120);
+            builtin::array_set<ref struct>($licm_repr_951, i_1, item_120);
             untaken.used = i_1 + 1;
             i_9.value = local.tee i_1(i_9.value + 10);
             local.tee i_9(struct.new "core:prelude//$Cell<i32>" { value: i_1 }).value = i_9.value + 1;
@@ -676,24 +684,25 @@ called(before): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b40: block {
         l41: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__50: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_51: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_51 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__50;
                 };
@@ -707,23 +716,23 @@ called(before): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
             break $inline_core_prelude_array_wado_seq_eq_i32__57: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b46: block {
             l47: loop {
                 break_if b46 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__57: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__57: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__57: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__57: 0;
                 }
                 used_96 = used_96 + 1;
@@ -733,7 +742,7 @@ called(before): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
         b52: block {
             l53: loop {
                 break_if b52 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_15, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__57: 0;
                 }
                 used_96 = used_96 + 1;
@@ -754,16 +763,18 @@ called(after): "), used: 16 }, s2: struct.new "core:prelude/string.wado//String"
     }
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i_9 = struct.new "core:prelude//$Cell<i32>" { value: 0 };
+    $licm_repr_951 = untaken.repr;
     b55: block {
         l56: loop {
             break_if b55 i_9.value >= 4;
             $for_9_body: block {
                 item_120 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_body_write.wado//$Closure_4" { $capture_0: i_9 }, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_3", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_3" };
-                if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len(untaken.repr)) {
+                if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len($licm_repr_951)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                    $licm_repr_951 = untaken.repr;
                 }
-                builtin::array_set<ref struct>(untaken.repr, i_1, item_120);
+                builtin::array_set<ref struct>($licm_repr_951, i_1, item_120);
                 untaken.used = i_1 + 1;
                 if (local.tee i_1(i_9.value) % 2) == 0 {
                     i_9.value = i_1 + 1;
@@ -775,24 +786,25 @@ called(after): "), used: 16 }, s2: struct.new "core:prelude/string.wado//String"
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b59: block {
         l60: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__69: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_70: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_70 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__69;
                 };
@@ -806,23 +818,23 @@ called(after): "), used: 16 }, s2: struct.new "core:prelude/string.wado//String"
             break $inline_core_prelude_array_wado_seq_eq_i32__76: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b65: block {
             l66: loop {
                 break_if b65 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__76: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__76: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__76: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__76: 0;
                 }
                 used_96 = used_96 + 1;
@@ -832,7 +844,7 @@ called(after): "), used: 16 }, s2: struct.new "core:prelude/string.wado//String"
         b71: block {
             l72: loop {
                 break_if b71 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__76: 0;
                 }
                 used_96 = used_96 + 1;
@@ -853,15 +865,17 @@ called(skipped): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
     }
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i_1 = 0;
+    $licm_repr_951 = untaken.repr;
     b74: block {
         l75: loop {
             break_if b74 2 <=u i_1;
             item_120 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_body_write.wado//$Closure_5" { $capture_0: local.tee i_9(struct.new "core:prelude//$Cell<i32>" { value: builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_13, i_1) }) }, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_4", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_4" };
-            if @unlikely(local.tee used_96(untaken.used) >= builtin::array_len(untaken.repr)) {
+            if @unlikely(local.tee used_96(untaken.used) >= builtin::array_len($licm_repr_951)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                $licm_repr_951 = untaken.repr;
             }
-            builtin::array_set<ref struct>(untaken.repr, used_96, item_120);
+            builtin::array_set<ref struct>($licm_repr_951, used_96, item_120);
             untaken.used = used_96 + 1;
             i_9.value = i_9.value * 10;
             i_1 = i_1 + 1;
@@ -869,24 +883,25 @@ called(skipped): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b77: block {
         l78: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__93: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_94: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_94 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__93;
                 };
@@ -900,23 +915,23 @@ called(skipped): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
             break $inline_core_prelude_array_wado_seq_eq_i32__100: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b83: block {
             l84: loop {
                 break_if b83 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__100: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__100: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__100: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__100: 0;
                 }
                 used_96 = used_96 + 1;
@@ -926,7 +941,7 @@ called(skipped): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
         b89: block {
             l90: loop {
                 break_if b89 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__100: 0;
                 }
                 used_96 = used_96 + 1;
@@ -947,23 +962,25 @@ called(chained): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
     }
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_951 = untaken.repr;
     b92: block {
         l93: loop {
-            break_if b92 result_111.used >= 3;
-            if @unlikely(local.tee i_1(result_111.used) >= builtin::array_len(result_111.repr)) {
+            break_if b92 local.tee i_1(result_111.used) >= 3;
+            if @unlikely(i_1 >= builtin::array_len(result_111.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
             }
             builtin::array_set<i32>(result_111.repr, i_1, 9);
             result_111.used = i_1 + 1;
             item_120 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_body_write.wado//$Closure_6" { $capture_0: result_111 }, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_5", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_5" };
-            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len(untaken.repr)) {
+            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len($licm_repr_951)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                $licm_repr_951 = untaken.repr;
             }
-            builtin::array_set<ref struct>(untaken.repr, i_1, item_120);
+            builtin::array_set<ref struct>($licm_repr_951, i_1, item_120);
             untaken.used = i_1 + 1;
-            if @unlikely(local.tee i_1(local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: $licm_repr_953 = result_111.repr; i_1 = result_111.used; let $array_clone_dst_12: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_12(builtin::array_new<i32>(i_1)), 0, $licm_repr_953, 0, i_1); $array_clone_dst_12, used: i_1 }).used) >= builtin::array_len(result_111.repr)) {
+            if @unlikely(local.tee i_1(local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: $licm_repr_954 = result_111.repr; i_1 = result_111.used; let $array_clone_dst_12: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_12(builtin::array_new<i32>(i_1)), 0, $licm_repr_954, 0, i_1); $array_clone_dst_12, used: i_1 }).used) >= builtin::array_len(result_111.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
             }
@@ -973,24 +990,25 @@ called(chained): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b97: block {
         l98: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__121: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_122: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_122 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__121;
                 };
@@ -1004,23 +1022,23 @@ called(chained): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
             break $inline_core_prelude_array_wado_seq_eq_i32__128: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b103: block {
             l104: loop {
                 break_if b103 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__128: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__128: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__128: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__128: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1030,7 +1048,7 @@ called(chained): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
         b109: block {
             l110: loop {
                 break_if b109 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__128: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1051,10 +1069,11 @@ called(lens): "), used: 15 }, s2: struct.new "core:prelude/string.wado//String" 
     }
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    $licm_repr_951 = untaken.repr;
     b112: block {
         l113: loop {
-            break_if b112 $mv_arg_2.used >= 3;
-            if @unlikely(local.tee i_1($mv_arg_2.used + 1) > builtin::array_len($mv_arg_2.repr)) {
+            break_if b112 local.tee i_1($mv_arg_2.used) >= 3;
+            if @unlikely(local.tee i_1(i_1 + 1) > builtin::array_len($mv_arg_2.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, i_1);
             }
@@ -1062,11 +1081,12 @@ called(lens): "), used: 15 }, s2: struct.new "core:prelude/string.wado//String" 
             $mv_arg_2.used = i_1;
             builtin::array_copy<u8>($mv_arg_2.repr, used_96, global:closure_capture_for_header_body_write.wado::$const_obj_10, 0, 1);
             item_120 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_body_write.wado//$Closure_7" { $capture_0: $mv_arg_2 }, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_6", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_6" };
-            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len(untaken.repr)) {
+            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len($licm_repr_951)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                $licm_repr_951 = untaken.repr;
             }
-            builtin::array_set<ref struct>(untaken.repr, i_1, item_120);
+            builtin::array_set<ref struct>($licm_repr_951, i_1, item_120);
             untaken.used = i_1 + 1;
             if @unlikely(local.tee i_1(local.tee $mv_arg_2(struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_16: ref Array<u8>; $array_clone_src_16 = $mv_arg_2.repr; i_1 = $mv_arg_2.used; let $array_clone_dst_17: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_17(builtin::array_new<u8>(i_1)), 0, $array_clone_src_16, 0, i_1); $array_clone_dst_17, used: i_1 }).used + 1) > builtin::array_len($mv_arg_2.repr)) {
                 cold_path;
@@ -1079,24 +1099,25 @@ called(lens): "), used: 15 }, s2: struct.new "core:prelude/string.wado//String" 
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b117: block {
         l118: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__152: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_153: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_153 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__152;
                 };
@@ -1110,23 +1131,23 @@ called(lens): "), used: 15 }, s2: struct.new "core:prelude/string.wado//String" 
             break $inline_core_prelude_array_wado_seq_eq_i32__159: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b123: block {
             l124: loop {
                 break_if b123 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__159: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__159: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__159: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__159: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1136,7 +1157,7 @@ called(lens): "), used: 15 }, s2: struct.new "core:prelude/string.wado//String" 
         b129: block {
             l130: loop {
                 break_if b129 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__159: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1157,40 +1178,43 @@ called(texts): "), used: 16 }, s2: struct.new "core:prelude/string.wado//String"
     }
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i_9 = struct.new "core:prelude//$Cell<i32>" { value: 0 };
+    $licm_repr_951 = untaken.repr;
     b132: block {
         l133: loop {
             break_if b132 local.tee i_1(i_9.value) >= 3;
             i_9.value = i_1 + 1;
             value_490 = struct.new "closure_capture_for_header_body_write.wado//$Closure_9" { $capture_0: i_9 };
-            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len(untaken.repr)) {
+            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len($licm_repr_951)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                $licm_repr_951 = untaken.repr;
             }
-            builtin::array_set<ref struct>(untaken.repr, i_1, struct.new "canonical//CanonicalClosure_0" { env: value_490, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_7", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_7" });
+            builtin::array_set<ref struct>($licm_repr_951, i_1, struct.new "canonical//CanonicalClosure_0" { env: value_490, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_7", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_7" });
             untaken.used = i_1 + 1;
             local.tee i_9(struct.new "core:prelude//$Cell<i32>" { value: i_9.value }).value = i_9.value + 1;
             continue l133;
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b135: block {
         l136: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__171: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_172: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_172 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__171;
                 };
@@ -1204,23 +1228,23 @@ called(texts): "), used: 16 }, s2: struct.new "core:prelude/string.wado//String"
             break $inline_core_prelude_array_wado_seq_eq_i32__178: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b141: block {
             l142: loop {
                 break_if b141 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__178: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__178: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__178: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__178: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1230,7 +1254,7 @@ called(texts): "), used: 16 }, s2: struct.new "core:prelude/string.wado//String"
         b147: block {
             l148: loop {
                 break_if b147 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_7, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__178: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1252,15 +1276,18 @@ called(bumped): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
     held_38 = struct.new "core:prelude/list.wado//List<closure_capture_for_header_body_write.wado/Held>" { repr: array.new_fixed<ref "closure_capture_for_header_body_write.wado//Held">(), used: 0 };
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i_9 = struct.new "core:prelude//$Cell<i32>" { value: 0 };
+    $licm_repr_951 = untaken.repr;
+    $licm_repr_1087 = held_38.repr;
     b150: block {
         l151: loop {
             break_if b150 (if i_9.value < 3 -> i32 {
                 value_542 = struct.new "closure_capture_for_header_body_write.wado//Held" { r: i_9 };
-                if @unlikely(local.tee i_1(held_38.used) >= builtin::array_len(held_38.repr)) {
+                if @unlikely(local.tee i_1(held_38.used) >= builtin::array_len($licm_repr_1087)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<closure_capture_for_header_body_write.wado/Held>::grow"(held_38);
+                    $licm_repr_1087 = held_38.repr;
                 }
-                builtin::array_set<ref "closure_capture_for_header_body_write.wado//Held">(held_38.repr, i_1, value_542);
+                builtin::array_set<ref "closure_capture_for_header_body_write.wado//Held">($licm_repr_1087, i_1, value_542);
                 held_38.used = i_1 + 1;
                 1;
             } else {
@@ -1270,37 +1297,39 @@ called(bumped): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<closure_capture_for_header_body_write.wado/Held>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, i_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_for_header_body_write.wado:76"), used: 45 });
                 unreachable;
-            }; builtin::array_get_value<ref "closure_capture_for_header_body_write.wado//Held">(local.tee $load_176(held_38.repr), 0).r.value = builtin::array_get_value<ref "closure_capture_for_header_body_write.wado//Held">($load_176, 0).r.value + 100;
+            }; builtin::array_get_value<ref "closure_capture_for_header_body_write.wado//Held">($licm_repr_1087, 0).r.value = builtin::array_get_value<ref "closure_capture_for_header_body_write.wado//Held">($licm_repr_1087, 0).r.value + 100;
             item_120 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_body_write.wado//$Closure_10" { $capture_0: i_9 }, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_8", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_8" };
-            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len(untaken.repr)) {
+            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len($licm_repr_951)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                $licm_repr_951 = untaken.repr;
             }
-            builtin::array_set<ref struct>(untaken.repr, i_1, item_120);
+            builtin::array_set<ref struct>($licm_repr_951, i_1, item_120);
             untaken.used = i_1 + 1;
             local.tee i_9(struct.new "core:prelude//$Cell<i32>" { value: i_9.value }).value = i_9.value + 1;
             continue l151;
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b156: block {
         l157: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__199: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_200: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_200 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__199;
                 };
@@ -1314,23 +1343,23 @@ called(bumped): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
             break $inline_core_prelude_array_wado_seq_eq_i32__206: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b162: block {
             l163: loop {
                 break_if b162 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_6, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_6, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__206: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_6, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_6, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__206: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_6, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_6, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__206: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_6, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_6, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__206: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1340,7 +1369,7 @@ called(bumped): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
         b168: block {
             l169: loop {
                 break_if b168 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_6, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_6, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__206: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1361,39 +1390,42 @@ called(aliased): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
     }
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i_9 = struct.new "core:prelude//$Cell<i32>" { value: 0 };
+    $licm_repr_951 = untaken.repr;
     b171: block {
         l172: loop {
             break_if b171 i_9.value >= 2;
             value_611 = struct.new "closure_capture_for_header_body_write.wado//$Closure_11" { $capture_0: i_9 };
-            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len(untaken.repr)) {
+            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len($licm_repr_951)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                $licm_repr_951 = untaken.repr;
             }
-            builtin::array_set<ref struct>(untaken.repr, i_1, struct.new "canonical//CanonicalClosure_0" { env: value_611, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_9", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_9" });
+            builtin::array_set<ref struct>($licm_repr_951, i_1, struct.new "canonical//CanonicalClosure_0" { env: value_611, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_9", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_9" });
             untaken.used = i_1 + 1;
             local.tee i_9(struct.new "core:prelude//$Cell<i32>" { value: i_9.value }).value = i_9.value + 1;
             continue l172;
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b174: block {
         l175: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__218: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_219: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_219 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__218;
                 };
@@ -1407,23 +1439,23 @@ called(aliased): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
             break $inline_core_prelude_array_wado_seq_eq_i32__225: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b180: block {
             l181: loop {
                 break_if b180 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__225: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__225: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__225: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__225: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1433,7 +1465,7 @@ called(aliased): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
         b186: block {
             l187: loop {
                 break_if b186 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__225: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1454,39 +1486,42 @@ called(copied): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
     }
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i_9 = struct.new "core:prelude//$Cell<i32>" { value: 0 };
+    $licm_repr_951 = untaken.repr;
     b189: block {
         l190: loop {
             break_if b189 i_9.value >= 2;
             value_659 = struct.new "closure_capture_for_header_body_write.wado//$Closure_12" { $capture_0: struct.new "closure_capture_for_header_body_write.wado//Held" { r: i_9 } };
-            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len(untaken.repr)) {
+            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len($licm_repr_951)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                $licm_repr_951 = untaken.repr;
             }
-            builtin::array_set<ref struct>(untaken.repr, i_1, struct.new "canonical//CanonicalClosure_0" { env: value_659, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_10", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_10" });
+            builtin::array_set<ref struct>($licm_repr_951, i_1, struct.new "canonical//CanonicalClosure_0" { env: value_659, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_10", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_10" });
             untaken.used = i_1 + 1;
             local.tee i_9(struct.new "core:prelude//$Cell<i32>" { value: i_9.value }).value = i_9.value + 1;
             continue l190;
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b192: block {
         l193: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__237: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_238: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_238 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__237;
                 };
@@ -1500,23 +1535,23 @@ called(copied): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
             break $inline_core_prelude_array_wado_seq_eq_i32__244: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b198: block {
             l199: loop {
                 break_if b198 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__244: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__244: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__244: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__244: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1526,7 +1561,7 @@ called(copied): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
         b204: block {
             l205: loop {
                 break_if b204 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_4, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__244: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1547,37 +1582,40 @@ called(fielded): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
     }
     held_38 = struct.new "core:prelude/list.wado//List<closure_capture_for_header_body_write.wado/Held>" { repr: array.new_fixed<ref "closure_capture_for_header_body_write.wado//Held">(), used: 0 };
     i_9 = struct.new "core:prelude//$Cell<i32>" { value: 0 };
+    $licm_repr_1087 = held_38.repr;
     b207: block {
         l208: loop {
             break_if b207 i_9.value >= 3;
             value_542 = struct.new "closure_capture_for_header_body_write.wado//Held" { r: i_9 };
-            if @unlikely(local.tee i_1(held_38.used) >= builtin::array_len(held_38.repr)) {
+            if @unlikely(local.tee i_1(held_38.used) >= builtin::array_len($licm_repr_1087)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<closure_capture_for_header_body_write.wado/Held>::grow"(held_38);
+                $licm_repr_1087 = held_38.repr;
             }
-            builtin::array_set<ref "closure_capture_for_header_body_write.wado//Held">(held_38.repr, i_1, value_542);
+            builtin::array_set<ref "closure_capture_for_header_body_write.wado//Held">($licm_repr_1087, i_1, value_542);
             held_38.used = i_1 + 1;
             local.tee i_9(struct.new "core:prelude//$Cell<i32>" { value: i_9.value }).value = i_9.value + 1;
             continue l208;
         };
     };
     i_1 = held_38.used;
-    $load_176 = held_38.repr;
+    $licm_repr_1087 = held_38.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b210: block {
         l211: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_closure_capture_for_header_body_write_wado_Held__fn_mut_closure_capture_for_header_body_write_wado_Held___i32__core_prelude_traits_wado_Iterator__next_sroa_return__255: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_closure_capture_for_header_body_write_wado_Held__core_prelude_traits_wado_Iterator__next_256: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_closure_capture_for_header_body_write_wado_Held__core_prelude_traits_wado_Iterator__next_256 used_96 >= i_1;
-                    i_9 = builtin::array_get_value<ref "closure_capture_for_header_body_write.wado//Held">($load_176, used_96).r;
+                    i_9 = builtin::array_get_value<ref "closure_capture_for_header_body_write.wado//Held">($licm_repr_1087, used_96).r;
                     used_96 = used_96 + 1;
                     $fused_slot_903 = i_9.value;
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_closure_capture_for_header_body_write_wado_Held__fn_mut_closure_capture_for_header_body_write_wado_Held___i32__core_prelude_traits_wado_Iterator__next_sroa_return__255;
                 };
@@ -1591,23 +1629,23 @@ called(fielded): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
             break $inline_core_prelude_array_wado_seq_eq_i32__263: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b215: block {
             l216: loop {
                 break_if b215 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_3, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_3, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__263: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_3, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_3, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__263: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_3, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_3, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__263: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_3, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_3, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__263: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1617,7 +1655,7 @@ called(fielded): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
         b221: block {
             l222: loop {
                 break_if b221 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_3, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_3, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__263: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1635,43 +1673,45 @@ stored.into_iter().map(|h| *h.r).collect(): "), used: 185 }, s1: struct.new "cor
         unreachable;
     }
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
-    $licm_repr_953 = global:closure_capture_for_header_body_write.wado::$const_obj_13;
     i_1 = 0;
+    $licm_repr_951 = untaken.repr;
     b224: block {
         l225: loop {
             break_if b224 i_1 >= 2;
-            used_96 = builtin::array_get_value<i32>($licm_repr_953, i_1);
+            used_96 = builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_13, i_1);
             i_1 = i_1 + 1;
             item_120 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_body_write.wado//$Closure_14" { $capture_0: local.tee i_9(struct.new "core:prelude//$Cell<i32>" { value: used_96 }) }, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_11", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_11" };
-            if @unlikely(local.tee used_96(untaken.used) >= builtin::array_len(untaken.repr)) {
+            if @unlikely(local.tee used_96(untaken.used) >= builtin::array_len($licm_repr_951)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                $licm_repr_951 = untaken.repr;
             }
-            builtin::array_set<ref struct>(untaken.repr, used_96, item_120);
+            builtin::array_set<ref struct>($licm_repr_951, used_96, item_120);
             untaken.used = used_96 + 1;
             i_9.value = i_9.value * 10;
             continue l225;
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b227: block {
         l228: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__278: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_279: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_279 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__278;
                 };
@@ -1685,23 +1725,23 @@ stored.into_iter().map(|h| *h.r).collect(): "), used: 185 }, s1: struct.new "cor
             break $inline_core_prelude_array_wado_seq_eq_i32__285: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b233: block {
             l234: loop {
                 break_if b233 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__285: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__285: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__285: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__285: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1711,7 +1751,7 @@ stored.into_iter().map(|h| *h.r).collect(): "), used: 185 }, s1: struct.new "cor
         b239: block {
             l240: loop {
                 break_if b239 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_2, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__285: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1732,39 +1772,42 @@ called(elements): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
     }
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i_1 = 0;
+    $licm_repr_951 = untaken.repr;
     b242: block {
         l243: loop {
             break_if b242 i_1 >= 3;
             value_809 = struct.new "closure_capture_for_header_body_write.wado//$Closure_15" { $capture_0: i_1 };
-            if @unlikely(local.tee used_96(untaken.used) >= builtin::array_len(untaken.repr)) {
+            if @unlikely(local.tee used_96(untaken.used) >= builtin::array_len($licm_repr_951)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                $licm_repr_951 = untaken.repr;
             }
-            builtin::array_set<ref struct>(untaken.repr, used_96, struct.new "canonical//CanonicalClosure_0" { env: value_809, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_12", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_12" });
+            builtin::array_set<ref struct>($licm_repr_951, used_96, struct.new "canonical//CanonicalClosure_0" { env: value_809, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_12", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_12" });
             untaken.used = used_96 + 1;
             i_1 = i_1 + black_box(1) + 1;
             continue l243;
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b245: block {
         l246: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__298: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_299: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_299 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__298;
                 };
@@ -1778,23 +1821,23 @@ called(elements): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
             break $inline_core_prelude_array_wado_seq_eq_i32__305: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b251: block {
             l252: loop {
                 break_if b251 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_1, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_1, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__305: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_1, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_1, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__305: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_1, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_1, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__305: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_1, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_1, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__305: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1804,7 +1847,7 @@ called(elements): "), used: 19 }, s2: struct.new "core:prelude/string.wado//Stri
         b257: block {
             l258: loop {
                 break_if b257 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_1, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_1, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__305: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1825,38 +1868,41 @@ called(updated): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
     }
     untaken = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i_9 = struct.new "core:prelude//$Cell<i32>" { value: 0 };
+    $licm_repr_951 = untaken.repr;
     b260: block {
         l261: loop {
             break_if b260 i_9.value = local.tee i_1(i_9.value + 1); i_1 < 3 == 0;
             item_120 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_capture_for_header_body_write.wado//$Closure_16" { $capture_0: local.tee i_9(struct.new "core:prelude//$Cell<i32>" { value: i_1 }) }, inspect: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_inspect_wrapper_13", func: ref.func "closure/closure_capture_for_header_body_write.wado/$closure_wrapper_13" };
-            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len(untaken.repr)) {
+            if @unlikely(local.tee i_1(untaken.used) >= builtin::array_len($licm_repr_951)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(untaken);
+                $licm_repr_951 = untaken.repr;
             }
-            builtin::array_set<ref struct>(untaken.repr, i_1, item_120);
+            builtin::array_set<ref struct>($licm_repr_951, i_1, item_120);
             untaken.used = i_1 + 1;
             continue l261;
         };
     };
     i_1 = untaken.used;
-    $sroa_self_repr_1099 = untaken.repr;
+    $licm_repr_951 = untaken.repr;
     used_96 = 0;
-    result_111 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    $licm_repr_954 = local.tee result_111(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }).repr;
     b263: block {
         l264: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__317: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_318: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_fn____i32__core_prelude_traits_wado_Iterator__next_318 used_96 >= i_1;
-                    item_120 = builtin::array_get_value<ref struct>($sroa_self_repr_1099, used_96);
+                    item_120 = builtin::array_get_value<ref struct>($licm_repr_951, used_96);
                     used_96 = used_96 + 1;
                     $fused_slot_903 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item_120)).env);
                     };
-                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len(result_111.repr)) {
+                    if @unlikely(local.tee used_123(result_111.used) >= builtin::array_len($licm_repr_954)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_111);
+                        $licm_repr_954 = result_111.repr;
                     }
-                    builtin::array_set<i32>(result_111.repr, used_123, $fused_slot_903);
+                    builtin::array_set<i32>($licm_repr_954, used_123, $fused_slot_903);
                     result_111.used = used_123 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_fn____i32__fn_mut_fn____i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__317;
                 };
@@ -1870,23 +1916,23 @@ called(updated): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
             break $inline_core_prelude_array_wado_seq_eq_i32__324: 0;
         }
         used_96 = 0;
-        $licm_repr_953 = result_111.repr;
+        $licm_repr_954 = result_111.repr;
         b269: block {
             l270: loop {
                 break_if b269 (builtin::i64_extend_i32_s(used_96) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_0, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_0, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__324: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_0, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_0, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__324: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_0, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_0, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__324: 0;
                 }
                 used_96 = used_96 + 1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_0, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_0, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__324: 0;
                 }
                 used_96 = used_96 + 1;
@@ -1896,7 +1942,7 @@ called(updated): "), used: 18 }, s2: struct.new "core:prelude/string.wado//Strin
         b275: block {
             l276: loop {
                 break_if b275 used_96 >= i_1;
-                if builtin::array_get_value<i32>($licm_repr_953, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_0, used_96) {
+                if builtin::array_get_value<i32>($licm_repr_954, used_96) != builtin::array_get_value<i32>(global:closure_capture_for_header_body_write.wado::$const_obj_0, used_96) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__324: 0;
                 }
                 used_96 = used_96 + 1;

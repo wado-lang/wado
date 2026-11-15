@@ -1085,7 +1085,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<tagged_temp
     let n_247: i32;
     let new_used_251: i32;
     let start_252: i32;
-    let $sroa_view_repr_765: ref Array<u8>;
     let q: u64;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
@@ -1107,14 +1106,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<tagged_temp
         };
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__30;
     };
-    $sroa_view_repr_765 = global:core:prelude/string.wado::$const_obj_6;
     if @unlikely(local.tee n_247(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, n_247);
     }
     new_used_251 = out_3.used;
     out_3.used = n_247;
-    builtin::array_copy<u8>(local.tee $load_10(out_3.repr), new_used_251, $sroa_view_repr_765, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_10(out_3.repr), new_used_251, global:core:prelude/string.wado::$const_obj_6, 0, 1);
     new_used_251 = $mv$t$h1 < 0;
     x_170 = builtin::i64_extend_i32_s($mv$t$h1);
     x_170 = select i64(x_170 < 0_i64, 0_i64 - x_170, x_170);
@@ -1194,22 +1192,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<tagged_temp
     }
     new_used_251 = out_3.used;
     out_3.used = n_247;
-    $sroa_view_repr_765 = out_3.repr;
+    $load_10 = out_3.repr;
     $mv$t$h1 = new_used_251 + $mv$t$h1;
     b153: block {
         l154: loop {
             break_if b153 ($mv$t$h1 - new_used_251) < 2;
             q = x_170 /u 100_i64;
             start_252 = local.tee n_247(builtin::i32_wrap_i64(x_170 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_765, $mv$t$h1 - 1, (48 + n_247) - (start_252 * 10));
-            builtin::array_set_u8($sroa_view_repr_765, $mv$t$h1 - 2, 48 + start_252);
+            builtin::array_set_u8($load_10, $mv$t$h1 - 1, (48 + n_247) - (start_252 * 10));
+            builtin::array_set_u8($load_10, $mv$t$h1 - 2, 48 + start_252);
             $mv$t$h1 = $mv$t$h1 - 2;
             x_170 = q;
             continue l154;
         };
     };
     if $mv$t$h1 > new_used_251 {
-        builtin::array_set_u8($sroa_view_repr_765, new_used_251, 48 + builtin::i32_wrap_i64(x_170 %u 10_i64));
+        builtin::array_set_u8($load_10, new_used_251, 48 + builtin::i32_wrap_i64(x_170 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_72: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_72;

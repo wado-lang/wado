@@ -254,7 +254,7 @@ pub(super) fn region_needs(
                             refusal.get_or_insert(RegionRefusal::UnaccountableWrite);
                         }
                     } else {
-                        match facts.ctfe_builtins.and_then(|m| m.get(func_id)) {
+                        match facts.builtin(func_id) {
                             None => {
                                 refusal.get_or_insert(RegionRefusal::UnrunnableCall);
                                 unrunnable_callees.push(*func_id);

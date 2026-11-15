@@ -98,6 +98,61 @@ fn an_evaluated_program_reaches_a_dependencys_dependency() {
         .success();
 }
 
+/// Programs over one dependency compile on the snapshot of it the second one
+/// built, the bundled component the dependency reaches included.
+#[test]
+fn successive_programs_over_one_dependency_compile_on_its_snapshot() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_packages(tmp.path(), "hello", "hello");
+    let app = tmp.path().join("app");
+    fs::write(
+        tmp.path().join("greet/src/lib.wado"),
+        "use { BinaryProperty, contains } from \"core:icu\";\n\
+         pub fn hello() -> String { return if contains(BinaryProperty::Uppercase, 'A') { \"upper\" } else { \"lower\" }; }\n",
+    )
+    .unwrap();
+    let program = |suffix: &str| {
+        format!(
+            "eval(`use {{ println, Stdout }} from \"core:cli\";\n\
+             use {{ hello }} from \"greet\";\n\
+             export fn run() with Stdout {{ println(hello()); println(\"{suffix}\"); }}`)"
+        )
+    };
+    let check = |n: u32| {
+        format!(
+            "\x20   let out{n} = {};\n\
+             \x20   assert out{n} matches {{ Ok(o) && o.stdout == \"upper\\n{n}\\n\" }}, `${{out{n}:?}}`;\n",
+            program(&n.to_string())
+        )
+    };
+    fs::write(
+        app.join("app_test.wado"),
+        format!(
+            "use {{ eval }} from \"core:eval\";\n\n\
+             test \"each program reaches the dependency\" {{\n{}{}{}}}\n",
+            check(1),
+            check(2),
+            check(3),
+        ),
+    )
+    .unwrap();
+    let output = wado_in(&app)
+        .env("WADO_TRACE", "dependency_snapshot")
+        .args(["test", "app_test.wado"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("[dependency_snapshot] built over"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("[dependency_snapshot] seeds the compile"),
+        "{stderr}"
+    );
+}
+
 #[test]
 fn editing_the_dependency_misses_the_cache() {
     let tmp = tempfile::tempdir().unwrap();

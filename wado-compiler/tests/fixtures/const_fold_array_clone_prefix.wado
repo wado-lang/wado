@@ -1,0 +1,25 @@
+// A clone of a constant array folds to the constant prefix it copies. Unlike
+// the `array_new` that opens a buffer, a clone's every element is live, so the
+// literal holds exactly what the clone would have built. A String that SROA
+// splits before its source folds leaves this shape: each serialized key copied
+// its name into a fresh array where the constant would do.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let src = builtin::array_new_data::<u8>(b"abcdef");
+    let head = builtin::array_clone_prefix(&src, 3);
+    let mut out = "";
+    for let i of 0..<builtin::array_len(&head) {
+        out.push(builtin::array_get_value(&head, i) as char);
+    }
+    println(out);
+}
+
+__DATA__
+{
+    "stdout": "abc\n",
+    "wir_contrast": {"O2": [{"builtin::array_clone_prefix(&src, 3)": "builtin::array_clone_prefix(&src, builtin::black_box(3))"}]},
+    "wir_scope": "const_fold_array_clone_prefix.wado/run",
+    "wir_expect:O2": ["builtin::array_get_value<u8>(global:"],
+    "wir_not_expect:O2": ["array_clone_dst"]
+}

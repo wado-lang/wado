@@ -301,6 +301,7 @@ fn "opt_elide_nonnull_casts.wado/run"() {
     let self_33: ref "core:prelude/list.wado//List<i32>";
     let self_40: ref "core:prelude/list.wado//List<opt_elide_nonnull_casts.wado/P>";
     let value_65: ref struct;
+    let $licm_repr_99: ref Array<fn()->i32>;
     i = black_box(1);
     self_33 = global:opt_elide_nonnull_casts.wado::TABLE;
     if @unlikely(i >=u 5) {
@@ -332,10 +333,11 @@ fn "opt_elide_nonnull_casts.wado/run"() {
     }
     lens = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    $licm_repr_99 = lens.repr;
     b5: block {
         l6: loop {
-            break_if b5 s.used >= 3;
-            if @unlikely(local.tee i(s.used + 1) > builtin::array_len(s.repr)) {
+            break_if b5 local.tee i(s.used) >= 3;
+            if @unlikely(local.tee i(i + 1) > builtin::array_len(s.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, i);
             }
@@ -343,11 +345,12 @@ fn "opt_elide_nonnull_casts.wado/run"() {
             s.used = i;
             builtin::array_copy<u8>(s.repr, $v1_1, global:opt_elide_nonnull_casts.wado::$const_obj_1, 0, 1);
             value_65 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "opt_elide_nonnull_casts.wado//$Closure_0" { $capture_0: s }, func: ref.func "closure/opt_elide_nonnull_casts.wado/$closure_wrapper_0" };
-            if @unlikely(local.tee i(lens.used) >= builtin::array_len(lens.repr)) {
+            if @unlikely(local.tee i(lens.used) >= builtin::array_len($licm_repr_99)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(lens);
+                $licm_repr_99 = lens.repr;
             }
-            builtin::array_set<ref struct>(lens.repr, i, value_65);
+            builtin::array_set<ref struct>($licm_repr_99, i, value_65);
             lens.used = i + 1;
             if @unlikely(local.tee i(local.tee s(struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = s.repr; i = s.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(i)), 0, $array_clone_src_1, 0, i); $array_clone_dst_2, used: i }).used + 1) > builtin::array_len(s.repr)) {
                 cold_path;

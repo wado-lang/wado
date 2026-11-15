@@ -397,16 +397,14 @@ fn "treeset_mut_ref_deep.wado/run"() with Stdout {
     let $cm_pair_7: i64;
     let $licm_repr_126: ref Array<u8>;
     let $sroa_seen_inner_145: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>";
-    let $sroa_$iter_0_repr_146: ref "Array<treeset_mut_ref_deep.wado/Elem>";
     let $sroa_$iter_0_index_147: i32;
     $sroa_seen_inner_145 = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<()>(0), alive: builtin::array_new<bool>(0), count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
     result_2 = struct.new "core:prelude/list.wado//List<treeset_mut_ref_deep.wado/LitToken>" { repr: array.new_fixed<ref "treeset_mut_ref_deep.wado//LitToken">(), used: 0 };
-    $sroa_$iter_0_repr_146 = global:treeset_mut_ref_deep.wado::$const_obj_3;
     $sroa_$iter_0_index_147 = 0;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_index_147 >= 4;
-            ref_val = builtin::array_get_value<ref "treeset_mut_ref_deep.wado//Elem">($sroa_$iter_0_repr_146, $sroa_$iter_0_index_147);
+            ref_val = builtin::array_get_value<ref "treeset_mut_ref_deep.wado//Elem">(global:treeset_mut_ref_deep.wado::$const_obj_3, $sroa_$iter_0_index_147);
             $sroa_$iter_0_index_147 = $sroa_$iter_0_index_147 + 1;
             "treeset_mut_ref_deep.wado/collect_lits$sroa[elem.value,&mut(seen.inner)]"(ref_val, $sroa_seen_inner_145, result_2);
             continue l1;
@@ -2646,11 +2644,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<treeset_mut
     let n_126: i32;
     let new_used_130: i32;
     let start_131: i32;
-    let $sroa_view_repr_549: ref Array<u8>;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
-    $sroa_view_repr_549 = global:core:prelude/string.wado::$const_obj_9;
-    out_3.used = 3;
-    builtin::array_copy<u8>(out_3.repr, 0, $sroa_view_repr_549, 0, 3);
+    local.tee out_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }).used = 3;
+    builtin::array_copy<u8>(out_3.repr, 0, global:core:prelude/string.wado::$const_obj_9, 0, 3);
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__28: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {

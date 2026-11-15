@@ -298,7 +298,6 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "cold_outline_moves_region.wado/run"() {
-    let $load_0: ref "core:prelude/list.wado//List<i32>";
     let cols: ref "cold_outline_moves_region.wado//Cols";
     let i: i32;
     let $v2_4: i32;
@@ -306,33 +305,39 @@ fn "cold_outline_moves_region.wado/run"() {
     let $v3_6: bool;
     let $v3_seen_7: bool;
     let used_39: i32;
+    let $licm_a_58: ref "core:prelude/list.wado//List<i32>";
+    let $licm_b_59: ref "core:prelude/list.wado//List<i32>";
+    let $licm_c_60: ref "core:prelude/list.wado//List<i32>";
     cols = struct.new "cold_outline_moves_region.wado//Cols" { a: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }, b: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }, c: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 } };
     i = 0;
+    $licm_a_58 = cols.a;
+    $licm_b_59 = cols.b;
+    $licm_c_60 = cols.c;
     b0: block {
         l1: loop {
             break_if b0 i >= 50;
-            if @unlikely(local.tee $load_0(cols.a).used >= builtin::array_len($load_0.repr)) {
+            if @unlikely($licm_a_58.used >= builtin::array_len($licm_a_58.repr)) {
                 cold_path;
                 "cold_outline_moves_region.wado/cold_outline_moves_region.wado/Cols::push_row$cold0$dae[x]"(cols);
             }
-            if @unlikely(local.tee used_39(local.tee $load_0(cols.a).used) >= builtin::array_len($load_0.repr)) {
+            if @unlikely(local.tee used_39($licm_a_58.used) >= builtin::array_len($licm_a_58.repr)) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_0);
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($licm_a_58);
             }
-            builtin::array_set<i32>($load_0.repr, used_39, i);
-            $load_0.used = used_39 + 1;
-            if @unlikely(local.tee used_39(local.tee $load_0(cols.b).used) >= builtin::array_len($load_0.repr)) {
+            builtin::array_set<i32>($licm_a_58.repr, used_39, i);
+            $licm_a_58.used = used_39 + 1;
+            if @unlikely(local.tee used_39($licm_b_59.used) >= builtin::array_len($licm_b_59.repr)) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_0);
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($licm_b_59);
             }
-            builtin::array_set<i32>($load_0.repr, used_39, i);
-            $load_0.used = used_39 + 1;
-            if @unlikely(local.tee used_39(local.tee $load_0(cols.c).used) >= builtin::array_len($load_0.repr)) {
+            builtin::array_set<i32>($licm_b_59.repr, used_39, i);
+            $licm_b_59.used = used_39 + 1;
+            if @unlikely(local.tee used_39($licm_c_60.used) >= builtin::array_len($licm_c_60.repr)) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_0);
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($licm_c_60);
             }
-            builtin::array_set<i32>($load_0.repr, used_39, i);
-            $load_0.used = used_39 + 1;
+            builtin::array_set<i32>($licm_c_60.repr, used_39, i);
+            $licm_c_60.used = used_39 + 1;
             i = i + 1;
             continue l1;
         };

@@ -345,6 +345,8 @@ pub fn optimize(
         }
     }
 
+    // After the final DCE, which a `HeapEffectsCache` must not outlive.
+    let mut heap_effects = HeapEffectsCache::default();
     // FieldAccess promotion: scalar fields over stable receivers freeze to
     // operands (born-as-operands), so store-load forwarding / cse become
     // operand reads. Runs after the optimization loop (so the struct shape is
@@ -353,12 +355,7 @@ pub fn optimize(
     // two soundness gates (scalar-field + receiver-availability) and the WIR
     // const-local propagation keep it default-safe.
     run_pass("nir/promote_fields", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(
-            p,
-            &exec,
-            /* include_fields */ true,
-            FreezePhase::Terminal,
-        )
+        extract::freeze_pure_arith(p, &exec, Some(&mut heap_effects), FreezePhase::Terminal)
     });
     // Re-run the structural BCE matcher now that `promote_fields` froze
     // invariant bounds (`arr.used`) into constant operands the in-loop
@@ -380,7 +377,7 @@ pub fn optimize(
     // checks are versioned, and before `select_lowering`, which
     // reshapes conditions out of matcher form.
     run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
-        loop_version_bce::version_loops(p, &mut descriptors, &exec)
+        loop_version_bce::version_loops(p, &mut descriptors, &exec, &mut heap_effects)
     });
     // After every bounds-check eliminator, which read the signed halves.
     run_pass("nir/unsigned_range_check", &mut project, profiler, |p| {
@@ -402,7 +399,7 @@ pub fn optimize(
     });
 
     run_pass("nir/multi_value_param", &mut project, profiler, |p| {
-        multi_value_param::classify_multi_value_params(p, &exec)
+        multi_value_param::classify_multi_value_params(p, &exec, &mut heap_effects)
     });
 
     // Freeze re-emittable pure arithmetic (constants / local reads composed by
@@ -412,12 +409,7 @@ pub fn optimize(
     // root and are simply not emitted. (Early arith promotion already ran before
     // the loop; `FieldAccess` promotion ran above, after SROA.)
     run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(
-            p,
-            &exec,
-            /* include_fields */ false,
-            FreezePhase::Terminal,
-        )
+        extract::freeze_pure_arith(p, &exec, None, FreezePhase::Terminal)
     });
 
     // The born-resolved invariant is now enforced by the type system: a call
@@ -888,7 +880,7 @@ fn run_optimization_passes(
     // the SROA passes), since SROA scalarizes the structs a promoted `FieldAccess`
     // would reference. See the late call in `optimize`.
     run_pass("nir/promote_pure_values_early", project, profiler, |p| {
-        extract::freeze_pure_arith(p, exec, /* include_fields */ false, FreezePhase::Early)
+        extract::freeze_pure_arith(p, exec, None, FreezePhase::Early)
     });
     // What changed in the iteration just run, and so the convergence flag:
     // empty ends the loop, non-empty after it names what held the loop open.

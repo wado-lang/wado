@@ -138,7 +138,6 @@ fn "licm_reload_hoist_pays.wado/run"() with Stdout {
     let out_35: ref "core:prelude/string.wado//String";
     let is_negative_102: bool;
     let x_106: i64;
-    let $sroa_view_repr_204: ref Array<u8>;
     let $sroa_t_h0_255: i32;
     let $sroa_t_h1_256: i32;
     m = struct.new "licm_reload_hoist_pays.wado//Meter" { level: black_box(10) };
@@ -153,14 +152,13 @@ fn "licm_reload_hoist_pays.wado/run"() with Stdout {
     $sroa_t_h0_255 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_106(x_106 = builtin::i64_extend_i32_s($sroa_t_h0_255); select i64(x_106 < 0_i64, 0_i64 - x_106, x_106)));
     is_negative_102 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_35, is_negative_102, $sroa_t_h0_255);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_35.repr), is_negative_102, x_106, $sroa_t_h0_255);
-    $sroa_view_repr_204 = global:licm_reload_hoist_pays.wado::$const_obj_0;
     if @unlikely(local.tee $sroa_t_h0_255(out_35.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_35, $sroa_t_h0_255);
     }
     is_negative_102 = out_35.used;
     out_35.used = $sroa_t_h0_255;
-    builtin::array_copy<u8>(out_35.repr, is_negative_102, $sroa_view_repr_204, 0, 1);
+    builtin::array_copy<u8>(out_35.repr, is_negative_102, global:licm_reload_hoist_pays.wado::$const_obj_0, 0, 1);
     $sroa_t_h0_255 = $sroa_t_h1_256 < 0;
     $sroa_t_h1_256 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_106(x_106 = builtin::i64_extend_i32_s($sroa_t_h1_256); select i64(x_106 < 0_i64, 0_i64 - x_106, x_106)));
     $sroa_t_h0_255 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_35, $sroa_t_h0_255, $sroa_t_h1_256);

@@ -8,8 +8,8 @@
 // for them: its assertions are not read.
 //
 // A case is kept when Re means the same by it:
-// - the flags beyond `dgy` are `m` and `s`, which become a modifier group;
-//   `i` and `v` are left out;
+// - the flags beyond `dgy` are `i`, `m` and `s`, which become a modifier group;
+//   `v` is left out;
 // - Node accepts the pattern with the `u` flag;
 // - it holds no lookaround or backreference, which Re refuses;
 // - the subject is well formed, which a Wado string must be, and short.
@@ -48,8 +48,8 @@ function metadata(source) {
 }
 
 // Whether a `u`-mode pattern holds what WEP: Re lists as a known gap:
-// lookaround, a backreference, the `i` modifier, a repeated group name, or a
-// count above 4294967295.
+// lookaround, a backreference, a repeated group name, or a count above
+// 4294967295.
 function refused(pattern) {
   const names = new Set();
   let inClass = false;
@@ -67,8 +67,7 @@ function refused(pattern) {
       inClass = true;
     } else if (c === "(") {
       const name = /^\?<([^=!>]+)>/.exec(rest)?.[1];
-      const modifiers = /^\?([a-z]*(?:-[a-z]*)?):/.exec(rest)?.[1] ?? "";
-      if (/^\?(=|!|<=|<!)/.test(rest) || modifiers.includes("i") || (name && names.has(name))) {
+      if (/^\?(=|!|<=|<!)/.test(rest) || (name && names.has(name))) {
         return true;
       }
       names.add(name);
@@ -84,10 +83,10 @@ function refused(pattern) {
 
 // The pattern under Re's rules, or null where Re means something else by it.
 function asRe(source, flags) {
-  if (/[^dgymsu]/.test(flags) || source.length > MAX_PATTERN) {
+  if (/[^dgimsuy]/.test(flags) || source.length > MAX_PATTERN) {
     return null;
   }
-  const modifiers = [...flags].filter((f) => f === "m" || f === "s").join("");
+  const modifiers = [...flags].filter((f) => f === "i" || f === "m" || f === "s").join("");
   const pattern = modifiers ? `(?${modifiers}:${source})` : source;
   if (!acceptsUnderU(pattern)) {
     return null;

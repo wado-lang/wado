@@ -539,149 +539,54 @@ test "(?=(abcdefghijklmn))(?<=\\1)a" {
     assert Regex::new(#"(?=(abcdefghijklmn))(?<=\1)a"#).is_err();
 }
 
-test "(?i-:.es)" {
-    assert validate_ecma262_syntax(#"(?i-:.es)"#).is_ok();
-    assert Regex::new(#"(?i-:.es)"#).is_err();
+test "(?i:((\\w)\\w)(?<=\\1\\2\\1))" {
+    assert validate_ecma262_syntax(#"(?i:((\w)\w)(?<=\1\2\1))"#).is_ok();
+    assert Regex::new(#"(?i:((\w)\w)(?<=\1\2\1))"#).is_err();
 }
 
-test "(?i-:Z\\B)" {
-    assert validate_ecma262_syntax(#"(?i-:Z\B)"#).is_ok();
-    assert Regex::new(#"(?i-:Z\B)"#).is_err();
+test "(?i:(.)(?<=(\\1\\1)))" {
+    assert validate_ecma262_syntax(#"(?i:(.)(?<=(\1\1)))"#).is_ok();
+    assert Regex::new(#"(?i:(.)(?<=(\1\1)))"#).is_err();
 }
 
-test "(?i-:[^ab])c" {
-    assert validate_ecma262_syntax(#"(?i-:[^ab])c"#).is_ok();
-    assert Regex::new(#"(?i-:[^ab])c"#).is_err();
+test "(?i:(?<=\\1(\\w))d)" {
+    assert validate_ecma262_syntax(#"(?i:(?<=\1(\w))d)"#).is_ok();
+    assert Regex::new(#"(?i:(?<=\1(\w))d)"#).is_err();
 }
 
-test "(?i-:[ab])c" {
-    assert validate_ecma262_syntax(#"(?i-:[ab])c"#).is_ok();
-    assert Regex::new(#"(?i-:[ab])c"#).is_err();
+test "(?i:(?=(\\w))(?<=(\\1)).)" {
+    assert validate_ecma262_syntax(#"(?i:(?=(\w))(?<=(\1)).)"#).is_ok();
+    assert Regex::new(#"(?i:(?=(\w))(?<=(\1)).)"#).is_err();
 }
 
-test "(?i-:\\P{Lu})" {
-    assert validate_ecma262_syntax(#"(?i-:\P{Lu})"#).is_ok();
-    assert Regex::new(#"(?i-:\P{Lu})"#).is_err();
+test "(?i:(?=(abcdefghijklmn))(?<=\\1)a)" {
+    assert validate_ecma262_syntax(#"(?i:(?=(abcdefghijklmn))(?<=\1)a)"#).is_ok();
+    assert Regex::new(#"(?i:(?=(abcdefghijklmn))(?<=\1)a)"#).is_err();
 }
 
-test "(?i-:\\W)" {
-    assert validate_ecma262_syntax(#"(?i-:\W)"#).is_ok();
-    assert Regex::new(#"(?i-:\W)"#).is_err();
+test "(?i:(\\w(\\w))(?<=\\1\\2\\1))" {
+    assert validate_ecma262_syntax(#"(?i:(\w(\w))(?<=\1\2\1))"#).is_ok();
+    assert Regex::new(#"(?i:(\w(\w))(?<=\1\2\1))"#).is_err();
 }
 
-test "(?i-:\\b)" {
-    assert validate_ecma262_syntax(#"(?i-:\b)"#).is_ok();
-    assert Regex::new(#"(?i-:\b)"#).is_err();
+test "(?i:(a)(?-i:\\1))" {
+    assert validate_ecma262_syntax(#"(?i:(a)(?-i:\1))"#).is_ok();
+    assert Regex::new(#"(?i:(a)(?-i:\1))"#).is_err();
 }
 
-test "(?i-:\\p{Lu})" {
-    assert validate_ecma262_syntax(#"(?i-:\p{Lu})"#).is_ok();
-    assert Regex::new(#"(?i-:\p{Lu})"#).is_err();
+test "(?i:(abc\\1))" {
+    assert validate_ecma262_syntax(#"(?i:(abc\1))"#).is_ok();
+    assert Regex::new(#"(?i:(abc\1))"#).is_err();
 }
 
-test "(?i-:\\u0061)b" {
-    assert validate_ecma262_syntax(#"(?i-:\u0061)b"#).is_ok();
-    assert Regex::new(#"(?i-:\u0061)b"#).is_err();
+test "(?i:^(f)oo(?<=^\\1o+)$)" {
+    assert validate_ecma262_syntax(#"(?i:^(f)oo(?<=^\1o+)$)"#).is_ok();
+    assert Regex::new(#"(?i:^(f)oo(?<=^\1o+)$)"#).is_err();
 }
 
-test "(?i-:\\u{0061})b" {
-    assert validate_ecma262_syntax(#"(?i-:\u{0061})b"#).is_ok();
-    assert Regex::new(#"(?i-:\u{0061})b"#).is_err();
-}
-
-test "(?i-:\\w)" {
-    assert validate_ecma262_syntax(#"(?i-:\w)"#).is_ok();
-    assert Regex::new(#"(?i-:\w)"#).is_err();
-}
-
-test "(?i-:\\x61)b" {
-    assert validate_ecma262_syntax(#"(?i-:\x61)b"#).is_ok();
-    assert Regex::new(#"(?i-:\x61)b"#).is_err();
-}
-
-test "(?i-:es$)" {
-    assert validate_ecma262_syntax(#"(?i-:es$)"#).is_ok();
-    assert Regex::new(#"(?i-:es$)"#).is_err();
-}
-
-test "(?i:.es)" {
-    assert validate_ecma262_syntax(#"(?i:.es)"#).is_ok();
-    assert Regex::new(#"(?i:.es)"#).is_err();
-}
-
-test "(?i:Z\\B)" {
-    assert validate_ecma262_syntax(#"(?i:Z\B)"#).is_ok();
-    assert Regex::new(#"(?i:Z\B)"#).is_err();
-}
-
-test "(?i:[^ab])c" {
-    assert validate_ecma262_syntax(#"(?i:[^ab])c"#).is_ok();
-    assert Regex::new(#"(?i:[^ab])c"#).is_err();
-}
-
-test "(?i:[ab])c" {
-    assert validate_ecma262_syntax(#"(?i:[ab])c"#).is_ok();
-    assert Regex::new(#"(?i:[ab])c"#).is_err();
-}
-
-test "(?i:\\P{Lu})" {
-    assert validate_ecma262_syntax(#"(?i:\P{Lu})"#).is_ok();
-    assert Regex::new(#"(?i:\P{Lu})"#).is_err();
-}
-
-test "(?i:\\W)" {
-    assert validate_ecma262_syntax(#"(?i:\W)"#).is_ok();
-    assert Regex::new(#"(?i:\W)"#).is_err();
-}
-
-test "(?i:\\b)" {
-    assert validate_ecma262_syntax(#"(?i:\b)"#).is_ok();
-    assert Regex::new(#"(?i:\b)"#).is_err();
-}
-
-test "(?i:\\p{Lu})" {
-    assert validate_ecma262_syntax(#"(?i:\p{Lu})"#).is_ok();
-    assert Regex::new(#"(?i:\p{Lu})"#).is_err();
-}
-
-test "(?i:\\u0061)b" {
-    assert validate_ecma262_syntax(#"(?i:\u0061)b"#).is_ok();
-    assert Regex::new(#"(?i:\u0061)b"#).is_err();
-}
-
-test "(?i:\\u{0061})b" {
-    assert validate_ecma262_syntax(#"(?i:\u{0061})b"#).is_ok();
-    assert Regex::new(#"(?i:\u{0061})b"#).is_err();
-}
-
-test "(?i:\\w)" {
-    assert validate_ecma262_syntax(#"(?i:\w)"#).is_ok();
-    assert Regex::new(#"(?i:\w)"#).is_err();
-}
-
-test "(?i:\\x61)b" {
-    assert validate_ecma262_syntax(#"(?i:\x61)b"#).is_ok();
-    assert Regex::new(#"(?i:\x61)b"#).is_err();
-}
-
-test "(?i:a(?-i:b))c" {
-    assert validate_ecma262_syntax(#"(?i:a(?-i:b))c"#).is_ok();
-    assert Regex::new(#"(?i:a(?-i:b))c"#).is_err();
-}
-
-test "(?i:a)b" {
-    assert validate_ecma262_syntax(#"(?i:a)b"#).is_ok();
-    assert Regex::new(#"(?i:a)b"#).is_err();
-}
-
-test "(?i:aB)" {
-    assert validate_ecma262_syntax(#"(?i:aB)"#).is_ok();
-    assert Regex::new(#"(?i:aB)"#).is_err();
-}
-
-test "(?i:es$)" {
-    assert validate_ecma262_syntax(#"(?i:es$)"#).is_ok();
-    assert Regex::new(#"(?i:es$)"#).is_err();
+test "(?i:^(f)oo(?<=^\\1o+).$)" {
+    assert validate_ecma262_syntax(#"(?i:^(f)oo(?<=^\1o+).$)"#).is_ok();
+    assert Regex::new(#"(?i:^(f)oo(?<=^\1o+).$)"#).is_err();
 }
 
 test "(?m:(?<=^)\\w+(?<=$))" {
@@ -699,29 +604,9 @@ test "(?m:(?<=^[a-c]{3})def)" {
     assert Regex::new(#"(?m:(?<=^[a-c]{3})def)"#).is_err();
 }
 
-test "(?m:(?i-:es$))" {
-    assert validate_ecma262_syntax(#"(?m:(?i-:es$))"#).is_ok();
-    assert Regex::new(#"(?m:(?i-:es$))"#).is_err();
-}
-
-test "(?m:(?i:es$))" {
-    assert validate_ecma262_syntax(#"(?m:(?i:es$))"#).is_ok();
-    assert Regex::new(#"(?m:(?i:es$))"#).is_err();
-}
-
 test "(?m:\\w+(?<=$))" {
     assert validate_ecma262_syntax(#"(?m:\w+(?<=$))"#).is_ok();
     assert Regex::new(#"(?m:\w+(?<=$))"#).is_err();
-}
-
-test "(?s:(?i-:.es))" {
-    assert validate_ecma262_syntax(#"(?s:(?i-:.es))"#).is_ok();
-    assert Regex::new(#"(?s:(?i-:.es))"#).is_err();
-}
-
-test "(?s:(?i:.es))" {
-    assert validate_ecma262_syntax(#"(?s:(?i:.es))"#).is_ok();
-    assert Regex::new(#"(?s:(?i:.es))"#).is_err();
 }
 
 test "(A)\\1" {
@@ -762,11 +647,6 @@ test "(a)(?i-:\\1)" {
 test "(a)(?i:\\1)" {
     assert validate_ecma262_syntax(#"(a)(?i:\1)"#).is_ok();
     assert Regex::new(#"(a)(?i:\1)"#).is_err();
-}
-
-test "(a)|(?:b)|(?i:c)|(?:d)|(e)" {
-    assert validate_ecma262_syntax(#"(a)|(?:b)|(?i:c)|(?:d)|(e)"#).is_ok();
-    assert Regex::new(#"(a)|(?:b)|(?i:c)|(?:d)|(e)"#).is_err();
 }
 
 test "(a*)b\\1+" {
@@ -922,26 +802,6 @@ test "^foooo(?<=fo+)$" {
 test "a(.?)b\\1c\\1d\\1" {
     assert validate_ecma262_syntax(#"a(.?)b\1c\1d\1"#).is_ok();
     assert Regex::new(#"a(.?)b\1c\1d\1"#).is_err();
-}
-
-test "a(?i:b)c" {
-    assert validate_ecma262_syntax(#"a(?i:b)c"#).is_ok();
-    assert Regex::new(#"a(?i:b)c"#).is_err();
-}
-
-test "a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k" {
-    assert validate_ecma262_syntax(#"a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k"#).is_ok();
-    assert Regex::new(#"a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k"#).is_err();
-}
-
-test "a|b|(?i:c)|d|e" {
-    assert validate_ecma262_syntax(#"a|b|(?i:c)|d|e"#).is_ok();
-    assert Regex::new(#"a|b|(?i:c)|d|e"#).is_err();
-}
-
-test "b(?i:a)" {
-    assert validate_ecma262_syntax(#"b(?i:a)"#).is_ok();
-    assert Regex::new(#"b(?i:a)"#).is_err();
 }
 
 test "b{9007199254740991,9007199254740991}" {

@@ -375,17 +375,20 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/$cm_stream_lift_val_u32"(ha
     let i: i32;
     let elem: u32;
     let used: i32;
+    let $licm_repr_15: ref Array<u32>;
     arr = struct.new "core:prelude/list.wado//List<u32>" { repr: builtin::array_new<u32>(count), used: 0 };
     i = 0;
+    $licm_repr_15 = arr.repr;
     b3: block {
         l4: loop {
             break_if b3 i >= count;
             elem = builtin::load_i32(ptr + (i * 4));
-            if @unlikely(local.tee used(arr.used) >= builtin::array_len(arr.repr)) {
+            if @unlikely(local.tee used(arr.used) >= builtin::array_len($licm_repr_15)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(arr);
+                $licm_repr_15 = arr.repr;
             }
-            builtin::array_set<u32>(arr.repr, used, elem);
+            builtin::array_set<u32>($licm_repr_15, used, elem);
             arr.used = used + 1;
             i = i + 1;
             continue l4;
@@ -1032,18 +1035,21 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Stream<u32>::read_to_end_siz
     let other_len: i32;
     let new_used: i32;
     let $licm_arith_10: i32;
+    let $licm_repr_11: ref Array<u32>;
     all = struct.new "core:prelude/list.wado//List<u32>" { repr: builtin::array_new<u32>(0), used: 0 };
     $licm_arith_10 = self.value;
+    $licm_repr_11 = all.repr;
     block {
         l99: loop {
             chunk = "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u32>::settle"("cm_stream_binding_shared_by_two_call_shapes.wado/$cm_stream_read_val_u32$spec1"($licm_arith_10, 4096, struct.new "core:prelude/types.wado//ReadInto" {}), self);
             $inline_core_prelude_list_wado_List_u32___extend_2: block {
                 break_if $inline_core_prelude_list_wado_List_u32___extend_2 local.tee other_len(chunk.items.used) == 0;
-                if @unlikely(local.tee new_used(all.used + other_len) > builtin::array_len(all.repr)) {
+                if @unlikely(local.tee new_used(all.used + other_len) > builtin::array_len($licm_repr_11)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow_to"(all, new_used);
+                    $licm_repr_11 = all.repr;
                 }
-                builtin::array_copy<u32>(all.repr, all.used, chunk.items.repr, 0, other_len);
+                builtin::array_copy<u32>($licm_repr_11, all.used, chunk.items.repr, 0, other_len);
                 all.used = new_used;
             };
             if chunk.result != 0 {
@@ -1779,7 +1785,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<cm_stream_b
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative_79: bool;
     let x_83: i64;
-    let $sroa_view_repr_288: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_26: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_26;
@@ -1788,23 +1793,21 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<cm_stream_b
     $mv$t$h0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_83(x_83 = builtin::i64_extend_i32_s($mv$t$h0); select i64(x_83 < 0_i64, 0_i64 - x_83, x_83)));
     is_negative_79 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_79, $mv$t$h0);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_3.repr), is_negative_79, x_83, $mv$t$h0);
-    $sroa_view_repr_288 = global:core:prelude/string.wado::$const_obj_18;
     if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
     }
     is_negative_79 = out_3.used;
     out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(out_3.repr, is_negative_79, $sroa_view_repr_288, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, is_negative_79, global:core:prelude/string.wado::$const_obj_18, 0, 1);
     "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"($mv$t$h1, out_3);
-    $load_0 = global:core:prelude/string.wado::$const_obj_18;
     if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
     }
     $mv$t$h1 = out_3.used;
     out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(out_3.repr, $mv$t$h1, $load_0, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, $mv$t$h1, global:core:prelude/string.wado::$const_obj_18, 0, 1);
     $mv$t$h0 = $mv$t$h2 < 0;
     $mv$t$h1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_83(x_83 = builtin::i64_extend_i32_s($mv$t$h2); select i64(x_83 < 0_i64, 0_i64 - x_83, x_83)));
     $mv$t$h0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, $mv$t$h0, $mv$t$h1);

@@ -227,6 +227,26 @@ impl ArgSite {
     }
 }
 
+/// `head::method(…)` as the static call it is, `head` a type written in its
+/// place.
+fn static_call_on_head(
+    call: &ast::CallExpr,
+    head: &ast::PathSegment,
+    method: &ast::PathSegment,
+) -> ast::StaticMethodCallExpr {
+    ast::StaticMethodCallExpr {
+        id: call.id,
+        target_type: ast::Type::Named(ast::NamedType::new(head.id, head.name.clone(), head.span)),
+        method: method.name.clone(),
+        method_id: method.id,
+        method_span: method.span,
+        type_args: call.type_args.clone(),
+        args: call.args.clone(),
+        has_trailing_comma: call.has_trailing_comma,
+        span: call.span,
+    }
+}
+
 pub(super) fn arg_sites_of(raw_args: &[Expr], resolved: usize, call_span: Span) -> Vec<ArgSite> {
     (0..resolved)
         .map(|i| ArgSite::of(raw_args, i, call_span))
@@ -297,6 +317,9 @@ pub(super) struct DefaultTypeBinding {
 pub(super) struct DefaultWalk {
     pub(super) site: Option<AstId>,
     pub(super) home: Option<ModuleSource>,
+    /// What `Self` means where the defaults were written: a method's
+    /// receiver, and nothing for a declaration binding none.
+    pub(super) self_binding: Option<SelfBinding>,
     pub(super) bindings: Vec<DefaultTypeBinding>,
     /// Bound ahead of the first default: the parameters the site wrote.
     pub(super) written: Vec<(String, TypeId)>,
@@ -989,11 +1012,15 @@ impl TypeSystem {
         if prefix == "Self"
             && let Some(self_type_id) = ctx.trait_ctx.self_type
         {
-            // In a trait's own frame `Self` is the slot the trait bounds, so
-            // `Self::m()` goes through that bound as `T::m()` does. A blanket's
-            // `Self` is its receiver `T`, which the rewrite below keeps reaching
-            // the blanket itself.
-            if self.is_trait_self(self_type_id) && ctx.trait_ctx.type_params.contains_key("Self") {
+            // Where `Self` is a parameter the frame bounds by the trait it is
+            // elaborated against, `Self::m()` goes through that bound as
+            // `T::m()` does: a trait's own frame, or a default walked at a
+            // receiver the caller bounds. A blanket's `Self` is its receiver
+            // `T`, bounded by other traits, which the rewrite below keeps
+            // reaching the blanket itself. A declaration's own scope (a local
+            // struct's field default) binds no parameter of the enclosing item,
+            // so there `Self` reaches none of the trait's bounds.
+            if self.bounded_by_self_trait(ctx, self_type_id) {
                 return self.callee_ident_for_type_param("Self", suffix, self_type_id);
             }
             // `Self` names the receiver, not one of its bounds: an impl
@@ -1011,14 +1038,26 @@ impl TypeSystem {
         CalleeIdentKind::AsIs(ident)
     }
 
-    /// Whether `ty` is a trait's own `Self`.
-    fn is_trait_self(&self, ty: TypeId) -> bool {
-        self.type_table
-            .borrow()
-            .type_param_id(ty)
-            .is_some_and(|id| {
-                self.resolutions.defs().kind(id.owner).is_trait_like()
-                    && id == TypeParamId::trait_self(id.owner)
+    /// Whether the frame binds `self_type` with a bound reaching the trait its
+    /// `Self` is elaborated against, itself or as a supertrait.
+    fn bounded_by_self_trait(&self, ctx: &Scope, self_type: TypeId) -> bool {
+        let Some(self_trait) = ctx.trait_ctx.self_trait else {
+            return false;
+        };
+        if ctx.trait_ctx.binder(self_type).is_none() {
+            return false;
+        }
+        let table = self.type_table.borrow();
+        ctx.trait_ctx
+            .bounds(&table, BoundsOf::Type(self_type))
+            .iter()
+            .filter_map(|bound| self.resolutions.bound_decl(&bound.bound))
+            .any(|bounding| {
+                bounding == self_trait
+                    || self
+                        .trait_env
+                        .supertrait_decls(&bounding)
+                        .any(|decl| decl == self_trait)
             })
     }
 
@@ -1614,43 +1653,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Expr::Ident(ident) = &call.callee else {
             unreachable!("non-Ident callees are handled by the indirect-call fast path above")
         };
-        // A default body's author reached `Self::m()` through a bound. `Self`
-        // still names this impl's target, which supplies the body; the bound
-        // names the trait, as `Trait::<Self>::m()` would. A blanket's `Self` is
-        // its receiver parameter, which only the rewrite below reaches.
+        // A default body's author reached `Self::m()` through a bound, and a
+        // trait method's default walked at its receiver was written in its
+        // trait. `Self` still names the concrete type, which supplies the
+        // method; the trait is the one named, as `Trait::<Self>::m()` would.
+        // A blanket's `Self` is its receiver parameter, which only the rewrite
+        // below reaches.
         if given_args.is_none()
             && let [head, method] = ident.segments.as_slice()
             && head.name == "Self"
-            && let Some(required) = self.abstract_selection(call.id).map(|s| s.trait_decl)
+            && let Some(required) = self
+                .abstract_selection(call.id)
+                .map(|s| s.trait_decl)
+                .or(self.annotate_ctx.trait_ctx.self_reads_trait)
             && self
                 .annotate_ctx
                 .trait_ctx
                 .self_type
                 .is_some_and(|ty| self.tysys.binder_name(ty).is_none())
         {
-            let on_self = ast::StaticMethodCallExpr {
-                id: call.id,
-                target_type: ast::Type::Named(ast::NamedType::new(
-                    head.id,
-                    head.name.clone(),
-                    head.span,
-                )),
-                method: method.name.clone(),
-                method_id: method.id,
-                method_span: method.span,
-                type_args: call.type_args.clone(),
-                args: call.args.clone(),
-                has_trailing_comma: call.has_trailing_comma,
-                span: call.span,
-            };
             return self.resolve_static_method_call_of_trait(
-                &on_self,
+                &static_call_on_head(call, head, method),
                 Some(required),
                 ctx,
                 expected_type,
             );
         }
         let mut callee_kind = self.tysys.classify_call_callee(&self.annotate_ctx, ident);
+        // A reference has no declaration name to spell the call under, so a
+        // `Self::m()` or `T::m()` standing for `&A` goes to the static path,
+        // which keys an `impl … for &A` by its reference kind.
+        if given_args.is_none()
+            && let CalleeIdentKind::Rewritten { receiver, .. } = callee_kind
+            && self.tysys.type_table.borrow().is_reference(receiver)
+            && let [head, method] = ident.segments.as_slice()
+        {
+            return self.resolve_static_method_call_of_trait(
+                &static_call_on_head(call, head, method),
+                None,
+                ctx,
+                expected_type,
+            );
+        }
         // A bare case constructs (`Some(x)`) only where the expected type
         // supplies it, and then ahead of any function of that name.
         if let CalleeIdentKind::AsIs(bare) = callee_kind
@@ -2496,19 +2540,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .method_id
                         .and_then(|def| self.tysys.signatures.method_sig(def))
                         .cloned();
-                    let type_bindings = match (sig, ns_receiver_type) {
-                        (Some(sig), Some(receiver)) => {
-                            let declaring_trait = self.tysys.signatures.declaring_trait(&sig);
-                            self.own_slot_default_bindings(
-                                &param_defaults,
-                                &sig.own_params,
-                                &sig.own_type_param_ids(),
-                                receiver,
-                                declaring_trait,
-                                method_type_args.clone(),
-                                Some(defaults_module.clone()),
-                            )
-                        }
+                    let declaring_trait = sig
+                        .as_ref()
+                        .and_then(|sig| self.tysys.signatures.declaring_trait(sig));
+                    let self_binding = ns_receiver_type
+                        .map(|receiver| SelfBinding::of_static(receiver, declaring_trait));
+                    let type_bindings = match (sig, self_binding) {
+                        (Some(sig), Some(declaring)) => self.own_slot_default_bindings(
+                            &param_defaults,
+                            &sig.own_params,
+                            &sig.own_type_param_ids(),
+                            declaring,
+                            method_type_args.clone(),
+                            Some(defaults_module.clone()),
+                        ),
                         (sig, _) => slot_type_bindings(
                             &self.tysys.type_table,
                             &sig.map(|sig| sig.own_type_param_ids()).unwrap_or_default(),
@@ -2521,6 +2566,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &param_types,
                         &param_defaults,
                         defaults_module.clone(),
+                        self_binding,
                         &type_bindings,
                         ctx,
                     );
@@ -2751,6 +2797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &check_param_types,
                 &param_defaults,
                 defaults_module.clone(),
+                None,
                 &type_bindings,
                 Some(call.id),
                 ctx,
@@ -3074,6 +3121,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_types,
             &defaults,
             callee_module,
+            None,
             &[],
             Some(site),
             ctx,
@@ -3092,6 +3140,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_types: &[TypeId],
         defaults: &[(String, Option<Expr>)],
         defaults_module: ModuleSource,
+        self_binding: Option<SelfBinding>,
         type_bindings: &[DefaultTypeBinding],
         ctx: &mut FunctionContext,
     ) {
@@ -3107,6 +3156,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_types,
             defaults,
             Some(defaults_module),
+            self_binding,
             type_bindings,
             Some(site),
             ctx,
@@ -3123,6 +3173,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_types: &[TypeId],
         defaults: &[(String, Option<Expr>)],
         callee_module: Option<ModuleSource>,
+        self_binding: Option<SelfBinding>,
         type_bindings: &[DefaultTypeBinding],
         site: Option<AstId>,
         ctx: &mut FunctionContext,
@@ -3137,6 +3188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_types,
             defaults,
             callee_module,
+            self_binding,
             type_bindings,
             site,
             ctx,
@@ -3174,6 +3226,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_types: &[TypeId],
         defaults: &[(String, Option<Expr>)],
         callee_module: Option<ModuleSource>,
+        self_binding: Option<SelfBinding>,
         type_bindings: &[DefaultTypeBinding],
         site: Option<AstId>,
         ctx: &mut FunctionContext,
@@ -3198,6 +3251,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let walk = DefaultWalk {
             site,
             home: callee_module,
+            self_binding,
             bindings: type_bindings.to_vec(),
             written: args
                 .iter()
@@ -3270,11 +3324,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let DefaultWalk {
             site,
             home,
+            self_binding,
             bindings,
             written,
             defaults,
         } = walk;
-        self.resolving_defaults_at(site, home, &bindings, |s| {
+        self.resolving_defaults_at(site, home, self_binding, &bindings, |s| {
             ctx.with_caller_bindings_hidden(|ctx| {
                 let bind = |ctx: &mut FunctionContext, name: &str, type_id: TypeId| {
                     if name != RECEIVER {
@@ -3312,11 +3367,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         site: Option<AstId>,
         home: Option<ModuleSource>,
+        self_binding: Option<SelfBinding>,
         type_bindings: &[DefaultTypeBinding],
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let walk = |s: &mut Self| {
-            s.with_resolving_home(home, |s| s.with_callee_type_bindings(type_bindings, body))
+            s.with_resolving_home(home, |s| {
+                s.with_declaration_frame(self_binding, type_bindings, body)
+            })
         };
         let Some(site) = site else {
             return walk(self);
@@ -3370,19 +3428,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// Run `body` with `bindings` as the only type parameters in scope: the
-    /// declaration's, each standing for the type argument the site settled on.
-    /// A default naming one (`fields: T = T::default()`) then resolves against
-    /// that type, and a caller's same-named parameter cannot shadow it.
-    fn with_callee_type_bindings<R>(
+    /// Run `body` in the frame of the declaration that wrote the defaults:
+    /// `bindings` as the only type parameters in scope, each standing for the
+    /// type argument the site settled on, and `self_binding` as its `Self`. A
+    /// default naming one (`fields: T = T::default()`, `n = Self::k()`) then
+    /// resolves against what the site settled, and nothing of the caller's
+    /// frame answers for it.
+    fn with_declaration_frame<R>(
         &mut self,
+        self_binding: Option<SelfBinding>,
         bindings: &[DefaultTypeBinding],
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        if bindings.is_empty() {
-            return body(self);
-        }
         let mut scope = self.enter_inherited_type_param_scope();
+        // A receiver the caller's own parameter stands for is that parameter,
+        // bound by whatever binds it there, shadowed or not. The default
+        // reaches it as `Self` alone: the caller's name for it is not in scope.
+        let receiver_binder: Option<(BinderInScope, Vec<ScopedBound>)> =
+            self_binding.and_then(|binding| {
+                let saved = scope.saved();
+                let binder = *saved.binder(binding.type_id)?;
+                let table = scope.tysys.type_table.borrow();
+                Some((
+                    binder,
+                    saved.bounds(&table, BoundsOf::Type(binding.type_id)),
+                ))
+            });
         // Resolved against the enclosing scope, which the loop below clears.
         //
         // A type argument nothing pinned is still an inference variable;
@@ -3426,6 +3497,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         scope.annotate_ctx.trait_ctx.clear_binders();
         scope.annotate_ctx.trait_ctx.clear_bounds();
+        match self_binding {
+            Some(binding) => {
+                scope.set_self_binding(binding);
+                scope.annotate_ctx.trait_ctx.self_reads_trait = binding.declaring_trait;
+            }
+            None => scope.clear_self_binding(),
+        }
+        if let Some((binder, bounds)) = receiver_binder {
+            scope.bind_param("Self", binder, bounds);
+        }
         for (i, binding) in bindings.iter().enumerate() {
             let Some(bounds) = &installed[i] else {
                 continue;
@@ -3866,7 +3947,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             })
             .collect();
-        let self_binding = receiver.map(|receiver| self.tysys.base_self_binding(receiver, None));
+        let self_binding = receiver.map(|receiver| SelfBinding::of_static(receiver, None));
         self.link_deferred_assoc_equalities(&owners, &names, &args, self_binding, span);
     }
 
@@ -4597,7 +4678,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: Option<TypeId>,
         span: token::Span,
     ) {
-        let self_binding = receiver.map(|receiver| self.tysys.base_self_binding(receiver, None));
+        let self_binding = receiver.map(|receiver| SelfBinding::of_static(receiver, None));
         self.enforce_type_arg_bounds(
             &type_args.params,
             &type_args.method_args,
@@ -4819,29 +4900,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .is_inherited()
                     .then(|| (impl_def, method.sig.clone()))
             });
-        let (impl_def, mut sig) = inheriting.next()?;
+        let (impl_def, sig) = inheriting.next()?;
         if matches!(choice, SigChoice::Unique) && inheriting.next().is_some() {
             return None;
         }
-        let (receiver, receiver_params) = if let Some(decl) = key.decl() {
+        self.inherited_sig_in_block(impl_def, sig)
+    }
+
+    /// The trait default `sig`, which block `impl_def` inherits, read in the
+    /// frame of the declaration the block targets: `Self` is that declaration
+    /// at its own parameters, behind the block's reference where it targets
+    /// one.
+    pub(super) fn inherited_sig_in_block(
+        &self,
+        impl_def: DefId,
+        mut sig: MethodSig,
+    ) -> Option<MethodSig> {
+        let (target, decl) = {
+            let table = self.tysys.type_table.borrow();
             (
-                self.declared_self_type(decl)?,
+                table.impl_target_whole(impl_def),
+                table.impl_target_decl(impl_def),
+            )
+        };
+        let (receiver, receiver_params) = if let Some(decl) = decl {
+            let declared = self.declared_self_type(decl)?;
+            let receiver = {
+                let mut table = self.tysys.type_table.borrow_mut();
+                match RefKind::from_resolved(table.get(target)) {
+                    Some(kind) => table.make_ref_of(kind, declared),
+                    None => declared,
+                }
+            };
+            (
+                receiver,
                 self.type_lookup()
                     .declared_type_param_ids(decl)
                     .map(<[TypeId]>::to_vec)
                     .unwrap_or_default(),
             )
         } else {
-            // A receiver no declaration names is written only as a primitive's
-            // path, whose impl binds nothing.
-            assert!(
-                trait_env.impl_headers[&impl_def].type_params.is_empty(),
-                "a static call names a declaration-less receiver only by a primitive"
-            );
-            (
-                self.tysys.type_table.borrow().impl_target_whole(impl_def),
-                Vec::new(),
-            )
+            // A builtin shape has no declaration to read parameters off, so
+            // the block's own target is the receiver, at the slots it places.
+            let params = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .matched_param_types(target);
+            (target, params)
         };
         let frame = self.tysys.trait_frame_at(impl_def, receiver);
         let in_frame = sig.decl.instantiate(&self.tysys.type_table, &frame);
@@ -6033,7 +6139,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     raw_args: call.args.get(receiver..).unwrap_or_default(),
                     decl_return_type: declared_return,
                     expected_return_type: expected_type,
-                    trait_decl,
+                    self_binding: SelfBinding::of_static(type_param_type_id, trait_decl),
                     declaring_module: found_trait.module().cloned(),
                     impl_args: &[],
                     inst: inst.as_ref(),
@@ -6130,12 +6236,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The method's own slots, as the turbofish spelled them or the
             // solve above settled them. The receiver is the bound's own
             // parameter, which the monomorphizer binds.
+            let self_binding = SelfBinding::of_static(type_param_type_id, trait_decl);
             let type_bindings = self.own_slot_default_bindings(
                 &param_defaults,
                 &own_params,
                 &method_slots,
-                type_param_type_id,
-                trait_decl,
+                self_binding,
                 method_type_args_for_defaults,
                 Some(defaults_module.clone()),
             );
@@ -6145,6 +6251,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &param_types,
                 &param_defaults,
                 defaults_module.clone(),
+                Some(self_binding),
                 &type_bindings,
                 ctx,
             );

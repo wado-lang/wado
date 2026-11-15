@@ -854,11 +854,13 @@ fn "http_fields_immutable_errors.wado/$cm_binding__wasi:http/types@0.3.0#[method
     let $result_12: ref "core:prelude/list.wado//List<u8>";
     let arr_19: ref Array<u8>;
     let value_30: ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]";
+    let $licm_repr_36: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
     $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/$wasi:http/types@0.3.0#[method]fields.copy-all"(self, $outptr);
     self = builtin::load_i32($outptr);
     $result_4 = struct.new "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee $count_3(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
+    $licm_repr_36 = $result_4.repr;
     b8: block {
         l9: loop {
             break_if b8 $i >= $count_3;
@@ -875,11 +877,12 @@ fn "http_fields_immutable_errors.wado/$cm_binding__wasi:http/types@0.3.0#[method
                 drop("mem/realloc"($str_ptr, $elem_addr, 1, 0));
             }
             value_30 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: $lifted_string, 1: $result_12 };
-            if @unlikely(local.tee $elem_addr($result_4.used) >= builtin::array_len($result_4.repr)) {
+            if @unlikely(local.tee $elem_addr($result_4.used) >= builtin::array_len($licm_repr_36)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::grow"($result_4);
+                $licm_repr_36 = $result_4.repr;
             }
-            builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($result_4.repr, $elem_addr, value_30);
+            builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($licm_repr_36, $elem_addr, value_30);
             $result_4.used = $elem_addr + 1;
             $i = $i + 1;
             continue l9;
@@ -1338,6 +1341,7 @@ fn "http_fields_immutable_errors.wado/$cm_binding__wasi:http/types@0.3.0#[method
     let $result_15: ref "core:prelude/list.wado//List<u8>";
     let ptr_19: i32;
     let arr: ref Array<u8>;
+    let $licm_repr_39: ref "Array<core:prelude/list.wado/List<u8>>";
     ptr_19 = "mem/realloc"(0, 0, 1, 4);
     "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(name.repr, ptr_19);
     ptr_19 = builtin::i32_wrap_i64(local.tee $name_packed(builtin::i64_extend_i32_u(ptr_19) | 17179869184_i64));
@@ -1350,6 +1354,7 @@ fn "http_fields_immutable_errors.wado/$cm_binding__wasi:http/types@0.3.0#[method
     self = builtin::load_i32($outptr);
     $result_10 = struct.new "core:prelude/list.wado//List<wasi:http/types.wado/FieldValue>" { repr: builtin::array_new<ref "core:prelude/list.wado//List<u8>">(local.tee ptr_19(builtin::load_i32($outptr + 4))), used: 0 };
     $name_flat1 = 0;
+    $licm_repr_39 = $result_10.repr;
     b96: block {
         l97: loop {
             break_if b96 $name_flat1 >= ptr_19;
@@ -1359,11 +1364,12 @@ fn "http_fields_immutable_errors.wado/$cm_binding__wasi:http/types@0.3.0#[method
             if $elem_addr > 0 {
                 drop("mem/realloc"($base_13, $elem_addr, 1, 0));
             }
-            if @unlikely(local.tee $elem_addr($result_10.used) >= builtin::array_len($result_10.repr)) {
+            if @unlikely(local.tee $elem_addr($result_10.used) >= builtin::array_len($licm_repr_39)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"($result_10);
+                $licm_repr_39 = $result_10.repr;
             }
-            builtin::array_set<ref "core:prelude/list.wado//List<u8>">($result_10.repr, $elem_addr, $result_15);
+            builtin::array_set<ref "core:prelude/list.wado//List<u8>">($licm_repr_39, $elem_addr, $result_15);
             $result_10.used = $elem_addr + 1;
             $name_flat1 = $name_flat1 + 1;
             continue l97;
@@ -1614,6 +1620,7 @@ fn "http_fields_immutable_errors.wado/$cm_binding__wasi:http/types@0.3.0#[method
     let $local_21: ref null "core:prelude/string.wado//String";
     let ptr_28: i32;
     let arr_40: ref Array<u8>;
+    let $licm_repr_56: ref "Array<core:prelude/list.wado/List<u8>>";
     ptr_28 = "mem/realloc"(0, 0, 1, 4);
     "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(name.repr, ptr_28);
     ptr_28 = builtin::i32_wrap_i64(local.tee $name_packed(builtin::i64_extend_i32_u(ptr_28) | 17179869184_i64));
@@ -1627,6 +1634,7 @@ fn "http_fields_immutable_errors.wado/$cm_binding__wasi:http/types@0.3.0#[method
         self = builtin::load_i32($outptr + 4);
         $local_12 = struct.new "core:prelude/list.wado//List<wasi:http/types.wado/FieldValue>" { repr: builtin::array_new<ref "core:prelude/list.wado//List<u8>">(local.tee ptr_28(builtin::load_i32(($outptr + 4) + 4))), used: 0 };
         $name_flat1 = 0;
+        $licm_repr_56 = $local_12.repr;
         b138: block {
             l139: loop {
                 break_if b138 $name_flat1 >= ptr_28;
@@ -1636,11 +1644,12 @@ fn "http_fields_immutable_errors.wado/$cm_binding__wasi:http/types@0.3.0#[method
                 if $local_14 > 0 {
                     drop("mem/realloc"($local_15, $local_14, 1, 0));
                 }
-                if @unlikely(local.tee $local_14($local_12.used) >= builtin::array_len($local_12.repr)) {
+                if @unlikely(local.tee $local_14($local_12.used) >= builtin::array_len($licm_repr_56)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"($local_12);
+                    $licm_repr_56 = $local_12.repr;
                 }
-                builtin::array_set<ref "core:prelude/list.wado//List<u8>">($local_12.repr, $local_14, $local_17);
+                builtin::array_set<ref "core:prelude/list.wado//List<u8>">($licm_repr_56, $local_14, $local_17);
                 $local_12.used = $local_14 + 1;
                 $name_flat1 = $name_flat1 + 1;
                 continue l139;

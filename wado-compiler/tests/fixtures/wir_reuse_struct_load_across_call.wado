@@ -22,21 +22,20 @@ impl Rows {
 
 fn fill(n: i32) -> Rows {
     let mut b = Rows { tag: [], id: [] };
-    for let i of 0..<n {
-        b.push_row(i, i * 2);
-    }
+    b.push_row(n, n * 2);
+    b.push_row(n + 1, n * 3);
     return b;
 }
 
 export fn run() {
     let b = fill(builtin::black_box(10));
-    assert b.tag.len() == 10 && b.id[9] == 18;
+    assert b.tag.len() == 2 && b.id[1] == 30;
 }
 
 __DATA__
 {
     "stdout": "",
     "wir_pass": {"O2": ["wir/reuse_struct_loads"]},
-    "wir_scope": "fill",
-    "wir_expect:O2": ["(b.tag).used;"]
+    "wir_scope": "wir_reuse_struct_load_across_call.wado/run",
+    "wir_expect:O2": ["(b_{}.tag).used;"]
 }

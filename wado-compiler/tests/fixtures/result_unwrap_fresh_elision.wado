@@ -1,6 +1,7 @@
 // Test that unwrap() on a fresh Result does not produce double value_copy.
 // The inlined unwrap pattern should recognize that FieldAccess and VariantPayload
 // on fresh values are themselves fresh, eliminating unnecessary copies.
+// `black_box` hides the case, so the unwrap's test survives -O2 to be hinted.
 
 use { println, Stdout } from "core:cli";
 
@@ -13,7 +14,7 @@ fn make_result() -> Result<List<u8>, String> {
 }
 
 export fn run() with Stdout {
-    let data = make_result().unwrap();
+    let data = builtin::black_box(make_result()).unwrap();
     assert data.len() == 3;
     println("ok");
 }

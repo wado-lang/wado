@@ -189,19 +189,21 @@ fn "assert_truncate_string.wado/run"() {
     let i_1: i32;
     let new_used: i32;
     let start_9: i32;
-    let $licm_repr_34: ref Array<u8>;
+    let $licm_repr_35: ref Array<u8>;
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     i_1 = 0;
+    $licm_repr_35 = s.repr;
     b0: block {
         l1: loop {
             break_if b0 i_1 >= 300;
-            if @unlikely(local.tee new_used(s.used + 1) > builtin::array_len(s.repr)) {
+            if @unlikely(local.tee new_used(s.used + 1) > builtin::array_len($licm_repr_35)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used);
+                $licm_repr_35 = s.repr;
             }
             start_9 = s.used;
             s.used = new_used;
-            builtin::array_set_u8(s.repr, start_9, 120);
+            builtin::array_set_u8($licm_repr_35, start_9, 120);
             i_1 = i_1 + 1;
             continue l1;
         };
@@ -211,23 +213,23 @@ fn "assert_truncate_string.wado/run"() {
             break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
         }
         new_used = 0;
-        $licm_repr_34 = s.repr;
+        $licm_repr_35 = s.repr;
         b5: block {
             l6: loop {
                 break_if b5 (builtin::i64_extend_i32_s(new_used) + 3_i64) >= builtin::i64_extend_i32_s(i_1);
-                if builtin::array_get_value<u8>($licm_repr_34, new_used) != builtin::array_get_value<u8>(global:assert_truncate_string.wado::$const_obj_0, new_used) {
+                if builtin::array_get_value<u8>($licm_repr_35, new_used) != builtin::array_get_value<u8>(global:assert_truncate_string.wado::$const_obj_0, new_used) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 new_used = new_used + 1;
-                if builtin::array_get_value<u8>($licm_repr_34, new_used) != builtin::array_get_value<u8>(global:assert_truncate_string.wado::$const_obj_0, new_used) {
+                if builtin::array_get_value<u8>($licm_repr_35, new_used) != builtin::array_get_value<u8>(global:assert_truncate_string.wado::$const_obj_0, new_used) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 new_used = new_used + 1;
-                if builtin::array_get_value<u8>($licm_repr_34, new_used) != builtin::array_get_value<u8>(global:assert_truncate_string.wado::$const_obj_0, new_used) {
+                if builtin::array_get_value<u8>($licm_repr_35, new_used) != builtin::array_get_value<u8>(global:assert_truncate_string.wado::$const_obj_0, new_used) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 new_used = new_used + 1;
-                if builtin::array_get_value<u8>($licm_repr_34, new_used) != builtin::array_get_value<u8>(global:assert_truncate_string.wado::$const_obj_0, new_used) {
+                if builtin::array_get_value<u8>($licm_repr_35, new_used) != builtin::array_get_value<u8>(global:assert_truncate_string.wado::$const_obj_0, new_used) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 new_used = new_used + 1;
@@ -237,7 +239,7 @@ fn "assert_truncate_string.wado/run"() {
         b11: block {
             l12: loop {
                 break_if b11 new_used >= i_1;
-                if builtin::array_get_value<u8>($licm_repr_34, new_used) != builtin::array_get_value<u8>(global:assert_truncate_string.wado::$const_obj_0, new_used) {
+                if builtin::array_get_value<u8>($licm_repr_35, new_used) != builtin::array_get_value<u8>(global:assert_truncate_string.wado::$const_obj_0, new_used) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 new_used = new_used + 1;

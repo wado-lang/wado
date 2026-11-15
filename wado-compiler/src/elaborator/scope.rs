@@ -489,6 +489,10 @@ pub(super) struct TraitContext {
     /// of its calls selected through a declared bound, by the call's node.
     /// See [`Elaborator::abstract_selections`].
     pub(super) abstract_selections: Option<Rc<AbstractSelections>>,
+    /// Set while a trait method's default is walked at its receiver: the
+    /// trait the default was written in, whose `Self::m()` names that trait's
+    /// `m` whatever else the receiver declares under the name.
+    pub(super) self_reads_trait: Option<DefId>,
 }
 
 impl TraitContext {
@@ -744,6 +748,7 @@ pub(super) struct SelfFrame {
     self_trait: Option<DefId>,
     self_trait_args: Vec<TypeId>,
     abstract_selections: Option<Rc<AbstractSelections>>,
+    self_reads_trait: Option<DefId>,
 }
 
 /// One open `type_implements_trait` question.
@@ -813,6 +818,7 @@ impl Scope {
             self_trait: self.trait_ctx.self_trait.take(),
             self_trait_args: std::mem::take(&mut self.trait_ctx.self_trait_args),
             abstract_selections: self.trait_ctx.abstract_selections.take(),
+            self_reads_trait: self.trait_ctx.self_reads_trait.take(),
         }
     }
 
@@ -822,6 +828,7 @@ impl Scope {
         self.trait_ctx.self_trait = frame.self_trait;
         self.trait_ctx.self_trait_args = frame.self_trait_args;
         self.trait_ctx.abstract_selections = frame.abstract_selections;
+        self.trait_ctx.self_reads_trait = frame.self_reads_trait;
     }
 }
 
@@ -1028,6 +1035,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.annotate_ctx.trait_ctx.self_trait_args = Vec::new();
         self.annotate_ctx.trait_ctx.self_type = Some(binding.type_id);
         self.annotate_ctx.trait_ctx.abstract_selections = None;
+        self.annotate_ctx.trait_ctx.self_reads_trait = None;
+    }
+
+    /// Leave no `Self` standing: the frame of a declaration that binds none.
+    pub(super) fn clear_self_binding(&mut self) {
+        drop(self.annotate_ctx.take_self_frame());
     }
 
     /// [`Self::set_self_binding`] for the duration of `body`, restoring the

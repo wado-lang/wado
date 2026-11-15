@@ -316,6 +316,491 @@ test "(?<\u{1D5B0}\u{1D5A1}\u{1D5A5}>q\\w*\\W\\w*\\W\\w*)" {
     assert spans(#"(?<𝖰𝖡𝖥>q\w*\W\w*\W\w*)"#, "The quick brown fox jumped over the lazy dog's back") == "4..19,4..19";
 }
 
+test "(?i-:.es)" {
+    assert spans(#"(?i-:.es)"#, "aes") == "0..3";
+    assert spans(#"(?i-:.es)"#, "aeS") == "0..3";
+    assert spans(#"(?i-:.es)"#, "\u{A}es") == "";
+    assert spans(#"(?i-:.es)"#, "\u{A}eS") == "";
+}
+
+test "(?i-:Z\\B)" {
+    assert spans(#"(?i-:Z\B)"#, "Z\u{17F}") == "0..1";
+    assert spans(#"(?i-:Z\B)"#, "Z\u{212A}") == "0..1";
+}
+
+test "(?i-:[^ab])c" {
+    assert spans(#"(?i-:[^ab])c"#, "ac") == "";
+    assert spans(#"(?i-:[^ab])c"#, "Ac") == "";
+    assert spans(#"(?i-:[^ab])c"#, "bc") == "";
+    assert spans(#"(?i-:[^ab])c"#, "Bc") == "";
+}
+
+test "(?i-:[ab])c" {
+    assert spans(#"(?i-:[ab])c"#, "ac") == "0..2";
+    assert spans(#"(?i-:[ab])c"#, "Ac") == "0..2";
+    assert spans(#"(?i-:[ab])c"#, "bc") == "0..2";
+    assert spans(#"(?i-:[ab])c"#, "Bc") == "0..2";
+}
+
+test "(?i-:\\P{Lu})" {
+    assert spans(#"(?i-:\P{Lu})"#, "A") == "0..1";
+    assert spans(#"(?i-:\P{Lu})"#, "a") == "0..1";
+    assert spans(#"(?i-:\P{Lu})"#, "Z") == "0..1";
+    assert spans(#"(?i-:\P{Lu})"#, "z") == "0..1";
+    assert spans(#"(?i-:\P{Lu})"#, "0") == "0..1";
+}
+
+test "(?i-:\\W)" {
+    assert spans(#"(?i-:\W)"#, "\u{17F}") == "";
+    assert spans(#"(?i-:\W)"#, "\u{212A}") == "";
+}
+
+test "(?i-:\\b)" {
+    assert spans(#"(?i-:\b)"#, "A") == "0..0 1..1";
+    assert spans(#"(?i-:\b)"#, "a") == "0..0 1..1";
+    assert spans(#"(?i-:\b)"#, "z") == "0..0 1..1";
+    assert spans(#"(?i-:\b)"#, "Z") == "0..0 1..1";
+    assert spans(#"(?i-:\b)"#, "\u{17F}") == "0..0 2..2";
+    assert spans(#"(?i-:\b)"#, "\u{212A}") == "0..0 3..3";
+}
+
+test "(?i-:\\p{Lu})" {
+    assert spans(#"(?i-:\p{Lu})"#, "A") == "0..1";
+    assert spans(#"(?i-:\p{Lu})"#, "a") == "0..1";
+    assert spans(#"(?i-:\p{Lu})"#, "Z") == "0..1";
+    assert spans(#"(?i-:\p{Lu})"#, "z") == "0..1";
+}
+
+test "(?i-:\\u0061)b" {
+    assert spans(#"(?i-:\u0061)b"#, "ab") == "0..2";
+    assert spans(#"(?i-:\u0061)b"#, "Ab") == "0..2";
+}
+
+test "(?i-:\\u{0061})b" {
+    assert spans(#"(?i-:\u{0061})b"#, "ab") == "0..2";
+    assert spans(#"(?i-:\u{0061})b"#, "Ab") == "0..2";
+}
+
+test "(?i-:\\w)" {
+    assert spans(#"(?i-:\w)"#, "A") == "0..1";
+    assert spans(#"(?i-:\w)"#, "a") == "0..1";
+    assert spans(#"(?i-:\w)"#, "z") == "0..1";
+    assert spans(#"(?i-:\w)"#, "Z") == "0..1";
+    assert spans(#"(?i-:\w)"#, "\u{17F}") == "0..2";
+    assert spans(#"(?i-:\w)"#, "\u{212A}") == "0..3";
+}
+
+test "(?i-:\\x61)b" {
+    assert spans(#"(?i-:\x61)b"#, "ab") == "0..2";
+    assert spans(#"(?i-:\x61)b"#, "Ab") == "0..2";
+}
+
+test "(?i-:es$)" {
+    assert spans(#"(?i-:es$)"#, "es") == "0..2";
+    assert spans(#"(?i-:es$)"#, "eS") == "0..2";
+    assert spans(#"(?i-:es$)"#, "es\u{A}z") == "";
+    assert spans(#"(?i-:es$)"#, "eS\u{A}z") == "";
+}
+
+test "(?i:(?-i:.es))" {
+    assert spans(#"(?i:(?-i:.es))"#, "aes") == "0..3";
+    assert spans(#"(?i:(?-i:.es))"#, "aeS") == "";
+    assert spans(#"(?i:(?-i:.es))"#, "\u{A}es") == "";
+    assert spans(#"(?i:(?-i:.es))"#, "\u{A}eS") == "";
+}
+
+test "(?i:(?-i:Z\\B))" {
+    assert spans(#"(?i:(?-i:Z\B))"#, "Z\u{17F}") == "";
+    assert spans(#"(?i:(?-i:Z\B))"#, "Z\u{212A}") == "";
+}
+
+test "(?i:(?-i:[^ab])c)" {
+    assert spans(#"(?i:(?-i:[^ab])c)"#, "ac") == "";
+    assert spans(#"(?i:(?-i:[^ab])c)"#, "Ac") == "0..2";
+    assert spans(#"(?i:(?-i:[^ab])c)"#, "bc") == "";
+    assert spans(#"(?i:(?-i:[^ab])c)"#, "Bc") == "0..2";
+}
+
+test "(?i:(?-i:[ab])c)" {
+    assert spans(#"(?i:(?-i:[ab])c)"#, "ac") == "0..2";
+    assert spans(#"(?i:(?-i:[ab])c)"#, "Ac") == "";
+    assert spans(#"(?i:(?-i:[ab])c)"#, "bc") == "0..2";
+    assert spans(#"(?i:(?-i:[ab])c)"#, "Bc") == "";
+}
+
+test "(?i:(?-i:\\P{Lu}))" {
+    assert spans(#"(?i:(?-i:\P{Lu}))"#, "A") == "";
+    assert spans(#"(?i:(?-i:\P{Lu}))"#, "a") == "0..1";
+    assert spans(#"(?i:(?-i:\P{Lu}))"#, "Z") == "";
+    assert spans(#"(?i:(?-i:\P{Lu}))"#, "z") == "0..1";
+    assert spans(#"(?i:(?-i:\P{Lu}))"#, "0") == "0..1";
+}
+
+test "(?i:(?-i:\\W))" {
+    assert spans(#"(?i:(?-i:\W))"#, "\u{17F}") == "0..2";
+    assert spans(#"(?i:(?-i:\W))"#, "\u{212A}") == "0..3";
+}
+
+test "(?i:(?-i:\\b))" {
+    assert spans(#"(?i:(?-i:\b))"#, "\u{17F}") == "";
+    assert spans(#"(?i:(?-i:\b))"#, "\u{212A}") == "";
+}
+
+test "(?i:(?-i:\\p{Lu}))" {
+    assert spans(#"(?i:(?-i:\p{Lu}))"#, "A") == "0..1";
+    assert spans(#"(?i:(?-i:\p{Lu}))"#, "a") == "";
+    assert spans(#"(?i:(?-i:\p{Lu}))"#, "Z") == "0..1";
+    assert spans(#"(?i:(?-i:\p{Lu}))"#, "z") == "";
+}
+
+test "(?i:(?-i:\\u0061)b)" {
+    assert spans(#"(?i:(?-i:\u0061)b)"#, "ab") == "0..2";
+    assert spans(#"(?i:(?-i:\u0061)b)"#, "aB") == "0..2";
+    assert spans(#"(?i:(?-i:\u0061)b)"#, "Ab") == "";
+}
+
+test "(?i:(?-i:\\u{0061})b)" {
+    assert spans(#"(?i:(?-i:\u{0061})b)"#, "ab") == "0..2";
+    assert spans(#"(?i:(?-i:\u{0061})b)"#, "aB") == "0..2";
+    assert spans(#"(?i:(?-i:\u{0061})b)"#, "Ab") == "";
+}
+
+test "(?i:(?-i:\\w))" {
+    assert spans(#"(?i:(?-i:\w))"#, "\u{17F}") == "";
+    assert spans(#"(?i:(?-i:\w))"#, "\u{212A}") == "";
+}
+
+test "(?i:(?-i:\\x61)b)" {
+    assert spans(#"(?i:(?-i:\x61)b)"#, "ab") == "0..2";
+    assert spans(#"(?i:(?-i:\x61)b)"#, "aB") == "0..2";
+    assert spans(#"(?i:(?-i:\x61)b)"#, "Ab") == "";
+}
+
+test "(?i:(?-i:a(?i:b))c)" {
+    assert spans(#"(?i:(?-i:a(?i:b))c)"#, "ABC") == "";
+    assert spans(#"(?i:(?-i:a(?i:b))c)"#, "ABc") == "";
+    assert spans(#"(?i:(?-i:a(?i:b))c)"#, "Abc") == "";
+    assert spans(#"(?i:(?-i:a(?i:b))c)"#, "aBc") == "0..3";
+    assert spans(#"(?i:(?-i:a(?i:b))c)"#, "abC") == "0..3";
+    assert spans(#"(?i:(?-i:a(?i:b))c)"#, "abc") == "0..3";
+}
+
+test "(?i:(?-i:aB))" {
+    assert spans(#"(?i:(?-i:aB))"#, "AB") == "";
+    assert spans(#"(?i:(?-i:aB))"#, "Ab") == "";
+    assert spans(#"(?i:(?-i:aB))"#, "ab") == "";
+    assert spans(#"(?i:(?-i:aB))"#, "aB") == "0..2";
+}
+
+test "(?i:(?-i:es$))" {
+    assert spans(#"(?i:(?-i:es$))"#, "es") == "0..2";
+    assert spans(#"(?i:(?-i:es$))"#, "eS") == "";
+    assert spans(#"(?i:(?-i:es$))"#, "es\u{A}z") == "";
+    assert spans(#"(?i:(?-i:es$))"#, "eS\u{A}z") == "";
+}
+
+test "(?i:(?-i:fo)o)" {
+    assert spans(#"(?i:(?-i:fo)o)"#, "FOO") == "";
+    assert spans(#"(?i:(?-i:fo)o)"#, "FOo") == "";
+    assert spans(#"(?i:(?-i:fo)o)"#, "foo") == "0..3";
+    assert spans(#"(?i:(?-i:fo)o)"#, "foO") == "0..3";
+}
+
+test "(?i:(?:ab|cd)+|ef)" {
+    assert spans(#"(?i:(?:ab|cd)+|ef)"#, "AEKeFCDab") == "3..5 5..9";
+    assert spans(#"(?i:(?:ab|cd)+|ef)"#, "AEKFCD") == "4..6";
+    assert spans(#"(?i:(?:ab|cd)+|ef)"#, "AEKFCDab") == "4..8";
+}
+
+test "(?i:(?m-:es$))" {
+    assert spans(#"(?i:(?m-:es$))"#, "es") == "0..2";
+    assert spans(#"(?i:(?m-:es$))"#, "eS") == "0..2";
+    assert spans(#"(?i:(?m-:es$))"#, "es\u{A}z") == "0..2";
+    assert spans(#"(?i:(?m-:es$))"#, "eS\u{A}z") == "0..2";
+}
+
+test "(?i:(?m-i:^a$))" {
+    assert spans(#"(?i:(?m-i:^a$))"#, "A\u{A}") == "";
+    assert spans(#"(?i:(?m-i:^a$))"#, "a\u{A}") == "0..1";
+}
+
+test "(?i:(?m:^(?-i:a)$))" {
+    assert spans(#"(?i:(?m:^(?-i:a)$))"#, "A\u{A}") == "";
+    assert spans(#"(?i:(?m:^(?-i:a)$))"#, "a\u{A}") == "0..1";
+}
+
+test "(?i:(?m:es$))" {
+    assert spans(#"(?i:(?m:es$))"#, "es") == "0..2";
+    assert spans(#"(?i:(?m:es$))"#, "eS") == "0..2";
+    assert spans(#"(?i:(?m:es$))"#, "es\u{A}z") == "0..2";
+    assert spans(#"(?i:(?m:es$))"#, "eS\u{A}z") == "0..2";
+}
+
+test "(?i:(?s-:.es))" {
+    assert spans(#"(?i:(?s-:.es))"#, "aes") == "0..3";
+    assert spans(#"(?i:(?s-:.es))"#, "aeS") == "0..3";
+    assert spans(#"(?i:(?s-:.es))"#, "\u{A}es") == "0..3";
+    assert spans(#"(?i:(?s-:.es))"#, "\u{A}eS") == "0..3";
+}
+
+test "(?i:(?s:.es))" {
+    assert spans(#"(?i:(?s:.es))"#, "aes") == "0..3";
+    assert spans(#"(?i:(?s:.es))"#, "aeS") == "0..3";
+    assert spans(#"(?i:(?s:.es))"#, "\u{A}es") == "0..3";
+    assert spans(#"(?i:(?s:.es))"#, "\u{A}eS") == "0..3";
+}
+
+test "(?i:([a-z]+)([0-9]+))" {
+    assert spans(#"(?i:([a-z]+)([0-9]+))"#, "aBc12 def34") == "0..5,0..3,3..5 6..11,6..9,9..11";
+    assert spans(#"(?i:([a-z]+)([0-9]+))"#, "aBc12 dEf34") == "0..5,0..3,3..5 6..11,6..9,9..11";
+}
+
+test "(?i:(\\|)([\\w\\x81-\\xff ]*)(\\|)([\\/a-z][\\w:\\/\\.]*\\.[a-z]{3,4})(\\|))" {
+    assert spans(
+        #"(?i:(\|)([\w\x81-\xff ]*)(\|)([\/a-z][\w:\/\.]*\.[a-z]{3,4})(\|))"#,
+        "To sign up click |here|https:www.xxxx.org/subscribe.htm|",
+    ) == "17..56,17..18,18..22,22..23,23..55,55..56";
+}
+
+test "(?i:(a)|(?:b)|(?-i:c)|(?:d)|(e))" {
+    assert spans(#"(?i:(a)|(?:b)|(?-i:c)|(?:d)|(e))"#, "A") == "0..1,0..1,-";
+    assert spans(#"(?i:(a)|(?:b)|(?-i:c)|(?:d)|(e))"#, "B") == "0..1,-,-";
+    assert spans(#"(?i:(a)|(?:b)|(?-i:c)|(?:d)|(e))"#, "C") == "";
+    assert spans(#"(?i:(a)|(?:b)|(?-i:c)|(?:d)|(e))"#, "D") == "0..1,-,-";
+    assert spans(#"(?i:(a)|(?:b)|(?-i:c)|(?:d)|(e))"#, "E") == "0..1,-,0..1";
+}
+
+test "(?i:.es)" {
+    assert spans(#"(?i:.es)"#, "aes") == "0..3";
+    assert spans(#"(?i:.es)"#, "aeS") == "0..3";
+    assert spans(#"(?i:.es)"#, "\u{A}es") == "";
+    assert spans(#"(?i:.es)"#, "\u{A}eS") == "";
+}
+
+test "(?i:<body.*>((.*\\n?)*?)<\\/body>)" {
+    assert spans(
+        #"(?i:<body.*>((.*\n?)*?)<\/body>)"#,
+        "<html>\u{A}<body onXXX=\"alert(event.type);\">\u{A}<p>Kibology for all</p>\u{A}<p>All for Kibology</p>\u{A}</body>\u{A}</html>",
+    ) == "7..96,40..89,65..89";
+}
+
+test "(?i:LS)" {
+    assert spans(#"(?i:LS)"#, "false") == "2..4";
+}
+
+test "(?i:String)" {
+    assert spans(#"(?i:String)"#, "test string") == "5..11";
+}
+
+test "(?i:Z\\B)" {
+    assert spans(#"(?i:Z\B)"#, "Z\u{17F}") == "0..1";
+    assert spans(#"(?i:Z\B)"#, "Z\u{212A}") == "0..1";
+}
+
+test "(?i:[\\u0390])" {
+    assert spans(#"(?i:[\u0390])"#, "\u{1FD3}") == "0..3";
+}
+
+test "(?i:[\\u03b0])" {
+    assert spans(#"(?i:[\u03b0])"#, "\u{1FE3}") == "0..3";
+}
+
+test "(?i:[\\u1fd3])" {
+    assert spans(#"(?i:[\u1fd3])"#, "\u{390}") == "0..2";
+}
+
+test "(?i:[\\u1fe3])" {
+    assert spans(#"(?i:[\u1fe3])"#, "\u{3B0}") == "0..2";
+}
+
+test "(?i:[\\ufb05])" {
+    assert spans(#"(?i:[\ufb05])"#, "\u{FB06}") == "0..3";
+}
+
+test "(?i:[\\ufb06])" {
+    assert spans(#"(?i:[\ufb06])"#, "\u{FB05}") == "0..3";
+}
+
+test "(?i:[^ab])c" {
+    assert spans(#"(?i:[^ab])c"#, "ac") == "";
+    assert spans(#"(?i:[^ab])c"#, "Ac") == "";
+    assert spans(#"(?i:[^ab])c"#, "bc") == "";
+    assert spans(#"(?i:[^ab])c"#, "Bc") == "";
+}
+
+test "(?i:[^o]t\\b)" {
+    assert spans(#"(?i:[^o]t\b)"#, "pilOt\u{A}soviet robot\u{9}openoffice") == "10..12";
+}
+
+test "(?i:[a-z]+)" {
+    assert spans(#"(?i:[a-z]+)"#, "ABC def ghi") == "0..3 4..7 8..11";
+}
+
+test "(?i:[ab])c" {
+    assert spans(#"(?i:[ab])c"#, "ac") == "0..2";
+    assert spans(#"(?i:[ab])c"#, "Ac") == "0..2";
+    assert spans(#"(?i:[ab])c"#, "bc") == "0..2";
+    assert spans(#"(?i:[ab])c"#, "Bc") == "0..2";
+}
+
+test "(?i:\\Bo\\B)" {
+    assert spans(#"(?i:\Bo\B)"#, "devils arise\u{9}fOr\u{A}revil") == "14..15";
+}
+
+test "(?i:\\P{Lu})" {
+    assert spans(#"(?i:\P{Lu})"#, "A") == "0..1";
+    assert spans(#"(?i:\P{Lu})"#, "a") == "0..1";
+    assert spans(#"(?i:\P{Lu})"#, "Z") == "0..1";
+    assert spans(#"(?i:\P{Lu})"#, "z") == "0..1";
+    assert spans(#"(?i:\P{Lu})"#, "0") == "0..1";
+}
+
+test "(?i:\\W)" {
+    assert spans(#"(?i:\W)"#, "\u{17F}") == "";
+    assert spans(#"(?i:\W)"#, "\u{212A}") == "";
+}
+
+test "(?i:\\b)" {
+    assert spans(#"(?i:\b)"#, "A") == "0..0 1..1";
+    assert spans(#"(?i:\b)"#, "a") == "0..0 1..1";
+    assert spans(#"(?i:\b)"#, "z") == "0..0 1..1";
+    assert spans(#"(?i:\b)"#, "Z") == "0..0 1..1";
+    assert spans(#"(?i:\b)"#, "\u{17F}") == "0..0 2..2";
+    assert spans(#"(?i:\b)"#, "\u{212A}") == "0..0 3..3";
+}
+
+test "(?i:\\p{Lu})" {
+    assert spans(#"(?i:\p{Lu})"#, "A") == "0..1";
+    assert spans(#"(?i:\p{Lu})"#, "a") == "0..1";
+    assert spans(#"(?i:\p{Lu})"#, "Z") == "0..1";
+    assert spans(#"(?i:\p{Lu})"#, "z") == "0..1";
+}
+
+test "(?i:\\u0061)b" {
+    assert spans(#"(?i:\u0061)b"#, "ab") == "0..2";
+    assert spans(#"(?i:\u0061)b"#, "Ab") == "0..2";
+}
+
+test "(?i:\\u{0061})b" {
+    assert spans(#"(?i:\u{0061})b"#, "ab") == "0..2";
+    assert spans(#"(?i:\u{0061})b"#, "Ab") == "0..2";
+}
+
+test "(?i:\\w)" {
+    assert spans(#"(?i:\w)"#, "A") == "0..1";
+    assert spans(#"(?i:\w)"#, "a") == "0..1";
+    assert spans(#"(?i:\w)"#, "z") == "0..1";
+    assert spans(#"(?i:\w)"#, "Z") == "0..1";
+    assert spans(#"(?i:\w)"#, "\u{17F}") == "0..2";
+    assert spans(#"(?i:\w)"#, "\u{212A}") == "0..3";
+}
+
+test "(?i:\\x61)b" {
+    assert spans(#"(?i:\x61)b"#, "ab") == "0..2";
+    assert spans(#"(?i:\x61)b"#, "Ab") == "0..2";
+}
+
+test "(?i:a(?-i:b))c" {
+    assert spans(#"(?i:a(?-i:b))c"#, "ABC") == "";
+    assert spans(#"(?i:a(?-i:b))c"#, "ABc") == "";
+    assert spans(#"(?i:a(?-i:b))c"#, "Abc") == "0..3";
+    assert spans(#"(?i:a(?-i:b))c"#, "aBc") == "";
+    assert spans(#"(?i:a(?-i:b))c"#, "abC") == "";
+    assert spans(#"(?i:a(?-i:b))c"#, "abc") == "0..3";
+}
+
+test "(?i:a)b" {
+    assert spans(#"(?i:a)b"#, "AB") == "";
+    assert spans(#"(?i:a)b"#, "Ab") == "0..2";
+    assert spans(#"(?i:a)b"#, "ab") == "0..2";
+}
+
+test "(?i:aB)" {
+    assert spans(#"(?i:aB)"#, "AB") == "0..2";
+    assert spans(#"(?i:aB)"#, "Ab") == "0..2";
+    assert spans(#"(?i:aB)"#, "aB") == "0..2";
+    assert spans(#"(?i:aB)"#, "ab") == "0..2";
+}
+
+test "(?i:ab|cd|ef)" {
+    assert spans(#"(?i:ab|cd|ef)"#, "AEKFCD") == "4..6";
+}
+
+test "(?i:a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k)" {
+    assert spans(#"(?i:a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k)"#, "A") == "0..1";
+    assert spans(#"(?i:a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k)"#, "B") == "";
+    assert spans(#"(?i:a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k)"#, "C") == "0..1";
+    assert spans(#"(?i:a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k)"#, "D") == "";
+    assert spans(#"(?i:a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k)"#, "E") == "";
+    assert spans(#"(?i:a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k)"#, "F") == "";
+    assert spans(#"(?i:a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k)"#, "G") == "0..1";
+    assert spans(#"(?i:a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k)"#, "H") == "0..1";
+    assert spans(#"(?i:a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k)"#, "K") == "0..1";
+}
+
+test "(?i:a|b|(?-i:c)|d|e)" {
+    assert spans(#"(?i:a|b|(?-i:c)|d|e)"#, "A") == "0..1";
+    assert spans(#"(?i:a|b|(?-i:c)|d|e)"#, "B") == "0..1";
+    assert spans(#"(?i:a|b|(?-i:c)|d|e)"#, "C") == "";
+    assert spans(#"(?i:a|b|(?-i:c)|d|e)"#, "D") == "0..1";
+    assert spans(#"(?i:a|b|(?-i:c)|d|e)"#, "E") == "0..1";
+}
+
+test "(?i:b(?-i:a)z)" {
+    assert spans(#"(?i:b(?-i:a)z)"#, "baz") == "0..3";
+    assert spans(#"(?i:b(?-i:a)z)"#, "bAz") == "";
+    assert spans(#"(?i:b(?-i:a)z)"#, "Baz") == "0..3";
+    assert spans(#"(?i:b(?-i:a)z)"#, "baZ") == "0..3";
+    assert spans(#"(?i:b(?-i:a)z)"#, "BaZ") == "0..3";
+    assert spans(#"(?i:b(?-i:a)z)"#, "BAZ") == "";
+}
+
+test "(?i:b(?-i:ar))" {
+    assert spans(#"(?i:b(?-i:ar))"#, "BAR") == "";
+    assert spans(#"(?i:b(?-i:ar))"#, "bAR") == "";
+    assert spans(#"(?i:b(?-i:ar))"#, "bar") == "0..3";
+    assert spans(#"(?i:b(?-i:ar))"#, "Bar") == "0..3";
+}
+
+test "(?i:b)" {
+    assert spans(#"(?i:b)"#, "abc abc abc") == "1..2 5..6 9..10";
+}
+
+test "(?i:es$)" {
+    assert spans(#"(?i:es$)"#, "es") == "0..2";
+    assert spans(#"(?i:es$)"#, "eS") == "0..2";
+    assert spans(#"(?i:es$)"#, "es\u{A}z") == "";
+    assert spans(#"(?i:es$)"#, "eS\u{A}z") == "";
+}
+
+test "(?im:(?-i:es$))" {
+    assert spans(#"(?im:(?-i:es$))"#, "es") == "0..2";
+    assert spans(#"(?im:(?-i:es$))"#, "eS") == "";
+    assert spans(#"(?im:(?-i:es$))"#, "es\u{A}z") == "0..2";
+    assert spans(#"(?im:(?-i:es$))"#, "eS\u{A}z") == "";
+}
+
+test "(?im:(?-m:es$))" {
+    assert spans(#"(?im:(?-m:es$))"#, "es") == "0..2";
+    assert spans(#"(?im:(?-m:es$))"#, "eS") == "0..2";
+    assert spans(#"(?im:(?-m:es$))"#, "es\u{A}z") == "";
+    assert spans(#"(?im:(?-m:es$))"#, "eS\u{A}z") == "";
+}
+
+test "(?is:(?-i:.es))" {
+    assert spans(#"(?is:(?-i:.es))"#, "aes") == "0..3";
+    assert spans(#"(?is:(?-i:.es))"#, "aeS") == "";
+    assert spans(#"(?is:(?-i:.es))"#, "\u{A}es") == "0..3";
+    assert spans(#"(?is:(?-i:.es))"#, "\u{A}eS") == "";
+}
+
+test "(?is:(?-s:.es))" {
+    assert spans(#"(?is:(?-s:.es))"#, "aes") == "0..3";
+    assert spans(#"(?is:(?-s:.es))"#, "aeS") == "0..3";
+    assert spans(#"(?is:(?-s:.es))"#, "\u{A}es") == "";
+    assert spans(#"(?is:(?-s:.es))"#, "\u{A}eS") == "";
+}
+
 test "(?m-:es$)" {
     assert spans(#"(?m-:es$)"#, "es") == "0..2";
     assert spans(#"(?m-:es$)"#, "eS") == "";
@@ -364,6 +849,20 @@ test "(?m:(?-m:es.$))" {
     assert spans(#"(?m:(?-m:es.$))"#, "es\u{A}") == "";
     assert spans(#"(?m:(?-m:es.$))"#, "esz\u{A}") == "";
     assert spans(#"(?m:(?-m:es.$))"#, "es\u{A}\u{A}") == "";
+}
+
+test "(?m:(?i-:es$))" {
+    assert spans(#"(?m:(?i-:es$))"#, "es") == "0..2";
+    assert spans(#"(?m:(?i-:es$))"#, "eS") == "0..2";
+    assert spans(#"(?m:(?i-:es$))"#, "es\u{A}z") == "0..2";
+    assert spans(#"(?m:(?i-:es$))"#, "eS\u{A}z") == "0..2";
+}
+
+test "(?m:(?i:es$))" {
+    assert spans(#"(?m:(?i:es$))"#, "es") == "0..2";
+    assert spans(#"(?m:(?i:es$))"#, "eS") == "0..2";
+    assert spans(#"(?m:(?i:es$))"#, "es\u{A}z") == "0..2";
+    assert spans(#"(?m:(?i:es$))"#, "eS\u{A}z") == "0..2";
 }
 
 test "(?m:(?s-:.es$))" {
@@ -611,6 +1110,20 @@ test "(?s:(?-s:^.$))" {
     assert spans(#"(?s:(?-s:^.$))"#, "\u{2029}") == "";
 }
 
+test "(?s:(?i-:.es))" {
+    assert spans(#"(?s:(?i-:.es))"#, "aes") == "0..3";
+    assert spans(#"(?s:(?i-:.es))"#, "aeS") == "0..3";
+    assert spans(#"(?s:(?i-:.es))"#, "\u{A}es") == "0..3";
+    assert spans(#"(?s:(?i-:.es))"#, "\u{A}eS") == "0..3";
+}
+
+test "(?s:(?i:.es))" {
+    assert spans(#"(?s:(?i:.es))"#, "aes") == "0..3";
+    assert spans(#"(?s:(?i:.es))"#, "aeS") == "0..3";
+    assert spans(#"(?s:(?i:.es))"#, "\u{A}es") == "0..3";
+    assert spans(#"(?s:(?i:.es))"#, "\u{A}eS") == "0..3";
+}
+
 test "(?s:(?m-:es.$))" {
     assert spans(#"(?s:(?m-:es.$))"#, "esz\u{A}") == "0..3";
     assert spans(#"(?s:(?m-:es.$))"#, "es\u{A}\u{A}") == "0..3";
@@ -767,6 +1280,14 @@ test "(a)?(a)" {
 
 test "(a)?a" {
     assert spans(#"(a)?a"#, "a") == "0..1,-";
+}
+
+test "(a)|(?:b)|(?i:c)|(?:d)|(e)" {
+    assert spans(#"(a)|(?:b)|(?i:c)|(?:d)|(e)"#, "A") == "";
+    assert spans(#"(a)|(?:b)|(?i:c)|(?:d)|(e)"#, "B") == "";
+    assert spans(#"(a)|(?:b)|(?i:c)|(?:d)|(e)"#, "C") == "0..1,-,-";
+    assert spans(#"(a)|(?:b)|(?i:c)|(?:d)|(e)"#, "D") == "";
+    assert spans(#"(a)|(?:b)|(?i:c)|(?:d)|(e)"#, "E") == "";
 }
 
 test "(a.a)|(?:b.b)|(?s:c.c)|(?:d.d)|(e.e)" {
@@ -2665,6 +3186,14 @@ test "a(?<z>b)(ca)" {
     assert spans(#"a(?<z>b)(ca)"#, "abcabcabcabc") == "0..4,1..2,2..4 6..10,7..8,8..10";
 }
 
+test "a(?i:b)c" {
+    assert spans(#"a(?i:b)c"#, "abc") == "0..3";
+    assert spans(#"a(?i:b)c"#, "aBc") == "0..3";
+    assert spans(#"a(?i:b)c"#, "ABc") == "";
+    assert spans(#"a(?i:b)c"#, "aBC") == "";
+    assert spans(#"a(?i:b)c"#, "ABC") == "";
+}
+
 test "a(b)(ca)" {
     assert spans(#"a(b)(ca)"#, "abcabcabcabc") == "0..4,1..2,2..4 6..10,7..8,8..10";
 }
@@ -2785,12 +3314,32 @@ test "ab|cd|ef" {
     assert spans(#"ab|cd|ef"#, "AEKFCD") == "";
 }
 
+test "a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k" {
+    assert spans(#"a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k"#, "A") == "";
+    assert spans(#"a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k"#, "B") == "0..1";
+    assert spans(#"a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k"#, "C") == "";
+    assert spans(#"a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k"#, "D") == "0..1";
+    assert spans(#"a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k"#, "E") == "0..1";
+    assert spans(#"a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k"#, "F") == "0..1";
+    assert spans(#"a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k"#, "G") == "";
+    assert spans(#"a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k"#, "H") == "";
+    assert spans(#"a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k"#, "K") == "";
+}
+
 test "a|(b)" {
     assert spans(#"a|(b)"#, "a") == "0..1,-";
 }
 
 test "a|ab" {
     assert spans(#"a|ab"#, "abc") == "0..1";
+}
+
+test "a|b|(?i:c)|d|e" {
+    assert spans(#"a|b|(?i:c)|d|e"#, "A") == "";
+    assert spans(#"a|b|(?i:c)|d|e"#, "B") == "";
+    assert spans(#"a|b|(?i:c)|d|e"#, "C") == "0..1";
+    assert spans(#"a|b|(?i:c)|d|e"#, "D") == "";
+    assert spans(#"a|b|(?i:c)|d|e"#, "E") == "";
 }
 
 test "b" {
@@ -2808,6 +3357,12 @@ test "b(.).(.)" {
 test "b(.).(.)." {
     assert spans(#"b(.).(.)."#, "abcdefg") == "1..6,2..3,4..5";
     assert spans(#"b(.).(.)."#, "ab\u{1D306}defg") == "1..9,2..6,7..8";
+}
+
+test "b(?i:a)" {
+    assert spans(#"b(?i:a)"#, "BA") == "";
+    assert spans(#"b(?i:a)"#, "bA") == "0..2";
+    assert spans(#"b(?i:a)"#, "ba") == "0..2";
 }
 
 test "b(c)" {

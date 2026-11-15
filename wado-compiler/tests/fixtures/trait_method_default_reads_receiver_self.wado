@@ -1,0 +1,79 @@
+// A trait method's value default resolves in the trait's scope, where `Self`
+// is the receiver: `a.m()` on an `A` reads `A::k()`, and a call from another
+// default body reads the `Self` that body stands on. `Self::k()` is the
+// trait's `k`, whatever the receiver declares under the name, and nothing of
+// the caller's frame answers for it, a parameter shadowing the receiver's type
+// included.
+use { println, Stdout } from "core:cli";
+
+trait Tr with () {
+    fn k() -> i32;
+    fn m(&self, n: i32 = Self::k()) -> i32;
+    fn g<U>(&self, _u: U, n: i32 = Self::k()) -> i32;
+    fn d(&self) -> i32 {
+        return self.m() + self.g(true);
+    }
+}
+
+struct A {}
+
+impl A {
+    fn k() -> i32 {
+        return 100;
+    }
+}
+
+impl Tr for A {
+    fn k() -> i32 {
+        return 7;
+    }
+    fn m(&self, n: i32) -> i32 {
+        return n;
+    }
+    fn g<U>(&self, _u: U, n: i32) -> i32 {
+        return n * 10;
+    }
+}
+
+struct B {}
+
+impl Tr for B {
+    fn k() -> i32 {
+        return 2;
+    }
+    fn m(&self, n: i32) -> i32 {
+        return n;
+    }
+    fn g<U>(&self, _u: U, n: i32) -> i32 {
+        return n * 10;
+    }
+}
+
+fn through<T: Tr>(t: &T) -> i32 {
+    return t.m();
+}
+
+struct Holder<T> {
+    t: T,
+}
+
+impl<T: Tr> Holder<T> {
+    #[allow(shadowed_name)]
+    fn shadowed<T>(&self, _x: T) -> i32 {
+        return self.t.m();
+    }
+}
+
+export fn run() with Stdout {
+    let a = A {};
+    let b = B {};
+    println(`${a.m()} ${b.m()} ${a.g("x")}`);
+    println(`${a.d()} ${b.d()}`);
+    println(`${through(&a)} ${through(&b)}`);
+    println(`${Holder { t: b }.shadowed(true)}`);
+}
+
+__DATA__
+{
+    "stdout": "7 2 70\n77 22\n7 2\n2\n"
+}

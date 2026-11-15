@@ -55,7 +55,6 @@ use super::condition_implication::{
 use super::const_branch_prune::BranchPruneRule;
 use super::dce::{DescriptorCache, callee_descriptor};
 use super::elide_local::ElideRule;
-use super::gate::FunctionGate;
 use super::heap_effect::{HeapEffectsCache, LazyHeapFrame};
 use crate::module_source::ModuleSource;
 use crate::nir::FuncId;
@@ -184,6 +183,7 @@ pub(super) fn version_loops(
     project: &mut NirPackage,
     cache: &mut DescriptorCache,
     exec: &Arc<Executor>,
+    heap: &mut HeapEffectsCache,
 ) -> bool {
     let fill_id = project.intern_extern(&FunctionRef {
         module_source: ModuleSource::builtin(),
@@ -207,9 +207,7 @@ pub(super) fn version_loops(
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, &type_table, exec);
-    let gate = FunctionGate::new(project, exec);
-    let mut heap = HeapEffectsCache::default();
-    let effects = heap.effects(project, &type_table, &gate);
+    let effects = heap.effects(project, &type_table, exec);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {

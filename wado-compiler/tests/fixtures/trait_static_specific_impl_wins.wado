@@ -1,0 +1,55 @@
+// A qualified static selects as the method form does: an impl for one
+// instantiation wins over one for the head, and a variadic impl yields to a
+// non-variadic one, whether the impls write the static or inherit it.
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    v: T,
+}
+
+trait Tr with () {
+    fn k() -> i32 {
+        return 4;
+    }
+    fn j() -> i32;
+}
+
+impl<T> Tr for Box<T> {
+    fn j() -> i32 {
+        return 1;
+    }
+}
+
+impl Tr for Box<i32> {
+    fn k() -> i32 {
+        return 8;
+    }
+    fn j() -> i32 {
+        return 2;
+    }
+}
+
+impl<..T> Tr for [..T] {
+    fn j() -> i32 {
+        return 3;
+    }
+}
+
+impl<A, B> Tr for [A, B, A] {
+    fn k() -> i32 {
+        return 5;
+    }
+    fn j() -> i32 {
+        return 6;
+    }
+}
+
+export fn run() with Stdout {
+    println(`${Tr::<Box<String>>::k()} ${Tr::<Box<i32>>::k()} ${Tr::<Box<String>>::j()} ${Tr::<Box<i32>>::j()}`);
+    println(`${Tr::<[i32, String]>::k()} ${Tr::<[i32, bool, i32]>::k()} ${Tr::<[i32, String]>::j()} ${Tr::<[i32, bool, i32]>::j()}`);
+}
+
+__DATA__
+{
+    "stdout": "4 8 1 2\n4 5 3 6\n"
+}

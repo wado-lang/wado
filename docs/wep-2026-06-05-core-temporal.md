@@ -402,8 +402,9 @@ cannot yet interpret.
 ### Formatting beyond ISO 8601
 
 Locale-aware formatting (`toLocaleString`) belongs to
-[`core:icu`](./wep-2026-08-09-core-icu.md) and is tracked by that WEP's open item
-on where its date/time formatting meets this module. Lenient parsing —
+[`core:icu`](./wep-2026-08-09-core-icu.md) and is tracked by the open question in
+[`wado-bundled-icu/TODO.md`](../wado-bundled-icu/TODO.md) on where its date/time
+formatting meets this module. Lenient parsing —
 [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) for the human-written
 date spellings — is named as future work by that WEP and is not implemented
 here either.

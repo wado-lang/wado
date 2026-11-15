@@ -173,11 +173,7 @@ test "groups count their opening parentheses" {
 }
 
 test "modifiers" {
-    assert tree(#"(?m:a)(?-ms:b)(?s-i:c)"#) == "(cat (?m- a) (?-ms b) (?s-i c))";
-}
-
-test "i is refused at the modifier, until core:icu folds case" {
-    assert error(#"abc(?mi:x)"#) == "the `i` modifier needs simple case folding, which core:icu does not offer yet (at byte 6)";
+    assert tree(#"(?m:a)(?-ms:b)(?s-i:c)(?mi:d)"#) == "(cat (?m- a) (?-ms b) (?s-i c) (?im- d))";
 }
 
 test "assertions and the dot" {

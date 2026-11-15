@@ -509,23 +509,26 @@ fn "sroa_split_loop_rebound_local.wado/sroa_split_loop_rebound_local.wado/statem
     let part_3: ref "core:prelude/string.wado//String";
     let $match_5: ref null "core:prelude/string.wado//String";
     let self_26: ref "core:prelude/string.wado//StrSlice";
-    let $sroa_sep_repr_46: ref Array<u8>;
+    let $licm_repr_46: ref "Array<core:prelude/string.wado/String>";
+    let $sroa_sep_repr_47: ref Array<u8>;
     out = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
-    $sroa_sep_repr_46 = array.new_fixed<u8>(59);
-    $iter_0 = struct.new "core:prelude/string.wado//StrSplitIter" { repr: $mv$text$repr, used: $mv$text$used, pos: 0, sep_repr: $sroa_sep_repr_46, sep_at: 0, sep_len: 1, finished: 0 };
+    $sroa_sep_repr_47 = array.new_fixed<u8>(59);
+    $iter_0 = struct.new "core:prelude/string.wado//StrSplitIter" { repr: $mv$text$repr, used: $mv$text$used, pos: 0, sep_repr: $sroa_sep_repr_47, sep_at: 0, sep_len: 1, finished: 0 };
+    $licm_repr_46 = out.repr;
     b45: block {
         l46: loop {
             if ref.is_null(local.tee $match_5("core:prelude/string.wado/core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next$spec0"($iter_0))) == 0 {
                 self_26 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee part_3(ref.as_non_null($match_5)).repr, start: 0, end: part_3.used };
                 multivalue_bind [$mv$text$repr, $mv$text$used, $mv_end_3] = (let $mv_end_3: i32; multivalue_bind [$mv$text$repr, $mv$text$used, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"(self_26.repr, 0, self_26.end); "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$text$repr, $mv$text$used, $mv_end_3));
                 if $mv_end_3 != $mv$text$used {
-                    builtin::array_copy<u8>(local.tee $sroa_sep_repr_46(builtin::array_new<u8>(local.tee $mv_end_3($mv_end_3 - $mv$text$used))), 0, $mv$text$repr, $mv$text$used, $mv_end_3);
-                    part_3 = struct.new "core:prelude/string.wado//String" { repr: $sroa_sep_repr_46, used: $mv_end_3 };
-                    if @unlikely(local.tee $mv$text$used(out.used) >= builtin::array_len(out.repr)) {
+                    builtin::array_copy<u8>(local.tee $sroa_sep_repr_47(builtin::array_new<u8>(local.tee $mv_end_3($mv_end_3 - $mv$text$used))), 0, $mv$text$repr, $mv$text$used, $mv_end_3);
+                    part_3 = struct.new "core:prelude/string.wado//String" { repr: $sroa_sep_repr_47, used: $mv_end_3 };
+                    if @unlikely(local.tee $mv$text$used(out.used) >= builtin::array_len($licm_repr_46)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(out);
+                        $licm_repr_46 = out.repr;
                     }
-                    builtin::array_set<ref "core:prelude/string.wado//String">(out.repr, $mv$text$used, part_3);
+                    builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_46, $mv$text$used, part_3);
                     out.used = $mv$text$used + 1;
                 }
             } else {

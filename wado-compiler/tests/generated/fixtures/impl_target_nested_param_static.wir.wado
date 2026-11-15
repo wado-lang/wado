@@ -2571,18 +2571,21 @@ fn "impl_target_nested_param_static.wado/impl_target_nested_param_static.wado/Pa
     let value_13: ref "core:prelude/string.wado//String";
     let used_14: i32;
     let $sroa_$iter_0_start_24: i32;
+    let $licm_repr_26: ref "Array<core:prelude/string.wado/String>";
     a = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     $sroa_$iter_0_start_24 = 0;
+    $licm_repr_26 = a.repr;
     b383: block {
         l384: loop {
             break_if b383 $sroa_$iter_0_start_24 >= 2;
             $sroa_$iter_0_start_24 = $sroa_$iter_0_start_24 + 1;
             value_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-            if @unlikely(local.tee used_14(a.used) >= builtin::array_len(a.repr)) {
+            if @unlikely(local.tee used_14(a.used) >= builtin::array_len($licm_repr_26)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(a);
+                $licm_repr_26 = a.repr;
             }
-            builtin::array_set<ref "core:prelude/string.wado//String">(a.repr, used_14, value_13);
+            builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_26, used_14, value_13);
             a.used = used_14 + 1;
             continue l384;
         };

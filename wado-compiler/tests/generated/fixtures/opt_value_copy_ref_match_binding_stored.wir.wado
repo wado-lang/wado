@@ -112,9 +112,13 @@ fn "opt_value_copy_ref_match_binding_stored.wado/build$dae[n]"() {
     let $vc_payload_1_17: ref "opt_value_copy_ref_match_binding_stored.wado//Rep";
     let v_19: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let $sroa_op_value_39: ref "opt_value_copy_ref_match_binding_stored.wado//Op";
+    let $licm_repr_40: ref "Array<opt_value_copy_ref_match_binding_stored.wado/Op>";
+    let $hfs_used_41: i32;
     ops = struct.new "core:prelude/list.wado//List<opt_value_copy_ref_match_binding_stored.wado/Op>" { repr: array.new_fixed<ref "opt_value_copy_ref_match_binding_stored.wado//Op">(), used: 0 };
     tagged = 0;
     i_2 = 0;
+    $licm_repr_40 = ops.repr;
+    $hfs_used_41 = 0;
     b0: block {
         l1: loop {
             break_if b0 i_2 >= 4;
@@ -144,12 +148,14 @@ fn "opt_value_copy_ref_match_binding_stored.wado/build$dae[n]"() {
                         };
                     }; $array_clone_dst_7, used: $vc_payload_0_16 } } };
                 });
-                if @unlikely(local.tee $vc_payload_0_16(ops.used) >= builtin::array_len(ops.repr)) {
+                if @unlikely($hfs_used_41 >= builtin::array_len($licm_repr_40)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_ref_match_binding_stored.wado/Op>::grow"(ops);
+                    $licm_repr_40 = ops.repr;
+                } else {
                 }
-                builtin::array_set<ref "opt_value_copy_ref_match_binding_stored.wado//Op">(ops.repr, $vc_payload_0_16, $sroa_op_value_39);
-                ops.used = $vc_payload_0_16 + 1;
+                builtin::array_set<ref "opt_value_copy_ref_match_binding_stored.wado//Op">($licm_repr_40, $hfs_used_41, $sroa_op_value_39);
+                $hfs_used_41 = $hfs_used_41 + 1;
                 tagged = tagged + rep.tags.used;
             } else {
                 $sroa_op_value_39 = (if ref.test "opt_value_copy_ref_match_binding_stored.wado//Op::Plain"($sroa_op_value_39) -> ref "opt_value_copy_ref_match_binding_stored.wado//Op" {
@@ -171,14 +177,17 @@ fn "opt_value_copy_ref_match_binding_stored.wado/build$dae[n]"() {
                         };
                     }; $array_clone_dst_7, used: $vc_payload_0_16 } } };
                 });
-                if @unlikely(local.tee $vc_payload_0_16(ops.used) >= builtin::array_len(ops.repr)) {
+                if @unlikely($hfs_used_41 >= builtin::array_len($licm_repr_40)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_ref_match_binding_stored.wado/Op>::grow"(ops);
+                    $licm_repr_40 = ops.repr;
+                } else {
                 }
-                builtin::array_set<ref "opt_value_copy_ref_match_binding_stored.wado//Op">(ops.repr, $vc_payload_0_16, $sroa_op_value_39);
-                ops.used = $vc_payload_0_16 + 1;
+                builtin::array_set<ref "opt_value_copy_ref_match_binding_stored.wado//Op">($licm_repr_40, $hfs_used_41, $sroa_op_value_39);
+                $hfs_used_41 = $hfs_used_41 + 1;
             }
             i_2 = i_2 + 1;
+            ops.used = $hfs_used_41;
             continue l1;
         };
     };

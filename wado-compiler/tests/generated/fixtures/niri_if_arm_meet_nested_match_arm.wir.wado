@@ -97,7 +97,6 @@ fn "niri_if_arm_meet_nested_match_arm.wado/run"() with Stdout, MonotonicClock {
     let b: i32;
     let out_37: ref "core:prelude/string.wado//String";
     let is_negative_104: bool;
-    let $sroa_view_repr_204: ref Array<u8>;
     drop(local.tee now("niri_if_arm_meet_nested_match_arm.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"()) != now);
     a = "niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(1);
     b = "niri_if_arm_meet_nested_match_arm.wado/check_match_arm_meet"(0);
@@ -109,14 +108,13 @@ fn "niri_if_arm_meet_nested_match_arm.wado/run"() with Stdout, MonotonicClock {
     a = "core:prelude/primitive.wado/count_digits_u64"(local.tee now(now = builtin::i64_extend_i32_s(a); select i64(now < 0_i64, 0_i64 - now, now)));
     is_negative_104 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_37, is_negative_104, a);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_37.repr), is_negative_104, now, a);
-    $sroa_view_repr_204 = global:niri_if_arm_meet_nested_match_arm.wado::$const_obj_0;
     if @unlikely(local.tee a(out_37.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_37, a);
     }
     is_negative_104 = out_37.used;
     out_37.used = a;
-    builtin::array_copy<u8>(out_37.repr, is_negative_104, $sroa_view_repr_204, 0, 1);
+    builtin::array_copy<u8>(out_37.repr, is_negative_104, global:niri_if_arm_meet_nested_match_arm.wado::$const_obj_0, 0, 1);
     a = b < 0;
     b = "core:prelude/primitive.wado/count_digits_u64"(local.tee now(now = builtin::i64_extend_i32_s(b); select i64(now < 0_i64, 0_i64 - now, now)));
     a = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_37, a, b);

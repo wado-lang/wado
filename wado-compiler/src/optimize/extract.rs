@@ -31,7 +31,6 @@ use crate::optimize::alias::{
     CallImmutability, builder_alias_sets, call_verdicts, first_param_types,
 };
 use crate::optimize::arena_query::{def_dominates, storage_root};
-use crate::optimize::gate::FunctionGate;
 use crate::optimize::heap_effect::HeapEffectsCache;
 use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
@@ -257,7 +256,9 @@ fn record_value_tree_types(e: &mut Engine, v: ValueId, type_id: tir::TypeId) -> 
 pub(super) fn freeze_pure_arith(
     project: &mut NirPackage,
     exec: &Arc<Executor>,
-    include_fields: bool,
+    // Freeze field reads too. A field read is versioned by what a call
+    // writes, which these heap effects answer.
+    fields: Option<&mut HeapEffectsCache>,
     // `Early` runs before the optimize loop, on each function's freshly-built
     // (clean, un-restructured) graph. Only then is it sound to freeze a
     // *constant leaf read* (`Local` / `FieldAccess`) into its literal: born
@@ -272,12 +273,8 @@ pub(super) fn freeze_pure_arith(
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, type_table, exec);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    // Only a field read is versioned by what a call writes.
-    let gate = include_fields.then(|| FunctionGate::new(project, exec));
-    let mut heap = HeapEffectsCache::default();
-    let effects = gate
-        .as_ref()
-        .map(|gate| heap.effects(project, type_table, gate));
+    let effects = fields.map(|heap| heap.effects(project, type_table, exec));
+    let include_fields = effects.is_some();
     let outcomes = exec.map_init(
         &project.functions,
         EngineBuffers::default,
