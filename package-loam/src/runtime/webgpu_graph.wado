@@ -165,7 +165,7 @@ impl Graph for WebGpuBackend {
 
     /// A weight read only as products' right matrix, or as a gather's rows, is
     /// kept as `kept_contracted` keeps one: column by column along the axis the
-    /// products contract, in bf16 where that loses nothing. The weights of a
+    /// products contract, in a half where one loses nothing. The weights of a
     /// `Joined` launch are kept so as one matrix, side by side, and those of a
     /// `Paired` one as one matrix whose columns alternate between theirs, each
     /// a view of it. Any other is kept as `keep` keeps it.
@@ -188,7 +188,7 @@ impl Graph for WebGpuBackend {
             for let at of run {
                 let weight = load(at)?;
                 kind = kind_of(&weight);
-                parts.push(widened(self, &weight).unwrap());
+                parts.push(in_f32(self, &weight).unwrap());
             }
             if paired {
                 // As `[inner, columns]`, which `interleaved` pairs.
@@ -234,7 +234,7 @@ impl Graph for WebGpuBackend {
             }
             let host = load(at)?;
             kept[at] = Option::Some(if let Some(axis) = contracted[at] {
-                of_kind(self, kind_of(&host), self.kept_contracted(&widened(self, &host).unwrap(), axis));
+                of_kind(self, kind_of(&host), self.kept_contracted(&in_f32(self, &host).unwrap(), axis));
             } else {
                 kept_any(self, &host);
             });
@@ -1239,7 +1239,7 @@ fn side_by_side(parts: &List<DeviceTensor>, along: i32) -> Option<DeviceTensor> 
         extents[along] = joined.extents[along];
         let next = joined.offset + joined.extents[along] * joined.strides[along];
         if p.slot != joined.slot
-            || p.half != joined.half
+            || p.packed != joined.packed
             || extents != joined.extents
             || !reads_as(&p, next, &joined.strides) {
             return null;
@@ -1417,7 +1417,7 @@ fn right_matrix(
 fn interleaved_view(a: &DeviceTensor, b: &DeviceTensor) -> Option<DeviceTensor> {
     let step = a.strides[1];
     if a.slot != b.slot
-        || a.half != b.half
+        || a.packed != b.packed
         || a.extents != b.extents
         || step % 2 != 0
         || !reads_as(b, a.offset + step / 2, &a.strides) {
@@ -1506,7 +1506,7 @@ fn of_kind(g: &mut WebGpuBackend, kind: ElementKind, computed: Placed<f32, Untyp
 
 /// A float weight's values as f32s, which hold a half's exactly. `None` for
 /// any other element.
-fn widened(g: &mut WebGpuBackend, weight: &Any<Cpu>) -> Option<Tensor<f32, Untyped>> {
+fn in_f32(g: &mut WebGpuBackend, weight: &Any<Cpu>) -> Option<Tensor<f32, Untyped>> {
     return match weight {
         F32(t) => Option::Some(*t),
         F16(t) => Option::Some(g.cpu.convert(t)),

@@ -3,10 +3,11 @@
 //! An f32 tensor lives on the device from the kernel, `upload` or `keep` that
 //! writes it there until `compute` downloads it, and so does a `bool` one, as
 //! 1.0 and 0.0, and a half one, as the f32 equal to each element: a kernel
-//! computes in f32 and rounds what it stores to the half. An `i64` tensor stays on the host, since WGSL stores none, and
-//! a gather writes its indices to the device as `u32` when it runs, but for the
-//! index `arg_max` leaves on the device as an f32, which a gather reads there.
-//! A weight kept for products alone is held in bf16 where that loses nothing,
+//! computes in f32 and rounds what it stores to the half. An `i64` tensor
+//! stays on the host, since WGSL stores none, and a gather writes its indices
+//! to the device as `u32` when it runs, but for the index `arg_max` leaves on
+//! the device as an f32, which a gather reads there. A weight kept for
+//! products and gathers alone is held in bf16 or f16 where one loses nothing,
 //! which halves what a product reads. The convolutions and `max_pool` run on
 //! the CPU. See `package-loam/webgpu.md`.
 
@@ -19,6 +20,7 @@ use {
     Float,
     Epilogue,
     Expr,
+    HalfFloat,
     Prologue,
     Read,
     RowOp,
@@ -82,11 +84,11 @@ pub struct DeviceTensor {
     internal offset: i32,
     internal extents: List<i32>,
     internal strides: List<i32>,
-    /// Whether the buffer holds bf16 elements, two to a word, the even one in
-    /// the low half. Only a product's right operand, a gather's data and a
+    /// The half the buffer holds its elements in, two to a word, the even one
+    /// in the low half. Only a product's right operand, a gather's data and a
     /// copy's source read one so; every other kernel takes f32, which
     /// `materialized` widens it to.
-    internal half: bool,
+    internal packed: Option<HalfFloat>,
 }
 
 /// A tensor where the WebGPU backend holds it.
@@ -345,7 +347,7 @@ fn renamed_over(was: &List<DeviceTensor>, now: &List<&DeviceTensor>) -> Option<R
     for let i of 0..<now.len() {
         let a = &was[i];
         let b = now[i];
-        let laid_out = a.extents == b.extents && reads_as(b, a.offset, &a.strides) && a.half == b.half;
+        let laid_out = a.extents == b.extents && reads_as(b, a.offset, &a.strides) && a.packed == b.packed;
         if !laid_out || !slots.bound(a.slot, b.slot) {
             return null;
         }
@@ -1137,7 +1139,7 @@ impl WebGpuBackend {
     }
 
     /// A `[k, n]` matrix of `values`, `at(r, c)` its element at row `r` and
-    /// column `c`, kept in bf16 where that loses nothing. It is kept column by
+    /// column `c`, kept in the half `half_holding` finds. It is kept column by
     /// column, so a product of a few rows reads each column's run along the
     /// inner axis: one workgroup lane per run of it, rather than one per
     /// column, which leaves most of a device idle where the columns are few.
@@ -1156,26 +1158,30 @@ impl WebGpuBackend {
         at: fn(i32, i32) -> f32,
     ) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
         let count = k * n;
-        let half = held_in_bf16(values);
-        let words = if half { count.div_ceil(2) } else { count };
-        let width = if half { 2 } else { 1 };
+        let packed = half_holding(values);
+        let width = if packed matches { Some(_) } { 2 } else { 1 };
+        let words = count.div_ceil(width);
         let by_columns = words <= self.max_binding && n < NARROW_GROUPS * narrow_columns(false, width, n);
         let element = |i: i32| if by_columns { at(i % k, i / k) } else { at(i / n, i % n) };
-        let slot = if half {
-            self.written(words, |w| {
-                let low = element(2 * w).to_bits() >> 16;
-                let high = if 2 * w + 1 < count { element(2 * w + 1).to_bits() & 0xFFFF_0000 } else { 0 };
-                return high | low;
-            }, true);
-        } else {
-            self.written(words, |i| element(i).to_bits(), true);
+        let slot = match packed {
+            Some(half) => {
+                let bits = |i: i32| match half {
+                    F16 => f16::from_f32(element(i)).to_bits() as u32,
+                    BF16 => element(i).to_bits() >> 16,
+                };
+                self.written(words, |w| {
+                    let high = if 2 * w + 1 < count { bits(2 * w + 1) << 16 } else { 0 };
+                    return high | bits(2 * w);
+                }, true)
+            },
+            None => self.written(words, |i| element(i).to_bits(), true),
         };
         return Placed::Device(DeviceTensor {
             slot,
             offset: 0,
             extents: [k, n],
             strides: if by_columns { [1, k] } else { [n, 1] },
-            half,
+            packed,
         });
     }
 
@@ -1315,7 +1321,7 @@ impl WebGpuBackend {
         &mut self,
         t: &DeviceTensor,
     ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if is_contiguous(t) && !t.half {
+        if is_contiguous(t) && t.packed matches { None } {
             return *t;
         }
         let out = contiguous(self.allocated(element_count(&t.extents), false), 0, t.extents);
@@ -1676,7 +1682,7 @@ impl WebGpuBackend {
                 if spans[b].slot != o.slot {
                     continue;
                 }
-                assert o.half == operands[firsts[b]].half, "one buffer holds one element type";
+                assert o.packed == operands[firsts[b]].packed, "one buffer holds one element type";
                 let [least, most] = [
                     i32::min(words[b].0, lo),
                     i32::max(words[b].1, hi),
@@ -1749,7 +1755,7 @@ impl WebGpuBackend {
         from: &DeviceTensor,
         to: &DeviceTensor,
     ) with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder)
-        contract from.extents == to.extents, !to.half
+        contract from.extents == to.extents, to.packed matches { None }
     {
         let count = element_count(&to.extents);
         if count == 0 {
@@ -1760,7 +1766,7 @@ impl WebGpuBackend {
             let mut params = element_params(count, x, &to.extents);
             push_view(&mut params, rebased(from, &source), &from.strides);
             push_view(&mut params, rebased(to, &target), &to.strides);
-            self.dispatch(ShaderKey::Copy([to.extents.len(), from.half]), [source, target], params, [x, y, 1]);
+            self.dispatch(ShaderKey::Copy([to.extents.len(), from.packed]), [source, target], params, [x, y, 1]);
             return;
         }
         let axis = split_axis(&to.extents);
@@ -1891,7 +1897,7 @@ impl WebGpuBackend {
     ) -> Option<Placed<f32, Out>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let av = self.device_view(a);
         let bv = self.device_view(b);
-        assert !av.half, "a product reads half elements on its right only";
+        assert av.packed matches { None }, "a product reads half elements on its right only";
         let lhs = if av.extents.len() == 1 { as_row(&av) } else { av };
         let rhs = if bv.extents.len() == 1 { as_column(&bv) } else { bv };
         let ra = lhs.extents.len();
@@ -1986,19 +1992,19 @@ impl WebGpuBackend {
                 Some(e) && last => e.op,
                 _ => operand(0),
             };
-            let half = bound.views[1].half;
+            let packed = bound.views[1].packed;
             let [key, row_groups, group_columns] = if narrow {
                 let width = word_width(&bound.views[1], across);
                 [
                     ShaderKey::NarrowProduct(
-                        [op, bound.bindings, br, continued, across, half, width, per_group, paired, null],
+                        [op, bound.bindings, br, continued, across, packed, width, per_group, paired, null],
                     ),
                     1,
                     narrow_columns(across, width, cols),
                 ];
             } else {
                 [
-                    ShaderKey::Product([op, bound.bindings, br, continued, half, across]),
+                    ShaderKey::Product([op, bound.bindings, br, continued, packed, across]),
                     rows.div_ceil(TILE),
                     TILE,
                 ];
@@ -2044,7 +2050,7 @@ impl WebGpuBackend {
             rows: i32::min(rows, NARROW),
             inner,
         };
-        // A lane of a product not across `b` sums two columns of a bf16 one.
+        // A lane of a product not across `b` sums two columns of a packed one.
         let partial_bytes = 4 * NARROW * if across { 1 } else { 2 } * NARROW_LANES;
         if rows > NARROW_ROWS
             || paired && !across
@@ -2101,7 +2107,7 @@ impl WebGpuBackend {
                 batch.len(),
                 false,
                 across,
-                bound.views[1].half,
+                bound.views[1].packed,
                 width,
                 per_group,
                 paired,
@@ -2164,7 +2170,7 @@ impl WebGpuBackend {
         let mut extents = data.extents[0..<axis].to_list();
         extents.extend(&indices.extents);
         extents.extend(&data.extents[axis + 1..<data.extents.len()].to_list());
-        if consecutive(&words) && !data.half {
+        if consecutive(&words) && data.packed matches { None } {
             // A view of the rows, the index axes split out of `axis`. Half
             // rows are widened by the kernel.
             let mut strides = data.strides[0..<axis].to_list();
@@ -2222,7 +2228,7 @@ impl WebGpuBackend {
         params.push(rebased(&whole, &by) as u32);
         push_view(&mut params, 0, &out.strides);
         params.push((data.extents[axis] - 1) as u32);
-        self.dispatch(ShaderKey::Gather([flat.len(), axis, data.half, true]), [source, by, target], params, [x, y, 1]);
+        self.dispatch(ShaderKey::Gather([flat.len(), axis, data.packed, true]), [source, by, target], params, [x, y, 1]);
         return Option::Some(contiguous(out.slot, 0, *extents));
     }
 
@@ -2262,7 +2268,7 @@ impl WebGpuBackend {
             push_view(&mut params, rebased(&part, &target), &part.strides);
             let indices = Span { slot: index_slot, first: 0, count: words.len() };
             self.dispatch(
-                ShaderKey::Gather([part.extents.len(), axis, data.half, false]),
+                ShaderKey::Gather([part.extents.len(), axis, data.packed, false]),
                 [source, indices, target],
                 params,
                 [x, y, 1],
@@ -2390,14 +2396,14 @@ impl WebGpuBackend {
                 offset: 0,
                 extents: [batch, kv, total, d],
                 strides,
-                half: false,
+                packed: null,
             },
             DeviceTensor {
                 slot: cache,
                 offset: n,
                 extents: [batch, kv, total, d],
                 strides,
-                half: false,
+                packed: null,
             },
         ];
         let appending = self.appendable(past_k, past_v, capacity, n, &strides, past, shared);
@@ -2460,14 +2466,14 @@ impl WebGpuBackend {
                     offset: 0,
                     extents: held_past,
                     strides,
-                    half: false,
+                    packed: null,
                 });
                 self.copy(&sliced(past_v, 2, 0, copied), &DeviceTensor {
                     slot,
                     offset: n,
                     extents: held_past,
                     strides,
-                    half: false,
+                    packed: null,
                 });
                 slot;
             },
@@ -2942,7 +2948,7 @@ struct Span {
 
 /// The elements of `t`'s buffer one word holds.
 fn elements_per_word(t: &DeviceTensor) -> i32 {
-    return if t.half { 2 } else { 1 };
+    return if t.packed matches { Some(_) } { 2 } else { 1 };
 }
 
 /// `t`'s offset from the start of `span`, a binding of its buffer.
@@ -2954,21 +2960,28 @@ fn rebased(t: &DeviceTensor, span: &Span) -> i32 {
 /// product's right operand, a gather's data and a copy's source reads them.
 fn all_f32(operands: &List<DeviceTensor>) -> bool {
     for let o of *operands {
-        if o.half {
+        if o.packed matches { Some(_) } {
             return false;
         }
     }
     return true;
 }
 
-/// Whether bf16 holds each of `values` exactly: its low 16 bits are zero.
-fn held_in_bf16(values: &List<f32>) -> bool {
+/// The half that holds each of `values` exactly, bf16 before f16: a bf16 is
+/// an f32's high bits, which a shader widens with a shift. f16 is offered
+/// finite values alone, since WGSL leaves what `unpack2x16float` makes of any
+/// other open.
+fn half_holding(values: &List<f32>) -> Option<HalfFloat> {
+    let mut in_bf16 = true;
+    let mut in_f16 = true;
     for let v of *values {
-        if v.to_bits() & 0xFFFF != 0 {
-            return false;
+        in_bf16 = in_bf16 && v.to_bits() & 0xFFFF == 0;
+        in_f16 = in_f16 && v.is_finite() && (f16::from_f32(v) as f32).to_bits() == v.to_bits();
+        if !in_bf16 && !in_f16 {
+            return null;
         }
     }
-    return true;
+    return Option::Some(if in_bf16 { HalfFloat::BF16 } else { HalfFloat::F16 });
 }
 
 /// The elements a pack of `operands` holds, each copied whole.
@@ -3039,7 +3052,7 @@ fn split_axis(extents: &List<i32>) -> i32 {
 
 /// A view of `extents` laid out row-major from `offset`.
 internal fn contiguous(slot: i32, offset: i32, extents: List<i32>) -> DeviceTensor {
-    return DeviceTensor { slot, offset, strides: row_major(&extents), extents, half: false };
+    return DeviceTensor { slot, offset, strides: row_major(&extents), extents, packed: null };
 }
 
 /// The strides of `extents` laid out row-major.
@@ -3287,32 +3300,45 @@ fn push_view(params: &mut List<u32>, offset: i32, strides: &List<i32>) {
 }
 
 /// The WGSL declaring `bindings` read-only buffers `o0`, `o1`, …, the output
-/// `out` and the parameters `p` after them. Binding `half` holds bf16 words,
-/// which [`element_wgsl`] reads.
-fn buffers_wgsl(bindings: i32, half: Option<i32>) -> String {
+/// `out` and the parameters `p` after them. Binding `packed` holds words of
+/// halves, which [`element_wgsl`] reads.
+fn buffers_wgsl(bindings: i32, packed: Option<i32>) -> String {
     let mut out = "";
     for let k of 0..<bindings {
-        out.push_str(
-            `@group(0) @binding(${k}) var<storage, read> o${k}: array<${word_wgsl(half == Option::Some(k))}>;\n`,
-        );
+        let word = if packed == Option::Some(k) { "u32" } else { "f32" };
+        out.push_str(`@group(0) @binding(${k}) var<storage, read> o${k}: array<${word}>;\n`);
     }
     out.push_str(`@group(0) @binding(${bindings}) var<storage, read_write> out: array<f32>;\n`);
     out.push_str(`@group(0) @binding(${bindings + 1}) var<storage, read> p: array<u32>;\n`);
     return out;
 }
 
-/// The WGSL type of a buffer's words: `u32` where they hold bf16 pairs.
-fn word_wgsl(half: bool) -> String {
-    return if half { "u32" } else { "f32" };
+/// The WGSL type of a buffer's words: `u32` where they hold pairs of halves.
+fn word_wgsl(packed: Option<HalfFloat>) -> String {
+    return if packed matches { Some(_) } { "u32" } else { "f32" };
 }
 
 /// The f32 at the element index `index`, a `u32`, of the buffer `buffer`: an
-/// f32 element, or a bf16 one widened, its word's low half for an even index.
-fn element_wgsl(buffer: String, index: String, half: bool) -> String {
-    if !half {
-        return `${buffer}[${index}]`;
-    }
-    return `bitcast<f32>((${buffer}[(${index}) >> 1u] >> (((${index}) & 1u) * 16u)) << 16u)`;
+/// f32 element, or a half one widened, its word's low half for an even index.
+fn element_wgsl(buffer: String, index: String, packed: Option<HalfFloat>) -> String {
+    return match packed {
+        None => `${buffer}[${index}]`,
+        Some(F16) => `unpack2x16float(${buffer}[(${index}) >> 1u])[(${index}) & 1u]`,
+        Some(BF16) => `bitcast<f32>((${buffer}[(${index}) >> 1u] >> (((${index}) & 1u) * 16u)) << 16u)`,
+    };
+}
+
+/// Lines binding `v0` and `v1` to the two elements of the word `w`, widened.
+fn pair_wgsl(half: HalfFloat, indent: String) -> String {
+    return match half {
+        F16 => `${indent}let v = unpack2x16float(w);
+${indent}let v0 = v.x;
+${indent}let v1 = v.y;
+`,
+        BF16 => `${indent}let v0 = bitcast<f32>(w << 16u);
+${indent}let v1 = bitcast<f32>(w & 0xFFFF0000u);
+`,
+    };
 }
 
 /// Lines binding `{name}{from}`, … `{name}{to - 1}` to the coordinates of
@@ -3372,13 +3398,13 @@ variant ShaderKey {
     /// [`row_shader`]'s arguments.
     Rows([Expr, List<i32>, i32, i32, bool]),
     /// [`copy_shader`]'s arguments.
-    Copy([i32, bool]),
+    Copy([i32, Option<HalfFloat>]),
     /// [`product_shader`]'s arguments.
-    Product([Expr, List<i32>, i32, bool, bool, bool]),
+    Product([Expr, List<i32>, i32, bool, Option<HalfFloat>, bool]),
     /// [`narrow_product_shader`]'s arguments.
-    NarrowProduct([Expr, List<i32>, i32, bool, bool, bool, i32, i32, bool, Option<Staged>]),
+    NarrowProduct([Expr, List<i32>, i32, bool, bool, Option<HalfFloat>, i32, i32, bool, Option<Staged>]),
     /// [`gather_shader`]'s arguments.
-    Gather([i32, i32, bool, bool]),
+    Gather([i32, i32, Option<HalfFloat>, bool]),
     /// [`append_shader`]'s arguments.
     Append([List<i32>, bool, i32]),
     /// [`attend_shader`]'s arguments.
@@ -3395,28 +3421,28 @@ impl ShaderKey {
         let source = match self {
             Elementwise([op, bindings, rank]) => elementwise_shader(op, bindings, *rank),
             Rows([op, bindings, rank, row_axes, reduced]) => row_shader(op, bindings, *rank, *row_axes, *reduced),
-            Copy([rank, half]) => copy_shader(*rank, *half),
-            Product([op, bindings, batch, continued, half, across]) => product_shader(
+            Copy([rank, packed]) => copy_shader(*rank, *packed),
+            Product([op, bindings, batch, continued, packed, across]) => product_shader(
                 op,
                 bindings,
                 *batch,
                 *continued,
-                *half,
+                *packed,
                 *across,
             ),
-            NarrowProduct([op, bindings, batch, continued, across, half, width, lanes, paired, staged]) => narrow_product_shader(
+            NarrowProduct([op, bindings, batch, continued, across, packed, width, lanes, paired, staged]) => narrow_product_shader(
                 op,
                 bindings,
                 *batch,
                 *continued,
                 *across,
-                *half,
+                *packed,
                 *width,
                 *lanes,
                 *paired,
                 staged,
             ),
-            Gather([rank, axis, half, ranked]) => gather_shader(*rank, *axis, *half, *ranked),
+            Gather([rank, axis, packed, ranked]) => gather_shader(*rank, *axis, *packed, *ranked),
             Append([bindings, rotary, batch]) => append_shader(bindings, *rotary, *batch),
             Attend([bindings, head, rotary, biased, part, batch]) => attend_shader(
                 bindings,
@@ -3447,6 +3473,15 @@ test "an infinity in a kernel is no const-expression" {
         1,
     ]).source();
     assert source.contains("non_finite(4286578688u)");
+}
+
+test "a matrix packs in a half only where each value fits it" {
+    let past_f16 = f32::from_bits(0x71000000);
+    let past_bf16 = f32::from_bits(0x3F802000);
+    assert half_holding(&[1.0, past_f16]) matches { Some(BF16) };
+    assert half_holding(&[1.0, past_bf16]) matches { Some(F16) };
+    assert half_holding(&[past_f16, past_bf16]) matches { None };
+    assert half_holding(&[1.0, f32::INFINITY, past_bf16]) matches { None };
 }
 
 /// The element of operand `k`, read from binding `bindings[k]`, whose view's
@@ -3912,14 +3947,14 @@ ${prelude}${phases}${write}}
 ${ELEMENTWISE_OPERATORS}`;
 }
 
-/// The WGSL copying a view to another of one extents, widening a `half`
+/// The WGSL copying a view to another of one extents, widening a `packed`
 /// source. Parameters: the count, the invocations per row, the extents, then
 /// the source's offset and strides and the destination's.
-fn copy_shader(rank: i32, half: bool) -> String {
+fn copy_shader(rank: i32, packed: Option<HalfFloat>) -> String {
     let from = 2 + rank;
     let to = from + rank + 1;
     let source = index_wgsl(from, 0, rank, "c", `bitcast<i32>(p[${from}])`);
-    return `@group(0) @binding(0) var<storage, read> src: array<${word_wgsl(half)}>;
+    return `@group(0) @binding(0) var<storage, read> src: array<${word_wgsl(packed)}>;
 @group(0) @binding(1) var<storage, read_write> dst: array<f32>;
 @group(0) @binding(2) var<storage, read> p: array<u32>;
 
@@ -3932,7 +3967,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 ${coords_wgsl("i", 2, 0, rank, "c", "    ")}    dst[u32(${index_wgsl(to, 0, rank, "c", `bitcast<i32>(p[${to}])`)})] = ${element_wgsl(
         "src",
         `u32(${source})`,
-        half,
+        packed,
     )};
 }
 `;
@@ -3942,10 +3977,10 @@ ${coords_wgsl("i", 2, 0, rank, "c", "    ")}    dst[u32(${index_wgsl(to, 0, rank
 /// Parameters: the count, the invocations per row, the output's extents, the
 /// data's offset and its stride along each output axis, 0 along `axis`, its
 /// stride along `axis`, the index the output's first row along `axis` reads,
-/// then the output's offset and strides. A `half` data is widened. A `ranked`
+/// then the output's offset and strides. A `packed` data is widened. A `ranked`
 /// index is an f32 a kernel left, which the last parameter, the axis's last
 /// index, clamps as StableHLO does; the host has clamped any other.
-fn gather_shader(rank: i32, axis: i32, half: bool, ranked: bool) -> String {
+fn gather_shader(rank: i32, axis: i32, packed: Option<HalfFloat>, ranked: bool) -> String {
     let data = 2 + rank;
     let along = data + rank + 1;
     let first = along + 1;
@@ -3953,7 +3988,7 @@ fn gather_shader(rank: i32, axis: i32, half: bool, ranked: bool) -> String {
     let source = index_wgsl(data, 0, rank, "c", `bitcast<i32>(p[${data}])`);
     let index = `indices[p[${first}] + c${axis}]`;
     let picked = if ranked { `clamp(${index}, 0.0, f32(p[${out + rank + 1}]))` } else { index };
-    return `@group(0) @binding(0) var<storage, read> data: array<${word_wgsl(half)}>;
+    return `@group(0) @binding(0) var<storage, read> data: array<${word_wgsl(packed)}>;
 @group(0) @binding(1) var<storage, read> indices: array<${if ranked { "f32" } else { "u32" }}>;
 @group(0) @binding(2) var<storage, read_write> out: array<f32>;
 @group(0) @binding(3) var<storage, read> p: array<u32>;
@@ -3968,7 +4003,7 @@ ${coords_wgsl("i", 2, 0, rank, "c", "    ")}    let picked = i32(${picked});
     out[u32(${index_wgsl(out, 0, rank, "c", `bitcast<i32>(p[${out}])`)})] = ${element_wgsl(
         "data",
         `u32(${source} + picked * bitcast<i32>(p[${along}]))`,
-        half,
+        packed,
     )};
 }
 `;
@@ -3982,10 +4017,17 @@ ${coords_wgsl("i", 2, 0, rank, "c", "    ")}    let picked = i32(${picked});
 /// strides, then each epilogue operand's offset and strides over
 /// `[..batch, rows, cols]`. Where `continued`, the sums start from a partial
 /// result laid out as the output is, the last binding, after whose offset the
-/// parameters end. Where `half`, the right matrix is bf16, widened as read.
+/// parameters end. A `packed` right matrix is widened as read.
 /// Where `across`, the right matrix is contiguous along its inner axis, so a
 /// tile of it is read with neighbouring lanes along that axis.
-fn product_shader(op: &Expr, bindings: &List<i32>, batch: i32, continued: bool, half: bool, across: bool) -> String {
+fn product_shader(
+    op: &Expr,
+    bindings: &List<i32>,
+    batch: i32,
+    continued: bool,
+    packed: Option<HalfFloat>,
+    across: bool,
+) -> String {
     // The tile element a lane loads of the right matrix: its step of the inner
     // axis and its column, each within the tile.
     let [step, column] = if across { ["local.x", "local.y"] } else { ["local.y", "local.x"] };
@@ -3996,7 +4038,7 @@ fn product_shader(op: &Expr, bindings: &List<i32>, batch: i32, continued: bool, 
     }
 `;
     }
-    return `${buffers_wgsl(1 + max_of(bindings), right_binding(bindings, half))}
+    return `${buffers_wgsl(1 + max_of(bindings), right_binding(bindings, packed))}
 var<workgroup> ta: array<f32, 256>;
 var<workgroup> tb: array<f32, 256>;
 
@@ -4016,7 +4058,7 @@ ${start}    for (var t = 0u; t < (inner + 15u) / 16u; t++) {
         let cb = group.x * 16u + ${column};
         var vb = 0.0;
         if kb < inner && cb < cols {
-            vb = ${right_wgsl(bindings, half, "kb", "cb")};
+            vb = ${right_wgsl(bindings, packed, "kb", "cb")};
         }
         tb[${step} * 16u + ${column}] = vb;
         workgroupBarrier();
@@ -4039,8 +4081,8 @@ ${ELEMENTWISE_OPERATORS}`;
 /// contiguous, as a transposed weight is: a run of lanes reads one column.
 /// Otherwise a run of lanes reads one row's run of columns. A workgroup
 /// computes `lanes` columns, as `narrow_columns` counts them for a lane
-/// reading one element. The parameters and `half` are the tiled shader's.
-/// Where `width` is 2, the right matrix is bf16 and each lane reads a word,
+/// reading one element. The parameters and `packed` are the tiled shader's.
+/// Where `width` is 2, the right matrix is packed and each lane reads a word,
 /// two elements of it: two steps of the inner axis where `across`, two
 /// columns otherwise. Where `paired`, the right matrix interleaves two, and
 /// each even column's lane writes through `op` what its column and the next
@@ -4053,13 +4095,13 @@ fn narrow_product_shader(
     batch: i32,
     continued: bool,
     across: bool,
-    half: bool,
+    packed: Option<HalfFloat>,
     width: i32,
     lanes: i32,
     paired: bool,
     staged: &Option<Staged>,
 ) -> String {
-    assert width == 1 || half && width == 2;
+    assert width == 1 || width == 2;
     assert !paired || across && !continued && lanes % 2 == 0, "a pair's sums meet in one workgroup";
     assert !continued || staged matches { None }, "a prologue reads the whole inner axis";
     let splits = NARROW_LANES / lanes;
@@ -4084,16 +4126,17 @@ fn narrow_product_shader(
         None => |k: String| `o${bindings[0]}[u32(a_base + i32(r0 + b) * a_row + i32(${k}) * a_inner)]`,
     };
     let sum = if width == 1 {
-        `                let vb = ${right_wgsl(bindings, half, "k")};
+        `                let vb = ${right_wgsl(bindings, packed, "k")};
                 for (var b = 0u; b < block; b++) {
                     sums[b] += ${lhs("k")} * vb;
                 }
 `;
     } else {
+        let Some(half) = packed else {
+            panic("loam: a lane reads two elements of a word that holds one");
+        };
         let pair = `                let w = o${bindings[1]}[${right_index_wgsl("k")} >> 1u];
-                let v0 = bitcast<f32>(w << 16u);
-                let v1 = bitcast<f32>(w & 0xFFFF0000u);
-`;
+${pair_wgsl(half, "                ")}`;
         if across {
             `${pair}                for (var b = 0u; b < block; b++) {
                     sums[b] += ${lhs("k")} * v0;
@@ -4118,7 +4161,7 @@ fn narrow_product_shader(
     } else {
         "";
     };
-    return `${buffers_wgsl(1 + max_of(bindings), right_binding(bindings, half))}
+    return `${buffers_wgsl(1 + max_of(bindings), right_binding(bindings, packed))}
 var<workgroup> partial: array<f32, ${NARROW * lane_cols * NARROW_LANES}>;
 ${staging}
 @compute @workgroup_size(${NARROW_LANES})
@@ -4165,13 +4208,13 @@ ${ELEMENTWISE_OPERATORS}`;
 }
 
 /// The elements of `rhs`, a product's right matrix, that one word read gives
-/// [`narrow_product_shader`]: 2 where it is bf16 and each word starts at an
+/// [`narrow_product_shader`]: 2 where it is packed and each word starts at an
 /// even element along the axis read contiguously, the inner one where
 /// `across` and the columns otherwise, and 1 elsewhere.
 fn word_width(rhs: &DeviceTensor, across: bool) -> i32 {
     let r = rhs.extents.len();
     let unit = if across { r - 2 } else { r - 1 };
-    if !rhs.half || rhs.strides[unit] != 1 || rhs.offset % 2 != 0 {
+    if rhs.packed matches { None } || rhs.strides[unit] != 1 || rhs.offset % 2 != 0 {
         return 1;
     }
     for let d of 0..<r {
@@ -4182,9 +4225,9 @@ fn word_width(rhs: &DeviceTensor, across: bool) -> i32 {
     return 2;
 }
 
-/// The binding a product's right matrix is read from where it is bf16.
-fn right_binding(bindings: &List<i32>, half: bool) -> Option<i32> {
-    if !half {
+/// The binding a product's right matrix is read from where it is packed.
+fn right_binding(bindings: &List<i32>, packed: Option<HalfFloat>) -> Option<i32> {
+    if packed matches { None } {
         return null;
     }
     let mut readers = 0;
@@ -4193,13 +4236,13 @@ fn right_binding(bindings: &List<i32>, half: bool) -> Option<i32> {
             readers += 1;
         }
     }
-    assert readers == 1, "a bf16 binding holds the right matrix alone";
+    assert readers == 1, "a packed binding holds the right matrix alone";
     return Option::Some(bindings[1]);
 }
 
 /// A product's right matrix at the inner index `k` and column `column`.
-fn right_wgsl(bindings: &List<i32>, half: bool, k: String, column: String = "col") -> String {
-    return element_wgsl(`o${bindings[1]}`, right_index_wgsl(k, column), half);
+fn right_wgsl(bindings: &List<i32>, packed: Option<HalfFloat>, k: String, column: String = "col") -> String {
+    return element_wgsl(`o${bindings[1]}`, right_index_wgsl(k, column), packed);
 }
 
 /// The element index, a `u32`, of a product's right matrix at the inner index

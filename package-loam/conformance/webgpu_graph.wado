@@ -47,6 +47,11 @@ use gated from "./gated.onnxtext"
         type: "onnxtext",
         generator: { module: "lib:loam" },
     };
+use gated_f16 from "./gated_f16.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: { module: "lib:loam" },
+    };
 use projected from "./projected.onnxtext"
     with {
         type: "onnxtext",
@@ -333,6 +338,23 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     idle(&mut gpu);
     assert gpu.kept_bytes() == idle_bytes, "a call leaves nothing once its launches idle";
 
+    // A graph in f16 keeps a matrix bf16 would round as f16s, two to a word:
+    // the embedding's 8 elements, the paired products' 12 and the product
+    // down's 6, beside the normalization's weight and the epsilon in f32.
+    let before_f16 = gpu.kept_bytes();
+    let mut f16_gpu = gated_f16::Model::new(gated_f16::Params::embedded(&mut gpu));
+    assert gpu.kept_bytes() - before_f16 == 2 * 4 + 4 + (8 + 12 + 6) * 2, "a matrix of f16s is kept as f16s";
+    let mut f16_cpu = gated_f16::Model::new(gated_f16::Params::embedded(cpu));
+    for let positions of [3, 9] as List<i32> {
+        let rows = Tensor::<i64, [gated_f16::N, gated_f16::S]> {
+            data: (0..<positions).map(|i| (i * 3 % 4) as i64).collect(),
+            extents: [1, positions],
+        };
+        let on_device = widened(&gated_f16::compute(&mut gpu, &rows, &mut f16_gpu));
+        let reference = widened(&gated_f16::compute(cpu, &rows, &mut f16_cpu));
+        println(`compiled gated f16 ${positions} ${deviation(&on_device, &reference)}`);
+    }
+
     // The three projections of one input are one product, by their weights
     // kept side by side.
     let mut projected_gpu = projected::Model::new(projected::Params::embedded(&mut gpu));
@@ -575,6 +597,11 @@ fn rows_of<Axes>(rows: i32, positions: i32) -> Tensor<f32, Axes> {
         data,
         extents: [rows, positions, 2],
     };
+}
+
+fn widened<E: Element, Axes>(t: &Tensor<E, Axes>) -> List<f32> {
+    let cpu = &mut Cpu {};
+    return cpu.convert::<E, f32, Axes>(t).data;
 }
 
 /// How far `got` sits from `want`, NaN where their extents differ.

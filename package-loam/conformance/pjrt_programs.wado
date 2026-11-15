@@ -12,6 +12,11 @@ use gated from "./gated.onnxtext"
         type: "onnxtext",
         generator: { module: "lib:loam" },
     };
+use gated_f16 from "./gated_f16.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: { module: "lib:loam" },
+    };
 use projected from "./projected.onnxtext"
     with {
         type: "onnxtext",
@@ -156,6 +161,18 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
         assert gated_device.programs.len() == compiled, "one program per shape class";
         let reference = gated::compute(cpu, &input, &mut gated_cpu);
         note(`compiled gated ${positions}`, deviation(&on_device.data, &reference.data));
+    }
+
+    let mut f16_device = gated_f16::Model::new(gated_f16::Params::embedded(device));
+    let mut f16_cpu = gated_f16::Model::new(gated_f16::Params::embedded(cpu));
+    for let positions of [3, 9] as List<i32> {
+        let rows = Tensor::<i64, [gated_f16::N, gated_f16::S]> {
+            data: (0..<positions).map(|i| (i * 3 % 4) as i64).collect(),
+            extents: [1, positions],
+        };
+        let on_device = cpu.convert::<f16, f32, _>(&gated_f16::compute(device, &rows, &mut f16_device));
+        let reference = cpu.convert::<f16, f32, _>(&gated_f16::compute(cpu, &rows, &mut f16_cpu));
+        note(`compiled gated f16 ${positions}`, deviation(&on_device.data, &reference.data));
     }
 
     let mut projected_device = projected::Model::new(projected::Params::embedded(device));

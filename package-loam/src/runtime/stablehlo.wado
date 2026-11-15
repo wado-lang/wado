@@ -419,11 +419,12 @@ impl Writer {
         self.lined(id, node, "stablehlo.convert", bytes_name, raw, "", "");
     }
 
-    /// `op` over the node's operands, elementwise. A bf16 one goes through f32:
+    /// `op` over the node's operands, elementwise. A half one goes through f32.
     /// XLA folds the widening of a bf16 result into the operation that computed
-    /// it, which then never rounds.
+    /// it, which then never rounds, and a graph it computes in f16 lands a few
+    /// f16 steps from one whose every operation rounds once.
     fn computed(&mut self, id: i32, node: &RecordedNode, op: String) {
-        if node.kind matches { BF16 } {
+        if node.kind matches { BF16 | F16 } {
             self.summed(id, node, op, "", "", "", "");
         } else {
             self.line(id, node, op, "", "");
