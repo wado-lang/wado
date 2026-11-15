@@ -74,10 +74,6 @@ lower is then available to each interface the slice adds.
 
 ## Known gaps
 
-- The glue predates extern handles and no longer runs: it is called through the
-  canonical ABI, which carries no reference.
-  [WEP: Extern Handles](../docs/wep-2026-11-14-extern-handles.md) holds the
-  roadmap that replaces it.
 - A program cannot recover from a DOM exception: it traps.
 - CI runs the glue on jsdom only, never in a browser.
 - jco 1.30.0 fails an export that a listener reenters during

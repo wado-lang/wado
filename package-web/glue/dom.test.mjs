@@ -53,15 +53,24 @@ test("an element that is no input does not narrow to one", async () => {
   assert.equal(greeting.textContent, "Hello, stranger!");
 });
 
-test("one object crosses as one handle, tagged with its nearest class", async () => {
-  const { global, document: documentGlue } = await import(glue);
+test("an object's class is its nearest declared ancestor's", async () => {
+  const { $glue } = await import(glue);
   install('<div id="div"></div><p id="p"></p><input id="input">');
-  assert.equal(global.document(), global.document());
+  const { imports } = $glue();
+  const classOf = (id) => imports["$class-of"](document.getElementById(id));
+  // Neither `HTMLDivElement` nor `HTMLParagraphElement` is declared, so both
+  // answer `HTMLElement`'s class.
+  assert.equal(classOf("div"), classOf("p"));
+  assert.notEqual(classOf("input"), classOf("div"));
+  assert.notEqual(imports["$class-of"](document), classOf("div"));
+  assert.throws(() => imports["$class-of"]({}), TypeError);
+});
 
-  const handleOf = (id) => documentGlue.getElementById(global.document(), id);
-  const classOf = (handle) => Math.floor(handle / 2 ** 37);
-  assert.equal(classOf(handleOf("div")), classOf(handleOf("p")));
-  assert.notEqual(classOf(handleOf("input")), classOf(handleOf("div")));
-  assert.notEqual(handleOf("div"), handleOf("p"));
-  assert.equal(handleOf("div"), handleOf("div"));
+test("two handles are the same when they are one object", async () => {
+  const { $glue } = await import(glue);
+  install('<div id="div"></div><p id="p"></p>');
+  const { imports } = $glue();
+  const div = document.getElementById("div");
+  assert.equal(imports["$same"](div, document.getElementById("div")), 1);
+  assert.equal(imports["$same"](div, document.getElementById("p")), 0);
 });

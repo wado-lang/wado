@@ -1,108 +1,82 @@
 //! The JavaScript glue serving a `WebIDL` module's imports from the browser's own
 //! objects, generated from the same IR as the Wado module.
+//!
+//! A web import is a core import of the main module, so each function here
+//! takes the import's core signature: the canonical ABI's flat form, except
+//! that a handle, an `Option` of one and a closure are each one `externref`.
 
-use std::cmp::Reverse;
 use std::fmt::Write;
 
-use heck::ToLowerCamelCase;
-use wado_compiler::name::callback_export_name;
+use wado_compiler::name::{
+    ExternHostQuery, callback_export_name, cm_callback_func_name, cm_import_alias,
+};
 
 use crate::ir::{WadoFunction, WadoType};
 use crate::webidl::{JsFunction, JsMember, WebIdlOutput};
 
-/// A handle is the object itself, so the guest holds it as an `externref` and
-/// `==` on two of them is identity. The `$` prefix keeps the runtime's names
-/// apart from every `WebIDL` argument name.
+/// What every glue instance holds besides its imports. The `$` prefix keeps
+/// these names apart from every parameter, which is `p<n>`.
 const RUNTIME: &str = r#"
-// The class of the deepest interface `object` is an instance of.
-export function $classOf(object) {
-  const entry = $CLASSES.find(
-    ([name]) => globalThis[name] !== undefined && object instanceof globalThis[name],
-  );
-  if (entry === undefined) {
+// One glue per instance of the component: it holds that instance's memory.
+export function $glue() {
+  // The main module's memory, its allocator and its exports, which the loader
+  // hands over once the module is instantiated.
+  let $core;
+  const $decoder = new TextDecoder();
+  const $encoder = new TextEncoder();
+  const $view = () => new DataView($core.memory.buffer);
+  const $string = (ptr, len) => $decoder.decode(new Uint8Array($core.memory.buffer, ptr, len));
+  // Writes `value` where the guest frees it, and its address and length at `at`.
+  const $putString = (at, value) => {
+    const bytes = $encoder.encode(value);
+    const ptr = $core.realloc(0, 0, 1, bytes.length);
+    new Uint8Array($core.memory.buffer, ptr, bytes.length).set(bytes);
+    const view = $view();
+    view.setUint32(at, ptr, true);
+    view.setUint32(at + 4, bytes.length, true);
+  };
+  const $list = (ptr, len, size, load) =>
+    Array.from({ length: len }, (_, i) => load(ptr + i * size));
+
+  // Each declared interface's prototype, to its class.
+  let $classes;
+  // The class of the nearest ancestor of `object`'s interface that is declared.
+  const $classOf = (object) => {
+    if ($classes === undefined) {
+      $classes = new Map();
+      for (const [name, cls] of $CLASSES) {
+        if (globalThis[name] !== undefined) {
+          $classes.set(globalThis[name].prototype, cls);
+        }
+      }
+    }
+    for (let p = Object.getPrototypeOf(object); p !== null; p = Object.getPrototypeOf(p)) {
+      const cls = $classes.get(p);
+      if (cls !== undefined) {
+        return cls;
+      }
+    }
     throw new TypeError(`${object} is an instance of no interface this package declares`);
-  }
-  return entry[1];
-}
+  };
 
-const $some = (f) => (value) => (value === undefined ? undefined : f(value));
-const $nullable = (f) => (value) => (value === null ? undefined : f(value));
-const $someNumber = $some(Number);
-const $nullableBigInt = $nullable(BigInt);
+  // One function per closure, so `removeEventListener` is handed the very
+  // function `addEventListener` was. The map holds neither alive.
+  const $callbacks = new WeakMap();
+  const $callback = (closure, call) => {
+    let f = $callbacks.get(closure);
+    if (f === undefined) {
+      f = (...args) => call(closure, ...args);
+      $callbacks.set(closure, f);
+    }
+    return f;
+  };
 
-// The component's `wado:callback/callback` export, which calls a closure back.
-// The component hands it over once instantiated.
-let $callbackExport;
-
-export function $connect(callback) {
-  $callbackExport = callback;
-}
-
-// One function per closure key, so `removeEventListener` is handed the very
-// function `addEventListener` was.
-const $callbacks = new Map();
-
-function $callback(key, call) {
-  let f = $callbacks.get(key);
-  if (f === undefined) {
-    f = (...args) => call(key, ...args);
-    $callbacks.set(key, f);
-  }
-  return f;
-}
+  return {
+    connect(core) {
+      $core = core;
+    },
+    imports: {
 "#;
-
-/// Names JavaScript does not take as a parameter in a module, which is strict code.
-const RESERVED: &[&str] = &[
-    "arguments",
-    "await",
-    "break",
-    "case",
-    "catch",
-    "class",
-    "const",
-    "continue",
-    "debugger",
-    "default",
-    "delete",
-    "do",
-    "else",
-    "enum",
-    "eval",
-    "export",
-    "extends",
-    "false",
-    "finally",
-    "for",
-    "function",
-    "if",
-    "implements",
-    "import",
-    "in",
-    "instanceof",
-    "interface",
-    "let",
-    "new",
-    "null",
-    "package",
-    "private",
-    "protected",
-    "public",
-    "return",
-    "static",
-    "super",
-    "switch",
-    "this",
-    "throw",
-    "true",
-    "try",
-    "typeof",
-    "var",
-    "void",
-    "while",
-    "with",
-    "yield",
-];
 
 /// The glue module for `output`, naming `source` in its header.
 #[must_use]
@@ -110,74 +84,58 @@ pub fn generate(output: &WebIdlOutput, source: &str) -> String {
     let module = &output.module;
     let mut out = format!(
         "// Generated by wado-from-idl from {source}. Do not edit.\n\
-         // The `{}` module's imports, answered by the browser's own objects.\n\n",
+         // The `{}` module's imports, answered by the browser's own objects.\n\n\
+         const $CLASSES = [\n",
         module.package_name
     );
-    let mut classes: Vec<(&str, u16)> = module
-        .resources
-        .iter()
-        .map(|r| {
-            let classes = r
-                .classes
-                .expect("the WebIDL frontend numbers every resource");
-            (output.interfaces[&r.name].as_str(), classes.lo)
-        })
-        .collect();
-    classes.sort_by_key(|&(_, lo)| Reverse(lo));
-    out.push_str(
-        "// Deepest first: a class follows its ancestors in pre-order.\nconst $CLASSES = [\n",
-    );
-    for (name, class) in classes {
-        writeln!(out, "  [{name:?}, {class}],").unwrap();
+    for resource in &module.resources {
+        let classes = resource
+            .classes
+            .expect("the WebIDL frontend numbers every resource");
+        let interface = &output.interfaces[&resource.name];
+        writeln!(out, "  [{interface:?}, {}],", classes.lo).unwrap();
     }
     out.push_str("];\n");
     out.push_str(RUNTIME);
+    writeln!(
+        out,
+        "      {:?}: $classOf,\n      {:?}: (a, b) => (a === b ? 1 : 0),",
+        ExternHostQuery::ClassOf.import_name(),
+        ExternHostQuery::Same.import_name()
+    )
+    .unwrap();
 
-    let interfaces = module
+    let functions = module
         .resources
         .iter()
-        .map(|r| (&r.cm_attr, &r.methods))
-        .chain(
-            module
-                .interfaces
-                .iter()
-                .map(|i| (&i.cm_interface, &i.functions)),
-        );
-    for (path, functions) in interfaces {
-        let (_, name) = path
-            .split_once('/')
-            .expect("a `<package>/<interface>` path");
-        writeln!(out, "\nexport const {} = {{", name.to_lower_camel_case()).unwrap();
-        for function in functions {
+        .flat_map(|r| &r.methods)
+        .chain(module.interfaces.iter().flat_map(|i| &i.functions));
+    for function in functions {
+        if crosses(function) {
             write_function(&mut out, function, &output.js[&function.cm_attr]);
         }
-        out.push_str("};\n");
     }
+    out.push_str("    },\n  };\n}\n");
     out
 }
 
-fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
-    let (_, name) = function
-        .cm_attr
-        .split_once('#')
-        .expect("a `<interface>#<member>` path");
-    let params: Vec<String> = function
+/// Whether the compiler lowers `function`: a handle inside a list has no form
+/// until the handle table.
+fn crosses(function: &WadoFunction) -> bool {
+    function
         .params
         .iter()
-        .map(|p| {
-            let name = p.wit_name.to_lower_camel_case();
-            if RESERVED.contains(&name.as_str()) {
-                format!("{name}_")
-            } else {
-                name
-            }
-        })
-        .collect();
+        .map(|p| &p.ty)
+        .chain(&function.return_type)
+        .all(|ty| !matches!(Shape::of(ty), Shape::List(elem) if is_handle(elem)))
+}
+
+fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
+    let mut flat = FlatParams::default();
     let mut args: Vec<String> = function
         .params
         .iter()
-        .zip(&params)
-        .map(|(p, name)| from_guest(&p.ty, name))
+        .map(|p| lift(&p.ty, &mut flat))
         .collect();
     if js.variadic {
         let last = args.last_mut().expect("a variadic argument");
@@ -197,117 +155,311 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
         JsMember::GlobalGet(attribute) => format!("globalThis.{attribute}"),
     };
     let body = match &function.return_type {
-        Some(ty) => format!("return {};", to_guest(ty, &value)),
-        None => format!("{value};"),
+        None => vec![format!("{value};")],
+        Some(ty) if flat_count(ty) == 1 => vec![format!("return {};", lower(ty, &value))],
+        // A result of more than one core value returns through memory, at the
+        // address the last parameter carries.
+        Some(ty) => {
+            flat.names.push("$ret".to_string());
+            let mut lines = vec![format!("const $value = {value};")];
+            store(ty, "$ret", 0, "$value", &mut lines);
+            lines
+        }
     };
     writeln!(
         out,
-        "  {}({}) {{\n    {body}\n  }},",
-        name.to_lower_camel_case(),
-        params.join(", ")
+        "      {:?}: ({}) => {{",
+        cm_import_alias(&function.cm_attr),
+        flat.names.join(", ")
     )
     .unwrap();
+    for line in body {
+        writeln!(out, "        {line}").unwrap();
+    }
+    out.push_str("      },\n");
 }
 
-/// `value`, as jco lifts it from the guest, in the form the DOM takes.
-fn from_guest(ty: &WadoType, value: &str) -> String {
-    match ty {
-        WadoType::Callback { params, .. } => callback(params, value),
-        WadoType::List(inner) => {
-            let element = from_guest(inner, "x");
-            if element == "x" {
-                value.to_string()
-            } else {
-                // jco lifts a numeric list to a typed array, whose `map` would
-                // coerce back to its element type.
-                format!("Array.from({value}, (x) => {element})")
-            }
-        }
-        ty => apply(conversion(ty).map(|(to_dom, _)| to_dom), value),
+/// The core parameters of the function being written, named in order.
+#[derive(Default)]
+struct FlatParams {
+    names: Vec<String>,
+}
+
+impl FlatParams {
+    fn next(&mut self) -> String {
+        let name = format!("p{}", self.names.len());
+        self.names.push(name.clone());
+        name
     }
 }
 
-/// The function calling back the closure `key` names, which takes `params`.
-fn callback(params: &[WadoType], key: &str) -> String {
-    let export = callback_export_name(params.iter().map(argument_word)).to_lower_camel_case();
-    let args: Vec<String> = (0..params.len()).map(|i| format!(", a{i}")).collect();
-    let lifted: Vec<String> = params
-        .iter()
-        .enumerate()
-        .map(|(i, ty)| format!(", {}", to_guest(ty, &format!("a{i}"))))
-        .collect();
-    format!(
-        "$callback({key}, (key{}) => $callbackExport.{export}(key{}))",
-        args.concat(),
-        lifted.concat()
-    )
-}
-
-fn argument_word(ty: &WadoType) -> &'static str {
-    ty.callback_argument_word()
-        .unwrap_or_else(|| unreachable!("the WebIDL frontend admits no {ty:?} callback argument"))
-}
-
-/// `value`, as the DOM returns it, in the form jco lowers to the guest.
-fn to_guest(ty: &WadoType, value: &str) -> String {
-    apply(conversion(ty).map(|(_, to_guest)| to_guest), value)
-}
-
-fn apply(function: Option<&str>, value: &str) -> String {
-    function.map_or_else(|| value.to_string(), |f| format!("{f}({value})"))
-}
-
-/// The functions converting a `ty` to the DOM and back, where jco's own form
-/// differs. A `None` crosses as `undefined`, which the DOM reads as `null`.
-fn conversion(ty: &WadoType) -> Option<(&'static str, &'static str)> {
-    match ty {
-        WadoType::Option(inner) => Conversion::of(inner).map(|c| c.functions(true)),
-        ty => Conversion::of(ty).map(|c| c.functions(false)),
-    }
-}
-
+/// A value that is one core value, and one slot in memory.
 #[derive(Clone, Copy)]
-enum Conversion {
-    BigInt,
+enum Scalar {
+    Bool,
+    I8,
+    I16,
+    I32,
+    I64,
+    U8,
+    U16,
+    U32,
+    U64,
+    F32,
+    F64,
+    /// The object itself, as an `externref`.
+    Handle,
 }
 
-impl Conversion {
-    fn of(ty: &WadoType) -> Option<Self> {
+/// How a type the `WebIDL` frontend lowers to crosses.
+enum Shape<'a> {
+    Scalar(Scalar),
+    String,
+    List(&'a WadoType),
+    Option(&'a WadoType),
+    Callback(&'a [WadoType]),
+}
+
+impl<'a> Shape<'a> {
+    fn of(ty: &'a WadoType) -> Self {
         match ty {
             WadoType::Borrow(inner) => Self::of(inner),
-            WadoType::I64 | WadoType::U64 => Some(Self::BigInt),
-            // A handle is the object itself.
-            WadoType::Named(_)
-            | WadoType::Bool
-            | WadoType::I8
-            | WadoType::I16
-            | WadoType::I32
-            | WadoType::U8
-            | WadoType::U16
-            | WadoType::U32
-            | WadoType::F32
-            | WadoType::F64
-            | WadoType::String => None,
-            WadoType::Option(_)
-            | WadoType::Char
+            WadoType::Bool => Self::Scalar(Scalar::Bool),
+            WadoType::I8 => Self::Scalar(Scalar::I8),
+            WadoType::I16 => Self::Scalar(Scalar::I16),
+            WadoType::I32 => Self::Scalar(Scalar::I32),
+            WadoType::I64 => Self::Scalar(Scalar::I64),
+            WadoType::U8 => Self::Scalar(Scalar::U8),
+            WadoType::U16 => Self::Scalar(Scalar::U16),
+            WadoType::U32 => Self::Scalar(Scalar::U32),
+            WadoType::U64 => Self::Scalar(Scalar::U64),
+            WadoType::F32 => Self::Scalar(Scalar::F32),
+            WadoType::F64 => Self::Scalar(Scalar::F64),
+            WadoType::Named(_) => Self::Scalar(Scalar::Handle),
+            WadoType::String => Self::String,
+            WadoType::List(elem) => Self::List(elem),
+            WadoType::Option(inner) => Self::Option(inner),
+            WadoType::Callback { params, .. } => Self::Callback(params),
+            WadoType::Char
             | WadoType::I128
             | WadoType::U128
             | WadoType::Result { .. }
-            | WadoType::List(_)
             | WadoType::TreeMap(..)
             | WadoType::Tuple(_)
             | WadoType::Stream(_)
-            | WadoType::Future(_)
-            | WadoType::Callback { .. } => {
+            | WadoType::Future(_) => {
                 unreachable!("the WebIDL frontend lowers to no {ty:?} here")
             }
         }
     }
+}
 
-    const fn functions(self, optional: bool) -> (&'static str, &'static str) {
-        match (self, optional) {
-            (Self::BigInt, false) => ("Number", "BigInt"),
-            (Self::BigInt, true) => ("$someNumber", "$nullableBigInt"),
+fn is_handle(ty: &WadoType) -> bool {
+    matches!(Shape::of(ty), Shape::Scalar(Scalar::Handle))
+}
+
+/// How many core values `ty` crosses as, whole.
+fn flat_count(ty: &WadoType) -> usize {
+    match Shape::of(ty) {
+        // `None` is the null reference.
+        Shape::Option(inner) if is_handle(inner) => 1,
+        Shape::Option(inner) => 1 + flat_count(inner),
+        Shape::String | Shape::List(_) => 2,
+        Shape::Scalar(_) | Shape::Callback(_) => 1,
+    }
+}
+
+/// The DOM value of a parameter of type `ty`, read from the core parameters it
+/// takes from `flat`. A `None` is `undefined`, which the DOM reads as an
+/// argument left out.
+fn lift(ty: &WadoType, flat: &mut FlatParams) -> String {
+    match Shape::of(ty) {
+        Shape::Option(inner) if is_handle(inner) => format!("({} ?? undefined)", flat.next()),
+        Shape::Option(inner) => {
+            let case = flat.next();
+            let some = lift(inner, flat);
+            format!("({case} === 0 ? undefined : {some})")
         }
+        Shape::String => {
+            let (ptr, len) = (flat.next(), flat.next());
+            format!("$string({ptr}, {len})")
+        }
+        Shape::List(elem) => {
+            let (ptr, len) = (flat.next(), flat.next());
+            let (size, _) = layout(elem);
+            format!("$list({ptr}, {len}, {size}, (at) => {})", load(elem, "at"))
+        }
+        Shape::Callback(params) => callback(params, &flat.next()),
+        Shape::Scalar(scalar) => scalar.from_core(&flat.next()),
+    }
+}
+
+/// The one core value the DOM's `value` of type `ty` returns as.
+fn lower(ty: &WadoType, value: &str) -> String {
+    match Shape::of(ty) {
+        // An `undefined` would cross as a reference that is not null.
+        Shape::Option(inner) if is_handle(inner) => format!("({value} ?? null)"),
+        Shape::Scalar(scalar) => scalar.to_core(value),
+        Shape::Option(_) | Shape::String | Shape::List(_) | Shape::Callback(_) => {
+            unreachable!("{ty:?} is no single core value")
+        }
+    }
+}
+
+/// The function calling the closure `closure` back, which takes `params`.
+fn callback(params: &[WadoType], closure: &str) -> String {
+    let words = params.iter().map(|ty| {
+        ty.callback_argument_word()
+            .unwrap_or_else(|| unreachable!("the WebIDL frontend admits no {ty:?} callback argument"))
+    });
+    let export = cm_callback_func_name(&callback_export_name(words));
+    let names: Vec<String> = (0..params.len()).map(|i| format!("a{i}")).collect();
+    let lowered: Vec<String> = params
+        .iter()
+        .zip(&names)
+        .map(|(ty, name)| format!(", {}", lower(ty, name)))
+        .collect();
+    let taken: Vec<String> = names.iter().map(|name| format!(", {name}")).collect();
+    format!(
+        "$callback({closure}, (closure{}) => $core.exports[{export:?}](closure{}))",
+        taken.concat(),
+        lowered.concat()
+    )
+}
+
+/// The canonical ABI's size and alignment of `ty` in linear memory.
+fn layout(ty: &WadoType) -> (u32, u32) {
+    match Shape::of(ty) {
+        Shape::Scalar(scalar) => {
+            let size = scalar.size();
+            (size, size)
+        }
+        Shape::String | Shape::List(_) => (8, 4),
+        Shape::Option(inner) => {
+            let (size, align) = layout(inner);
+            (align_to(align_to(1, align) + size, align), align)
+        }
+        Shape::Callback(_) => unreachable!("a closure crosses only as a whole parameter"),
+    }
+}
+
+fn align_to(offset: u32, align: u32) -> u32 {
+    offset.div_ceil(align) * align
+}
+
+/// The DOM value of type `ty` read from linear memory at `at`.
+fn load(ty: &WadoType, at: &str) -> String {
+    match Shape::of(ty) {
+        Shape::String => {
+            format!("$string($view().getUint32({at}, true), $view().getUint32({at} + 4, true))")
+        }
+        Shape::Scalar(scalar) => {
+            scalar.from_core(&format!("$view().{}", scalar.accessor("get", at, None)))
+        }
+        Shape::List(_) | Shape::Option(_) | Shape::Callback(_) => {
+            unreachable!("the WebIDL frontend lowers to no list of {ty:?}")
+        }
+    }
+}
+
+/// The statements writing the DOM's `value` of type `ty` at `base + offset`.
+fn store(ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<String>) {
+    let at = if offset == 0 {
+        base.to_string()
+    } else {
+        format!("{base} + {offset}")
+    };
+    match Shape::of(ty) {
+        Shape::String => lines.push(format!("$putString({at}, {value});")),
+        Shape::Option(inner) => {
+            let (_, align) = layout(inner);
+            lines.push(format!("if ({value} === null || {value} === undefined) {{"));
+            lines.push(format!("  $view().setUint8({at}, 0);"));
+            lines.push("} else {".to_string());
+            lines.push(format!("  $view().setUint8({at}, 1);"));
+            let mut some = Vec::new();
+            store(inner, base, offset + align_to(1, align), value, &mut some);
+            lines.extend(some.into_iter().map(|line| format!("  {line}")));
+            lines.push("}".to_string());
+        }
+        Shape::Scalar(scalar) => lines.push(format!(
+            "$view().{};",
+            scalar.accessor("set", &at, Some(&scalar.to_core(value)))
+        )),
+        Shape::List(_) | Shape::Callback(_) => {
+            unreachable!("the WebIDL frontend returns no {ty:?}")
+        }
+    }
+}
+
+impl Scalar {
+    /// The DOM value that the core value `value` is.
+    fn from_core(self, value: &str) -> String {
+        match self {
+            Self::Bool => format!("({value} !== 0)"),
+            // A core `i32` reaches JavaScript signed.
+            Self::U32 => format!("({value} >>> 0)"),
+            Self::I64 => format!("Number({value})"),
+            Self::U64 => format!("Number(BigInt.asUintN(64, {value}))"),
+            Self::I8
+            | Self::I16
+            | Self::I32
+            | Self::U8
+            | Self::U16
+            | Self::F32
+            | Self::F64
+            | Self::Handle => value.to_string(),
+        }
+    }
+
+    /// The core value the DOM's `value` crosses as.
+    fn to_core(self, value: &str) -> String {
+        match self {
+            Self::Bool => format!("({value} ? 1 : 0)"),
+            Self::I64 | Self::U64 => format!("BigInt({value})"),
+            Self::I8
+            | Self::I16
+            | Self::I32
+            | Self::U8
+            | Self::U16
+            | Self::U32
+            | Self::F32
+            | Self::F64
+            | Self::Handle => value.to_string(),
+        }
+    }
+
+    /// Its size in linear memory, which is also its alignment.
+    fn size(self) -> u32 {
+        match self {
+            Self::Bool | Self::I8 | Self::U8 => 1,
+            Self::I16 | Self::U16 => 2,
+            Self::I32 | Self::U32 | Self::F32 => 4,
+            Self::I64 | Self::U64 | Self::F64 => 8,
+            Self::Handle => unreachable!("a handle in memory has no form until the handle table"),
+        }
+    }
+
+    /// The `DataView` call reading it at `at`, or writing `value` there.
+    fn accessor(self, verb: &str, at: &str, value: Option<&str>) -> String {
+        let method = match self {
+            Self::Bool | Self::U8 => "Uint8",
+            Self::I8 => "Int8",
+            Self::I16 => "Int16",
+            Self::U16 => "Uint16",
+            Self::I32 => "Int32",
+            Self::U32 => "Uint32",
+            Self::I64 => "BigInt64",
+            Self::U64 => "BigUint64",
+            Self::F32 => "Float32",
+            Self::F64 => "Float64",
+            Self::Handle => unreachable!("a handle in memory has no form until the handle table"),
+        };
+        let mut args = vec![at.to_string()];
+        args.extend(value.map(str::to_string));
+        if self.size() > 1 {
+            args.push("true".to_string());
+        }
+        format!("{verb}{method}({})", args.join(", "))
     }
 }

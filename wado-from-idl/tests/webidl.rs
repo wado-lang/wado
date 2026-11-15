@@ -509,10 +509,14 @@ fn a_variadic_argument_is_a_list_the_glue_spreads() {
         .expect("the slice should transform")
         .glue;
     assert!(
-        glue.contains("  append(self, nodes) {\n    self.append(...nodes);\n  },"),
+        glue.contains(
+            "p0.write($string(p1, p2), ...$list(p3, p4, 8, (at) => \
+             $string($view().getUint32(at, true), $view().getUint32(at + 4, true))));"
+        ),
         "{glue}"
     );
-    assert!(glue.contains("self.write(prefix, ...text);"), "{glue}");
+    // A handle inside a list has no form until the handle table.
+    assert!(!glue.contains("element#append"), "{glue}");
 }
 
 fn callback(name: &str, ret: &str, args: &[String]) -> String {
