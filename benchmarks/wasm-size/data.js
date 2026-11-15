@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794742325507,
+  "lastUpdate": 1794751370527,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77781,6 +77781,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 435516,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d7329c8aa7b6b0a3a024a2c807ae9891d9de4ae5",
+          "message": "Merge pull request #2633 from wado-lang/ccr-9fe26c59-gqrsz3\n\nperf(sroa): scalarize a struct handed `&mut` to a cold call",
+          "timestamp": "2026-11-15T22:47:16+09:00",
+          "tree_id": "e4e56b16b87053a625b7790cb83ec3436ce98954",
+          "url": "https://github.com/wado-lang/wado/commit/d7329c8aa7b6b0a3a024a2c807ae9891d9de4ae5"
+        },
+        "date": 1794751369604,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7295,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24542,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435490,
             "unit": "bytes"
           }
         ]
