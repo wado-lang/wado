@@ -203,6 +203,9 @@ pub fn cm_type_to_type_id(
             type_table.make_compiler_struct(CompilerItem::String)
         }
         Type::Named(_) if item == Some(CompilerItem::ByteList) => type_table.make_byte_list(),
+        Type::Named(_) if item == Some(CompilerItem::ExternObject) => {
+            type_table.make_extern_object()
+        }
         Type::Named(named) => match named.name.as_str() {
             "i8" => TypeTable::I8,
             "i16" => TypeTable::I16,

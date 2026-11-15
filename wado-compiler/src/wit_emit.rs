@@ -32,9 +32,7 @@ use crate::tir::{
 };
 use crate::type_table::TypeTable;
 use crate::unparse::unparse_type_into;
-use crate::world_registry::{
-    CALLBACK_INTERFACE, CallbackExport, ExportMappings, WorldRegistry, WorldSurface,
-};
+use crate::world_registry::{ExportMappings, WorldRegistry, WorldSurface};
 
 /// How much of the referenced interface graph to inline into the WIT document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -267,10 +265,6 @@ pub fn emit_wit_text_from(
             out.push('\n');
             out.push_str(&nested.to_string());
         }
-        if let Some(nested) = callback_package(&surface.callbacks) {
-            out.push('\n');
-            out.push_str(&nested.to_string());
-        }
     }
     Ok(out)
 }
@@ -411,9 +405,6 @@ impl<'a> Emitter<'a> {
         }
         for fq in &export_fqs {
             world.named_interface_export(fq.clone());
-        }
-        if !surface.callbacks.is_empty() {
-            world.named_interface_export(CALLBACK_INTERFACE);
         }
 
         if user_funcs.is_empty() {
@@ -1244,30 +1235,6 @@ fn component_imports<'a>(
     functions
         .iter()
         .filter(|func| !registry.is_extern_import(func))
-}
-
-/// The package declaring `callbacks`, which no registry holds; `None` without any.
-fn callback_package(callbacks: &[CallbackExport]) -> Option<wit_encoder::NestedPackage> {
-    if callbacks.is_empty() {
-        return None;
-    }
-    let parts =
-        FqParts::parse(CALLBACK_INTERFACE).expect("the callback interface is fully qualified");
-    let mut iface = Interface::new(parts.interface);
-    for callback in callbacks {
-        let mut func = StandaloneFunc::new(callback.cm_name.clone(), false);
-        let mut params = Params::empty();
-        for (name, primitive) in &callback.params {
-            let ty = primitive_by_name(primitive).expect("a callback takes primitives");
-            params.push(name.clone(), ty);
-        }
-        func.set_params(params);
-        iface.function(func);
-    }
-    let mut package =
-        wit_encoder::NestedPackage::new(PackageName::new(parts.namespace, parts.package, None));
-    package.interface(iface);
-    Some(package)
 }
 
 /// Map a Wado primitive type name to its WIT type, if it names a primitive.

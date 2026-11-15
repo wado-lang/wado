@@ -632,6 +632,10 @@ fn register_exports(ctx: &mut WirContext<'_>) {
         }
     }
 
+    for name in &component_plan.callback_core_exports {
+        export_under_own_name(ctx, name);
+    }
+
     for callback in &component_plan.guest_callbacks {
         export_under_own_name(ctx, &callback.core_func_name);
         if let Some(post_return) = &callback.post_return_core_name {

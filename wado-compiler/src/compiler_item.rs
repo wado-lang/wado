@@ -230,6 +230,9 @@ pub enum CompilerItem {
     FutureWritable,
     /// `Subtask` — the subtask an async import call runs as.
     Subtask,
+    /// `ExternObject` — any extern handle, whatever resource declares it: what
+    /// a closure crosses to a web import as.
+    ExternObject,
     /// `Stream<T>` — the CM stream handle a `stream` type lowers to.
     Stream,
     /// `StreamWritable<T>` — the write end of a CM stream.
@@ -744,10 +747,6 @@ pub enum CompilerItem {
     CmLowerString,
     /// `core:rt::cm_lower_array_u8`.
     CmLowerArrayU8,
-    /// `core:rt::cm_callback_key`.
-    CmCallbackKey,
-    /// `core:rt::cm_callback`.
-    CmCallback,
     /// `core:rt::cm_await_blocked`.
     CmAwaitBlocked,
     /// `core:prelude/types::CopyResult`, how a CM copy ended.
@@ -860,6 +859,7 @@ impl CompilerItem {
         Self::Future,
         Self::FutureWritable,
         Self::Subtask,
+        Self::ExternObject,
         Self::Stream,
         Self::StreamWritable,
         Self::ByteList,
@@ -1047,8 +1047,6 @@ impl CompilerItem {
         Self::MemoryToByteList,
         Self::CmLowerString,
         Self::CmLowerArrayU8,
-        Self::CmCallbackKey,
-        Self::CmCallback,
         Self::CmAwaitBlocked,
         Self::CmFutureWriteResult,
         Self::CmCopyCount,
@@ -1148,6 +1146,7 @@ impl CompilerItem {
             Self::Future => "future",
             Self::FutureWritable => "future_writable",
             Self::Subtask => "subtask",
+            Self::ExternObject => "extern_object",
             Self::Stream => "stream",
             Self::StreamWritable => "stream_writable",
             Self::ByteList => "byte_list",
@@ -1276,8 +1275,6 @@ impl CompilerItem {
             Self::MemoryToByteList => "memory_to_byte_list",
             Self::CmLowerString => "cm_lower_string",
             Self::CmLowerArrayU8 => "cm_lower_array_u8",
-            Self::CmCallbackKey => "cm_callback_key",
-            Self::CmCallback => "cm_callback",
             Self::CmAwaitBlocked => "cm_await_blocked",
             Self::CmFutureWriteResult => "cm_future_write_result",
             Self::CmCopyCount => "cm_copy_count",
@@ -1393,8 +1390,6 @@ impl CompilerItem {
             | Self::MemoryToByteList
             | Self::CmLowerString
             | Self::CmLowerArrayU8
-            | Self::CmCallbackKey
-            | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmFutureWriteResult
             | Self::CmCopyCount
@@ -1470,6 +1465,7 @@ impl CompilerItem {
             | Self::Future
             | Self::FutureWritable
             | Self::Subtask
+            | Self::ExternObject
             | Self::Stream
             | Self::StreamWritable
             | Self::ByteList
@@ -1757,8 +1753,6 @@ impl CompilerItem {
             | Self::MemoryToByteList
             | Self::CmLowerString
             | Self::CmLowerArrayU8
-            | Self::CmCallbackKey
-            | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmFutureWriteResult
             | Self::CmCopyCount
@@ -1806,7 +1800,8 @@ impl CompilerItem {
             | Self::FutureWritable
             | Self::Stream
             | Self::StreamWritable
-            | Self::Subtask => CompilerItemKind::Resource,
+            | Self::Subtask
+            | Self::ExternObject => CompilerItemKind::Resource,
             Self::ByteList | Self::ByteSlice => CompilerItemKind::Newtype,
             Self::Option | Self::Result => CompilerItemKind::Variant,
             Self::Ordering

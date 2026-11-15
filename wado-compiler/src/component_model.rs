@@ -694,7 +694,8 @@ pub struct CmFunctionInfo {
     /// The indices of `params` declared `&ListView<E>`, recorded at the
     /// `List<E>` they cross as: the adapter passes the block the view lies in.
     pub list_args: Vec<usize>,
-    /// The closures among `params`, by index and declared type. Each crosses as its `u32` key.
+    /// The closures among `params`, by index and declared type. Each crosses as
+    /// an extern handle, so a function taking one is a web import.
     pub callbacks: Vec<(usize, Type)>,
     /// Return type
     pub return_type: Option<Type>,
@@ -1872,6 +1873,10 @@ impl CmInterfaceRegistry {
         let Type::Named(named) = &handle else {
             return None;
         };
+        // `core:rt` declares it, and no binding module does.
+        if self.type_decls.is(named.id, CompilerItem::ExternObject) {
+            return Some(handle);
+        }
         let source = self.source_interface(named)?;
         self.is_unrestricted_resource(&source, &named.name)
             .then_some(handle)
@@ -1929,7 +1934,6 @@ impl CmInterfaceRegistry {
         func.params
             .iter()
             .map(|(_, _, ty)| ty)
-            .chain(func.callbacks.iter().map(|(_, ty)| ty))
             .chain(&func.return_type)
             .any(|ty| self.mentions_extern_handle(ty))
     }
@@ -3560,7 +3564,7 @@ impl CmInterfaceRegistry {
         Ok(())
     }
 
-    /// `params` at their GC-level value types, closures as `u32` keys and a
+    /// `params` at their GC-level value types, a closure as the extern handle it crosses as and a
     /// `&ListView<E>` as the `List<E>` it crosses as.
     fn value_params(&self, params: Vec<(String, String, Type)>) -> ValueParams {
         let mut callbacks = Vec::new();
@@ -3582,9 +3586,11 @@ impl CmInterfaceRegistry {
                 if !matches!(ty, Type::Function(_)) {
                     return (name, cm_name, self.value_type(&ty));
                 }
-                let key = NamedType::new(AstId::fresh(), "u32".to_string(), ty.span());
+                let closure =
+                    self.type_decls
+                        .item_type(CompilerItem::ExternObject, vec![], ty.span());
                 callbacks.push((i, ty));
-                (name, cm_name, Type::Named(key))
+                (name, cm_name, closure)
             })
             .collect();
         ValueParams {
@@ -4984,6 +4990,7 @@ impl KnownTypes<'_> {
     fn named_supported(&self, named: &NamedType) -> bool {
         let name = named.name.as_str();
         self.decls.is(named.id, CompilerItem::String)
+            || self.decls.is(named.id, CompilerItem::ExternObject)
             || wado_primitive_name_to_cm(name).is_some()
             || self.enums.contains(name)
             || self.resources.contains(name)

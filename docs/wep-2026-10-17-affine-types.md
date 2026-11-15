@@ -962,8 +962,8 @@ one, and it is refused where it would outlive the value's owner.
 ### A callee may keep a reference no body follows
 
 The check follows a reference within the body holding it. A callee handed one
-may store it in a global, or hand a closure to the Component Model, which
-`cm_callback_key` keeps for the life of the instance. Neither is visible at the
+may store it in a global, or hand a closure to a web import, whose host keeps
+it for as long as it likes. Neither is visible at the
 call, so a use after the owner drops reaches a zeroed object, and what that does
 is unspecified.
 

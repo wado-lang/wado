@@ -646,17 +646,17 @@ pub(super) fn is_same_free_read(a: &WirInstr, b: &WirInstr) -> bool {
 
 /// Visit each operand of `instr` that accepts `(ref null $type)` where its
 /// type allows `(ref $type)`: one an instruction traps on when null by itself,
-/// `ref.cast` and `ref.test`, a value dropped, tested for null, compared or
-/// externalized, and one stored into a local `locals` declares nullable.
+/// `ref.cast` and `ref.test`, a value dropped, tested for null or compared,
+/// and one stored into a local `locals` declares nullable. An externalized
+/// value is none: `extern.convert_any` answers null for null, so its result is
+/// as nullable as its operand.
 pub(super) fn for_each_nullable_ref_operand(
     instr: &mut WirInstr,
     locals: &WirLocals,
     mut f: impl FnMut(&mut WirInstr),
 ) {
     match instr {
-        WirInstr::Drop(value) | WirInstr::RefIsNull(value) | WirInstr::ExternExternalize(value) => {
-            f(value);
-        }
+        WirInstr::Drop(value) | WirInstr::RefIsNull(value) => f(value),
         WirInstr::RefEq(a, b) => {
             f(a);
             f(b);

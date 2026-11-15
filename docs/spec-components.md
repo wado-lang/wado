@@ -142,18 +142,21 @@ test {
 
 - A callback's parameters are scalars and handles, and it returns nothing. Any
   other function type on a `#[cm]` declaration is a compile error.
-- The closure stays in the guest. The call registers it and passes a `u32` key
-  in its place. One closure value has one key.
-- The host calls the closure back through the `wado:callback/callback`
-  interface, which the component exports. It holds one function per argument
-  shape, named `call` followed by one word per argument: the argument's
-  primitive type, or `handle` for a handle (`call`, `call-i32`, `call-handle`).
-  Each takes the key first, is lifted synchronously, and returns nothing.
-  `wado wit` lists the interface among the world's exports.
+- The closure crosses as itself: one reference the host holds, and the
+  collector reclaims the closure once the host lets go of it. An import that
+  takes one is a core import of the main module, as an import of an
+  [extern handle](./wep-2026-11-14-extern-handles.md#a-closure-crosses-as-itself)
+  is.
+- The host calls the closure back through a core export of the main module. It
+  exports one function per argument shape, named `$cm_callback__call` followed
+  by `-` and one word per argument: the argument's primitive type, or `handle`
+  for a handle (`$cm_callback__call`, `$cm_callback__call-i32`,
+  `$cm_callback__call-handle`). Each takes the closure first and returns
+  nothing. The component lifts none of them, so `wado wit` lists none.
 - The host may call a callback during an import call, which reenters the
   component, or while `run` is suspended.
-- A callback runs as a task of its own. It may perform an effect a world import
-  backs.
+- A callback runs outside any Component Model task. It may perform an effect a
+  synchronously lowered world import backs.
 - Where a Wado handler answers the `#[cm]` interface instead of the host, the
   handler receives the closure itself and may call it.
 

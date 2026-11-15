@@ -8,7 +8,6 @@ use wado_compiler_tests as common;
 
 mod assert_capture_plan;
 mod cm_async_value_import;
-mod cm_callback_export;
 mod cm_catalog;
 mod cm_decls_across_modules;
 mod cm_donut_canary;

@@ -341,10 +341,11 @@ fn full_scope_reconstructs_resource_methods_and_reparses() {
         .expect("resource WIT failed to re-parse");
 }
 
-/// A closure passed to an import makes the component export the callback
-/// interface the host calls it back through, which a full scope declares.
+/// An import taking a closure is a web import, and the host calls the closure
+/// back through a core export the component does not lift: the world names
+/// neither.
 #[test]
-fn a_callback_exports_the_interface_the_host_calls_it_back_through() {
+fn a_callback_leaves_the_world_as_it_was() {
     let source = "#[cm(\"example:demo/target\")]\n\
          interface Target {\n\
              #[cm(\"example:demo/target#listen\")]\n\
@@ -355,11 +356,8 @@ fn a_callback_exports_the_interface_the_host_calls_it_back_through() {
              Target::listen(|_: i32| {});\n\
          }";
     let text = emit_scope(source, WitScope::Full);
-    assert!(text.contains("export wado:callback/callback;"), "\n{text}");
-    assert!(
-        text.contains("call-i32: func(key: u32, a0: s32);"),
-        "\n{text}"
-    );
+    assert!(!text.contains("callback"), "\n{text}");
+    assert!(!text.contains("example:demo/target"), "\n{text}");
     let mut resolve = wit_parser::Resolve::new();
     resolve
         .push_str("emitted.wit", &text)

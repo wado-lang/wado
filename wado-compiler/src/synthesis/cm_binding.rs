@@ -1102,7 +1102,7 @@ fn validate_imports_representable(project: &Package) -> Result<(), SynthesisErro
             } else {
                 op.return_type
             };
-            // A closure crosses as its callback key; the elaborator checked its shape.
+            // A closure crosses as an extern handle; the elaborator checked its shape.
             let values = op
                 .params
                 .iter()

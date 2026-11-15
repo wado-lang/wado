@@ -19,9 +19,9 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use crate::synthesis::common::{cast, internal_call, option_none, synth_span};
+use crate::synthesis::common::{builtin_call, cast, option_none, synth_span};
 
-use super::callback_export::{Callbacks, erased_callback_type};
+use super::callback_export::Callbacks;
 use super::import_adapter::is_gc_passthrough_param;
 use super::types::{cm_type_to_type_id, flatten_param_type, is_wasm_flat_type};
 
@@ -329,7 +329,7 @@ impl CallRewriteWalker<'_> {
         let mut args = take_call_args(expr);
         let receiver = matches!(kind, CmCallKind::Method).then(|| args.remove(0));
         let param_offset = usize::from(receiver.is_some());
-        self.key_callbacks(
+        self.externalize_callbacks(
             func_info,
             args.iter_mut().map(|a| &mut a.expr),
             param_offset,
@@ -354,32 +354,33 @@ impl CallRewriteWalker<'_> {
         self.retarget_to_adapter(expr, adapter, args);
     }
 
-    /// Replace each closure `func_info` takes with its `u32` key. `args` starts at
-    /// parameter `param_offset`.
-    fn key_callbacks<'e>(
+    /// Replace each closure `func_info` takes with the extern handle it
+    /// crosses as. `args` starts at parameter `param_offset`.
+    fn externalize_callbacks<'e>(
         &mut self,
         func_info: &CmFunctionInfo,
         args: impl Iterator<Item = &'e mut TirExpr>,
         param_offset: usize,
     ) {
         for (i, arg) in args.enumerate() {
-            if func_info.callback_at(i + param_offset).is_none() {
+            let param = i + param_offset;
+            if func_info.callback_at(param).is_none() {
                 continue;
             }
+            let extern_object = cm_type_to_type_id(
+                &func_info.params[param].2,
+                &mut self.type_table.borrow_mut(),
+                self.call_sites.registry,
+            );
             // A diverging argument never reaches the call.
             if !self.type_table.borrow().is_never(arg.type_id) {
-                self.callbacks.insert(arg.type_id);
+                self.callbacks.insert((arg.type_id, extern_object));
             }
-            let erased = erased_callback_type(&mut self.type_table.borrow_mut());
             let closure = std::mem::replace(
                 arg,
                 TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
             );
-            *arg = internal_call(
-                "cm_callback_key",
-                vec![cast(closure, erased)],
-                TypeTable::U32,
-            );
+            *arg = builtin_call("closure_as_extern", vec![closure], extern_object);
         }
     }
 

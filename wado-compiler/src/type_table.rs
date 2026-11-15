@@ -2194,6 +2194,12 @@ impl TypeTable {
         self.make_generic_instance(def, vec![payload])
     }
 
+    /// Any extern handle, whatever resource declares it.
+    pub fn make_extern_object(&mut self) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::ExternObject);
+        self.make_resource(def)
+    }
+
     pub fn make_subtask(&mut self) -> TypeId {
         let def = self.require_compiler_item_def(CompilerItem::Subtask);
         self.make_resource(def)

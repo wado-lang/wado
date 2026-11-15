@@ -1,56 +1,50 @@
-//! The exports a host calls a Wado closure back through, one per signature.
-
-use std::iter;
+//! The core exports a host calls a Wado closure back through, one per
+//! argument shape. The component lifts none of them: the closure arrives as
+//! the `externref` it crossed as, which the Component Model cannot carry.
 
 use crate::hashmap::IndexSet;
 use crate::name::{callback_export_name, cm_callback_func_name};
 use crate::package::Package;
 use crate::synthesis::common::{
-    block, cast, expr_stmt, internal_call, local_ref, locals_from_params, synth_param, synth_span,
+    block, builtin_call, expr_stmt, local_ref, locals_from_params, synth_param, synth_span,
 };
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TypeId};
 use crate::type_table::TypeTable;
-use crate::world_registry::CallbackExport;
 
 use super::entry_type_table;
 use super::import_adapter::make_binding_function;
 
-/// The closure types the imports are passed.
-pub(super) type Callbacks = IndexSet<TypeId>;
+/// The closure types the imports are passed, each with the extern handle type
+/// it crosses as.
+pub(super) type Callbacks = IndexSet<(TypeId, TypeId)>;
 
-/// Add an export for each boundary signature among `callbacks` to the entry
+/// Add an export for each argument shape among `callbacks` to the entry
 /// module.
 pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Callbacks) {
     let type_table = entry_type_table(project);
-    let mut signatures: IndexSet<String> = IndexSet::default();
-    let mut exports = Vec::new();
+    let mut shapes: IndexSet<String> = IndexSet::default();
     let mut functions = Vec::new();
-    for &closure in callbacks {
+    for &(closure, extern_object) in callbacks {
         let params = closure_params(&type_table.borrow(), closure);
         let boundary: Vec<Boundary> = params
             .iter()
             .map(|&param| boundary(&type_table.borrow(), param))
             .collect();
-        let cm_name = callback_export_name(boundary.iter().map(|b| b.word));
-        if !signatures.insert(cm_name.clone()) {
+        let shape = callback_export_name(boundary.iter().map(|b| b.word));
+        if !shapes.insert(shape.clone()) {
             continue;
         }
-        let core_func = cm_callback_func_name(&cm_name);
-        let mut tir_params = vec![synth_param("key", 0, TypeTable::U32)];
+        let mut tir_params = vec![synth_param("closure", 0, extern_object)];
         let mut args = Vec::new();
-        for (i, (&wado, b)) in params.iter().zip(&boundary).enumerate() {
+        for (i, b) in boundary.iter().enumerate() {
             let name = format!("a{i}");
             let slot = u32::try_from(i + 1).expect("a closure takes few parameters");
             tir_params.push(synth_param(&name, slot, b.type_id));
-            args.push(lift_arg(local_ref(slot, &name, b.type_id), wado));
+            args.push(local_ref(slot, &name, b.type_id));
         }
-        let erased = erased_callback_type(&mut type_table.borrow_mut());
-        let callee = cast(
-            internal_call(
-                "cm_callback",
-                vec![local_ref(0, "key", TypeTable::U32)],
-                erased,
-            ),
+        let callee = builtin_call(
+            "extern_as_closure",
+            vec![local_ref(0, "closure", extern_object)],
             closure,
         );
         let call = TirExpr::new(
@@ -63,37 +57,21 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
         );
         let locals = locals_from_params(&tir_params);
         let function = make_binding_function(
-            core_func.clone(),
+            cm_callback_func_name(&shape),
             tir_params,
             TypeTable::UNIT,
             block(vec![expr_stmt(call)]),
             u32::try_from(locals.len()).expect("a closure takes few parameters"),
             locals,
         );
-        // A handle is an `externref`, which the Component Model cannot lift:
-        // such a callback is a core export alone, for a host that reaches the
-        // core instance.
-        let export_params: Option<Vec<_>> = iter::once(Some(("key".to_string(), "u32")))
-            .chain(
-                boundary
-                    .iter()
-                    .enumerate()
-                    .map(|(i, b)| b.primitive.map(|primitive| (format!("a{i}"), primitive))),
-            )
-            .collect();
         {
             let mut function = function.borrow_mut();
             function.is_export = true;
-            function.is_cm_export = export_params.is_some();
+            // The host calls it, so it is a root with a fixed signature.
+            function.is_cm_export = true;
+            project.callback_core_exports.push(function.name.clone());
         }
         functions.push(function);
-        if let Some(params) = export_params {
-            exports.push(CallbackExport {
-                cm_name,
-                core_func,
-                params,
-            });
-        }
     }
     project
         .tir_modules
@@ -101,12 +79,6 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
         .expect("entry module should exist")
         .functions
         .extend(functions);
-    project.callback_exports = exports;
-}
-
-/// The `fn()` the `core:rt` registry holds every callback as.
-pub(super) fn erased_callback_type(type_table: &mut TypeTable) -> TypeId {
-    type_table.make_function(vec![], TypeTable::UNIT, vec![])
 }
 
 fn closure_params(type_table: &TypeTable, closure: TypeId) -> Vec<TypeId> {
@@ -129,8 +101,6 @@ fn closure_params(type_table: &TypeTable, closure: TypeId) -> Vec<TypeId> {
 /// How a closure argument crosses the boundary.
 struct Boundary {
     type_id: TypeId,
-    /// The Wado primitive `type_id` is; `None` for an extern handle.
-    primitive: Option<&'static str>,
     /// What the export's name calls it. One name must mean one closure type in
     /// the guest, where every extern handle is one `externref`.
     word: &'static str,
@@ -140,7 +110,6 @@ fn boundary(type_table: &TypeTable, param: TypeId) -> Boundary {
     if type_table.is_extern_handle(param) {
         return Boundary {
             type_id: param,
-            primitive: None,
             word: "handle",
         };
     }
@@ -149,16 +118,7 @@ fn boundary(type_table: &TypeTable, param: TypeId) -> Boundary {
         unreachable!("the elaborator admits only a scalar callback parameter");
     };
     Boundary {
-        type_id: head,
-        primitive: Some(primitive.as_str()),
+        type_id: param,
         word: primitive.as_str(),
     }
-}
-
-/// `value`, at its boundary type, as the Wado `param` the closure takes.
-fn lift_arg(value: TirExpr, param: TypeId) -> TirExpr {
-    if value.type_id == param {
-        return value;
-    }
-    cast(value, param)
 }

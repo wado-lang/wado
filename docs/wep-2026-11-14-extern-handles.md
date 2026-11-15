@@ -353,7 +353,9 @@ no number of its own, and giving it one is the last step of the roadmap.
 
 Each step lands with `SurfaceDom`'s tests passing. The jsdom run fails from the
 representation step until the loader step, since an `externref` does not pass
-through the canonical ABI the present glue is called through.
+through the canonical ABI the present glue is called through. Closures come
+before the glue: a listener is how the jsdom run reaches the program, so the
+glue cannot be run without them.
 
 - [x] `repr = "externref"` on `#[cm]`, validated beside `linearity`, `extends` and
   `classes`, and declared by `wado-from-idl` on every resource of the slice
@@ -367,17 +369,19 @@ through the canonical ABI the present glue is called through.
 - [x] The boundary: a web import is a core import, the synthesized trapping
   module satisfies it, and the component validates and runs on wasmtime. An
   extern handle in an `export fn` signature is an error
+- [x] `class-of` and `same` are imports, which narrowing, `Inspect` and `==`
+  call for a host object
+- [x] Closures cross as `externref`, called back through unlifted core exports,
+  and the registry and `wado:callback/callback` are removed
 - [ ] The glue: `wado-from-idl` generates shims over core signatures, reading
-  strings from memory, with no handle table. `class-of` and `same` become
-  imports, which narrowing, `Inspect` and `==` call for a host object where
-  they trap today
+  strings from memory, with no handle table, and keeps one function per closure
 - [ ] The loader: the jco transpile runs in `instantiation` mode and replaces
   the trapping module's functions with the glue. The programs that ran against
-  a wasmtime host stub (a two-level `extends`, narrowing by the host's class,
-  `==` as the host interned) run against jsdom instead: a Component Model host
-  cannot supply a web import
-- [ ] Closures cross as `externref`, called back through unlifted core exports,
-  and the registry and `wado:callback/callback` are removed
+  a wasmtime host stub run against jsdom instead, since a Component Model host
+  can neither supply a web import nor call an unlifted export: a two-level
+  `extends`, narrowing by the host's class, `==` as the host interned, a
+  closure called back after `run` returned, and one entered while `run` is
+  suspended
 - [ ] The handle table: a handle in linear memory is a slot index, and
   `sequence<T>` and `FrozenArray<T>` of an interface lower to `List<T>`
 - [ ] An `AsyncCall` over a promise, and `Rejection`: `wait` through a

@@ -89,7 +89,6 @@ pub fn build_wir_package(package: &NirPackage) -> WirPackage {
     wir.import_plan = component_imports::resolve_import_plan(package, &wir.needed_canonicals);
     wir.world_surface = WorldSurface {
         imports: component_imports::imported_cm_interface_fqs(package, &wir.import_plan),
-        callbacks: package.component_plan.callback_exports.clone(),
     };
     wir
 }

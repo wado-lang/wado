@@ -810,6 +810,16 @@ internal fn extern_handle_backed_class<R>(handle: R) -> i32;
 #[side_effect(trap)]
 internal fn extern_handle_same_backing<R>(a: R, b: R) -> bool;
 
+/// The closure `f` as the extern handle it crosses to a web import as.
+#[storage(opaque)]
+#[side_effect(none)]
+internal fn closure_as_extern<F, R>(f: F) -> R;
+
+/// The closure of type `F` that `handle` is. Traps on anything else.
+#[storage(opaque)]
+#[side_effect(trap)]
+internal fn extern_as_closure<R, F>(handle: R) -> F;
+
 /// The class of the host object `handle`, which the host answers: the nearest
 /// ancestor of its interface that declares one. Undefined on a backed handle.
 #[storage(none)]

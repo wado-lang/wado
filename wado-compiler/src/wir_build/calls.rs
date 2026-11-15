@@ -919,6 +919,19 @@ impl FunctionTranslator<'_, '_> {
                 });
                 Some(WirInstr::RefEq(a, b))
             }
+            "closure_as_extern" => {
+                let closure = self.translate_operand(args[0].expr);
+                Some(WirInstr::ExternExternalize(Box::new(closure)))
+            }
+            "extern_as_closure" => {
+                let handle = self.translate_operand(args[0].expr);
+                let (_, closure_struct) = self.canonical_closure_types_of(result_type_id);
+                Some(WirInstr::RefCast {
+                    type_id: closure_struct,
+                    nullable: false,
+                    expr: Box::new(WirInstr::ExternInternalize(Box::new(handle))),
+                })
+            }
             "extern_handle_host_class" => {
                 Some(self.ask_extern_host(ExternHostQuery::ClassOf, args))
             }
@@ -1627,6 +1640,35 @@ impl FunctionTranslator<'_, '_> {
             _ => return None,
         })
     }
+    /// The canonical function type and closure struct every closure of the
+    /// function type `fn_type_id` shares, by signature.
+    fn canonical_closure_types_of(&self, fn_type_id: TypeId) -> (WirTypeId, WirTypeId) {
+        let ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } = self.type_table.get(fn_type_id)
+        else {
+            panic!(
+                "[WIR] expected a function type, got {:?}",
+                self.type_table.get(fn_type_id)
+            );
+        };
+        // Unit params are erased from the canonical signature (they have no
+        // Wasm representation); every canonical-key site filters identically.
+        let param_wirs: Vec<WirType> = params
+            .iter()
+            .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
+            .filter(|t| !matches!(t, WirType::Unit))
+            .collect();
+        let result_wirs = self.result_wir_types(*return_type);
+        let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
+        let Some((fn_type, closure_struct, _)) = self.ctx.canonical_closure_types.get(&key) else {
+            panic!("[WIR] canonical closure type not registered for signature {key:?}");
+        };
+        (fn_type.clone(), closure_struct.clone())
+    }
+
     /// Translate `IndirectCall { callee, args }` to `call_ref` through canonical closure.
     pub(super) fn translate_indirect_call(
         &mut self,
@@ -1642,39 +1684,7 @@ impl FunctionTranslator<'_, '_> {
         }
         let callee_wir = self.translate_operand(callee);
         let callee_ty = self.operand_type_id(callee);
-
-        // Look up the Function type to get param/result info
-        let fn_type = self.type_table.get(callee_ty);
-        let (param_types, return_type) = match fn_type {
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => (params.clone(), *return_type),
-            other => panic!(
-                "[WIR] translate_indirect_call: expected Function type, got {other:?} (callee type_id={callee_ty:?})"
-            ),
-        };
-
-        // Compute canonical closure types directly by signature key. Unit
-        // params are erased from the canonical signature (they have no Wasm
-        // representation); every canonical-key site filters identically.
-        let param_wirs: Vec<WirType> = param_types
-            .iter()
-            .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
-            .filter(|t| !matches!(t, WirType::Unit))
-            .collect();
-        let result_wirs = self.result_wir_types(return_type);
-        let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
-        let (fn_type_id, closure_struct_type_id) = if let Some((ftid, stid, _)) =
-            self.ctx.canonical_closure_types.get(&key)
-        {
-            (ftid.clone(), stid.clone())
-        } else {
-            panic!(
-                "[WIR] translate_indirect_call: canonical closure type not registered for signature {key:?}"
-            );
-        };
+        let (fn_type_id, closure_struct_type_id) = self.canonical_closure_types_of(callee_ty);
 
         // Generate a temp local for the callee as canonical closure struct ref
         let temp_name = self.fresh_local("$indirect_call");
