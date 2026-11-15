@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::MangledName;
+use crate::name::{EXTERN_IMPORT_MODULE, ExternHostQuery, MangledName};
 
 use crate::canonical::CanonicalIntrinsic;
 use crate::module_source::ModuleSource;
@@ -676,6 +676,28 @@ impl<'a> WirContext<'a> {
         let func_id = self.register_import_func("wasi".to_string(), name, type_id, wir_name);
         self.needed_canonicals.insert(intrinsic, func_id.clone());
         func_id
+    }
+
+    /// The import that answers `query`, registered where a function first asks.
+    pub fn ensure_extern_host_query(&mut self, query: ExternHostQuery) -> WirFuncId {
+        let name = query.import_name();
+        let key = MangledName::wasi_import(&name);
+        if let Some(func_id) = self.func_map.get(&key) {
+            return func_id.clone();
+        }
+        let object = WirType::AbstractRef {
+            heap_type: WirAbstractHeapType::Extern,
+            nullable: false,
+        };
+        let type_id = self.register_func_type(
+            format!("functype//wasi/{name}"),
+            vec![object; query.arity()],
+            vec![WirType::I32],
+        );
+        let wir_name = WirName {
+            fq: key.into_string(),
+        };
+        self.register_import_func(EXTERN_IMPORT_MODULE.to_string(), name, type_id, wir_name)
     }
 
     fn ref_to(type_id: &WirTypeId) -> WirType {

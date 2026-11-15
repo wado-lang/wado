@@ -333,7 +333,7 @@ internal fn handle_class(handle: ExternObject) -> i32 {
     if builtin::extern_handle_is_backed(handle) {
         return builtin::extern_handle_backed_class(handle);
     }
-    unreachable();
+    return builtin::extern_handle_host_class(handle);
 }
 
 /// Whether two extern handles are one object.
@@ -345,7 +345,7 @@ internal fn handle_eq(a: ExternObject, b: ExternObject) -> bool {
     if builtin::extern_handle_is_backed(b) {
         return false;
     }
-    unreachable();
+    return builtin::extern_handle_host_same(a, b);
 }
 
 /// Writes an extern handle as the name of the resource its class names.

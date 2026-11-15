@@ -1,0 +1,36 @@
+// A host object carries no class and no backing value, so narrowing asks the
+// host for its class and `==` asks whether two are one object.
+
+#[cm("example:dom/node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
+resource Node {}
+
+#[cm("example:dom/element", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource Element extends Node {}
+
+struct Tag {}
+
+fn is_element(node: Node) -> bool {
+    return node matches { _: Element };
+}
+
+fn same(a: Node, b: Node) -> bool {
+    return a == b;
+}
+
+// A backed handle answers both itself, so no host is asked.
+export fn run() {
+    let tag = Tag {};
+    let element = Element::backed_by(&tag);
+    assert is_element(builtin::black_box(element));
+    assert !is_element(builtin::black_box(Node::backed_by(&tag)));
+    assert same(builtin::black_box(element), Element::backed_by(&tag));
+}
+
+__DATA__
+{
+  "skip_os": true,
+  "wat_lines": [
+    { "contains": ["(import \"extern\" \"$class-of\"", "(param (ref extern))", "(result i32)"], "count": 1 },
+    { "contains": ["(import \"extern\" \"$same\"", "(param (ref extern) (ref extern))", "(result i32)"], "count": 1 }
+  ]
+}

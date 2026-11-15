@@ -8,7 +8,7 @@
 use std::array;
 
 use crate::module_source::ModuleSource;
-use crate::name::{BACKED_HANDLE_CLASS_FIELD, MangledName, cm_import_alias};
+use crate::name::{BACKED_HANDLE_CLASS_FIELD, ExternHostQuery, MangledName, cm_import_alias};
 use crate::rarity::Mark;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
@@ -919,6 +919,10 @@ impl FunctionTranslator<'_, '_> {
                 });
                 Some(WirInstr::RefEq(a, b))
             }
+            "extern_handle_host_class" => {
+                Some(self.ask_extern_host(ExternHostQuery::ClassOf, args))
+            }
+            "extern_handle_host_same" => Some(self.ask_extern_host(ExternHostQuery::Same, args)),
             "swap_handles" => {
                 let box_ty = self.wir_type(self.operand_type_id(args[0].expr));
                 let (mut seq, [a, b]) = self.spill_operands(args, [box_ty.clone(), box_ty]);
@@ -952,6 +956,19 @@ impl FunctionTranslator<'_, '_> {
             }
 
             _ => None,
+        }
+    }
+
+    /// A call of the import that answers `query` about the host objects `args`.
+    fn ask_extern_host(&mut self, query: ExternHostQuery, args: &[ArenaCallArg]) -> WirInstr {
+        assert_eq!(args.len(), query.arity());
+        let func_id = self.ctx.ensure_extern_host_query(query);
+        WirInstr::Call {
+            func_id,
+            args: args
+                .iter()
+                .map(|arg| self.translate_operand(arg.expr))
+                .collect(),
         }
     }
 

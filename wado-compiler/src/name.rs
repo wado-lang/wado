@@ -726,6 +726,34 @@ pub fn cm_dependency_interface(interface: &ast::CmImport, component: &str) -> as
 /// replaces that one (WEP: Extern Handles).
 pub const EXTERN_IMPORT_MODULE: &str = "extern";
 
+/// What the guest asks the host of its own objects, which carry neither a
+/// class nor a backing value. Each is an import of `EXTERN_IMPORT_MODULE`
+/// named by `cm_import_alias`, beside the web imports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ExternHostQuery {
+    /// `class-of(object) -> i32`: the class of the nearest ancestor of the
+    /// object's interface that declares one.
+    ClassOf,
+    /// `same(a, b) -> i32`: whether two objects are one.
+    Same,
+}
+
+impl ExternHostQuery {
+    pub fn import_name(self) -> String {
+        cm_import_alias(match self {
+            Self::ClassOf => "class-of",
+            Self::Same => "same",
+        })
+    }
+
+    pub fn arity(self) -> usize {
+        match self {
+            Self::ClassOf => 1,
+            Self::Same => 2,
+        }
+    }
+}
+
 /// The core function a CM import lowers to.
 pub fn cm_import_alias(cm_identifier: &str) -> String {
     format!("{INTERNAL_PREFIX}{cm_identifier}")

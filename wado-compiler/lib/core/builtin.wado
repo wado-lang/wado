@@ -810,6 +810,18 @@ internal fn extern_handle_backed_class<R>(handle: R) -> i32;
 #[side_effect(trap)]
 internal fn extern_handle_same_backing<R>(a: R, b: R) -> bool;
 
+/// The class of the host object `handle`, which the host answers: the nearest
+/// ancestor of its interface that declares one. Undefined on a backed handle.
+#[storage(none)]
+#[side_effect(trap)]
+internal fn extern_handle_host_class<R>(handle: R) -> i32;
+
+/// Whether the host objects `a` and `b` are one, which the host answers.
+/// Undefined on a backed handle.
+#[storage(none)]
+#[side_effect(trap)]
+internal fn extern_handle_host_same<R>(a: R, b: R) -> bool;
+
 /// Calls stdout's write_via_stream indirectly (ambient, no effect required).
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stdout::write_via_stream() through the effect system.
