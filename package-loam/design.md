@@ -5,7 +5,7 @@ completion, and this file what was built after it. These documents hold a part
 each:
 
 - [Loam on TPU and WebGPU](./devices.md): running at the best speed on both
-  devices, which the roadmap builds.
+  devices.
 - [Loam on WebGPU](./webgpu.md): how a pass runs on a WebGPU device.
 - [Loam Tokenizer](./tokenizer.md): the tokenizer.
 - [Runtime Assets](./remote-import.md): files a program reads at run time, not

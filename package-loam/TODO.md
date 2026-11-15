@@ -18,8 +18,8 @@ The devices keep in step. An item is finished on `Cpu`, `WebGpuBackend` and
 `PjrtBackend` alike, the last under the CPU plugin. A run on a TPU is measured
 beside the roadmap and holds no item up.
 
-A weight stays as the checkpoint stores it. Unpacked to bf16 the model fits no
-device here, and packed it fits one TPU chip of 16 GB.
+A weight stays as the checkpoint stores it. Unpacked to bf16, the model's 20
+billion weights outgrow a TPU chip of 16 GB. Packed, they are under it.
 
 1. [ ] The inventory. `loam dump` reads gpt-oss-20b's graph, which needs none
    of its data files. Finished when the dump names every operator, element type
