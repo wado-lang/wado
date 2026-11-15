@@ -330,6 +330,15 @@ add('CastLikeConstant', {
   ]),
   opset: 15,
 });
+// A value the run computes, cast to a half and back as RMSNormalization's body does.
+add('CastLikeComputed', {
+  ...inHalf(onto, [
+    node('Cast', ['H'], 'W', { to: FLOAT }),
+    node('Mul', ['W', 'W'], 'Q'),
+    node('CastLike', ['Q', 'H'], 'S'),
+  ]),
+  opset: 15,
+});
 // Where `erf` is 0, 1 or -1 to the last bit of either width.
 add('GeluFloat16', { ...inHalf([0, 8, -8, 16, -16, 32], [node('Gelu', ['H'], 'S')]), opset: 20 });
 add('CastFromInt64', {
@@ -374,6 +383,18 @@ add('SimplifiedLayerNormalization', {
   inputs: { A: float([2, 4]) },
   inits: { S: float([4], [1, -0.5, 2, 0.25]) },
   nodes: [node('SimplifiedLayerNormalization', ['A', 'S'], 'Y', { epsilon: f32(1e-5), axis: -1 })],
+  opset: 17,
+});
+// Halves whose squares overflow f16: the default `stash_type` computes in f32.
+add('SimplifiedLayerNormalizationHalf', {
+  inputs: { A: float([2, 3], [300, -400, 500, 1, 2, 3]) },
+  inits: { C: float([3], [1, -0.5, 2]) },
+  nodes: [
+    node('Cast', ['A'], 'H', { to: FLOAT16 }),
+    node('Cast', ['C'], 'K', { to: FLOAT16 }),
+    node('SimplifiedLayerNormalization', ['H', 'K'], 'N', { epsilon: f32(1e-5), axis: -1 }),
+    node('Cast', ['N'], 'Y', { to: FLOAT }),
+  ],
   opset: 17,
 });
 add('GeluTanh', {

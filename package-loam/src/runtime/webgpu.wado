@@ -3351,6 +3351,8 @@ enum Words {
     F16,
     PackedF16,
     PackedBF16,
+    /// Indices the host wrote, which no float read may flush.
+    U32,
 }
 
 /// The WGSL declaring a read-only buffer `o{k}` for each of `words` but the
@@ -3370,7 +3372,7 @@ fn load${k}(i: u32) -> f32 {
     let stored = match words[last] {
         F32 => "v",
         F16 => "f16(v)",
-        _ => panic("loam: a kernel writes no packed halves"),
+        _ => panic("loam: a kernel writes f32s or f16s alone"),
     };
     out.push_str(`@group(0) @binding(${last}) var<storage, read_write> out: array<${array_wgsl(words[last])}>;
 fn put(i: u32, v: f32) {
@@ -3386,7 +3388,7 @@ fn array_wgsl(words: Words) -> String {
     return match words {
         F32 => "f32",
         F16 => "f16",
-        PackedF16 | PackedBF16 => "u32",
+        PackedF16 | PackedBF16 | U32 => "u32",
     };
 }
 
@@ -3395,7 +3397,7 @@ fn array_wgsl(words: Words) -> String {
 fn element_wgsl(buffer: String, index: String, words: Words) -> String {
     return match words {
         F32 => `${buffer}[${index}]`,
-        F16 => `f32(${buffer}[${index}])`,
+        F16 | U32 => `f32(${buffer}[${index}])`,
         PackedF16 => `unpack2x16float(${buffer}[(${index}) >> 1u])[(${index}) & 1u]`,
         PackedBF16 => `bitcast<f32>((${buffer}[(${index}) >> 1u] >> (((${index}) & 1u) * 16u)) << 16u)`,
     };
@@ -3416,7 +3418,7 @@ ${indent}let v1 = v.y;
 ${indent}let v0 = bitcast<f32>(w << 16u);
 ${indent}let v1 = bitcast<f32>(w & 0xFFFF0000u);
 `,
-        F32 => panic("loam: a lane reads two elements of a word that holds one"),
+        F32 | U32 => panic("loam: a lane reads two elements of a word that holds one"),
     };
 }
 
@@ -3529,7 +3531,13 @@ impl Shader {
                 staged,
                 words,
             ),
-            Gather([rank, axis, ranked]) => gather_shader(*rank, *axis, *ranked, words),
+            Gather([rank, axis, ranked]) => {
+                let mut bound = *words;
+                if !*ranked {
+                    bound[1] = Words::U32;
+                }
+                gather_shader(*rank, *axis, *ranked, &bound);
+            },
             Append([bindings, rotary, batch]) => append_shader(bindings, *rotary, *batch, words),
             Attend([bindings, head, rotary, biased, part, batch]) => attend_shader(
                 bindings,
@@ -4085,7 +4093,7 @@ ${coords_wgsl("i", 2, 0, rank, "c", "    ")}    put(u32(${index_wgsl(to, 0, rank
 /// stride along `axis`, the index the output's first row along `axis` reads,
 /// then the output's offset and strides. A `ranked` index is an f32 a kernel
 /// left, which the last parameter, the axis's last index, clamps as StableHLO
-/// does; the host has clamped any other, written as the bits of a `u32`.
+/// does; the host has clamped any other, written as a `u32`.
 fn gather_shader(rank: i32, axis: i32, ranked: bool, words: &List<Words>) -> String {
     let data = 2 + rank;
     let along = data + rank + 1;
@@ -4093,7 +4101,7 @@ fn gather_shader(rank: i32, axis: i32, ranked: bool, words: &List<Words>) -> Str
     let out = first + 1;
     let source = index_wgsl(data, 0, rank, "c", `bitcast<i32>(p[${data}])`);
     let index = `o1[p[${first}] + c${axis}]`;
-    let picked = if ranked { `clamp(${index}, 0.0, f32(p[${out + rank + 1}]))` } else { `bitcast<u32>(${index})` };
+    let picked = if ranked { `clamp(${index}, 0.0, f32(p[${out + rank + 1}]))` } else { index };
     return `${buffers_wgsl(words)}
 @compute @workgroup_size(${LANES})
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {

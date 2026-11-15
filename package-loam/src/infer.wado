@@ -38,6 +38,7 @@ use {
     is_float,
     is_unary_operator,
     operands_short,
+    settled,
     trailing_axes,
 } from "./graph.wado";
 use { Condition, Poly, equalities, owe as owe_at, owe_equal as owe_equal_at } from "./poly.wado";
@@ -555,21 +556,15 @@ fn checked_node(node: &Node, scope: &mut Checked, opset: Option<i64>) -> Result<
         }
     }
     operands_given(node, &scope.known, &scope.shapes)?;
-    let cast_like_at_run = node.op == "CastLike";
-    let node = if cast_like_at_run { &cast_like(node, &scope.primitives)? } else { node };
+    // The graph keeps the `CastLike` until `cast_likes_resolved` rewrites it.
+    let node = if node.op == "CastLike" { &cast_like(node, &scope.primitives)? } else { node };
     match fold(node, &scope.known, &scope.shapes) {
         Ok(Some(k)) => {
             scope.primitives[node.outputs[0]] = known_primitive(&k);
             scope.known[node.outputs[0]] = k;
             return Result::Ok(());
         },
-        Ok(None) => {
-            if cast_like_at_run {
-                // Every later stage reads the graph's node, which stays a
-                // `CastLike` no kernel is named for.
-                return Result::Err(refusal(node, "CastLike converts only a tensor the build knows"));
-            }
-        },
+        Ok(None) => {},
         Err(reason) => {
             return Result::Err(refusal(node, reason));
         },
@@ -914,6 +909,27 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
         element = Option::Some(p);
     }
     return Result::Ok(element);
+}
+
+/// `nodes`, their subgraphs' among them, with each `CastLike` the `Cast` it
+/// is, by the element types `primitives` holds once a check of them passed.
+pub fn cast_likes_resolved(nodes: List<Node>, primitives: &HashMap<String, String>) -> List<Node> {
+    let mut out: List<Node> = [];
+    for let node of nodes {
+        let mut attrs: List<Attr> = [];
+        for let a of node.attrs {
+            attrs.push(match a.graph {
+                Some(g) => Attr {
+                    ..a,
+                    graph: Option::Some(Graph { ..g, nodes: cast_likes_resolved(g.nodes, primitives) }),
+                },
+                None => a,
+            });
+        }
+        let node = Node { ..node, attrs };
+        out.push(if node.op == "CastLike" { settled(cast_like(&node, primitives)) } else { node });
+    }
+    return out;
 }
 
 /// `CastLike` as the `Cast` it is, to the element its second operand has.

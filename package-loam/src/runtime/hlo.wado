@@ -578,16 +578,18 @@ pub fn lifted<affine G: Graph, E: Element, In, Out>(
 
 /// ONNX's `ReduceMean` over `dims`, which the result drops: the sum over
 /// `count`, the elements each sums, a value the graph computes where a valid
-/// length is among them.
+/// length is among them. A half's mean is computed in f32 and rounded once,
+/// since the count a half holds is rounded past 256 in bf16.
 pub fn reduce_mean<affine G: Graph, E: Float, In, Out>(
     g: &mut G,
     x: &G::Tensor<E, In>,
     dims: List<i32>,
     count: &G::Tensor<i64, []>,
 ) -> G::Tensor<E, Out> with _ {
-    let sum: G::Tensor<E, Out> = g.reduce(x, Binary::Add, 0.0, dims);
-    let divisor: G::Tensor<E, Out> = g.broadcast_in_dim(&g.convert::<i64, E, []>(count), g.extents_of(&sum), []);
-    return g.binary(Binary::Divide, &sum, &divisor);
+    let wide: G::Tensor<f32, In> = g.convert::<E, f32, In>(x);
+    let sum: G::Tensor<f32, Out> = g.reduce(&wide, Binary::Add, 0.0, dims);
+    let divisor: G::Tensor<f32, Out> = g.broadcast_in_dim(&g.convert::<i64, f32, []>(count), g.extents_of(&sum), []);
+    return g.convert::<f32, E, Out>(&g.binary(Binary::Divide, &sum, &divisor));
 }
 
 /// `x` with each position along `axis` at or past its row's `length` replaced

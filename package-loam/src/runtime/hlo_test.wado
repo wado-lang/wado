@@ -164,6 +164,16 @@ test "reduce_mean divides each sum by the count it summed" {
     assert mean.data == [1.5, 4.5] as List<f32>;
 }
 
+test "reduce_mean of halves divides in f32 by a count bf16 cannot hold" {
+    let g = &mut Cpu {};
+    let mut data = List::<bf16>::filled(257, 1.0);
+    data[0] = 2.0;
+    let x = Tensor::<bf16, [A, B]> { data, extents: [1, 257] };
+    // 258 / 257 rounds to 1.0; dividing by the count in bf16, 256, gives 1.0078125.
+    let mean = reduce_mean::<Cpu, bf16, [A, B], [A]>(g, &x, [1], &value(257));
+    assert mean.data == [1.0] as List<bf16>;
+}
+
 test "masking replaces each position along the axis from the length on" {
     let g = &mut Cpu {};
     let x = Tensor::<f32, [A, B]> {

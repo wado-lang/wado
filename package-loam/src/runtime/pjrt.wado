@@ -207,8 +207,8 @@ impl PjrtBackend {
         return self.donated;
     }
 
-    /// The bytes the weights take in bf16, and those that stay f32 to lose
-    /// nothing.
+    /// The bytes the weights take in halves, those of a half graph and the f32
+    /// ones bf16 holds exactly, and those that stay f32 to lose nothing.
     pub fn weight_bytes(&self) -> [i64, i64] {
         return [self.halved_bytes, self.whole_bytes];
     }
@@ -420,6 +420,14 @@ impl Graph for PjrtBackend {
         for let at of 0..<count {
             kept.push(match load(at)? {
                 F32(t) => Any::F32(Located::Device(self.kept_weight(&t))),
+                F16(t) => {
+                    self.halved_bytes += 2 * t.data.len() as i64;
+                    kept_any(self, &Any::F16(t));
+                },
+                BF16(t) => {
+                    self.halved_bytes += 2 * t.data.len() as i64;
+                    kept_any(self, &Any::BF16(t));
+                },
                 other => kept_any(self, &other),
             });
         }

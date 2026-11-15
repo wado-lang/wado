@@ -563,6 +563,10 @@ test "CastLike gives a constant the element of a tensor the run computes" {
     assert_agrees(#include_bytes("./operators/CastLikeConstant.onnx"), #include_str("./operators/CastLikeConstant.txt"));
 }
 
+test "CastLike gives a value the run computes the element of another" {
+    assert_agrees(#include_bytes("./operators/CastLikeComputed.onnx"), #include_str("./operators/CastLikeComputed.txt"));
+}
+
 test "Gelu computes in the float16 its operand is" {
     assert_agrees(#include_bytes("./operators/GeluFloat16.onnx"), #include_str("./operators/GeluFloat16.txt"));
 }
@@ -581,6 +585,13 @@ test "Shape between start and end" {
 
 test "Concat of two shapes" {
     assert_agrees(#include_bytes("./operators/ConcatShapes.onnx"), #include_str("./operators/ConcatShapes.txt"));
+}
+
+test "SimplifiedLayerNormalization of halves computes in f32" {
+    assert_agrees(
+        #include_bytes("./operators/SimplifiedLayerNormalizationHalf.onnx"),
+        #include_str("./operators/SimplifiedLayerNormalizationHalf.txt"),
+    );
 }
 
 test "SimplifiedLayerNormalization scales each row by the root of its mean square" {

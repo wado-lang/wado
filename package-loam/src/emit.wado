@@ -66,6 +66,7 @@ use {
     ROTARY_COS,
     ROTARY_SIN,
     attention_options,
+    cast_likes_resolved,
     is_elementwise,
     named_present,
     range_bounds,
@@ -104,6 +105,7 @@ pub fn emit(
     placement: Placement = Placement::File,
     decode: Option<Decode> = null,
 ) -> Result<String, EmitError> {
+    let graph = &Graph { ..*graph, nodes: cast_likes_resolved(graph.nodes, &checked.primitives) };
     let prepared = Prepared::of(graph, checked, &placement)?;
     let rows = match prepared.rows(graph, checked) {
         Ok(rows) => rows,
