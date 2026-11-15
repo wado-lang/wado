@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794720320223,
+  "lastUpdate": 1794723916713,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77585,6 +77585,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/120c682f7d937830a3c5394bc2a1d52abd5a0be4"
         },
         "date": 1794720318870,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7295,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24494,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435516,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "982cc2b8b6763419a2d20404a01092849fca32a8",
+          "message": "Merge pull request #2629 from wado-lang/ccr-0ea92ac8-1fra6x\n\nchore(jade): pin a pattern's `i` modifier to ignoring case only where it reaches",
+          "timestamp": "2026-11-15T15:07:23+09:00",
+          "tree_id": "d0861257c523e48113c285d651c655b15a075b61",
+          "url": "https://github.com/wado-lang/wado/commit/982cc2b8b6763419a2d20404a01092849fca32a8"
+        },
+        "date": 1794723915652,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
