@@ -759,6 +759,16 @@ set -e -o pipefail
 node package-loam/tools/ort_inspect.mjs "$@"
 """
 
+[tasks.loam-onnx-inventory]
+description = "Report what a model asks of Loam from its graph alone: operators with their attributes, inputs and outputs, and weights by element type and file"
+depends = ["loam-oracle-deps"]
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+: "${1:?Usage: mise run loam-onnx-inventory <model.onnx>}"
+node package-loam/tools/onnx_inventory.mjs "$@"
+"""
+
 [tasks.sync-proto-corpus]
 description = "Copy the .proto files Grog's tests name out of the vendor/protobuf and vendor/onnx submodules"
 run = "scripts/sync-proto-corpus.sh"

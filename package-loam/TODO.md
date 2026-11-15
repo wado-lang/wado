@@ -21,11 +21,34 @@ beside the roadmap and holds no item up.
 A weight stays as the checkpoint stores it. Unpacked to bf16, the model's 20
 billion weights outgrow a TPU chip of 16 GB. Packed, they are under it.
 
-1. [ ] The inventory. `loam dump` reads gpt-oss-20b's graph, which needs none
-   of its data files. Finished when the dump names every operator, element type
-   and attribute the build stops at, and each one is an item below or joins
-   one.
-2. [ ] A graph keeps its element types. `Element` admits `f32`, `i64` and
+What the model asks of Loam, as
+`mise run loam-onnx-inventory model_q4f16.onnx` reports it. The graph holds no
+function and no branch. An operator below with nothing missing is one Loam
+lowers, though the build stops before it reaches any of them.
+
+| Operator                                       | Nodes | What Loam lacks                               |
+| ---------------------------------------------- | ----- | --------------------------------------------- |
+| `MatMulNBits`, 4 bits in blocks of 32          | 73    | The operator. No node gives zero points.      |
+| `SkipSimplifiedLayerNormalization`             | 48    | The operator, which names up to four outputs. |
+| `GroupQueryAttention`, a window of 128 or none | 24    | The attention sinks, its twelfth input.       |
+| `QMoE`, 32 experts of 4 bits, 4 to a token     | 24    | The operator.                                 |
+| `Add`, `Reshape`, `Cast`, `Constant`, `Gather` | 103   | Nothing.                                      |
+| `ReduceSum`, `Shape`, `Sub`                    | 3     | Nothing.                                      |
+| `SimplifiedLayerNormalization`                 | 1     | Nothing.                                      |
+
+| Weights                    | Tensors | Bytes          |
+| -------------------------- | ------- | -------------- |
+| `float16`                  | 317     | 2,459,526,784  |
+| `uint8`, packed int4       | 121     | 10,164,326,400 |
+| In the graph               | 289     | 54,999,168     |
+| In the largest data file   | 62      | 2,096,824,320  |
+| One layer's `gate_up_proj` | 1       | 265,420,800    |
+
+The embedding is a `float16` table a `Gather` reads, so the model has no
+`GatherBlockQuantized`. The inputs and outputs are `int64` and `float16`, and
+the two `Cast`s give `int32`.
+
+1. [ ] A graph keeps its element types. `Element` admits `f32`, `i64` and
    `bool`, and `Graph` spells its arithmetic in `f32`. Every operation and
    kernel takes the element type the graph gives it instead: `f16` and `bf16`,
    and the `u8` a packed int4 weight is stored in. `Params` holds a half weight
@@ -35,7 +58,7 @@ billion weights outgrow a TPU chip of 16 GB. Packed, they are under it.
    picks the tokens onnxruntime picks from it on `Cpu`, on `WebGpuBackend` with
    and without `shader-f16`, and on `PjrtBackend`, and the deviation of each
    path's logits from onnxruntime's is recorded.
-3. [ ] Loading a tensor at a time. `load` reads the checkpoint from a source
+2. [ ] Loading a tensor at a time. `load` reads the checkpoint from a source
    that yields one tensor's bytes at a time, rather than from the whole file
    the guest holds. A range is 64 bits wide and names one of several data
    files. A tensor reaches the device in its stored type, where today each
@@ -43,24 +66,26 @@ billion weights outgrow a TPU chip of 16 GB. Packed, they are under it.
    larger than the guest's memory, spread over several data files, loads onto
    `WebGpuBackend` and `PjrtBackend`, and `Cpu` loads one it can hold through
    the same source.
-4. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
-   which onnx-community's `q4` exports use. A weight stays packed on the
-   device, read by the quantized product composite or by a quantized gather
-   (see [Loam on TPU and WebGPU](./devices.md)). No path unpacks one when it
-   loads, since gpt-oss-20b unpacked fits no device. A quantized weight is the
+3. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
+   which onnx-community's `q4` exports use. gpt-oss-20b has the first alone. A
+   weight stays packed on the device, read by the quantized product composite
+   or by a quantized gather (see [Loam on TPU and WebGPU](./devices.md)). No
+   path unpacks one when it loads, since gpt-oss-20b unpacked fits no device. A quantized weight is the
    tensors the operator takes, the packed `u8`, the scales and the zero points,
    and the bit width and block size are the composite's attributes. So it has
    no type of its own, which the block formats under Known gaps wait for.
    Finished when Gemma 3 (270M)'s `q4` export picks the tokens onnxruntime
    picks from it on every device.
-5. [ ] onnxruntime's `QMoE`, and a `GroupQueryAttention` with attention sinks.
-   A `QMoE` decomposes in two forms. Over a prompt it loops over the experts
-   and masks each one's rows, so its temporaries do not grow with the prompt.
-   Over a step it gathers the experts the token routes to. Finished when
-   `operators_test.wado` holds each to onnxruntime on every device, and
-   `PjrtBackend::analyzing` reports the temporaries of both forms for a prompt
-   and for a step.
-6. [ ] Experts held on demand. An expert is one slice along the first axis of
+4. [ ] The rest of gpt-oss-20b's operators: onnxruntime's `QMoE` and
+   `SkipSimplifiedLayerNormalization`, and a `GroupQueryAttention` with
+   attention sinks. Stage 0 gives every node a shape per output, as it does
+   `Split`'s, which the normalization's four outputs need. A `QMoE` decomposes
+   in two forms. Over a prompt it loops over the experts and masks each one's
+   rows, so its temporaries do not grow with the prompt. Over a step it gathers
+   the experts the token routes to. Finished when `operators_test.wado` holds
+   each to onnxruntime on every device, and `PjrtBackend::analyzing` reports
+   the temporaries of both forms for a prompt and for a step.
+5. [ ] Experts held on demand. An expert is one slice along the first axis of
    each `QMoE` input the operator's definition indexes by expert, so no model
    is named. A device holds as many experts as a budget the caller sets: all
    of them on a TPU chip, fewer on a GPU of 8 GB and on `Cpu`. The rest stay
@@ -71,7 +96,7 @@ billion weights outgrow a TPU chip of 16 GB. Packed, they are under it.
    them. So the host waits once a layer, which The MVP Is Tier 1 Only says a
    `QMoE` spares it. Finished when `operators_test.wado` holds a `QMoE` to
    onnxruntime with a budget of half its experts on every device.
-7. [ ] gpt-oss-20b, a mixture of experts. Finished when
+6. [ ] gpt-oss-20b, a mixture of experts. Finished when
    `example/gpt-oss-20b/` continues a prompt with the tokens onnxruntime picks
    from onnx-community's `q4f16` export on `Cpu`, under `wado run-webgpu` on a
    device with 8 GB, and under `wado run-pjrt`, with no line that names a
@@ -81,8 +106,7 @@ billion weights outgrow a TPU chip of 16 GB. Packed, they are under it.
 
 ## Later
 
-Work the road to gpt-oss-20b does not pass. It is unordered, and an item joins
-the roadmap when the inventory finds the model needs it.
+Work the road to gpt-oss-20b does not pass. It is unordered.
 
 - [ ] TPU and WebGPU at their best speed. A pass is a graph built once per
   shape class and compiled for each device: StableHLO through `core:pjrt` for
@@ -153,14 +177,11 @@ the roadmap when the inventory finds the model needs it.
   `bool`, and `Softplus` and `Reciprocal`. Finished when `operators_test.wado`
   holds each to onnxruntime, and a mask built from a comparison joins the
   kernel of the `Where` reading it.
-- [ ] Nodes of several outputs. Stage 0 gives every node a shape per output,
-  as it does `Split`'s. Finished when the cases of a recurrent decoder's
-  onnxruntime operators that read a second output pass.
 - [ ] The onnxruntime operators of a recurrent decoder: `LinearAttention`
-  with each of its update rules, `CausalConvWithState`, and
-  `SkipSimplifiedLayerNormalization`, and a `GroupQueryAttention` that
-  rotates part of each head. Finished when `operators_test.wado` holds each
-  to onnxruntime, with and without a past state.
+  with each of its update rules and `CausalConvWithState`, and a
+  `GroupQueryAttention` that rotates part of each head. Finished when
+  `operators_test.wado` holds each to onnxruntime, with and without a past
+  state, the cases that read a second output among them.
 - [ ] onnxruntime's `RotaryEmbedding` and `FastGelu`. Finished when
   `operators_test.wado` holds each to onnxruntime, a rotation of part of each
   head by `rotary_embedding_dim` and one by position ids among the cases.
