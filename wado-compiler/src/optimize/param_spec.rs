@@ -888,14 +888,7 @@ fn struct_literal_consts(
     value: Operand,
     expected: Option<TypeId>,
 ) -> Option<FieldConsts> {
-    let mut expr = body.strip_casts(value.as_expr()?);
-    if let ExprKind::Unary {
-        op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-        expr: inner,
-    } = &body.exprs[expr].kind
-    {
-        expr = body.strip_casts(inner.as_expr()?);
-    }
+    let expr = struct_literal_under(body, value)?;
     let ExprKind::StructLiteral {
         struct_type,
         fields,
@@ -916,6 +909,19 @@ fn struct_literal_consts(
             })
             .collect(),
     )
+}
+
+/// The struct literal `value` builds, under casts and a reference to it.
+fn struct_literal_under(body: &Body, value: Operand) -> Option<ExprId> {
+    let mut expr = body.strip_casts(value.as_expr()?);
+    if let ExprKind::Unary {
+        op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+        expr: inner,
+    } = &body.exprs[expr].kind
+    {
+        expr = body.strip_casts(inner.as_expr()?);
+    }
+    matches!(body.exprs[expr].kind, ExprKind::StructLiteral { .. }).then_some(expr)
 }
 
 /// What a caller's body alone says about the constants it passes: its calls,
@@ -1292,9 +1298,7 @@ fn binds_hot_field(
             .expr;
         !match argument_local(body, arg) {
             Some((local, _)) => built_in_cold_run(body, cold, local),
-            None => arg.as_expr().is_some_and(|e| {
-                cold.contains(&e) && matches!(body.exprs[e].kind, ExprKind::StructLiteral { .. })
-            }),
+            None => builds_in_cold_run(body, cold, arg),
         }
     })
 }
@@ -1316,11 +1320,13 @@ fn built_in_cold_run(body: &Body, cold: &IndexSet<ExprId>, local: u32) -> bool {
             return;
         }
         bound = true;
-        all_cold &= value.as_expr().is_some_and(|e| {
-            cold.contains(&e) && matches!(body.exprs[e].kind, ExprKind::StructLiteral { .. })
-        });
+        all_cold &= builds_in_cold_run(body, cold, *value);
     });
     bound && all_cold
+}
+
+fn builds_in_cold_run(body: &Body, cold: &IndexSet<ExprId>, value: Operand) -> bool {
+    struct_literal_under(body, value).is_some_and(|literal| cold.contains(&literal))
 }
 
 fn select_sites(

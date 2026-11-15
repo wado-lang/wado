@@ -619,6 +619,10 @@ struct FrameState {
     /// write unbinds the other's local, and rebinding either local ends the
     /// pair.
     handle_twins: Vec<[(u32, Vec<u32>); 2]>,
+    /// The locals bound from outside the frame: a call's parameters, a region's
+    /// free reads. An array handle one holds is the caller's too, which no
+    /// write-back carries, so a write reaching it through a twin is refused.
+    seeded: IndexSet<u32>,
 }
 
 /// What the engine knows beyond the body in front of it. Every field is
@@ -943,9 +947,8 @@ impl<'a> Interpreter<'a> {
     pub fn bind_local(&mut self, index: u32, lattice: Lattice) {
         self.frame.place_aliases.swap_remove(&index);
         self.frame.array_aliases.swap_remove(&index);
-        self.frame
-            .handle_twins
-            .retain(|twins| twins.iter().all(|(root, _)| *root != index));
+        self.frame.retire_twins(|root, _| root == index);
+        self.frame.seeded.swap_remove(&index);
         self.frame.replace_place(index, &[]);
         self.frame
             .place_fields

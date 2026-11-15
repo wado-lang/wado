@@ -37,6 +37,36 @@ impl FrameState {
         }
     }
 
+    /// End the pairs of every place `left` names, which no longer holds the
+    /// handle it shared. The places such a pair linked through it still share
+    /// one, so they are paired with each other.
+    pub(super) fn retire_twins(&mut self, left: impl Fn(u32, &[u32]) -> bool) {
+        let gone = |(root, path): &(u32, Vec<u32>)| left(*root, path);
+        let (cut, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut self.handle_twins)
+            .into_iter()
+            .partition(|twins| twins.iter().any(gone));
+        self.handle_twins = kept;
+        let mut sharing: Vec<IndexSet<(u32, Vec<u32>)>> = Vec::new();
+        for twins in cut {
+            let mut joined: IndexSet<(u32, Vec<u32>)> = twins.into_iter().collect();
+            let linked: Vec<usize> = (0..sharing.len())
+                .filter(|&i| joined.iter().any(|place| sharing[i].contains(place)))
+                .collect();
+            for i in linked.into_iter().rev() {
+                joined.extend(sharing.swap_remove(i));
+            }
+            sharing.push(joined);
+        }
+        for places in sharing {
+            let mut survivors = places.into_iter().filter(|place| !gone(place));
+            if let Some(first) = survivors.next() {
+                for place in survivors {
+                    self.handle_twins.push([first.clone(), place]);
+                }
+            }
+        }
+    }
+
     /// Whether `index` takes part in a live place alias, as the alias handle
     /// or as the place it names. Either role makes a value snapshot of the
     /// local unsound to hand out.
@@ -97,6 +127,7 @@ impl FrameState {
                 Lattice::Const(value)
             };
             state.env.insert(index, lattice);
+            state.seeded.insert(index);
         }
         state.ctfe_clobbered = track.clobbered;
         state
@@ -665,7 +696,8 @@ impl Interpreter<'_> {
             return Flow::Fallthrough(Lattice::Unevaluated);
         }
         self.frame.replace_place(root, &path);
-        self.retire_twins_under(root, &path);
+        self.frame
+            .retire_twins(|r, p| r == root && p.starts_with(&path));
         if self
             .update_place(root, &path, |place| {
                 *place = value;
@@ -726,16 +758,6 @@ impl Interpreter<'_> {
         Some(())
     }
 
-    /// End the pairs of every place under `(root, path)`, which a store there
-    /// leaves holding a handle other than the one it shared.
-    fn retire_twins_under(&mut self, root: u32, path: &[u32]) {
-        self.frame.handle_twins.retain(|twins| {
-            twins
-                .iter()
-                .all(|(r, p)| !(*r == root && p.starts_with(path)))
-        });
-    }
-
     fn unbind_all(&mut self, locals: Vec<u32>) {
         for index in locals {
             self.bind_local(index, Lattice::Unevaluated);
@@ -745,7 +767,7 @@ impl Interpreter<'_> {
     /// The locals a write at `(root, path)` leaves stale: each holding, through
     /// any chain of twins, the array handle a place the write overlaps holds.
     /// `None` when one lives in `root` itself, which unbinding would take the
-    /// write down with.
+    /// write down with, or in a seeded local.
     fn stale_twins(&self, root: u32, path: &[u32]) -> Option<Vec<u32>> {
         let mut reached: Vec<(u32, Vec<u32>)> = vec![(root, path.to_vec())];
         let mut stale: Vec<u32> = Vec::new();
@@ -759,7 +781,7 @@ impl Interpreter<'_> {
                     {
                         continue;
                     }
-                    if other.0 == root {
+                    if other.0 == root || self.frame.seeded.contains(&other.0) {
                         return None;
                     }
                     stale.push(other.0);
@@ -1257,6 +1279,13 @@ impl Interpreter<'_> {
         }
         if aliased_write_targets(&targets, &places) {
             return self.decline(&key, "two arguments reach one place");
+        }
+        let shares_written_handle = targets.iter().any(|(_, root, path)| {
+            self.stale_twins(*root, path)
+                .is_some_and(|stale| places.iter().any(|(other, _)| stale.contains(other)))
+        });
+        if shares_written_handle {
+            return self.decline(&key, "two arguments share an array handle");
         }
         // A result may embed a parameter's storage — `Formatter::new(&mut buf)`
         // returns a `Formatter` holding that reference, and a retained `&` one
