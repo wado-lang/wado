@@ -55,7 +55,7 @@ use crate::elaborator::types::{
     ImplMemberKind, OverloadedCallForm, RequiredTrait, TraitMethodMatch,
 };
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
-use crate::name::{DeclName, FqTraitName, FqTypeName, RefKind, UNIT_TYPE_NAME};
+use crate::name::{FqTraitName, FqTypeName, RefKind, UNIT_TYPE_NAME};
 use crate::resolve::Resolution;
 use crate::unparse::binary_op_str;
 
@@ -520,9 +520,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_param {
             return self.bound_declared_rhs_type(trait_, method_name, self_type_id);
         }
-        let struct_name = self.tysys.struct_name_for_type(self_type_id)?;
-        let admitted =
-            self.find_arithmetic_trait_impls(&struct_name, self_type_id, trait_, method_name, rhs);
+        self.tysys.struct_name_for_type(self_type_id)?;
+        let admitted = self.find_arithmetic_trait_impls(self_type_id, trait_, method_name, rhs);
         self.report_ambiguous_operator_rhs(&admitted, self_type_id, *op, span);
         let [trait_info] = admitted.as_slice() else {
             return None;
@@ -614,20 +613,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         rhs_type_id: TypeId,
         op: &BinaryOp,
     ) -> Option<TypeId> {
-        let struct_name = self.tysys.struct_name_for_type(rhs_type_id)?;
+        self.tysys.struct_name_for_type(rhs_type_id)?;
         let (item, method_name) = operator_trait_method(op)?;
         let trait_ = self.tysys.compiler_trait_def(item)?;
         // `1 + m` reads the impl on the right operand's type and gives the
         // literal that same type, so the impl must be the one whose right-hand
         // type is it — an `Add<Feet>` on `Meters` does not answer for `1 + m`.
         let rhs = ArgClass::Exact(rhs_type_id);
-        self.find_arithmetic_trait_impl(
-            &struct_name,
-            rhs_type_id,
-            trait_,
-            method_name,
-            Some(&rhs),
-        )?;
+        self.find_arithmetic_trait_impl(rhs_type_id, trait_, method_name, Some(&rhs))?;
         Some(rhs_type_id)
     }
 }
@@ -899,9 +892,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Coherence lets any same-package module host an `impl <struct_name>`.
         if struct_module_source.is_some() {
-            let entries: Vec<DefId> = self.tysys.trait_env.inherent_impl_keys(
-                &self.impl_target_of(base_type_id, &DeclName::new(&struct_name)),
-            );
+            let entries: Vec<DefId> = self
+                .tysys
+                .trait_env
+                .inherent_impl_keys(&self.impl_target_of(base_type_id));
             // The receiver's own declaration, which is what an impl header
             // targeting it must name.
             let receiver_decl = self.tysys.type_table.borrow().nominal_def(base_type_id);
@@ -939,9 +933,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if struct_module_source.is_none() {
-            let entries: Vec<DefId> = self.tysys.trait_env.inherent_impl_keys(
-                &self.impl_target_of(base_type_id, &DeclName::new(&struct_name)),
-            );
+            let entries: Vec<DefId> = self
+                .tysys
+                .trait_env
+                .inherent_impl_keys(&self.impl_target_of(base_type_id));
             for entry in &entries {
                 let impl_ref = ImplBlockRef(*entry);
                 let trait_env = Arc::clone(&self.tysys.trait_env);
@@ -1126,8 +1121,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
         loop {
-            if let Some(head) = self.tysys.struct_name_for_type(link) {
-                let target = self.impl_target_of(link, &DeclName::new(&head));
+            if self.tysys.struct_name_for_type(link).is_some() {
+                let target = self.impl_target_of(link);
                 let (args, decl) = {
                     let table = self.tysys.type_table.borrow();
                     (
@@ -1593,18 +1588,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (key, args) = {
             let tt = self.tysys.type_table.borrow();
             let (ResolvedType::Struct {
-                def: StructDef::Decl(def),
+                def: StructDef::Decl(_),
                 type_args,
             }
-            | ResolvedType::Variant { def, type_args }
-            | ResolvedType::Resource { def, type_args }) = tt.get(receiver)
+            | ResolvedType::Variant { type_args, .. }
+            | ResolvedType::Resource { type_args, .. }) = tt.get(receiver)
             else {
                 return Vec::new();
             };
             if tt.nominal_type_args(receiver).is_none() {
                 return Vec::new();
             }
-            let key = self.impl_target_of(receiver, &DeclName::new(tt.decl_name(*def)));
+            let key = self.impl_target_of(receiver);
             (key, type_args.clone())
         };
         let trait_env = Arc::clone(&self.tysys.trait_env);
@@ -3321,27 +3316,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// Run an indexing-trait lookup on `(struct_name, base_type_id)`, falling
-    /// back to the receiver's newtype base `(lookup_name, lookup_type_id)` only
-    /// when it actually differs. For a non-newtype receiver the base equals the
-    /// primary, so the former `lookup(primary).or_else(|| lookup(base))` re-ran
-    /// the identical scan on every `a[i]`; this skips that redundant call.
+    /// Run an indexing-trait lookup on `base_type_id`, falling back to the
+    /// receiver's newtype base `lookup_type_id` only when it actually differs.
+    /// For a non-newtype receiver the base equals the primary, so the scan
+    /// runs once on every `a[i]`.
     ///
     /// The matched receiver's `TypeId` comes back with the hit, so the caller
     /// names the dispatched method after the type whose impl actually matched.
     pub(super) fn index_lookup_or_newtype_base<T>(
         &mut self,
-        struct_name: &str,
         base_type_id: TypeId,
-        lookup_name: &str,
         lookup_type_id: TypeId,
-        mut lookup: impl FnMut(&mut Self, &str, TypeId) -> Option<T>,
+        mut lookup: impl FnMut(&mut Self, TypeId) -> Option<T>,
     ) -> Option<(T, TypeId)> {
-        if let Some(found) = lookup(self, struct_name, base_type_id) {
+        if let Some(found) = lookup(self, base_type_id) {
             return Some((found, base_type_id));
         }
-        if lookup_name != struct_name || lookup_type_id != base_type_id {
-            return lookup(self, lookup_name, lookup_type_id).map(|found| (found, lookup_type_id));
+        if lookup_type_id != base_type_id {
+            return lookup(self, lookup_type_id).map(|found| (found, lookup_type_id));
         }
         None
     }
@@ -3351,12 +3343,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `None` matches by container name alone.
     pub(super) fn find_index_trait_impl(
         &mut self,
-        struct_name: &str,
         base_type_id: TypeId,
         expected_index_type: Option<TypeId>,
     ) -> Option<IndexingTraitInfo> {
         self.find_indexing_trait_impl(
-            struct_name,
             base_type_id,
             CompilerItem::IndexRef,
             "index_ref",
@@ -3369,12 +3359,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// sends the caller back to the shared lookup.
     pub(super) fn find_index_mut_trait_impl_as_ref(
         &mut self,
-        struct_name: &str,
         base_type_id: TypeId,
         expected_index_type: Option<TypeId>,
     ) -> Option<IndexingTraitInfo> {
         self.find_indexing_trait_impl(
-            struct_name,
             base_type_id,
             CompilerItem::IndexRefMut,
             "index_ref_mut",
@@ -3392,7 +3380,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// compiler builds is already the result.
     pub(super) fn find_from_array_impls(
         &mut self,
-        struct_name: &str,
         base_type_id: TypeId,
         want_pair: bool,
     ) -> Vec<FromArrayInfo> {
@@ -3417,7 +3404,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(from_def) = self.tysys.compiler_trait_def(CompilerItem::From) else {
                 return Vec::new();
             };
-            self.find_arithmetic_trait_impls(struct_name, base_type_id, from_def, "from", None)
+            self.find_arithmetic_trait_impls(base_type_id, from_def, "from", None)
                 .into_iter()
                 .filter_map(|info| {
                     let array_type = info.rhs_type?;
@@ -3452,12 +3439,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// given.
     pub(super) fn find_index_assign_trait_impl(
         &mut self,
-        struct_name: &str,
         base_type_id: TypeId,
         expected_index_type: Option<TypeId>,
     ) -> Option<IndexingTraitInfo> {
         self.find_indexing_trait_impl(
-            struct_name,
             base_type_id,
             CompilerItem::IndexAssign,
             "index_assign",
@@ -3469,12 +3454,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// given.
     pub(super) fn find_index_swap_trait_impl(
         &mut self,
-        struct_name: &str,
         base_type_id: TypeId,
         expected_index_type: Option<TypeId>,
     ) -> Option<IndexingTraitInfo> {
         self.find_indexing_trait_impl(
-            struct_name,
             base_type_id,
             CompilerItem::IndexSwap,
             "index_swap",
@@ -3530,12 +3513,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// overloaded impls; `None` matches by container name alone.
     pub(super) fn find_index_value_trait_impl(
         &mut self,
-        struct_name: &str,
         base_type_id: TypeId,
         expected_index_type: Option<TypeId>,
     ) -> Option<IndexingTraitInfo> {
         self.find_indexing_trait_impl(
-            struct_name,
             base_type_id,
             CompilerItem::IndexValue,
             "index_value",
@@ -3547,7 +3528,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `IndexRef` for a read, `IndexAssign` and `IndexRefMut` for a write.
     pub(super) fn index_key_candidates(
         &mut self,
-        struct_name: &str,
         base_type_id: TypeId,
         access: KeyedAccess,
     ) -> Vec<KeyCandidate> {
@@ -3563,7 +3543,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let mut found = Vec::new();
         for &(item, method) in serving {
-            let written = self.indexing_trait_impls(struct_name, base_type_id, item, method, None);
+            let written = self.indexing_trait_impls(base_type_id, item, method, None);
             found.extend(written.into_iter().filter_map(|info| {
                 Some(KeyCandidate {
                     key: Some(info.index_type?),
@@ -3571,7 +3551,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method,
                 })
             }));
-            let open = self.open_indexing_trait_impls(struct_name, base_type_id, item);
+            let open = self.open_indexing_trait_impls(base_type_id, item);
             found.extend(open.into_iter().map(|trait_name| KeyCandidate {
                 key: None,
                 trait_name,
@@ -3585,7 +3565,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// leaves its key to the subscript (`impl<I: Show> IndexValue<I> for T`).
     fn open_indexing_trait_impls(
         &mut self,
-        struct_name: &str,
         base_type_id: TypeId,
         item: CompilerItem,
     ) -> Vec<FqTraitName> {
@@ -3599,7 +3578,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .nominal_type_args(base_type_id)
             .unwrap_or_default();
         self.collect_trait_impls(
-            &self.impl_target_of(base_type_id, &DeclName::new(struct_name)),
+            &self.impl_target_of(base_type_id),
             &concrete_type_args,
             trait_,
             |s, impl_ref, _| {
@@ -3627,13 +3606,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Find operator trait implementation
     pub(super) fn find_arithmetic_trait_impl(
         &mut self,
-        struct_name: &str,
         base_type_id: TypeId,
         trait_: DefId,
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Option<ArithmeticTraitInfo> {
-        let target = self.impl_target_of(base_type_id, &DeclName::new(struct_name));
+        let target = self.impl_target_of(base_type_id);
         self.find_operator_impl_on(&target, base_type_id, trait_, method_name, rhs)
     }
 
@@ -3663,13 +3641,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// not been given a type yet, and a literal admits without selecting.
     pub(super) fn find_arithmetic_trait_impls(
         &mut self,
-        struct_name: &str,
         base_type_id: TypeId,
         trait_: DefId,
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Vec<ArithmeticTraitInfo> {
-        let target = self.impl_target_of(base_type_id, &DeclName::new(struct_name));
+        let target = self.impl_target_of(base_type_id);
         self.find_operator_impls_on(&target, base_type_id, trait_, method_name, rhs)
     }
 
@@ -3858,19 +3835,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Helper to find indexing trait implementations (Index, `IndexMut`, or `IndexAssign`)
     pub(super) fn find_indexing_trait_impl(
         &mut self,
-        struct_name: &str,
         base_type_id: TypeId,
         item: CompilerItem,
         method_name: &str,
         expected_index_type: Option<TypeId>,
     ) -> Option<IndexingTraitInfo> {
-        let mut impls = self.indexing_trait_impls(
-            struct_name,
-            base_type_id,
-            item,
-            method_name,
-            expected_index_type,
-        );
+        let mut impls =
+            self.indexing_trait_impls(base_type_id, item, method_name, expected_index_type);
         // An impl writing the key defines the function the subscript names;
         // one leaving it to the subscript only covers it.
         if let Some(written) = impls.iter().position(|i| i.trait_arg_slots.is_empty()) {
@@ -3889,7 +3860,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// from, in candidate order.
     fn indexing_trait_impls(
         &mut self,
-        struct_name: &str,
         base_type_id: TypeId,
         item: CompilerItem,
         method_name: &str,
@@ -3906,7 +3876,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         };
         self.collect_trait_impls(
-            &self.impl_target_of(base_type_id, &DeclName::new(struct_name)),
+            &self.impl_target_of(base_type_id),
             &concrete_type_args,
             trait_,
             |s, impl_ref, impl_sig| {
@@ -4054,7 +4024,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         index_expr: &ast::IndexExpr,
         ctx: &mut FunctionContext,
     ) -> bool {
-        let Some((struct_name, base_type_id)) = self.index_container_head(index_expr, ctx) else {
+        let Some((_, base_type_id)) = self.index_container_head(index_expr, ctx) else {
             return false;
         };
         let Some(index_type) = self.index_key_at(index_expr, base_type_id, ctx) else {
@@ -4062,24 +4032,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // The same two lookups `resolve_index` makes for a `&mut` subscript,
         // newtype base included, so the answer is the route it will take.
-        let (lookup_name, lookup_type_id) =
-            self.tysys.newtype_base_lookup(&struct_name, base_type_id);
-        let ref_mut = self.index_lookup_or_newtype_base(
-            &struct_name,
-            base_type_id,
-            &lookup_name,
-            lookup_type_id,
-            |s, n, t| s.find_index_mut_trait_impl_as_ref(n, t, Some(index_type)),
-        );
+        let lookup_type_id = self.tysys.newtype_base_lookup(base_type_id);
+        let ref_mut = self.index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+            s.find_index_mut_trait_impl_as_ref(t, Some(index_type))
+        });
         ref_mut.is_none()
             && self
-                .index_lookup_or_newtype_base(
-                    &struct_name,
-                    base_type_id,
-                    &lookup_name,
-                    lookup_type_id,
-                    |s, n, t| s.find_index_trait_impl(n, t, Some(index_type)),
-                )
+                .index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+                    s.find_index_trait_impl(t, Some(index_type))
+                })
                 .is_some()
     }
 
@@ -4092,10 +4053,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> Option<TypeId> {
-        let (struct_name, base_type_id) = self.index_container_head(index_expr, ctx)?;
+        let (_, base_type_id) = self.index_container_head(index_expr, ctx)?;
         let index_type = self.index_key_at(index_expr, base_type_id, ctx)?;
         let index_mut_info =
-            self.find_index_mut_trait_impl_as_ref(&struct_name, base_type_id, Some(index_type))?;
+            self.find_index_mut_trait_impl_as_ref(base_type_id, Some(index_type))?;
 
         // First, look up method info on the OUTPUT type (what IndexMut returns)
         let output_type = index_mut_info.output_type;
@@ -4114,24 +4075,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => Some(type_args),
             _ => None,
         };
-        let (output_struct_name, output_module_source, output_type_args) = match nominal_args {
+        let (output_module_source, output_type_args) = match nominal_args {
             Some(type_args) => {
-                let (n, m) = self
+                let (_, module) = self
                     .tysys
                     .type_table
                     .borrow()
                     .nominal_head(output_base_type_id)
                     .expect("a nominal type names a declaration");
-                (n, m, (!type_args.is_empty()).then_some(type_args))
+                (module, (!type_args.is_empty()).then_some(type_args))
             }
-            None => (
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .mangle_type_name(output_base_type_id),
-                self.current_module_source.clone(),
-                None,
-            ),
+            None => (self.current_module_source.clone(), None),
         };
 
         // Look up method info to check if it needs &mut self
@@ -4145,7 +4099,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut probe = ArgProbe::new(&method_call.args, ctx, expected_type);
         if method_info.is_none()
             && let Some(trait_match) = self.find_trait_method_for_type(
-                &self.impl_target(&output_struct_name),
+                &self.impl_target_of(output_base_type_id),
                 &method_call.method,
                 output_type_args.as_deref(),
                 Some(output_type),

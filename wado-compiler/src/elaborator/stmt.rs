@@ -2347,10 +2347,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
         // A newtype inherits its base's `Eq`, which is where the impl is.
-        let (name, receiver) = self
+        let (_, receiver) = self
             .tysys
             .trait_impl_base_lookup(&written, scrutinee, eq_trait);
-        self.find_arithmetic_trait_impl(&name, receiver, eq_trait, &method, Some(&ArgClass::StrLit))
+        self.find_arithmetic_trait_impl(receiver, eq_trait, &method, Some(&ArgClass::StrLit))
             .is_some()
     }
 

@@ -48,7 +48,7 @@ use crate::elaborator::sig;
 use crate::elaborator::synth::{ArgProbe, ArgSource};
 use crate::elaborator::trait_env::{BlanketBound, BlanketReceiver};
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
-use crate::name::{DeclName, FqTraitName, unalias_namespace_member};
+use crate::name::{FqTraitName, unalias_namespace_member};
 use crate::resolve::Resolution;
 use crate::synthesis::template::blanket_impl_args;
 use crate::unparse::unparse_type_into;
@@ -481,7 +481,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Get struct name and module source from base type
         // The struct_module is where the struct is defined (and inherent methods live)
-        let (struct_name, struct_module) = match self.tysys.type_table.borrow().get(base_type_id) {
+        let (_, struct_module) = match self.tysys.type_table.borrow().get(base_type_id) {
             ResolvedType::Struct { .. } | ResolvedType::Tuple(_) => self
                 .tysys
                 .type_table
@@ -587,7 +587,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // rather than by the receiver's declaration, so both keys are asked.
         // The qualified forms have returned above.
         let colliding_trait = |this: &Self| {
-            let value_key = this.impl_target_of(base_type_id, &DeclName::new(&struct_name));
+            let value_key = this.impl_target_of(base_type_id);
             this.tysys
                 .trait_impl_declaring(&value_key, method_name)
                 .or_else(|| {
@@ -623,7 +623,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Fall back to base type trait methods
         if method_info.is_none()
             && let Some(trait_match) = self.find_trait_method_for_type(
-                &self.impl_target_of(base_type_id, &DeclName::new(&struct_name)),
+                &self.impl_target_of(base_type_id),
                 method_name,
                 receiver_type_args_for_trait.as_deref(),
                 Some(base_type_id),
@@ -2548,9 +2548,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
         if let Some(method_def) = declaration.or_else(|| {
-            let receiver = self.impl_target_of(target_type_id, &DeclName::new(&struct_name));
-            self.qualified_method_decl_id(&receiver, &static_call.method)
-                .or_else(|| self.qualified_method_decl_at(None, &struct_name, &static_call.method))
+            let owner = self.static_owner_key(receiver.key(), &static_call.method);
+            self.qualified_method_decl_id(&owner, &static_call.method)
         }) && self.record_reference_to_decl(static_call.method_id, method_def, static_call.span)
         {
             return TypeTable::ERROR;
@@ -3201,29 +3200,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .partition(|&&k| *defs.module(k) == self.current_module_source);
         keys.extend(elsewhere);
-        // A blanket's own body names its receiver by the block's parameter,
-        // which reaches that block itself. A site that passes no type wrote the
-        // parameter's name, which the scope resolves.
-        let binder = receiver_type.or_else(|| {
-            self.annotate_ctx
-                .trait_ctx
-                .type_params
-                .get(receiver.spelled())
-                .map(|b| b.type_id)
-        });
-        if let Some(ty) = binder
-            && let Some(owner) = self
-                .tysys
-                .type_table
-                .borrow()
-                .type_param_id(ty)
-                .map(|p| p.owner)
-            && env.impl_headers.contains_key(&owner)
-            && self.tysys.type_table.borrow().impl_target_whole(owner) == ty
-            && !keys.contains(&owner)
-        {
-            keys.insert(0, owner);
-        }
         // A key naming no declaration holds blocks of different shapes (`&A`
         // and `&B`, `[..T]` and `[A, B, A]`), which no declaration's arguments
         // tell apart, so the receiver is matched against each whole target.
@@ -3683,7 +3659,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // its own.
         let link_receiver = match &newtype_dispatch {
             Some((_, base_type_id, _)) => ReceiverId::keyed(
-                self.impl_target_of(*base_type_id, &DeclName::new(&actual_struct_name)),
+                self.impl_target_of(*base_type_id),
                 None,
                 &actual_struct_name,
             ),

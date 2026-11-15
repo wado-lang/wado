@@ -6,7 +6,8 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::defs::{DefId, DefTable};
 use crate::hashmap::IndexSet;
-use crate::name::{DeclName, FqTraitName, RefKind};
+use crate::name::{FqTraitName, RefKind};
+use crate::resolve::Resolution;
 use crate::tir::{ResolvedType, TypeArgMap, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -441,9 +442,22 @@ impl StaticLookup {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The receiver `spelled` names where the call wrote it at `site`.
+    /// The receiver `spelled` names where the call wrote it at `site`. A
+    /// binder keys by the item binding it, which is how a blanket's own
+    /// statics are indexed.
     pub(super) fn receiver_at(&self, site: Option<ast::AstId>, spelled: &str) -> ReceiverId {
-        ReceiverId::keyed(self.impl_target_at(site, spelled), None, spelled)
+        let resolutions = &self.tysys.resolutions;
+        let key = match site.and_then(|site| resolutions.walked(site)) {
+            Some(Resolution::Binder(binder)) => resolutions.binder_owner(binder).map_or_else(
+                || ImplTargetKey::of_undeclared(&self.current_module_source, spelled),
+                |owner| ImplTargetKey::TypeParam {
+                    owner,
+                    name: spelled.to_string(),
+                },
+            ),
+            _ => self.impl_target_at(site, spelled),
+        };
+        ReceiverId::keyed(key, None, spelled)
     }
 
     /// The receiver the call resolved to `ty`, which a reference keys by kind.
@@ -451,7 +465,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let kind = RefKind::from_resolved(self.tysys.type_table.borrow().get(ty));
         let key = match kind {
             Some(kind) => ImplTargetKey::Ref(kind),
-            None => self.impl_target_of(ty, &DeclName::new(spelled)),
+            None => self.impl_target_of(ty),
         };
         ReceiverId::keyed(key, Some(ty), spelled)
     }

@@ -1769,10 +1769,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A case is reachable wherever its type is; only a static method has
         // a visibility of its own to check.
         if callee_kind.case_owner().is_none()
-            && let Some((struct_name, _)) = effective_name.rsplit_once("::")
+            && let Some(receiver) = &call_receiver
         {
-            let receiver = self.impl_target_at(receiver_site, struct_name);
-            self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);
+            self.check_static_call_visibility(
+                receiver.key(),
+                effective_name,
+                Some(call.id),
+                call.span,
+            );
         }
 
         if let Some((owner, variant, case_data)) = self.case_of_callee(&callee_kind, ident) {
@@ -1816,6 +1820,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // First, determine expected parameter types to handle coercion.
         let signature = self.lookup_function_signature(
             effective_name,
+            call_receiver.as_ref(),
             effect_op.as_ref(),
             callee_kind.callee_site(),
         );
@@ -2286,17 +2291,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `ns::Type::method` never reaches the bare-spelling check,
                     // so the ladder is enforced here. The receiver is named at
                     // its own segment, which the walk answered for.
-                    {
-                        let receiver = self.impl_target_at(receiver_site, type_name);
-                        let qualified = format!("{type_name}::{method_name}");
-                        self.check_static_call_visibility(
-                            &receiver,
-                            &qualified,
-                            Some(call.id),
-                            call.span,
-                        );
-                    }
-
                     // The importing module never names `Type` on its own, so a
                     // bare-name search reaches no impl on it: the callee then
                     // loses its trait segment and names a body nothing
@@ -2315,6 +2309,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             type_name,
                         ),
                     };
+                    self.check_static_call_visibility(
+                        receiver.key(),
+                        &format!("{type_name}::{method_name}"),
+                        Some(call.id),
+                        call.span,
+                    );
                     // The receiver's own type arguments, and the method's, as
                     // the two-segment spelling infers them. Reading only a
                     // written turbofish mangled `ns::Cell::wrap(7)` with no
@@ -2975,6 +2975,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn lookup_function_signature(
         &mut self,
         name: &str,
+        receiver: Option<&ReceiverId>,
         effect_op: Option<&EffectOperation>,
         callee_site: Option<ast::AstId>,
     ) -> Option<CalleeSignature> {
@@ -3005,12 +3006,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A newtype inheriting the static reads the link that owns it: its
             // arguments resolve against that link's parameters, and are held to
             // the newtype once the call retypes them.
-            let key = self.impl_target(prefix);
-            let owner = self.static_owner_key(&key, suffix);
+            let key = receiver
+                .expect("a qualified callee carries its receiver")
+                .key();
+            let owner = self.static_owner_key(key, suffix);
             if let Some(sig) = self.unique_qualified_method_sig_keyed(&owner, suffix) {
                 return Some(CalleeSignature::of_method(&sig));
             }
-            if let Some(sig) = self.derived_method_signature(&key, suffix) {
+            if let Some(sig) = self.derived_method_signature(key, suffix) {
                 return Some(sig);
             }
 

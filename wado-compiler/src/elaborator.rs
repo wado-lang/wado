@@ -74,7 +74,7 @@ use crate::kiln::InvocationIndex;
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, Receiver, RefKind};
-use crate::name::{DeclName, FqTraitName, FqTypeName, global_name, namespace_member_alias};
+use crate::name::{FqTraitName, FqTypeName, global_name, namespace_member_alias};
 use crate::resolve::{Resolution, head_site};
 use crate::symbol::{Symbol, SymbolKind, SymbolTable, VariableSymbol};
 use crate::tir::{self as tir, TypeId};
@@ -744,23 +744,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             _ => self.tysys.get_ultimate_base_struct_name(link),
         };
-        let link_key = self.impl_target_of(link, &name::DeclName::new(&link_name));
+        let link_key = self.impl_target_of(link);
         Some((link_key, link_name, link))
-    }
-
-    /// The declaration a `Type::method` call resolves to, at the link of a
-    /// newtype chain that owns it. Every site that records the use→def edge
-    /// for such a call ends its ladder here, so none of them stops one link
-    /// short.
-    pub(super) fn qualified_method_decl_at(
-        &mut self,
-        site: Option<AstId>,
-        type_name: &str,
-        method_name: &str,
-    ) -> Option<DefId> {
-        let key = self.impl_target_at(site, type_name);
-        let owner = self.static_owner_key(&key, method_name);
-        self.qualified_method_decl_id(&owner, method_name)
     }
 
     /// The declaring node of `receiver::method_name` written qualified.
@@ -1513,13 +1498,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// The impl target a receiver spelling names in the current frame.
-    pub(crate) fn impl_target(&self, type_name: &str) -> trait_env::ImplTargetKey {
-        self.impl_target_at(None, type_name)
-    }
-
-    /// [`Self::impl_target`] for a receiver written at `site`, keyed to what it
-    /// names in the module that wrote it.
+    /// The impl target a receiver spelling written at `site` names, keyed to
+    /// what it names in the module that wrote it.
     pub(crate) fn impl_target_at(
         &self,
         site: Option<AstId>,
@@ -1531,19 +1511,36 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// Impl-target key for a receiver whose `TypeId` is known. The type
-    /// already carries its declaring module, so this asks it rather than
-    /// re-resolving the name from the caller's vantage — which cannot
-    /// separate two modules' same-named types when the caller imports
-    /// neither, and reaches the receiver only through a return type.
-    pub(crate) fn impl_target_of(
-        &self,
-        type_id: tir::TypeId,
-        fallback_name: &DeclName,
-    ) -> trait_env::ImplTargetKey {
-        match self.type_decl_key(type_id) {
-            Some(def) => trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def),
-            None => self.impl_target(fallback_name.as_decl_str()),
+    /// Impl-target key for a receiver whose `TypeId` is known (refs peeled),
+    /// read off the type alone: the head [`TypeTable::impl_receiver_key`]
+    /// indexes the method form under, so a static and a method call on one
+    /// type meet the same impls.
+    pub(crate) fn impl_target_of(&self, type_id: tir::TypeId) -> trait_env::ImplTargetKey {
+        if let Some(def) = self.type_decl_key(type_id) {
+            return trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
+        }
+        let tt = self.tysys.type_table.borrow();
+        let peeled = tt.peel_refs(type_id);
+        match tt.get(peeled) {
+            tir::ResolvedType::TypeParam { id } => trait_env::ImplTargetKey::TypeParam {
+                owner: id.owner,
+                name: tt.param_name(*id).to_string(),
+            },
+            tir::ResolvedType::Struct {
+                def: tir::StructDef::Anon(id),
+                ..
+            } => trait_env::ImplTargetKey::Undeclared(
+                tt.anon_struct_module(*id).clone(),
+                tt.anon_struct_mangle(*id),
+            ),
+            resolved @ tir::ResolvedType::Function { .. } => {
+                let name = tt.fn_receiver_name(resolved);
+                trait_env::ImplTargetKey::Function {
+                    display: name.to_display(),
+                    name,
+                }
+            }
+            _ => trait_env::ImplTargetKey::Builtin(tt.base_type_name(peeled)),
         }
     }
 
@@ -1718,7 +1715,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.associated_constants.clear();
         type AssocConstInput = (
             AstId,
-            String,
+            DefId,
             String,
             ast::Type,
             ast::Expr,
@@ -1734,30 +1731,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     None
                 }
             })
-            .flat_map(|impl_block| {
-                let type_name = self.get_type_name(&impl_block.ty);
+            .filter_map(|impl_block| {
+                let owner = self.tysys.resolutions.head_decl(&impl_block.ty)?;
                 let is_inherent = impl_block.trait_type.is_none();
-                impl_block
-                    .constants
-                    .iter()
-                    .map(move |assoc_const| {
-                        (
-                            assoc_const.id,
-                            type_name.clone(),
-                            assoc_const.name.clone(),
-                            assoc_const.ty.clone(),
-                            assoc_const.value.clone(),
-                            is_inherent.then_some(assoc_const.visibility),
-                        )
-                    })
-                    .collect::<Vec<_>>()
+                Some(impl_block.constants.iter().map(move |assoc_const| {
+                    (
+                        assoc_const.id,
+                        owner,
+                        assoc_const.name.clone(),
+                        assoc_const.ty.clone(),
+                        assoc_const.value.clone(),
+                        is_inherent.then_some(assoc_const.visibility),
+                    )
+                }))
             })
+            .flatten()
             .collect();
-        for (decl, type_name, const_name, ty, value, inherent_visibility) in assoc_const_inputs {
+        for (decl, owner, const_name, ty, value, inherent_visibility) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
-            let Some(owner) = self.decl_key_or_local(&type_name) else {
-                continue;
-            };
             self.sem.decls.associated_constants.insert(
                 (owner, const_name),
                 sig::AssocConstSig {

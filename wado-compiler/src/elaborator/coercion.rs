@@ -1649,11 +1649,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> Option<(FromArrayInfo, TypeId, bool)> {
         let resolve = |elaborator: &mut Self, ty: TypeId| {
-            let name = elaborator.tysys.literal_target_name(ty)?;
-            match elaborator
-                .find_from_array_impls(&name, ty, want_pair)
-                .as_slice()
-            {
+            elaborator.tysys.literal_target_name(ty)?;
+            match elaborator.find_from_array_impls(ty, want_pair).as_slice() {
                 [only] => Some(Ok(only.clone())),
                 [] => None,
                 several => Some(Err(several.len())),
@@ -1733,14 +1730,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !is_literal_expr(element) {
             return false;
         }
-        let Some(name) = self.tysys.literal_target_name(slot_type) else {
+        if self.tysys.literal_target_name(slot_type).is_none() {
             return false;
-        };
+        }
         let Some(from_def) = self.tysys.compiler_trait_def(CompilerItem::From) else {
             return false;
         };
         let found = self
-            .find_arithmetic_trait_impls(&name, slot_type, from_def, "from", None)
+            .find_arithmetic_trait_impls(slot_type, from_def, "from", None)
             .into_iter()
             .find(|info| info.rhs_type == Some(found_type));
         let Some(info) = found else {
@@ -1768,16 +1765,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn is_key_value_literal_target(&mut self, type_id: TypeId) -> bool {
         self.tysys
             .literal_target_name(type_id)
-            .is_some_and(|name| !self.find_from_array_impls(&name, type_id, true).is_empty())
+            .is_some_and(|_| !self.find_from_array_impls(type_id, true).is_empty())
     }
 
     /// The `LiteralSpread::spread_literal` a `..base` member calls on
     /// `output_type`, or `None` where the type does not implement the trait.
     fn literal_spread_call(&mut self, output_type: TypeId) -> Option<LiteralCallee> {
-        let name = self.tysys.literal_target_name(output_type)?;
+        self.tysys.literal_target_name(output_type)?;
         let trait_ = self.tysys.compiler_trait_def(CompilerItem::LiteralSpread)?;
-        let info =
-            self.find_arithmetic_trait_impl(&name, output_type, trait_, "spread_literal", None)?;
+        let info = self.find_arithmetic_trait_impl(output_type, trait_, "spread_literal", None)?;
         Some(self.literal_callee(
             Some(info.impl_def),
             info.impl_module_source,

@@ -612,28 +612,41 @@ impl TypeSystem {
     ) -> (String, TypeId) {
         match self.own_impl_link(type_id, trait_) {
             Some(link) if link != type_id => (self.type_table.borrow().base_type_name(link), link),
-            _ => self.newtype_base_lookup(name, type_id),
+            _ => match self.newtype_base_lookup(type_id) {
+                base if base == type_id => (name.to_string(), type_id),
+                base => (self.lookup_head_name(base), base),
+            },
         }
     }
 
-    /// A newtype's representation head, named for a trait-impl lookup fallback,
-    /// else the name and id given.
+    /// A newtype's representation head, for a trait-impl lookup fallback, else
+    /// the type given.
     ///
     /// A middle link writes no impl of its own, or [`Self::own_impl_link`] would
     /// have stopped there.
-    pub(crate) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
-        let tt = self.type_table.borrow();
-        if let Some(base_id) = tt.newtype_representation(type_id) {
-            let is_builtin_array = matches!(tt.get(base_id), ResolvedType::BuiltinArray(_));
-            drop(tt);
-            if is_builtin_array {
-                return (ARRAY_TYPE_NAME.to_string(), base_id);
-            }
-            if let Some(base_name) = self.struct_name_for_type(base_id) {
-                return (base_name, base_id);
-            }
+    pub(crate) fn newtype_base_lookup(&self, type_id: TypeId) -> TypeId {
+        match self.type_table.borrow().newtype_representation(type_id) {
+            Some(base) if self.has_lookup_head(base) => base,
+            Some(_) | None => type_id,
         }
-        (name.to_string(), type_id)
+    }
+
+    fn has_lookup_head(&self, ty: TypeId) -> bool {
+        matches!(
+            self.type_table.borrow().get(ty),
+            ResolvedType::BuiltinArray(_)
+        ) || self.struct_name_for_type(ty).is_some()
+    }
+
+    fn lookup_head_name(&self, ty: TypeId) -> String {
+        if matches!(
+            self.type_table.borrow().get(ty),
+            ResolvedType::BuiltinArray(_)
+        ) {
+            return ARRAY_TYPE_NAME.to_string();
+        }
+        self.struct_name_for_type(ty)
+            .expect("a lookup head is an array or names a struct")
     }
 
     /// Peel a chain of trailing newtypes / generic instances down to the

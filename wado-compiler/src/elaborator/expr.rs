@@ -1370,9 +1370,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         }
 
-        if ident.owner_segment().is_some()
+        if let Some(owner) = ident.owner_segment()
+            && let Some(pos) = ident.name.find("::")
+            && let receiver = self.receiver_at(Some(owner.id), &ident.name[..pos])
             && self
-                .lookup_function_signature(&ident.name, None, Some(ident.id))
+                .lookup_function_signature(&ident.name, Some(&receiver), None, Some(ident.id))
                 .is_some()
         {
             let _ = self.emit(TypeError::CallableAsValue {
@@ -2265,16 +2267,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // For List and custom types, look for Index or IndexValue trait implementation
         // (List implements IndexValue<i32> with type Output = T)
-        let struct_name = self
+        let names_struct = self
             .tysys
             .struct_name_for_type(base_type_id)
-            .unwrap_or_default();
+            .is_some_and(|name| !name.is_empty());
 
-        // For newtypes, also resolve the base type name for trait impl lookup
-        let (lookup_name, lookup_type_id) =
-            self.tysys.newtype_base_lookup(&struct_name, base_type_id);
+        // For newtypes, the base type also answers the trait impl lookup
+        let lookup_type_id = self.tysys.newtype_base_lookup(base_type_id);
 
-        if !struct_name.is_empty() {
+        if names_struct {
             // Only a key synthesis cannot type (a compound literal, whose type
             // the impl supplies) falls back to pre-selecting an impl for its
             // expected type.
@@ -2282,13 +2283,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let expected_key = self
                 .index_key_type_at(expr_type, key_class, access.keyed(), index.index.span())
                 .or_else(|| {
-                    self.index_lookup_or_newtype_base(
-                        &struct_name,
-                        base_type_id,
-                        &lookup_name,
-                        lookup_type_id,
-                        |s, n, t| s.find_index_value_trait_impl(n, t, None),
-                    )
+                    self.index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+                        s.find_index_value_trait_impl(t, None)
+                    })
                     .and_then(|(i, _)| i.index_type)
                 });
             let index_type = self.resolve_expr(&index.index, ctx, expected_key);
@@ -2306,24 +2303,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // access that resolves never reaches the by-value lowering.
             let value_impl = (access == IndexAccess::Value)
                 .then(|| {
-                    self.index_lookup_or_newtype_base(
-                        &struct_name,
-                        base_type_id,
-                        &lookup_name,
-                        lookup_type_id,
-                        |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
-                    )
+                    self.index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+                        s.find_index_value_trait_impl(t, Some(index_type))
+                    })
                 })
                 .flatten();
             let index_trait_info = (access == IndexAccess::Mutable)
                 .then(|| {
-                    self.index_lookup_or_newtype_base(
-                        &struct_name,
-                        base_type_id,
-                        &lookup_name,
-                        lookup_type_id,
-                        |s, n, t| s.find_index_mut_trait_impl_as_ref(n, t, Some(index_type)),
-                    )
+                    self.index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+                        s.find_index_mut_trait_impl_as_ref(t, Some(index_type))
+                    })
                     .map(|found| (found, "index_ref_mut"))
                 })
                 .flatten()
@@ -2335,11 +2324,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     aliases_only
                         .then(|| {
                             self.index_lookup_or_newtype_base(
-                                &struct_name,
                                 base_type_id,
-                                &lookup_name,
                                 lookup_type_id,
-                                |s, n, t| s.find_index_trait_impl(n, t, Some(index_type)),
+                                |s, t| s.find_index_trait_impl(t, Some(index_type)),
                             )
                             .map(|found| (found, "index_ref"))
                         })
@@ -2382,13 +2369,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             let index_value_info = value_impl.or_else(|| {
-                self.index_lookup_or_newtype_base(
-                    &struct_name,
-                    base_type_id,
-                    &lookup_name,
-                    lookup_type_id,
-                    |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
-                )
+                self.index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+                    s.find_index_value_trait_impl(t, Some(index_type))
+                })
             });
             if let Some((trait_info, _)) = index_value_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
@@ -2450,25 +2433,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TypeId> {
         let recv_type = self.resolve_expr(&index_expr.expr, ctx, None);
         let base_type_id = self.tysys.through_ref(recv_type);
-        let struct_name = self.tysys.struct_name_for_type(base_type_id)?;
-        let (lookup_name, lookup_type_id) =
-            self.tysys.newtype_base_lookup(&struct_name, base_type_id);
-        self.index_lookup_or_newtype_base(
-            &struct_name,
-            base_type_id,
-            &lookup_name,
-            lookup_type_id,
-            |s, n, t| s.find_index_trait_impl(n, t, None),
-        )
+        self.tysys.struct_name_for_type(base_type_id)?;
+        let lookup_type_id = self.tysys.newtype_base_lookup(base_type_id);
+        self.index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+            s.find_index_trait_impl(t, None)
+        })
         .and_then(|(i, _)| i.index_type)
         .or_else(|| {
-            self.index_lookup_or_newtype_base(
-                &struct_name,
-                base_type_id,
-                &lookup_name,
-                lookup_type_id,
-                |s, n, t| s.find_index_assign_trait_impl(n, t, None),
-            )
+            self.index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+                s.find_index_assign_trait_impl(t, None)
+            })
             .and_then(|(i, _)| i.index_type)
         })
     }
