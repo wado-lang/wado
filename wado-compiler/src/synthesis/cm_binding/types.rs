@@ -10,7 +10,7 @@ use crate::ast::{AstId, NamedType, Type};
 use crate::cm_abi;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{
-    CmInterfaceRegistry, EXTERN_HANDLE_IN_AGGREGATE, cm_layout_with_registry,
+    CmInterfaceRegistry, EXTERN_HANDLE_AT_EXPORT, cm_layout_with_registry,
 };
 use crate::hashmap::IndexMap;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
@@ -797,10 +797,6 @@ pub(super) fn scalar_store_op(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
 ) -> &'static str {
-    assert!(
-        cm_interface_registry.extern_handle(ty).is_none(),
-        "{EXTERN_HANDLE_IN_AGGREGATE}"
-    );
     match flatten_param_type(ty, cm_interface_registry)[..] {
         [TypeTable::F64] => "f64_store",
         [TypeTable::F32] => "f32_store",
@@ -821,10 +817,6 @@ pub(super) fn handle_load_op(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
 ) -> (&'static str, TypeId) {
-    assert!(
-        cm_interface_registry.extern_handle(ty).is_none(),
-        "{EXTERN_HANDLE_IN_AGGREGATE}"
-    );
     let [flat] = cm_interface_registry.cm_flatten(ty)[..] else {
         panic!("a handle is one flat value: {ty:?}");
     };
@@ -972,7 +964,7 @@ fn flat_types_from_type_id_inner(
         _ if type_table.is_resource_type(type_id) => {
             assert!(
                 !type_table.is_extern_handle(type_id),
-                "{EXTERN_HANDLE_IN_AGGREGATE}"
+                "{EXTERN_HANDLE_AT_EXPORT}"
             );
             out.push(cm_abi::CmValType::I32);
         }

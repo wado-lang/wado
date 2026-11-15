@@ -70,10 +70,15 @@ test("the host answers identity, narrowing and a listener while `run` waits", as
   assert.equal(found.narrow, "true true false");
   // A `<div>`'s own interface is not declared, so it is named by `HTMLElement`.
   assert.equal(found.inspect, "HtmlInputElement HtmlElement");
+  // The list the program set is the list it read back, object for object.
+  assert.equal(found.labels, "2 true true");
 
   const div = document.getElementById("div");
+  assert.deepEqual(div.ariaLabelledByElements, [document.getElementById("input"), div]);
   div.dispatchEvent(new Event("click"));
   assert.equal(found.clicks, "1");
+  // `<div>`, `<body>`, `<html>`, the document and the window.
+  assert.equal(found.path, "5 true");
   await running;
   assert.equal(found.state, "done");
   // The closure outlives `run`, and keeps what it captured.

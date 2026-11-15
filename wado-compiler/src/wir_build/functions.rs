@@ -193,17 +193,22 @@ fn extern_import_core_func_type(
             nullable: shape == ExternRef::Optional,
         })
     };
-    let flatten = |ty: &Type, out: &mut Vec<WirType>| match extern_ref(ty) {
-        Some(reference) => out.push(reference),
-        None => {
+    let flatten = |ty: &Type, out: &mut Vec<WirType>| {
+        if let Some(reference) = extern_ref(ty) {
+            out.push(reference);
+        } else {
             let mut flat = Vec::new();
             flatten_cm_param_type(&registry.resolve_type(ty), &mut flat, registry);
             out.extend(flat.into_iter().map(valtype_to_wir_type));
         }
     };
     let mut params = Vec::new();
-    for (_, _, ty) in &func.params {
-        flatten(ty, &mut params);
+    if registry.params_in_buffer(func.params.iter().map(|(_, _, ty)| ty), func.is_async) {
+        params.push(WirType::I32);
+    } else {
+        for (_, _, ty) in &func.params {
+            flatten(ty, &mut params);
+        }
     }
     let mut results = Vec::new();
     if let Some(ret) = &func.return_type {
@@ -632,7 +637,7 @@ fn register_exports(ctx: &mut WirContext<'_>) {
         }
     }
 
-    for name in &component_plan.callback_core_exports {
+    for name in &component_plan.host_core_exports {
         export_under_own_name(ctx, name);
     }
 

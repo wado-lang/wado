@@ -12,16 +12,17 @@ covers eight interfaces: `EventTarget`, `Event`, `Node`, `Element`,
 `HTMLElement`, `HTMLInputElement`, `Document` and `Window`.
 
 `wado-from-idl` skips every member it cannot lower and names it on stderr. On
-the current snapshot it skips 570 members:
+the current snapshot it skips 559 members (`mise run update-package-web` prints
+each):
 
-| Reason                             | Members | Examples                                               |
-| ---------------------------------- | ------- | ------------------------------------------------------ |
-| An event handler attribute         | 353     | `onclick`, `oninput`                                   |
-| A type outside the slice           | 145     | `NodeList`, `HTMLCollection`, `DOMTokenList`, `any`    |
-| `Promise<T>`                       | 35      | `scroll_to`, `request_fullscreen`                      |
-| `sequence<T>` and `FrozenArray<T>` | 17      | `composed_path`, `get_attribute_names`                 |
-| A union                            | 13      | `append`, `prepend`, `before`, the `inner_html` getter |
-| More than one overload lowers      | 2       | `Window.alert`                                         |
+| Reason                        | Members | Examples                                               |
+| ----------------------------- | ------- | ------------------------------------------------------ |
+| An event handler attribute    | 353     | `onclick`, `oninput`                                   |
+| A type outside the slice      | 151     | `NodeList`, `HTMLCollection`, `sequence<Range>`, `any` |
+| `Promise<T>`                  | 35      | `scroll_to`, `request_fullscreen`                      |
+| A union                       | 13      | `append`, `prepend`, `before`, the `inner_html` getter |
+| More than one overload lowers | 2       | `Window.alert`                                         |
+| `ObservableArray<T>`          | 1       | `adopted_style_sheets`                                 |
 
 A variadic argument lowers, but `append` and its siblings take
 `(Node or DOMString)`, so they wait on the union.
@@ -33,10 +34,11 @@ lower is then available to each interface the slice adds.
 
 ### 1. Sequences and variadics
 
-- [ ] Lower `sequence<T>` and `FrozenArray<T>` to `List<T>`, in the bindings and
+- [x] Lower `sequence<T>` and `FrozenArray<T>` to `List<T>`, in the bindings and
   in the glue
 - [x] Lower a variadic argument to a `List<T>`
-- [ ] `SurfaceDom` answers the members this unlocks that the slice already has
+- [ ] `SurfaceDom` answers the members this unlocks that the slice already has:
+  `composed_path`, `get_attribute_names`, the `aria_*_elements` attributes
 
 ### 2. Default arguments on a `#[cm]` operation
 

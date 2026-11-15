@@ -387,6 +387,26 @@ pub fn affine_handle(value: TirExpr, tt: &TypeTable) -> TirExpr {
     }
 }
 
+/// Whether `type_id` is an extern handle, or a reference to one.
+pub fn is_extern_handle(tt: &TypeTable, type_id: TypeId) -> bool {
+    tt.is_extern_handle(peel_newtypes(tt, tt.peel_refs(type_id)))
+}
+
+/// The `i32` a handle is in linear memory, or among the flat values of an
+/// aggregate: the slot an extern handle is put in (WEP: Extern Handles), and
+/// what [`affine_handle`] answers otherwise.
+pub fn handle_in_memory(value: TirExpr, tt: &TypeTable) -> TirExpr {
+    if is_extern_handle(tt, value.type_id) {
+        internal_call(
+            CompilerItem::ExternSlotPut.attr_name(),
+            vec![value],
+            TypeTable::I32,
+        )
+    } else {
+        affine_handle(value, tt)
+    }
+}
+
 /// Split a packed pointer/length `i64` — the `(ptr | len << 32)` encoding
 /// `cm_lower_string` / `cm_lower_array_u8` return — into its `ptr` (low 32
 /// bits) and `len` (high 32 bits) `i32` expressions. The one place the packing

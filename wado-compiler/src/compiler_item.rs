@@ -737,6 +737,14 @@ pub enum CompilerItem {
     HandleClass,
     /// `core:rt::handle_eq`.
     HandleEq,
+    /// `core:rt::extern_slot_put`.
+    ExternSlotPut,
+    /// `core:rt::extern_slot_get`.
+    ExternSlotGet,
+    /// `core:rt::extern_slot_take`.
+    ExternSlotTake,
+    /// `core:rt::extern_slot_free`.
+    ExternSlotFree,
     /// `core:rt::inspect_handle`.
     InspectHandle,
     /// `core:rt::memory_to_gc_string`.
@@ -1042,6 +1050,10 @@ impl CompilerItem {
         Self::CoverageReport,
         Self::HandleClass,
         Self::HandleEq,
+        Self::ExternSlotPut,
+        Self::ExternSlotGet,
+        Self::ExternSlotTake,
+        Self::ExternSlotFree,
         Self::InspectHandle,
         Self::MemoryToGcString,
         Self::MemoryToByteList,
@@ -1270,6 +1282,10 @@ impl CompilerItem {
             Self::CoverageReport => "coverage_report",
             Self::HandleClass => "handle_class",
             Self::HandleEq => "handle_eq",
+            Self::ExternSlotPut => "extern_slot_put",
+            Self::ExternSlotGet => "extern_slot_get",
+            Self::ExternSlotTake => "extern_slot_take",
+            Self::ExternSlotFree => "extern_slot_free",
             Self::InspectHandle => "inspect_handle",
             Self::MemoryToGcString => "memory_to_gc_string",
             Self::MemoryToByteList => "memory_to_byte_list",
@@ -1385,6 +1401,10 @@ impl CompilerItem {
             | Self::CoverageReport
             | Self::HandleClass
             | Self::HandleEq
+            | Self::ExternSlotPut
+            | Self::ExternSlotGet
+            | Self::ExternSlotTake
+            | Self::ExternSlotFree
             | Self::InspectHandle
             | Self::MemoryToGcString
             | Self::MemoryToByteList
@@ -1748,6 +1768,10 @@ impl CompilerItem {
             | Self::CoverageReport
             | Self::HandleClass
             | Self::HandleEq
+            | Self::ExternSlotPut
+            | Self::ExternSlotGet
+            | Self::ExternSlotTake
+            | Self::ExternSlotFree
             | Self::InspectHandle
             | Self::MemoryToGcString
             | Self::MemoryToByteList

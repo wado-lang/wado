@@ -462,9 +462,11 @@ test {
 }
 ```
 
-An import whose signature names an extern handle is a web import. The handle crosses as the reference itself where it is a whole parameter or result, or an `Option` of one. A web import is not part of the component's world, and an extern handle in the signature of an `export fn` is an error: a reference to a host object does not cross a component boundary.
+An import whose signature names an extern handle is a web import. The handle may stand anywhere a value does: as a parameter or a result, in an `Option`, a list, a record or a variant. A web import is not part of the component's world, and an extern handle in the signature of an `export fn` is an error: a reference to a host object does not cross a component boundary.
 
-> Not yet implemented: no host serves a web import yet, so calling one traps unless a handler answers it. An extern handle inside a list, a record or another variant is not yet lowered, and an import taking one is rejected. A type pattern or `==` on an object of the host traps, since the class and the identity of one are not yet read. [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md) lists the work.
+A host that serves no web imports still runs the component. There, a call of one that no handler answers traps.
+
+> Not yet implemented: an `async` web import is rejected where it is called. [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md) lists the work.
 
 ### Resource Ownership
 

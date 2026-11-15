@@ -731,10 +731,14 @@ impl Lowering<'_> {
     /// The Wado type of a `WebIDL` type, or why the slice has none. A union is
     /// the one constituent the slice can express; `undefined` in it means nullable.
     fn lower_type(&self, ty: &IdlType, flow: Flow) -> std::result::Result<WadoType, String> {
-        if !ty.generic.is_empty() {
-            return Err(format!("`{}<…>`", ty.generic));
-        }
         let (inner, nullable) = match &ty.inner {
+            IdlTypeInner::Types(arguments) if !ty.generic.is_empty() => (
+                self.lower_generic(&ty.generic, arguments, flow)?,
+                ty.nullable,
+            ),
+            IdlTypeInner::Name(_) if !ty.generic.is_empty() => {
+                unreachable!("webidl2 lists a generic's arguments")
+            }
             IdlTypeInner::Name(name) => (self.lower_name(name, flow)?, ty.nullable),
             IdlTypeInner::Types(constituents) => {
                 let mut expressible = Vec::new();
@@ -761,6 +765,25 @@ impl Lowering<'_> {
             }
         };
         Ok(optional(inner, nullable))
+    }
+
+    /// A `sequence<T>` or a `FrozenArray<T>` is a `List<T>` of what a list
+    /// carries across: a scalar, a string or a handle.
+    fn lower_generic(
+        &self,
+        generic: &str,
+        arguments: &[IdlType],
+        flow: Flow,
+    ) -> std::result::Result<WadoType, String> {
+        let ("sequence" | "FrozenArray", [element]) = (generic, arguments) else {
+            return Err(format!("`{generic}<…>`"));
+        };
+        let reason = |of: &str| format!("`{generic}` of {of}");
+        let element = self.lower_type(element, flow).map_err(|r| reason(&r))?;
+        if !glue::list_carries(&element) {
+            return Err(reason("a list, a nullable type or a callback"));
+        }
+        Ok(WadoType::List(Box::new(element)))
     }
 
     fn lower_name(&self, name: &str, flow: Flow) -> std::result::Result<WadoType, String> {

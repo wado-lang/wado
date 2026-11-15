@@ -1,0 +1,37 @@
+// An `async` web import has no lowering yet, so a call of one is refused;
+// declaring it is not. Every other form of import carries an extern handle.
+
+#[cm("example:demo/node", linearity = "unrestricted", repr = "externref", classes = "0..=0")]
+resource Node {}
+
+#[cm("example:demo/global")]
+interface Dom {
+    #[cm("example:demo/global#touch")]
+    fn touch(n: Option<&Node>) -> i32;
+
+    #[cm("example:demo/global#touch-all")]
+    fn touch_all(ns: List<Node>) -> i32;
+
+    #[cm("example:demo/global#touch-later")]
+    async fn touch_later(n: Node) -> AsyncCall<i32>;
+
+    #[cm("example:demo/global#never-called")]
+    async fn never_called() -> AsyncCall<Node>;
+
+    #[cm("example:demo/global#root")]
+    fn root() -> Node;
+}
+
+export fn run() with Dom {
+    let n = Dom::root();
+    let _ = Dom::touch(Option::Some(&n));
+    let _ = Dom::touch_all([n]);
+    let _ = Dom::touch_later(n).wait();
+}
+
+__DATA__
+{
+    "compile_error": ":29:13: analysis error: `Dom::touch_later` is unavailable: an `async` import that takes or returns an extern handle has no lowering yet",
+    "compile_errors_not_contains": ["`Dom::touch` is", "`Dom::touch_all`", "never_called", "`Dom::root`"],
+    "compile_error_codes": ["UNAVAILABLE"]
+}

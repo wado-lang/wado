@@ -12,7 +12,7 @@ use crate::call_args::CallArgs;
 use crate::canonical::CanonicalIntrinsic;
 use crate::cm_abi;
 use crate::component_model::{
-    CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, EXTERN_HANDLE_IN_AGGREGATE,
+    CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, EXTERN_HANDLE_AT_EXPORT,
 };
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -127,7 +127,7 @@ fn lower_to_flat_inner(
         _ if ctx.type_table.borrow().is_resource_type(type_id) => {
             assert!(
                 !ctx.type_table.borrow().is_extern_handle(type_id),
-                "{EXTERN_HANDLE_IN_AGGREGATE}"
+                "{EXTERN_HANDLE_AT_EXPORT}"
             );
             let local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_stmt(
@@ -823,7 +823,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 ResolvedType::Resource { .. } => {
                     assert!(
                         !type_table_cell.borrow().is_extern_handle(target_type_id),
-                        "{EXTERN_HANDLE_IN_AGGREGATE}"
+                        "{EXTERN_HANDLE_AT_EXPORT}"
                     );
                     let handle = flat(cm_val_type_to_type_id(flat_types[0]));
                     (cast(handle.0, target_type_id), handle.1)

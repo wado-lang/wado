@@ -150,13 +150,20 @@ These imports are not component imports. The emitted WIT does not list them.
 Linear memory cannot hold a reference, and the canonical ABI puts a value there
 in three cases: a list's elements, parameters past 16 flat values, and a result
 past one. A handle in any of them is written as an `i32`, the index of a slot
-in a table of `externref` the main module exports.
+in a table the guest keeps. A handle inside a record or a variant that stays
+flat is that index too, so one type has one flat form.
 
 - The side that sends writes each handle into a slot and the index into memory.
   The side that receives reads the slot.
 - The guest allocates slots, as it allocates the memory beside them, and clears
   them once it has read or the call has returned. A cleared slot holds nothing
   alive.
+- The table is a list in `core:rt`, not a Wasm table. The host reaches it
+  through two exports of the main module: one puts an object in a free slot
+  and answers its index, the other answers the object in a slot. A Wasm table
+  the host reads and writes itself was the first design. It needs table
+  declarations and `table.grow` in the compiler's IR, and it leaves allocation
+  to an export all the same, for nothing a program can observe.
 - Slots are not freed in the order they were taken: a call suspended in `wait`
   (below) keeps its slots while another call runs.
 
@@ -382,7 +389,7 @@ glue cannot be run without them.
   unlifted export: a two-level `extends`, narrowing by the host's class, `==`
   as the host interned, a closure called back after `run` returned, and one
   entered while `run` is suspended
-- [ ] The handle table: a handle in linear memory is a slot index, and
+- [x] The handle table: a handle in linear memory is a slot index, and
   `sequence<T>` and `FrozenArray<T>` of an interface lower to `List<T>`
 - [ ] An `AsyncCall` over a promise, and `Rejection`: `wait` through a
   suspending import, every callback entered through `WebAssembly.promising`,
@@ -418,10 +425,13 @@ glue cannot be run without them.
   measured against the range test it replaces.
 - A `match` reads the class once for each type-pattern arm, not once for the
   `match`.
-- Until the handle table lands, an import with an extern handle inside a list, a
-  record or a variant other than `Option`, or with so many parameters that they
-  are passed through memory, is rejected as unsupported. So is an `async` web
-  import.
+- An `async` web import is rejected where it is called.
+- The glue generator writes no shim for a member whose parameters are passed
+  through memory, and stops on one. The slice has none.
+- A list's element in the bindings is a scalar, a string or a handle. A
+  `sequence` of anything else is skipped.
+- Nothing measures the slots: a program that leaked one would keep its object
+  alive unnoticed.
 - `class-of` reads prototypes of the glue's own realm. An object from another
   realm, such as an element of an `iframe`'s document, has other prototypes and
   matches none.

@@ -9,7 +9,7 @@
 
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
-use crate::component_model::{CmVariantCase, EMPTY_TUPLE_AT_BOUNDARY, EXTERN_HANDLE_IN_AGGREGATE};
+use crate::component_model::{CmVariantCase, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::module_source::ModuleSource;
 use crate::optimize::pass_dump;
 use crate::tir::{TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirStmt, TypeId};
@@ -98,11 +98,19 @@ pub(super) fn synthesize_lift_into(
             locals,
             ctx,
         ),
-        _ if ctx.type_table.borrow().is_extern_handle(target) => {
-            unreachable!("{EXTERN_HANDLE_IN_AGGREGATE}")
-        }
+        _ if ctx.type_table.borrow().is_extern_handle(target) => take_extern_slot(addr, target),
         _ => synthesize_lift(ty, addr, next_local, stmts, locals, ctx),
     }
+}
+
+/// The extern handle of type `handle` in the slot whose index is at `addr`.
+/// Taking it frees the slot (WEP: Extern Handles).
+fn take_extern_slot(addr: TirExpr, handle: TypeId) -> TirExpr {
+    internal_call(
+        CompilerItem::ExternSlotTake.attr_name(),
+        vec![builtin_call("i32_load", vec![addr], TypeTable::I32)],
+        handle,
+    )
 }
 
 /// The string whose `len` bytes sit at `ptr`, copied onto the GC heap as
@@ -299,8 +307,7 @@ fn synthesize_lift_inner(
                         }
                     }
                     if ctx.cm_interface_registry.extern_handle(ty).is_some() {
-                        let (load, loaded) = handle_load_op(ty, ctx.cm_interface_registry);
-                        return builtin_call(load, vec![addr], loaded);
+                        return lift_handle(ty, addr, ctx);
                     }
                     // The test world drops a library's exports before their
                     // types register, yet still synthesizes the bindings their
@@ -335,12 +342,15 @@ fn synthesize_lift_inner(
 /// The resource `ty` names, lifted from the handle at `addr`. The cast is what
 /// makes the handle the resource's object (WEP: Affine Types).
 fn lift_handle(ty: &Type, addr: TirExpr, ctx: &LiftContext<'_>) -> TirExpr {
-    let (load, loaded) = handle_load_op(ty, ctx.cm_interface_registry);
     let resource = cm_held_type_to_type_id(
         ty,
         &mut ctx.type_table.borrow_mut(),
         ctx.cm_interface_registry,
     );
+    if ctx.cm_interface_registry.extern_handle(ty).is_some() {
+        return take_extern_slot(addr, resource);
+    }
+    let (load, loaded) = handle_load_op(ty, ctx.cm_interface_registry);
     cast(builtin_call(load, vec![addr], loaded), resource)
 }
 

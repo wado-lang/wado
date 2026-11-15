@@ -27,9 +27,9 @@ pub struct ComponentPlan {
     pub world_exports: Vec<WorldExportPlan>,
     /// Test functions to export.
     pub test_exports: Vec<TestExportPlan>,
-    /// The entry module's functions a host calls a closure back through: core
+    /// The entry module's functions a host of the web imports calls: core
     /// exports under their own names, which the component does not lift.
-    pub callback_core_exports: Vec<String>,
+    pub host_core_exports: Vec<String>,
     /// Lifts a dependency's guest-effect import is wired to, rather than
     /// exports of the component.
     pub guest_callbacks: Vec<GuestCallbackPlan>,
@@ -198,7 +198,7 @@ pub fn build_component_plan(
     cm_interface_registry: &CmInterfaceRegistry,
     lib_world: Option<&WorldInfo>,
     is_lib_world: bool,
-    callback_core_exports: &[String],
+    host_core_exports: &[String],
     guest_callbacks: &[GuestCallback],
 ) -> ComponentPlan {
     // Build world exports from registry.
@@ -263,7 +263,7 @@ pub fn build_component_plan(
     ComponentPlan {
         world_exports,
         test_exports,
-        callback_core_exports: callback_core_exports.to_vec(),
+        host_core_exports: host_core_exports.to_vec(),
         guest_callbacks,
     }
 }

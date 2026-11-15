@@ -755,6 +755,26 @@ impl ExternHostQuery {
     }
 }
 
+/// How the host reaches the slots extern handles are in while they cross in
+/// linear memory. Each is a core export of the main module.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ExternSlotAccess {
+    /// `put(object) -> i32`: the slot the guest puts the object in.
+    Put,
+    /// `get(slot) -> object`: the object in a slot, which stays there.
+    Get,
+}
+
+impl ExternSlotAccess {
+    pub fn export_name(self) -> String {
+        let access = match self {
+            Self::Put => "put",
+            Self::Get => "get",
+        };
+        format!("{INTERNAL_PREFIX}cm_extern_slot_{access}")
+    }
+}
+
 /// The core function a CM import lowers to.
 pub fn cm_import_alias(cm_identifier: &str) -> String {
     format!("{INTERNAL_PREFIX}{cm_identifier}")

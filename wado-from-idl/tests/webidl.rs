@@ -515,8 +515,89 @@ fn a_variadic_argument_is_a_list_the_glue_spreads() {
         ),
         "{glue}"
     );
-    // A handle inside a list has no form until the handle table.
-    assert!(!glue.contains("element#append"), "{glue}");
+    // A handle in a list is the index of its slot, which the host reads.
+    assert!(
+        glue.contains(
+            "p0.append(...$list(p1, p2, 4, (at) => \
+             $core.exports[\"$cm_extern_slot_get\"]($view().getUint32(at, true))));"
+        ),
+        "{glue}"
+    );
+}
+
+fn sequence(generic: &str, element: &str) -> String {
+    format!(
+        r#"{{"type": "return-type", "extAttrs": [], "generic": "{generic}", "nullable": false, "union": false, "idlType": [{element}]}}"#
+    )
+}
+
+#[test]
+fn a_sequence_is_a_list_either_way() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation("path", &sequence("sequence", &plain("Node")), &[], ""),
+            operation("names", &sequence("sequence", &plain("DOMString")), &[], ""),
+            operation(
+                "observe",
+                &plain("undefined"),
+                &[argument(
+                    "targets",
+                    &sequence("sequence", &plain("Node")),
+                    false,
+                    "null",
+                )],
+                "",
+            ),
+            attribute("ports", &sequence("FrozenArray", &plain("long")), true),
+            // A list's element is a scalar, a string or a handle.
+            operation(
+                "nested",
+                &sequence("sequence", &sequence("sequence", &plain("long"))),
+                &[],
+                "",
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(code.contains("fn path(&self) -> List<Node>;"), "{code}");
+    assert!(code.contains("fn names(&self) -> List<String>;"), "{code}");
+    assert!(
+        code.contains("fn observe(&self, targets: List<Node>);"),
+        "{code}"
+    );
+    assert!(code.contains("fn ports(&self) -> List<i32>;"), "{code}");
+    assert_eq!(
+        skipped,
+        ["Element.nested: `sequence` of a list, a nullable type or a callback"]
+    );
+
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    // The host puts each handle it answers in a slot of the guest's.
+    assert!(
+        glue.contains(
+            "$putList($ret, $value, 4, 4, (at, item) => {\n          \
+             $view().setUint32(at, $core.exports[\"$cm_extern_slot_put\"](item), true);\n        });"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "$putList($ret, $value, 8, 4, (at, item) => {\n          \
+             $putString(at, item);\n        });"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "p0.observe($list(p1, p2, 4, (at) => \
+             $core.exports[\"$cm_extern_slot_get\"]($view().getUint32(at, true))));"
+        ),
+        "{glue}"
+    );
 }
 
 fn callback(name: &str, ret: &str, args: &[String]) -> String {

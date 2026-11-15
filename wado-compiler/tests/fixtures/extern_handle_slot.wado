@@ -1,0 +1,64 @@
+// Linear memory holds no reference, so a handle the canonical ABI puts there
+// (a list's element, a record's field, a result beside other values) crosses
+// as an `i32`: the index of a slot the guest keeps the handle in. The host
+// reads a slot, and fills one, through two exports of the main module.
+
+#[cm("example:demo/node", linearity = "unrestricted", repr = "externref", classes = "0..=0")]
+resource Node {}
+
+#[cm("example:demo/global#pair")]
+struct Pair {
+    #[cm("a")]
+    a: Node,
+    #[cm("b")]
+    b: Option<Node>,
+}
+
+#[cm("example:demo/global")]
+interface Dom {
+    #[cm("example:demo/global#touch-pair")]
+    fn touch_pair(p: Pair) -> i32;
+
+    #[cm("example:demo/global#touch-all")]
+    fn touch_all(ns: List<Node>) -> i32;
+
+    #[cm("example:demo/global#all")]
+    fn all() -> List<Node>;
+
+    #[cm("example:demo/global#make-pair")]
+    fn make_pair() -> Pair;
+
+    #[cm("example:demo/global#root")]
+    fn root() -> Node;
+}
+
+struct Tag {}
+
+fn ask_the_host() -> i32 with Dom {
+    let n = Dom::root();
+    let pair = Dom::make_pair();
+    let all = Dom::all();
+    return Dom::touch_pair(Pair { a: n, b: pair.b }) + Dom::touch_all(all) + Dom::touch_all([pair.a]);
+}
+
+// No host answers under `wado run`, so the calls are compiled and never made.
+export fn run() with Dom {
+    if builtin::black_box(false) {
+        let _ = ask_the_host();
+    }
+}
+
+__DATA__
+{
+  "skip_os": true,
+  "wat_lines": [
+    { "contains": ["(import \"extern\" \"$example:demo/global#touch-pair\"", "(param i32 i32 i32)", "(result i32)"], "count": 1 },
+    { "contains": ["(import \"extern\" \"$example:demo/global#touch-all\"", "(param i32 i32)", "(result i32)"], "count": 1 },
+    { "contains": ["(import \"extern\" \"$example:demo/global#all\"", "(param i32)"], "count": 1 },
+    { "contains": ["(import \"extern\" \"$example:demo/global#make-pair\"", "(param i32)"], "count": 1 },
+    { "contains": ["(export \"$cm_extern_slot_put\""], "count": 1 },
+    { "contains": ["(export \"$cm_extern_slot_get\""], "count": 1 },
+    { "contains": ["(func $", "/$cm_extern_slot_put ", "(param (ref extern)) (result i32)"], "count": 1 },
+    { "contains": ["(func $", "/$cm_extern_slot_get ", "(param i32) (result (ref extern))"], "count": 1 }
+  ]
+}

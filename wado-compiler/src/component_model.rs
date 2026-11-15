@@ -635,12 +635,12 @@ fn cm_attr_cm_name(attrs: &[Attribute], wado_name: &str) -> String {
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
 
-/// The base an extern handle registers as a newtype of. Nothing lowers it: a
-/// handle crosses as an `externref` ([`CmInterfaceRegistry::extern_ref`]), and
-/// an import holding one any other way is refused
-/// ([`CmInterfaceRegistry::is_unbuilt_extern_import`]).
-fn extern_handle_placeholder(span: Span) -> Type {
-    Type::Named(NamedType::new(AstId::fresh(), "f64".to_string(), span))
+/// The base an extern handle registers as a newtype of: what it is in linear
+/// memory, the index of the slot it was put in. Whole, as a parameter or a
+/// result, it crosses as an `externref` instead
+/// ([`CmInterfaceRegistry::extern_ref`]).
+fn extern_handle_in_memory(span: Span) -> Type {
+    Type::Named(NamedType::new(AstId::fresh(), "u32".to_string(), span))
 }
 
 /// Extract CM parameter names from a `#[cm_params("param-a", "param-b")]` attribute.
@@ -703,10 +703,9 @@ pub struct CmFunctionInfo {
     pub world: Option<WorldFunctionSite>,
 }
 
-/// Why no synthesis meets an extern handle inside another value.
-pub const EXTERN_HANDLE_IN_AGGREGATE: &str = "an extern handle crosses only as a whole parameter \
-     or result: `is_function_supported` refuses an import holding one elsewhere, and the \
-     elaborator an export holding one at all";
+/// Why no export synthesis meets an extern handle.
+pub const EXTERN_HANDLE_AT_EXPORT: &str =
+    "the elaborator refuses an extern handle in the signature of an export";
 
 /// What one `externref` of a web import's signature carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1945,22 +1944,21 @@ impl CmInterfaceRegistry {
         self.is_function_supported(func) && !self.is_extern_import(func)
     }
 
-    /// Whether `func` is a web import no lowering is built for yet, so a call
-    /// of it is refused.
+    /// Whether a call of the web import `func` puts an extern handle in a slot:
+    /// one inside another value, or among parameters passed through memory.
     #[must_use]
-    pub fn is_unbuilt_extern_import(&self, func: &CmFunctionInfo) -> bool {
-        self.is_extern_import(func) && !self.extern_handles_cross(func)
+    pub fn crosses_extern_handle_in_slot(&self, func: &CmFunctionInfo) -> bool {
+        let params = || func.params.iter().map(|(_, _, ty)| ty);
+        let in_slot = |ty: &Type| self.extern_ref(ty).is_none() && self.mentions_extern_handle(ty);
+        params().chain(&func.return_type).any(in_slot)
+            || (self.is_extern_import(func) && self.params_in_buffer(params(), func.is_async))
     }
 
-    /// Whether every extern handle in `func`'s signature crosses as an
-    /// `externref` of its own. One inside a list, a record or another variant
-    /// would cross as a slot of the handle table, which is not built yet.
-    fn extern_handles_cross(&self, func: &CmFunctionInfo) -> bool {
-        let crosses = |ty: &Type| self.extern_ref(ty).is_some() || !self.mentions_extern_handle(ty);
-        func.params.iter().all(|(_, _, ty)| crosses(ty))
-            && func.return_type.as_ref().is_none_or(crosses)
-            && !self.params_in_buffer(func.params.iter().map(|(_, _, ty)| ty), func.is_async)
-            && !func.is_async
+    /// Whether `func` is a web import no lowering is built for yet, so a call
+    /// of it is refused: an `async` one.
+    #[must_use]
+    pub fn is_unbuilt_extern_import(&self, func: &CmFunctionInfo) -> bool {
+        self.is_extern_import(func) && func.is_async
     }
 
     /// The core values `ty` crosses as, whole: one for an `externref`, the
@@ -2261,7 +2259,7 @@ impl CmInterfaceRegistry {
                         "newtype",
                         source_interface,
                         resource.name.clone(),
-                        extern_handle_placeholder(resource.span),
+                        extern_handle_in_memory(resource.span),
                     );
                     continue;
                 }
@@ -3504,7 +3502,7 @@ impl CmInterfaceRegistry {
         };
         // Each type with its newtypes (`Mark`, `Duration`, `Instant`, an extern
         // handle) resolved to their bases.
-        (!self.is_extern_import(func) || self.extern_handles_cross(func))
+        !self.is_unbuilt_extern_import(func)
             && func
                 .params
                 .iter()

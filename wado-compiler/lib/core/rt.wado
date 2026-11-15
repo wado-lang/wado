@@ -328,6 +328,45 @@ internal fn handle_eq(a: ExternObject, b: ExternObject) -> bool {
     return builtin::extern_handle_host_same(a, b);
 }
 
+/// The extern handles that are in linear memory right now, each at the index
+/// written there. A slot nothing is in holds nothing alive.
+global mut EXTERN_SLOTS: List<Option<ExternObject>> = [];
+
+/// The slots of `EXTERN_SLOTS` nothing is in. A call that waits keeps its
+/// slots while another call runs, so they free in no order.
+global mut FREE_EXTERN_SLOTS: List<i32> = [];
+
+/// The slot `handle` is put in, to cross in linear memory as that index.
+#[compiler_item("extern_slot_put")]
+internal fn extern_slot_put(handle: ExternObject) -> i32 {
+    if let Some(slot) = FREE_EXTERN_SLOTS.pop() {
+        EXTERN_SLOTS[slot] = Option::Some(handle);
+        return slot;
+    }
+    EXTERN_SLOTS.push(Option::Some(handle));
+    return EXTERN_SLOTS.len() - 1;
+}
+
+/// The handle in `slot`, which stays there.
+#[compiler_item("extern_slot_get")]
+internal fn extern_slot_get(slot: i32) -> ExternObject {
+    return EXTERN_SLOTS[slot].unwrap();
+}
+
+/// The handle in `slot`, which is free from here on.
+#[compiler_item("extern_slot_take")]
+internal fn extern_slot_take(slot: i32) -> ExternObject {
+    let handle = extern_slot_get(slot);
+    extern_slot_free(slot);
+    return handle;
+}
+
+#[compiler_item("extern_slot_free")]
+internal fn extern_slot_free(slot: i32) {
+    EXTERN_SLOTS[slot] = null;
+    FREE_EXTERN_SLOTS.push(slot);
+}
+
 /// Writes an extern handle as the name of the resource its class names.
 #[compiler_item("inspect_handle")]
 internal fn inspect_handle(f: &mut Formatter, name: String) {

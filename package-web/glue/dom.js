@@ -32,6 +32,16 @@ export function $glue() {
   };
   const $list = (ptr, len, size, load) =>
     Array.from({ length: len }, (_, i) => load(ptr + i * size));
+  // Writes `items` where the guest frees them, and their address and count at
+  // `at`.
+  const $putList = (at, items, size, align, store) => {
+    const list = Array.from(items);
+    const ptr = $core.realloc(0, 0, align, list.length * size);
+    list.forEach((item, i) => store(ptr + i * size, item));
+    const view = $view();
+    view.setUint32(at, ptr, true);
+    view.setUint32(at + 4, list.length, true);
+  };
 
   // Each declared interface's prototype, to its class.
   let $classes;
@@ -100,6 +110,12 @@ export function $glue() {
       },
       "$wado-lang:web/event#current-target": (p0) => {
         return (p0.currentTarget ?? null);
+      },
+      "$wado-lang:web/event#composed-path": (p0, $ret) => {
+        const $value = p0.composedPath();
+        $putList($ret, $value, 4, 4, (at, item) => {
+          $view().setUint32(at, $core.exports["$cm_extern_slot_put"](item), true);
+        });
       },
       "$wado-lang:web/event#event-phase": (p0) => {
         return p0.eventPhase;
@@ -265,6 +281,12 @@ export function $glue() {
       "$wado-lang:web/element#get-spatial-navigation-container": (p0) => {
         return p0.getSpatialNavigationContainer();
       },
+      "$wado-lang:web/element#focusable-areas": (p0, $ret) => {
+        const $value = p0.focusableAreas();
+        $putList($ret, $value, 4, 4, (at, item) => {
+          $view().setUint32(at, $core.exports["$cm_extern_slot_put"](item), true);
+        });
+      },
       "$wado-lang:web/element#check-visibility": (p0) => {
         return (p0.checkVisibility() ? 1 : 0);
       },
@@ -350,6 +372,12 @@ export function $glue() {
       },
       "$wado-lang:web/element#has-attributes": (p0) => {
         return (p0.hasAttributes() ? 1 : 0);
+      },
+      "$wado-lang:web/element#get-attribute-names": (p0, $ret) => {
+        const $value = p0.getAttributeNames();
+        $putList($ret, $value, 8, 4, (at, item) => {
+          $putString(at, item);
+        });
       },
       "$wado-lang:web/element#get-attribute": (p0, p1, p2, $ret) => {
         const $value = p0.getAttribute($string(p1, p2));
@@ -602,6 +630,20 @@ export function $glue() {
       "$wado-lang:web/element#set-aria-col-span": (p0, p1, p2, p3) => {
         p0.ariaColSpan = (p1 === 0 ? undefined : $string(p2, p3));
       },
+      "$wado-lang:web/element#aria-controls-elements": (p0, $ret) => {
+        const $value = p0.ariaControlsElements;
+        if ($value === null || $value === undefined) {
+          $view().setUint8($ret, 0);
+        } else {
+          $view().setUint8($ret, 1);
+          $putList($ret + 4, $value, 4, 4, (at, item) => {
+            $view().setUint32(at, $core.exports["$cm_extern_slot_put"](item), true);
+          });
+        }
+      },
+      "$wado-lang:web/element#set-aria-controls-elements": (p0, p1, p2, p3) => {
+        p0.ariaControlsElements = (p1 === 0 ? undefined : $list(p2, p3, 4, (at) => $core.exports["$cm_extern_slot_get"]($view().getUint32(at, true))));
+      },
       "$wado-lang:web/element#aria-current": (p0, $ret) => {
         const $value = p0.ariaCurrent;
         if ($value === null || $value === undefined) {
@@ -613,6 +655,20 @@ export function $glue() {
       },
       "$wado-lang:web/element#set-aria-current": (p0, p1, p2, p3) => {
         p0.ariaCurrent = (p1 === 0 ? undefined : $string(p2, p3));
+      },
+      "$wado-lang:web/element#aria-described-by-elements": (p0, $ret) => {
+        const $value = p0.ariaDescribedByElements;
+        if ($value === null || $value === undefined) {
+          $view().setUint8($ret, 0);
+        } else {
+          $view().setUint8($ret, 1);
+          $putList($ret + 4, $value, 4, 4, (at, item) => {
+            $view().setUint32(at, $core.exports["$cm_extern_slot_put"](item), true);
+          });
+        }
+      },
+      "$wado-lang:web/element#set-aria-described-by-elements": (p0, p1, p2, p3) => {
+        p0.ariaDescribedByElements = (p1 === 0 ? undefined : $list(p2, p3, 4, (at) => $core.exports["$cm_extern_slot_get"]($view().getUint32(at, true))));
       },
       "$wado-lang:web/element#aria-description": (p0, $ret) => {
         const $value = p0.ariaDescription;
@@ -626,6 +682,20 @@ export function $glue() {
       "$wado-lang:web/element#set-aria-description": (p0, p1, p2, p3) => {
         p0.ariaDescription = (p1 === 0 ? undefined : $string(p2, p3));
       },
+      "$wado-lang:web/element#aria-details-elements": (p0, $ret) => {
+        const $value = p0.ariaDetailsElements;
+        if ($value === null || $value === undefined) {
+          $view().setUint8($ret, 0);
+        } else {
+          $view().setUint8($ret, 1);
+          $putList($ret + 4, $value, 4, 4, (at, item) => {
+            $view().setUint32(at, $core.exports["$cm_extern_slot_put"](item), true);
+          });
+        }
+      },
+      "$wado-lang:web/element#set-aria-details-elements": (p0, p1, p2, p3) => {
+        p0.ariaDetailsElements = (p1 === 0 ? undefined : $list(p2, p3, 4, (at) => $core.exports["$cm_extern_slot_get"]($view().getUint32(at, true))));
+      },
       "$wado-lang:web/element#aria-disabled": (p0, $ret) => {
         const $value = p0.ariaDisabled;
         if ($value === null || $value === undefined) {
@@ -638,6 +708,20 @@ export function $glue() {
       "$wado-lang:web/element#set-aria-disabled": (p0, p1, p2, p3) => {
         p0.ariaDisabled = (p1 === 0 ? undefined : $string(p2, p3));
       },
+      "$wado-lang:web/element#aria-error-message-elements": (p0, $ret) => {
+        const $value = p0.ariaErrorMessageElements;
+        if ($value === null || $value === undefined) {
+          $view().setUint8($ret, 0);
+        } else {
+          $view().setUint8($ret, 1);
+          $putList($ret + 4, $value, 4, 4, (at, item) => {
+            $view().setUint32(at, $core.exports["$cm_extern_slot_put"](item), true);
+          });
+        }
+      },
+      "$wado-lang:web/element#set-aria-error-message-elements": (p0, p1, p2, p3) => {
+        p0.ariaErrorMessageElements = (p1 === 0 ? undefined : $list(p2, p3, 4, (at) => $core.exports["$cm_extern_slot_get"]($view().getUint32(at, true))));
+      },
       "$wado-lang:web/element#aria-expanded": (p0, $ret) => {
         const $value = p0.ariaExpanded;
         if ($value === null || $value === undefined) {
@@ -649,6 +733,20 @@ export function $glue() {
       },
       "$wado-lang:web/element#set-aria-expanded": (p0, p1, p2, p3) => {
         p0.ariaExpanded = (p1 === 0 ? undefined : $string(p2, p3));
+      },
+      "$wado-lang:web/element#aria-flow-to-elements": (p0, $ret) => {
+        const $value = p0.ariaFlowToElements;
+        if ($value === null || $value === undefined) {
+          $view().setUint8($ret, 0);
+        } else {
+          $view().setUint8($ret, 1);
+          $putList($ret + 4, $value, 4, 4, (at, item) => {
+            $view().setUint32(at, $core.exports["$cm_extern_slot_put"](item), true);
+          });
+        }
+      },
+      "$wado-lang:web/element#set-aria-flow-to-elements": (p0, p1, p2, p3) => {
+        p0.ariaFlowToElements = (p1 === 0 ? undefined : $list(p2, p3, 4, (at) => $core.exports["$cm_extern_slot_get"]($view().getUint32(at, true))));
       },
       "$wado-lang:web/element#aria-has-popup": (p0, $ret) => {
         const $value = p0.ariaHasPopup;
@@ -709,6 +807,20 @@ export function $glue() {
       },
       "$wado-lang:web/element#set-aria-label": (p0, p1, p2, p3) => {
         p0.ariaLabel = (p1 === 0 ? undefined : $string(p2, p3));
+      },
+      "$wado-lang:web/element#aria-labelled-by-elements": (p0, $ret) => {
+        const $value = p0.ariaLabelledByElements;
+        if ($value === null || $value === undefined) {
+          $view().setUint8($ret, 0);
+        } else {
+          $view().setUint8($ret, 1);
+          $putList($ret + 4, $value, 4, 4, (at, item) => {
+            $view().setUint32(at, $core.exports["$cm_extern_slot_put"](item), true);
+          });
+        }
+      },
+      "$wado-lang:web/element#set-aria-labelled-by-elements": (p0, p1, p2, p3) => {
+        p0.ariaLabelledByElements = (p1 === 0 ? undefined : $list(p2, p3, 4, (at) => $core.exports["$cm_extern_slot_get"]($view().getUint32(at, true))));
       },
       "$wado-lang:web/element#aria-level": (p0, $ret) => {
         const $value = p0.ariaLevel;
@@ -781,6 +893,20 @@ export function $glue() {
       },
       "$wado-lang:web/element#set-aria-orientation": (p0, p1, p2, p3) => {
         p0.ariaOrientation = (p1 === 0 ? undefined : $string(p2, p3));
+      },
+      "$wado-lang:web/element#aria-owns-elements": (p0, $ret) => {
+        const $value = p0.ariaOwnsElements;
+        if ($value === null || $value === undefined) {
+          $view().setUint8($ret, 0);
+        } else {
+          $view().setUint8($ret, 1);
+          $putList($ret + 4, $value, 4, 4, (at, item) => {
+            $view().setUint32(at, $core.exports["$cm_extern_slot_put"](item), true);
+          });
+        }
+      },
+      "$wado-lang:web/element#set-aria-owns-elements": (p0, p1, p2, p3) => {
+        p0.ariaOwnsElements = (p1 === 0 ? undefined : $list(p2, p3, 4, (at) => $core.exports["$cm_extern_slot_get"]($view().getUint32(at, true))));
       },
       "$wado-lang:web/element#aria-placeholder": (p0, $ret) => {
         const $value = p0.ariaPlaceholder;
@@ -1546,6 +1672,12 @@ export function $glue() {
       },
       "$wado-lang:web/document#element-from-point": (p0, p1, p2) => {
         return (p0.elementFromPoint(p1, p2) ?? null);
+      },
+      "$wado-lang:web/document#elements-from-point": (p0, p1, p2, $ret) => {
+        const $value = p0.elementsFromPoint(p1, p2);
+        $putList($ret, $value, 4, 4, (at, item) => {
+          $view().setUint32(at, $core.exports["$cm_extern_slot_put"](item), true);
+        });
       },
       "$wado-lang:web/document#scrolling-element": (p0) => {
         return (p0.scrollingElement ?? null);

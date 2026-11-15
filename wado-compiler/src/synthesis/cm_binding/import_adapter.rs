@@ -16,8 +16,8 @@ use crate::tir::{
 use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
-    affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
-    cm_raw_call, deref_expr, expr_stmt, field_access, i32_const, if_stmt, internal_call,
+    alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast, cm_raw_call,
+    deref_expr, expr_stmt, field_access, handle_in_memory, i32_const, if_stmt, internal_call,
     is_affine_resource, let_mut_stmt, let_stmt, linear_alloc, linear_free, local_ref, loop_stmt,
     option_none, option_some, return_stmt, split_packed_ptr_len, struct_literal, synth_param,
     synth_span, unreachable_call,
@@ -933,7 +933,10 @@ impl<'a> AdapterBuilder<'a> {
     ) -> Vec<(&'a Type, Vec<FlatSlot>)> {
         let mut owning = Vec::new();
         for (plan, range) in plans.iter().zip(ranges) {
-            if !owns_lowered(plan, self.lower_ctx.cm_interface_registry) {
+            // A flat argument that is one `externref` was put in no slot.
+            if !owns_lowered(plan, self.lower_ctx.cm_interface_registry)
+                || self.registry().extern_ref(plan.ty).is_some()
+            {
                 continue;
             }
             let mut slots = Vec::with_capacity(range.len());
@@ -1376,7 +1379,7 @@ impl<'a> AdapterBuilder<'a> {
                     let stores = cm_param_store_plan(plan.ty, registry);
                     for (sub_offset, store_name) in &stores {
                         let addr = params_buf_addr(params_buf_local, base_offset + sub_offset);
-                        let value = affine_handle(
+                        let value = handle_in_memory(
                             self.flat_args[flat_idx].clone(),
                             &self.lower_ctx.type_table.borrow(),
                         );

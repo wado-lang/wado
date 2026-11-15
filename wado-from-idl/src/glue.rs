@@ -4,11 +4,14 @@
 //! A web import is a core import of the main module, so each function here
 //! takes the import's core signature: the canonical ABI's flat form, except
 //! that a handle, an `Option` of one and a closure are each one `externref`.
+//! A handle in linear memory is the index of a slot the guest keeps it in,
+//! which the glue reads and fills through two exports of the main module.
 
 use std::fmt::Write;
 
+use wado_compiler::component_model::flat_params_in_buffer;
 use wado_compiler::name::{
-    ExternHostQuery, callback_export_name, cm_callback_func_name, cm_import_alias,
+    ExternHostQuery, ExternSlotAccess, callback_export_name, cm_callback_func_name, cm_import_alias,
 };
 
 use crate::ir::{WadoFunction, WadoType};
@@ -37,6 +40,16 @@ export function $glue() {
   };
   const $list = (ptr, len, size, load) =>
     Array.from({ length: len }, (_, i) => load(ptr + i * size));
+  // Writes `items` where the guest frees them, and their address and count at
+  // `at`.
+  const $putList = (at, items, size, align, store) => {
+    const list = Array.from(items);
+    const ptr = $core.realloc(0, 0, align, list.length * size);
+    list.forEach((item, i) => store(ptr + i * size, item));
+    const view = $view();
+    view.setUint32(at, ptr, true);
+    view.setUint32(at + 4, list.length, true);
+  };
 
   // Each declared interface's prototype, to its class.
   let $classes;
@@ -111,26 +124,42 @@ pub fn generate(output: &WebIdlOutput, source: &str) -> String {
         .flat_map(|r| &r.methods)
         .chain(module.interfaces.iter().flat_map(|i| &i.functions));
     for function in functions {
-        if crosses(function) {
-            write_function(&mut out, function, &output.js[&function.cm_attr]);
-        }
+        write_function(&mut out, function, &output.js[&function.cm_attr]);
     }
     out.push_str("    },\n  };\n}\n");
     out
 }
 
-/// Whether the compiler lowers `function`: a handle inside a list has no form
-/// until the handle table.
-fn crosses(function: &WadoFunction) -> bool {
-    function
-        .params
-        .iter()
-        .map(|p| &p.ty)
-        .chain(&function.return_type)
-        .all(|ty| !matches!(Shape::of(ty), Shape::List(elem) if is_handle(elem)))
+/// Whether a list's elements may be of type `ty`: what [`load`] reads and
+/// [`store`] writes at one address.
+#[must_use]
+pub fn list_carries(ty: &WadoType) -> bool {
+    match Shape::of(ty) {
+        Shape::Scalar(_) | Shape::String => true,
+        Shape::List(_) | Shape::Option(_) | Shape::Callback(_) => false,
+    }
+}
+
+/// How many core values the canonical ABI flattens `ty` to, which is what
+/// decides whether the parameters are passed through memory.
+fn canonical_flat_count(ty: &WadoType) -> usize {
+    match Shape::of(ty) {
+        Shape::Option(inner) => 1 + canonical_flat_count(inner),
+        Shape::Scalar(_) | Shape::String | Shape::List(_) | Shape::Callback(_) => flat_count(ty),
+    }
 }
 
 fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
+    let canonical: usize = function
+        .params
+        .iter()
+        .map(|p| canonical_flat_count(&p.ty))
+        .sum();
+    assert!(
+        !flat_params_in_buffer(canonical, false),
+        "`{}` passes its parameters through memory, which no shim reads",
+        function.cm_attr
+    );
     let mut flat = FlatParams::default();
     let mut args: Vec<String> = function
         .params
@@ -290,7 +319,7 @@ fn lift(ty: &WadoType, flat: &mut FlatParams) -> String {
             format!("$list({ptr}, {len}, {size}, (at) => {})", load(elem, "at"))
         }
         Shape::Callback(params) => callback(params, &flat.next()),
-        Shape::Scalar(scalar) => scalar.from_core(&flat.next()),
+        Shape::Scalar(scalar) => scalar.read_core(&flat.next()),
     }
 }
 
@@ -354,9 +383,7 @@ fn load(ty: &WadoType, at: &str) -> String {
         Shape::String => {
             format!("$string($view().getUint32({at}, true), $view().getUint32({at} + 4, true))")
         }
-        Shape::Scalar(scalar) => {
-            scalar.from_core(&format!("$view().{}", scalar.accessor("get", at, None)))
-        }
+        Shape::Scalar(scalar) => scalar.read_memory(at),
         Shape::List(_) | Shape::Option(_) | Shape::Callback(_) => {
             unreachable!("the WebIDL frontend lowers to no list of {ty:?}")
         }
@@ -383,19 +410,24 @@ fn store(ty: &WadoType, base: &str, offset: u32, value: &str, lines: &mut Vec<St
             lines.extend(some.into_iter().map(|line| format!("  {line}")));
             lines.push("}".to_string());
         }
-        Shape::Scalar(scalar) => lines.push(format!(
-            "$view().{};",
-            scalar.accessor("set", &at, Some(&scalar.to_core(value)))
-        )),
-        Shape::List(_) | Shape::Callback(_) => {
-            unreachable!("the WebIDL frontend returns no {ty:?}")
+        Shape::Scalar(scalar) => lines.push(scalar.to_memory(&at, value)),
+        Shape::List(elem) => {
+            let (size, align) = layout(elem);
+            lines.push(format!(
+                "$putList({at}, {value}, {size}, {align}, (at, item) => {{"
+            ));
+            let mut items = Vec::new();
+            store(elem, "at", 0, "item", &mut items);
+            lines.extend(items.into_iter().map(|line| format!("  {line}")));
+            lines.push("});".to_string());
         }
+        Shape::Callback(_) => unreachable!("the WebIDL frontend returns no {ty:?}"),
     }
 }
 
 impl Scalar {
     /// The DOM value that the core value `value` is.
-    fn from_core(self, value: &str) -> String {
+    fn read_core(self, value: &str) -> String {
         match self {
             Self::Bool => format!("({value} !== 0)"),
             // A core `i32` reaches JavaScript signed.
@@ -430,14 +462,37 @@ impl Scalar {
         }
     }
 
+    /// The DOM value in linear memory at `at`. A handle there is the index of
+    /// its slot, which the guest frees.
+    fn read_memory(self, at: &str) -> String {
+        let read = format!("$view().{}", self.accessor("get", at, None));
+        if matches!(self, Self::Handle) {
+            let get = ExternSlotAccess::Get.export_name();
+            format!("$core.exports[{get:?}]({read})")
+        } else {
+            self.read_core(&read)
+        }
+    }
+
+    /// The statement writing the DOM's `value` at `at`. A handle goes into a
+    /// slot, which the guest frees where it takes the handle out.
+    fn to_memory(self, at: &str, value: &str) -> String {
+        let written = if matches!(self, Self::Handle) {
+            let put = ExternSlotAccess::Put.export_name();
+            format!("$core.exports[{put:?}]({value})")
+        } else {
+            self.to_core(value)
+        };
+        format!("$view().{};", self.accessor("set", at, Some(&written)))
+    }
+
     /// Its size in linear memory, which is also its alignment.
     fn size(self) -> u32 {
         match self {
             Self::Bool | Self::I8 | Self::U8 => 1,
             Self::I16 | Self::U16 => 2,
-            Self::I32 | Self::U32 | Self::F32 => 4,
+            Self::I32 | Self::U32 | Self::F32 | Self::Handle => 4,
             Self::I64 | Self::U64 | Self::F64 => 8,
-            Self::Handle => unreachable!("a handle in memory has no form until the handle table"),
         }
     }
 
@@ -449,12 +504,11 @@ impl Scalar {
             Self::I16 => "Int16",
             Self::U16 => "Uint16",
             Self::I32 => "Int32",
-            Self::U32 => "Uint32",
+            Self::U32 | Self::Handle => "Uint32",
             Self::I64 => "BigInt64",
             Self::U64 => "BigUint64",
             Self::F32 => "Float32",
             Self::F64 => "Float64",
-            Self::Handle => unreachable!("a handle in memory has no form until the handle table"),
         };
         let mut args = vec![at.to_string()];
         args.extend(value.map(str::to_string));

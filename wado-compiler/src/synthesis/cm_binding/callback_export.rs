@@ -1,14 +1,22 @@
-//! The core exports a host calls a Wado closure back through, one per
-//! argument shape. The component lifts none of them: the closure arrives as
-//! the `externref` it crossed as, which the Component Model cannot carry.
+//! The core exports a host of the web imports calls: one per argument shape
+//! to call a Wado closure back through, and the pair that reaches the slots of
+//! extern handles. The component lifts none of them: each takes or answers an
+//! `externref`, which the Component Model cannot carry.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexSet;
-use crate::name::{CALLBACK_HANDLE_WORD, callback_export_name, cm_callback_func_name};
+use crate::name::{
+    CALLBACK_HANDLE_WORD, ExternSlotAccess, callback_export_name, cm_callback_func_name,
+};
 use crate::package::Package;
 use crate::synthesis::common::{
-    block, builtin_call, expr_stmt, local_ref, locals_from_params, synth_param, synth_span,
+    block, builtin_call, expr_stmt, internal_call, local_ref, locals_from_params, return_stmt,
+    synth_param, synth_span,
 };
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TypeId};
+use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TypeId};
 use crate::type_table::TypeTable;
 
 use super::entry_type_table;
@@ -18,12 +26,20 @@ use super::import_adapter::make_binding_function;
 /// it crosses as.
 pub(super) type Callbacks = IndexSet<(TypeId, TypeId)>;
 
+/// What the calls of web imports ask the main module to export.
+#[derive(Default)]
+pub(super) struct HostCalls {
+    pub callbacks: Callbacks,
+    /// Whether a call puts an extern handle in a slot, which the host then
+    /// reaches.
+    pub extern_slots: bool,
+}
+
 /// Add an export for each argument shape among `callbacks` to the entry
 /// module.
 pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Callbacks) {
     let type_table = entry_type_table(project);
     let mut shapes: IndexSet<String> = IndexSet::default();
-    let mut functions = Vec::new();
     for &(closure, extern_object) in callbacks {
         let params = closure_params(&type_table.borrow(), closure);
         let shape = callback_export_name(
@@ -64,21 +80,60 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
             u32::try_from(locals.len()).expect("a closure takes few parameters"),
             locals,
         );
-        {
-            let mut function = function.borrow_mut();
-            function.is_export = true;
-            // The host calls it, so it is a root with a fixed signature.
-            function.is_cm_export = true;
-            project.callback_core_exports.push(function.name.clone());
-        }
-        functions.push(function);
+        export_to_host(project, function);
+    }
+}
+
+/// Add the exports the host reaches an extern handle's slot through
+/// ([`ExternSlotAccess`]) to the entry module.
+pub(super) fn synthesize_extern_slot_exports(project: &mut Package) {
+    let extern_object = entry_type_table(project).borrow_mut().make_extern_object();
+    let accessors = [
+        (
+            ExternSlotAccess::Put,
+            CompilerItem::ExternSlotPut,
+            extern_object,
+            TypeTable::I32,
+        ),
+        (
+            ExternSlotAccess::Get,
+            CompilerItem::ExternSlotGet,
+            TypeTable::I32,
+            extern_object,
+        ),
+    ];
+    for (access, item, param, result) in accessors {
+        let params = vec![synth_param("a0", 0, param)];
+        let call = internal_call(item.attr_name(), vec![local_ref(0, "a0", param)], result);
+        let locals = locals_from_params(&params);
+        let function = make_binding_function(
+            access.export_name(),
+            params,
+            result,
+            block(vec![return_stmt(Some(call))]),
+            1,
+            locals,
+        );
+        export_to_host(project, function);
+    }
+}
+
+/// Make `function` a core export of the main module under its own name, in
+/// the entry module. The host calls it, so it is a root with a fixed
+/// signature.
+fn export_to_host(project: &mut Package, function: Rc<RefCell<TirFunction>>) {
+    {
+        let mut function = function.borrow_mut();
+        function.is_export = true;
+        function.is_cm_export = true;
+        project.host_core_exports.push(function.name.clone());
     }
     project
         .tir_modules
         .get_mut(&project.entry_module_source)
         .expect("entry module should exist")
         .functions
-        .extend(functions);
+        .push(function);
 }
 
 fn closure_params(type_table: &TypeTable, closure: TypeId) -> Vec<TypeId> {

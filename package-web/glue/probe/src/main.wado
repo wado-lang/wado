@@ -1,9 +1,9 @@
 //! What only the host's own objects answer, which `glue/dom.test.mjs` reads
 //! back from the attributes of `<body>`: identity, narrowing through more than
-//! one level of `extends`, the name `Inspect` writes, and a listener entered
-//! while `run` waits.
+//! one level of `extends`, the name `Inspect` writes, a list of handles each
+//! way, and a listener entered while `run` waits.
 
-use { Dom, Event, HtmlElement, HtmlInputElement, Node } from "wado-lang:web";
+use { Dom, Event, EventTarget, HtmlElement, HtmlInputElement, Node } from "wado-lang:web";
 use { MonotonicClock } from "wasi:clocks";
 
 export fn run() with (Dom, MonotonicClock) {
@@ -18,10 +18,18 @@ export fn run() with (Dom, MonotonicClock) {
     report("narrow", `${narrowed} ${other matches { _: HtmlInputElement }}`);
     report("inspect", `${node:?} ${other:?}`);
 
+    // A list carries handles both ways, each as the index of a slot.
+    div.set_aria_labelled_by_elements(Option::Some([input, div]));
+    let labels = div.aria_labelled_by_elements().unwrap();
+    report("labels", `${labels.len()} ${labels[0] == input} ${labels[1] == div}`);
+
     let mut clicks = 0;
-    div.add_event_listener("click", |_: Event| {
+    let target: EventTarget = div;
+    div.add_event_listener("click", |event: Event| {
         clicks += 1;
         report("clicks", `${clicks}`);
+        let path = event.composed_path();
+        report("path", `${path.len()} ${path[0] == target}`);
     });
     report("state", "waiting");
     MonotonicClock::wait_for(50_000_000).wait();
