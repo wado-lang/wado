@@ -579,22 +579,17 @@ impl Iterator for Split {
     }
 }
 
-/// `len` bytes of `a` and `b` in an order no short pattern predicts.
-fn noise(len: i32) -> ByteList {
+test "a DFA with too many states hands over to the Pike VM, and is released" {
+    // `a` and `b` in an order no short pattern predicts.
     let mut bytes: List<u8> = [];
     let mut x: u32 = 0x9E3779B9;
-    for let _i of 0..<len {
+    for let _i of 0..<30000 {
         x ^= x << 13;
         x ^= x >> 17;
         x ^= x << 5;
         bytes.push(if x & 1 == 0 { b'a' } else { b'b' });
     }
-    return bytes as ByteList;
-}
-
-test "a DFA with too many states hands over to the Pike VM, and is released" {
-    let bytes = noise(30000);
-    let text = String::try_from_utf8(bytes).unwrap();
+    let text = String::try_from_utf8(bytes as ByteList).unwrap();
 
     let forward = Regex::new(#"[ab]*a[ab]{13}"#).unwrap();
     let mut last = bytes.len() - 14;
@@ -618,10 +613,7 @@ test "a DFA with too many states hands over to the Pike VM, and is released" {
 }
 
 test "a DFA whose states are large gives up before its tables are" {
-    let mut text = "";
-    for let _i of 0..<1300 {
-        text.push('a');
-    }
+    let text = "a".repeat(1300);
     let r = Regex::new(#"a[ab]{1200}b"#).unwrap();
     assert !r.is_match(&text);
     assert r.lazy.off;
