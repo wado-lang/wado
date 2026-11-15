@@ -16,7 +16,7 @@ use crate::wir::{
 };
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir_arena::ExprKind;
+use crate::nir_arena::{ExprKind, NodeRef};
 
 use super::context::WirContext;
 use crate::name::{
@@ -448,9 +448,12 @@ fn cross_signature_casts(package: &NirPackage, type_table: &TypeTable) -> IndexS
         let Some(body) = &func.body else {
             continue;
         };
-        for node in body.exprs.values() {
-            let ExprKind::Cast { expr, target_type } = node.kind else {
-                continue;
+        body.for_each_reachable_node(|node| {
+            let NodeRef::Expr(id) = node else {
+                return;
+            };
+            let ExprKind::Cast { expr, target_type } = body.exprs[id].kind else {
+                return;
             };
             let from = type_table.representation_head(body.operand_type(expr));
             let to = type_table.representation_head(target_type);
@@ -459,7 +462,7 @@ fn cross_signature_casts(package: &NirPackage, type_table: &TypeTable) -> IndexS
                 erased.insert(from);
                 erased.insert(to);
             }
-        }
+        });
     }
     erased
 }
