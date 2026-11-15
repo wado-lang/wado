@@ -211,6 +211,46 @@ test "Identity" {
     assert_agrees(#include_bytes("./operators/Identity.onnx"), #include_str("./operators/Identity.txt"));
 }
 
+test "Max broadcasts a trailing operand" {
+    assert_agrees(#include_bytes("./operators/Max.onnx"), #include_str("./operators/Max.txt"));
+}
+
+test "Min broadcasts a unit axis" {
+    assert_agrees(#include_bytes("./operators/Min.onnx"), #include_str("./operators/Min.txt"));
+}
+
+test "Max of three operands" {
+    assert_agrees(#include_bytes("./operators/MaxOfThree.onnx"), #include_str("./operators/MaxOfThree.txt"));
+}
+
+test "Min of one operand" {
+    assert_agrees(#include_bytes("./operators/MinOfOne.onnx"), #include_str("./operators/MinOfOne.txt"));
+}
+
+test "Clip between two bounds" {
+    assert_agrees(#include_bytes("./operators/Clip.onnx"), #include_str("./operators/Clip.txt"));
+}
+
+test "Clip with a lower bound alone" {
+    assert_agrees(#include_bytes("./operators/ClipBelow.onnx"), #include_str("./operators/ClipBelow.txt"));
+}
+
+test "Clip with an upper bound alone" {
+    assert_agrees(#include_bytes("./operators/ClipAbove.onnx"), #include_str("./operators/ClipAbove.txt"));
+}
+
+test "Clip with no bound" {
+    assert_agrees(#include_bytes("./operators/ClipUnbounded.onnx"), #include_str("./operators/ClipUnbounded.txt"));
+}
+
+test "Clip bounded by attributes, as before opset 11" {
+    assert_agrees(#include_bytes("./operators/ClipByAttributes.onnx"), #include_str("./operators/ClipByAttributes.txt"));
+}
+
+test "Clip whose lower bound passes its upper" {
+    assert_agrees(#include_bytes("./operators/ClipCrossed.onnx"), #include_str("./operators/ClipCrossed.txt"));
+}
+
 test "MatMul of two matrices" {
     assert_agrees(#include_bytes("./operators/MatMul.onnx"), #include_str("./operators/MatMul.txt"));
 }
@@ -496,6 +536,29 @@ test "Cast of bool to int64 is 1 or 0" {
 #[TODO]
 test "Cast to int32 truncates toward 0" {
     assert_agrees(#include_bytes("./operators/CastToInt32.onnx"), #include_str("./operators/CastToInt32.txt"));
+}
+
+test "Cast to float16 rounds to the nearest half" {
+    assert_agrees(#include_bytes("./operators/CastThroughFloat16.onnx"), #include_str("./operators/CastThroughFloat16.txt"));
+}
+
+test "Cast to bfloat16 rounds to the nearest half" {
+    assert_agrees(#include_bytes("./operators/CastThroughBFloat16.onnx"), #include_str("./operators/CastThroughBFloat16.txt"));
+}
+
+test "Cast of a constant to float16 rounds it at build time" {
+    assert_agrees(
+        #include_bytes("./operators/CastConstantToFloat16.onnx"),
+        #include_str("./operators/CastConstantToFloat16.txt"),
+    );
+}
+
+test "CastLike gives a constant the element of a tensor the run computes" {
+    assert_agrees(#include_bytes("./operators/CastLikeConstant.onnx"), #include_str("./operators/CastLikeConstant.txt"));
+}
+
+test "Gelu computes in the float16 its operand is" {
+    assert_agrees(#include_bytes("./operators/GeluFloat16.onnx"), #include_str("./operators/GeluFloat16.txt"));
 }
 
 test "Cast of int64 to float rounds to the nearest" {

@@ -417,7 +417,7 @@ test "a float may be a word, in any case, as ONNX's parser reads it" {
 test "a float attribute may be a word" {
     let g = read(
         `agraph (float[2] X) => (float[2] Y) {
-            Y = Clip <min = -inf, max = inf> (X)
+            Y = HardSigmoid <alpha = -inf, beta = inf> (X)
         }`,
     ).unwrap();
     assert g.nodes[0].attrs[0].values == ["-inf"];

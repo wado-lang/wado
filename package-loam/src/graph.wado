@@ -597,10 +597,15 @@ pub global GROUP_QUERY_ATTENTION: String = "com.microsoft.GroupQueryAttention";
 /// - `SimplifiedLayerNormalization` is onnxruntime's RMS normalization over the
 ///   last axis: `x / √(mean(x²) + epsilon) · scale`, the function ONNX's
 ///   `RMSNormalization` (opset 23) defines.
+/// - `Max` and `Min` take any number of operands, two at a time.
+/// - `Clip` is `Min(Max(x, min), max)`, as ONNX defines it, each bound an
+///   optional operand, or before opset 11 an optional attribute.
 fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
     let [needed, write]: [i32, fn(&Node, &mut FunctionBody) -> Result<(), String>] = match node.op.as_str_slice() {
         "Gelu" => [1, gelu],
         "SimplifiedLayerNormalization" => [2, rms_normalization],
+        "Max" | "Min" => [1, pairwise],
+        "Clip" => [1, clip],
         _ => {
             return Result::Ok(null);
         },
@@ -609,7 +614,7 @@ fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
     if given < needed {
         return Result::Err(`${node.site()}: ${operands_short(needed, given)}`);
     }
-    let mut body = FunctionBody { prefix: node.outputs.first().unwrap_or(node.op), nodes: [] };
+    let mut body = FunctionBody { prefix: node.outputs.first().unwrap_or(node.op), x: node.inputs[0], nodes: [] };
     write(node, &mut body)?;
     return Result::Ok(Option::Some(body.nodes));
 }
@@ -662,9 +667,30 @@ fn rms_normalization(node: &Node, body: &mut FunctionBody) -> Result<(), String>
     return Result::Ok(());
 }
 
+fn pairwise(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
+    let steps: List<[String, String]> = node.inputs.into_iter().skip(1).map(|operand| [node.op, operand]).collect();
+    body.chained(node.inputs[0], steps, node);
+    return Result::Ok(());
+}
+
+fn clip(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
+    let mut steps: List<[String, String]> = [];
+    for let [index, bound, op] of [[1, "min", "Max"], [2, "max", "Min"]] {
+        if node.has_operand(index) {
+            steps.push([op, node.inputs[index]]);
+        } else if node.attr(bound) matches { Some(_) } {
+            steps.push([op, body.constant(node.float_attr(bound, 0.0).map_err(|e| at_node(node, e))?)]);
+        }
+    }
+    body.chained(node.inputs[0], steps, node);
+    return Result::Ok(());
+}
+
 /// A function's body as it is written out, each tensor named under `prefix`.
 struct FunctionBody {
     prefix: String,
+    /// The function's first operand, whose element its constants take.
+    x: String,
     nodes: List<Node>,
 }
 
@@ -681,14 +707,17 @@ impl FunctionBody {
         return out;
     }
 
+    /// `value` in the element `x` has, as ONNX's function bodies write a
+    /// constant: through `CastLike`.
     fn constant(&mut self, value: f32) -> String {
-        return self.node("Constant", [], [
+        let written = self.node("Constant", [], [
             Attr {
                 name: "value_float",
                 values: [`${value}`],
                 is_list: false,
             },
         ]);
+        return self.binary("CastLike", &written, &self.x);
     }
 
     fn unary(&mut self, op: String, x: &String) -> String {
@@ -697,6 +726,21 @@ impl FunctionBody {
 
     fn binary(&mut self, op: String, a: &String, b: &String) -> String {
         return self.node(op, [*a, *b], []);
+    }
+
+    /// `x` through each `[op, operand]` of `steps` in turn, the last of them
+    /// computing the function's output, which is `x` where there is none.
+    fn chained(&mut self, x: String, steps: List<[String, String]>, function: &Node) {
+        let mut rest = steps;
+        let Some([last_op, last]) = rest.pop() else {
+            self.output("Identity", [x], function);
+            return;
+        };
+        let mut reached = x;
+        for let [op, operand] of rest {
+            reached = self.binary(op, &reached, &operand);
+        }
+        self.output(last_op, [reached, last], function);
     }
 
     /// The body's last node, which computes the function's output.
@@ -730,10 +774,26 @@ pub fn settled<T, E>(read: Result<T, E>) -> T {
     return value;
 }
 
-/// The operators that broadcast two operands against each other: each a case of
-/// the runtime's `BinaryOp`, by name.
+/// Whether `op` broadcasts two operands against each other.
 pub fn is_binary_elementwise(op: &String) -> bool {
-    return case_named::<BinaryOp>(op) matches { Some(_) };
+    return binary_operator(op) matches { Some(_) };
+}
+
+/// What an operator broadcasting two operands against each other computes of
+/// each pair, or `None` for any other operator.
+pub fn binary_operator(op: &String) -> Option<BinaryOp> {
+    return Option::Some(match op.as_str_slice() {
+        "Add" => BinaryOp::Add,
+        "Sub" => BinaryOp::Sub,
+        "Mul" => BinaryOp::Mul,
+        "Div" => BinaryOp::Div,
+        "Pow" => BinaryOp::Pow,
+        "Max" => BinaryOp::Maximum,
+        "Min" => BinaryOp::Minimum,
+        _ => {
+            return null;
+        },
+    });
 }
 
 /// The one-operand operators an `Expr` applies: each a case of the runtime's

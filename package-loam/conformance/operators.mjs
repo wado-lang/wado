@@ -63,6 +63,28 @@ for (const op of ['Relu', 'Sigmoid', 'Tanh', 'Erf', 'Exp', 'Log', 'Sqrt', 'Neg',
   add(op, { inputs: { A: float([2, 3]) }, nodes: [node(op, ['A'], 'Y')] });
 }
 
+add('Max', binary('Max', [2, 3], [3]));
+add('Min', binary('Min', [2, 3], [2, 1]));
+add('MaxOfThree', {
+  inputs: { A: float([2, 3]), B: float([3]), C: float([2, 1]) },
+  nodes: [node('Max', ['A', 'B', 'C'], 'Y')],
+});
+add('MinOfOne', { inputs: { A: float([2, 3]) }, nodes: [node('Min', ['A'], 'Y')] });
+
+// Clip's bounds are scalars, each optional; a lower one past the upper yields
+// the upper.
+const clip = (bounds, names) => ({ inputs: { A: float([2, 3]) }, inits: bounds, nodes: [node('Clip', ['A', ...names], 'Y')] });
+add('Clip', clip({ L: float([], [-1]), H: float([], [1.5]) }, ['L', 'H']));
+add('ClipBelow', clip({ L: float([], [-1]) }, ['L']));
+add('ClipAbove', clip({ H: float([], [1.5]) }, ['', 'H']));
+add('ClipUnbounded', clip({}, []));
+add('ClipByAttributes', {
+  inputs: { A: float([2, 3]) },
+  nodes: [node('Clip', ['A'], 'Y', { min: f32(-1), max: f32(1.5) })],
+  opset: 6,
+});
+add('ClipCrossed',clip({ L: float([], [2]), H: float([], [-1]) }, ['L', 'H']));
+
 add('MatMul', binary('MatMul', [2, 3], [3, 4]));
 add('MatMulBatched', binary('MatMul', [2, 2, 3], [2, 3, 4]));
 add('MatMulShared', binary('MatMul', [2, 2, 3], [3, 4]));
@@ -286,6 +308,30 @@ add('CastToInt64', cast(INT64));
 add('CastToBool', cast(BOOL, FLOAT, [0, -0, 0.5, -3.5, Infinity, NaN]));
 add('CastBoolToInt64', cast(BOOL, INT64, [0, -0, 0.5, -3.5, Infinity, NaN]));
 add('CastToInt32', cast(INT32, INT64));
+// Past a half's range, a tie between two halves, and a value below its least.
+add('CastThroughFloat16', cast(FLOAT16, FLOAT, [0.1, -65520, 65519, 1.00048828125, 1e-8, -0]));
+add('CastThroughBFloat16', cast(BFLOAT16, FLOAT, [0.1, -65520, 3.4e38, 1.00390625, 1e-40, -0]));
+// onnxruntime computes a float16 node in float32 and rounds where a `Cast`
+// says to, so `a` holds values whose every intermediate is a half either way.
+const inHalf = (a, nodes) => ({
+  inputs: { A: float([2, 3], a) },
+  inits: { C: float([3], [0.1, -65520, 1.00048828125]) },
+  nodes: [node('Cast', ['A'], 'H', { to: FLOAT16 }), ...nodes, node('Cast', ['S'], 'Y', { to: FLOAT })],
+});
+// A constant cast at build time rounds as one cast at run does: 0.1 is no half.
+const onto = [0, 0, 0, 0, 1, 2];
+add('CastConstantToFloat16', inHalf(onto, [node('Cast', ['C'], 'D', { to: FLOAT16 }), node('Add', ['H', 'D'], 'S')]));
+// onnxruntime leaves this one unrounded, so the constant holds halves.
+add('CastLikeConstant', {
+  ...inHalf(onto, [
+    node('Constant', [], 'K', { value: { tensor: tensorProto('k', FLOAT, [3], new Float32Array([0.5, -2, 1.5]).buffer) } }),
+    node('CastLike', ['K', 'H'], 'D'),
+    node('Add', ['H', 'D'], 'S'),
+  ]),
+  opset: 15,
+});
+// Where `erf` is 0, 1 or -1 to the last bit of either width.
+add('GeluFloat16', { ...inHalf([0, 8, -8, 16, -16, 32], [node('Gelu', ['H'], 'S')]), opset: 20 });
 add('CastFromInt64', {
   inputs: { A: int64([2, 3], [-3, -1, 0, 1, 2, 9007199254740993]) },
   nodes: [node('Cast', ['A'], 'Y', { to: FLOAT })],

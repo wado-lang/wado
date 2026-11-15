@@ -4,7 +4,7 @@
 use { HashMap } from "core:collections";
 use { EmitError, Operands, Symbols, axis_list, f32_literal, float_literal } from "./emit_symbols.wado";
 use { fill_of } from "./fold.wado";
-use { Elements, Node, case_named, settled, trailing_axes } from "./graph.wado";
+use { Elements, Node, binary_operator, case_named, settled, trailing_axes } from "./graph.wado";
 use { BACKEND_PARAM } from "./idents.wado";
 use {
     Checked,
@@ -126,7 +126,7 @@ internal fn built_call(
     if op == "Conv" {
         return built_conv(node, checked, exprs, symbols);
     }
-    if let Some(binary) = case_named::<BinaryOp>(&op) {
+    if let Some(binary) = binary_operator(&op) {
         let trailing = settled(trailing_axes(node, shapes[node.inputs[0]].rank(), shapes[node.inputs[1]].rank()));
         let a = stretched(checked, exprs, symbols, &node.inputs[0], &out, 0)?;
         let b = stretched(checked, exprs, symbols, &node.inputs[1], &out, trailing)?;
@@ -136,8 +136,10 @@ internal fn built_call(
             Mul => "Multiply",
             Div => "Divide",
             Pow => "Power",
-            // No ONNX operator is named as these are.
-            Maximum | Minimum | Eq | Ne | Lt | Le | Gt | Ge => unreachable(),
+            Maximum => "Maximum",
+            Minimum => "Minimum",
+            // A comparison yields no element of its operands' type.
+            Eq | Ne | Lt | Le | Gt | Ge => unreachable(),
         };
         return Result::Ok(`backend.binary::<${element}, [${axes}]>(Binary::${name}, ${a}, ${b})`);
     }

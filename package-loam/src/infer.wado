@@ -21,6 +21,7 @@ use {
     slice_bounds,
 } from "./fold.wado";
 use {
+    Attr,
     AttrError,
     Dim,
     Graph,
@@ -554,6 +555,8 @@ fn checked_node(node: &Node, scope: &mut Checked, opset: Option<i64>) -> Result<
         }
     }
     operands_given(node, &scope.known, &scope.shapes)?;
+    let cast_like_at_run = node.op == "CastLike";
+    let node = if cast_like_at_run { &cast_like(node, &scope.primitives)? } else { node };
     match fold(node, &scope.known, &scope.shapes) {
         Ok(Some(k)) => {
             scope.primitives[node.outputs[0]] = known_primitive(&k);
@@ -561,6 +564,11 @@ fn checked_node(node: &Node, scope: &mut Checked, opset: Option<i64>) -> Result<
             return Result::Ok(());
         },
         Ok(None) => {
+            if cast_like_at_run {
+                // Every later stage reads the graph's node, which stays a
+                // `CastLike` no kernel is named for.
+                return Result::Err(refusal(node, "CastLike converts only a tensor the build knows"));
+            }
         },
         Err(reason) => {
             return Result::Err(refusal(node, reason));
@@ -906,6 +914,37 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
         element = Option::Some(p);
     }
     return Result::Ok(element);
+}
+
+/// `CastLike` as the `Cast` it is, to the element its second operand has.
+/// int32 and int64 are one primitive, so an integer target names neither.
+fn cast_like(node: &Node, primitives: &HashMap<String, String>) -> Result<Node, InferError> {
+    let like = node.inputs[1];
+    let Some(p) = primitives.get(like) else {
+        return Result::Err(refusal(node, `operand ${like} has no element type the build knows`));
+    };
+    // `TensorProto.DataType`'s numbers.
+    let to = match p.as_str_slice() {
+        "f32" => 1,
+        "bool" => 9,
+        "f16" => 10,
+        "bf16" => 16,
+        _ => {
+            return Result::Err(refusal(node, `operand ${like} is ${p}, which CastLike does not convert to`));
+        },
+    };
+    return Result::Ok(Node {
+        ..*node,
+        op: "Cast",
+        inputs: [node.inputs[0]],
+        attrs: [
+            Attr {
+                name: "to",
+                values: [`${to}`],
+                is_list: false,
+            },
+        ],
+    });
 }
 
 /// The primitive a folded tensor is held in once a kernel reads it. Every
@@ -2095,7 +2134,7 @@ fn required_operands(op: &String) -> Option<i32> {
         "Shape" | "Reshape" | "Unsqueeze" | "Squeeze" | "Flatten" | "Concat" | "Slice" | "ConstantOfShape" | "Transpose" | "Softmax" | "Split" | "MaxPool" | "ArgMax" => Option::Some(
             1,
         ),
-        "Gather" | "MatMul" | "Gemm" | "Conv" | "Expand" => Option::Some(2),
+        "Gather" | "MatMul" | "Gemm" | "Conv" | "Expand" | "CastLike" => Option::Some(2),
         "If" => Option::Some(1),
         "Range" | "Where" => Option::Some(3),
         _ => null,
