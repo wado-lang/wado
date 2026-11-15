@@ -33,6 +33,8 @@ struct SurfaceNode {
     index: i32,
     content: Content,
     attributes: TreeMap<String, String>,
+    // The elements a reflected element reference was set to, by its attribute.
+    referenced: TreeMap<String, List<i32>>,
     value: String,
     parent: i32,
     first_child: i32,
@@ -44,6 +46,8 @@ struct SurfaceNode {
 struct SurfaceEvent {
     type: String,
     target: i32,
+    // Empty unless the event is being dispatched.
+    path: List<i32>,
 }
 
 struct SurfaceRejection {
@@ -55,6 +59,10 @@ struct SurfaceRejection {
 // supported, and no screen shows this document.
 fn fullscreen_unsupported() -> Rejection {
     return Rejection::backed_by(&SurfaceRejection { name: "TypeError", message: "fullscreen is not supported" });
+}
+
+fn surface_rejection(rejection: Rejection) -> &mut SurfaceRejection {
+    return rejection.backing::<SurfaceRejection>().expect("a rejection of a SurfaceDom backs the handle");
 }
 
 struct Listener {
@@ -110,6 +118,24 @@ fn is_void(local_name: &String) -> bool {
 // Scripting is disabled where no browser runs, so `noscript` is escaped.
 fn is_raw_text(local_name: &String) -> bool {
     return *local_name matches { "style" | "script" | "xmp" | "iframe" | "noembed" | "noframes" | "plaintext" };
+}
+
+// The Infra standard's "split on ASCII whitespace".
+fn split_on_ascii_whitespace(text: &String) -> List<String> {
+    let mut tokens: List<String> = [];
+    let mut token = "";
+    for let c of text.chars() {
+        if !is_infra_whitespace(c) {
+            token.push(c);
+        } else if !token.is_empty() {
+            tokens.push(token);
+            token = "";
+        }
+    }
+    if !token.is_empty() {
+        tokens.push(token);
+    }
+    return tokens;
 }
 
 // The HTML standard's "escaping a string".
@@ -175,6 +201,7 @@ impl SurfaceDom {
             index: self.nodes.len(),
             content,
             attributes: TreeMap::new(),
+            referenced: TreeMap::new(),
             value: "",
             parent: NO_NODE,
             first_child: NO_NODE,
@@ -289,6 +316,67 @@ impl SurfaceDom {
             at = self.nodes[at].parent;
         }
         return at == ancestor;
+    }
+
+    fn root_of(&self, index: i32) -> i32 {
+        let mut at = index;
+        while self.nodes[at].parent != NO_NODE {
+            at = self.nodes[at].parent;
+        }
+        return at;
+    }
+
+    // Writes an element's attribute, or removes it for `null`. Either forgets
+    // the elements a reference was set to under that name.
+    fn write_attribute(&mut self, index: i32, name: String, value: Option<String>) {
+        let node = &mut self.nodes[index];
+        node.referenced.remove(name);
+        if let Some(value) = value {
+            node.attributes[name] = value;
+        } else {
+            node.attributes.remove(name);
+        }
+    }
+
+    // The HTML standard's attr-associated elements of a reflected element
+    // reference: the elements set, or else those its attribute names by id.
+    fn referenced_elements(&self, index: i32, attribute: String) -> Option<List<Element>> {
+        let node = &self.nodes[index];
+        let root = self.root_of(index);
+        let mut found: List<Element> = [];
+        if let Some(targets) = node.referenced.get(attribute) {
+            // Only a descendant of one of the element's ancestors counts.
+            for let target of targets {
+                if root != index && target != root && self.root_of(target) == root {
+                    found.push(self.element_handle(target));
+                }
+            }
+            return Option::Some(found);
+        }
+        let Some(ids) = node.attributes.get(attribute) else {
+            return null;
+        };
+        for let id of split_on_ascii_whitespace(&ids) {
+            let target = self.first_inclusive_descendant_where(root, |n| n.content matches { Element(_) }
+                && n.attributes.get("id") == Option::Some(id));
+            if target != NO_NODE {
+                found.push(self.element_handle(target));
+            }
+        }
+        return Option::Some(found);
+    }
+
+    fn set_referenced_elements(&mut self, index: i32, attribute: String, elements: Option<List<Element>>) {
+        let Some(elements) = elements else {
+            self.write_attribute(index, attribute, null);
+            return;
+        };
+        self.write_attribute(index, attribute, Option::Some(""));
+        let mut targets: List<i32> = [];
+        for let element of elements {
+            targets.push(self.index(element));
+        }
+        self.nodes[index].referenced[attribute] = targets;
     }
 
     fn children(&self, parent: i32) -> Children {
@@ -482,12 +570,15 @@ impl EventTarget for SurfaceDom {
 
     fn dispatch_event(&mut self, this: &EventTarget, event: Event) -> bool {
         let target = self.index(*this);
-        self.surface_event(event).target = target;
         let path = self.event_path(target);
+        let dispatched = self.surface_event(event);
+        dispatched.target = target;
+        dispatched.path = path;
         for let mut i = path.len() - 1; i >= 0; i -= 1 {
             self.invoke(path[i], event, true);
         }
         self.invoke(target, event, false);
+        dispatched.path = [];
         resume true;
     }
 
@@ -496,7 +587,15 @@ impl EventTarget for SurfaceDom {
 
 impl Event for SurfaceDom {
     fn new(&mut self, type: String) -> Event {
-        resume Event::backed_by(&SurfaceEvent { type, target: NO_NODE });
+        resume Event::backed_by(&SurfaceEvent { type, target: NO_NODE, path: [] });
+    }
+
+    fn composed_path(&mut self, this: &Event) -> List<EventTarget> {
+        let mut path: List<EventTarget> = [];
+        for let index of self.surface_event(*this).path {
+            path.push(self.target_handle(index));
+        }
+        resume path;
     }
 
     fn type(&mut self, this: &Event) -> String {
@@ -574,11 +673,11 @@ impl Document for SurfaceDom {
 
 impl Rejection for SurfaceDom {
     fn name(&mut self, this: &Rejection) -> String {
-        resume this.backing::<SurfaceRejection>().expect("a rejection of a SurfaceDom backs the handle").name;
+        resume surface_rejection(*this).name;
     }
 
     fn message(&mut self, this: &Rejection) -> String {
-        resume this.backing::<SurfaceRejection>().expect("a rejection of a SurfaceDom backs the handle").message;
+        resume surface_rejection(*this).message;
     }
 
     ..trap
@@ -706,9 +805,12 @@ impl Element for SurfaceDom {
 
     fn set_attribute(&mut self, this: &Element, qualified_name: String, value: String) {
         assert is_valid_attribute_local_name(&qualified_name), "InvalidCharacterError: not a valid attribute name";
-        let index = self.index(*this);
-        self.nodes[index].attributes[qualified_name.to_ascii_lowercase()] = value;
+        self.write_attribute(self.index(*this), qualified_name.to_ascii_lowercase(), Option::Some(value));
         resume ();
+    }
+
+    fn get_attribute_names(&mut self, this: &Element) -> List<String> {
+        resume self.nodes[self.index(*this)].attributes.keys().collect();
     }
 
     fn has_attribute(&mut self, this: &Element, qualified_name: String) -> bool {
@@ -716,8 +818,7 @@ impl Element for SurfaceDom {
     }
 
     fn remove_attribute(&mut self, this: &Element, qualified_name: String) {
-        let index = self.index(*this);
-        self.nodes[index].attributes.remove(qualified_name.to_ascii_lowercase());
+        self.write_attribute(self.index(*this), qualified_name.to_ascii_lowercase(), null);
         resume ();
     }
 
@@ -734,6 +835,69 @@ impl Element for SurfaceDom {
 
     fn request_fullscreen(&mut self, this: &Element) -> Result<(), Rejection> {
         resume Result::Err(fullscreen_unsupported());
+    }
+
+    fn aria_controls_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-controls");
+    }
+
+    fn set_aria_controls_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-controls", value);
+        resume ();
+    }
+
+    fn aria_described_by_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-describedby");
+    }
+
+    fn set_aria_described_by_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-describedby", value);
+        resume ();
+    }
+
+    fn aria_details_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-details");
+    }
+
+    fn set_aria_details_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-details", value);
+        resume ();
+    }
+
+    fn aria_error_message_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-errormessage");
+    }
+
+    fn set_aria_error_message_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-errormessage", value);
+        resume ();
+    }
+
+    fn aria_flow_to_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-flowto");
+    }
+
+    fn set_aria_flow_to_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-flowto", value);
+        resume ();
+    }
+
+    fn aria_labelled_by_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-labelledby");
+    }
+
+    fn set_aria_labelled_by_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-labelledby", value);
+        resume ();
+    }
+
+    fn aria_owns_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-owns");
+    }
+
+    fn set_aria_owns_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-owns", value);
+        resume ();
     }
 
     ..trap

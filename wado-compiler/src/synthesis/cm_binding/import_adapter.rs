@@ -228,6 +228,12 @@ fn optional_subtask_type(type_table: &RefCell<TypeTable>) -> TypeId {
     tt.make_option(subtask)
 }
 
+/// The `None` an `AsyncCall` holds where no subtask is in flight.
+fn no_subtask(type_table: &RefCell<TypeTable>) -> TirExpr {
+    let option_type = optional_subtask_type(type_table);
+    option_none(option_type, type_table.borrow().compiler_items())
+}
+
 /// The subtask a packed `(subtask_handle << 4) | status` names, lifted, or
 /// None where the call completed synchronously and the handle is 0.
 fn lift_subtask(
@@ -414,10 +420,7 @@ fn synthesize_async_wrap_function(
         i32_const(0)
     };
 
-    let no_subtask = {
-        let option_type = optional_subtask_type(ctx.type_table);
-        option_none(option_type, ctx.type_table.borrow().compiler_items())
-    };
+    let no_subtask = no_subtask(ctx.type_table);
     let buffer = result_buffer(ctx.type_table, outptr_expr, outptr_size, outptr_align);
     let no_args = arg_buffer(ctx.type_table, None);
     let no_promise = optional_promise(ctx.type_table, None);
@@ -1563,13 +1566,10 @@ impl<'a> AdapterBuilder<'a> {
                 ),
                 optional_promise(type_table, None),
             ),
-            Pending::Promise => {
-                let no_subtask = option_none(
-                    optional_subtask_type(type_table),
-                    type_table.borrow().compiler_items(),
-                );
-                (no_subtask, optional_promise(type_table, Some(answered)))
-            }
+            Pending::Promise => (
+                no_subtask(type_table),
+                optional_promise(type_table, Some(answered)),
+            ),
         };
         let subtask_struct = make_async_call_literal(
             subtask_type,

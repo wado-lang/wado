@@ -39,7 +39,7 @@ lower is then available to each interface the slice adds.
 - [x] Lower `sequence<T>` and `FrozenArray<T>` to `List<T>`, in the bindings and
   in the glue
 - [x] Lower a variadic argument to a `List<T>`
-- [ ] `SurfaceDom` answers the members this unlocks that the slice already has:
+- [x] `SurfaceDom` answers the members this unlocks that the slice already has:
   `composed_path`, `get_attribute_names`, the `aria_*_elements` attributes
 
 ### 2. Default arguments on a `#[cm]` operation

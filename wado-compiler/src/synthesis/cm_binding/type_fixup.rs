@@ -338,14 +338,13 @@ impl CallRewriteWalker<'_> {
             .registry
             .get_function(&key)
             .expect("an adapter exists only for a registered CM function");
-        let mut args = take_call_args(expr);
-        for arg in &mut args {
-            let taken = std::mem::replace(
-                &mut arg.expr,
-                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-            );
-            arg.expr = extern_handle_by_value(taken, &self.type_table.borrow());
-        }
+        let mut args: Vec<CallArg> = take_call_args(expr)
+            .into_iter()
+            .map(|arg| CallArg {
+                expr: extern_handle_by_value(arg.expr, &self.type_table.borrow()),
+                ..arg
+            })
+            .collect();
         let receiver = matches!(kind, CmCallKind::Method).then(|| args.remove(0));
         let param_offset = usize::from(receiver.is_some());
         self.externalize_callbacks(

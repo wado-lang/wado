@@ -139,7 +139,8 @@ pub fn generate(output: &WebIdlOutput, source: &str) -> String {
     }
     writeln!(
         out,
-        "];\nconst $SLOT_PUT = {:?};",
+        "];\nconst $SLOT_GET = {:?};\nconst $SLOT_PUT = {:?};",
+        ExternSlotAccess::Get.export_name(),
         ExternSlotAccess::Put.export_name()
     )
     .unwrap();
@@ -520,8 +521,7 @@ impl Scalar {
     fn read_memory(self, at: &str) -> String {
         let read = format!("$view().{}", self.accessor("get", at, None));
         if matches!(self, Self::Handle) {
-            let get = ExternSlotAccess::Get.export_name();
-            format!("$core.exports[{get:?}]({read})")
+            format!("$core.exports[$SLOT_GET]({read})")
         } else {
             self.read_core(&read)
         }
@@ -531,8 +531,7 @@ impl Scalar {
     /// slot, which the guest frees where it takes the handle out.
     fn to_memory(self, at: &str, value: &str) -> String {
         let written = if matches!(self, Self::Handle) {
-            let put = ExternSlotAccess::Put.export_name();
-            format!("$core.exports[{put:?}]({value})")
+            format!("$core.exports[$SLOT_PUT]({value})")
         } else {
             self.to_core(value)
         };

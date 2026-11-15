@@ -516,7 +516,7 @@ fn a_variadic_argument_is_a_list_the_glue_spreads() {
     assert!(
         glue.contains(
             "p0.append(...$list(p1, p2, 4, (at) => \
-             $core.exports[\"$cm_extern_slot_get\"]($view().getUint32(at, true))));"
+             $core.exports[$SLOT_GET]($view().getUint32(at, true))));"
         ),
         "{glue}"
     );
@@ -576,8 +576,14 @@ fn a_sequence_is_a_list_either_way() {
     // The host puts each handle it answers in a slot of the guest's.
     assert!(
         glue.contains(
+            "const $SLOT_GET = \"$cm_extern_slot_get\";\nconst $SLOT_PUT = \"$cm_extern_slot_put\";"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
             "$putList($ret, $value, 4, 4, (at, item) => {\n          \
-             $view().setUint32(at, $core.exports[\"$cm_extern_slot_put\"](item), true);\n        });"
+             $view().setUint32(at, $core.exports[$SLOT_PUT](item), true);\n        });"
         ),
         "{glue}"
     );
@@ -591,7 +597,7 @@ fn a_sequence_is_a_list_either_way() {
     assert!(
         glue.contains(
             "p0.observe($list(p1, p2, 4, (at) => \
-             $core.exports[\"$cm_extern_slot_get\"]($view().getUint32(at, true))));"
+             $core.exports[$SLOT_GET]($view().getUint32(at, true))));"
         ),
         "{glue}"
     );
@@ -642,7 +648,7 @@ fn a_promise_is_an_async_call_settling_to_a_result() {
         glue.contains(
             "\"$wado-lang:web/element#ready\": (p0) => {\n        \
              return $settle(p0.ready(), 4, ($ret, $value) => {\n          \
-             $view().setUint32($ret, $core.exports[\"$cm_extern_slot_put\"]($value), true);\n        \
+             $view().setUint32($ret, $core.exports[$SLOT_PUT]($value), true);\n        \
              });\n      },"
         ),
         "{glue}"
