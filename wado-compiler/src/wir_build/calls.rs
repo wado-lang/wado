@@ -974,11 +974,16 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// A call of the import that answers `query` about the host objects `args`.
+    /// A program calling no web import holds no such object, and imports
+    /// nothing to ask about one.
     fn ask_extern_host(&mut self, query: ExternHostQuery, args: &[ArenaCallArg]) -> WirInstr {
         assert_eq!(
             args.len(),
             query.objects() + usize::from(query.takes_address())
         );
+        if !self.ctx.has_extern_import {
+            return WirInstr::Unreachable;
+        }
         let func_id = self.ctx.ensure_extern_host_query(query);
         WirInstr::Call {
             func_id,

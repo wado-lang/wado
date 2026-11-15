@@ -1,0 +1,41 @@
+// Only a value a reference reaches in place backs a handle. A reference to an
+// extern handle, a closure, a scalar or `()` is a cell, and two types' cells
+// are one struct, so the backing could not be told from another type's.
+#[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
+resource Node {}
+
+#[cm("example:demo/dom#element", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource Element extends Node {}
+
+struct Tag {
+    name: String,
+}
+
+fn answer() -> i32 {
+    return 1;
+}
+
+export fn run() {
+    let tag = Tag { name: "a" };
+    let node = Node::backed_by(&tag);
+    let _of_handle = Node::backed_by(&node);
+    let _of_unit = Node::backed_by(&());
+    let _of_scalar = Node::backed_by(&1);
+    let _as_handle = node.backing::<Element>();
+    let _as_closure = node.backing::<fn() -> i32>();
+    let _of_closure = Node::backed_by(&answer);
+}
+
+__DATA__
+{
+  "compile_error": "type 'Node' does not implement trait 'RefMut' required by bound on 'T'",
+  "compile_errors_contains": [
+    "type '()' does not implement trait 'RefMut'",
+    "type 'i32' does not implement trait 'RefMut'",
+    "type 'Element' does not implement trait 'RefMut'",
+    "type 'fn() -> i32' does not implement trait 'RefMut'"
+  ],
+  "compile_error_codes": [
+    "TRAIT_BOUND_NOT_SATISFIED"
+  ]
+}

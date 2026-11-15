@@ -364,17 +364,15 @@ type "functype//core:prelude/string.wado/&core:prelude/string.wado/String^core:p
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(128)
 
-type "functype//wasi/$same" = fn(ref extern, ref extern) -> i32;  // TypeId(129)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(129)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(130)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(130)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(131)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(131)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(132)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(132)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(133)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(134)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(133)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -384,7 +382,6 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
-import fn wasi/$same from "extern/$same";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
@@ -423,7 +420,7 @@ fn "extern_handle_generic.wado/$test_1_a_handle_compares_by_its_backing"() {
         if ref.test "core:prelude//$BackedHandle"(extern.internalize($v2_3)) {
             break $inline_handle_eq_4: 0;
         }
-        break $inline_handle_eq_4: "wasi/$same"(first, $v2_3);
+        unreachable;
     } == 0) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
@@ -449,7 +446,7 @@ Buf::<i32>::backed_by(&a): "), used: 28 }, s3: struct.new "core:prelude/string.w
         if ref.test "core:prelude//$BackedHandle"(extern.internalize($v2_3)) {
             break $inline_handle_eq_7: 0;
         }
-        break $inline_handle_eq_7: "wasi/$same"(first, $v2_3);
+        unreachable;
     } == 0) == 0) {
         cold_path;
         "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<extern_handle_generic.wado/$tmpl$2f5ab1f8b51a1e51,[extern_handle_generic.wado/Buf<i32>,extern_handle_generic.wado/Bytes,extern_handle_generic.wado/Buf<i32>]>"(struct.new "extern_handle_generic.wado//$tmpl$2f5ab1f8b51a1e51" { h0: first, h1: b_1, h2: $v2_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_handle_compares_by_its_backing at extern_handle_generic.wado:29

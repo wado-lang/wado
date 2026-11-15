@@ -439,6 +439,8 @@ Every extern handle type implements `ExternHandle`, a marker the compiler states
 - `R::backed_by(&value)` makes a handle of type `R` that `value` stands behind. The handle keeps the reference, not a copy. Its class is `R`'s own.
 - `handle.backing::<T>()` is the value behind the handle, as `Option<&mut T>`. It is `None` for an object of the host, and for a handle a value of another type backs.
 
+The value's type is one a reference reaches in place, which the bound `T: RefMut` states: a struct, a tuple, a list or a string. A scalar, a variant, a closure or an extern handle backs no handle.
+
 A backed handle is how a guest answers an import itself, as a handler in a test does.
 
 <!-- {"fixture":"spec_components_backed_handle.wado"} -->

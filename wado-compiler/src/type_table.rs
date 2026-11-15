@@ -697,13 +697,23 @@ impl TypeTable {
             .is_some_and(|def| self.is_unrestricted_resource(def))
     }
 
-    /// Whether a value of `ty` is an `externref`: an extern handle, or an
-    /// `Option` of one, whose `None` is the null.
+    /// Whether a value of `ty` is an `externref`: an extern handle, or a
+    /// variant of two cases, one holding nothing and one holding a handle,
+    /// which is the handle or the null. `Option` of a handle is one.
     #[must_use]
     pub fn is_externref(&self, ty: TypeId) -> bool {
         let head = self.representation_head(ty);
-        let handle = self.as_option(head).unwrap_or(head);
-        self.is_extern_handle(self.representation_head(handle))
+        let ResolvedType::Variant { def, type_args } = self.get(head) else {
+            return self.is_extern_handle(head);
+        };
+        let Some(payloads) = self.variant_instance_payloads(*def, type_args) else {
+            return false;
+        };
+        let [a, b] = payloads[..] else {
+            return false;
+        };
+        let holds_handle = |ty| self.is_extern_handle(self.representation_head(ty));
+        (a == Self::UNIT && holds_handle(b)) || (b == Self::UNIT && holds_handle(a))
     }
 
     /// Record `child extends parent`, already validated by the caller.

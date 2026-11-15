@@ -7,6 +7,12 @@ resource Node {}
 #[cm("example:dom/element", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
 resource Element extends Node {}
 
+#[cm("example:dom/global")]
+interface Dom {
+    #[cm("example:dom/global#root")]
+    fn root() -> Node;
+}
+
 struct Tag {}
 
 fn is_element(node: Node) -> bool {
@@ -17,8 +23,12 @@ fn same(a: Node, b: Node) -> bool {
     return a == b;
 }
 
-// A backed handle answers both itself, so no host is asked.
-export fn run() {
+// A backed handle answers both itself, so no host is asked. No host answers
+// under `wado run`, so the call making a host object is compiled and never made.
+export fn run() with Dom {
+    if builtin::black_box(false) {
+        assert !is_element(Dom::root());
+    }
     let tag = Tag {};
     let element = Element::backed_by(&tag);
     assert is_element(builtin::black_box(element));

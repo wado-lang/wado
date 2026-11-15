@@ -503,17 +503,15 @@ type "functype//core:prelude/traits.wado/opt_sroa_variant_extern_handle.wado/Wei
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(187)
 
-type "functype//wasi/$same" = fn(ref extern, ref extern) -> i32;  // TypeId(188)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(188)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(189)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(189)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(190)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(190)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(191)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(191)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(192)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(193)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(192)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -523,7 +521,6 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
-import fn wasi/$same from "extern/$same";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
@@ -650,7 +647,7 @@ fn "opt_sroa_variant_extern_handle.wado/$test_0_a_returned_handle_round_trips"()
             if ref.test "core:prelude//$BackedHandle"(extern.internalize(b)) {
                 break $inline_handle_eq_0: 0;
             }
-            break $inline_handle_eq_0: "wasi/$same"(n, b);
+            unreachable;
         };
     } else {
         0;

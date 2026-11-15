@@ -54,5 +54,30 @@ test "a replaced handle is stored back" {
     assert same == node;
 }
 
+variant Slot {
+    Empty,
+    Full(Node),
+}
+
+struct Shelf {
+    slot: Slot,
+}
+
+fn fill(place: &mut Slot, next: Slot) {
+    *place = next;
+}
+
+test "a two-case variant over a handle is stored back too" {
+    let a = Tag { name: "a" };
+    let mut shelf = Shelf { slot: Slot::Empty };
+    fill(&mut shelf.slot, Slot::Full(Node::backed_by(&a)));
+    let Full(node) = shelf.slot else {
+        panic("the slot was filled");
+    };
+    assert node == Node::backed_by(&a);
+    fill(&mut shelf.slot, Slot::Empty);
+    assert shelf.slot matches { Empty };
+}
+
 __DATA__
 {"test": {}}

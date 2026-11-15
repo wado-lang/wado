@@ -269,6 +269,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             };
 
             let module = if cm_interface_registry.is_extern_import(func) {
+                ctx.has_extern_import = true;
                 EXTERN_IMPORT_MODULE
             } else {
                 "wasi"

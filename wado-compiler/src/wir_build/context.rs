@@ -144,6 +144,10 @@ pub struct WirContext<'a> {
     /// Available WASI function names (computed during component generation).
     pub available_wasi_funcs: IndexSet<String>,
 
+    /// Whether the program calls a web import. Without one it holds no object
+    /// of the host, so it has nothing to ask the host about.
+    pub has_extern_import: bool,
+
     /// Map from `ModuleSource` to wasm module name (e.g., "mem").
     /// Functions/globals from these modules are extracted into separate wasm core modules.
     pub wasm_module_sources: IndexMap<ModuleSource, String>,
@@ -334,6 +338,7 @@ impl<'a> WirContext<'a> {
             canonical_inspectable_base_type_id: None,
             wasm_module_sources: IndexMap::<ModuleSource, String>::default(),
             available_wasi_funcs: IndexSet::default(),
+            has_extern_import: false,
             pending_bodies: Vec::new(),
             needed_canonicals: IndexMap::default(),
             multi_value_return_funcs,

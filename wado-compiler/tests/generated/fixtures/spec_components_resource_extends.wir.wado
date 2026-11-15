@@ -358,19 +358,15 @@ type "functype//spec_components_resource_extends.wado/spec_components_resource_e
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(122)
 
-type "functype//wasi/$same" = fn(ref extern, ref extern) -> i32;  // TypeId(123)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(123)
 
-type "functype//wasi/$class-of" = fn(ref extern) -> i32;  // TypeId(124)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(124)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(125)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(125)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(126)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(126)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(127)
-
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(128)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(129)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(127)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -380,8 +376,6 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
-import fn wasi/$same from "extern/$same";
-import fn wasi/$class-of from "extern/$class-of";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
@@ -449,7 +443,7 @@ fn "spec_components_resource_extends.wado/$cm_export__$test_0"() {
         if ref.test "core:prelude//$BackedHandle"(extern.internalize(w)) {
             break $inline_handle_eq_4: 0;
         }
-        break $inline_handle_eq_4: "wasi/$same"(w, w);
+        unreachable;
     };
     $v3_seen = 0;
     if @unlikely((if $v2 -> i32 {
@@ -457,7 +451,7 @@ fn "spec_components_resource_extends.wado/$cm_export__$test_0"() {
             if ref.test "core:prelude//$BackedHandle"(extern.internalize(w)) {
                 break $inline_handle_class_5: ref.cast "core:prelude//$BackedHandle"(extern.internalize(w)).class;
             }
-            break $inline_handle_class_5: "wasi/$class-of"(w);
+            unreachable;
         } - 1) <=u 0;
         $v3_seen = 1;
         $v3;
@@ -937,7 +931,7 @@ fn "core:rt/handle_class"(handle) {
     if ref.test "core:prelude//$BackedHandle"(extern.internalize(handle)) {
         return ref.cast "core:prelude//$BackedHandle"(extern.internalize(handle)).class;
     }
-    return "wasi/$class-of"(handle);
+    return unreachable;
 }
 
 fn "core:rt/cm_await_blocked"(handle, packed) {

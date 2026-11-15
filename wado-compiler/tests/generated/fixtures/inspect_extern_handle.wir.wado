@@ -370,17 +370,15 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slic
 
 type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<inspect_extern_handle.wado/Node>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]" = fn(ref null extern, ref "core:prelude/string.wado//String");  // TypeId(132)
 
-type "functype//wasi/$class-of" = fn(ref extern) -> i32;  // TypeId(133)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(133)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(134)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(134)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(135)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(135)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(136)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(136)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(137)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(138)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(137)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -390,7 +388,6 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
-import fn wasi/$class-of from "extern/$class-of";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
@@ -548,7 +545,7 @@ condition: `${n:#?}` == \"Element\"
         if ref.test "core:prelude//$BackedHandle"(extern.internalize(n_0)) {
             break $inline_core_prelude_string_wado_String__format_inspect_extern_handle_wado__tmpl_84c37427293e2c34__inspect_extern_handle_wado_Text___spec0_spec0_sroa_t_h0__1__$inline_inspect_extern_handle_wado_Text_core_prelude_traits_wado_Inspect__inspect_sroa_self_value_f_buf__0__$inline_handle_class_0: ref.cast "core:prelude//$BackedHandle"(extern.internalize(n_0)).class;
         }
-        break $inline_core_prelude_string_wado_String__format_inspect_extern_handle_wado__tmpl_84c37427293e2c34__inspect_extern_handle_wado_Text___spec0_spec0_sroa_t_h0__1__$inline_inspect_extern_handle_wado_Text_core_prelude_traits_wado_Inspect__inspect_sroa_self_value_f_buf__0__$inline_handle_class_0: "wasi/$class-of"(n_0);
+        unreachable;
     }) == 2 {
         $sroa_slot_108 = array.new_fixed<u8>(84, 101, 120, 116);
         a_end_14 = 4;
@@ -2597,7 +2594,7 @@ fn "inspect_extern_handle.wado/inspect_extern_handle.wado/Node^core:prelude/trai
         if ref.test "core:prelude//$BackedHandle"(extern.internalize(self)) {
             break $inline_handle_class_0: ref.cast "core:prelude//$BackedHandle"(extern.internalize(self)).class;
         }
-        break $inline_handle_class_0: "wasi/$class-of"(self);
+        unreachable;
     }) == 2 {
         $sroa_slot_23 = array.new_fixed<u8>(84, 101, 120, 116);
         $class = 4;

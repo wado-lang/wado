@@ -215,6 +215,12 @@ the program: `==` compares the backing values, not the structs around them. A
 handler therefore has no duty to remember the handle it gave out, which it
 could only break silently.
 
+The backing type is bound by `RefMut`: a struct, a tuple, a list or a string,
+which a reference reaches in place. A reference to any other value is a cell
+holding a copy. A cell carries neither the value's identity nor its type: the
+cells of two extern handle types are one struct, and so are those of two
+function types, so `backing::<Element>()` would answer a handle a `Node` backs.
+
 Any code may call either function. A backed handle that reaches a real host is
 no object of that host's, and the host rejects it as it would any wrong value.
 
@@ -433,6 +439,9 @@ glue cannot be run without them.
   measured against the range test it replaces.
 - A `match` reads the class once for each type-pattern arm, not once for the
   `match`.
+- A scalar, a variant, a closure and an extern handle back no handle. A backed
+  handle that carried its backing's type beside the class would admit them, at
+  a word for each handle; nothing asked for one yet.
 - A reference to an extern handle is a cell holding it, so a `&self` method on
   one allocates wherever the call is not inlined. The cost was not measured.
 - A `&mut` to a place holding a handle asks `same` of the host before storing

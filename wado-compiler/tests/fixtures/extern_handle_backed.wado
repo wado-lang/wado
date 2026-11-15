@@ -37,6 +37,22 @@ test "a value of another type is not the backing" {
     assert element.backing::<String>() matches { None };
 }
 
+struct Held<T> {
+    value: T,
+}
+
+test "two instances of one generic struct are two types" {
+    let tag = Tag { name: "div", uses: 0 };
+    let held = Held { value: Node::backed_by(&tag) };
+    let node = Node::backed_by(&held);
+    assert node.backing::<Held<Node>>() matches { Some(_) };
+    assert node.backing::<Held<Element>>() matches { None };
+    let pair = [Node::backed_by(&tag), 1];
+    let of_pair = Node::backed_by(&pair);
+    assert of_pair.backing::<[Node, i32]>() matches { Some(_) };
+    assert of_pair.backing::<[Element, i32]>() matches { None };
+}
+
 test "an upcast keeps the backing and the class" {
     let tag = Tag { name: "p", uses: 7 };
     let node: Node = Element::backed_by(&tag);

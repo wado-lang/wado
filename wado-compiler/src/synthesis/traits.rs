@@ -4536,7 +4536,7 @@ fn generate_fn_inspect_fn(
 }
 
 /// Generate `Inspect` for an opaque handle (a resource, Future, Stream), rendered as `Name#0x<hex>`,
-/// or as `Name { type_id, object_id }` for an unrestricted one.
+/// or as the name of the resource its class names for an extern handle.
 fn generate_opaque_inspect_fn(
     receiver: &FqTypeName,
     type_arg_names: &[FqTypeName],

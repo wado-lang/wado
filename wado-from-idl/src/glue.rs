@@ -177,23 +177,10 @@ pub fn list_carries(ty: &WadoType) -> bool {
     }
 }
 
-/// How many core values the canonical ABI flattens `ty` to, which is what
-/// decides whether the parameters are passed through memory.
-fn canonical_flat_count(ty: &WadoType) -> usize {
-    match Shape::of(ty) {
-        Shape::Option(inner) => 1 + canonical_flat_count(inner),
-        Shape::Scalar(_) | Shape::String | Shape::List(_) | Shape::Callback(_) => flat_count(ty),
-    }
-}
-
 fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
-    let canonical: usize = function
-        .params
-        .iter()
-        .map(|p| canonical_flat_count(&p.ty))
-        .sum();
+    let flat_params: usize = function.params.iter().map(|p| flat_count(&p.ty)).sum();
     assert!(
-        !flat_params_in_buffer(canonical, false),
+        !flat_params_in_buffer(flat_params, false),
         "`{}` passes its parameters through memory, which no shim reads",
         function.cm_attr
     );
