@@ -459,13 +459,12 @@ set -euo pipefail
 # shim is ahead of `/usr/bin/rg` on PATH otherwise.
 export PATH="/usr/bin:$PATH"
 # Run builds with cargo, which would starve a test run and be starved by it.
-lock=()
 case " $* " in
-    *" --run "*) lock=(./scripts/exclusive.sh test) ;;
+    *" --run "*) set -- ./scripts/exclusive.sh test scripts/dev-bin.sh wado run \
+        --process-read "$HOME/.cargo" --process-read "$HOME/.rustup" package-eddy/src/main.wado -- "$@" ;;
+    *) set -- scripts/dev-bin.sh wado run package-eddy/src/main.wado -- "$@" ;;
 esac
-"${lock[@]}" scripts/dev-bin.sh wado run \
-    --process-read "$HOME/.cargo" --process-read "$HOME/.rustup" \
-    package-eddy/src/main.wado -- "$@"
+exec "$@"
 """
 
 # The oracle tasks run the ANTLR4 jar, so Java is installed for them alone. A

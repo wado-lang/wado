@@ -101,7 +101,11 @@ test "a reviewer is told of the tools its workspace offers, and no others" {
     assert !reading.contains("FindSymbol") && !reading.contains("reproduce it");
 
     let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "" };
-    let running = instructions(&Workspace { root: "src", symbols: Some(empty_index()), runner: Some(runner) });
+    let running = instructions(&Workspace {
+        root: "src",
+        symbols: Some(empty_index()),
+        runner: Some(runner),
+    });
     assert running.contains("FindSymbol") && running.contains("reproduce it");
 }
 

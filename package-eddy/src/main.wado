@@ -46,11 +46,12 @@ impl Deserialize for Options;
 /// Every review of one head commit.
 struct Record {
     head: String,
-    base: String,
     reviews: List<Attempt>,
 }
 
 struct Attempt {
+    /// The merge base the diff was taken from, which moves with `--base`.
+    base: String,
     reviewer: String,
     run: bool,
     max_turns: i32,
@@ -87,7 +88,7 @@ ${commits.trim()}`;
         add_build_submodules(&root);
         Some(home_runner());
     } else {
-        null
+        null;
     };
     let ws: Option<Workspace> = Some(Workspace { root, runner });
     let result = review(&api_key, CLAUDE_MODEL, &change(&heading, &diff), &ws, options.max_turns);
@@ -96,10 +97,16 @@ ${commits.trim()}`;
     let path = fs::join(&options.reviews, `${head}.json`);
     let mut record = match fs::read_to_string(&path) {
         Ok(text) => from_string::<Record, String>(text).unwrap(),
-        Err(e) && e.kind matches { NotFound } => Record { head, base, reviews: [] },
+        Err(e) && e.kind matches { NotFound } => Record { head, reviews: [] },
         Err(e) => fail(`${e}`),
     };
-    record.reviews.push(Attempt { reviewer: CLAUDE_MODEL, run: options.run, max_turns: options.max_turns, result });
+    record.reviews.push(Attempt {
+        base,
+        reviewer: CLAUDE_MODEL,
+        run: options.run,
+        max_turns: options.max_turns,
+        result,
+    });
     fs::create_dir_all(&options.reviews).unwrap();
     fs::write(&path, &to_bytes_pretty(&record).unwrap()).unwrap();
     eprintln(`recorded in ${path}: ${result.turns} turns, ${result.calls.len()} tool calls`);
