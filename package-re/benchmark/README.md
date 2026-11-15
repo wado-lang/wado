@@ -42,14 +42,15 @@ which is the bar a literal pattern is held to.
 Environment: Wado 2026-11-15 (`-O2`), wasmtime 50.0.1, Node.js v26.13.0,
 Linux x86_64. Best of three runs, picked by `benchmark/pick.ts`.
 
-| Case                  |     Node.js |          Re | Node.js ms/iter | Re ms/iter | Re vs Node.js |
-| --------------------- | ----------: | ----------: | --------------: | ---------: | ------------- |
-| `literal`             |   3.54 GB/s | 550.33 MB/s |           0.019 |      0.119 | 6.4x slower   |
-| `literal-ignore-case` |   1.15 GB/s | 224.22 MB/s |           0.057 |      0.292 | 5.1x slower   |
-| `email`               |  91.33 MB/s | 185.65 MB/s |           0.719 |      0.353 | 2.0x faster   |
-| `uri`                 | 107.33 MB/s | 149.15 MB/s |           0.612 |      0.440 | 1.4x faster   |
-| `timestamp-captures`  | 870.83 MB/s | 251.53 MB/s |           0.075 |      0.261 | 3.5x slower   |
-| `pathological`        |  162.84 B/s | 167.27 MB/s |         147.380 |    < 0.001 | 10⁶x faster   |
+| Case                  |     Node.js |        Wado | Node.js ms/iter | Wado ms/iter | Wado vs Node.js |
+| --------------------- | ----------: | ----------: | --------------: | -----------: | --------------- |
+| `literal`             |   4.01 GB/s | 542.00 MB/s |           0.016 |        0.121 | 7.4x slower     |
+| `literal-find`        |   9.19 GB/s | 926.58 MB/s |           0.007 |        0.070 | 9.9x slower     |
+| `literal-ignore-case` |   1.35 GB/s | 224.17 MB/s |           0.049 |        0.292 | 6.0x slower     |
+| `email`               | 100.95 MB/s | 207.97 MB/s |           0.651 |        0.315 | 2.1x faster     |
+| `uri`                 | 105.57 MB/s | 175.34 MB/s |           0.622 |        0.374 | 1.7x faster     |
+| `timestamp-captures`  |   1.08 GB/s | 266.49 MB/s |           0.061 |        0.246 | 4.1x slower     |
+| `pathological`        |  172.51 B/s | 163.48 MB/s |         139.124 |      < 0.001 | 10⁶x faster     |
 
 ## Fuel
 
