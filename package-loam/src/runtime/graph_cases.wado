@@ -15,7 +15,7 @@ use {
     scalar,
     shared,
 } from "./hlo.wado";
-use { Any, Untyped, f32_of, i64_of } from "./recorded.wado";
+use { Any, Untyped, typed } from "./recorded.wado";
 use { Attention, Tensor, element_count } from "./tensor.wado";
 use { noise } from "../../example/webgpu/compare.wado";
 
@@ -206,7 +206,7 @@ pub fn attending<affine G: Graph>(
     bias: &G::Tensor<f32, [Bt, Ht, St, Tt]>,
     options: &Attention,
 ) -> [G::Tensor<f32, [Bt, St, Qt]>, G::Tensor<f32, [Bt, Ht, Tt, Dt]>, G::Tensor<f32, [Bt, Ht, Tt, Dt]>] with _ {
-    return g.group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+    return g.group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
         &inputs.0,
         &inputs.1,
         &inputs.2,
@@ -334,8 +334,8 @@ pub fn repeating<affine G: Graph>(
         Any::I64(g.relabeled::<i64, [A], Untyped>(ids)),
     ];
     let last = g.repeated(count, &start, |step, state| {
-        let held = f32_of::<G, [A]>(g, &state[0]);
-        let tally = i64_of::<G, [A]>(g, &state[1]);
+        let held = typed::<G, f32, [A]>(g, &state[0]);
+        let tally = typed::<G, i64, [A]>(g, &state[1]);
         let doubled = g.binary(Binary::Multiply, &held, &scale);
         let added = g.binary(Binary::Add, &tally, &g.broadcast_in_dim(step, g.extents_of(&held), []));
         return [
@@ -344,8 +344,8 @@ pub fn repeating<affine G: Graph>(
         ];
     });
     return [
-        f32_of::<G, [A]>(g, &last[0]),
-        i64_of::<G, [A]>(g, &last[1]),
+        typed::<G, f32, [A]>(g, &last[0]),
+        typed::<G, i64, [A]>(g, &last[1]),
     ];
 }
 
@@ -358,12 +358,12 @@ pub fn repeating_view<affine G: Graph>(
 ) -> G::Tensor<f32, [A, A]> with _ {
     let start: List<Any<G>> = [Any::F32(g.relabeled::<f32, [A, A], Untyped>(x))];
     let last = g.repeated(count, &start, |_, state| {
-        let held = f32_of::<G, [A, A]>(g, &state[0]);
+        let held = typed::<G, f32, [A, A]>(g, &state[0]);
         let doubled = g.binary(Binary::Add, &held, &held);
         let turned = g.transpose::<f32, [A, A], [A, A]>(&doubled, [1, 0]);
         return [Any::F32(g.relabeled::<f32, [A, A], Untyped>(&turned))];
     });
-    return f32_of::<G, [A, A]>(g, &last[0]);
+    return typed::<G, f32, [A, A]>(g, &last[0]);
 }
 
 /// A loop of `count` runs of a shared cache's attention, each attending what the
@@ -386,11 +386,11 @@ pub fn repeating_attention<affine G: Graph>(
         count,
         &start,
         |step, state| {
-            let attended = f32_of::<G, [Bt, St, Qt]>(g, &state[0]);
-            let keys = f32_of::<G, [Bt, Ht, Pt, Dt]>(g, &state[1]);
-            let values = f32_of::<G, [Bt, Ht, Pt, Dt]>(g, &state[2]);
+            let attended = typed::<G, f32, [Bt, St, Qt]>(g, &state[0]);
+            let keys = typed::<G, f32, [Bt, Ht, Pt, Dt]>(g, &state[1]);
+            let values = typed::<G, f32, [Bt, Ht, Pt, Dt]>(g, &state[2]);
             let length = g.binary(Binary::Add, &first, step);
-            let [out, present_k, present_v] = g.group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Pt, Dt, Pos, Half, Bt, Ht, St>(
+            let [out, present_k, present_v] = g.group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Pt, Dt, Pos, Half, Bt, Ht, St>(
                 &attended,
                 k,
                 v,
@@ -410,7 +410,7 @@ pub fn repeating_attention<affine G: Graph>(
             ];
         },
     );
-    return f32_of::<G, [Bt, St, Qt]>(g, &last[0]);
+    return typed::<G, f32, [Bt, St, Qt]>(g, &last[0]);
 }
 
 /// Six heads over one of 6 elements, which on a device makes the parts of a step

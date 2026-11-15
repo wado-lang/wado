@@ -28,7 +28,6 @@ use {
     Comparison,
     Cpu,
     Element,
-    f32_of,
     full,
     Graph,
     Holds,
@@ -36,6 +35,7 @@ use {
     Slots,
     strided_gather,
     Tensor,
+    typed,
     Untyped,
     WebGpuBackend,
 } from "lib:loam";
@@ -458,7 +458,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             Any::I64(gpu.relabeled::<i64, [], Untyped>(&gpu.upload(&turns))),
             Any::F32(gpu.relabeled::<f32, [cases::A, cases::A], Untyped>(&gpu.upload(&square))),
         ], &[]);
-        let turned = f32_of::<WebGpuBackend, [cases::A, cases::A]>(&gpu, &viewed[0]);
+        let turned = typed::<WebGpuBackend, f32, [cases::A, cases::A]>(&gpu, &viewed[0]);
         println(`repeated view ${times} ${apart(&mut gpu, &turned, &cases::repeating_view(cpu, &turns, &square))}`);
     }
 
@@ -484,7 +484,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         ],
         &[],
     );
-    let looped_out = f32_of::<WebGpuBackend, [cases::Bt, cases::St, cases::Qt]>(&gpu, &looped[0]);
+    let looped_out = typed::<WebGpuBackend, f32, [cases::Bt, cases::St, cases::Qt]>(&gpu, &looped[0]);
     let looped_want = cases::repeating_attention(cpu, &runs, &query, &key, &value, &looped_past);
     println(`repeated attention ${apart(&mut gpu, &looped_out, &looped_want)}`);
 

@@ -24,7 +24,6 @@ use {
     AttrError,
     Dim,
     Graph,
-    KERNEL_ELEMENT,
     Known,
     Node,
     Rank,
@@ -35,6 +34,7 @@ use {
     dims_of,
     element_of,
     is_binary_elementwise,
+    is_float,
     is_unary_operator,
     operands_short,
     trailing_axes,
@@ -476,7 +476,7 @@ fn checked_graph(graph: &Graph, scope: &mut Checked) -> Result<(), InferError> {
             scope.shapes[vi.name] = shape_of(&vi, &mut scope.axes)?;
             // An element no kernel reaches is left out, for emit to name.
             if let Some(element) = element_of(&vi.dtype) {
-                scope.primitives[vi.name] = element.computed;
+                scope.primitives[vi.name] = element.primitive;
             }
         }
     }
@@ -496,7 +496,7 @@ fn checked_graph(graph: &Graph, scope: &mut Checked) -> Result<(), InferError> {
         scope.shapes[vi.name] = held(&vi.name, merge_declared(vi, &produced, &mut scope.owed, &mut scope.axes)?)?;
         if let Some(element) = element_of(&vi.dtype)
             && let Some(computed) = scope.primitives.get(vi.name)
-            && element.computed != computed {
+            && element.primitive != computed {
             builtin::cold_path();
             return Result::Err(InferError::DeclaredElement(DeclaredElementConflict {
                 tensor: vi.name,
@@ -820,13 +820,16 @@ fn is_layout(op: &String) -> bool {
 }
 
 /// The primitive a node's kernel produces: its operand's for a layout kernel,
-/// `Cast`'s target, and f32 for every other; `None` for an element emit refuses.
+/// `Cast`'s target, and the one float its operands share for every other;
+/// `None` for an element emit refuses.
 fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Result<Option<String>, InferError> {
     let op = node.op;
     if op == "Cast" {
         let to = attr_read(node, node.required_int_attr("to"))?;
         return match data_type(to) {
-            Some(Float) => Result::Ok(Option::Some(KERNEL_ELEMENT)),
+            Some(Float) => Result::Ok(Option::Some("f32")),
+            Some(Float16) => Result::Ok(Option::Some("f16")),
+            Some(Bfloat16) => Result::Ok(Option::Some("bf16")),
             Some(Int64) => Result::Ok(Option::Some("i64")),
             Some(Bool) => Result::Ok(Option::Some("bool")),
             _ => Result::Err(refusal(node, `\`to\` is element type ${to}, which no kernel holds`)),
@@ -838,8 +841,8 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
     }
     if op == "ArgMax" {
         let x = node.inputs[0];
-        if let Some(p) = primitives.get(x) && p != KERNEL_ELEMENT {
-            return Result::Err(refusal(node, `operand ${x} is ${p}, and ArgMax ranks ${KERNEL_ELEMENT}`));
+        if let Some(p) = primitives.get(x) && !is_float(&p) {
+            return Result::Err(refusal(node, `operand ${x} is ${p}, and ArgMax ranks a float`));
         }
         return Result::Ok(Option::Some("i64"));
     }
@@ -881,24 +884,39 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
         }
         return Result::Ok(px);
     }
+    let mut first: Option<String> = null;
+    let mut element: Option<String> = null;
     for let [index, input] of node.inputs.into_iter().enumerate() {
         if read_at_build_time(node, index) {
             continue;
         }
-        if let Some(p) = primitives.get(input) && p != KERNEL_ELEMENT {
-            return Result::Err(refusal(node, `operand ${input} is ${p}, and ${op} computes in ${KERNEL_ELEMENT}`));
+        let Some(p) = primitives.get(input) else {
+            continue;
+        };
+        if !is_float(&p) {
+            return Result::Err(refusal(node, `operand ${input} is ${p}, and ${op} computes in a float`));
         }
+        if let Some(e) = element && e != p {
+            return Result::Err(refusal(
+                node,
+                `operand ${input} is ${p} and ${first.unwrap()} is ${e}, and ${op} computes in one float`,
+            ));
+        }
+        first = Option::Some(input);
+        element = Option::Some(p);
     }
-    return Result::Ok(Option::Some(KERNEL_ELEMENT));
+    return Result::Ok(element);
 }
 
 /// The primitive a folded tensor is held in once a kernel reads it. Every
 /// folded tensor has one, read or not, so no two compare equal for want of it.
 fn known_primitive(k: &Known) -> String {
-    return match k.elements {
-        Ints(_) | Symbolic(_) => "i64",
-        Floats(_) => KERNEL_ELEMENT,
-        Bools(_) => "bool",
+    return match [k.elements, k.stored] {
+        [Ints(_) | Symbolic(_), _] => "i64",
+        [Floats(_), Float16] => "f16",
+        [Floats(_), BFloat16] => "bf16",
+        [Floats(_), _] => "f32",
+        [Bools(_), _] => "bool",
     };
 }
 

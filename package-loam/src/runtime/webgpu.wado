@@ -15,6 +15,7 @@ use {
     Holds,
     Cpu,
     Element,
+    Float,
     Epilogue,
     Expr,
     Prologue,
@@ -2838,9 +2839,9 @@ impl WebGpuBackend {
     /// `Graph::arg_max`: one workgroup per part of a lane, then one per
     /// lane over the parts' winners, each index left on the device as an f32,
     /// which holds it exactly, for a step after it to read.
-    internal fn arg_max_kernel<Axes>(
+    internal fn arg_max_kernel<E: Float, Axes>(
         &mut self,
-        t: &Placed<f32, Axes>,
+        t: &Placed<E, Axes>,
         axis: i32,
     ) -> Placed<i64, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let view = self.device_view(t);

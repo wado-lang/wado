@@ -4,7 +4,7 @@
 
 use { HashMap, HashSet, TreeMap } from "core:collections";
 use { Extent, spelled_poly } from "./extent.wado";
-use { Attr, Dim, Graph, KERNEL_ELEMENT, Node, Rank, ValueInfo, is_binary_elementwise, read_at } from "./graph.wado";
+use { Attr, Dim, Graph, Node, Rank, ValueInfo, is_binary_elementwise, is_float, read_at } from "./graph.wado";
 use { Checked, is_reduction, is_unary_elementwise } from "./infer.wado";
 use { Shape } from "./shape.wado";
 
@@ -198,8 +198,8 @@ fn declare_unit_axis(graph: &mut Graph, at: i32, axis: i32) {
 pub fn take_arg_max(graph: &mut Graph, checked: &Checked, output: &String, axis: i32) -> Result<(), OptionConflict> {
     let [at, _] = output_with_axis("arg_max", graph, checked, output, axis)?;
     let element = checked.primitives[*output];
-    if element != KERNEL_ELEMENT {
-        return conflict("arg_max", `${*output} is ${element}, and ArgMax ranks ${KERNEL_ELEMENT}`);
+    if !is_float(&element) {
+        return conflict("arg_max", `${*output} is ${element}, and ArgMax ranks a float`);
     }
     if graph.nodes.into_iter().any(|n| n.reads().contains_str(output)) {
         return conflict("arg_max", `${*output} is read inside the graph, which needs its elements`);

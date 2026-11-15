@@ -7,7 +7,7 @@
 use { HashMap, HashSet } from "core:collections";
 use { Binary, Comparison, Unary } from "./hlo.wado";
 use { Any, Operation, Recorded, RecordedNode, Region } from "./recorded.wado";
-use { BinaryOp, Cpu, Expr, RowOp, Step, UnaryOp, operand } from "./tensor.wado";
+use { BinaryOp, Cpu, ElementKind, Expr, RowOp, Step, UnaryOp, operand } from "./tensor.wado";
 
 /// What a program runs for one region, in order, and the nodes it yields.
 pub struct Plan {
@@ -152,8 +152,10 @@ pub fn splats_of(constants: &HashMap<i32, Any<Cpu>>) -> HashMap<i32, Option<f32>
     for let [id, value] of constants.entries() {
         splats[*id] = match value {
             F32(t) => splat(&t.data),
+            F16(t) => splat(&t.data.into_iter().map(|v| f32::from(v)).collect()),
+            BF16(t) => splat(&t.data.into_iter().map(|v| f32::from(v)).collect()),
             Bool(t) => splat(&t.data.into_iter().map(|b| if b { 1.0 as f32 } else { 0.0 }).collect()),
-            I64(_) => null,
+            U8(_) | I64(_) => null,
         };
     }
     return splats;
@@ -671,8 +673,8 @@ fn shared_group(readers: &HashMap<i32, List<i32>>, group_of: &HashMap<i32, i32>,
 /// Whether a kernel computes `node`: an elementwise step, a view, or a sum or
 /// a maximum along the last axis, over elements a device holds as f32.
 fn fusable(recorded: &Recorded, node: &RecordedNode) -> bool {
-    let held = |id: i32| !recorded.nodes[id].kind matches { I64 };
-    if node.kind matches { I64 } || !node.operands.into_iter().all(|o| held(o)) {
+    let held = |kind: ElementKind| kind matches { F32 | Bool };
+    if !held(node.kind) || !node.operands.into_iter().all(|o| held(recorded.nodes[o].kind)) {
         return false;
     }
     return match &node.op {

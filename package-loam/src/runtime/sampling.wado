@@ -314,7 +314,7 @@ fn picked<affine G: Graph>(
     let greatest: G::Tensor<f32, [Slots]> = g.reduce(logits, Binary::Maximum, f32::NEG_INFINITY, [1]);
     let below = g.binary(Binary::Subtract, logits, &by_row(g, &greatest, &extents));
     let scaled = g.binary(Binary::Divide, &below, &g.broadcast_in_dim(&decoding.temperature, extents, []));
-    let mut probabilities = softmax::<G, [Slots, Tokens]>(g, &scaled, 1);
+    let mut probabilities = softmax::<G, f32, [Slots, Tokens]>(g, &scaled, 1);
     if decoding.sampler.filters_top_k {
         let ones = full::<G, f32, [Slots, Tokens]>(g, 1.0, extents);
         let wanted: G::Tensor<f32, [Slots]> = g.broadcast_in_dim(&decoding.top_k, rows, []);

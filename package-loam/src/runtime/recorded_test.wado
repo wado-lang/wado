@@ -27,7 +27,7 @@ use {
     windowed,
     windowed_input,
 } from "./graph_cases.wado";
-use { Any, Recorder, Untyped, f32_of, host_of, run } from "./recorded.wado";
+use { Any, Recorder, Untyped, host_of, run, typed } from "./recorded.wado";
 use { Binary, Graph, Slots, branched } from "./hlo.wado";
 use { Cpu, Holds, Tensor } from "./tensor.wado";
 
@@ -145,7 +145,7 @@ fn doubled_on_host<affine G: Graph>(
     pred: &G::Tensor<bool, [C]>,
 ) -> List<Any<G>> with _ {
     return g.repeated(count, &[Any::F32(g.relabeled::<f32, [A], Untyped>(x))], |_, state| {
-        let v = f32_of::<G, [A]>(g, &state[0]);
+        let v = typed::<G, f32, [A]>(g, &state[0]);
         let doubled = branched::<G, [C], G::Tensor<f32, [A]>>(g, pred, Option::Some(true), || {
             let sum = g.binary(Binary::Add, &v, &v);
             return g.yielded(&sum);
@@ -165,7 +165,7 @@ test "a branch the host took in a loop's body adds nothing to what the loop retu
     let pred = r.parameter::<bool, [C]>([1]);
     let last = doubled_on_host(&mut r, &rcount, &rx, &pred);
     assert last.len() == 1;
-    let result = f32_of::<Recorder, [A]>(&r, &last[0]);
+    let result = typed::<Recorder, f32, [A]>(&r, &last[0]);
     let recorded = r.finished([result.id]);
     let count = Tensor::<i64, []> {
         data: [2],

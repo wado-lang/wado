@@ -78,19 +78,19 @@ pub struct ValueInfo {
     pub data: Option<ByteList> = null,
 }
 
-/// An element type a kernel reaches: the primitive a tensor is held in, its
-/// width in a payload, the primitive the kernels compute it in, and its name
-/// in a safetensors header.
+/// An element type a kernel reaches: the primitive a tensor is held and
+/// computed in, its width in a payload, and its name in a safetensors header.
 pub struct Element {
     pub primitive: String,
     pub width: i32,
-    pub computed: String,
     pub stored: String,
 }
 
-/// The one element type the kernels have arithmetic for. A layout kernel moves
-/// an `i64` or `bool` tensor, and every other kernel reads and produces this.
-pub global KERNEL_ELEMENT: String = "f32";
+/// Whether `primitive` is one the kernels have arithmetic for. A layout kernel
+/// moves any element, and every other kernel reads and produces one of these.
+pub fn is_float(primitive: &String) -> bool {
+    return *primitive == "f32" || *primitive == "f16" || *primitive == "bf16";
+}
 
 /// The `TensorProto.DataType` an attribute's number names, as `Cast`'s `to`
 /// carries one. `None` for a number the enum does not declare.
@@ -102,16 +102,15 @@ pub fn data_type(number: i64) -> Option<onnx::TensorProtoDataType> {
 }
 
 /// `dtype`'s element, or `None` for one no kernel reaches, whose payload is not
-/// read. Half precision is held and widened, never computed.
+/// read.
 pub fn element_of(dtype: &String) -> Option<Element> {
     return match dtype.as_str_slice() {
-        "float" => Option::Some(
-            Element { primitive: KERNEL_ELEMENT, width: 4, computed: KERNEL_ELEMENT, stored: "F32" },
-        ),
-        "float16" => Option::Some(Element { primitive: "f16", width: 2, computed: KERNEL_ELEMENT, stored: "F16" }),
-        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, computed: KERNEL_ELEMENT, stored: "BF16" }),
-        "int64" => Option::Some(Element { primitive: "i64", width: 8, computed: "i64", stored: "I64" }),
-        "bool" => Option::Some(Element { primitive: "bool", width: 1, computed: "bool", stored: "BOOL" }),
+        "float" => Option::Some(Element { primitive: "f32", width: 4, stored: "F32" }),
+        "float16" => Option::Some(Element { primitive: "f16", width: 2, stored: "F16" }),
+        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, stored: "BF16" }),
+        "uint8" => Option::Some(Element { primitive: "u8", width: 1, stored: "U8" }),
+        "int64" => Option::Some(Element { primitive: "i64", width: 8, stored: "I64" }),
+        "bool" => Option::Some(Element { primitive: "bool", width: 1, stored: "BOOL" }),
         _ => null,
     };
 }

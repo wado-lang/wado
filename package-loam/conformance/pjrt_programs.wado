@@ -323,6 +323,9 @@ fn apart<E: Element, Axes>(g: &mut PjrtBackend, got: &Any<PjrtBackend>, want: &T
         F32(t) => g.download(t),
         I64(t) => cpu.convert::<i64, f32, Untyped>(&g.download(t)),
         Bool(t) => cpu.convert::<bool, f32, Untyped>(&g.download(t)),
+        F16(t) => cpu.convert::<f16, f32, Untyped>(&g.download(t)),
+        BF16(t) => cpu.convert::<bf16, f32, Untyped>(&g.download(t)),
+        U8(t) => cpu.convert::<u8, f32, Untyped>(&g.download(t)),
     };
     if read.extents != want.extents {
         return f32::NAN;
