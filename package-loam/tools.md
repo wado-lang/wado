@@ -58,7 +58,7 @@ on the CPU and on its WebGPU provider, which must pick the same tokens.
 onnxruntime makes of a model: the graph transformers that changed it, where each
 node runs, the optimized graph with its inferred shapes, and one profiled run.
 
-`wado run tools/onnx_inventory.wado <model.onnx>` reports what a model asks of
+`wado run package-loam/tools/onnx_inventory.wado <model.onnx>` reports what a model asks of
 Loam, from its graph alone: each operator with the attribute values and the
 input and output counts its nodes use, the graph's inputs and outputs, and its
 weights by element type and by the file holding them. `loam dump` stops at the

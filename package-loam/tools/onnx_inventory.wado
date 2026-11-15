@@ -127,6 +127,10 @@ fn count_nodes(graph: &onnx::GraphProto, ops: &mut TreeMap<String, Operator>) {
                 push_new(&mut values, attr_value(&a));
             }
             op.attrs[name] = values;
+        }
+        // Stored before the branches count into `ops`, which may hold this key.
+        ops[key] = op;
+        for let a of node.attribute {
             if let Some(branch) = &a.g {
                 count_nodes(branch, ops);
             }
@@ -134,8 +138,31 @@ fn count_nodes(graph: &onnx::GraphProto, ops: &mut TreeMap<String, Operator>) {
                 count_nodes(&branch, ops);
             }
         }
-        ops[key] = op;
     }
+}
+
+/// The bytes `t` stores: its external `length`, its `raw_data`, or else, for
+/// typed fields or external data that runs to the end of its file, its
+/// element count at its type's width.
+fn stored_bytes(t: &onnx::TensorProto) -> i64 {
+    if let Some(length) = external_entry(t, "length") {
+        return i64::from_str(&length).unwrap_or(0);
+    }
+    if let Some(raw) = &t.raw_data {
+        return raw.len() as i64;
+    }
+    let mut count: i64 = 1;
+    for let d of t.dims {
+        count *= d;
+    }
+    return match t.data_type.unwrap_or(0) {
+        2 | 3 | 9 => count,
+        4 | 5 | 10 | 16 => 2 * count,
+        1 | 6 | 12 => 4 * count,
+        7 | 11 | 13 => 8 * count,
+        21 | 22 => count.div_ceil(2),
+        _ => 0,
+    };
 }
 
 fn tally(into: &mut TreeMap<String, Tally>, key: String, bytes: i64) {
@@ -209,10 +236,7 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
     let mut initializers: List<String> = [];
     for let t of graph.initializer {
         let name = t.name.unwrap_or("");
-        let size = match external_entry(&t, "length") {
-            Some(length) => i64::from_str(&length).unwrap_or(0),
-            None => t.raw_data.unwrap_or(b"").len() as i64,
-        };
+        let size = stored_bytes(&t);
         tally(&mut by_type, element_name(t.data_type.unwrap_or(0)), size);
         tally(&mut by_file, external_entry(&t, "location").unwrap_or("(in the graph)"), size);
         weights.push(Weight { name, typed: typed_tensor(&t), bytes: size });

@@ -309,9 +309,9 @@ generator the model alone.
 
 `WebGpuBackend` computes in f32 between the f16s it reads and writes
 ([Half Element Types](./design.md#half-element-types)), so a device whose f16
-arithmetic is faster gains nothing from it. Arithmetic in f16 is chosen by a
-Kiln option, on a device that offers `shader-f16`, and a graph built with it is
-held to a tolerance rather than to the f32 path's bits.
+arithmetic is faster gains nothing from it. No Kiln option chooses arithmetic
+in f16 yet. One would, on a device that offers `shader-f16`, and a graph built
+with it would be held to a tolerance rather than to the f32 path's bits.
 
 Its attention kernel writes f32s alone, so a half graph's attention runs
 decomposed. A tensor is held in `f32`, `f16`, `bf16`, `u8`, `i64` or `bool`,
