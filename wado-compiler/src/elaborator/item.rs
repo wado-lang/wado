@@ -512,7 +512,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             if !self.tysys.is_impl_target_param(impl_declared_params, name) {
                 // A name the block does not declare has to be a type the module
                 // does; otherwise it names nothing at all.
-                if !self.names_type_at(Some(named.id), name) {
+                if !self.names_type_at(named.id) {
                     let _ = self.emit(TypeError::UndeclaredImplTypeParam {
                         name: name.clone(),
                         span: named.span,

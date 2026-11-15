@@ -1,0 +1,27 @@
+// `Self::none()` and `Self::all()` inside a flags type's own impl build the
+// flags literal: `Self` names the impl's target, which is the flags type.
+use { println, Stdout } from "core:cli";
+
+flags Perm {
+    Read,
+    Write,
+}
+
+impl Perm {
+    fn nothing() -> Perm {
+        return Self::none();
+    }
+
+    fn every() -> Perm {
+        return Self::all();
+    }
+}
+
+export fn run() with Stdout {
+    println(`${Perm::nothing() as u32} ${Perm::every() as u32}`);
+}
+
+__DATA__
+{
+    "stdout": "0 3\n"
+}

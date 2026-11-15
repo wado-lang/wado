@@ -1279,10 +1279,13 @@ mod tests {
     /// The attributes of the module's one `use`.
     fn use_attributes(source: &str) -> ImportAttributes {
         let module = parse_test_module(source);
-        let Some(Item::Use(use_decl)) = module.items.into_iter().next() else {
+        let [Item::Use(use_decl)] = module.items.as_slice() else {
             panic!("the source is one `use`");
         };
-        use_decl.attributes.expect("the `use` carries a `with`")
+        use_decl
+            .attributes
+            .clone()
+            .expect("the `use` carries a `with`")
     }
 
     #[test]
@@ -1682,10 +1685,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 self.skip_generated_bodies && module_source.is_user_authored();
             let (mut ast, skipped) = {
                 let _span = self.logger.span(&format!("parse {mod_name}"));
-                if matches!(module_source, ModuleSource::Dependency { .. })
-                    && !self.skip_generated_bodies
-                {
-                    (self.parse_dependency(&source, &module_source)?, None)
+                if module_source.keeps_parse() && !self.skip_generated_bodies {
+                    (self.parse_kept(&source, &module_source)?, None)
                 } else {
                     self.parse_source_with(&source, &module_source, skip_generated_bodies)?
                 }
@@ -2428,19 +2429,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         Ok(self.parse_source_with(source, module_source, false)?.0)
     }
 
-    /// The parse of a dependency module's `source`: the one an earlier compile
-    /// took while the source is unchanged, since a dependency snapshot's facts
-    /// key on the `AstId`s one parse mints.
-    fn parse_dependency(
-        &self,
-        source: &str,
-        module_source: &ModuleSource,
-    ) -> Result<Module, LoadError> {
+    /// The parse of `source` for a module that [`ModuleSource::keeps_parse`]:
+    /// the one an earlier compile took while the source is unchanged, since a
+    /// dependency snapshot's facts key on the `AstId`s one parse mints.
+    fn parse_kept(&self, source: &str, module_source: &ModuleSource) -> Result<Module, LoadError> {
         static PARSES: LazyLock<Mutex<IndexMap<String, Arc<Module>>>> =
             LazyLock::new(Mutex::default);
-        let ModuleSource::Dependency { path, .. } = module_source else {
-            panic!("only a dependency module's parse is kept: {module_source}");
-        };
+        let path = module_source
+            .kept_parse_path()
+            .unwrap_or_else(|| panic!("{module_source} keeps no parse"));
         let kept = |parses: &IndexMap<String, Arc<Module>>| {
             parses
                 .get(path.as_str())
