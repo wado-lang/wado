@@ -2641,7 +2641,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => self
                 .impl_target_decl_key(receiver, &resolved.impl_name)
                 .map_or_else(
-                    || self.declaring_module_of(&self.impl_target_of(receiver)),
+                    || self.declaring_module_of(receiver),
                     |def| defs.module(def).clone(),
                 ),
         };

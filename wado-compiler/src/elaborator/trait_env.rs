@@ -175,16 +175,6 @@ impl ImplTargetKey {
         }
     }
 
-    pub(crate) fn decl_name<'a>(&'a self, defs: &'a DefTable) -> Option<&'a str> {
-        match self {
-            ImplTargetKey::Decl(def) => Some(defs.name(*def)),
-            ImplTargetKey::Undeclared(_, name)
-            | ImplTargetKey::TypeParam { name, .. }
-            | ImplTargetKey::Builtin(name) => Some(name),
-            ImplTargetKey::Ref(_) | ImplTargetKey::Function { .. } => None,
-        }
-    }
-
     /// How to spell this target in a diagnostic — the declaration name, or the
     /// reference prefix for a `&T` / `&mut T` target.
     pub(crate) fn display_name<'a>(&'a self, defs: &'a DefTable) -> &'a str {

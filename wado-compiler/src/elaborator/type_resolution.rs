@@ -278,12 +278,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         let binders = &self.annotate_ctx.trait_ctx.type_params;
+        let local_items = &self.sem.decls.fn_local_items;
         #[expect(
             clippy::disallowed_methods,
             reason = "a suggested name is a spelling no walk visits, and must shadow nothing"
         )]
         let fresh = PIN_NAMES.iter().filter(|name| {
             !binders.contains_key(**name)
+                && !local_items.contains_key(**name)
                 && **name != param_name
                 && self
                     .tysys

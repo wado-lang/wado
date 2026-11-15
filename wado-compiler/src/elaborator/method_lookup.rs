@@ -18,7 +18,6 @@ use crate::module_source::ModuleSource;
 use crate::name::{
     ARRAY_TYPE_NAME, LocalMethodName, MethodName, TUPLE_TYPE_NAME, display_generic_name,
 };
-use crate::primitive::PrimitiveType;
 use crate::tir::{
     EffectRows, FunctionRef, MonomorphInfo, ProjectionAnswer, ResolvedType, SlotProjections,
     StructDef, SubstitutionContext, TemplateId, TraitRef, TypeArgMap, TypeId, TypeParamId,
@@ -698,27 +697,19 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The module whose methods the receiver `key` keys: its declaration's, a
-    /// primitive's own, and where the walk stands for a shape no module
-    /// declares.
-    pub(super) fn declaring_module_of(&self, key: &ImplTargetKey) -> ModuleSource {
+    /// The module whose methods a receiver of type `ty` keys: its
+    /// declaration's, `Array` and the tuple family included, a primitive's
+    /// own, and where the walk stands for a type no module declares.
+    pub(super) fn declaring_module_of(&self, ty: TypeId) -> ModuleSource {
+        let Some(def) = self.type_decl_key(ty) else {
+            return self.current_module_source.clone();
+        };
         let defs = self.tysys.resolutions.defs();
         // A primitive's methods live apart from its declaration.
-        let primitive = match key {
-            ImplTargetKey::Decl(def) => match defs.primitive(*def) {
-                Some(primitive) => Some(primitive),
-                None => return defs.module(*def).clone(),
-            },
-            ImplTargetKey::Builtin(name) => PrimitiveType::from_name(name),
-            ImplTargetKey::Undeclared(..)
-            | ImplTargetKey::Ref(_)
-            | ImplTargetKey::TypeParam { .. }
-            | ImplTargetKey::Function { .. } => None,
-        };
-        primitive.map_or_else(
-            || self.current_module_source.clone(),
-            ModuleSource::of_primitive,
-        )
+        match defs.primitive(def) {
+            Some(primitive) => ModuleSource::of_primitive(primitive),
+            None => defs.module(def).clone(),
+        }
     }
 
     /// Look up method info based on receiver type and method name.

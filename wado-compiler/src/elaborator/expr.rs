@@ -2273,15 +2273,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // For List and custom types, look for Index or IndexValue trait implementation
         // (List implements IndexValue<i32> with type Output = T)
-        let names_struct = self
-            .tysys
-            .struct_name_for_type(base_type_id)
-            .is_some_and(|name| !name.is_empty());
-
         // For newtypes, the base type also answers the trait impl lookup
         let lookup_type_id = self.tysys.newtype_base_lookup(base_type_id);
 
-        if names_struct {
+        if self.tysys.has_struct_head(base_type_id) {
             // Only a key synthesis cannot type (a compound literal, whose type
             // the impl supplies) falls back to pre-selecting an impl for its
             // expected type.

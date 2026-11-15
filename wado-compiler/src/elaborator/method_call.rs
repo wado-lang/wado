@@ -1880,15 +1880,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let declaring_key = owner
             .filter(|(link, _)| self.is_declaring_link(*link))
             .map(|(_, key)| key);
-        let (name, key) = match declaring_key {
-            Some(key) => (
-                key.decl_name(self.tysys.resolutions.defs())
-                    .map(str::to_string),
-                Some(key),
-            ),
-            None => self.tysys.static_receiver_struct_key(target_type_id),
-        };
-        let lookup_receiver = key.zip(name).map(|(key, _)| ReceiverId::keyed(key, None));
+        let key = declaring_key.or_else(|| self.tysys.static_receiver_struct_key(target_type_id));
+        let lookup_receiver = key.map(|key| ReceiverId::keyed(key, None));
         let static_receiver = lookup_receiver.as_ref().map(ReceiverId::key);
 
         // `Type::<T>::method()` parses as a static-method call and never
@@ -3596,11 +3589,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // newtype's static call dispatches to its base, whose name is not the
         // caller's to resolve — that frame can hold a same-named declaration of
         // its own.
-        let link_receiver = match &newtype_dispatch {
-            Some((_, base_type_id, _)) => {
-                ReceiverId::keyed(self.impl_target_of(*base_type_id), None)
-            }
-            None => call_receiver.clone(),
+        let (link_receiver, link_type) = match &newtype_dispatch {
+            Some((_, base_type_id, _)) => (
+                ReceiverId::keyed(self.impl_target_of(*base_type_id), None),
+                *base_type_id,
+            ),
+            None => (call_receiver.clone(), receiver_type),
         };
         // The resolution walks from the newtype to its base itself, so it reads
         // the arguments at the base and answers in the newtype. It reads the
@@ -3646,7 +3640,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .find(|e| e.is_inherent())
                         .map(|e| e.module.clone())
                 })
-                .unwrap_or_else(|| self.declaring_module_of(link_receiver.key()));
+                .unwrap_or_else(|| self.declaring_module_of(link_type));
             StaticMethodRef::new(module, &actual_struct_name, method_name, None, declaration)
         });
 
@@ -3882,39 +3876,29 @@ impl TypeSystem {
         })
     }
 
-    /// A static-method receiver's `(struct_name, decl_key)` for impl / parameter
-    /// lookups: newtypes follow to the base, arrays to `core:array`.
+    /// A static-method receiver's key for impl / parameter lookups: newtypes
+    /// follow to the base, arrays to `core:array`.
     pub(super) fn static_receiver_struct_key(
         &self,
         target_type_id: TypeId,
-    ) -> (Option<String>, Option<ImplTargetKey>) {
-        let key = {
-            let table = self.type_table.borrow();
-            // A reference buckets by its kind, as an `impl … for &A` header
-            // does.
-            if let Some(kind) = RefKind::from_resolved(table.get(target_type_id)) {
-                let key = ImplTargetKey::Ref(kind);
-                let name = key.display_name(self.resolutions.defs()).to_string();
-                return (Some(name), Some(key));
+    ) -> Option<ImplTargetKey> {
+        let table = self.type_table.borrow();
+        // A reference buckets by its kind, as an `impl … for &A` header does.
+        if let Some(kind) = RefKind::from_resolved(table.get(target_type_id)) {
+            return Some(ImplTargetKey::Ref(kind));
+        }
+        // Keyed on what a newtype wraps, not on itself: its impls are looked up
+        // on its base. A `flags` wraps nothing it inherits from.
+        let head = table.reflect_structure_head(target_type_id);
+        match table.get(head) {
+            ResolvedType::BuiltinArray(_) => {
+                Some(ImplTargetKey::Builtin(ARRAY_TYPE_NAME.to_string()))
             }
-            // Keyed on what a newtype wraps, not on itself: its impls are
-            // looked up on its base. A `flags` wraps nothing it inherits from.
-            let head = table.reflect_structure_head(target_type_id);
-            match table.get(head) {
-                ResolvedType::BuiltinArray(_) => {
-                    Some(ImplTargetKey::Builtin(ARRAY_TYPE_NAME.to_string()))
-                }
-                ResolvedType::Unit => Some(ImplTargetKey::Builtin(UNIT_TYPE_NAME.to_string())),
-                _ => table
-                    .nominal_def(head)
-                    .map(|def| ImplTargetKey::of_decl(self.resolutions.defs(), def)),
-            }
-        };
-        let name = key
-            .as_ref()
-            .and_then(|key| key.decl_name(self.resolutions.defs()))
-            .map(str::to_string);
-        (name, key)
+            ResolvedType::Unit => Some(ImplTargetKey::Builtin(UNIT_TYPE_NAME.to_string())),
+            _ => table
+                .nominal_def(head)
+                .map(|def| ImplTargetKey::of_decl(self.resolutions.defs(), def)),
+        }
     }
 
     /// The type parameter the blanket impl `blanket` targets, `T` in

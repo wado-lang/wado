@@ -1516,7 +1516,31 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     name,
                 }
             }
-            _ => trait_env::ImplTargetKey::Builtin(tt.base_type_name(peeled)),
+            // A builtin shape, and a type still unsettled or already reported
+            // (`unknown`, an inference variable), which keys a bucket no impl
+            // is indexed under.
+            tir::ResolvedType::Primitive(_)
+            | tir::ResolvedType::Unit
+            | tir::ResolvedType::Never
+            | tir::ResolvedType::Tuple(_)
+            | tir::ResolvedType::BuiltinArray(_)
+            | tir::ResolvedType::Struct { .. }
+            | tir::ResolvedType::Enum { .. }
+            | tir::ResolvedType::Resource { .. }
+            | tir::ResolvedType::Variant { .. }
+            | tir::ResolvedType::Newtype { .. }
+            | tir::ResolvedType::Flags { .. }
+            | tir::ResolvedType::Ref(_)
+            | tir::ResolvedType::MutRef(_)
+            | tir::ResolvedType::InferVar(_)
+            | tir::ResolvedType::TypePack { .. }
+            | tir::ResolvedType::PackElement { .. }
+            | tir::ResolvedType::AssocParam { .. }
+            | tir::ResolvedType::AssocTypeProjection { .. }
+            | tir::ResolvedType::Unknown
+            | tir::ResolvedType::Error => {
+                trait_env::ImplTargetKey::Builtin(tt.base_type_name(peeled))
+            }
         }
     }
 
