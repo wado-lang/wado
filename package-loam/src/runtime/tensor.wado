@@ -725,9 +725,9 @@ pub trait Element with () {
         return Self::kind() matches { F32 };
     }
     /// Whether an f32 holds every value of this exactly, so a GPU can store
-    /// it as one: `f32` itself, and `bool` as 1.0 and 0.0.
+    /// it as one: a float, and `bool` as 1.0 and 0.0.
     fn exact_in_f32() -> bool {
-        return Self::is_f32();
+        return Self::is_float();
     }
     /// Whether arithmetic on this is a float's: computed in f32 and rounded
     /// once to this. An integer's is computed in i64 and wraps to it.
@@ -937,11 +937,39 @@ pub enum RowOp {
     Max,
 }
 
+/// A float element narrower than the f32 an [`Expr`] computes in.
+pub enum HalfFloat {
+    F16,
+    BF16,
+}
+
+impl HalfFloat {
+    /// The element of `kind` where it is one.
+    pub fn of(kind: ElementKind) -> Option<HalfFloat> {
+        return match kind {
+            F16 => Option::Some(HalfFloat::F16),
+            BF16 => Option::Some(HalfFloat::BF16),
+            _ => null,
+        };
+    }
+
+    /// The nearest value of this to `v`, ties to even, as an f32.
+    pub fn rounded(&self, v: f32) -> f32 {
+        return match *self {
+            F16 => f32::from(f16::from_f32(v)),
+            BF16 => f32::from(bf16::from_f32(v)),
+        };
+    }
+}
+
 /// One step of an [`Expr`], reading the steps before it by position.
 pub variant Step {
     Operand(i32),
     Constant(f32),
     Unary([UnaryOp, i32]),
+    /// The step rounded to a half, which is where a kernel computing in f32
+    /// stores a half's result.
+    Rounded([HalfFloat, i32]),
     Binary([BinaryOp, i32, i32]),
     /// `[condition, then, else]`: the second where the first is not zero.
     Select([i32, i32, i32]),
@@ -975,6 +1003,19 @@ impl Step {
             Binary([op, a, b]) => [3, ReflectEnum::<BinaryOp>::discriminant(&op), a, b],
             Select([c, a, b]) => [4, c, a, b],
             Fold([op, a]) => [5, ReflectEnum::<RowOp>::discriminant(&op), a, 0],
+            Rounded([to, a]) => [6, ReflectEnum::<HalfFloat>::discriminant(&to), a, 0],
+        };
+    }
+
+    /// This reading step `at[a]` where it reads step `a`.
+    fn reading(&self, at: &List<i32>) -> Step {
+        return match *self {
+            Unary([o, a]) => Step::Unary([o, at[a]]),
+            Rounded([to, a]) => Step::Rounded([to, at[a]]),
+            Binary([o, a, b]) => Step::Binary([o, at[a], at[b]]),
+            Select([c, a, b]) => Step::Select([at[c], at[a], at[b]]),
+            Fold([o, a]) => Step::Fold([o, at[a]]),
+            leaf => leaf,
         };
     }
 }
@@ -1027,6 +1068,21 @@ impl Expr {
         return e;
     }
 
+    /// This rounded to `to`.
+    pub fn rounded(&self, to: HalfFloat) -> Expr {
+        let mut e = *self;
+        e.ended(Step::Rounded([to, self.last()]));
+        return e;
+    }
+
+    /// This as an element of `kind` stores it: rounded where that is a half.
+    pub fn stored_as(&self, kind: ElementKind) -> Expr {
+        return match HalfFloat::of(kind) {
+            Some(to) => self.rounded(to),
+            None => *self,
+        };
+    }
+
     /// This folded along its row by `op`, read at every element of the row.
     pub fn row(&self, op: RowOp) -> Expr {
         let mut e = *self;
@@ -1058,6 +1114,7 @@ impl Expr {
                     Some(v) => Option::Some(unary_over(op, &whole([v]))[0]),
                     None => null,
                 },
+                Rounded([to, a]) => values[a].map(|v: f32| to.rounded(v)),
                 Binary([op, a, b]) => match [values[a], values[b]] {
                     [Some(x), Some(y)] => Option::Some(binary_over(op, &whole([x]), &whole([y]))[0]),
                     _ => null,
@@ -1104,15 +1161,24 @@ impl Expr {
     fn merged(&mut self, other: &Expr) -> i32 {
         let mut at: List<i32> = [];
         for let step of other.steps {
-            at.push(self.shared(match step {
-                Unary([o, a]) => Step::Unary([o, at[a]]),
-                Binary([o, a, b]) => Step::Binary([o, at[a], at[b]]),
-                Select([c, a, b]) => Step::Select([at[c], at[a], at[b]]),
-                Fold([o, a]) => Step::Fold([o, at[a]]),
-                leaf => leaf,
-            }));
+            at.push(self.shared(step.reading(&at)));
         }
         return at[at.len() - 1];
+    }
+
+    /// This with `operand(index)` computed by `by`, over this one's operands,
+    /// rather than read.
+    pub fn substituted(&self, index: i32, by: &Expr) -> Expr {
+        let mut e = Expr { steps: [] };
+        let mut at: List<i32> = [];
+        for let step of self.steps {
+            at.push(match step {
+                Operand(k) && k == index => e.merged(by),
+                other => e.shared(other.reading(&at)),
+            });
+        }
+        e.ending(at[at.len() - 1]);
+        return e;
     }
 
     /// The step at `at` as the output: computed again last where it is not
@@ -1178,6 +1244,7 @@ impl Expr {
                 Operand(k) => run_of(operands[k], start, n),
                 Constant(c) => whole([c]),
                 Unary([op, a]) => whole(unary_over(op, &values[a])),
+                Rounded([to, a]) => whole(each(&values[a], |e| to.rounded(e))),
                 Binary([op, a, b]) => whole(binary_over(op, &values[a], &values[b])),
                 Select([c, a, b]) => whole(selected(&values[c], &values[a], &values[b])),
                 Fold([op, a]) => whole([folded(op, &values[a], n)]),

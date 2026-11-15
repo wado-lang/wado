@@ -1,7 +1,7 @@
 use { Binary, DotDims, Graph, Unary } from "./hlo.wado";
 use { Kernel, Plan, planned, replanned, splats_of } from "./fusion.wado";
 use { Recorded, Recorder, Untyped, Value, constants } from "./recorded.wado";
-use { BinaryOp, Holds, Tensor, UnaryOp, operand } from "./tensor.wado";
+use { BinaryOp, ElementKind, Float, HalfFloat, Holds, Tensor, UnaryOp, operand } from "./tensor.wado";
 
 fn plan_of(recorded: &Recorded) -> Plan {
     return planned(recorded, &splats_of(&constants(recorded)));
@@ -148,15 +148,15 @@ test "a fold joins no kernel whose operands it would read neither per element no
 
 /// A gated layer over `x`: the product by one weight, through SiLU, times the
 /// product by another. The two products, then the result.
-fn gated(
+fn gated<E: Float>(
     r: &mut Recorder,
-    x: &Value<f32, Untyped>,
-    scale: Option<&Value<f32, Untyped>>,
-) -> [Value<f32, Untyped>, Value<f32, Untyped>, Value<f32, Untyped>] {
-    let gate_w = r.parameter::<f32, Untyped>([2, 8]);
-    let up_w = r.parameter::<f32, Untyped>([2, 8]);
-    let gate = r.dot_general::<f32, Untyped, Untyped, Untyped>(x, &gate_w, &last_axis_by_rows());
-    let up = r.dot_general::<f32, Untyped, Untyped, Untyped>(x, &up_w, &last_axis_by_rows());
+    x: &Value<E, Untyped>,
+    scale: Option<&Value<E, Untyped>>,
+) -> [Value<E, Untyped>, Value<E, Untyped>, Value<E, Untyped>] {
+    let gate_w = r.parameter::<E, Untyped>([2, 8]);
+    let up_w = r.parameter::<E, Untyped>([2, 8]);
+    let gate = r.dot_general::<E, Untyped, Untyped, Untyped>(x, &gate_w, &last_axis_by_rows());
+    let up = r.dot_general::<E, Untyped, Untyped, Untyped>(x, &up_w, &last_axis_by_rows());
     let silu = r.binary(Binary::Multiply, &gate, &r.unary(Unary::Logistic, &gate));
     let mut y = r.binary(Binary::Multiply, &silu, &up);
     if let Some(s) = scale {
@@ -181,6 +181,38 @@ test "a gated layer is one paired product, the gate and the scale in its epilogu
     assert p.operands.into_iter().map(|o| o.node).collect() == [s.id] as List<i32>;
     let silu = operand(0).binary(BinaryOp::Mul, &operand(0).unary(UnaryOp::Sigmoid));
     assert p.op == silu.binary(BinaryOp::Mul, &operand(1)).binary(BinaryOp::Mul, &operand(2));
+}
+
+test "a gated layer over a half pairs as one over f32 does, each value it names rounded to the half" {
+    let mut r = Recorder::new();
+    let x = r.parameter::<bf16, Untyped>([1, 4, 2]);
+    let s = r.parameter::<bf16, Untyped>([1, 4, 8]);
+    let [gate, _, y] = gated(&mut r, &x, Option::Some(&s));
+    let recorded = r.finished([y.id]);
+    let plan = plan_of(&recorded);
+    assert spelled(&plan)[4] == `paired ${gate.id} ${y.id}`;
+    let Paired(p) = plan.launches[4] else {
+        unreachable();
+    };
+    let half = HalfFloat::BF16;
+    let stored = operand(0).rounded(half);
+    let silu = stored.binary(BinaryOp::Mul, &stored.unary(UnaryOp::Sigmoid).rounded(half)).rounded(half);
+    let product = silu.binary(BinaryOp::Mul, &operand(1).rounded(half)).rounded(half);
+    assert p.op == product.binary(BinaryOp::Mul, &operand(2)).rounded(half);
+}
+
+test "a step rounded to a half is the value the CPU stores, and a substitution reaches under it" {
+    let x: f32 = 1.0 + 1.0 / 2048.0;
+    let doubled = operand(0).binary(BinaryOp::Add, &operand(0));
+    let xs: List<f32> = [x];
+    let large: List<f32> = [65520.0];
+    let unread: List<f32> = [0.0];
+    assert operand(0).rounded(HalfFloat::F16).over(1, &[&xs]) == [1.0] as List<f32>;
+    assert operand(0).rounded(HalfFloat::BF16).over(1, &[&large]) == [65536.0] as List<f32>;
+    assert operand(0).rounded(HalfFloat::F16).over(1, &[&large]) == [f32::INFINITY] as List<f32>;
+    let under = doubled.rounded(HalfFloat::F16).substituted(0, &operand(1).rounded(HalfFloat::F16));
+    assert under.over(1, &[&unread, &xs]) == [2.0] as List<f32>;
+    assert operand(0).stored_as(ElementKind::F32) == operand(0);
 }
 
 test "a gate read outside the layer is written, and pairs with nothing" {

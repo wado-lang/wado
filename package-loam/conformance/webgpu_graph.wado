@@ -93,6 +93,24 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let every = cases::elementwise(&mut gpu, &gpu.upload(&ex), &gpu.upload(&ey));
     println(`elementwise ${apart(&mut gpu, &every, &cases::elementwise(cpu, &ex, &ey))}`);
 
+    let [hx, edges] = cases::halved_inputs();
+    let [held_x, held_edges] = [
+        gpu.upload(&hx),
+        gpu.upload(&edges),
+    ];
+    let read_before_halves = gpu.read_backs();
+    let in_f16 = cases::halved::<WebGpuBackend, f16>(&mut gpu, &held_x, &held_edges);
+    let in_bf16 = cases::halved::<WebGpuBackend, bf16>(&mut gpu, &held_x, &held_edges);
+    assert gpu.read_backs() == read_before_halves, "a half is computed on the device";
+    for let [name, got_half, want_half] of [
+        ["f16", in_f16, cases::halved::<Cpu, f16>(cpu, &hx, &edges)],
+        ["bf16", in_bf16, cases::halved::<Cpu, bf16>(cpu, &hx, &edges)],
+    ] {
+        println(`halved ${name} product ${apart(&mut gpu, &got_half.0, &want_half.0)}`);
+        println(`halved ${name} summed ${apart(&mut gpu, &got_half.1, &want_half.1)}`);
+        println(`halved ${name} stored ${apart(&mut gpu, &got_half.2, &want_half.2)}`);
+    }
+
     // A gather of consecutive rows is a view of them, and dispatches nothing.
     let rows = rows_of::<[Rows, Run, Pair]>(1, 5);
     let from_one = full::<Cpu, i64, [Slots]>(cpu, 1, [1]);

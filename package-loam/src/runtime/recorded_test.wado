@@ -20,6 +20,8 @@ use {
     branching_inputs,
     elementwise,
     elementwise_inputs,
+    halved,
+    halved_inputs,
     mixed,
     mixed_inputs,
     repeating,
@@ -83,6 +85,32 @@ test "every recorded elementwise operation computes the CPU's" {
         host_of(&x),
         host_of(&y),
     ]) == [host_of(&want)] as List<Any<Cpu>>;
+}
+
+test "a recorded graph over halves stores each result in its half, as the CPU does" {
+    let cpu = &mut Cpu {};
+    let [x, edges] = halved_inputs();
+    let mut r = Recorder::new();
+    let rx = r.parameter::<f32, [A, B]>(x.extents);
+    let redges = r.parameter::<f32, [C]>(edges.extents);
+    let narrow = halved::<Recorder, f16>(&mut r, &rx, &redges);
+    let wide = halved::<Recorder, bf16>(&mut r, &rx, &redges);
+    let recorded = r.finished([narrow.0.id, narrow.1.id, narrow.2.id, wide.0.id, wide.1.id, wide.2.id]);
+    let want_narrow = halved::<Cpu, f16>(cpu, &x, &edges);
+    let want_wide = halved::<Cpu, bf16>(cpu, &x, &edges);
+    assert want_narrow.0.data != want_wide.0.data, "each half rounds its own way";
+    assert want_narrow.2.data[4] == f32::INFINITY && want_wide.2.data[4] == 65536.0;
+    assert run(cpu, &recorded, &[
+        host_of(&x),
+        host_of(&edges),
+    ]) == [
+        host_of(&want_narrow.0),
+        host_of(&want_narrow.1),
+        host_of(&want_narrow.2),
+        host_of(&want_wide.0),
+        host_of(&want_wide.1),
+        host_of(&want_wide.2),
+    ] as List<Any<Cpu>>;
 }
 
 test "a recorded convolution and pooling compute the CPU's, an uploaded tensor a constant of the graph" {

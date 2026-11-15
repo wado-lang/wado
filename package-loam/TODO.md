@@ -317,10 +317,10 @@ generator the model alone.
 
 ### Element types and precision
 
-Every arithmetic kernel computes in f32 and stores f32, as the WEP's signatures
-spell, but a half graph needs it to store `f16` or `bf16` as well. A
-`WebGpuBackend` view holds f32 alone, and `compute` converts a half input and
-output where it crosses the boundary. One of `int64` is held in `i64`, and one
+A `WebGpuBackend` view holds a half as the f32 that equals it, so a half
+tensor takes an f32 one's memory there, and no kernel computes in f16 where the
+device offers `shader-f16`. Its attention kernel takes f32 alone, so a half
+graph's attention runs decomposed. One of `int64` is held in `i64`, and one
 of `bool` in `bool`. Every other element type stops the build naming it.
 Arithmetic in `double` and the integer types is a second instantiation of the
 same kernels. Wado has a primitive for nearly every ONNX element type, so what
@@ -353,8 +353,8 @@ them.
 ### WebGPU
 
 The WebGPU backend runs `convolution` and `reduce_window` on the CPU, each
-downloading its operand. So does a kernel over an element type other than f32,
-a product with more batch elements or tiles than one dispatch dimension holds,
+downloading its operand. So does a kernel over an element type other than a
+float or `bool`, a product with more batch elements or tiles than one dispatch dimension holds,
 and an elementwise kernel, a row kernel or a product whose output outgrows one
 binding. A model whose graph alternates the two crosses the boundary at every
 such node.
@@ -375,11 +375,6 @@ query, key and value, stays a product of its own. Over more than one row, a
 part of a concatenation is strided by the whole product's row, so a `reshape`
 merging its rows with an axis after them copies it, as Gemma 3's query and key
 normalization over heads does on a prompt.
-
-WGSL leaves a value past a half's range indeterminate, whether `pack2x16float`
-stores it or f16 arithmetic computes it. So a half graph that reaches one, a
-mask of negative infinity stored in a half among them, gets whatever the device
-makes of it.
 
 A buffer crosses the component boundary as a `list<u8>`, which the guest
 converts from or to f32 one element at a time, so crossing costs more than the

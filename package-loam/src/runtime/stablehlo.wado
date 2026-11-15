@@ -335,8 +335,8 @@ impl Writer {
             Constant(data) => self.constant(id, node, data),
             Iota(dimension) => self.line(id, node, "stablehlo.iota", "", ` {iota_dimension = ${*dimension} : i64}`),
             Convert => self.line(id, node, "stablehlo.convert", "", ""),
-            Unary(op) => self.line(id, node, unary_name(*op), "", ""),
-            Binary(op) => self.line(id, node, binary_name(*op), "", ""),
+            Unary(op) => self.computed(id, node, unary_name(*op)),
+            Binary(op) => self.computed(id, node, binary_name(*op)),
             Compare(direction) => {
                 let kind = self.recorded.nodes[node.operands[0]].kind;
                 self.line(id, node, "stablehlo.compare", "", comparison_attributes(direction_name(*direction), kind));
@@ -417,6 +417,17 @@ impl Writer {
         let bytes_name = `${node_name(id)}b`;
         self.scalar(bytes_name, hex, raw);
         self.lined(id, node, "stablehlo.convert", bytes_name, raw, "", "");
+    }
+
+    /// `op` over the node's operands, elementwise. A bf16 one goes through f32:
+    /// XLA folds the widening of a bf16 result into the operation that computed
+    /// it, which then never rounds.
+    fn computed(&mut self, id: i32, node: &RecordedNode, op: String) {
+        if node.kind matches { BF16 } {
+            self.summed(id, node, op, "", "", "", "");
+        } else {
+            self.line(id, node, op, "", "");
+        }
     }
 
     /// `op` over the node's operands and then `more`, whose types are

@@ -2,7 +2,8 @@
 //!
 //! An f32 tensor lives on the device from the kernel, `upload` or `keep` that
 //! writes it there until `compute` downloads it, and so does a `bool` one, as
-//! 1.0 and 0.0. An `i64` tensor stays on the host, since WGSL stores none, and
+//! 1.0 and 0.0, and a half one, as the f32 equal to each element: a kernel
+//! computes in f32 and rounds what it stores to the half. An `i64` tensor stays on the host, since WGSL stores none, and
 //! a gather writes its indices to the device as `u32` when it runs, but for the
 //! index `arg_max` leaves on the device as an f32, which a gather reads there.
 //! A weight kept for products alone is held in bf16 where that loses nothing,
@@ -3348,6 +3349,10 @@ fn steps_wgsl(op: &Expr, last: i32, indent: String) -> String {
             Unary([u, a]) => unary_wgsl(u, `s${a}`),
             Binary([o, a, b]) => binary_wgsl(o, `s${a}`, `s${b}`),
             Select([c, a, b]) => `select(s${b}, s${a}, s${c} != 0.0)`,
+            Rounded([to, a]) => match to {
+                F16 => `to_f16(s${a})`,
+                BF16 => `to_bf16(s${a})`,
+            },
             Fold(_) => {
                 fold += 1;
                 `folds[${fold - 1}]`;
@@ -4510,5 +4515,33 @@ fn minimum_(a: f32, b: f32) -> f32 {
         return a + b;
     }
     return min(a, b);
+}
+
+// The nearest bf16 to v, ties to even, in the integers: WGSL may compute a
+// float expression at a higher precision, which would round it twice.
+fn to_bf16(v: f32) -> f32 {
+    let b = bitcast<u32>(v);
+    if (b & 0x7f800000u) == 0x7f800000u {
+        return v;
+    }
+    return bitcast<f32>((b + 0x7fffu + ((b >> 16u) & 1u)) & 0xffff0000u);
+}
+
+// The nearest f16 to v, ties to even. Below 2^-14 an f16 is a multiple of
+// 2^-24, and above 65520 it is infinite.
+fn to_f16(v: f32) -> f32 {
+    let b = bitcast<u32>(v);
+    let magnitude = b & 0x7fffffffu;
+    if magnitude >= 0x7f800000u {
+        return v;
+    }
+    if magnitude < 0x38800000u {
+        return round(v * 16777216.0) * (1.0 / 16777216.0);
+    }
+    let r = (b + 0x0fffu + ((b >> 13u) & 1u)) & 0xffffe000u;
+    if (r & 0x7fffffffu) >= 0x47800000u {
+        return bitcast<f32>((b & 0x80000000u) | 0x7f800000u);
+    }
+    return bitcast<f32>(r);
 }
 ";

@@ -3,7 +3,7 @@
 //! device, and `pjrt_topology.wado` compiles them for one it does not have.
 
 use { PjrtHost } from "core:pjrt";
-use { Any, Cpu, Element, Graph, Holds, Located, PjrtBackend, Slots, Tensor, Untyped } from "lib:loam";
+use { Any, Cpu, Element, Graph, Holds, Located, PjrtBackend, Recorder, Slots, Tensor, Untyped } from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
 use { decoded_tokens, requests_apart, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
@@ -85,6 +85,27 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
         Any::F32(untyped(device, &device.upload(&ey))),
     ], &[]);
     note("elementwise", apart(device, &computed[0], &cases::elementwise(cpu, &ex, &ey)));
+
+    let [hx, edges] = cases::halved_inputs();
+    let halves = device.compiled(|r| {
+        let rx = r.parameter::<f32, [cases::A, cases::B]>(hx.extents);
+        let redges = r.parameter::<f32, [cases::C]>(edges.extents);
+        let narrow = cases::halved::<Recorder, f16>(r, &rx, &redges);
+        let wide = cases::halved::<Recorder, bf16>(r, &rx, &redges);
+        return r.finished([narrow.0.id, narrow.1.id, narrow.2.id, wide.0.id, wide.1.id, wide.2.id]);
+    }, &[], &[]).unwrap();
+    let in_halves = device.executed(&halves, &[
+        Any::F32(untyped(device, &device.upload(&hx))),
+        Any::F32(untyped(device, &device.upload(&edges))),
+    ], &[]);
+    let want_narrow = cases::halved::<Cpu, f16>(cpu, &hx, &edges);
+    let want_wide = cases::halved::<Cpu, bf16>(cpu, &hx, &edges);
+    note("halved f16 product", apart(device, &in_halves[0], &want_narrow.0));
+    note("halved f16 summed", apart(device, &in_halves[1], &want_narrow.1));
+    note("halved f16 stored", apart(device, &in_halves[2], &want_narrow.2));
+    note("halved bf16 product", apart(device, &in_halves[3], &want_wide.0));
+    note("halved bf16 summed", apart(device, &in_halves[4], &want_wide.1));
+    note("halved bf16 stored", apart(device, &in_halves[5], &want_wide.2));
 
     let w = cases::windowed_input();
     let windowed = device.compiled(|r| {
