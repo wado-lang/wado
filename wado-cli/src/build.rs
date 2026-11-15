@@ -410,11 +410,12 @@ pub async fn build_world_components(
     embed: EmbedOptions,
 ) -> Result<(), CliExit> {
     assert!(!targets.is_empty(), "every caller has a world to build");
+    let cpus = cores();
     let mut knobs = knobs.clone();
     knobs
         .opt_threads
-        .get_or_insert((cores() / targets.len()).max(1));
-    let slots = Arc::new(Semaphore::new(cores()));
+        .get_or_insert((cpus / targets.len()).max(1));
+    let slots = Arc::new(Semaphore::new(cpus));
     let mut builds = JoinSet::<Result<(), CliExit>>::new();
     for target in targets {
         let slot = Arc::clone(&slots)
