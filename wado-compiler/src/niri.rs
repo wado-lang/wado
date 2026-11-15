@@ -616,8 +616,8 @@ struct FrameState {
     reassigned: LocalSet,
     /// Pairs of places a store left holding one array handle: the frame holds
     /// each by value, so a write landing on one leaves the other stale. The
-    /// write unbinds the other's local, and rebinding either local ends the
-    /// pair.
+    /// write unbinds the other's local. Rebinding a local ends its pairs, see
+    /// [`FrameState::retire_twins`].
     handle_twins: Vec<[(u32, Vec<u32>); 2]>,
     /// The locals bound from outside the frame: a call's parameters, a region's
     /// free reads. An array handle one holds is the caller's too, which no

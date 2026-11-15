@@ -1298,7 +1298,7 @@ fn binds_hot_field(
             .expr;
         !match argument_local(body, arg) {
             Some((local, _)) => built_in_cold_run(body, cold, local),
-            None => builds_in_cold_run(body, cold, arg),
+            None => is_cold_literal(body, cold, arg),
         }
     })
 }
@@ -1320,12 +1320,12 @@ fn built_in_cold_run(body: &Body, cold: &IndexSet<ExprId>, local: u32) -> bool {
             return;
         }
         bound = true;
-        all_cold &= builds_in_cold_run(body, cold, *value);
+        all_cold &= is_cold_literal(body, cold, *value);
     });
     bound && all_cold
 }
 
-fn builds_in_cold_run(body: &Body, cold: &IndexSet<ExprId>, value: Operand) -> bool {
+fn is_cold_literal(body: &Body, cold: &IndexSet<ExprId>, value: Operand) -> bool {
     struct_literal_under(body, value).is_some_and(|literal| cold.contains(&literal))
 }
 
