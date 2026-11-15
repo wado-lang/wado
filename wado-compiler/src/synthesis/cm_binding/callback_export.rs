@@ -1,14 +1,12 @@
 //! The exports a host calls a Wado closure back through, one per signature.
 
-use std::cell::RefCell;
 use std::iter;
 
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexSet;
 use crate::name::{callback_export_name, cm_callback_func_name};
 use crate::package::Package;
 use crate::synthesis::common::{
-    block, cast, expr_stmt, handle_from_f64, internal_call, local_ref, locals_from_params,
-    synth_param, synth_span,
+    block, cast, expr_stmt, internal_call, local_ref, locals_from_params, synth_param, synth_span,
 };
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TypeId};
 use crate::type_table::TypeTable;
@@ -24,7 +22,8 @@ pub(super) type Callbacks = IndexSet<TypeId>;
 /// module.
 pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Callbacks) {
     let type_table = entry_type_table(project);
-    let mut exports: IndexMap<String, CallbackExport> = IndexMap::default();
+    let mut signatures: IndexSet<String> = IndexSet::default();
+    let mut exports = Vec::new();
     let mut functions = Vec::new();
     for &closure in callbacks {
         let params = closure_params(&type_table.borrow(), closure);
@@ -33,7 +32,7 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
             .map(|&param| boundary(&type_table.borrow(), param))
             .collect();
         let cm_name = callback_export_name(boundary.iter().map(|b| b.word));
-        if exports.contains_key(&cm_name) {
+        if !signatures.insert(cm_name.clone()) {
             continue;
         }
         let core_func = cm_callback_func_name(&cm_name);
@@ -43,11 +42,7 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
             let name = format!("a{i}");
             let slot = u32::try_from(i + 1).expect("a closure takes few parameters");
             tir_params.push(synth_param(&name, slot, b.type_id));
-            args.push(lift_arg(
-                &type_table,
-                local_ref(slot, &name, b.type_id),
-                wado,
-            ));
+            args.push(lift_arg(local_ref(slot, &name, b.type_id), wado));
         }
         let erased = erased_callback_type(&mut type_table.borrow_mut());
         let callee = cast(
@@ -75,28 +70,30 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
             u32::try_from(locals.len()).expect("a closure takes few parameters"),
             locals,
         );
-        {
-            let mut function = function.borrow_mut();
-            function.is_export = true;
-            function.is_cm_export = true;
-        }
-        functions.push(function);
-        let export_params = iter::once(("key".to_string(), "u32"))
+        // A handle is an `externref`, which the Component Model cannot lift:
+        // such a callback is a core export alone, for a host that reaches the
+        // core instance.
+        let export_params: Option<Vec<_>> = iter::once(Some(("key".to_string(), "u32")))
             .chain(
                 boundary
                     .iter()
                     .enumerate()
-                    .map(|(i, b)| (format!("a{i}"), b.primitive)),
+                    .map(|(i, b)| b.primitive.map(|primitive| (format!("a{i}"), primitive))),
             )
             .collect();
-        exports.insert(
-            cm_name.clone(),
-            CallbackExport {
+        {
+            let mut function = function.borrow_mut();
+            function.is_export = true;
+            function.is_cm_export = export_params.is_some();
+        }
+        functions.push(function);
+        if let Some(params) = export_params {
+            exports.push(CallbackExport {
                 cm_name,
                 core_func,
-                params: export_params,
-            },
-        );
+                params,
+            });
+        }
     }
     project
         .tir_modules
@@ -104,7 +101,7 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
         .expect("entry module should exist")
         .functions
         .extend(functions);
-    project.callback_exports = exports.into_values().collect();
+    project.callback_exports = exports;
 }
 
 /// The `fn()` the `core:rt` registry holds every callback as.
@@ -132,18 +129,18 @@ fn closure_params(type_table: &TypeTable, closure: TypeId) -> Vec<TypeId> {
 /// How a closure argument crosses the boundary.
 struct Boundary {
     type_id: TypeId,
-    /// The Wado primitive `type_id` is.
-    primitive: &'static str,
+    /// The Wado primitive `type_id` is; `None` for an extern handle.
+    primitive: Option<&'static str>,
     /// What the export's name calls it. One name must mean one closure type in
-    /// the guest, where a handle crossing as an `f64` is an `i64`.
+    /// the guest, where every extern handle is one `externref`.
     word: &'static str,
 }
 
 fn boundary(type_table: &TypeTable, param: TypeId) -> Boundary {
-    if type_table.is_unrestricted_handle(param) {
+    if type_table.is_extern_handle(param) {
         return Boundary {
-            type_id: TypeTable::F64,
-            primitive: "f64",
+            type_id: param,
+            primitive: None,
             word: "handle",
         };
     }
@@ -153,16 +150,13 @@ fn boundary(type_table: &TypeTable, param: TypeId) -> Boundary {
     };
     Boundary {
         type_id: head,
-        primitive: primitive.as_str(),
+        primitive: Some(primitive.as_str()),
         word: primitive.as_str(),
     }
 }
 
 /// `value`, at its boundary type, as the Wado `param` the closure takes.
-fn lift_arg(type_table: &RefCell<TypeTable>, value: TirExpr, param: TypeId) -> TirExpr {
-    if type_table.borrow().is_unrestricted_handle(param) {
-        return handle_from_f64(value, param);
-    }
+fn lift_arg(value: TirExpr, param: TypeId) -> TirExpr {
     if value.type_id == param {
         return value;
     }

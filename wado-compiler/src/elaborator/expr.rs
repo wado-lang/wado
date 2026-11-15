@@ -281,8 +281,8 @@ fn agrees_with_target(ty: TypeId, target: TypeId) -> bool {
     ty == target || ty == TypeTable::NEVER
 }
 
-/// The reason a cast naming an unrestricted resource is refused: its handle is
-/// an `f64`, and only a type pattern moves it down the `extends` chain.
+/// The reason a cast naming a resource is refused: an extern handle is no
+/// number, and only a type pattern moves it down the `extends` chain.
 fn handle_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
     let is_affine_handle = |ty| tt.is_resource_object(tt.representation_head(ty));
     if is_affine_handle(source) != is_affine_handle(target) {
@@ -291,21 +291,18 @@ fn handle_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<St
                 .to_string(),
         );
     }
-    let other = match (
-        tt.is_unrestricted_handle(source),
-        tt.is_unrestricted_handle(target),
-    ) {
-        (false, false) => return None,
-        (true, true) if tt.resource_join(source, target) == Some(target) => return None,
+    match (tt.is_extern_handle(source), tt.is_extern_handle(target)) {
+        (false, false) => None,
+        (true, true) if tt.resource_join(source, target) == Some(target) => None,
         (true, true) if tt.is_resource_narrowing(source, target) => {
-            return Some("`as` only upcasts a handle; a type pattern narrows one".to_string());
+            Some("`as` only upcasts a handle; a type pattern narrows one".to_string())
         }
-        (true, true) => return Some("neither resource extends the other".to_string()),
-        (true, false) => target,
-        (false, true) => source,
-    };
-    (tt.representation_head(other) != TypeTable::F64)
-        .then(|| "an unrestricted resource handle is an `f64`".to_string())
+        (true, true) => Some("neither resource extends the other".to_string()),
+        (true, false) | (false, true) => Some(
+            "an extern handle converts to no other type; `backed_by` makes one of a guest value"
+                .to_string(),
+        ),
+    }
 }
 
 /// The reason Rust's `as` refuses a cast between scalars, which Wado refuses

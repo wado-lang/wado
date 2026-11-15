@@ -12,13 +12,6 @@ use {
     HtmlInputElement,
     Node,
     Window,
-    DOCUMENT_CLASS,
-    EVENT_CLASS,
-    HANDLE_CLASS_STRIDE,
-    HTML_ELEMENT_CLASS,
-    HTML_INPUT_ELEMENT_CLASS,
-    NODE_CLASS,
-    WINDOW_CLASS,
 } from "./dom.wado";
 
 global NO_NODE: i32 = -1;
@@ -33,8 +26,10 @@ variant Content {
     Text(String),
 }
 
-// Linked as the DOM standard models the tree.
+// Linked as the DOM standard models the tree. A node backs its own handle, and
+// `index` is where the handle finds it again.
 struct SurfaceNode {
+    index: i32,
     content: Content,
     attributes: TreeMap<String, String>,
     value: String,
@@ -96,16 +91,6 @@ fn is_valid_attribute_local_name(name: &String) -> bool {
     return !name.is_empty() && !name.chars().any(|c| is_infra_whitespace(c) || c matches { '\0' | '/' | '=' | '>' });
 }
 
-fn class_of(content: &Content) -> f64 {
-    return match *content {
-        Document => DOCUMENT_CLASS,
-        Window => WINDOW_CLASS,
-        Element(name) => if name == "input" { HTML_INPUT_ELEMENT_CLASS } else { HTML_ELEMENT_CLASS },
-        // The slice has neither `DocumentType` nor `Text`, so these carry `Node`'s class.
-        Doctype | Text(_) => NODE_CLASS,
-    };
-}
-
 fn is_void(local_name: &String) -> bool {
     return *local_name matches { "area" | "base" | "basefont" | "bgsound" | "br" | "col" | "embed" | "frame" | "hr" | "img" | "input" | "keygen" | "link" | "meta" | "param" | "source" | "track" | "wbr" };
 }
@@ -150,13 +135,12 @@ fn strip_and_collapse_ascii_whitespace(text: &String) -> String {
 /// `createHTMLDocument()` makes, and the window holding it.
 pub struct SurfaceDom {
     nodes: List<SurfaceNode>,
-    events: List<SurfaceEvent>,
     listeners: List<Listener>,
 }
 
 impl SurfaceDom {
     pub fn new() -> SurfaceDom {
-        let mut dom = SurfaceDom { nodes: [], events: [], listeners: [] };
+        let mut dom = SurfaceDom { nodes: [], listeners: [] };
         dom.push(Content::Document);
         dom.push(Content::Window);
         dom.append(DOCUMENT_INDEX, dom.push(Content::Doctype));
@@ -176,6 +160,7 @@ impl SurfaceDom {
 
     fn push(&mut self, content: Content) -> i32 {
         self.nodes.push(SurfaceNode {
+            index: self.nodes.len(),
             content,
             attributes: TreeMap::new(),
             value: "",
@@ -192,23 +177,49 @@ impl SurfaceDom {
         return self.push(Content::Element(local_name));
     }
 
-    fn handle(&self, index: i32) -> f64 {
-        return class_of(&self.nodes[index].content) * HANDLE_CLASS_STRIDE + index as f64;
+    fn element_handle(&self, index: i32) -> HtmlElement {
+        let node = &self.nodes[index];
+        if node.content matches { Element(name) && name == "input" } {
+            return HtmlInputElement::backed_by(node);
+        }
+        return HtmlElement::backed_by(node);
+    }
+
+    fn node_handle(&self, index: i32) -> Node {
+        let node = &self.nodes[index];
+        match node.content {
+            Document => {
+                return Document::backed_by(node);
+            },
+            Element(_) => {
+                return self.element_handle(index);
+            },
+            // The slice has neither `DocumentType` nor `Text`, so these carry `Node`'s class.
+            Doctype | Text(_) => {
+                return Node::backed_by(node);
+            },
+            Window => unreachable(),
+        }
     }
 
     // Every event target is a node here, the window included.
-    fn index(&self, target: EventTarget) -> i32 {
-        let handle = target as f64;
-        let index = f64::fmod(handle, HANDLE_CLASS_STRIDE) as i32;
-        assert index < self.nodes.len() && self.handle(index) == handle;
-        return index;
+    fn target_handle(&self, index: i32) -> EventTarget {
+        if index == WINDOW_INDEX {
+            return Window::backed_by(&self.nodes[index]);
+        }
+        return self.node_handle(index);
     }
 
-    fn event_index(&self, event: Event) -> i32 {
-        let handle = event as f64;
-        let index = f64::fmod(handle, HANDLE_CLASS_STRIDE) as i32;
-        assert index < self.events.len() && EVENT_CLASS * HANDLE_CLASS_STRIDE + index as f64 == handle;
-        return index;
+    fn index(&self, target: EventTarget) -> i32 {
+        let Some(node) = target.backing::<SurfaceNode>() else {
+            panic("a node of a SurfaceDom backs the handle");
+        };
+        assert node.index < self.nodes.len() && ref_eq(node, &self.nodes[node.index]), "the handle is of this SurfaceDom";
+        return node.index;
+    }
+
+    fn surface_event(&self, event: Event) -> &mut SurfaceEvent {
+        return event.backing::<SurfaceEvent>().expect("an event of a SurfaceDom backs the handle");
     }
 
     // The DOM standard's event path, which reaches the window from the document.
@@ -225,7 +236,7 @@ impl SurfaceDom {
     // Runs with this DOM reinstalled, since a listener is a program calling back
     // into it. A listener added meanwhile waits for the next dispatch.
     fn invoke(&mut self, target: i32, event: Event, capture: bool) {
-        let type = &self.events[self.event_index(event)].type;
+        let type = &self.surface_event(event).type;
         let mut callbacks: List<fn mut(Event) with Dom> = [];
         for let listener of &self.listeners {
             if listener.target == target && listener.capture == capture && listener.type == *type {
@@ -243,7 +254,7 @@ impl SurfaceDom {
         if index == NO_NODE {
             return null;
         }
-        return Option::Some(self.handle(index) as Node);
+        return Option::Some(self.node_handle(index));
     }
 
     fn local_name_of(&self, element: Element) -> String {
@@ -257,7 +268,7 @@ impl SurfaceDom {
         if index == NO_NODE || !self.nodes[index].content matches { Element(_) } {
             return null;
         }
-        return Option::Some(self.handle(index) as Element);
+        return Option::Some(self.element_handle(index));
     }
 
     fn is_inclusive_ancestor(&self, ancestor: i32, index: i32) -> bool {
@@ -422,17 +433,17 @@ impl SurfaceDom {
 
 impl Dom for SurfaceDom {
     fn window(&mut self) -> Window {
-        resume self.handle(WINDOW_INDEX) as Window;
+        resume Window::backed_by(&self.nodes[WINDOW_INDEX]);
     }
 
     fn document(&mut self) -> Document {
-        resume self.handle(DOCUMENT_INDEX) as Document;
+        resume Document::backed_by(&self.nodes[DOCUMENT_INDEX]);
     }
 }
 
 impl Window for SurfaceDom {
     fn document(&mut self, this: &Window) -> Document {
-        resume self.handle(DOCUMENT_INDEX) as Document;
+        resume Document::backed_by(&self.nodes[DOCUMENT_INDEX]);
     }
 
     ..trap
@@ -459,7 +470,7 @@ impl EventTarget for SurfaceDom {
 
     fn dispatch_event(&mut self, this: &EventTarget, event: Event) -> bool {
         let target = self.index(*this);
-        self.events[self.event_index(event)].target = target;
+        self.surface_event(event).target = target;
         let path = self.event_path(target);
         for let mut i = path.len() - 1; i >= 0; i -= 1 {
             self.invoke(path[i], event, true);
@@ -473,20 +484,19 @@ impl EventTarget for SurfaceDom {
 
 impl Event for SurfaceDom {
     fn new(&mut self, type: String) -> Event {
-        self.events.push(SurfaceEvent { type, target: NO_NODE });
-        resume (EVENT_CLASS * HANDLE_CLASS_STRIDE + (self.events.len() - 1) as f64) as Event;
+        resume Event::backed_by(&SurfaceEvent { type, target: NO_NODE });
     }
 
     fn type(&mut self, this: &Event) -> String {
-        resume self.events[self.event_index(*this)].type;
+        resume self.surface_event(*this).type;
     }
 
     fn target(&mut self, this: &Event) -> Option<EventTarget> {
-        let target = self.events[self.event_index(*this)].target;
+        let target = self.surface_event(*this).target;
         if target == NO_NODE {
             resume null;
         } else {
-            resume Option::Some(self.handle(target) as EventTarget);
+            resume Option::Some(self.target_handle(target));
         }
     }
 
@@ -496,7 +506,7 @@ impl Event for SurfaceDom {
 impl Document for SurfaceDom {
     fn create_element(&mut self, this: &Document, local_name: String, options: Option<String>) -> Element {
         assert is_valid_element_local_name(&local_name), "InvalidCharacterError: not a valid element name";
-        resume self.handle(self.create(local_name.to_ascii_lowercase())) as Element;
+        resume self.element_handle(self.create(local_name.to_ascii_lowercase()));
     }
 
     fn document_element(&mut self, this: &Document) -> Option<Element> {
@@ -508,7 +518,7 @@ impl Document for SurfaceDom {
         if body == NO_NODE {
             resume null;
         } else {
-            resume Option::Some(self.handle(body) as HtmlElement);
+            resume Option::Some(self.element_handle(body));
         }
     }
 

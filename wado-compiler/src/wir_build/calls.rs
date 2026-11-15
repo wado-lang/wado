@@ -8,7 +8,7 @@
 use std::array;
 
 use crate::module_source::ModuleSource;
-use crate::name::{MangledName, cm_import_alias};
+use crate::name::{BACKED_HANDLE_CLASS_FIELD, MangledName, cm_import_alias};
 use crate::rarity::Mark;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
@@ -868,6 +868,56 @@ impl FunctionTranslator<'_, '_> {
                 );
                 let resource = self.translate_operand(args[0].expr);
                 Some(self.handle_of(resource))
+            }
+            "extern_handle_backed_by" => {
+                let class = self
+                    .type_table
+                    .narrowing_classes(type_args[0])
+                    .map_or(0, |classes| i32::from(classes.lo));
+                let value = self.translate_operand(args[0].expr);
+                Some(WirInstr::ExternExternalize(Box::new(self.struct_new(
+                    self.ctx.backed_handle().clone(),
+                    vec![WirInstr::I32Const(class), value],
+                ))))
+            }
+            "extern_handle_is_backed" => {
+                let handle = self.translate_operand(args[0].expr);
+                Some(self.is_backed_handle(handle))
+            }
+            "extern_handle_is_backed_by" => {
+                let backing = self.backing_struct(type_args[1]);
+                let handle_ty = self.wir_type(self.operand_type_id(args[0].expr));
+                let (mut seq, [handle]) = self.spill_operands(args, [handle_ty]);
+                seq.push(WirInstr::If {
+                    condition: Box::new(self.is_backed_handle(handle.clone())),
+                    result: Some(WirType::Bool),
+                    then_body: vec![WirInstr::RefTest {
+                        type_id: backing,
+                        nullable: false,
+                        expr: Box::new(self.backing_of(handle)),
+                    }],
+                    else_body: Some(vec![WirInstr::I32Const(0)]),
+                });
+                Some(WirInstr::Seq(seq))
+            }
+            "extern_handle_backing" => {
+                let handle = self.translate_operand(args[0].expr);
+                Some(WirInstr::RefCast {
+                    type_id: self.backing_struct(type_args[1]),
+                    nullable: false,
+                    expr: Box::new(self.backing_of(handle)),
+                })
+            }
+            "extern_handle_backed_class" => {
+                let handle = self.translate_operand(args[0].expr);
+                Some(self.backed_handle_field(handle, BACKED_HANDLE_CLASS_FIELD, WirType::I32))
+            }
+            "extern_handle_same_backing" => {
+                let [a, b] = [0, 1].map(|i| {
+                    let handle = self.translate_operand(args[i].expr);
+                    Box::new(self.backing_of(handle))
+                });
+                Some(WirInstr::RefEq(a, b))
             }
             "swap_handles" => {
                 let box_ty = self.wir_type(self.operand_type_id(args[0].expr));

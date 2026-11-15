@@ -17,7 +17,7 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
-    cm_raw_call, deref_expr, expr_stmt, field_access, handle_from_f64, handle_to_f64, i32_const,
+    cm_raw_call, deref_expr, expr_stmt, field_access, i32_const,
     if_stmt, internal_call, is_affine_resource, let_mut_stmt, let_stmt, linear_alloc, linear_free,
     local_ref, loop_stmt, option_none, option_some, return_stmt, split_packed_ptr_len,
     struct_literal, synth_param, synth_span, unreachable_call,
@@ -531,7 +531,15 @@ pub(super) fn synthesize_adapter(
         builder.alloc_sync_outptr()
     };
 
-    let raw_call_return_type = wasi_return_type_id(func_info, cm_interface_registry);
+    // A web import answers an extern handle, or an `Option` of one, as the one
+    // `externref` it is in the guest: there is nothing to lift.
+    let extern_ref_return = func_info
+        .return_type
+        .as_ref()
+        .filter(|ty| cm_interface_registry.extern_ref(ty).is_some())
+        .map(|ty| builder.cm_type_id(ty));
+    let raw_call_return_type = extern_ref_return
+        .unwrap_or_else(|| wasi_return_type_id(func_info, cm_interface_registry));
     let mut raw_call = cm_raw_call(
         func_info,
         std::mem::take(&mut builder.flat_args),
@@ -545,6 +553,9 @@ pub(super) fn synthesize_adapter(
         builder.emit_async_result(raw_call, async_outptr, args)
     } else if let Some(outptr) = sync_outptr {
         builder.emit_outptr_result(raw_call, outptr)
+    } else if let Some(handle_type) = extern_ref_return {
+        builder.body_stmts.push(return_stmt(Some(raw_call)));
+        handle_type
     } else if let Some(return_type) = &func_info.return_type {
         builder.emit_flat_result(raw_call, raw_call_return_type, return_type)
     } else {
@@ -880,7 +891,9 @@ impl<'a> AdapterBuilder<'a> {
                 }
                 ParamLowering::Aggregate => {
                     let param_ref = self.param_ref(plan);
-                    if self.params_in_buffer {
+                    // An `Option` of an extern handle is one nullable
+                    // `externref`, as the import takes it.
+                    if self.params_in_buffer || self.registry().extern_ref(plan.ty).is_some() {
                         self.flat_args.push(param_ref);
                     } else {
                         synthesize_flatten_value_to_flat_args(
@@ -897,13 +910,12 @@ impl<'a> AdapterBuilder<'a> {
                 }
                 ParamLowering::Direct => {
                     let range = plan.first_param..plan.first_param + plan.param_count;
-                    // The buffer stores a handle as its guest bits (`scalar_store_op`).
-                    let flat_handle =
-                        !self.params_in_buffer && self.registry().extern_handle(plan.ty).is_some();
                     for param in &self.params[range] {
-                        let arg = local_ref(param.local_index, &param.name, param.type_id);
-                        self.flat_args
-                            .push(if flat_handle { handle_to_f64(arg) } else { arg });
+                        self.flat_args.push(local_ref(
+                            param.local_index,
+                            &param.name,
+                            param.type_id,
+                        ));
                     }
                 }
             }
@@ -1655,11 +1667,6 @@ impl<'a> AdapterBuilder<'a> {
             let lifted_type_id = lifted.type_id;
             self.body_stmts.push(return_stmt(Some(lifted)));
             lifted_type_id
-        } else if let Some(handle) = registry.extern_handle(&resolved) {
-            let handle_type = self.cm_type_id(&handle);
-            self.body_stmts
-                .push(return_stmt(Some(handle_from_f64(raw_call, handle_type))));
-            handle_type
         } else {
             self.body_stmts.push(return_stmt(Some(raw_call)));
             raw_call_type

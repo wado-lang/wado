@@ -1,0 +1,69 @@
+// A guest value backs an extern handle: `backed_by` makes the handle and
+// `backing` gives the value back, by reference.
+#[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=2")]
+resource Node {}
+
+#[cm("example:demo/dom#element", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource Element extends Node {}
+
+#[cm("example:demo/dom#text", linearity = "unrestricted", repr = "externref", classes = "2..=2")]
+resource Text extends Node {}
+
+struct Tag {
+    name: String,
+    uses: i32,
+}
+
+struct Other {
+    name: String,
+    uses: i32,
+}
+
+test "backing gives the value back by reference" {
+    let mut tag = Tag { name: "div", uses: 0 };
+    let element = Element::backed_by(&tag);
+    let Some(back) = element.backing::<Tag>() else {
+        panic("a Tag backs the handle");
+    };
+    back.uses += 1;
+    assert tag.uses == 1;
+    assert back.name == "div";
+}
+
+test "a value of another type is not the backing" {
+    let tag = Tag { name: "div", uses: 0 };
+    let element = Element::backed_by(&tag);
+    assert element.backing::<Other>() matches { None };
+    assert element.backing::<String>() matches { None };
+}
+
+test "an upcast keeps the backing and the class" {
+    let tag = Tag { name: "p", uses: 7 };
+    let node: Node = Element::backed_by(&tag);
+    assert node.backing::<Tag>() matches { Some(t) && t.uses == 7 };
+    assert node matches { _: Element };
+    assert !(node matches { _: Text });
+}
+
+test "a handle is equal to itself and to another of the same value" {
+    let a = Tag { name: "a", uses: 0 };
+    let b = Tag { name: "a", uses: 0 };
+    let first = Element::backed_by(&a);
+    assert first == first;
+    assert first == Element::backed_by(&a);
+    assert first != Element::backed_by(&b);
+    let as_node: Node = first;
+    assert as_node == Node::backed_by(&a);
+}
+
+test "an optional handle is the handle or nothing" {
+    let tag = Tag { name: "a", uses: 0 };
+    let none: Option<Element> = null;
+    let some = Option::Some(Element::backed_by(&tag));
+    assert none == null;
+    assert some != none;
+    assert some == Option::Some(Element::backed_by(&tag));
+}
+
+__DATA__
+{"test": {}}

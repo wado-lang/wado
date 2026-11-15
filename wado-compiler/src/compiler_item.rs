@@ -302,6 +302,9 @@ pub enum CompilerItem {
     /// `AffineResource` — sealed marker every affine resource holds, so
     /// `ResourceId::of` takes one and nothing else.
     AffineResource,
+    /// `ExternHandle` — sealed marker every extern handle holds, whose
+    /// methods back a handle with a guest value (WEP: Extern Handles).
+    ExternHandle,
     /// `AnyBits` — sealed marker of a type every bit pattern of its width is a
     /// value of, so `builtin::load` may read one from any bytes.
     AnyBits,
@@ -729,6 +732,8 @@ pub enum CompilerItem {
     CoverageReport,
     /// `core:rt::handle_class`.
     HandleClass,
+    /// `core:rt::handle_eq`.
+    HandleEq,
     /// `core:rt::inspect_handle`.
     InspectHandle,
     /// `core:rt::memory_to_gc_string`.
@@ -867,6 +872,7 @@ impl CompilerItem {
         Self::Ref,
         Self::RefMut,
         Self::AffineResource,
+        Self::ExternHandle,
         Self::AnyBits,
         Self::Waitable,
         Self::Copyable,
@@ -1035,6 +1041,7 @@ impl CompilerItem {
         Self::CoverageProbe,
         Self::CoverageReport,
         Self::HandleClass,
+        Self::HandleEq,
         Self::InspectHandle,
         Self::MemoryToGcString,
         Self::MemoryToByteList,
@@ -1153,6 +1160,7 @@ impl CompilerItem {
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
             Self::AffineResource => "affine_resource",
+            Self::ExternHandle => "extern_handle",
             Self::AnyBits => "any_bits",
             Self::Waitable => "waitable",
             Self::Copyable => "copyable",
@@ -1262,6 +1270,7 @@ impl CompilerItem {
             Self::CoverageProbe => "coverage_probe",
             Self::CoverageReport => "coverage_report",
             Self::HandleClass => "handle_class",
+            Self::HandleEq => "handle_eq",
             Self::InspectHandle => "inspect_handle",
             Self::MemoryToGcString => "memory_to_gc_string",
             Self::MemoryToByteList => "memory_to_byte_list",
@@ -1378,6 +1387,7 @@ impl CompilerItem {
             | Self::CoverageProbe
             | Self::CoverageReport
             | Self::HandleClass
+            | Self::HandleEq
             | Self::InspectHandle
             | Self::MemoryToGcString
             | Self::MemoryToByteList
@@ -1472,6 +1482,7 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::AffineResource
+            | Self::ExternHandle
             | Self::AnyBits
             | Self::Waitable
             | Self::Copyable
@@ -1740,6 +1751,7 @@ impl CompilerItem {
             | Self::CoverageProbe
             | Self::CoverageReport
             | Self::HandleClass
+            | Self::HandleEq
             | Self::InspectHandle
             | Self::MemoryToGcString
             | Self::MemoryToByteList
@@ -1820,6 +1832,7 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::AffineResource
+            | Self::ExternHandle
             | Self::AnyBits
             | Self::Waitable
             | Self::Copyable

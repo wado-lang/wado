@@ -9,7 +9,9 @@ use std::cell::RefCell;
 use crate::ast::{AstId, NamedType, Type};
 use crate::cm_abi;
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{CmInterfaceRegistry, cm_layout_with_registry};
+use crate::component_model::{
+    CmInterfaceRegistry, EXTERN_HANDLE_IN_AGGREGATE, cm_layout_with_registry,
+};
 use crate::hashmap::IndexMap;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::primitive::PrimitiveType;
@@ -963,11 +965,11 @@ fn flat_types_from_type_id_inner(
             }
         }
         _ if type_table.is_resource_type(type_id) => {
-            out.push(if type_table.is_unrestricted_handle(type_id) {
-                cm_abi::CmValType::F64
-            } else {
-                cm_abi::CmValType::I32
-            });
+            assert!(
+                !type_table.is_extern_handle(type_id),
+                "{EXTERN_HANDLE_IN_AGGREGATE}"
+            );
+            out.push(cm_abi::CmValType::I32);
         }
         ResolvedType::Enum { .. } => out.push(cm_abi::CmValType::I32),
         ResolvedType::Tuple(elems) => {

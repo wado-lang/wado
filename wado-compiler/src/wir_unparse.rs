@@ -2423,6 +2423,7 @@ fn format_abstract_heap_type(ht: &WirAbstractHeapType) -> &'static str {
         WirAbstractHeapType::None => "none",
         WirAbstractHeapType::NoFunc => "nofunc",
         WirAbstractHeapType::Extern => "extern",
+        WirAbstractHeapType::NoExtern => "noextern",
     }
 }
 

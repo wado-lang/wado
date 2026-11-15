@@ -681,29 +681,20 @@ impl TypeTable {
             })
     }
 
-    /// The scalar a resource handle is in the guest: the `u64` bits of the `f64`
-    /// an unrestricted handle is outside it, or an `i32`. `None` for a non-resource.
-    #[must_use]
-    pub fn handle_scalar(&self, ty: TypeId) -> Option<TypeId> {
-        let def = self.resource_def_of(ty)?;
-        Some(if self.is_unrestricted_resource(def) {
-            Self::U64
-        } else {
-            Self::I32
-        })
-    }
-
     /// Whether `ty` is an affine resource, which the guest holds as a GC object
     /// boxing its `i32` handle.
     #[must_use]
     pub fn is_resource_object(&self, ty: TypeId) -> bool {
-        self.handle_scalar(ty) == Some(Self::I32)
+        self.resource_def_of(ty)
+            .is_some_and(|def| !self.is_unrestricted_resource(def))
     }
 
-    /// Whether `ty` is an unrestricted resource, whose handle is an `f64` outside the guest.
+    /// Whether `ty` is an extern handle: one `externref`, the host's object or
+    /// a guest value's backing struct.
     #[must_use]
-    pub fn is_unrestricted_handle(&self, ty: TypeId) -> bool {
-        self.handle_scalar(ty) == Some(Self::U64)
+    pub fn is_extern_handle(&self, ty: TypeId) -> bool {
+        self.resource_def_of(ty)
+            .is_some_and(|def| self.is_unrestricted_resource(def))
     }
 
     /// Record `child extends parent`, already validated by the caller.
@@ -826,12 +817,12 @@ impl TypeTable {
         value != target && self.is_resource_subtype(target, value)
     }
 
-    /// Whether `==` compares `a` and `b` as handles: both unrestricted, one
-    /// extending the other. The host interns handles, so equal means same object.
+    /// Whether `==` compares `a` and `b` as handles: both extern handles, one
+    /// extending the other.
     #[must_use]
     pub fn handles_compare(&self, a: TypeId, b: TypeId) -> bool {
         self.resource_join(a, b)
-            .is_some_and(|joined| self.is_unrestricted_handle(joined))
+            .is_some_and(|joined| self.is_extern_handle(joined))
     }
 
     /// Attach the program's declarations, so a nominal type can render its

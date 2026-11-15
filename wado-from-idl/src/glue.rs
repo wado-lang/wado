@@ -5,38 +5,28 @@ use std::cmp::Reverse;
 use std::fmt::Write;
 
 use heck::ToLowerCamelCase;
-use wado_compiler::ast::HandleClasses;
 use wado_compiler::name::callback_export_name;
 
 use crate::ir::{WadoFunction, WadoType};
 use crate::webidl::{JsFunction, JsMember, WebIdlOutput};
 
-/// Handles are interned, so `==` on two of them is identity. The `$` prefix keeps
-/// the runtime's names apart from every `WebIDL` argument name.
+/// A handle is the object itself, so the guest holds it as an `externref` and
+/// `==` on two of them is identity. The `$` prefix keeps the runtime's names
+/// apart from every `WebIDL` argument name.
 const RUNTIME: &str = r#"
-const $objects = [];
-const $handles = new Map();
-
-function $handle(object) {
-  let handle = $handles.get(object);
-  if (handle === undefined) {
-    const entry = $CLASSES.find(
-      ([name]) => globalThis[name] !== undefined && object instanceof globalThis[name],
-    );
-    if (entry === undefined) {
-      throw new TypeError(`${object} is an instance of no interface this package declares`);
-    }
-    handle = entry[1] * $STRIDE + $objects.push(object) - 1;
-    $handles.set(object, handle);
+// The class of the deepest interface `object` is an instance of.
+export function $classOf(object) {
+  const entry = $CLASSES.find(
+    ([name]) => globalThis[name] !== undefined && object instanceof globalThis[name],
+  );
+  if (entry === undefined) {
+    throw new TypeError(`${object} is an instance of no interface this package declares`);
   }
-  return handle;
+  return entry[1];
 }
 
-const $object = (handle) => $objects[handle % $STRIDE];
 const $some = (f) => (value) => (value === undefined ? undefined : f(value));
 const $nullable = (f) => (value) => (value === null ? undefined : f(value));
-const $someObject = $some($object);
-const $nullableHandle = $nullable($handle);
 const $someNumber = $some(Number);
 const $nullableBigInt = $nullable(BigInt);
 
@@ -123,7 +113,6 @@ pub fn generate(output: &WebIdlOutput, source: &str) -> String {
          // The `{}` module's imports, answered by the browser's own objects.\n\n",
         module.package_name
     );
-    writeln!(out, "const $STRIDE = {};", HandleClasses::STRIDE).unwrap();
     let mut classes: Vec<(&str, u16)> = module
         .resources
         .iter()
@@ -229,8 +218,8 @@ fn from_guest(ty: &WadoType, value: &str) -> String {
             if element == "x" {
                 value.to_string()
             } else {
-                // jco lifts a numeric list (a handle's `f64` among them) to a
-                // typed array, whose `map` would coerce back to its element type.
+                // jco lifts a numeric list to a typed array, whose `map` would
+                // coerce back to its element type.
                 format!("Array.from({value}, (x) => {element})")
             }
         }
@@ -279,17 +268,17 @@ fn conversion(ty: &WadoType) -> Option<(&'static str, &'static str)> {
 
 #[derive(Clone, Copy)]
 enum Conversion {
-    Handle,
     BigInt,
 }
 
 impl Conversion {
     fn of(ty: &WadoType) -> Option<Self> {
         match ty {
-            WadoType::Named(_) => Some(Self::Handle),
             WadoType::Borrow(inner) => Self::of(inner),
             WadoType::I64 | WadoType::U64 => Some(Self::BigInt),
-            WadoType::Bool
+            // A handle is the object itself.
+            WadoType::Named(_)
+            | WadoType::Bool
             | WadoType::I8
             | WadoType::I16
             | WadoType::I32
@@ -317,8 +306,6 @@ impl Conversion {
 
     const fn functions(self, optional: bool) -> (&'static str, &'static str) {
         match (self, optional) {
-            (Self::Handle, false) => ("$object", "$handle"),
-            (Self::Handle, true) => ("$someObject", "$nullableHandle"),
             (Self::BigInt, false) => ("Number", "BigInt"),
             (Self::BigInt, true) => ("$someNumber", "$nullableBigInt"),
         }

@@ -62,6 +62,9 @@ pub struct WirContext<'a> {
     /// place, so a reference to the resource sees a store through another
     /// (WEP: Affine Types). Set while types register, before any is looked up.
     pub handle_box: Option<WirTypeId>,
+    /// The struct behind an extern handle a guest value backs. Set beside
+    /// `handle_box`.
+    pub backed_handle: Option<WirTypeId>,
     /// Each cell struct by [`TypeTable::cell_struct_name`].
     pub cell_type_map: IndexMap<String, WirTypeId>,
     /// What [`TypeTable::holds_affine_resource`] has answered, by type.
@@ -297,6 +300,7 @@ impl<'a> WirContext<'a> {
             struct_decls: StructDecls::new(&package.structs),
             wado_types: IndexMap::default(),
             handle_box: None,
+            backed_handle: None,
             cell_type_map: IndexMap::default(),
             affine: TypeMemo::default(),
             variant_case_info: IndexMap::default(),
@@ -684,6 +688,12 @@ impl<'a> WirContext<'a> {
             .expect("`$Resource` registers before any type is looked up")
     }
 
+    pub fn backed_handle(&self) -> &WirTypeId {
+        self.backed_handle
+            .as_ref()
+            .expect("`$BackedHandle` registers before any type is looked up")
+    }
+
     /// Convert a TIR `TypeId` to a `WirType`. Registration reserves every
     /// concrete type before it defines any, so a miss is a type registration
     /// never saw.
@@ -803,8 +813,11 @@ impl<'a> WirContext<'a> {
             // the same absence `Unit` denotes.
             ResolvedType::Never => WirType::Unit,
             ResolvedType::Resource { .. } => {
-                if type_table.is_unrestricted_handle(type_id) {
-                    self.lookup_wir_type(type_table, TypeTable::U64)?
+                if type_table.is_extern_handle(type_id) {
+                    WirType::AbstractRef {
+                        heap_type: WirAbstractHeapType::Extern,
+                        nullable: false,
+                    }
                 } else {
                     Self::ref_to(self.handle_box())
                 }

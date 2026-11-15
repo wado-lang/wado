@@ -945,6 +945,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             CompilerItem::Ref,
             CompilerItem::RefMut,
             CompilerItem::AffineResource,
+            CompilerItem::ExternHandle,
             CompilerItem::AnyBits,
             CompilerItem::Waitable,
         ]) {

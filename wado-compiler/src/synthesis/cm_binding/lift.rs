@@ -9,7 +9,9 @@
 
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
-use crate::component_model::{CmVariantCase, EMPTY_TUPLE_AT_BOUNDARY};
+use crate::component_model::{
+    CmVariantCase, EMPTY_TUPLE_AT_BOUNDARY, EXTERN_HANDLE_IN_AGGREGATE,
+};
 use crate::module_source::ModuleSource;
 use crate::optimize::pass_dump;
 use crate::tir::{TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirStmt, TypeId};
@@ -17,7 +19,7 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast, expr_stmt,
-    generic_method_call, generic_static_call, handle_from_f64, i32_const, if_stmt, internal_call,
+    generic_method_call, generic_static_call, i32_const, if_stmt, internal_call,
     let_mut_stmt, let_stmt, linear_free, local_ref, loop_stmt, option_none, option_some,
     struct_literal, synth_span,
 };
@@ -98,9 +100,8 @@ pub(super) fn synthesize_lift_into(
             locals,
             ctx,
         ),
-        _ if ctx.type_table.borrow().is_unrestricted_handle(target) => {
-            let handle = synthesize_lift(ty, addr, next_local, stmts, locals, ctx);
-            handle_from_f64(handle, target)
+        _ if ctx.type_table.borrow().is_extern_handle(target) => {
+            unreachable!("{EXTERN_HANDLE_IN_AGGREGATE}")
         }
         _ => synthesize_lift(ty, addr, next_local, stmts, locals, ctx),
     }

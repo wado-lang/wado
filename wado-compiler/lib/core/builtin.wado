@@ -779,6 +779,37 @@ internal fn resource_handle<affine R>(r: &R) -> i32;
 #[side_effect(opaque)]
 internal fn zero_handle<R>(r: &R);
 
+/// The extern handle of type `R` that `value` backs, carrying `R`'s own class.
+/// The handle keeps the reference itself, and may hand it to the host.
+#[storage(opaque)]
+#[side_effect(none)]
+internal fn extern_handle_backed_by<R, T>(value: &T) -> R;
+
+/// Whether a guest value backs `handle`, rather than a host object.
+#[storage(none)]
+#[side_effect(none)]
+internal fn extern_handle_is_backed<R>(handle: R) -> bool;
+
+/// Whether a `T` backs `handle`.
+#[storage(none)]
+#[side_effect(none)]
+internal fn extern_handle_is_backed_by<R, T>(handle: R) -> bool;
+
+/// The `T` backing `handle`. Traps unless a `T` backs it.
+#[storage(opaque)]
+#[side_effect(trap)]
+internal fn extern_handle_backing<R, T>(handle: R) -> &mut T;
+
+/// The class a backed `handle` carries. Traps on a host object.
+#[storage(none)]
+#[side_effect(trap)]
+internal fn extern_handle_backed_class<R>(handle: R) -> i32;
+
+/// Whether one guest value backs both handles. Traps on a host object.
+#[storage(none)]
+#[side_effect(trap)]
+internal fn extern_handle_same_backing<R>(a: R, b: R) -> bool;
+
 /// Calls stdout's write_via_stream indirectly (ambient, no effect required).
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stdout::write_via_stream() through the effect system.

@@ -322,37 +322,36 @@ internal fn cm_callback(key: u32) -> fn() {
     return CM_CALLBACKS[key as i32];
 }
 
-global HANDLE_LIMIT: f64 = 9007199254740992.0;
+/// Any extern handle: every one is the same Wasm value, whatever resource
+/// declares it.
+#[cm("wado:extern/object", linearity = "unrestricted", repr = "externref")]
+internal resource ExternObject {}
 
-/// The class a host-minted unrestricted handle carries, `class * stride + index`,
-/// or -1 for an `f64` no host mints.
+/// The class an extern handle carries.
 #[compiler_item("handle_class")]
-internal fn handle_class(handle: f64, stride: f64) -> i32 {
-    let sign_clear = builtin::i64_reinterpret_f64(handle) >= 0;
-    if !(sign_clear && handle < HANDLE_LIMIT && builtin::f64_floor(handle) == handle) {
-        return -1;
+internal fn handle_class(handle: ExternObject) -> i32 {
+    if builtin::extern_handle_is_backed(handle) {
+        return builtin::extern_handle_backed_class(handle);
     }
-    return builtin::f64_floor(handle / stride) as i32;
+    unreachable();
 }
 
-/// Writes an unrestricted handle as `name { type_id, object_id }`, or as
-/// `name { handle }` where `class` is -1.
-#[compiler_item("inspect_handle")]
-internal fn inspect_handle(f: &mut Formatter, name: String, handle: f64, class: i32, stride: f64) {
-    struct_open(f, name);
-    if class < 0 {
-        struct_field(f, "handle", true);
-        handle.inspect(f);
-    } else {
-        struct_field(f, "type_id", true);
-        class.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "object_id", false);
-        let object_id = (handle - class as f64 * stride) as i64;
-        object_id.inspect(f);
+/// Whether two extern handles are one object.
+#[compiler_item("handle_eq")]
+internal fn handle_eq(a: ExternObject, b: ExternObject) -> bool {
+    if builtin::extern_handle_is_backed(a) {
+        return builtin::extern_handle_is_backed(b) && builtin::extern_handle_same_backing(a, b);
     }
-    struct_field_end(f);
-    struct_close(f);
+    if builtin::extern_handle_is_backed(b) {
+        return false;
+    }
+    unreachable();
+}
+
+/// Writes an extern handle as the name of the resource its class names.
+#[compiler_item("inspect_handle")]
+internal fn inspect_handle(f: &mut Formatter, name: String) {
+    f.write_str(&name);
 }
 
 // === CM Resource Method Adapters ===

@@ -30,10 +30,10 @@ use crate::type_table::TypeTable;
 
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmStreamPayload};
 use crate::synthesis::common::{
-    alloc_named_local, assign, binary, block, break_stmt, cast, cm_canonical_call, entry_call,
-    expr_stmt, handle_scalar, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    linear_alloc, linear_free, local_ref, loop_stmt, option_none, option_some, return_stmt,
-    struct_literal, synth_span,
+    affine_handle, alloc_named_local, assign, binary, block, break_stmt, cast, cm_canonical_call,
+    entry_call, expr_stmt, i32_const, i64_const, if_stmt, internal_call, is_affine_resource,
+    let_mut_stmt, let_stmt, linear_alloc, linear_free, local_ref, loop_stmt, option_none,
+    option_some, return_stmt, struct_literal, synth_span,
 };
 
 use super::synthesize_lift;
@@ -1799,10 +1799,7 @@ impl CmMethodRewriter<'_> {
         let taken_args: Vec<TirExpr> = std::mem::take(args)
             .into_vec()
             .into_iter()
-            .map(|a| match handle_scalar(self.tt, a.expr.type_id) {
-                Some(scalar) => cast(a.expr, scalar),
-                None => a.expr,
-            })
+            .map(|a| affine_handle(a.expr, self.tt))
             .collect();
 
         *expr = match target {
@@ -1810,13 +1807,13 @@ impl CmMethodRewriter<'_> {
                 cm_canonical_call(intrinsic, taken_args, expr.type_id)
             }
             // A `core:rt` binding returns a resource as its bare handle.
-            BindingTarget::Internal(item) => match handle_scalar(self.tt, expr.type_id) {
-                Some(scalar) => cast(
-                    internal_call(item.attr_name(), taken_args, scalar),
-                    expr.type_id,
-                ),
-                None => internal_call(item.attr_name(), taken_args, expr.type_id),
-            },
+            BindingTarget::Internal(item) if is_affine_resource(self.tt, expr.type_id) => cast(
+                internal_call(item.attr_name(), taken_args, TypeTable::I32),
+                expr.type_id,
+            ),
+            BindingTarget::Internal(item) => {
+                internal_call(item.attr_name(), taken_args, expr.type_id)
+            }
             BindingTarget::Entry(name) => {
                 entry_call(&name, taken_args, expr.type_id, self.entry_source.clone())
             }

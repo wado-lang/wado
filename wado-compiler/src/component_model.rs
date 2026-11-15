@@ -701,6 +701,20 @@ pub struct CmFunctionInfo {
     pub world: Option<WorldFunctionSite>,
 }
 
+/// Why no synthesis meets an extern handle inside another value.
+pub const EXTERN_HANDLE_IN_AGGREGATE: &str = "an extern handle crosses only as a whole parameter \
+     or result: `is_function_supported` refuses an import holding one elsewhere, and the \
+     elaborator an export holding one at all";
+
+/// What one `externref` of a web import's signature carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExternRef {
+    /// An extern handle, never null.
+    Handle,
+    /// An `Option` of an extern handle: null is `None`.
+    Optional,
+}
+
 /// The dependency component exporting a world function, and the label the
 /// program imports it under: a world function's name is the component's own,
 /// so two dependencies may each export one of a name.
@@ -1860,6 +1874,60 @@ impl CmInterfaceRegistry {
         let source = self.source_interface(named)?;
         self.is_unrestricted_resource(&source, &named.name)
             .then_some(handle)
+    }
+
+    /// How `ty` crosses as one `externref`, where it does: an extern handle, or
+    /// an `Option` of one whose `None` is the null reference.
+    #[must_use]
+    pub fn extern_ref(&self, ty: &Type) -> Option<ExternRef> {
+        if self.extern_handle(ty).is_some() {
+            return Some(ExternRef::Handle);
+        }
+        let Type::Generic(option) = ty else {
+            return None;
+        };
+        (self.type_decls.is(option.id, CompilerItem::Option)
+            && self.extern_handle(&option.args[0]).is_some())
+        .then_some(ExternRef::Optional)
+    }
+
+    fn mentions_extern_handle(&self, ty: &Type) -> bool {
+        ty.any(&mut |ty| self.extern_handle(ty).is_some())
+    }
+
+    /// Whether `func` is a web import: its signature holds an extern handle, so
+    /// it is a core import of the main module and no component import
+    /// (WEP: Extern Handles).
+    #[must_use]
+    pub fn is_extern_import(&self, func: &CmFunctionInfo) -> bool {
+        func.params
+            .iter()
+            .map(|(_, _, ty)| ty)
+            .chain(func.callbacks.iter().map(|(_, ty)| ty))
+            .chain(&func.return_type)
+            .any(|ty| self.mentions_extern_handle(ty))
+    }
+
+    /// Whether every extern handle in `func`'s signature crosses as an
+    /// `externref` of its own. One inside a list, a record or another variant
+    /// would cross as a slot of the handle table, which is not built yet.
+    fn extern_handles_cross(&self, func: &CmFunctionInfo) -> bool {
+        let crosses = |ty: &Type| self.extern_ref(ty).is_some() || !self.mentions_extern_handle(ty);
+        func.params.iter().all(|(_, _, ty)| crosses(ty))
+            && func.return_type.as_ref().is_none_or(crosses)
+            && !self.params_in_buffer(func.params.iter().map(|(_, _, ty)| ty), func.is_async)
+            && !func.is_async
+    }
+
+    /// The core values `ty` crosses as, whole: one for an `externref`, the
+    /// canonical ABI's otherwise.
+    #[must_use]
+    pub fn flat_count(&self, ty: &Type) -> usize {
+        if self.extern_ref(ty).is_some() {
+            1
+        } else {
+            self.cm_flatten(ty).len()
+        }
     }
 
     /// The CM type of a declared parameter: an extern-handle loses its
@@ -3395,9 +3463,11 @@ impl CmInterfaceRegistry {
         // Parameter types at the boundary's view (an extern handle is an `f64`),
         // and the return type with its newtypes (`Mark`, `Duration`, `Instant`)
         // resolved to their bases.
-        func.params
-            .iter()
-            .all(|(_, _, ty)| known.param_supported(&self.resolve_type(ty)))
+        (!self.is_extern_import(func) || self.extern_handles_cross(func))
+            && func
+                .params
+                .iter()
+                .all(|(_, _, ty)| known.param_supported(&self.resolve_type(ty)))
             && func
                 .return_type
                 .as_ref()
@@ -3685,7 +3755,7 @@ impl CmInterfaceRegistry {
         params: impl IntoIterator<Item = &'t Type>,
         is_async: bool,
     ) -> bool {
-        let flat_count = params.into_iter().map(|ty| self.cm_flatten(ty).len()).sum();
+        let flat_count = params.into_iter().map(|ty| self.flat_count(ty)).sum();
         flat_params_in_buffer(flat_count, is_async)
     }
 
@@ -4969,7 +5039,7 @@ pub const EMPTY_TUPLE_AT_BOUNDARY: &str = "the empty tuple `[]` has no Component
 /// (`{ n: u64 }` -> `[i64]`) returns flat. Shared by the import-binding
 /// synthesizer and the core functype builder so the two never disagree.
 pub fn cm_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
-    registry.cm_flatten(ty).len() > MAX_FLAT_RESULTS
+    registry.flat_count(ty) > MAX_FLAT_RESULTS
 }
 
 /// The CM canonical-ABI size and alignment of a registered variant, `None` for

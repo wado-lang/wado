@@ -6,7 +6,7 @@
 
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
-use crate::component_model::EMPTY_TUPLE_AT_BOUNDARY;
+use crate::component_model::{EMPTY_TUPLE_AT_BOUNDARY, EXTERN_HANDLE_IN_AGGREGATE};
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::{
@@ -17,7 +17,7 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, cast, deref_expr,
-    expr_stmt, generic_method_call, generic_method_call_monomorphized, handle_to_f64, i32_const,
+    expr_stmt, generic_method_call, generic_method_call_monomorphized, i32_const,
     i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt, linear_alloc, local_ref, loop_stmt,
     ref_expr, split_packed_ptr_len, synth_span,
 };
@@ -1456,7 +1456,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         Type::Named(_) | Type::Reference(_) | Type::MutReference(_)
             if ctx.cm_interface_registry.extern_handle(&resolved).is_some() =>
         {
-            flat_args.push(handle_to_f64(value));
+            unreachable!("{EXTERN_HANDLE_IN_AGGREGATE}");
         }
         // Primitive, flags, resource, or borrow handle: the value is the single flat arg.
         Type::Named(_) | Type::Reference(_) | Type::MutReference(_) => {

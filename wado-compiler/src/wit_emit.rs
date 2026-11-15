@@ -989,9 +989,6 @@ impl<'a> Emitter<'a> {
     /// resource becomes its bare WIT name (`own<R>`); a borrowed one becomes
     /// `borrow<R>`.
     fn map_resolved_leaf(&mut self, id: TypeId) -> Result<Type, WitEmitError> {
-        if self.types.is_unrestricted_handle(id) {
-            return Ok(Type::F64);
-        }
         match self.types.get(id) {
             ResolvedType::Primitive(p) => map_primitive(*p),
             ResolvedType::Struct { .. } if self.types.is_string(id) => Ok(Type::String),
@@ -1019,9 +1016,7 @@ impl<'a> Emitter<'a> {
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let inner = *inner;
-                if self.types.is_unrestricted_handle(inner) {
-                    Ok(Type::F64)
-                } else if self.is_named_resource(inner) {
+                if self.is_named_resource(inner) {
                     let def = self
                         .types
                         .nominal_def(inner)

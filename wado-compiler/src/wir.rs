@@ -800,6 +800,10 @@ impl WirType {
     }
 
     /// Returns true if this type is a non-nullable reference.
+    pub fn is_nullable_ref(&self) -> bool {
+        self.is_reference() && !self.is_nonnull_ref()
+    }
+
     pub fn is_nonnull_ref(&self) -> bool {
         matches!(
             self,
@@ -875,8 +879,8 @@ impl WirType {
                     | WirAbstractHeapType::Struct
                     | WirAbstractHeapType::Array
                     | WirAbstractHeapType::None => WirAbstractHeapType::None,
-                    WirAbstractHeapType::Extern => {
-                        panic!("[WIR] WIR has no `noextern` to default an externref")
+                    WirAbstractHeapType::Extern | WirAbstractHeapType::NoExtern => {
+                        WirAbstractHeapType::NoExtern
                     }
                 },
             },
@@ -951,6 +955,7 @@ pub enum WirAbstractHeapType {
     None,
     NoFunc,
     Extern,
+    NoExtern,
 }
 
 /// A function declaration with optional body.
@@ -1035,7 +1040,7 @@ impl WirLocals {
     pub fn is_nullable_ref(&self, name: &str) -> bool {
         self.types
             .get(name)
-            .is_some_and(|ty| ty.is_reference() && !ty.is_nonnull_ref())
+            .is_some_and(WirType::is_nullable_ref)
     }
 
     /// Declared locals, `(name, type)`, in table order.

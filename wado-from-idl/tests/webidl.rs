@@ -509,11 +509,11 @@ fn a_variadic_argument_is_a_list_the_glue_spreads() {
         .expect("the slice should transform")
         .glue;
     assert!(
-        glue.contains("  append(self, nodes) {\n    $object(self).append(...Array.from(nodes, (x) => $object(x)));\n  },"),
+        glue.contains("  append(self, nodes) {\n    self.append(...nodes);\n  },"),
         "{glue}"
     );
     assert!(
-        glue.contains("$object(self).write(prefix, ...text);"),
+        glue.contains("self.write(prefix, ...text);"),
         "{glue}"
     );
 }

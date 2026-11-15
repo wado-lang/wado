@@ -720,6 +720,12 @@ pub fn cm_dependency_interface(interface: &ast::CmImport, component: &str) -> as
 // which is what identifies it: a Wado spelling such as `Stdout::write_via_stream`
 // is shared by same-named interfaces.
 
+/// The module the main module imports its web imports from: the functions
+/// whose signature holds an extern handle, which are no component imports. A
+/// trapping module the component embeds satisfies it, and a browser's loader
+/// replaces that one (WEP: Extern Handles).
+pub const EXTERN_IMPORT_MODULE: &str = "extern";
+
 /// The core function a CM import lowers to.
 pub fn cm_import_alias(cm_identifier: &str) -> String {
     format!("{INTERNAL_PREFIX}{cm_identifier}")
@@ -847,6 +853,13 @@ pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
 /// The WIR struct an affine resource is: the object holding its handle. Not a
 /// cell, which the optimizer scalarizes as a value with no identity.
 pub const RESOURCE_OBJECT_STRUCT: &str = "$Resource";
+
+/// The WIR struct behind an extern handle a guest value backs: the handle's
+/// class and the value. A host object is never one, which is how the two are
+/// told apart (WEP: Extern Handles).
+pub const BACKED_HANDLE_STRUCT: &str = "$BackedHandle";
+pub const BACKED_HANDLE_CLASS_FIELD: &str = "class";
+pub const BACKED_HANDLE_VALUE_FIELD: &str = "value";
 
 /// The object of one field, `value`, that a reference to a primitive, an enum,
 /// a variant, a function or another reference points at.
