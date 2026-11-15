@@ -270,25 +270,28 @@ pub(crate) fn reparsed_snapshot_module<'a>(
 ///
 /// `live` stands in for the gating reify would have applied had the module been
 /// reified here: a cached function this program cannot reach is dropped, not
-/// cloned.
+/// cloned. It is `None` while a dependency snapshot builds, which keeps every
+/// function and, being a snapshot that no pass mutates, shares them with
+/// `snap_module` rather than holding a second copy of the stdlib.
 pub(crate) fn rehydrate_tir_module(
     snap_module: &TirModule,
     fresh_type_table: &Rc<RefCell<TypeTable>>,
     live: Option<&IndexSet<DefId>>,
     fn_remap: &mut IndexMap<*const RefCell<TirFunction>, Rc<RefCell<TirFunction>>>,
 ) -> TirModule {
+    let mut new_module = snap_module.clone();
+    new_module.type_table = Rc::clone(fresh_type_table);
+    let Some(live) = live else {
+        return new_module;
+    };
     // A synthesized function declares nothing, so nothing in the graph can name
     // it and it is never dropped. Nor is a declaration stating its facts: the
     // call naming it may be one synthesis mints later, and link snapshots it.
     let reachable = |f: &Rc<RefCell<TirFunction>>| {
         let f = f.borrow();
-        match (live, f.def_id) {
-            (Some(live), Some(def)) => f.declared.is_some() || live.contains(&def),
-            _ => true,
-        }
+        f.def_id
+            .is_none_or(|def| f.declared.is_some() || live.contains(&def))
     };
-    let mut new_module = snap_module.clone();
-    new_module.type_table = Rc::clone(fresh_type_table);
     new_module.functions = snap_module
         .functions
         .iter()
