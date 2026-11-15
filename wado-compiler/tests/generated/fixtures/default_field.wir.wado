@@ -7126,7 +7126,7 @@ fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:pr
             l1039: loop {
                 break_if b1038 (builtin::i64_extend_i32_s(from) + 3_i64) >= builtin::i64_extend_i32_s($mv$self$count);
                 break_if b1038 (builtin::i64_extend_i32_s(from) + 3_i64) >=u builtin::i64_extend_i32_u(builtin::array_len($mv$self$alive));
-                break_if b1038 ((((builtin::array_get_value<bool>($mv$self$alive, from) == 0) == 0) | ((builtin::array_get_value<bool>($mv$self$alive, from + 1) == 0) == 0)) | ((builtin::array_get_value<bool>($mv$self$alive, from + 2) == 0) == 0)) | ((builtin::array_get_value<bool>($mv$self$alive, from + 3) == 0) == 0);
+                break_if b1038 ((builtin::array_get_value<bool>($mv$self$alive, from) | builtin::array_get_value<bool>($mv$self$alive, from + 1)) | builtin::array_get_value<bool>($mv$self$alive, from + 2)) | builtin::array_get_value<bool>($mv$self$alive, from + 3);
                 from = from + 4;
                 continue l1039;
             };
