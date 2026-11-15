@@ -498,7 +498,12 @@ fn register_fn_closure(
         return;
     }
     for &part in params.iter().chain([return_type]) {
-        register_fn_closure(ctx, type_table, erased, type_table.representation_head(part));
+        register_fn_closure(
+            ctx,
+            type_table,
+            erased,
+            type_table.representation_head(part),
+        );
     }
 
     // Unit params are erased from the canonical signature, matching the

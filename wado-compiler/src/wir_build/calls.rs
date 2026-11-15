@@ -1617,8 +1617,8 @@ impl FunctionTranslator<'_, '_> {
             nullable: true,
         };
 
-        // A function type with no closure of its own lowers to `structref`,
-        // and casts down to the closure of its signature.
+        // A function type absent from `fn_closure_types` lowers to
+        // `structref`, and casts down to the closure of its signature.
         let callee_closure = if self.ctx.fn_closure_types.contains_key(&callee_ty) {
             callee_wir
         } else {
