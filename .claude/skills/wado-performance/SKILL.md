@@ -240,9 +240,9 @@ paid on a benchmark `fts` never touched.
   covers, against the one partial block it always wastes — under ~16 bytes per
   run it is a loss. **Four is where the sharing stops**: a wider block only adds
   lone gets, and measures worse the wider it gets (`dead-ends.md`).
-  **`array.set` shares nothing**: a store may write the header as far as
-  Cranelift knows, so four adjacent sets reload the length four times. Only
-  `array.copy` / `array.fill` amortise a write.
+  **`array.set` shares the length too**: wasmtime reads the length read-only
+  and in an alias region of its own, so an element store does not clobber it
+  and adjacent sets share one load, as gets do.
 - **SROA is priced by the aggregate's width, not by the allocation it removes.**
   Splitting a 40-slot tuple into locals deletes one `struct.new` per struct and
   costs 6.5% on cbor-twitter: past the register file, forty `ref` locals live
