@@ -262,27 +262,40 @@ pub(crate) fn reparsed_snapshot_module<'a>(
     })
 }
 
-/// Deep-clone a cached [`TirModule`] for a per-compile pipeline. A naïve `Clone`
-/// would only bump the snapshot's shared `Rc`s, letting an optimiser pass
-/// corrupt it, so the function `Rc`s are rebuilt fresh — memoised by pointer
-/// identity, preserving aliasing within the module — and `type_table` repointed.
-/// Embedded `TypeId`s stay valid, the per-compile table being a seeded clone.
-///
-/// `live` stands in for the gating reify would have applied had the module been
-/// reified here: a cached function this program cannot reach is dropped, not
-/// cloned. It is `None` while a dependency snapshot builds, which keeps every
-/// function and, being a snapshot that no pass mutates, shares them with
-/// `snap_module` rather than holding a second copy of the stdlib.
+/// Who takes a rehydrated module's functions.
+pub(crate) enum Rehydrate<'a> {
+    /// A program, whose passes mutate them: each is copied, memoised by
+    /// pointer identity to keep aliasing within the module. `live` stands in
+    /// for the gating reify would have applied had the module been reified
+    /// here, so a function the program cannot reach is dropped, not copied.
+    Owned {
+        live: &'a IndexSet<DefId>,
+        fn_remap: &'a mut IndexMap<*const RefCell<TirFunction>, Rc<RefCell<TirFunction>>>,
+    },
+    /// A dependency snapshot building, which serves every later program and
+    /// which no pass mutates: it keeps every function, shared with the snapshot
+    /// it rehydrates from rather than held twice.
+    Shared,
+}
+
+/// A cached [`TirModule`] for this compile, its `type_table` repointed.
+/// Embedded `TypeId`s stay valid, this compile's table being a seeded clone.
 pub(crate) fn rehydrate_tir_module(
     snap_module: &TirModule,
     fresh_type_table: &Rc<RefCell<TypeTable>>,
-    live: Option<&IndexSet<DefId>>,
-    fn_remap: &mut IndexMap<*const RefCell<TirFunction>, Rc<RefCell<TirFunction>>>,
+    rehydrate: Rehydrate<'_>,
 ) -> TirModule {
     let mut new_module = snap_module.clone();
     new_module.type_table = Rc::clone(fresh_type_table);
-    let Some(live) = live else {
-        return new_module;
+    let (live, fn_remap) = match rehydrate {
+        Rehydrate::Owned { live, fn_remap } => (live, fn_remap),
+        Rehydrate::Shared => {
+            assert!(
+                crate::dependency_snapshot::is_building(),
+                "only a dependency snapshot shares a snapshot's functions"
+            );
+            return new_module;
+        }
     };
     // A synthesized function declares nothing, so nothing in the graph can name
     // it and it is never dropped. Nor is a declaration stating its facts: the

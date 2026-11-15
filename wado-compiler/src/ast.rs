@@ -5292,6 +5292,17 @@ mod ast_id_tests {
         let mut parser = Parser::new(r.tokens);
         parser.parse_strict().expect("parse")
     }
+
+    /// A cached parse is cloned into every compile, so a compile's edit of its
+    /// items must stay its own.
+    #[test]
+    fn a_write_through_a_clone_leaves_the_parse_alone() {
+        let parsed = parse("fn a() {}\n");
+        let mut clone = parsed.clone();
+        clone.items.clear();
+        assert_eq!(parsed.items.len(), 1);
+    }
+
     /// Each bound is its own reference site, so two `T: Ord`s are two ids —
     /// what lets `Ord` mean a different declaration in each, and what a bound
     /// keyed by its spelling cannot express.

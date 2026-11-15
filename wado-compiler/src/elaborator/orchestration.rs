@@ -73,7 +73,7 @@ use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::semantics::Semantics;
 use crate::signature_reach;
 use crate::stdlib_snapshot::{
-    is_building, is_snapshot_kind, rehydrate_tir_module, snapshot_sources,
+    Rehydrate, is_building, is_snapshot_kind, rehydrate_tir_module, snapshot_sources,
 };
 use crate::symbol::SymbolKind;
 use crate::tir::{StructDef, TirFunction, TraitRef};
@@ -1793,14 +1793,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let snap_module = snapshot
                         .and_then(|s| s.tir_modules.get(module_source))
                         .expect("a snapshot hit implies a cached TirModule");
+                    let rehydrate = match snapshot_gate {
+                        Some(live) => Rehydrate::Owned {
+                            live,
+                            fn_remap: &mut fn_remap,
+                        },
+                        None => Rehydrate::Shared,
+                    };
                     result.insert(
                         module_source.clone(),
-                        rehydrate_tir_module(
-                            snap_module,
-                            &state.tysys.type_table,
-                            snapshot_gate,
-                            &mut fn_remap,
-                        ),
+                        rehydrate_tir_module(snap_module, &state.tysys.type_table, rehydrate),
                     );
                 } else if reify_eligible.contains(module_source) {
                     let module = modules.get(module_source).expect("module should exist");
