@@ -22,9 +22,9 @@ A weight stays as the checkpoint stores it. Unpacked to bf16, the model's 20
 billion weights outgrow a TPU chip of 16 GB. Packed, they are under it.
 
 What the model asks of Loam, as
-`mise run loam-onnx-inventory model_q4f16.onnx` reports it. The graph holds no
-function and no branch. An operator below with nothing missing is one Loam
-lowers, though the build stops before it reaches any of them.
+`wado run tools/onnx_inventory.wado model_q4f16.onnx` reports it. The graph
+holds no function and no branch. An operator below with nothing missing is one
+Loam lowers, though the build stops before it reaches any of them.
 
 | Operator                                       | Nodes | What Loam lacks                               |
 | ---------------------------------------------- | ----- | --------------------------------------------- |
