@@ -1,4 +1,8 @@
 //! Tests for the LSP-friendly `semantics` entry point.
+#![expect(
+    clippy::disallowed_methods,
+    reason = "a test names the declaration it asserts on"
+)]
 
 use crate::common::{block_on, in_memory_host};
 use std::assert_matches;

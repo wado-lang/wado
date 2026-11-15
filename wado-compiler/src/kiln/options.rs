@@ -135,6 +135,10 @@ pub enum CanonicalValue {
 /// # Errors
 /// When the module has no TIR or does not export `generate`. A shape failure
 /// inside `Options` comes back batched, so one bad field hides no others.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the Kiln protocol names `Options` in the generator's entry module"
+)]
 pub fn extract_options_descriptor(
     sem: &Semantics,
     module: &ModuleSource,

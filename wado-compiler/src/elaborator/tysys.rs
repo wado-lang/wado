@@ -100,12 +100,10 @@ impl TypeSystem {
     /// of the program's declarations.
     pub(crate) fn type_lookup<'s>(
         &'s self,
-        module: &'s ModuleSource,
         namespace_imports: &'s NamespaceImports,
         walk: &'s ModuleDecls,
     ) -> TypeLookup<'s> {
         TypeLookup {
-            current_module_source: module,
             resolutions: &self.resolutions,
             namespace_imports,
             program: &self.data,
@@ -482,24 +480,38 @@ pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
 /// stringification). They touch only `self.type_table`; the body walk and
 /// reify both reach them through `self.tysys`.
 impl TypeSystem {
-    /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
-    pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
+    /// Whether `type_id` is a struct, generic instance, newtype, flags or
+    /// `Array`, the types [`Self::struct_name_for_type`] names.
+    pub(crate) fn has_struct_head(&self, type_id: TypeId) -> bool {
         match self.type_table.borrow().get(type_id) {
-            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => None,
+            ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
             ResolvedType::Struct { .. }
-            | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. } => self
-                .type_table
-                .borrow()
-                .nominal_head(type_id)
-                .map(|(n, _)| n),
+            | ResolvedType::Flags { .. }
+            | ResolvedType::BuiltinArray(_) => true,
+            _ => false,
+        }
+    }
+
+    /// The name `type_id`'s impls are looked up under, where
+    /// [`Self::has_struct_head`] holds.
+    pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
+        if !self.has_struct_head(type_id) {
+            return None;
+        }
+        let table = self.type_table.borrow();
+        match table.get(type_id) {
             // `Array<T>` is declared definitionless, so it has no nominal head
             // to read; its declaration names it `Array` and carries its impls.
             ResolvedType::BuiltinArray(_) => Some(ARRAY_TYPE_NAME.to_string()),
-            _ => None,
+            _ => Some(
+                table
+                    .nominal_head(type_id)
+                    .expect("a struct head is nominal")
+                    .0,
+            ),
         }
     }
 
@@ -612,28 +624,27 @@ impl TypeSystem {
     ) -> (String, TypeId) {
         match self.own_impl_link(type_id, trait_) {
             Some(link) if link != type_id => (self.type_table.borrow().base_type_name(link), link),
-            _ => self.newtype_base_lookup(name, type_id),
+            _ => match self.newtype_base_lookup(type_id) {
+                base if base == type_id => (name.to_string(), type_id),
+                base => (
+                    self.struct_name_for_type(base)
+                        .expect("a newtype's lookup base names a struct"),
+                    base,
+                ),
+            },
         }
     }
 
-    /// A newtype's representation head, named for a trait-impl lookup fallback,
-    /// else the name and id given.
+    /// A newtype's representation head, for a trait-impl lookup fallback, else
+    /// the type given.
     ///
     /// A middle link writes no impl of its own, or [`Self::own_impl_link`] would
     /// have stopped there.
-    pub(crate) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
-        let tt = self.type_table.borrow();
-        if let Some(base_id) = tt.newtype_representation(type_id) {
-            let is_builtin_array = matches!(tt.get(base_id), ResolvedType::BuiltinArray(_));
-            drop(tt);
-            if is_builtin_array {
-                return (ARRAY_TYPE_NAME.to_string(), base_id);
-            }
-            if let Some(base_name) = self.struct_name_for_type(base_id) {
-                return (base_name, base_id);
-            }
+    pub(crate) fn newtype_base_lookup(&self, type_id: TypeId) -> TypeId {
+        match self.type_table.borrow().newtype_representation(type_id) {
+            Some(base) if self.has_struct_head(base) => base,
+            Some(_) | None => type_id,
         }
-        (name.to_string(), type_id)
     }
 
     /// Peel a chain of trailing newtypes / generic instances down to the

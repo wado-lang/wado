@@ -760,7 +760,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             continue;
                         }
                         let lookup = TypeLookup {
-                            current_module_source: module_source,
                             resolutions: &resolutions,
                             namespace_imports: &namespace_imports,
                             program: &data,
@@ -802,7 +801,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for item in &module.items {
                 // Rebuilt per item: the tables it borrows grow between items.
                 let lookup = TypeLookup {
-                    current_module_source: module_source,
                     resolutions: &resolutions,
                     namespace_imports: &namespace_imports,
                     program: &data,
@@ -1975,6 +1973,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Where the global `name` is declared, as seen from `source`, with its
     /// type and mutability. `signatures.globals` is keyed by the declaring
     /// module, so a re-exported name needs the chain resolved first.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "a global's signature is keyed by the module that declares the name"
+    )]
     fn global_declared_for(
         state: &AnnotateState,
         symbols: &SymbolTable,
@@ -2285,6 +2287,10 @@ fn spelled_references(
 /// The sites whose name the body walk bound to `core:rt`'s `unreachable`. A
 /// local binder taking the name binds its own uses, which the resolver's
 /// declaration-only answer cannot tell.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "`core:rt`'s `unreachable` is named by the module that declares it"
+)]
 pub(crate) fn rt_unreachable_calls(
     state: &AnnotateState,
     symbols: &SymbolTable,
@@ -2414,7 +2420,7 @@ fn trait_method_impls(tysys: &TypeSystem) -> IndexMap<ast::AstId, IndexSet<ast::
     // monomorphization never sees the block it has to yield to.
     for headers in by_trait.values() {
         for generic in headers.iter().filter(|header| !header.is_concrete()) {
-            let covers_every_head = matches!(generic.target, ImplTargetKey::TypeParam(..));
+            let covers_every_head = matches!(generic.target, ImplTargetKey::TypeParam { .. });
             let specifics = headers.iter().filter(|other| {
                 !std::ptr::eq(**other, *generic)
                     && (covers_every_head

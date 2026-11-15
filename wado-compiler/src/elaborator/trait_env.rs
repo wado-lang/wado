@@ -110,12 +110,15 @@ pub(crate) enum ImplTargetKey {
     /// the only vantage left.
     Undeclared(ModuleSource, String),
     Ref(name::RefKind),
-    /// A blanket impl's bare type parameter (`impl<T> Display for T`). It
-    /// names no declaration, so it gets no `DefId`: a lookup starts from a
-    /// type and can never reach this variant, which is what keeps a blanket
-    /// impl out of the bucket of a type that happens to share the parameter's
-    /// name. The module is the impl's own — the parameter is scoped to it.
-    TypeParam(ModuleSource, String),
+    /// A blanket impl's bare type parameter (`impl<T> Display for T`): the
+    /// impl declaring it and the name it declares, the identity
+    /// [`name::FqTypeName::binder_of`] gives a parameter. It indexes under that
+    /// binder, which only a type the impl's own frame declares reaches, so a
+    /// type sharing the parameter's spelling never meets the blanket.
+    TypeParam {
+        owner: DefId,
+        name: String,
+    },
     /// A builtin shape: a primitive, `Array`, the tuple family.
     /// Every mangler spells it bare, so a definition and a lookup agree on it.
     Builtin(String),
@@ -163,24 +166,12 @@ impl ImplTargetKey {
             ImplTargetKey::Undeclared(module, name) => {
                 name::Receiver::Type(name::FqTypeName::shape(module, name))
             }
-            // Not a binder: the bucket every impl in this module binding this
-            // spelling as its own parameter shares.
-            ImplTargetKey::TypeParam(module, name) => {
-                name::Receiver::Type(name::FqTypeName::param_bucket(module, name))
+            ImplTargetKey::TypeParam { owner, name } => {
+                name::Receiver::Type(name::FqTypeName::binder_of(defs, *owner, name))
             }
             ImplTargetKey::Ref(kind) => name::Receiver::Ref(*kind),
             ImplTargetKey::Builtin(name) => name::Receiver::Type(name::FqTypeName::builtin(name)),
             ImplTargetKey::Function { name, .. } => name::Receiver::Type(name.clone()),
-        }
-    }
-
-    pub(crate) fn decl_name<'a>(&'a self, defs: &'a DefTable) -> Option<&'a str> {
-        match self {
-            ImplTargetKey::Decl(def) => Some(defs.name(*def)),
-            ImplTargetKey::Undeclared(_, name)
-            | ImplTargetKey::TypeParam(_, name)
-            | ImplTargetKey::Builtin(name) => Some(name),
-            ImplTargetKey::Ref(_) | ImplTargetKey::Function { .. } => None,
         }
     }
 
@@ -190,7 +181,7 @@ impl ImplTargetKey {
         match self {
             ImplTargetKey::Decl(def) => defs.name(*def),
             ImplTargetKey::Undeclared(_, name)
-            | ImplTargetKey::TypeParam(_, name)
+            | ImplTargetKey::TypeParam { name, .. }
             | ImplTargetKey::Builtin(name)
             | ImplTargetKey::Function { display: name, .. } => name,
             ImplTargetKey::Ref(kind) => kind.prefix(),
@@ -203,7 +194,7 @@ impl ImplTargetKey {
             ImplTargetKey::Ref(kind) => Some(*kind),
             ImplTargetKey::Decl(_)
             | ImplTargetKey::Undeclared(..)
-            | ImplTargetKey::TypeParam(..)
+            | ImplTargetKey::TypeParam { .. }
             | ImplTargetKey::Builtin(_)
             | ImplTargetKey::Function { .. } => None,
         }
@@ -349,17 +340,6 @@ impl ImplHeader {
     /// `None` for a `&T` blanket and any other target.
     pub(super) fn ref_receiver(&self) -> Option<name::Receiver> {
         name::Receiver::ref_to(&self.target_id)
-    }
-
-    /// What a `&X` / `&mut X` target refers to, keyed as a value target is;
-    /// `None` for any other target.
-    pub(super) fn referent_key(&self, resolutions: &Resolutions) -> Option<ImplTargetKey> {
-        match &self.ty {
-            Type::Reference(inner) | Type::MutReference(inner) => {
-                Some(impl_target_key_at(inner, &self.module, resolutions))
-            }
-            _ => None,
-        }
     }
 }
 
@@ -864,7 +844,7 @@ fn index_impl_modules(
         if header.is_synthesize_request {
             continue;
         }
-        if matches!(header.target, ImplTargetKey::TypeParam(..)) {
+        if matches!(header.target, ImplTargetKey::TypeParam { .. }) {
             continue;
         }
         if concrete_only && !header.is_concrete() {
@@ -2037,7 +2017,7 @@ fn impl_target_key_at(
             name,
         };
     }
-    sited_impl_target_key(ty, module_source, resolutions)
+    sited_impl_target_key(ty, resolutions)
         .unwrap_or_else(|| ImplTargetKey::of_undeclared(module_source, &get_type_name_static(ty)))
 }
 
@@ -2047,11 +2027,7 @@ fn impl_target_key_at(
 /// `None` where the site names no declaration: a builtin shape, a name the walk
 /// could not resolve, or a position with no head at all. Those keep
 /// [`impl_target_key_at`], whose fallback keys them to the impl's own module.
-fn sited_impl_target_key(
-    ty: &ast::Type,
-    module_source: &ModuleSource,
-    resolutions: &Resolutions,
-) -> Option<ImplTargetKey> {
+fn sited_impl_target_key(ty: &ast::Type, resolutions: &Resolutions) -> Option<ImplTargetKey> {
     // A reference target buckets by kind alone: the table resolves `&List<T>`
     // to `List`, which is the referent, not the bucket.
     if let Some(kind) = name::RefKind::from_ast(ty) {
@@ -2062,10 +2038,12 @@ fn sited_impl_target_key(
         // The impl's own binder, which shadows any declaration of that name —
         // `impl<T> Trait for T` written where a `struct T` exists stays a
         // blanket.
-        Resolution::Binder(_) => Some(ImplTargetKey::TypeParam(
-            module_source.clone(),
-            get_type_name_static(ty),
-        )),
+        Resolution::Binder(binder) => Some(ImplTargetKey::TypeParam {
+            owner: resolutions
+                .binder_owner(binder)
+                .expect("an impl head's binder is the impl's own"),
+            name: get_type_name_static(ty),
+        }),
         Resolution::Def(def) => Some(ImplTargetKey::of_decl(resolutions.defs(), def)),
         Resolution::Projection(_) | Resolution::Unresolved => None,
     }
@@ -2154,7 +2132,7 @@ fn classify_position(
                 ImplTargetKey::Decl(key) if local.owns(key) => PositionKind::LocalType,
                 ImplTargetKey::Decl(_)
                 | ImplTargetKey::Ref(_)
-                | ImplTargetKey::TypeParam(..)
+                | ImplTargetKey::TypeParam { .. }
                 | ImplTargetKey::Builtin(_)
                 | ImplTargetKey::Undeclared(..) => PositionKind::ForeignType,
                 ImplTargetKey::Function { .. } => unreachable!("a name is no `fn(..)` signature"),

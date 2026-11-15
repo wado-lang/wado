@@ -460,7 +460,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 reported = true;
                 return true;
             }
-            if scope.decl_key_at(Some(id), name).is_some() {
+            if scope.decl_key_at(Some(id)).is_some() {
                 return false;
             }
             // A bare name has tiers the module scope does not hold, `Self` and
@@ -1091,7 +1091,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `Case`, so a prefix naming no type names a module.
                     || chain_defs
                         .iter()
-                        .any(|def| self.namespace_reaches_type(&t.name, t.id, t.span, *def))
+                        .any(|def| self.namespace_reaches_type(&t.name, t.id, *def))
             }
             // The name answers first, so a qualifier naming another type never
             // has its arguments read: nothing it wrote there could be accepted.
@@ -1156,7 +1156,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
             _ => return None,
         };
-        if let Some(def) = self.type_lookup().declaration_at(Some(site), &name) {
+        if let Some(def) = self.decl_key_at(Some(site)) {
             return Some(def);
         }
         let resolved = self.resolve_named_type(site, &name, span, false);
@@ -1165,14 +1165,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `def`'s type is reachable as a member of the namespace `alias`
     /// imports, a re-export counting as such a reach.
-    fn namespace_reaches_type(&mut self, alias: &str, site: AstId, span: Span, def: DefId) -> bool {
-        if self.namespace_alias_source(alias, site).is_none() {
-            return false;
-        }
-        let name = self.tysys.type_table.borrow().decl_name(def).to_string();
-        let member = namespace_member_alias(alias, &name);
-        let resolved = self.resolve_unsited_type_name(&member, span);
-        self.tysys.type_table.borrow().nominal_def(resolved) == Some(def)
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the walk answers for `ns::Type` under the import's `ns$Type` alias"
+    )]
+    fn namespace_reaches_type(&self, alias: &str, site: AstId, def: DefId) -> bool {
+        let member = namespace_member_alias(alias, self.tysys.resolutions.defs().name(def));
+        self.namespace_alias_source(alias, site).is_some()
+            && self
+                .tysys
+                .resolutions
+                .imported_as(&self.home_module(site), &member)
+                == Some(def)
     }
 
     fn format_pattern_case_name(&self, case_name: &str, qualifier: Option<&Type>) -> String {
@@ -2347,10 +2351,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
         // A newtype inherits its base's `Eq`, which is where the impl is.
-        let (name, receiver) = self
+        let (_, receiver) = self
             .tysys
             .trait_impl_base_lookup(&written, scrutinee, eq_trait);
-        self.find_arithmetic_trait_impl(&name, receiver, eq_trait, &method, Some(&ArgClass::StrLit))
+        self.find_arithmetic_trait_impl(receiver, eq_trait, &method, Some(&ArgClass::StrLit))
             .is_some()
     }
 

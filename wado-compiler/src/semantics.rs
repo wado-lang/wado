@@ -1104,6 +1104,10 @@ impl Semantics {
     /// symbol; a receiver notation (`mod#Type::m`) a method or associated
     /// constant. The module is resolved against the entry — relative paths
     /// anchor at its directory — and must already be loaded here.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "a symbol notation is text a tool supplies, naming a module's member"
+    )]
     pub fn resolve_symbol_notation(
         &self,
         notation: &SymbolNotation,
