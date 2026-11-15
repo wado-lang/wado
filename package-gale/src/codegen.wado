@@ -244,7 +244,11 @@ pub fn lower_for_analysis(grammar: &mut Grammar, token_kinds: TokenKinds) -> [Lo
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut diagnostics = Diagnostics {};
     let settings = install_action_context(grammar, GenSettings {}, &mut diagnostics).settings;
-    let atn_class_rules: List<String> = if grammar_needs_latn(grammar) { build_latn(grammar).atn_class_rules } else { [] };
+    let atn_class_rules: List<String> = if grammar_needs_latn(grammar) {
+        build_latn(grammar).atn_class_rules;
+    } else {
+        [];
+    };
     warn_lexer_rules(grammar, &settings, &atn_class_rules, &mut diagnostics);
     let mut ctx = lower_context(grammar, &lit_tokens, token_kinds, settings, diagnostics);
     let lowered = lower(grammar, &lit_tokens, &mut ctx);
