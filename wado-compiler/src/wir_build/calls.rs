@@ -1640,6 +1640,7 @@ impl FunctionTranslator<'_, '_> {
             _ => return None,
         })
     }
+
     /// The canonical function type and closure struct every closure of the
     /// function type `fn_type_id` shares, by signature.
     fn canonical_closure_types_of(&self, fn_type_id: TypeId) -> (WirTypeId, WirTypeId) {

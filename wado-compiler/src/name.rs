@@ -669,7 +669,8 @@ pub fn cm_task_entry_func_name(name: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_task_entry__{name}")
 }
 
-/// The core function of the `wado:callback/callback` export `name`.
+/// The core export the host calls a closure back through, for the shape
+/// `name` that [`callback_export_name`] gives.
 pub fn cm_callback_func_name(name: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_callback__{name}")
 }
@@ -830,8 +831,12 @@ pub fn cm_stream_lift_func_name(element: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_stream_lift_{element}")
 }
 
-/// The `wado:callback/callback` function the host calls a closure back through,
-/// given a word per argument: its Wado primitive, or `handle` (`call-handle`).
+/// What a callback export's name calls an extern handle argument.
+pub const CALLBACK_HANDLE_WORD: &str = "handle";
+
+/// The shape of the export the host calls a closure back through, given a word
+/// per argument: its Wado primitive, or [`CALLBACK_HANDLE_WORD`]
+/// (`call-handle`).
 pub fn callback_export_name<'a>(params: impl IntoIterator<Item = &'a str>) -> String {
     std::iter::once("call")
         .chain(params)

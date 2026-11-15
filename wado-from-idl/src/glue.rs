@@ -309,8 +309,9 @@ fn lower(ty: &WadoType, value: &str) -> String {
 /// The function calling the closure `closure` back, which takes `params`.
 fn callback(params: &[WadoType], closure: &str) -> String {
     let words = params.iter().map(|ty| {
-        ty.callback_argument_word()
-            .unwrap_or_else(|| unreachable!("the WebIDL frontend admits no {ty:?} callback argument"))
+        ty.callback_argument_word().unwrap_or_else(|| {
+            unreachable!("the WebIDL frontend admits no {ty:?} callback argument")
+        })
     });
     let export = cm_callback_func_name(&callback_export_name(words));
     let names: Vec<String> = (0..params.len()).map(|i| format!("a{i}")).collect();

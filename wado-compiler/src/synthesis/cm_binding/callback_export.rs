@@ -3,7 +3,7 @@
 //! the `externref` it crossed as, which the Component Model cannot carry.
 
 use crate::hashmap::IndexSet;
-use crate::name::{callback_export_name, cm_callback_func_name};
+use crate::name::{CALLBACK_HANDLE_WORD, callback_export_name, cm_callback_func_name};
 use crate::package::Package;
 use crate::synthesis::common::{
     block, builtin_call, expr_stmt, local_ref, locals_from_params, synth_param, synth_span,
@@ -26,21 +26,21 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
     let mut functions = Vec::new();
     for &(closure, extern_object) in callbacks {
         let params = closure_params(&type_table.borrow(), closure);
-        let boundary: Vec<Boundary> = params
-            .iter()
-            .map(|&param| boundary(&type_table.borrow(), param))
-            .collect();
-        let shape = callback_export_name(boundary.iter().map(|b| b.word));
+        let shape = callback_export_name(
+            params
+                .iter()
+                .map(|&param| argument_word(&type_table.borrow(), param)),
+        );
         if !shapes.insert(shape.clone()) {
             continue;
         }
         let mut tir_params = vec![synth_param("closure", 0, extern_object)];
         let mut args = Vec::new();
-        for (i, b) in boundary.iter().enumerate() {
+        for (i, &param) in params.iter().enumerate() {
             let name = format!("a{i}");
             let slot = u32::try_from(i + 1).expect("a closure takes few parameters");
-            tir_params.push(synth_param(&name, slot, b.type_id));
-            args.push(local_ref(slot, &name, b.type_id));
+            tir_params.push(synth_param(&name, slot, param));
+            args.push(local_ref(slot, &name, param));
         }
         let callee = builtin_call(
             "extern_as_closure",
@@ -98,27 +98,16 @@ fn closure_params(type_table: &TypeTable, closure: TypeId) -> Vec<TypeId> {
     params.clone()
 }
 
-/// How a closure argument crosses the boundary.
-struct Boundary {
-    type_id: TypeId,
-    /// What the export's name calls it. One name must mean one closure type in
-    /// the guest, where every extern handle is one `externref`.
-    word: &'static str,
-}
-
-fn boundary(type_table: &TypeTable, param: TypeId) -> Boundary {
+/// What the export's name calls a closure argument of type `param`. One name
+/// must mean one closure type in the guest, where every extern handle is one
+/// `externref`.
+fn argument_word(type_table: &TypeTable, param: TypeId) -> &'static str {
     if type_table.is_extern_handle(param) {
-        return Boundary {
-            type_id: param,
-            word: "handle",
-        };
+        return CALLBACK_HANDLE_WORD;
     }
     let head = type_table.representation_head(param);
     let ResolvedType::Primitive(primitive) = type_table.get(head) else {
         unreachable!("the elaborator admits only a scalar callback parameter");
     };
-    Boundary {
-        type_id: param,
-        word: primitive.as_str(),
-    }
+    primitive.as_str()
 }
