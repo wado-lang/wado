@@ -780,8 +780,9 @@ fn "bug_shared_binding_retained_by_view.wado/$test_2_a_for_loop_over_a_shared_bi
     let elements_8: ref "Array<core:prelude/string.wado/String>";
     let used_9: i32;
     let v_19: ref "core:prelude/string.wado//String";
-    let $licm_arith_51: bool;
-    let $av_52: i32;
+    let $licm_repr_45: ref "Array<core:prelude/string.wado/String>";
+    let $licm_arith_54: bool;
+    let $av_55: i32;
     used_9 = builtin::array_len(local.tee elements_8(array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }))));
     let $array_clone_dst_2: ref "Array<core:prelude/string.wado/String>";
     $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(used_9);
@@ -803,25 +804,27 @@ fn "bug_shared_binding_retained_by_view.wado/$test_2_a_for_loop_over_a_shared_bi
     };
     seen = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     $array_clone_i_4 = 0;
-    $licm_arith_51 = 1 >= used_9;
+    $licm_repr_45 = seen.repr;
+    $licm_arith_54 = 1 >= used_9;
     b33: block {
         l34: loop {
             break_if b33 $array_clone_i_4 >= used_9;
-            $av_52 = local.tee v_19(builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_dst_2, $array_clone_i_4)).used;
-            v_19 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_6: ref Array<u8>; $array_clone_src_6 = v_19.repr; let $array_clone_dst_7: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>($av_52)), 0, $array_clone_src_6, 0, $av_52); $array_clone_dst_7, used: $av_52 };
+            $av_55 = local.tee v_19(builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_dst_2, $array_clone_i_4)).used;
+            v_19 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_6: ref Array<u8>; $array_clone_src_6 = v_19.repr; let $array_clone_dst_7: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>($av_55)), 0, $array_clone_src_6, 0, $av_55); $array_clone_dst_7, used: $av_55 };
             $array_clone_i_4 = $array_clone_i_4 + 1;
-            if @unlikely($licm_arith_51) {
+            if @unlikely($licm_arith_54) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,index,value]"(used_9);
                 unreachable;
             }
             builtin::array_set<ref "core:prelude/string.wado//String">(elements_8, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(89), used: 1 });
-            if @unlikely(local.tee $av_52(seen.used) >= builtin::array_len(seen.repr)) {
+            if @unlikely(local.tee $av_55(seen.used) >= builtin::array_len($licm_repr_45)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(seen);
+                $licm_repr_45 = seen.repr;
             }
-            builtin::array_set<ref "core:prelude/string.wado//String">(seen.repr, $av_52, v_19);
-            seen.used = $av_52 + 1;
+            builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_45, $av_55, v_19);
+            seen.used = $av_55 + 1;
             continue l34;
         };
     };

@@ -588,12 +588,13 @@ fn "cm_stream_read_record_in_branch.wado/$cm_binding__wasi:filesystem/preopens@0
     let $lifted_string: ref "core:prelude/string.wado//String";
     let arr_16: ref Array<u8>;
     let value_20: ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]";
-    let self_24: ref null "Array<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
     let $held_7: ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]";
+    let $licm_repr_32: ref null "Array<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
     "wasi/$wasi:filesystem/preopens@0.3.0#get-directories"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude/list.wado//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>" { repr: builtin::array_new<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
+    $licm_repr_32 = $result.repr;
     b34: block {
         l35: loop {
             break_if b34 $i >= $count;
@@ -605,11 +606,12 @@ fn "cm_stream_read_record_in_branch.wado/$cm_binding__wasi:filesystem/preopens@0
                 drop("mem/realloc"($str_ptr, $elem_addr, 1, 0));
             }
             value_20 = struct.new "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]" { 0: $lifted_result_6, 1: $lifted_string };
-            if @unlikely(local.tee $elem_addr($result.used) >= builtin::array_len($result.repr)) {
+            if @unlikely(local.tee $elem_addr($result.used) >= builtin::array_len($licm_repr_32)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::grow"($result);
+                $licm_repr_32 = $result.repr;
             }
-            if ref.is_null(local.tee $held_7(builtin::array_get_value<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee self_24($result.repr), $elem_addr))) == 0 {
+            if ref.is_null(local.tee $held_7(builtin::array_get_value<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($licm_repr_32, $elem_addr))) == 0 {
                 if ref.is_null(local.tee $lifted_result_6($held_7.0)) == 0 {
                     $str_ptr = $lifted_result_6.value;
                     $lifted_result_6.value = 0;
@@ -617,7 +619,7 @@ fn "cm_stream_read_record_in_branch.wado/$cm_binding__wasi:filesystem/preopens@0
                 }
                 $held_7.0 = ref.null none;
             }
-            builtin::array_set<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(self_24, $elem_addr, value_20);
+            builtin::array_set<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($licm_repr_32, $elem_addr, value_20);
             $result.used = $elem_addr + 1;
             $i = $i + 1;
             continue l35;
@@ -693,10 +695,12 @@ fn "cm_stream_read_record_in_branch.wado/$cm_stream_lift_DirectoryEntry"(handle,
     let $local_9: ref null "core:prelude/string.wado//String";
     let $local_11: i32;
     let $local_12: ref "core:prelude/string.wado//String";
-    let elem: ref "wasi:filesystem/types.wado//DirectoryEntry";
     let arr_24: ref Array<u8>;
+    let value_36: ref "wasi:filesystem/types.wado//DirectoryEntry";
+    let $licm_repr_42: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
     arr_3 = struct.new "core:prelude/list.wado//List<wasi:filesystem/types.wado/DirectoryEntry>" { repr: builtin::array_new<ref "wasi:filesystem/types.wado//DirectoryEntry">(count), used: 0 };
     i = 0;
+    $licm_repr_42 = arr_3.repr;
     b45: block {
         l46: loop {
             break_if b45 i >= count;
@@ -734,12 +738,13 @@ fn "cm_stream_read_record_in_branch.wado/$cm_stream_lift_DirectoryEntry"(handle,
             if addr > 0 {
                 drop("mem/realloc"($vdisc, addr, 1, 0));
             }
-            elem = struct.new "wasi:filesystem/types.wado//DirectoryEntry" { type: $vresult, name: $local_12 };
-            if @unlikely(local.tee addr(arr_3.used) >= builtin::array_len(arr_3.repr)) {
+            value_36 = struct.new "wasi:filesystem/types.wado//DirectoryEntry" { type: $vresult, name: $local_12 };
+            if @unlikely(local.tee addr(arr_3.used) >= builtin::array_len($licm_repr_42)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<wasi:filesystem/types.wado/DirectoryEntry>::grow"(arr_3);
+                $licm_repr_42 = arr_3.repr;
             }
-            builtin::array_set<ref "wasi:filesystem/types.wado//DirectoryEntry">(arr_3.repr, addr, elem);
+            builtin::array_set<ref "wasi:filesystem/types.wado//DirectoryEntry">($licm_repr_42, addr, value_36);
             arr_3.used = addr + 1;
             i = i + 1;
             continue l46;

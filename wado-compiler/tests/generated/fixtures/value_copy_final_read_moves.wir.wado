@@ -224,13 +224,14 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "value_copy_final_read_moves.wado/each_iteration$dae[n]"() {
-    let $load_5: ref "Array<core:prelude/list.wado/List<i32>>";
     let items: ref "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>";
     let i: i32;
     let xs: ref "core:prelude/list.wado//List<i32>";
     let used_22: i32;
+    let $licm_repr_43: ref "Array<core:prelude/list.wado/List<i32>>";
     items = struct.new "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude/list.wado//List<i32>">(), used: 0 };
     i = 0;
+    $licm_repr_43 = items.repr;
     b0: block {
         l1: loop {
             break_if b0 i >= 3;
@@ -241,18 +242,19 @@ fn "value_copy_final_read_moves.wado/each_iteration$dae[n]"() {
             }
             builtin::array_set<i32>(xs.repr, 0, i);
             xs.used = 1;
-            if @unlikely(local.tee used_22(items.used) >= builtin::array_len(items.repr)) {
+            if @unlikely(local.tee used_22(items.used) >= builtin::array_len($licm_repr_43)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>::grow"(items);
+                $licm_repr_43 = items.repr;
             }
-            builtin::array_set<ref "core:prelude/list.wado//List<i32>">(local.tee $load_5(items.repr), used_22, xs);
+            builtin::array_set<ref "core:prelude/list.wado//List<i32>">($licm_repr_43, used_22, xs);
             items.used = local.tee used_22(used_22 + 1);
             if @unlikely(i >= used_22) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$contract_report0"(i, used_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_final_read_moves.wado:39"), used: 35 });
                 unreachable;
             }
-            if @unlikely(local.tee used_22(local.tee xs(builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($load_5, i)).used) >= builtin::array_len(xs.repr)) {
+            if @unlikely(local.tee used_22(local.tee xs(builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($licm_repr_43, i)).used) >= builtin::array_len(xs.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs);
             }

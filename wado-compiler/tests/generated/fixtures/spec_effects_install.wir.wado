@@ -1652,14 +1652,15 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
 }
 
 fn "core:secure_random/bytes$unchecked$dae[n]"() with Random {
+    let $load_12: i32;
     let $local_1_8: ref null "spec_effects_install.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_2_9: ref "spec_effects_install.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_3_10: ref "core:prelude/list.wado//List<u8>";
     let max_len_13: u64;
     let $local_3_16: ref "core:prelude/list.wado//List<u8>";
     let new_used: i32;
-    let $av_29: i32;
-    $av_29 = local.tee $local_3_10($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: block -> ref "core:prelude/list.wado//List<u8>" {
+    let $av_31: i32;
+    $av_31 = local.tee $local_3_10($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: block -> ref "core:prelude/list.wado//List<u8>" {
         if ref.is_null(local.tee $local_1_8(global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random)) == 0 {
             global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2_9(ref.as_non_null($local_1_8)).outer;
             $local_3_10 = block -> ref "core:prelude/list.wado//List<u8>" {
@@ -1673,12 +1674,12 @@ fn "core:secure_random/bytes$unchecked$dae[n]"() with Random {
         }
         unreachable;
     }).used;
-    $local_3_10 = struct.new "core:prelude/list.wado//List<u8>" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = $local_3_10.repr; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_29)), 0, $array_clone_src_2, 0, $av_29); $array_clone_dst_3, used: $av_29 };
+    $array_clone_src_2 = local.tee $local_3_10(struct.new "core:prelude/list.wado//List<u8>" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = $local_3_10.repr; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_31)), 0, $array_clone_src_2, 0, $av_31); $array_clone_dst_3, used: $av_31 }).repr;
     b184: block {
         l185: loop {
-            break_if b184 local.tee $av_29($local_3_10.used) >= 16;
-            $array_clone_src_2 = local.tee $local_3_16($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_4: block -> ref "core:prelude/list.wado//List<u8>" {
-                max_len_13 = builtin::i64_extend_i32_s(16 - $av_29);
+            break_if b184 $av_31 >= 16;
+            $array_clone_dst_3 = local.tee $local_3_16($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_4: block -> ref "core:prelude/list.wado//List<u8>" {
+                max_len_13 = builtin::i64_extend_i32_s(16 - $av_31);
                 if ref.is_null(local.tee $local_1_8(global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random)) == 0 {
                     global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2_9(ref.as_non_null($local_1_8)).outer;
                     $local_3_16 = block -> ref "core:prelude/list.wado//List<u8>" {
@@ -1691,21 +1692,27 @@ fn "core:secure_random/bytes$unchecked$dae[n]"() with Random {
                 }
                 unreachable;
             }).repr;
-            builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>(local.tee $av_29($local_3_16.used))), 0, $array_clone_src_2, 0, $av_29);
-            if @unlikely($av_29 <= 0) {
+            $load_12 = $local_3_16.used;
+            let $array_clone_dst_7: ref Array<u8>;
+            builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>($load_12)), 0, $array_clone_dst_3, 0, $load_12);
+            if @unlikely($load_12 <= 0) {
                 cold_path;
-                "core:secure_random/bytes$unchecked$cold1$dae[n]"($av_29);
+                "core:secure_random/bytes$unchecked$cold1$dae[n]"($load_12);
                 unreachable;
             }
             $inline_core_prelude_list_wado_List_u8___extend_7: block {
-                break_if $inline_core_prelude_list_wado_List_u8___extend_7 $av_29 == 0;
-                if @unlikely(local.tee new_used($local_3_10.used + $av_29) > builtin::array_len($local_3_10.repr)) {
+                break_if $inline_core_prelude_list_wado_List_u8___extend_7 $load_12 == 0;
+                if @unlikely(local.tee new_used($av_31 + $load_12) > builtin::array_len($array_clone_src_2)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"($local_3_10, new_used);
+                    $array_clone_src_2 = $local_3_10.repr;
+                } else {
                 }
-                builtin::array_copy<u8>($local_3_10.repr, $local_3_10.used, $array_clone_dst_3, 0, $av_29);
-                $local_3_10.used = new_used;
+                $av_31 = $local_3_10.used;
+                builtin::array_copy<u8>($array_clone_src_2, $av_31, $array_clone_dst_7, 0, $load_12);
+                $av_31 = new_used;
             };
+            $local_3_10.used = $av_31;
             continue l185;
         };
     };
@@ -3246,14 +3253,16 @@ fn "spec_effects_install.wado/spec_effects_install.wado/$Closure_3::$call$dae[se
     let i: i32;
     let used_9: i32;
     let $licm_arith_14: i32;
-    return out = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }, i = 0, $licm_arith_14 = builtin::i32_wrap_i64(max_len), b386: block {
+    let $licm_repr_15: ref Array<u8>;
+    return out = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }, i = 0, $licm_arith_14 = builtin::i32_wrap_i64(max_len), $licm_repr_15 = out.repr, b386: block {
         l387: loop {
             break_if b386 i >= $licm_arith_14;
-            if @unlikely(local.tee used_9(out.used) >= builtin::array_len(out.repr)) {
+            if @unlikely(local.tee used_9(out.used) >= builtin::array_len($licm_repr_15)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(out);
+                $licm_repr_15 = out.repr;
             }
-            builtin::array_set_u8(out.repr, used_9, 0);
+            builtin::array_set_u8($licm_repr_15, used_9, 0);
             out.used = used_9 + 1;
             i = i + 1;
             continue l387;

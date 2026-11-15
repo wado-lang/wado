@@ -80,7 +80,6 @@ fn "sroa_param_shared_and_mut_cell_alike.wado/run"() with Stdout {
     let out_37: ref "core:prelude/string.wado//String";
     let is_negative_104: bool;
     let x_108: i64;
-    let $sroa_view_repr_204: ref Array<u8>;
     let $sroa_t_h0_257: i32;
     $sroa_t_h0_257 = "sroa_param_shared_and_mut_cell_alike.wado/forwards_first$sroa[p.value.x]"(local.tee $sroa_s_x_33(black_box(1)));
     $sroa_s_x_33 = "sroa_param_shared_and_mut_cell_alike.wado/forwards_second$sroa[p.value.x]"($sroa_s_x_33);
@@ -92,14 +91,13 @@ fn "sroa_param_shared_and_mut_cell_alike.wado/run"() with Stdout {
     $sroa_t_h0_257 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_108(x_108 = builtin::i64_extend_i32_s($sroa_t_h0_257); select i64(x_108 < 0_i64, 0_i64 - x_108, x_108)));
     is_negative_104 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_37, is_negative_104, $sroa_t_h0_257);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_37.repr), is_negative_104, x_108, $sroa_t_h0_257);
-    $sroa_view_repr_204 = global:sroa_param_shared_and_mut_cell_alike.wado::$const_obj_0;
     if @unlikely(local.tee $sroa_t_h0_257(out_37.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_37, $sroa_t_h0_257);
     }
     is_negative_104 = out_37.used;
     out_37.used = $sroa_t_h0_257;
-    builtin::array_copy<u8>(out_37.repr, is_negative_104, $sroa_view_repr_204, 0, 1);
+    builtin::array_copy<u8>(out_37.repr, is_negative_104, global:sroa_param_shared_and_mut_cell_alike.wado::$const_obj_0, 0, 1);
     $sroa_t_h0_257 = $sroa_s_x_33 < 0;
     $sroa_s_x_33 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_108(x_108 = builtin::i64_extend_i32_s($sroa_s_x_33); select i64(x_108 < 0_i64, 0_i64 - x_108, x_108)));
     $sroa_t_h0_257 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_37, $sroa_t_h0_257, $sroa_s_x_33);

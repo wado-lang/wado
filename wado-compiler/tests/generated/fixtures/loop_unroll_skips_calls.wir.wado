@@ -134,7 +134,6 @@ fn "loop_unroll_skips_calls.wado/run"() with Stdout {
     let $sroa_$iter_0_start_36: i32;
     let out_58: ref "core:prelude/string.wado//String";
     let x_129: i64;
-    let $sroa_view_repr_204: ref Array<u8>;
     a = builtin::array_new<i32>(local.tee len_0(black_box(10)));
     $sroa_$iter_0_start_36 = 0;
     b6: block {
@@ -155,14 +154,13 @@ fn "loop_unroll_skips_calls.wado/run"() with Stdout {
     $sroa_$iter_0_start_36 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_129(x_129 = builtin::i64_extend_i32_s($sroa_$iter_0_start_36); select i64(x_129 < 0_i64, 0_i64 - x_129, x_129)));
     current = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_58, current, $sroa_$iter_0_start_36);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_58.repr), current, x_129, $sroa_$iter_0_start_36);
-    $sroa_view_repr_204 = global:loop_unroll_skips_calls.wado::$const_obj_0;
     if @unlikely(local.tee $sroa_$iter_0_start_36(out_58.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_58, $sroa_$iter_0_start_36);
     }
     current = out_58.used;
     out_58.used = $sroa_$iter_0_start_36;
-    builtin::array_copy<u8>(out_58.repr, current, $sroa_view_repr_204, 0, 1);
+    builtin::array_copy<u8>(out_58.repr, current, global:loop_unroll_skips_calls.wado::$const_obj_0, 0, 1);
     $sroa_$iter_0_start_36 = len_0 < 0;
     len_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_129(x_129 = builtin::i64_extend_i32_s(len_0); select i64(x_129 < 0_i64, 0_i64 - x_129, x_129)));
     $sroa_$iter_0_start_36 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_58, $sroa_$iter_0_start_36, len_0);

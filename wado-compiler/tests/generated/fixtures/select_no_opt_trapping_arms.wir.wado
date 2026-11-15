@@ -136,7 +136,6 @@ fn "select_no_opt_trapping_arms.wado/run"() with Stdout {
     let q: i32;
     let out_24: ref "core:prelude/string.wado//String";
     let x_95: i64;
-    let $sroa_view_repr_204: ref Array<u8>;
     denom = black_box(0);
     num = black_box(100);
     q = (if denom != 0 -> i32 {
@@ -167,14 +166,13 @@ fn "select_no_opt_trapping_arms.wado/run"() with Stdout {
     q = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_95(x_95 = builtin::i64_extend_i32_s(q); select i64(x_95 < 0_i64, 0_i64 - x_95, x_95)));
     num = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_24, num, q);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_24.repr), num, x_95, q);
-    $sroa_view_repr_204 = global:select_no_opt_trapping_arms.wado::$const_obj_0;
     if @unlikely(local.tee num(out_24.used + 1) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_24, num);
     }
     q = out_24.used;
     out_24.used = num;
-    builtin::array_copy<u8>(out_24.repr, q, $sroa_view_repr_204, 0, 1);
+    builtin::array_copy<u8>(out_24.repr, q, global:select_no_opt_trapping_arms.wado::$const_obj_0, 0, 1);
     num = denom < 0;
     denom = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_95(x_95 = builtin::i64_extend_i32_s(denom); select i64(x_95 < 0_i64, 0_i64 - x_95, x_95)));
     num = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_24, num, denom);

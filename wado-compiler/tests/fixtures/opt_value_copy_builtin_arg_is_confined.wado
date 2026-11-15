@@ -26,8 +26,9 @@ fn total(rules: &List<Rule>, names: &List<String>) -> i32 {
 }
 
 export fn run() with Stdout {
-    let rules: List<Rule> = [Rule { name: "ab", n: 1 }, Rule { name: "cde", n: 2 }];
-    let names: List<String> = ["ab", "xy", "cde"];
+    // Opaque, so a clone of a constant name cannot fold away in the copy's place.
+    let rules: List<Rule> = builtin::black_box([Rule { name: "ab", n: 1 }, Rule { name: "cde", n: 2 }]);
+    let names: List<String> = builtin::black_box(["ab", "xy", "cde"]);
     println(`${total(&rules, &names)}`);
 }
 

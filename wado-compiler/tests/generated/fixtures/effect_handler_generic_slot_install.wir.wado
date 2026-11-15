@@ -155,27 +155,25 @@ type "functype//effect_handler_generic_slot_install.wado/effect_handler_generic_
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(53)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_generic_slot_install.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0" = fn(i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(54)
+type "functype//wasi/future-new:s32" = fn() -> i64;  // TypeId(54)
 
-type "functype//wasi/future-new:s32" = fn() -> i64;  // TypeId(55)
+type "functype//wasi/future-drop-readable:s32" = fn(i32);  // TypeId(55)
 
-type "functype//wasi/future-drop-readable:s32" = fn(i32);  // TypeId(56)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(56)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(57)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(57)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(58)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(58)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(59)
+type "functype//wasi/future-write:s32" = fn(i32, i32) -> i32;  // TypeId(59)
 
-type "functype//wasi/future-write:s32" = fn(i32, i32) -> i32;  // TypeId(60)
+type "functype//wasi/future-drop-writable:s32" = fn(i32);  // TypeId(60)
 
-type "functype//wasi/future-drop-writable:s32" = fn(i32);  // TypeId(61)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(61)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(62)
+type "functype//effect_handler_generic_slot_install.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(62)
 
-type "functype//effect_handler_generic_slot_install.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(63)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(64)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(63)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -197,18 +195,18 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:effect_handler_generic_slot_install.wado::$effect_core:prelude/types.wado/Future<i32>: ref null "effect_handler_generic_slot_install.wado//$Dispatch_core:prelude/types.wado/Future<i32>" = ref.null none;
 global mut global:effect_handler_generic_slot_install.wado::$effect_core:prelude/types.wado/FutureWritable<i32>: ref null "effect_handler_generic_slot_install.wado//$Dispatch_core:prelude/types.wado/FutureWritable<i32>" = ref.null none;
-global global:core:prelude/string.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
-global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 115, 61);
+global global:effect_handler_generic_slot_install.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
+global global:effect_handler_generic_slot_install.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 115, 61);
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "effect_handler_generic_slot_install.wado/run"() with Stdout {
+    let $load_38: ref Array<u8>;
     let c: ref "effect_handler_generic_slot_install.wado//Counter<i32>";
     let rx_1: ref null "core:prelude//$Resource";
     let tx_2: ref null "core:prelude//$Resource";
     let b: ref "effect_handler_generic_slot_install.wado//Counter<i32>";
     let $save_core:prelude/types.wado/Future<i32>_11: ref null "effect_handler_generic_slot_install.wado//$Dispatch_core:prelude/types.wado/Future<i32>";
     let $save_core:prelude/types.wado/FutureWritable<i32>_14: ref null "effect_handler_generic_slot_install.wado//$Dispatch_core:prelude/types.wado/FutureWritable<i32>";
-    let message_29: ref "core:prelude/string.wado//String";
     let $local_0_44: ref null "effect_handler_generic_slot_install.wado//$Dispatch_core:prelude/types.wado/Future<i32>";
     let $local_1_45: ref "effect_handler_generic_slot_install.wado//$Dispatch_core:prelude/types.wado/Future<i32>";
     let $local_2_46: ref null "tuple//[core:prelude/types.wado/Future<i32>, core:prelude/types.wado/FutureWritable<i32>]";
@@ -216,6 +214,10 @@ fn "effect_handler_generic_slot_install.wado/run"() with Stdout {
     let $local_2_52: ref null "effect_handler_generic_slot_install.wado//$Dispatch_core:prelude/types.wado/FutureWritable<i32>";
     let $local_3_53: ref "effect_handler_generic_slot_install.wado//$Dispatch_core:prelude/types.wado/FutureWritable<i32>";
     let $local_4_54: ref "core:prelude/types.wado//FutureWrite<i32>";
+    let out_89: ref "core:prelude/string.wado//String";
+    let is_negative_156: bool;
+    let $sroa_t_h0_309: i32;
+    let $sroa_t_h1_310: i32;
     c = struct.new "effect_handler_generic_slot_install.wado//Counter<i32>" { stored: global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0, drops: 0 };
     global:effect_handler_generic_slot_install.wado::$effect_core:prelude/types.wado/Future<i32> = struct.new "effect_handler_generic_slot_install.wado//$Dispatch_core:prelude/types.wado/Future<i32>" { outer: local.tee $save_core:prelude/types.wado/Future<i32>_11(global:effect_handler_generic_slot_install.wado::$effect_core:prelude/types.wado/Future<i32>), op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_generic_slot_install.wado//$Closure_0" { $capture_0: c }, func: ref.func "closure/effect_handler_generic_slot_install.wado/$closure_wrapper_0" }, op_drop: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_generic_slot_install.wado//$Closure_3" { $capture_0: c }, func: ref.func "closure/effect_handler_generic_slot_install.wado/$closure_wrapper_1" } };
     global:effect_handler_generic_slot_install.wado::$effect_core:prelude/types.wado/FutureWritable<i32> = struct.new "effect_handler_generic_slot_install.wado//$Dispatch_core:prelude/types.wado/FutureWritable<i32>" { outer: local.tee $save_core:prelude/types.wado/FutureWritable<i32>_14(global:effect_handler_generic_slot_install.wado::$effect_core:prelude/types.wado/FutureWritable<i32>), op_write: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_generic_slot_install.wado//$Closure_4" { $capture_0: c }, func: ref.func "closure/effect_handler_generic_slot_install.wado/$closure_wrapper_2" } };
@@ -326,18 +328,33 @@ fn "effect_handler_generic_slot_install.wado/run"() with Stdout {
         "effect_handler_generic_slot_install.wado/run$cold0"();
         unreachable;
     }
-    message_29 = block -> ref "core:prelude/string.wado//String" {
-        let $mv_field_7: i32;
-        $mv_field_7 = c.drops;
-        let $mv_field_8: i32;
-        $mv_field_8 = b.drops;
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_generic_slot_install.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($mv_field_7, $mv_field_8);
+    $sroa_t_h0_309 = c.drops;
+    $sroa_t_h1_310 = b.drops;
+    local.tee out_89(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(39), used: 0 }).used = 6;
+    builtin::array_copy<u8>(out_89.repr, 0, global:effect_handler_generic_slot_install.wado::$const_obj_1, 0, 6);
+    is_negative_156 = $sroa_t_h0_309 < 0;
+    $sroa_t_h0_309 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_5_49($cm_pair_5_49 = builtin::i64_extend_i32_s($sroa_t_h0_309); select i64($cm_pair_5_49 < 0_i64, 0_i64 - $cm_pair_5_49, $cm_pair_5_49)));
+    is_negative_156 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_89, is_negative_156, $sroa_t_h0_309);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_38(out_89.repr), is_negative_156, $cm_pair_5_49, $sroa_t_h0_309);
+    if @unlikely(local.tee $sroa_t_h0_309(out_89.used + 1) > builtin::array_len($load_38)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_89, $sroa_t_h0_309);
+    }
+    is_negative_156 = out_89.used;
+    out_89.used = $sroa_t_h0_309;
+    builtin::array_copy<u8>(out_89.repr, is_negative_156, global:effect_handler_generic_slot_install.wado::$const_obj_0, 0, 1);
+    $sroa_t_h0_309 = $sroa_t_h1_310 < 0;
+    $sroa_t_h1_310 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_5_49($cm_pair_5_49 = builtin::i64_extend_i32_s($sroa_t_h1_310); select i64($cm_pair_5_49 < 0_i64, 0_i64 - $cm_pair_5_49, $cm_pair_5_49)));
+    $sroa_t_h0_309 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_89, $sroa_t_h0_309, $sroa_t_h1_310);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_89.repr, $sroa_t_h0_309, $cm_pair_5_49, $sroa_t_h1_310);
+    $inline_core_prelude_string_wado_String__format_effect_handler_generic_slot_install_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70: block {
+        break $inline_core_prelude_string_wado_String__format_effect_handler_generic_slot_install_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70;
     };
-    $mv_field_7 = builtin::i32_wrap_i64(local.tee $cm_pair_5_49("wasi/stream-new"()));
-    $mv_field_8 = builtin::i32_wrap_i64($cm_pair_5_49 >> 32_i64);
-    $mv_field_7 = "effect_handler_generic_slot_install.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_7);
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_8, message_29.repr, message_29.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv_field_7);
+    $sroa_t_h0_309 = builtin::i32_wrap_i64(local.tee $cm_pair_5_49("wasi/stream-new"()));
+    $sroa_t_h1_310 = builtin::i32_wrap_i64($cm_pair_5_49 >> 32_i64);
+    $sroa_t_h0_309 = "effect_handler_generic_slot_install.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_309);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_t_h1_310, out_89.repr, out_89.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_309);
 }
 
 fn "effect_handler_generic_slot_install.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -737,38 +754,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     digit_count = self.used;
     self.used = is_negative;
     return digit_count;
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_generic_slot_install.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($mv$t$h0, $mv$t$h1) {
-    let out_3: ref "core:prelude/string.wado//String";
-    let is_negative_70: bool;
-    let x_74: i64;
-    let $sroa_view_repr_194: ref Array<u8>;
-    let $sroa_view_repr_204: ref Array<u8>;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(39), used: 0 };
-    $sroa_view_repr_194 = global:core:prelude/string.wado::$const_obj_1;
-    out_3.used = 6;
-    builtin::array_copy<u8>(out_3.repr, 0, $sroa_view_repr_194, 0, 6);
-    is_negative_70 = $mv$t$h0 < 0;
-    $mv$t$h0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h0); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
-    is_negative_70 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_70, $mv$t$h0);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $sroa_view_repr_194(out_3.repr), is_negative_70, x_74, $mv$t$h0);
-    $sroa_view_repr_204 = global:core:prelude/string.wado::$const_obj_0;
-    if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($sroa_view_repr_194)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
-    }
-    is_negative_70 = out_3.used;
-    out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(out_3.repr, is_negative_70, $sroa_view_repr_204, 0, 1);
-    $mv$t$h0 = $mv$t$h1 < 0;
-    $mv$t$h1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h1); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
-    $mv$t$h0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, $mv$t$h0, $mv$t$h1);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, $mv$t$h0, x_74, $mv$t$h1);
-    $inline_core_prelude_string_wado_String__internal_push_view_70: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_70;
-    };
-    return out_3;
 }
 
 fn "closure/effect_handler_generic_slot_install.wado/$closure_wrapper_0"($env) {

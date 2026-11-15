@@ -1381,13 +1381,15 @@ fn "core:json/integral_digits$sroa[return]"($mv$n$neg, $mv$n$int_digits, $mv$n$e
         }
         $mv$n$neg = builtin::i32_wrap_i64($mv$n$exp);
         $mv$n$int_digits = 0;
+        $mv$input$repr = digits.repr;
         b65: block {
             l66: loop {
                 break_if b65 $mv$n$int_digits >= $mv$n$neg;
                 $mv$n$int_digits = $mv$n$int_digits + 1;
-                if @unlikely(local.tee $mv$n$mantissa_start(digits.used + 1) > builtin::array_len(digits.repr)) {
+                if @unlikely(local.tee $mv$n$mantissa_start(digits.used + 1) > builtin::array_len($mv$input$repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(digits, $mv$n$mantissa_start);
+                    $mv$input$repr = digits.repr;
                 }
                 $mv$n$mantissa_end = digits.used;
                 digits.used = $mv$n$mantissa_start;
@@ -1396,7 +1398,7 @@ fn "core:json/integral_digits$sroa[return]"($mv$n$neg, $mv$n$int_digits, $mv$n$e
                     "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"($mv$n$mantissa_end, $mv$n$mantissa_start, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
                     unreachable;
                 }
-                builtin::array_set_u8(digits.repr, $mv$n$mantissa_end, 48);
+                builtin::array_set_u8($mv$input$repr, $mv$n$mantissa_end, 48);
                 continue l66;
             };
         };
@@ -4094,29 +4096,25 @@ fn "core:json/core:json/to_string<serde_json_rename.wado/ApiResponse>$sroa[retur
     let buf_2: ref "core:prelude/string.wado//String";
     let new_used_354: i32;
     let start_355: i32;
-    buf_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    $thread_$inline_serde_json_rename_wado_ApiResponse_core_serde_Serialize__serialize_core_json_JsonSerializer__1: block {
-        buf_2.used = 1;
-        builtin::array_copy<u8>(buf_2.repr, 0, global:core:json::$const_obj_32, 0, 1);
-        "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0"(buf_2, global:core:json::$const_obj_31, 0);
-        if @unlikely(local.tee new_used_354(buf_2.used + 3) > builtin::array_len(buf_2.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used_354);
-        }
-        start_355 = buf_2.used;
-        buf_2.used = new_used_354;
-        "core:prelude/primitive.wado/write_decimal_digits"(buf_2.repr, start_355, 404_i64, 3);
-        "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec1"(buf_2, global:core:json::$const_obj_30, 1);
-        "core:json/core:json/write_escaped_string<&core:prelude/string.wado/String>"(buf_2, value);
-        if @unlikely(local.tee new_used_354(buf_2.used + 1) > builtin::array_len(buf_2.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used_354);
-        }
-        start_355 = buf_2.used;
-        buf_2.used = new_used_354;
-        builtin::array_copy<u8>(buf_2.repr, start_355, global:core:json::$const_obj_29, 0, 1);
-        break $thread_$inline_serde_json_rename_wado_ApiResponse_core_serde_Serialize__serialize_core_json_JsonSerializer__1;
-    };
+    local.tee buf_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 }).used = 1;
+    builtin::array_copy<u8>(buf_2.repr, 0, global:core:json::$const_obj_32, 0, 1);
+    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0"(buf_2, global:core:json::$const_obj_31, 0);
+    if @unlikely(local.tee new_used_354(buf_2.used + 3) > builtin::array_len(buf_2.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used_354);
+    }
+    start_355 = buf_2.used;
+    buf_2.used = new_used_354;
+    "core:prelude/primitive.wado/write_decimal_digits"(buf_2.repr, start_355, 404_i64, 3);
+    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec1"(buf_2, global:core:json::$const_obj_30, 1);
+    "core:json/core:json/write_escaped_string<&core:prelude/string.wado/String>"(buf_2, value);
+    if @unlikely(local.tee new_used_354(buf_2.used + 1) > builtin::array_len(buf_2.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used_354);
+    }
+    start_355 = buf_2.used;
+    buf_2.used = new_used_354;
+    builtin::array_copy<u8>(buf_2.repr, start_355, global:core:json::$const_obj_29, 0, 1);
     if ref.test "core:prelude/types.wado//Option<char>::Some"(trailing_char) {
         new_used_354 = ref.cast "core:prelude/types.wado//Option<char>::Some"(trailing_char).payload_0;
         "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf_2, new_used_354);
@@ -4129,29 +4127,25 @@ fn "core:json/core:json/to_string<serde_json_rename.wado/ApiResponse>$sroa[retur
     let buf_2: ref "core:prelude/string.wado//String";
     let new_used_354: i32;
     let start_355: i32;
-    buf_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    $thread_$inline_serde_json_rename_wado_ApiResponse_core_serde_Serialize__serialize_core_json_JsonSerializer__1: block {
-        buf_2.used = 1;
-        builtin::array_copy<u8>(buf_2.repr, 0, global:core:json::$const_obj_32, 0, 1);
-        "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0"(buf_2, global:core:json::$const_obj_31, 0);
-        if @unlikely(local.tee new_used_354(buf_2.used + 3) > builtin::array_len(buf_2.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used_354);
-        }
-        start_355 = buf_2.used;
-        buf_2.used = new_used_354;
-        "core:prelude/primitive.wado/write_decimal_digits"(buf_2.repr, start_355, 200_i64, 3);
-        "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec1"(buf_2, global:core:json::$const_obj_30, 1);
-        "core:json/core:json/write_escaped_string<&core:prelude/string.wado/String>"(buf_2, value);
-        if @unlikely(local.tee new_used_354(buf_2.used + 1) > builtin::array_len(buf_2.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used_354);
-        }
-        start_355 = buf_2.used;
-        buf_2.used = new_used_354;
-        builtin::array_copy<u8>(buf_2.repr, start_355, global:core:json::$const_obj_29, 0, 1);
-        break $thread_$inline_serde_json_rename_wado_ApiResponse_core_serde_Serialize__serialize_core_json_JsonSerializer__1;
-    };
+    local.tee buf_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 }).used = 1;
+    builtin::array_copy<u8>(buf_2.repr, 0, global:core:json::$const_obj_32, 0, 1);
+    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0"(buf_2, global:core:json::$const_obj_31, 0);
+    if @unlikely(local.tee new_used_354(buf_2.used + 3) > builtin::array_len(buf_2.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used_354);
+    }
+    start_355 = buf_2.used;
+    buf_2.used = new_used_354;
+    "core:prelude/primitive.wado/write_decimal_digits"(buf_2.repr, start_355, 200_i64, 3);
+    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec1"(buf_2, global:core:json::$const_obj_30, 1);
+    "core:json/core:json/write_escaped_string<&core:prelude/string.wado/String>"(buf_2, value);
+    if @unlikely(local.tee new_used_354(buf_2.used + 1) > builtin::array_len(buf_2.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used_354);
+    }
+    start_355 = buf_2.used;
+    buf_2.used = new_used_354;
+    builtin::array_copy<u8>(buf_2.repr, start_355, global:core:json::$const_obj_29, 0, 1);
     if ref.test "core:prelude/types.wado//Option<char>::Some"(trailing_char) {
         new_used_354 = ref.cast "core:prelude/types.wado//Option<char>::Some"(trailing_char).payload_0;
         "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf_2, new_used_354);

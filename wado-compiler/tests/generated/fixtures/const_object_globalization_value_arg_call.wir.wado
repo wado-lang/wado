@@ -247,11 +247,10 @@ fn "const_object_globalization_value_arg_call.wado/$cm_export__run"() {
 fn "const_object_globalization_value_arg_call.wado/encode_key$spec0"(name) {
     let $load_1: ref Array<u8>;
     let s_1: ref "core:prelude/string.wado//String";
-    local.tee s_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(2002), used: 0 }).used = 1;
-    builtin::array_set_u8(local.tee $load_1(s_1.repr), 0, 34);
+    builtin::array_set_u8(local.tee $load_1(local.tee s_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(2002), used: 0 }).repr), 0, 34);
     s_1.used = 5;
     builtin::array_copy<u8>($load_1, 1, name.repr, 0, 2);
-    builtin::array_copy<u8>($load_1, 1 + 2, global:const_object_globalization_value_arg_call.wado::$const_obj_1, 0, 2);
+    builtin::array_copy<u8>($load_1, 3, global:const_object_globalization_value_arg_call.wado::$const_obj_1, 0, 2);
     return s_1;
 }
 

@@ -284,53 +284,54 @@ fn "array_bounds_elim_version_strided_wir.wado/run"() with Stdout {
     let used_18: i32;
     let $sroa_v_end_40: i32;
     let $sroa_$iter_0_start_41: i32;
-    let out_48: ref "core:prelude/string.wado//String";
-    let x_119: i64;
-    let $sroa_view_repr_205: ref Array<u8>;
+    let $licm_repr_45: ref Array<i32>;
+    let out_49: ref "core:prelude/string.wado//String";
+    let x_120: i64;
     m = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     $sroa_v_end_40 = black_box(12);
     $sroa_$iter_0_start_41 = 0;
+    $licm_repr_45 = m.repr;
     b18: block {
         l19: loop {
             break_if b18 $sroa_$iter_0_start_41 >= $sroa_v_end_40;
             $sroa_$iter_0_start_41 = local.tee current($sroa_$iter_0_start_41) + 1;
-            if @unlikely(local.tee used_18(m.used) >= builtin::array_len(m.repr)) {
+            if @unlikely(local.tee used_18(m.used) >= builtin::array_len($licm_repr_45)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(m);
+                $licm_repr_45 = m.repr;
             }
-            builtin::array_set<i32>(m.repr, used_18, current);
+            builtin::array_set<i32>($licm_repr_45, used_18, current);
             m.used = used_18 + 1;
             continue l19;
         };
     };
     multivalue_bind [$sroa_v_end_40, $sroa_$iter_0_start_41] = ($sroa_v_end_40 = black_box(4); $sroa_$iter_0_start_41 = black_box(3); current = black_box(2); used_18 = black_box(3); "array_bounds_elim_version_strided_wir.wado/columns"(m.repr, m.used, $sroa_v_end_40, $sroa_$iter_0_start_41, current, used_18));
-    out_48 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
+    out_49 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__format_array_bounds_elim_version_strided_wir_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__format_array_bounds_elim_version_strided_wir_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22;
     };
     current = $sroa_v_end_40 < 0;
-    $sroa_v_end_40 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_119(x_119 = builtin::i64_extend_i32_s($sroa_v_end_40); select i64(x_119 < 0_i64, 0_i64 - x_119, x_119)));
-    current = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_48, current, $sroa_v_end_40);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_6(out_48.repr), current, x_119, $sroa_v_end_40);
-    $sroa_view_repr_205 = global:array_bounds_elim_version_strided_wir.wado::$const_obj_0;
-    if @unlikely(local.tee $sroa_v_end_40(out_48.used + 1) > builtin::array_len($load_6)) {
+    $sroa_v_end_40 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_120(x_120 = builtin::i64_extend_i32_s($sroa_v_end_40); select i64(x_120 < 0_i64, 0_i64 - x_120, x_120)));
+    current = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_49, current, $sroa_v_end_40);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_6(out_49.repr), current, x_120, $sroa_v_end_40);
+    if @unlikely(local.tee $sroa_v_end_40(out_49.used + 1) > builtin::array_len($load_6)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_48, $sroa_v_end_40);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_49, $sroa_v_end_40);
     }
-    current = out_48.used;
-    out_48.used = $sroa_v_end_40;
-    builtin::array_copy<u8>(out_48.repr, current, $sroa_view_repr_205, 0, 1);
+    current = out_49.used;
+    out_49.used = $sroa_v_end_40;
+    builtin::array_copy<u8>(out_49.repr, current, global:array_bounds_elim_version_strided_wir.wado::$const_obj_0, 0, 1);
     $sroa_v_end_40 = $sroa_$iter_0_start_41 < 0;
-    $sroa_$iter_0_start_41 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_119(x_119 = builtin::i64_extend_i32_s($sroa_$iter_0_start_41); select i64(x_119 < 0_i64, 0_i64 - x_119, x_119)));
-    $sroa_v_end_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_48, $sroa_v_end_40, $sroa_$iter_0_start_41);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_48.repr, $sroa_v_end_40, x_119, $sroa_$iter_0_start_41);
+    $sroa_$iter_0_start_41 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_120(x_120 = builtin::i64_extend_i32_s($sroa_$iter_0_start_41); select i64(x_120 < 0_i64, 0_i64 - x_120, x_120)));
+    $sroa_v_end_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_49, $sroa_v_end_40, $sroa_$iter_0_start_41);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_49.repr, $sroa_v_end_40, x_120, $sroa_$iter_0_start_41);
     $inline_core_prelude_string_wado_String__format_array_bounds_elim_version_strided_wir_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70: block {
         break $inline_core_prelude_string_wado_String__format_array_bounds_elim_version_strided_wir_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70;
     };
-    $sroa_v_end_40 = builtin::i32_wrap_i64(local.tee x_119("wasi/stream-new"()));
-    $sroa_$iter_0_start_41 = builtin::i32_wrap_i64(x_119 >> 32_i64);
+    $sroa_v_end_40 = builtin::i32_wrap_i64(local.tee x_120("wasi/stream-new"()));
+    $sroa_$iter_0_start_41 = builtin::i32_wrap_i64(x_120 >> 32_i64);
     $sroa_v_end_40 = "array_bounds_elim_version_strided_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_v_end_40);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_start_41, out_48.repr, out_48.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_start_41, out_49.repr, out_49.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_v_end_40);
 }
 

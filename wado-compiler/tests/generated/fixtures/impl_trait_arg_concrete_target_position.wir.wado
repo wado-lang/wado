@@ -72,7 +72,6 @@ global global:impl_trait_arg_concrete_target_position.wado::$const_obj_2: ref Ar
 global global:impl_trait_arg_concrete_target_position.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(97, 100, 100, 58, 32, 50);
 
 fn "impl_trait_arg_concrete_target_position.wado/run"() with Stdout {
-    let $load_7: ref Array<u8>;
     let $cm_pair_7_24: i64;
     let $sroa_$pattern_temp_0_0_13_30: i32;
     let $sroa_$pattern_temp_0_1_14_31: i32;
@@ -107,10 +106,8 @@ fn "impl_trait_arg_concrete_target_position.wado/run"() with Stdout {
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_31);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_30);
         $sroa_$pattern_temp_0_0_13_30 = break $fused_$inline_convert_sroa_return__2;
-        out_94 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
-        new_repr_233 = global:impl_trait_arg_concrete_target_position.wado::$const_obj_0;
-        out_94.used = local.tee $sroa_$pattern_temp_0_1_14_31(4);
-        builtin::array_copy<u8>(local.tee $load_7(out_94.repr), 0, new_repr_233, 0, 4);
+        local.tee out_94(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }).used = local.tee $sroa_$pattern_temp_0_1_14_31(4);
+        builtin::array_copy<u8>(local.tee new_repr_233(out_94.repr), 0, global:impl_trait_arg_concrete_target_position.wado::$const_obj_0, 0, 4);
         is_negative_156 = $sroa_$pattern_temp_0_0_13_30 < 0;
         $cm_pair_7_24 = builtin::i64_extend_i32_s($sroa_$pattern_temp_0_0_13_30);
         $cm_pair_7_24 = select i64($cm_pair_7_24 < 0_i64, 0_i64 - $cm_pair_7_24, $cm_pair_7_24);
@@ -175,7 +172,7 @@ fn "impl_trait_arg_concrete_target_position.wado/run"() with Stdout {
             break $inline_count_digits_u64_2: 20;
         };
         if is_negative_156 {
-            if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_31($sroa_$pattern_temp_0_1_14_31 + 1) > builtin::array_len($load_7)) {
+            if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_31($sroa_$pattern_temp_0_1_14_31 + 1) > builtin::array_len(new_repr_233)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_94, $sroa_$pattern_temp_0_1_14_31);
             }

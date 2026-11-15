@@ -568,25 +568,21 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<assert_esca
     let out_3: ref "core:prelude/string.wado//String";
     let new_used_83: i32;
     let start_84: i32;
-    let $sroa_view_repr_111: ref Array<u8>;
     if ref.is_null(global:core:prelude/string.wado::$const_obj_11) {
         global:core:prelude/string.wado::$const_obj_11 = array.new_data<u8>("Assertion failed in run at assert_escape_in_condition.wado:10
 condition: s == \"want:\\n\\t\\\"\\\\\"
 s: ");
     }
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(114), used: 0 };
-    $sroa_view_repr_111 = global:core:prelude/string.wado::$const_obj_11;
-    out_3.used = 97;
-    builtin::array_copy<u8>(out_3.repr, 0, $sroa_view_repr_111, 0, 97);
+    local.tee out_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(114), used: 0 }).used = 97;
+    builtin::array_copy<u8>(out_3.repr, 0, global:core:prelude/string.wado::$const_obj_11, 0, 97);
     "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]"(out_3, t.repr, t.used);
-    $sroa_view_repr_111 = global:core:prelude/string.wado::$const_obj_10;
     if @unlikely(local.tee new_used_83(out_3.used + 1) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_83);
     }
     start_84 = out_3.used;
     out_3.used = new_used_83;
-    builtin::array_copy<u8>(out_3.repr, start_84, $sroa_view_repr_111, 0, 1);
+    builtin::array_copy<u8>(out_3.repr, start_84, global:core:prelude/string.wado::$const_obj_10, 0, 1);
     return out_3;
 }
 

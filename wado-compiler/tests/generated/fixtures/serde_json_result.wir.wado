@@ -1316,13 +1316,15 @@ fn "core:json/integral_digits$sroa[return]$dae[start]"($mv$n$neg, $mv$n$int_digi
         }
         $mv$n$neg = builtin::i32_wrap_i64($mv$n$exp);
         $mv$n$int_digits = 0;
+        $mv$input$repr = digits.repr;
         b68: block {
             l69: loop {
                 break_if b68 $mv$n$int_digits >= $mv$n$neg;
                 $mv$n$int_digits = $mv$n$int_digits + 1;
-                if @unlikely(local.tee $mv$n$mantissa_start(digits.used + 1) > builtin::array_len(digits.repr)) {
+                if @unlikely(local.tee $mv$n$mantissa_start(digits.used + 1) > builtin::array_len($mv$input$repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(digits, $mv$n$mantissa_start);
+                    $mv$input$repr = digits.repr;
                 }
                 $mv$n$mantissa_end = digits.used;
                 digits.used = $mv$n$mantissa_start;
@@ -1331,7 +1333,7 @@ fn "core:json/integral_digits$sroa[return]$dae[start]"($mv$n$neg, $mv$n$int_digi
                     "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"($mv$n$mantissa_end, $mv$n$mantissa_start, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
                     unreachable;
                 }
-                builtin::array_set_u8(digits.repr, $mv$n$mantissa_end, 48);
+                builtin::array_set_u8($mv$input$repr, $mv$n$mantissa_end, 48);
                 continue l69;
             };
         };
@@ -5519,7 +5521,7 @@ fn "core:serde/core:prelude/types.wado/Result<i32,core:prelude/string.wado/Strin
         }
         return 0, struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: name_30 }, ref.null none;
     }
-    return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 2, message: out_113 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 }; $licm_repr_108 = global:core:serde::$const_obj_4; out_113.used = 24; builtin::array_copy<u8>(out_113.repr, 0, $licm_repr_108, 0, 24); $inline_core_prelude_string_wado_String__format_core_serde__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
+    return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 2, message: local.tee out_113(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(40), used: 0 }).used = 24; builtin::array_copy<u8>(out_113.repr, 0, global:core:serde::$const_obj_4, 0, 24); $inline_core_prelude_string_wado_String__format_core_serde__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_string_wado_String__format_core_serde__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
             $inline_core_prelude_string_wado_String__format_core_serde__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
                 break_if $inline_core_prelude_string_wado_String__format_core_serde__tmpl_5d09a9f8d325483d__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee lead_26(name_30.used) == 0;

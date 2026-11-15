@@ -304,11 +304,12 @@ fn "closure_capture_observes_later_write.wado/run"() {
     let l: ref "core:prelude/list.wado//List<i32>";
     let firsts: ref "core:prelude/list.wado//List<fn()->i32>";
     let value_87: ref "closure_capture_observes_later_write.wado//$Closure_13";
-    let $functor_112: ref "closure_capture_observes_later_write.wado//$Closure_1";
-    let $sroa_i_value_150: i32;
-    get_n = struct.new "canonical//CanonicalClosure_0" { env: local.tee $functor_112(struct.new "closure_capture_observes_later_write.wado//$Closure_1" { $capture_0: local.tee n(struct.new "core:prelude//$Cell<i32>" { value: 1 }) }), inspect: ref.func "closure/closure_capture_observes_later_write.wado/$closure_inspect_wrapper_0", func: ref.func "closure/closure_capture_observes_later_write.wado/$closure_wrapper_0" };
+    let $licm_repr_111: ref Array<fn()->i32>;
+    let $functor_113: ref "closure_capture_observes_later_write.wado//$Closure_1";
+    let $sroa_i_value_151: i32;
+    get_n = struct.new "canonical//CanonicalClosure_0" { env: local.tee $functor_113(struct.new "closure_capture_observes_later_write.wado//$Closure_1" { $capture_0: local.tee n(struct.new "core:prelude//$Cell<i32>" { value: 1 }) }), inspect: ref.func "closure/closure_capture_observes_later_write.wado/$closure_inspect_wrapper_0", func: ref.func "closure/closure_capture_observes_later_write.wado/$closure_wrapper_0" };
     n.value = 2;
-    if @unlikely(local.tee $v1_6($functor_112.$capture_0.value * 2) != 4) {
+    if @unlikely(local.tee $v1_6($functor_113.$capture_0.value * 2) != 4) {
         cold_path;
         "closure_capture_observes_later_write.wado/run$cold11"(get_n, $v1_6);
         unreachable;
@@ -326,12 +327,12 @@ fn "closure_capture_observes_later_write.wado/run"() {
         unreachable;
     }
     $v1_6 = 0;
-    $sroa_i_value_150 = 0;
+    $sroa_i_value_151 = 0;
     b3: block {
         l4: loop {
-            break_if b3 $sroa_i_value_150 >= 3;
-            $v1_6 = $v1_6 + $sroa_i_value_150;
-            $sroa_i_value_150 = $sroa_i_value_150 + 1;
+            break_if b3 $sroa_i_value_151 >= 3;
+            $v1_6 = $v1_6 + $sroa_i_value_151;
+            $sroa_i_value_151 = $sroa_i_value_151 + 1;
             continue l4;
         };
     };
@@ -342,16 +343,18 @@ fn "closure_capture_observes_later_write.wado/run"() {
     }
     firsts = struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     $v1_6 = 0;
+    $licm_repr_111 = firsts.repr;
     b6: block {
         l7: loop {
             break_if b6 $v1_6 >= 2;
             value_87 = struct.new "closure_capture_observes_later_write.wado//$Closure_13" { $capture_0: $v1_6 };
-            if @unlikely(local.tee $sroa_i_value_150(firsts.used) >= builtin::array_len(firsts.repr)) {
+            if @unlikely(local.tee $sroa_i_value_151(firsts.used) >= builtin::array_len($licm_repr_111)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(firsts);
+                $licm_repr_111 = firsts.repr;
             }
-            builtin::array_set<ref struct>(firsts.repr, $sroa_i_value_150, struct.new "canonical//CanonicalClosure_0" { env: value_87, inspect: ref.func "closure/closure_capture_observes_later_write.wado/$closure_inspect_wrapper_1", func: ref.func "closure/closure_capture_observes_later_write.wado/$closure_wrapper_1" });
-            firsts.used = $sroa_i_value_150 + 1;
+            builtin::array_set<ref struct>($licm_repr_111, $sroa_i_value_151, struct.new "canonical//CanonicalClosure_0" { env: value_87, inspect: ref.func "closure/closure_capture_observes_later_write.wado/$closure_inspect_wrapper_1", func: ref.func "closure/closure_capture_observes_later_write.wado/$closure_wrapper_1" });
+            firsts.used = $sroa_i_value_151 + 1;
             $v1_6 = $v1_6 + 1;
             continue l7;
         };

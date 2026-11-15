@@ -915,12 +915,13 @@ fn "wasi_filesystem_read_stream.wado/$cm_binding__wasi:filesystem/preopens@0.3.0
     let $lifted_string: ref "core:prelude/string.wado//String";
     let arr_16: ref Array<u8>;
     let value_20: ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]";
-    let self_24: ref null "Array<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
     let $held_7: ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]";
+    let $licm_repr_32: ref null "Array<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
     "wasi/$wasi:filesystem/preopens@0.3.0#get-directories"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude/list.wado//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>" { repr: builtin::array_new<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
     $i = 0;
+    $licm_repr_32 = $result.repr;
     b32: block {
         l33: loop {
             break_if b32 $i >= $count;
@@ -932,11 +933,12 @@ fn "wasi_filesystem_read_stream.wado/$cm_binding__wasi:filesystem/preopens@0.3.0
                 drop("mem/realloc"($str_ptr, $elem_addr, 1, 0));
             }
             value_20 = struct.new "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]" { 0: $lifted_result_6, 1: $lifted_string };
-            if @unlikely(local.tee $elem_addr($result.used) >= builtin::array_len($result.repr)) {
+            if @unlikely(local.tee $elem_addr($result.used) >= builtin::array_len($licm_repr_32)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::grow"($result);
+                $licm_repr_32 = $result.repr;
             }
-            if ref.is_null(local.tee $held_7(builtin::array_get_value<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee self_24($result.repr), $elem_addr))) == 0 {
+            if ref.is_null(local.tee $held_7(builtin::array_get_value<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($licm_repr_32, $elem_addr))) == 0 {
                 if ref.is_null(local.tee $lifted_result_6($held_7.0)) == 0 {
                     $str_ptr = $lifted_result_6.value;
                     $lifted_result_6.value = 0;
@@ -944,7 +946,7 @@ fn "wasi_filesystem_read_stream.wado/$cm_binding__wasi:filesystem/preopens@0.3.0
                 }
                 $held_7.0 = ref.null none;
             }
-            builtin::array_set<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(self_24, $elem_addr, value_20);
+            builtin::array_set<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($licm_repr_32, $elem_addr, value_20);
             $result.used = $elem_addr + 1;
             $i = $i + 1;
             continue l33;

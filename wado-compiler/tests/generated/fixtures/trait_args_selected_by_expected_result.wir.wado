@@ -70,71 +70,68 @@ global global:trait_args_selected_by_expected_result.wado::$const_obj_3: ref Arr
 fn "trait_args_selected_by_expected_result.wado/run"() with Stdout {
     let $load_1: ref Array<u8>;
     let out_8: ref "core:prelude/string.wado//String";
-    let $sroa_view_repr_836: ref Array<u8>;
-    let pos_1228: i32;
-    let t_1229: u64;
+    let pos_1236: i32;
+    let t_1237: u64;
     let q: u64;
     let pair: i32;
     let tens: i32;
-    out_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
-    $sroa_view_repr_836 = global:trait_args_selected_by_expected_result.wado::$const_obj_3;
-    builtin::array_copy<u8>(local.tee $load_1(out_8.repr), 0, $sroa_view_repr_836, 0, 9);
+    builtin::array_copy<u8>(local.tee $load_1(local.tee out_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }).repr), 0, global:trait_args_selected_by_expected_result.wado::$const_obj_3, 0, 9);
     out_8.used = 10;
-    pos_1228 = 10;
-    t_1229 = 3_i64;
+    pos_1236 = 10;
+    t_1237 = 3_i64;
     b0: block {
         l1: loop {
-            break_if b0 (pos_1228 - 9) < 2;
-            q = t_1229 /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(t_1229 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_1, pos_1228 - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($load_1, pos_1228 - 2, 48 + tens);
-            pos_1228 = pos_1228 - 2;
-            t_1229 = q;
+            break_if b0 (pos_1236 - 9) < 2;
+            q = t_1237 /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(t_1237 - (q * 100_i64))) / 10;
+            builtin::array_set_u8($load_1, pos_1236 - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($load_1, pos_1236 - 2, 48 + tens);
+            pos_1236 = pos_1236 - 2;
+            t_1237 = q;
             continue l1;
         };
     };
-    if pos_1228 > 9 {
-        builtin::array_set_u8($load_1, 9, 48 + builtin::i32_wrap_i64(t_1229 %u 10_i64));
+    if pos_1236 > 9 {
+        builtin::array_set_u8($load_1, 9, 48 + builtin::i32_wrap_i64(t_1237 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
     };
-    pos_1228 = builtin::i32_wrap_i64(local.tee t_1229("wasi/stream-new"()));
-    pair = builtin::i32_wrap_i64(t_1229 >> 32_i64);
-    pos_1228 = "trait_args_selected_by_expected_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos_1228);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_836(builtin::array_new<u8>(local.tee tens(out_8.used) + 1)), 0, out_8.repr, 0, tens);
-    builtin::array_set_u8($sroa_view_repr_836, tens, 10);
+    pos_1236 = builtin::i32_wrap_i64(local.tee t_1237("wasi/stream-new"()));
+    pair = builtin::i32_wrap_i64(t_1237 >> 32_i64);
+    pos_1236 = "trait_args_selected_by_expected_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos_1236);
+    builtin::array_copy<u8>(local.tee $load_1(builtin::array_new<u8>(local.tee tens(out_8.used) + 1)), 0, out_8.repr, 0, tens);
+    builtin::array_set_u8($load_1, tens, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         tens = tens + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(pair, $sroa_view_repr_836, 0, tens);
+        "core:rt/cm_stream_write_raw_all_u8"(pair, $load_1, 0, tens);
     });
     "wasi/stream-drop-writable"(pair);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos_1228);
-    pos_1228 = builtin::i32_wrap_i64(local.tee t_1229("wasi/stream-new"()));
-    pair = builtin::i32_wrap_i64(t_1229 >> 32_i64);
-    pos_1228 = "trait_args_selected_by_expected_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos_1228);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_836(builtin::array_new<u8>(11)), 0, global:trait_args_selected_by_expected_result.wado::$const_obj_2, 0, 10);
-    builtin::array_set_u8($sroa_view_repr_836, 10, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(pair, $sroa_view_repr_836);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos_1236);
+    pos_1236 = builtin::i32_wrap_i64(local.tee t_1237("wasi/stream-new"()));
+    pair = builtin::i32_wrap_i64(t_1237 >> 32_i64);
+    pos_1236 = "trait_args_selected_by_expected_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos_1236);
+    builtin::array_copy<u8>(local.tee $load_1(builtin::array_new<u8>(11)), 0, global:trait_args_selected_by_expected_result.wado::$const_obj_2, 0, 10);
+    builtin::array_set_u8($load_1, 10, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(pair, $load_1);
     "wasi/stream-drop-writable"(pair);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos_1228);
-    pos_1228 = builtin::i32_wrap_i64(local.tee t_1229("wasi/stream-new"()));
-    pair = builtin::i32_wrap_i64(t_1229 >> 32_i64);
-    pos_1228 = "trait_args_selected_by_expected_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos_1228);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_836(builtin::array_new<u8>(19)), 0, global:trait_args_selected_by_expected_result.wado::$const_obj_1, 0, 18);
-    builtin::array_set_u8($sroa_view_repr_836, 18, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(pair, $sroa_view_repr_836);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos_1236);
+    pos_1236 = builtin::i32_wrap_i64(local.tee t_1237("wasi/stream-new"()));
+    pair = builtin::i32_wrap_i64(t_1237 >> 32_i64);
+    pos_1236 = "trait_args_selected_by_expected_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos_1236);
+    builtin::array_copy<u8>(local.tee $load_1(builtin::array_new<u8>(19)), 0, global:trait_args_selected_by_expected_result.wado::$const_obj_1, 0, 18);
+    builtin::array_set_u8($load_1, 18, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(pair, $load_1);
     "wasi/stream-drop-writable"(pair);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos_1228);
-    pos_1228 = builtin::i32_wrap_i64(local.tee t_1229("wasi/stream-new"()));
-    pair = builtin::i32_wrap_i64(t_1229 >> 32_i64);
-    pos_1228 = "trait_args_selected_by_expected_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos_1228);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_836(builtin::array_new<u8>(13)), 0, global:trait_args_selected_by_expected_result.wado::$const_obj_0, 0, 12);
-    builtin::array_set_u8($sroa_view_repr_836, 12, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]$dae[return]"(pair, $sroa_view_repr_836);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos_1236);
+    pos_1236 = builtin::i32_wrap_i64(local.tee t_1237("wasi/stream-new"()));
+    pair = builtin::i32_wrap_i64(t_1237 >> 32_i64);
+    pos_1236 = "trait_args_selected_by_expected_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos_1236);
+    builtin::array_copy<u8>(local.tee $load_1(builtin::array_new<u8>(13)), 0, global:trait_args_selected_by_expected_result.wado::$const_obj_0, 0, 12);
+    builtin::array_set_u8($load_1, 12, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]$dae[return]"(pair, $load_1);
     "wasi/stream-drop-writable"(pair);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos_1228);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos_1236);
 }
 
 fn "trait_args_selected_by_expected_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

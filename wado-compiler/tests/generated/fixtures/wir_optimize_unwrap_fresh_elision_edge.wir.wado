@@ -135,16 +135,13 @@ global global:wir_optimize_unwrap_fresh_elision_edge.wado::$const_obj_2: ref Arr
 fn "wir_optimize_unwrap_fresh_elision_edge.wado/run"() with Stdout {
     let $load_1: ref Array<u8>;
     let out_169: ref "core:prelude/string.wado//String";
-    let $sroa_view_repr_119: ref Array<u8>;
     let pos: i32;
     let t_666: u64;
     let q: u64;
     let pair: i32;
     let tens: i32;
     $inline_core_prelude_string_wado_String__format_wir_optimize_unwrap_fresh_elision_edge_wado__tmpl_fb51c04d54491732__i32___spec1_spec0_dae_t_return__0: block {
-        out_169 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-        $sroa_view_repr_119 = global:wir_optimize_unwrap_fresh_elision_edge.wado::$const_obj_2;
-        builtin::array_copy<u8>(local.tee $load_1(out_169.repr), 0, $sroa_view_repr_119, 0, 5);
+        builtin::array_copy<u8>(local.tee $load_1(local.tee out_169(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }).repr), 0, global:wir_optimize_unwrap_fresh_elision_edge.wado::$const_obj_2, 0, 5);
         out_169.used = 6;
         pos = 6;
         t_666 = 1_i64;
@@ -187,9 +184,9 @@ fn "wir_optimize_unwrap_fresh_elision_edge.wado/run"() with Stdout {
     pos = builtin::i32_wrap_i64(local.tee t_666("wasi/stream-new"()));
     pair = builtin::i32_wrap_i64(t_666 >> 32_i64);
     pos = "wir_optimize_unwrap_fresh_elision_edge.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_119(builtin::array_new<u8>(8)), 0, global:wir_optimize_unwrap_fresh_elision_edge.wado::$const_obj_1, 0, 7);
-    builtin::array_set_u8($sroa_view_repr_119, 7, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(pair, $sroa_view_repr_119);
+    builtin::array_copy<u8>(local.tee $load_1(builtin::array_new<u8>(8)), 0, global:wir_optimize_unwrap_fresh_elision_edge.wado::$const_obj_1, 0, 7);
+    builtin::array_set_u8($load_1, 7, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(pair, $load_1);
     "wasi/stream-drop-writable"(pair);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos);
 }
@@ -883,11 +880,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<wir_optimiz
     let x: i64;
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_498: ref Array<u8>;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-    $sroa_view_repr_498 = global:wir_optimize_unwrap_fresh_elision_edge.wado::$const_obj_2;
-    out_3.used = local.tee $load_0(5);
-    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, $sroa_view_repr_498, 0, 5);
+    local.tee out_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }).used = local.tee $load_0(5);
+    builtin::array_copy<u8>(local.tee $load_1(out_3.repr), 0, global:wir_optimize_unwrap_fresh_elision_edge.wado::$const_obj_2, 0, 5);
     is_negative_65 = t < 0;
     x = builtin::i64_extend_i32_s(t);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -967,22 +961,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<wir_optimiz
     }
     is_negative_65 = out_3.used;
     out_3.used = $load_0;
-    $sroa_view_repr_498 = out_3.repr;
+    $load_1 = out_3.repr;
     t = is_negative_65 + t;
     b139: block {
         l140: loop {
             break_if b139 (t - is_negative_65) < 2;
             q = x /u 100_i64;
             tens = local.tee $load_0(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_498, t - 1, (48 + $load_0) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_498, t - 2, 48 + tens);
+            builtin::array_set_u8($load_1, t - 1, (48 + $load_0) - (tens * 10));
+            builtin::array_set_u8($load_1, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l140;
         };
     };
     if t > is_negative_65 {
-        builtin::array_set_u8($sroa_view_repr_498, is_negative_65, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($load_1, is_negative_65, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;

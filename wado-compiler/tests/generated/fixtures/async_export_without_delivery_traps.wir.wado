@@ -71,12 +71,9 @@ fn "async_export_without_delivery_traps.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let $sroa_t_h0_143: i32;
-    let $sroa_view_repr_550: ref Array<u8>;
     $sroa_t_h0_143 = unreachable;
-    out_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
-    $sroa_view_repr_550 = global:async_export_without_delivery_traps.wado::$const_obj_0;
-    out_12.used = local.tee $load_0(4);
-    builtin::array_copy<u8>(local.tee $load_1(out_12.repr), 0, $sroa_view_repr_550, 0, 4);
+    local.tee out_12(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }).used = local.tee $load_0(4);
+    builtin::array_copy<u8>(local.tee $load_1(out_12.repr), 0, global:async_export_without_delivery_traps.wado::$const_obj_0, 0, 4);
     is_negative_78 = $sroa_t_h0_143 < 0;
     x = builtin::i64_extend_i32_s($sroa_t_h0_143);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -156,22 +153,22 @@ fn "async_export_without_delivery_traps.wado/run"() with Stdout {
     }
     is_negative_78 = out_12.used;
     out_12.used = $load_0;
-    $sroa_view_repr_550 = out_12.repr;
+    $load_1 = out_12.repr;
     $sroa_t_h0_143 = is_negative_78 + $sroa_t_h0_143;
     b22: block {
         l23: loop {
             break_if b22 ($sroa_t_h0_143 - is_negative_78) < 2;
             q = x /u 100_i64;
             tens = local.tee $load_0(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_550, $sroa_t_h0_143 - 1, (48 + $load_0) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_550, $sroa_t_h0_143 - 2, 48 + tens);
+            builtin::array_set_u8($load_1, $sroa_t_h0_143 - 1, (48 + $load_0) - (tens * 10));
+            builtin::array_set_u8($load_1, $sroa_t_h0_143 - 2, 48 + tens);
             $sroa_t_h0_143 = $sroa_t_h0_143 - 2;
             x = q;
             continue l23;
         };
     };
     if $sroa_t_h0_143 > is_negative_78 {
-        builtin::array_set_u8($sroa_view_repr_550, is_negative_78, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($load_1, is_negative_78, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_44: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_44;
@@ -179,11 +176,11 @@ fn "async_export_without_delivery_traps.wado/run"() with Stdout {
     $sroa_t_h0_143 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $load_0 = builtin::i32_wrap_i64(x >> 32_i64);
     $sroa_t_h0_143 = "async_export_without_delivery_traps.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_143);
-    builtin::array_copy<u8>(local.tee $sroa_view_repr_550(builtin::array_new<u8>(local.tee is_negative_78(out_12.used) + 1)), 0, out_12.repr, 0, is_negative_78);
-    builtin::array_set_u8($sroa_view_repr_550, is_negative_78, 10);
+    builtin::array_copy<u8>(local.tee $load_1(builtin::array_new<u8>(local.tee is_negative_78(out_12.used) + 1)), 0, out_12.repr, 0, is_negative_78);
+    builtin::array_set_u8($load_1, is_negative_78, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         is_negative_78 = is_negative_78 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($load_0, $sroa_view_repr_550, 0, is_negative_78);
+        "core:rt/cm_stream_write_raw_all_u8"($load_0, $load_1, 0, is_negative_78);
     });
     "wasi/stream-drop-writable"($load_0);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_143);

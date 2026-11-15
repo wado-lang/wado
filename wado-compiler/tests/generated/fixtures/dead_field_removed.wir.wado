@@ -236,7 +236,6 @@ fn "dead_field_removed.wado/report"(configs) with Stdout {
     let out_49: ref "core:prelude/string.wado//String";
     let is_negative_116: bool;
     let x_120: i64;
-    let $sroa_view_repr_205: ref Array<u8>;
     let $sroa_t_h1_272: i32;
     self_21 = configs.used;
     if @unlikely(0 >= self_21) {
@@ -254,14 +253,13 @@ fn "dead_field_removed.wado/report"(configs) with Stdout {
     self_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_120(x_120 = builtin::i64_extend_i32_s(self_21); select i64(x_120 < 0_i64, 0_i64 - x_120, x_120)));
     is_negative_116 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_49, is_negative_116, self_21);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_3(out_49.repr), is_negative_116, x_120, self_21);
-    $sroa_view_repr_205 = global:dead_field_removed.wado::$const_obj_3;
     if @unlikely(local.tee self_21(out_49.used + 1) > builtin::array_len($load_3)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_49, self_21);
     }
     is_negative_116 = out_49.used;
     out_49.used = self_21;
-    builtin::array_copy<u8>(out_49.repr, is_negative_116, $sroa_view_repr_205, 0, 1);
+    builtin::array_copy<u8>(out_49.repr, is_negative_116, global:dead_field_removed.wado::$const_obj_3, 0, 1);
     self_21 = $sroa_t_h1_272 < 0;
     $sroa_t_h1_272 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_120(x_120 = builtin::i64_extend_i32_s($sroa_t_h1_272); select i64(x_120 < 0_i64, 0_i64 - x_120, x_120)));
     self_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_49, self_21, $sroa_t_h1_272);
