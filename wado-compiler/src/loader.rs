@@ -1279,10 +1279,13 @@ mod tests {
     /// The attributes of the module's one `use`.
     fn use_attributes(source: &str) -> ImportAttributes {
         let module = parse_test_module(source);
-        let Some(Item::Use(use_decl)) = module.items.into_iter().next() else {
+        let [Item::Use(use_decl)] = module.items.as_slice() else {
             panic!("the source is one `use`");
         };
-        use_decl.attributes.expect("the `use` carries a `with`")
+        use_decl
+            .attributes
+            .clone()
+            .expect("the `use` carries a `with`")
     }
 
     #[test]
