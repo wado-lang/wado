@@ -707,19 +707,17 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(225)
 
 type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(226)
 
-type "functype//wasi/$promise-wait" = fn(ref extern, i32);  // TypeId(227)
+type "functype//wasi/subtask-cancel" = fn(i32) -> u32;  // TypeId(227)
 
-type "functype//wasi/subtask-cancel" = fn(i32) -> u32;  // TypeId(228)
+type "functype//wasi_filesystem_set_times.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(228)
 
-type "functype//wasi_filesystem_set_times.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(229)
+type "functype//wasi_filesystem_set_times.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(229)
 
-type "functype//wasi_filesystem_set_times.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(230)
+type "functype//wasi_filesystem_set_times.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.write-via-stream" = fn(ref null "core:prelude//$Resource", i32, i64) -> i32;  // TypeId(230)
 
-type "functype//wasi_filesystem_set_times.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.write-via-stream" = fn(ref null "core:prelude//$Resource", i32, i64) -> i32;  // TypeId(231)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(231)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(232)
-
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0" = fn(i32, ref Array<u8>, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(233)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0" = fn(i32, ref Array<u8>, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(232)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -744,7 +742,6 @@ import fn wasi/resource-drop:wasi:filesystem/types.wado#Descriptor from "wasi/re
 import fn wasi/future-drop-readable:transmission-wasi:filesystem/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:filesystem/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
-import fn wasi/$promise-wait from "extern/$promise-wait";
 import fn wasi/subtask-cancel from "wasi/subtask-cancel";
 
 global mut global:core:prelude/types.wado::SETTLED_COPIES: ref null "core:prelude/list.wado//List<core:prelude/types.wado/CopySettlement>" = ref.null none;
@@ -3940,8 +3937,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) with Subtask {
     let subtask: ref null "core:prelude//$Resource";
     let set: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>";
-    let promise: ref extern;
-    let buffer_6: i32;
     let buffer_7: ref null "core:prelude/types.wado//ResultBuffer";
     let $block_v_9: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";
     let self_17: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
@@ -3962,15 +3957,15 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     if ref.is_null(local.tee $sroa_$write_back_11_value_43(self.promise)) == 0 {
         self.promise = ref.null noextern;
     }
-    if ref.is_null($sroa_$write_back_11_value_43) == 0 {
-        promise = ref.as_non_null($sroa_$write_back_11_value_43);
+    if @unlikely(ref.is_null($sroa_$write_back_11_value_43) == 0) {
+        drop(ref.as_non_null($sroa_$write_back_11_value_43));
         let $match_scrut_3: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
-        buffer_6 = (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_3(self.buffer.value)) -> i32 {
+        drop((if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_3(self.buffer.value)) -> i32 {
             ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($match_scrut_3).payload_0.ptr;
         } else {
             0;
-        });
-        "wasi/$promise-wait"(promise, buffer_6);
+        }));
+        unreachable;
     } else {
     }
     $match_scrut_3 = local.tee self_36(self.buffer).value;
@@ -3999,8 +3994,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"(self) with Subtask {
     let subtask: ref null "core:prelude//$Resource";
     let set: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>";
-    let promise: ref extern;
-    let buffer_6: i32;
     let buffer_7: ref null "core:prelude/types.wado//ResultBuffer";
     let $block_v_9: ref null "wasi:filesystem/types.wado//ErrorCode";
     let self_17: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
@@ -4021,15 +4014,15 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     if ref.is_null(local.tee $sroa_$write_back_11_value_43(self.promise)) == 0 {
         self.promise = ref.null noextern;
     }
-    if ref.is_null($sroa_$write_back_11_value_43) == 0 {
-        promise = ref.as_non_null($sroa_$write_back_11_value_43);
+    if @unlikely(ref.is_null($sroa_$write_back_11_value_43) == 0) {
+        drop(ref.as_non_null($sroa_$write_back_11_value_43));
         let $match_scrut_3: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
-        buffer_6 = (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_3(self.buffer.value)) -> i32 {
+        drop((if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_3(self.buffer.value)) -> i32 {
             ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($match_scrut_3).payload_0.ptr;
         } else {
             0;
-        });
-        "wasi/$promise-wait"(promise, buffer_6);
+        }));
+        unreachable;
     } else {
     }
     $match_scrut_3 = local.tee self_36(self.buffer).value;
@@ -4058,8 +4051,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) with Subtask {
     let subtask: ref null "core:prelude//$Resource";
     let set: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>";
-    let promise: ref extern;
-    let buffer_6: i32;
     let buffer_7: ref null "core:prelude/types.wado//ResultBuffer";
     let $block_v_9: ref null "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
     let self_17: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
@@ -4080,15 +4071,15 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     if ref.is_null(local.tee $sroa_$write_back_11_value_43(self.promise)) == 0 {
         self.promise = ref.null noextern;
     }
-    if ref.is_null($sroa_$write_back_11_value_43) == 0 {
-        promise = ref.as_non_null($sroa_$write_back_11_value_43);
+    if @unlikely(ref.is_null($sroa_$write_back_11_value_43) == 0) {
+        drop(ref.as_non_null($sroa_$write_back_11_value_43));
         let $match_scrut_3: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
-        buffer_6 = (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_3(self.buffer.value)) -> i32 {
+        drop((if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_3(self.buffer.value)) -> i32 {
             ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($match_scrut_3).payload_0.ptr;
         } else {
             0;
-        });
-        "wasi/$promise-wait"(promise, buffer_6);
+        }));
+        unreachable;
     } else {
     }
     $match_scrut_3 = local.tee self_36(self.buffer).value;

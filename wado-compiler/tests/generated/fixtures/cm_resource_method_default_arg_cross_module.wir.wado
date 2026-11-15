@@ -98,19 +98,15 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<c
 
 type "functype//sub/cm_resource_method_default_arg_cross_module_a.wado/sub/cm_resource_method_default_arg_cross_module_a.wado/Target^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn(ref extern, ref "core:prelude/string.wado//String");  // TypeId(39)
 
-type "functype//wasi/$same" = fn(ref extern, ref extern) -> i32;  // TypeId(40)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(40)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(41)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(43)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(44)
-
-type "functype//wasi/$class-of" = fn(ref extern) -> i32;  // TypeId(45)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(46)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(44)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -120,12 +116,10 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
-import fn wasi/$same from "extern/$same";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
-import fn wasi/$class-of from "extern/$class-of";
 
 fn "cm_resource_method_default_arg_cross_module.wado/$template_segment$cm_resource_method_default_arg_cross_module.wado/$tmpl$0ebd0a024ac64410"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {
     return (if index == 0 -> ref "core:prelude/string.wado//String" {
@@ -158,7 +152,7 @@ fn "cm_resource_method_default_arg_cross_module.wado/$cm_export__$test_0"() {
         if ref.test "core:prelude//$BackedHandle"(extern.internalize(t)) {
             break $inline_handle_eq_4: 0;
         }
-        break $inline_handle_eq_4: "wasi/$same"(t, t);
+        unreachable;
     } == 0) {
         cold_path;
         "cm_resource_method_default_arg_cross_module.wado/$test_0$cold0"(t);
@@ -304,7 +298,7 @@ fn "core:rt/handle_class"(handle) {
     if ref.test "core:prelude//$BackedHandle"(extern.internalize(handle)) {
         return ref.cast "core:prelude//$BackedHandle"(extern.internalize(handle)).class;
     }
-    return "wasi/$class-of"(handle);
+    return unreachable;
 }
 
 fn "core:rt/cm_await_blocked"(handle, packed) {

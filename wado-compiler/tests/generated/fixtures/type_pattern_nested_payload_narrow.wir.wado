@@ -244,17 +244,15 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slic
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked$spec0$dae[index]" = fn(ref Array<u8>, i32) -> u8;  // TypeId(89)
 
-type "functype//wasi/$class-of" = fn(ref extern) -> i32;  // TypeId(90)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(90)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(91)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(91)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(92)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(92)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(93)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(93)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(94)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(95)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(94)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -264,7 +262,6 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
-import fn wasi/$class-of from "extern/$class-of";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
@@ -360,7 +357,7 @@ fn "type_pattern_nested_payload_narrow.wado/$cm_export__run"() {
             if ref.test "core:prelude//$BackedHandle"(extern.internalize(el)) {
                 break $inline_handle_class_4: ref.cast "core:prelude//$BackedHandle"(extern.internalize(el)).class;
             }
-            break $inline_handle_class_4: "wasi/$class-of"(el);
+            unreachable;
         } - 4) <=u 0;
     } else {
         0;

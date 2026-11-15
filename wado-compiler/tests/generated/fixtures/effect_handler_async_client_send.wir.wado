@@ -828,19 +828,17 @@ type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#Error
 
 type "functype//wasi/subtask-cancel" = fn(i32) -> u32;  // TypeId(237)
 
-type "functype//wasi/$promise-wait" = fn(ref extern, i32);  // TypeId(238)
+type "functype//effect_handler_async_client_send.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(238)
 
-type "functype//effect_handler_async_client_send.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(239)
+type "functype//effect_handler_async_client_send.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(239)
 
-type "functype//effect_handler_async_client_send.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(240)
+type "functype//effect_handler_async_client_send.wado/$cm_binding__wasi:http/types@0.3.0#[static]request.new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32, ref null "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref null "tuple//[wasi:http/types.wado/Request, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(240)
 
-type "functype//effect_handler_async_client_send.wado/$cm_binding__wasi:http/types@0.3.0#[static]request.new" = fn(i32, ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32, ref null "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref null "tuple//[wasi:http/types.wado/Request, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(241)
+type "functype//effect_handler_async_client_send.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(241)
 
-type "functype//effect_handler_async_client_send.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(242)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(242)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(243)
-
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all" = fn(i32, ref Array<u8>, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(244)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all" = fn(i32, ref Array<u8>, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(243)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -871,7 +869,6 @@ import fn wasi/future-drop-writable:val-result<option<own<wasi:http/types.wado#F
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/subtask-cancel from "wasi/subtask-cancel";
-import fn wasi/$promise-wait from "extern/$promise-wait";
 
 global mut global:core:prelude/types.wado::SETTLED_COPIES: ref null "core:prelude/list.wado//List<core:prelude/types.wado/CopySettlement>" = ref.null none;
 global mut global:core:prelude/types.wado::DELIVERED: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Resolution>" = ref.null none;
@@ -3381,7 +3378,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"(self) with Subtask {
     let subtask: ref null "core:prelude//$Resource";
     let set: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>";
-    let promise: ref extern;
     let buffer_7: ref null "core:prelude/types.wado//ResultBuffer";
     let $block_v_9: ref null "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let self_17: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
@@ -3445,15 +3441,15 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     if ref.is_null(local.tee $sroa_$write_back_11_value_91(self.promise)) == 0 {
         self.promise = ref.null noextern;
     }
-    if ref.is_null($sroa_$write_back_11_value_91) == 0 {
-        promise = ref.as_non_null($sroa_$write_back_11_value_91);
+    if @unlikely(ref.is_null($sroa_$write_back_11_value_91) == 0) {
+        drop(ref.as_non_null($sroa_$write_back_11_value_91));
         let $match_scrut_5: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
-        $sroa_id_handle_88 = (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_5(self.buffer.value)) -> i32 {
+        drop((if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_5(self.buffer.value)) -> i32 {
             ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($match_scrut_5).payload_0.ptr;
         } else {
             0;
-        });
-        "wasi/$promise-wait"(promise, $sroa_id_handle_88);
+        }));
+        unreachable;
     } else {
     }
     $match_scrut_5 = local.tee self_79(self.buffer).value;
