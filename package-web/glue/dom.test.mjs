@@ -53,6 +53,34 @@ test("an element that is no input does not narrow to one", async () => {
   assert.equal(greeting.textContent, "Hello, stranger!");
 });
 
+// `probe/src/main.wado` writes what it found to the attributes of `<body>`.
+const probe = process.env.WEB_PROBE_JS;
+assert.ok(probe, "WEB_PROBE_JS names the transpiled glue/probe");
+
+test("the host answers identity, narrowing and a listener while `run` waits", async () => {
+  install('<input id="input"><div id="div"></div>');
+  const { run } = await import(probe);
+  const found = document.body.dataset;
+  const running = run.run();
+  while (found.state !== "waiting") {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  assert.equal(found.same, "true false");
+  // An input is an `HTMLElement` two levels up; a `<div>` is no input.
+  assert.equal(found.narrow, "true true false");
+  // A `<div>`'s own interface is not declared, so it is named by `HTMLElement`.
+  assert.equal(found.inspect, "HtmlInputElement HtmlElement");
+
+  const div = document.getElementById("div");
+  div.dispatchEvent(new Event("click"));
+  assert.equal(found.clicks, "1");
+  await running;
+  assert.equal(found.state, "done");
+  // The closure outlives `run`, and keeps what it captured.
+  div.dispatchEvent(new Event("click"));
+  assert.equal(found.clicks, "2");
+});
+
 test("an object's class is its nearest declared ancestor's", async () => {
   const { $glue } = await import(glue);
   install('<div id="div"></div><p id="p"></p><input id="input">');

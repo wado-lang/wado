@@ -373,15 +373,15 @@ glue cannot be run without them.
   call for a host object
 - [x] Closures cross as `externref`, called back through unlifted core exports,
   and the registry and `wado:callback/callback` are removed
-- [ ] The glue: `wado-from-idl` generates shims over core signatures, reading
+- [x] The glue: `wado-from-idl` generates shims over core signatures, reading
   strings from memory, with no handle table, and keeps one function per closure
-- [ ] The loader: the jco transpile runs in `instantiation` mode and replaces
+- [x] The loader: the jco transpile runs in `instantiation` mode and replaces
   the trapping module's functions with the glue. The programs that ran against
-  a wasmtime host stub run against jsdom instead, since a Component Model host
-  can neither supply a web import nor call an unlifted export: a two-level
-  `extends`, narrowing by the host's class, `==` as the host interned, a
-  closure called back after `run` returned, and one entered while `run` is
-  suspended
+  a wasmtime host stub run against jsdom instead (`package-web/glue/probe`),
+  since a Component Model host can neither supply a web import nor call an
+  unlifted export: a two-level `extends`, narrowing by the host's class, `==`
+  as the host interned, a closure called back after `run` returned, and one
+  entered while `run` is suspended
 - [ ] The handle table: a handle in linear memory is a slot index, and
   `sequence<T>` and `FrozenArray<T>` of an interface lower to `List<T>`
 - [ ] An `AsyncCall` over a promise, and `Rejection`: `wait` through a

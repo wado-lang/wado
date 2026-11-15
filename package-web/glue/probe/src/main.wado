@@ -1,0 +1,33 @@
+//! What only the host's own objects answer, which `glue/dom.test.mjs` reads
+//! back from the attributes of `<body>`: identity, narrowing through more than
+//! one level of `extends`, the name `Inspect` writes, and a listener entered
+//! while `run` waits.
+
+use { Dom, Event, HtmlElement, HtmlInputElement, Node } from "wado-lang:web";
+use { MonotonicClock } from "wasi:clocks";
+
+export fn run() with (Dom, MonotonicClock) {
+    let doc = Dom::document();
+    let input = doc.get_element_by_id("input").unwrap();
+    let div = doc.get_element_by_id("div").unwrap();
+    report("same", `${input == doc.get_element_by_id("input").unwrap()} ${input == div}`);
+
+    let node: Node = input;
+    let other: Node = div;
+    let narrowed = `${node matches { _: HtmlElement }} ${node matches { _: HtmlInputElement }}`;
+    report("narrow", `${narrowed} ${other matches { _: HtmlInputElement }}`);
+    report("inspect", `${node:?} ${other:?}`);
+
+    let mut clicks = 0;
+    div.add_event_listener("click", |_: Event| {
+        clicks += 1;
+        report("clicks", `${clicks}`);
+    });
+    report("state", "waiting");
+    MonotonicClock::wait_for(50_000_000).wait();
+    report("state", "done");
+}
+
+fn report(key: String, value: String) with Dom {
+    Dom::document().body().unwrap().set_attribute(`data-${key}`, value);
+}
