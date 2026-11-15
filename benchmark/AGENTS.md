@@ -25,9 +25,8 @@ until then.
 
 Read the `wado-performance` skill before measuring a change, and its section
 "A/B-ing a stdlib change" before comparing two versions of `wado-compiler/lib`.
-Without `WADO_BIN`, `wado.sh` runs `cargo run --release`, and a release build
-embeds the stdlib. So an A/B that swaps stdlib files into the tree rebuilds the
-compiler for every run.
+Without `WADO_BIN`, `wado.sh` runs the dev build, which reads the stdlib from
+disk. A release build embeds it, so an arm of a stdlib A/B is a release binary.
 
 Dead ends — a change the benchmark ignored, whose WIR diff shows no fewer
 instructions, and which does not even come out smaller — live in the

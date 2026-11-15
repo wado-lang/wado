@@ -522,11 +522,9 @@ done
 
 A change to `lib/core/*.wado` needs two compilers as well, which the source tree
 hides: a release build embeds the stdlib where a dev build reads it from disk.
-`benchmark/wado.sh` falls back to `cargo run --release` whenever `WADO_BIN` is
-unset, so swapping an arm's `.wado` files into the tree invalidates
-`wado-compiler` and rebuilds it under `lto=thin` / `codegen-units=1`. That is
-two full rebuilds per alternating round, and they are the wall clock rather than
-the benchmark.
+`benchmark/wado.sh` falls back to the dev build whenever `WADO_BIN` is unset, so
+an arm is a release binary, which carries its own stdlib wherever the tree
+stands.
 
 Build one binary per arm first, from the same compiler source with `lib/` at the
 branch's fork point and at `HEAD`, so `lib/` is all that differs. `git restore`
