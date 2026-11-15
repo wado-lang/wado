@@ -7060,6 +7060,19 @@ test "the dump lowers through the emitter's primed context" {
     assert ctx.follow.is_exact("a"), "the dump must install FOLLOW before lowering, as `generate` does";
 }
 
+test "the dump reports the lexer rules' warnings, as generation does" {
+    let input = "lexer grammar L;
+options { caseInsensitive = true; }
+A : [Z-a] ;
+C : '/*' ( C | {true}? . )*? '*/' ;";
+    let report = dump_source(input);
+    let messages: List<String> = gen(input).diagnostics.into_iter().map(|d| d.message).collect();
+    assert messages.len() == 2;
+    for let m of &messages {
+        assert report.contains(m);
+    }
+}
+
 // `--atn` reports the same grammar the GIR dump does, so it reports the same
 // lowering. Re-lowering it through `build_atn`'s fresh context instead reaches
 // a table that knows none of the stamped ids.
