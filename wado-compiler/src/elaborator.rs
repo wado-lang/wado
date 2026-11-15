@@ -346,6 +346,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The symbol `name` reaches from `module`, for a caller whose reference site
     /// is not at hand — a mangled name, a synthesis target.
+    #[expect(clippy::disallowed_methods, reason = "the scope's own entry")]
     pub(crate) fn symbol_named(&self, module: &ModuleSource, name: &str) -> Option<&'a Symbol> {
         let def = self.tysys.resolutions.resolve_in(module, name)?;
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
@@ -554,6 +555,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The declaration `module` declares under `name`, for the positions no
     /// reference site answers. The module is named by the caller, not searched
     /// for.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the table's lookup, read as an identity"
+    )]
     pub(super) fn decl_in_module(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
         self.symbols
             .lookup_in_module(module, name)
@@ -561,6 +566,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// [`Self::decl_in_module`] as a callee identity.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "`builtin::f`, `ns::f` and a synthesized `panic` name the module they read"
+    )]
     fn callee_in_module(&self, module: &ModuleSource, name: &str) -> Option<callee::CalleeRef> {
         Some(self.tysys.callee_of(self.decl_in_module(module, name)?))
     }
@@ -593,6 +602,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// the current module under `name` (local item, imported item, imported
     /// namespace member, etc.). Looks up the defining [`AstId`](crate::ast::AstId) through
     /// the symbol table; no-op if the name is not declared.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "an identifier's use→def edge, where the walk answered no declaration for its site"
+    )]
     pub(super) fn record_item_reference_by_name(&mut self, use_id: AstId, name: &str) {
         // The name is spelled at `use_id`, so it means what its own module says
         // it means. A travelled expression otherwise records an edge to a
@@ -1173,6 +1186,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// aliases, so this is the import tier answering the qualification the
     /// programmer wrote — the same answer the resolve walk gives `ns::Name` in
     /// type position, rather than a second lookup beside it.
+    #[expect(clippy::disallowed_methods, reason = "the import tier's own entry")]
     pub(super) fn namespace_member(&self, namespace: &str, name: &str) -> Option<DefId> {
         self.tysys.resolutions.imported_as(
             &self.current_module_source,
@@ -1512,6 +1526,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// For a generic instance it is the *base* type's declaration — type
     /// arguments are dropped, so it cannot tell `Foo<A>` from `Foo<B>`.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "a builtin type's declaration is the prelude's, which has no vantage"
+    )]
     pub(crate) fn type_decl_key(&self, type_id: tir::TypeId) -> Option<DefId> {
         // No vantage: an import aliasing a builtin's name never steers the type.
         if let Some(name) = self.tysys.builtin_type_name(type_id) {
@@ -1583,6 +1601,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         effect
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "a `use` names its member in the module it imports from"
+    )]
     fn record_use_reference(&mut self, source: &ModuleSource, site: AstId, name: &str) {
         if let Some(sym) = self.symbols.lookup_in_module(source, name) {
             self.record_reference_to_def(site, sym.defined_at);

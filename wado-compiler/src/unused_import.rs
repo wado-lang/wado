@@ -111,6 +111,10 @@ impl Uses<'_> {
     /// The local name an import of `name` binds (its `alias` where it has
     /// one) and `span`, where it is written, when the module never refers
     /// to it.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "an import binds the local name it writes, which is what is asked"
+    )]
     fn unused_binding(
         &self,
         name: &String,

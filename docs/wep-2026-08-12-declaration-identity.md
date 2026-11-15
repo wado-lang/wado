@@ -524,7 +524,9 @@ it is §6, that a fact about a declaration is read through the `DefId` naming it
 What is left, each with the reason. A declaration is whatever _identifies_ one,
 so this spans both currencies: a `DefId`, and a `Symbol` row, which carries the
 declaring node. Adding to the list is a design change — the alternative is
-always to give the caller the reference site.
+always to give the caller the reference site. Each public entry below is listed
+under `disallowed-methods` in `clippy.toml`, so a new caller fails
+`mise run clippy` until it carries an `expect` naming its reason.
 
 The one scope, which every other entry exists by not being:
 
@@ -537,10 +539,9 @@ Two single tiers of that scope, each for a caller asking about that tier alone:
 - `imported_as` — the import tier, for a caller asking about the aliasing
 - `prelude_decl` — the prelude tier, which has no vantage to be given
 
-The frame derivation: the scope over the walk's own frame. Each entry has a
-sited counterpart a caller with a reference site reaches instead.
+The frame derivation: the scope over the walk's own frame. It has a sited
+counterpart a caller with a reference site reaches instead.
 
-- `decl_key_or_local`, `TypeLookup::declaration` — for a rendered head
 - `namespace_member` — the `ns$Name` alias a namespace import registers
 
 The same derivation in the `Symbol` currency, which §5's `DefId` columns subsume:
@@ -911,15 +912,16 @@ Fixtures: `pattern_qualifier_type_args_read_error.wado`,
 A static call's receiver taken as an identity, as §4 states. Each step leaves
 the e2e fixtures passing.
 
-- [ ] A receiver identity, built from a reference site's `Resolution` or from a
+- [x] A receiver identity, built from a reference site's `Resolution` or from a
   `TypeId`, and `StaticQuery` built from it with no receiver name. Every
   static resolution's caller passes one.
-- [ ] A diagnostic about a static call spells the receiver from its identity. A
+- [x] A diagnostic about a static call spells the receiver from its identity. A
   receiver no site resolves is reported by the resolver alone. The wording
   that changes is reviewed fixture by fixture.
-- [ ] `ImplTargetKey::TypeParam` keyed by the impl's own `TypeParamId` rather
-  than by the module and the parameter's name.
-- [ ] `decl_key_or_local` and `TypeLookup::declaration` leave the frame
+- [x] `ImplTargetKey::TypeParam` keyed by the binder that declares the
+  parameter (its owner's `DefId` and the parameter's name) rather than by the
+  module and the name.
+- [x] `decl_key_or_local` and `TypeLookup::declaration` leave the frame
   derivation's list, and `impl_target(&str)`, `impl_target_at` and
   `static_receiver_key` are deleted. The name-to-declaration entries left
   in the list are listed under `disallowed-methods` in `clippy.toml`, so a

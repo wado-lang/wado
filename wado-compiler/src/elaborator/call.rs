@@ -1139,22 +1139,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         CalleeRef::effect_operation(defs, op.decl, op.op)
     }
 
-    /// The variant a `Variant::name(...)` callee's prefix names: the one the
-    /// walk answered for a bare case, else the one `prefix` names at its site.
-    fn variant_of_callee(
-        &self,
-        callee_kind: &CalleeIdentKind<'_>,
-        receiver_decl: Option<DefId>,
-    ) -> Option<&VariantInfo> {
-        match callee_kind {
-            CalleeIdentKind::Case { owner, .. } => self.type_lookup().variant_cases_of(*owner),
-            CalleeIdentKind::AbstractTypeParam { .. } => None,
-            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten { .. } => {
-                self.type_lookup().variant_cases_of(receiver_decl?)
-            }
-        }
-    }
-
     /// Record the receiver segment of `Type::member` as a type name, as written
     /// where it is the only prefix, else under the `effective` name it reached.
     fn record_receiver_reference(&mut self, ident: &ast::IdentExpr, effective: &str) {
@@ -1771,7 +1755,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .receiver_segment()
                 .and_then(|segment| self.receiver_at(segment))
         };
-        let receiver_decl = call_receiver.as_ref().and_then(|r| r.key().decl());
         // A case is reachable wherever its type is; only a static method has
         // a visibility of its own to check.
         if callee_kind.case_owner().is_none()
@@ -2182,8 +2165,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Check if this is a flags type method call: Perms::none(), Perms::all()
             // A newtype reaches its base's constants and keeps its own type:
             // `M::none()` on `type M = Perm` is `Perm::none() as M`.
-            else if let Some((flags_info, named)) =
-                receiver_decl.and_then(|def| self.flags_members_through_newtype(def))
+            else if let Some((flags_info, named)) = call_receiver
+                .as_ref()
+                .and_then(|receiver| receiver.key().decl())
+                .and_then(|def| self.flags_members_through_newtype(def))
                 && matches!(suffix, "none" | "all")
             {
                 self.record_receiver_reference(ident, prefix);
@@ -2208,31 +2193,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_receiver_reference(ident, prefix);
                 return converted;
             }
-            // A variant's own case was constructed above; any other name is a static.
-            else if self
-                .variant_of_callee(&callee_kind, receiver_decl)
-                .is_some()
-            {
-                let receiver_type = self.static_receiver_written(
-                    rewritten_receiver,
-                    receiver_site,
-                    prefix,
-                    call.span,
-                );
-                let receiver = call_receiver
-                    .as_ref()
-                    .expect("a qualified callee has a receiver")
-                    .at_type(Some(receiver_type));
-                return self.blanket_static_or_unknown(
-                    &receiver,
-                    suffix,
-                    ident,
-                    call,
-                    &args,
-                    expected_type,
-                    ctx,
-                );
-            }
             // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
             // alike. Ahead of the namespace arm below, which reads the
             // operation as a static method on the interface and mangles a body
@@ -2243,20 +2203,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     effective_name.to_string(),
                 )
             }
-            // A type, resource included, with no such static method.
-            else if call_receiver.is_some() {
+            // A type, resource included, with no such static method. A variant's
+            // own case was constructed above.
+            else if let Some(receiver) = &call_receiver {
                 let receiver_type = self.static_receiver_written(
                     rewritten_receiver,
                     receiver_site,
                     prefix,
                     call.span,
                 );
-                let receiver = call_receiver
-                    .as_ref()
-                    .expect("a qualified callee has a receiver")
-                    .at_type(Some(receiver_type));
                 return self.blanket_static_or_unknown(
-                    &receiver,
+                    &receiver.at_type(Some(receiver_type)),
                     suffix,
                     ident,
                     call,
@@ -2277,6 +2234,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // bare-name search reaches no impl on it: the callee then
                     // loses its trait segment and names a body nothing
                     // declares, which WIR build reports as an unresolved call.
+                    #[expect(
+                        clippy::disallowed_methods,
+                        reason = "the walk answers for `ns::Type` under the import's `ns$Type` alias"
+                    )]
                     let ns_key = self.namespace_member(prefix, type_name).map(|def| {
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
                     });
@@ -2436,7 +2397,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if let Some(head) = self.tysys.concrete_impl_head_of(Some(&method_ref)) {
                             head
                         } else if method_ref.type_name == type_name {
-                            self.namespace_member(prefix, type_name).map_or_else(
+                            ns_key.as_ref().and_then(ImplTargetKey::decl).map_or_else(
                                 || FqTypeName::shape(&struct_module, type_name),
                                 |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),
                             )
@@ -2593,6 +2554,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // its declared effects. The whole-path `ident.id` is the key the
                 // effect walker resolves free calls on (`check_effects_semantic`),
                 // and the suffix segment id is the key LSP jump-to-def uses.
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "`ns::func` names its member in the module the namespace imports"
+                )]
                 let def_key = self
                     .symbols
                     .lookup_in_module(&ns_source, suffix)
@@ -2975,6 +2940,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `None` is a callee this lookup could not find, which an empty parameter
     /// list does not say: a callee declaring no parameters has a count to check
     /// like any other.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "`builtin::f` and `ns::f` name their member in the module the prefix names"
+    )]
     pub(super) fn lookup_function_signature(
         &mut self,
         name: &str,

@@ -1165,6 +1165,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `def`'s type is reachable as a member of the namespace `alias`
     /// imports, a re-export counting as such a reach.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the walk answers for `ns::Type` under the import's `ns$Type` alias"
+    )]
     fn namespace_reaches_type(&self, alias: &str, site: AstId, def: DefId) -> bool {
         let member = namespace_member_alias(alias, self.tysys.resolutions.defs().name(def));
         self.namespace_alias_source(alias, site).is_some()

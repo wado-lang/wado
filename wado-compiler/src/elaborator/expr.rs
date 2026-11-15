@@ -1441,6 +1441,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Where `name` is *declared*, as seen from `home`. The signature tables
     /// are keyed by declaring module, so a name `home` merely imported or
     /// re-exported is not found under `home` itself.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "a global's signature is keyed by the module that declares the name"
+    )]
     fn declaring_module_of_ident(&self, name: &str, home: &ModuleSource) -> (ModuleSource, String) {
         if self.tysys.signatures.global(home, name).is_some()
             || self

@@ -22,7 +22,6 @@ use crate::elaborator::trait_env::{
     ViaClause, non_default_arg_count, written_arg_nodes, written_type_arg,
 };
 use crate::name::{FqTypeName, namespace_member_alias, namespaced_name};
-use crate::symbol::SymbolKind;
 use crate::tir::TraitRef;
 use crate::trait_solver::args_per_param;
 
@@ -278,8 +277,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map_or_else(|| bound.name.clone(), |named| named.to_display())
             })
             .collect();
-        // A suggested name must shadow nothing where the bound is written.
         let binders = &self.annotate_ctx.trait_ctx.type_params;
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "a suggested name is a spelling no walk visits, and must shadow nothing"
+        )]
         let fresh = PIN_NAMES.iter().filter(|name| {
             !binders.contains_key(**name)
                 && **name != param_name
@@ -628,18 +630,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if name == "Self" || self.binder_at(site, name).is_some() {
             return None;
         }
-        if let Some(def) = self.decl_key_at(Some(site)) {
-            return match self.tysys.resolutions.defs().kind(def) {
-                DefKind::Effect => Some("an interface"),
-                DefKind::Trait => Some("a trait"),
-                _ => None,
-            };
-        }
-        // The module being walked is not in the environment yet, so its own
-        // symbol table is what answers for what it declares itself.
-        match self.symbol_named(&self.current_module_source, name)?.kind {
-            SymbolKind::Effect(_) => Some("an interface"),
-            SymbolKind::Trait(_) => Some("a trait"),
+        match self
+            .tysys
+            .resolutions
+            .defs()
+            .kind(self.decl_key_at(Some(site))?)
+        {
+            DefKind::Effect => Some("an interface"),
+            DefKind::Trait => Some("a trait"),
             _ => None,
         }
     }

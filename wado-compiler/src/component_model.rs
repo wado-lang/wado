@@ -44,6 +44,10 @@ use crate::world_registry::{InterfaceExportLookup, InterfaceExportMethod, WorldR
 
 /// The declaration `interface_fq` names as `wado_name`, or `None` where it
 /// declares none. The boundary step §9 of the declaration-identity WEP reserves.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "a CM name reaches its declaration here, once, at the boundary"
+)]
 pub fn cm_decl_in_interface(
     type_table: &TypeTable,
     registry: &CmInterfaceRegistry,

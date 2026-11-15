@@ -245,6 +245,10 @@ impl Scopes {
         out
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the scope building its own tiers"
+    )]
     fn build(
         modules: &IndexMap<ModuleSource, Module>,
         symbols: &SymbolTable,
@@ -721,6 +725,10 @@ fn namespace_import_names(module: &Module) -> impl Iterator<Item = &str> {
 /// `ns::member` written in `module`: through a namespace import, which
 /// registers each member under its `ns$member` alias, or through an interface,
 /// which names its types.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the walk resolving a qualified segment"
+)]
 fn namespace_member(
     symbols: &SymbolTable,
     defs: &DefTable,
@@ -1691,6 +1699,10 @@ pub fn head_site(ty: &Type) -> Option<AstId> {
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "a test names its fixture's declarations"
+)]
 mod tests {
     use super::*;
     use crate::compiler_host::{InMemoryCompilerHost, LogLevel};

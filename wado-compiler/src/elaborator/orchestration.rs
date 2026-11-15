@@ -1976,6 +1976,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Where the global `name` is declared, as seen from `source`, with its
     /// type and mutability. `signatures.globals` is keyed by the declaring
     /// module, so a re-exported name needs the chain resolved first.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "a global's signature is keyed by the module that declares the name"
+    )]
     fn global_declared_for(
         state: &AnnotateState,
         symbols: &SymbolTable,
@@ -2292,6 +2296,10 @@ fn spelled_references(
 /// The sites whose name the body walk bound to `core:rt`'s `unreachable`. A
 /// local binder taking the name binds its own uses, which the resolver's
 /// declaration-only answer cannot tell.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "`core:rt`'s `unreachable` is named by the module that declares it"
+)]
 pub(crate) fn rt_unreachable_calls(
     state: &AnnotateState,
     symbols: &SymbolTable,

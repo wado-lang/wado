@@ -766,7 +766,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let rhs_class = ArgClass::Exact(right);
                 let mut admitted =
                     self.find_arithmetic_trait_impls(left, trait_, method_name, Some(&rhs_class));
-                let mut impl_name = struct_name.clone();
+                let mut impl_name = struct_name;
                 let mut impl_type_id = left;
                 if admitted.is_empty() {
                     // The impl is read on the link that wrote it, so the right
@@ -2637,6 +2637,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let concrete_impl = resolved
             .impl_def
             .filter(|def| self.tysys.trait_env.impl_headers[def].is_concrete());
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "a dispatch through a bound names no block, so the chain is matched by head"
+        )]
         let module_source = match concrete_impl {
             Some(def) => defs.module(def).clone(),
             None => self

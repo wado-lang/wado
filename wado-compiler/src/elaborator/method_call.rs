@@ -3232,7 +3232,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let _ = self.emit(TypeError::NoMatchingArgumentList {
                 trait_name,
-                receiver: struct_name.to_string(),
+                receiver: struct_name,
                 method: method_name.to_string(),
                 span,
             });
@@ -3257,7 +3257,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let _ = self.emit(TypeError::NoMatchingTraitArgument {
             trait_name,
-            receiver: struct_name.to_string(),
+            receiver: struct_name,
             method: method_name.to_string(),
             arg_type,
             candidates,
