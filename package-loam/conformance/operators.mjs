@@ -83,7 +83,7 @@ add('ClipByAttributes', {
   nodes: [node('Clip', ['A'], 'Y', { min: f32(-1), max: f32(1.5) })],
   opset: 6,
 });
-add('ClipCrossed',clip({ L: float([], [2]), H: float([], [-1]) }, ['L', 'H']));
+add('ClipCrossed', clip({ L: float([], [2]), H: float([], [-1]) }, ['L', 'H']));
 
 add('MatMul', binary('MatMul', [2, 3], [3, 4]));
 add('MatMulBatched', binary('MatMul', [2, 2, 3], [2, 3, 4]));
