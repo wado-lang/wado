@@ -810,7 +810,7 @@ impl Element for SurfaceDom {
     }
 
     fn get_attribute_names(&mut self, this: &Element) -> List<String> {
-        resume self.nodes[self.index(*this)].attributes.keys().collect();
+        resume self.nodes[self.index(*this)].attributes.keys().map(|name| *name).collect();
     }
 
     fn has_attribute(&mut self, this: &Element, qualified_name: String) -> bool {

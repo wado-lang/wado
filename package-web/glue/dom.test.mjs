@@ -130,3 +130,45 @@ test("two handles are the same when they are one object", async () => {
   assert.equal(imports["$same"](div, document.getElementById("div")), 1);
   assert.equal(imports["$same"](div, document.getElementById("p")), 0);
 });
+
+// Whether the collector reclaims what `held` refers to, given a few turns.
+async function isCollected(held) {
+  for (let i = 0; i < 20 && held.deref() !== undefined; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    globalThis.gc();
+  }
+  return held.deref() === undefined;
+}
+
+test("the collector reclaims a handle, a listener and a cycle through both heaps", async () => {
+  assert.equal(typeof globalThis.gc, "function", "run node with --expose-gc");
+  install('<input id="input"><div id="div"></div>');
+  document.hasStorageAccess = async () => true;
+  document.exitFullscreen = async () => {};
+  document.requestStorageAccess = async () => {};
+  const { run } = await import(`${probe}?collect`);
+  const found = document.body.dataset;
+  const running = run.run();
+  while (found.state !== "waiting") {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  const div = document.getElementById("div");
+  div.dispatchEvent(new Event("make"));
+  document.getElementById("cyclic").dispatchEvent(new Event("ping"));
+  assert.equal(found.cyclic, "cyclic");
+
+  // Out of the page, each element is held by the program alone, if at all.
+  const leave = (id) => {
+    const element = document.getElementById(id);
+    element.remove();
+    return new WeakRef(element);
+  };
+  const [dropped, cyclic, kept] = ["dropped", "cyclic", "kept"].map(leave);
+  assert.ok(await isCollected(dropped), "a handle the program dropped");
+  assert.ok(await isCollected(cyclic), "an element and the closure listening on it");
+  assert.ok(!(await isCollected(kept)), "a handle a global of the program holds");
+  div.dispatchEvent(new Event("release"));
+  assert.equal(found.released, "kept");
+  assert.ok(await isCollected(kept), "the handle, once the global lets go");
+  await running;
+});

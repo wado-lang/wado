@@ -1030,7 +1030,7 @@ mkdir -p "$PROBE/build"
 scripts/dev-bin.sh wado compile -f no-wide-arithmetic -o "$PROBE/build/main.wasm" "$PROBE/src/main.wado"
 node scripts/jco/transpile-released.mjs "$PROBE/build/main.wasm" "$PROBE/build"
 WEB_BROWSER_JS="$PWD/example/web-browser/build/main.js" WEB_PROBE_JS="$PWD/$PROBE/build/main.js" \
-  timeout 120 node --test "package-web/glue/*.test.mjs"
+  timeout 120 node --expose-gc --test "package-web/glue/*.test.mjs"
 """
 
 [tasks.web-browser-demo]

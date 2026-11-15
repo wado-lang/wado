@@ -150,7 +150,7 @@ array Array<u8> (mut u8);  // TypeId(19)
 
 array Array<i32> (mut i32);  // TypeId(20)
 
-struct core:prelude//$Cell<spec_functions_cm_callback.wado/Target> {  // TypeId(21)
+struct core:prelude//$Cell<extern> {  // TypeId(21)
     mut value: ref extern,
 }
 
@@ -161,7 +161,7 @@ struct canonical//CanonicalClosure_0 {  // TypeId(23)
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct, ref "core:prelude//$Cell<spec_functions_cm_callback.wado/Target>", ref struct);  // TypeId(24)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, ref "core:prelude//$Cell<extern>", ref struct);  // TypeId(24)
 
 struct canonical//CanonicalClosure_1 {  // TypeId(25)
     env: ref null struct,
@@ -436,7 +436,7 @@ fn "spec_functions_cm_callback.wado/$test_0"() {
     let seen: ref "core:prelude/list.wado//List<i32>";
     let $save_spec_functions_cm_callback.wado/Target: ref null "spec_functions_cm_callback.wado//$Dispatch_spec_functions_cm_callback.wado/Target";
     let value: ref "spec_functions_cm_callback.wado//EchoTarget";
-    let self_10: ref "core:prelude//$Cell<spec_functions_cm_callback.wado/Target>";
+    let self_10: ref "core:prelude//$Cell<extern>";
     let listener: ref struct;
     let $local_2: ref null "spec_functions_cm_callback.wado//$Dispatch_spec_functions_cm_callback.wado/Target";
     let $local_3: ref "spec_functions_cm_callback.wado//$Dispatch_spec_functions_cm_callback.wado/Target";
@@ -449,7 +449,7 @@ fn "spec_functions_cm_callback.wado/$test_0"() {
     value = struct.new "spec_functions_cm_callback.wado//EchoTarget" {};
     global:spec_functions_cm_callback.wado::$effect_spec_functions_cm_callback.wado/Target = struct.new "spec_functions_cm_callback.wado//$Dispatch_spec_functions_cm_callback.wado/Target" { outer: local.tee $save_spec_functions_cm_callback.wado/Target(global:spec_functions_cm_callback.wado::$effect_spec_functions_cm_callback.wado/Target), op_listen: struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_functions_cm_callback.wado//$Closure_0" { $capture_0: value }, func: ref.func "closure/spec_functions_cm_callback.wado/$closure_wrapper_0" } };
     $inline__effect_dispatch__spec_functions_cm_callback_wado_Target__listen_3: block {
-        self_10 = struct.new "core:prelude//$Cell<spec_functions_cm_callback.wado/Target>" { value: target };
+        self_10 = struct.new "core:prelude//$Cell<extern>" { value: target };
         listener = struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_functions_cm_callback.wado//$Closure_1" { $capture_0: seen }, func: ref.func "closure/spec_functions_cm_callback.wado/$closure_wrapper_1" };
         if ref.is_null(local.tee $local_2(global:spec_functions_cm_callback.wado::$effect_spec_functions_cm_callback.wado/Target)) == 0 {
             global:spec_functions_cm_callback.wado::$effect_spec_functions_cm_callback.wado/Target = local.tee $local_3(ref.as_non_null($local_2)).outer;

@@ -1,11 +1,13 @@
 //! What only the host's own objects answer, which `glue/dom.test.mjs` reads
 //! back from the attributes of `<body>`: identity, narrowing through more than
 //! one level of `extends`, the name `Inspect` writes, a list of handles each
-//! way, a promise settled and rejected, and a listener entered while `run`
-//! waits, which waits itself.
+//! way, a promise settled and rejected, a listener entered while `run` waits,
+//! which waits itself, and what the collector reclaims.
 
-use { Dom, Event, EventTarget, HtmlElement, HtmlInputElement, Node } from "wado-lang:web";
+use { Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node } from "wado-lang:web";
 use { MonotonicClock } from "wasi:clocks";
+
+global mut KEPT: Option<Element> = null;
 
 export fn run() with (Dom, MonotonicClock) {
     let doc = Dom::document();
@@ -45,6 +47,31 @@ export fn run() with (Dom, MonotonicClock) {
         report("focus", "waiting");
         let entered = input.request_fullscreen().wait();
         report("focus", `${entered matches { Ok(_) }}`);
+    });
+    // What the collector is asked about: the test holds each element weakly,
+    // takes it out of the page, and looks again.
+    div.add_event_listener("make", |_event: Event| {
+        let body = doc.body().unwrap();
+        // Its only handle dies with this call.
+        let dropped = doc.create_element("i");
+        dropped.set_id("dropped");
+        body.append_child(dropped);
+        // It holds a listener whose closure holds it: a cycle through both heaps.
+        let cyclic = doc.create_element("b");
+        cyclic.set_id("cyclic");
+        cyclic.add_event_listener("ping", |_ping: Event| report("cyclic", cyclic.id()));
+        body.append_child(cyclic);
+        // A global of the program keeps this one, until `release`.
+        let kept = doc.create_element("u");
+        kept.set_id("kept");
+        body.append_child(kept);
+        KEPT = Option::Some(kept);
+    });
+    div.add_event_listener("release", |_event: Event| {
+        if let Some(kept) = KEPT {
+            report("released", kept.id());
+        }
+        KEPT = null;
     });
     report("state", "waiting");
     MonotonicClock::wait_for(50_000_000).wait();

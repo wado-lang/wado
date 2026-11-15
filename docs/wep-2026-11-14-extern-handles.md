@@ -398,8 +398,9 @@ glue cannot be run without them.
 - [x] An `AsyncCall` over a promise, and `Rejection`: `wait` through a
   suspending import, every callback entered through `WebAssembly.promising`,
   and `SurfaceDom` answering a `Promise<T>` member
-- [ ] A collection test in the jsdom run: dropped handles, dropped listeners,
-  and a cycle through both heaps are collected
+- [x] A collection test in the jsdom run: a dropped handle and a cycle through
+  both heaps, a listener's closure in it, are collected, and a handle a global
+  holds is not until the global lets go
 - [ ] `Hash` for a handle
 
 ## Known gaps
