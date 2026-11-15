@@ -432,6 +432,10 @@ glue cannot be run without them.
   `sequence` of anything else is skipped.
 - Nothing measures the slots: a program that leaked one would keep its object
   alive unnoticed.
+- The slots are a list in `core:rt` behind two exports, chosen for what it
+  spares the compiler. A Wasm table of `externref` that the host reads and
+  writes itself was not built, and neither was timed: what a list of handles
+  costs per element, each way, is unknown.
 - `class-of` reads prototypes of the glue's own realm. An object from another
   realm, such as an element of an `iframe`'s document, has other prototypes and
   matches none.
