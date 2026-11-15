@@ -472,6 +472,12 @@ impl CliGeneratorProvider {
                 };
                 let options = CompilerOptions {
                     log_level: Some(log_level),
+                    // Every file that uses the generator waits on this
+                    // compile, so it takes the whole machine rather than the
+                    // one-thread share `wado test` gives each file. The output
+                    // does not depend on the thread count, so the cache holds.
+                    parallelism: std::thread::available_parallelism()
+                        .map_or(1, std::num::NonZero::get),
                     ..generator_compile_options(invocations)
                 };
                 let rt = tokio::runtime::Builder::new_current_thread()
