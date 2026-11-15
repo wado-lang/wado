@@ -23,6 +23,7 @@ use crate::compiler_host::{
 };
 use crate::coverage::CoverageScope;
 use crate::defs::{DefId, DefKind, DefTable};
+use crate::dependency_snapshot;
 use crate::elaborator::liveness::LivenessScope;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::{ModuleLoader, cached_stdlib_module};
@@ -291,7 +292,7 @@ pub(crate) fn rehydrate_tir_module(
         Rehydrate::Owned { live, fn_remap } => (live, fn_remap),
         Rehydrate::Shared => {
             assert!(
-                crate::dependency_snapshot::is_building(),
+                dependency_snapshot::is_building(),
                 "only a dependency snapshot shares a snapshot's functions"
             );
             return new_module;
