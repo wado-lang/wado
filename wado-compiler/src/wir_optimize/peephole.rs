@@ -1807,10 +1807,10 @@ mod tests {
         let WirInstr::ArrayFill { value, .. } = &mut instr else {
             unreachable!()
         };
-        *value = Box::new(WirInstr::I32DivS(
+        **value = WirInstr::I32DivS(
             Box::new(local_get("n", WirType::I32)),
             Box::new(local_get("d", WirType::I32)),
-        ));
+        );
         assert!(!fold_short_fill(&mut instr));
         assert_matches!(instr, WirInstr::ArrayFill { .. });
     }
