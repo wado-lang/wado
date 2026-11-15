@@ -7,7 +7,7 @@ use { Process } from "core:process";
 use { Client } from "wasi:http";
 use { ask_json, json_object, Usage } from "./anthropic.wado";
 use { run_agent, Call } from "./agent.wado";
-use { try_git } from "./git.wado";
+use { git, try_git } from "./git.wado";
 use { reset_snapshot, tree_git } from "./snapshot.wado";
 use { empty_index } from "./symbols.wado";
 use { Ran, Runner, Workspace, RUN_TIMEOUT } from "./tools.wado";
@@ -129,6 +129,8 @@ pub fn review(
             } else {
                 unreproduced_all(a.findings);
             },
+
+
             Err(e) => reviewed.error = Some(e),
         },
         Err(e) => reviewed.error = Some(e),
@@ -209,16 +211,21 @@ fn patch_of(w: &Workspace, commit: &String, paths: &List<String>) -> Result<Stri
 
 /// `repro`'s run in the tree at `w`, a clean checkout, with its patch applied.
 fn run_alone(w: &Workspace, repro: &Repro) -> Result<Ran, String> with (Preopens, Process) {
+    apply(w, &repro.patch)?;
+    return w.cargo(&repro.run, RUN_TIMEOUT);
+}
+
+fn apply(w: &Workspace, patch: &String) -> Result<(), String> with (Preopens, Process) {
     // Beside the tree, where no tool lists it.
     let name = `${fs::file_name(&w.root).unwrap()}.patch`;
     let path = `${w.root}.patch`;
-    fs::write(&path, &repro.patch).map_err(|e| `${e}`)?;
+    fs::write(&path, patch).map_err(|e| `${e}`)?;
     let applied = try_git(["-C", w.root, "apply", `../${name}`]);
     fs::remove_file(&path).map_err(|e| `${e}`)?;
-    if applied matches { None } {
-        return Err("the patch does not apply to the reviewed commit");
-    }
-    return w.cargo(&repro.run, RUN_TIMEOUT);
+    return match applied {
+        Some(_) => Ok(()),
+        None => Err("the patch does not apply to the reviewed commit"),
+    };
 }
 
 /// Whether `ran` shows the defect: a failure that prints `expect`. The text
@@ -248,6 +255,37 @@ test "a finding is reproduced only by a run that fails and prints what was expec
     assert !reproduced(&failed, &"another message");
     assert !reproduced(&failed, &"");
     assert !reproduced(&Ran { succeeded: true, report: "left == right" }, &"left == right");
+}
+
+test "a reproduction's files leave the tree as a patch that applies to a clean one" {
+    let root = "build/repro-test";
+    fs::remove_dir_all(root).unwrap();
+    fs::create_dir_all(root).unwrap();
+    fs::write(`${root}/Cargo.toml`, &"[workspace]\n").unwrap();
+    fs::write(`${root}/kept.txt`, &"old\n").unwrap();
+    git(["-C", root, "init", "--quiet"]);
+    git(["-C", root, "add", "--all"]);
+    git(["-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet", "--message", "base"]);
+    let commit = git(["-C", root, "rev-parse", "HEAD"]).trim().to_string();
+    let w = Workspace { root, runner: Some(Runner { target_dir: "build/target", cargo_home: "", rustup_home: "" }) };
+
+    fs::create_dir_all(`${root}/tests`).unwrap();
+    fs::write(`${root}/tests/new.rs`, &"#[test] fn t() {}\n").unwrap();
+    fs::write(`${root}/kept.txt`, &"new\n").unwrap();
+    fs::write(`${root}/unnamed.txt`, &"another finding's\n").unwrap();
+    let patch = patch_of(&w, &commit, &["tests/new.rs", "/kept.txt"]).unwrap();
+    assert patch_of(&w, &commit, &["tests/absent.rs"]).is_err();
+    assert patch_of(&w, &commit, &["Cargo.toml"]).is_err();
+    assert patch_of(&w, &commit, &["../outside.rs"]).is_err();
+    assert patch_of(&w, &commit, &[]).is_err();
+
+    reset_snapshot(&w.root, &commit);
+    assert !fs::exists(`${root}/tests/new.rs`);
+    apply(&w, &patch).unwrap();
+    assert fs::read_to_string(`${root}/tests/new.rs`).unwrap() == "#[test] fn t() {}\n";
+    assert fs::read_to_string(`${root}/kept.txt`).unwrap() == "new\n";
+    assert !fs::exists(`${root}/unnamed.txt`);
+    assert apply(&w, &patch).is_err();
 }
 
 test "an answer's finding may carry what reproduces it" {
