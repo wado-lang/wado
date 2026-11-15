@@ -308,11 +308,16 @@ generator the model alone.
 ### Element types and precision
 
 `WebGpuBackend` computes in f32 between the f16s it reads and writes
-([Half Element Types](./design.md#half-element-types)). Its attention kernel
-writes f32s alone, so a half graph's attention runs decomposed. A tensor is
-held in `f32`, `f16`, `bf16`, `u8`, `i64` or `bool`, and every other element
-type stops the build naming it. So does a `CastLike` of a value computed at
-run, since it converts only a tensor the build knows. Arithmetic in `double` and the integer types is a second instantiation of the
+([Half Element Types](./design.md#half-element-types)), so a device whose f16
+arithmetic is faster gains nothing from it. Arithmetic in f16 is chosen by a
+Kiln option, on a device that offers `shader-f16`, and a graph built with it is
+held to a tolerance rather than to the f32 path's bits.
+
+Its attention kernel writes f32s alone, so a half graph's attention runs
+decomposed. A tensor is held in `f32`, `f16`, `bf16`, `u8`, `i64` or `bool`,
+and every other element type stops the build naming it. So does a `CastLike`
+of a value computed at run, since it converts only a tensor the build knows.
+Arithmetic in `double` and the integer types is a second instantiation of the
 same kernels. Wado has a primitive for nearly every ONNX element type, so what
 a step adds is kernels that compute in one, never the mapping.
 
