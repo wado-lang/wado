@@ -31,9 +31,9 @@ type "functype//sroa_param_shared_and_mut_cell_alike.wado/$cm_export__run" = fn(
 
 type "functype//sroa_param_shared_and_mut_cell_alike.wado/forwards_second$sroa[p.value.x]" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//sroa_param_shared_and_mut_cell_alike.wado/g$sroa[a.value.x,b.value.x]" = fn(i32, i32) -> i32;  // TypeId(13)
+type "functype//sroa_param_shared_and_mut_cell_alike.wado/forwards_first$sroa[p.value.x]" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//sroa_param_shared_and_mut_cell_alike.wado/forwards_first$sroa[p.value.x]" = fn(i32) -> i32;  // TypeId(14)
+type "functype//sroa_param_shared_and_mut_cell_alike.wado/g$sroa[a.value.x,b.value.x]" = fn(i32, i32) -> i32;  // TypeId(14)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(15)
 
@@ -131,14 +131,14 @@ fn "sroa_param_shared_and_mut_cell_alike.wado/forwards_second$sroa[p.value.x]"(p
     return "sroa_param_shared_and_mut_cell_alike.wado/g$sroa[a.value.x,b.value.x]"(black_box(3), p);
 }
 
-fn "sroa_param_shared_and_mut_cell_alike.wado/g$sroa[a.value.x,b.value.x]"(a, b) {
-    return a + b;
-}
-
 fn "sroa_param_shared_and_mut_cell_alike.wado/forwards_first$sroa[p.value.x]"(p) {
     let $sroa_s_x_4: i32;
     $sroa_s_x_4 = black_box(2);
     return "sroa_param_shared_and_mut_cell_alike.wado/g$sroa[a.value.x,b.value.x]"(p, $sroa_s_x_4);
+}
+
+fn "sroa_param_shared_and_mut_cell_alike.wado/g$sroa[a.value.x,b.value.x]"(a, b) {
+    return a + b;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

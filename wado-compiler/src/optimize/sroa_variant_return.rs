@@ -898,7 +898,7 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
             PrimitiveType::Char => Some(SlotShape::Direct(Pad::Char)),
             PrimitiveType::V128 => None,
         },
-        _ if type_table.is_resource_object(payload) => Some(SlotShape::Wrapped),
+        _ if is_reference_resource(payload, type_table) => Some(SlotShape::Wrapped),
         ResolvedType::Resource { .. } | ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => {
             Some(SlotShape::Direct(Pad::Int(payload)))
         }
@@ -936,11 +936,17 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
     }
 }
 
+/// Whether a resource is a reference at Wasm level rather than an `i32`
+/// handle: a resource object, or an extern handle.
+fn is_reference_resource(type_id: TypeId, type_table: &TypeTable) -> bool {
+    type_table.is_resource_object(type_id) || type_table.is_extern_handle(type_id)
+}
+
 /// Whether a type is a non-nullable GC reference at Wasm level — the payload
 /// shape `wir_optimize::nullable_ref` collapses an `Option` around.
 fn is_gc_ref(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
-        ResolvedType::Resource { .. } => type_table.is_resource_object(type_id),
+        ResolvedType::Resource { .. } => is_reference_resource(type_id, type_table),
         ResolvedType::Struct { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::Tuple(_)

@@ -43,6 +43,7 @@ use crate::tir::{
     TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::compiler_host::Code;
 use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::unparse::unparse_type_into;
@@ -60,7 +61,10 @@ use task_return::{
     assert_task_returns_eliminated, expand_task_returns_in_func, reduce_task_returns_in_func,
     split_task_entry,
 };
-use type_fixup::{CmCallSites, collect_effect_calls_in_block, rewrite_calls_in_block};
+use type_fixup::{
+    CmCallSites, collect_effect_calls_in_block, rewrite_calls_in_block,
+    unbuilt_extern_import_calls,
+};
 use types::{Boundary, Slot, flat_types_from_type_id};
 pub use types::{
     LiftContext, cm_discriminant_byte_size, cm_flags_byte_size, cm_type_to_type_id,
@@ -408,14 +412,16 @@ fn named_decl_of(ty: &ResolvedType) -> Option<DefId> {
 ///
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
-pub fn generate_adapters(mut project: Package) -> Result<Package, SynthesisError> {
+pub fn generate_adapters(mut project: Package) -> Result<Package, Vec<SynthesisError>> {
     validate_imports_representable(&project)?;
+    reject_unbuilt_extern_imports(&project)?;
     let callbacks = generate_import_adapters(&mut project);
     synthesize_callback_exports(&mut project, &callbacks);
     synthesize_export_adapters(&mut project)?;
     synthesize_guest_callback_bindings(&mut project);
     generate_test_world_bindings(&mut project);
-    let validated = reject_unresolvable_record_payloads(&project)?;
+    let validated =
+        reject_unresolvable_record_payloads(&project).map_err(SynthesisError::from)?;
     reduce_unexpanded_task_returns(&project);
     resource_rewrite::rewrite_async_primitives(&mut project, validated);
     assert_task_returns_eliminated(&project);
@@ -431,6 +437,53 @@ fn entry_type_table(project: &Package) -> Rc<RefCell<TypeTable>> {
         .expect("entry module should exist")
         .type_table
         .clone()
+}
+
+/// Refuse each call of a web import no lowering is built for yet. Declaring one
+/// is fine: the bindings declare the whole platform, and a program calls little
+/// of it.
+fn reject_unbuilt_extern_imports(project: &Package) -> Result<(), Vec<SynthesisError>> {
+    let registry = &project.cm_interface_registry;
+    let entry_type_table = entry_type_table(project);
+    let call_sites = CmCallSites::new(
+        registry,
+        &project.tir_modules,
+        entry_type_table.borrow().defs(),
+    );
+    let mut errors = Vec::new();
+    for (source, module) in &project.tir_modules {
+        for func in &module.functions {
+            let func = func.borrow();
+            let Some(body) = &func.body else {
+                continue;
+            };
+            for (key, span) in unbuilt_extern_import_calls(body, &call_sites) {
+                let method = &registry
+                    .get_function(&key)
+                    .expect("the collector records only a registered CM function")
+                    .method_name;
+                let name = match call_sites.owners(&key).next() {
+                    Some(owner) => format!("{}::{method}", owner.name()),
+                    None => method.clone(),
+                };
+                errors.push(SynthesisError {
+                    code: Code::Unavailable,
+                    message: format!(
+                        "`{name}` is unavailable: it takes or returns an extern handle in a form \
+                         with no lowering yet: inside a list, a record or a variant other than \
+                         `Option`, among parameters passed through memory, or in an `async` import"
+                    ),
+                    span: Some(span),
+                    module: Some(Box::new(source.clone())),
+                });
+            }
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 /// Synthesize a binding function for each used WASI effect call and resource

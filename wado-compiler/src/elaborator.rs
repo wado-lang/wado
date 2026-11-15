@@ -60,7 +60,6 @@ use crate::ast::{
     self, AstId, AstVisitor, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic};
-use crate::component_model::{CmInterfaceRegistry, cm_function_key};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::divergence;
 use crate::elaborator::item::OperationOwner;
@@ -148,27 +147,19 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeReferences<'_, '_, H> {
     }
 }
 
-/// The sentence every declaration a site cannot call reports, keyed by the
-/// declaration: an `#[unavailable]` one, which only its `impl` or `trait` can
-/// qualify the name of, and a web import whose lowering is not built yet.
+/// The sentence every `#[unavailable]` declaration in the program reports,
+/// keyed by the declaration. Only its `impl` or `trait` can qualify the name.
 pub(crate) fn collect_unavailable(
     modules: &IndexMap<ModuleSource, Module>,
     defs: &DefTable,
-    registry: &CmInterfaceRegistry,
 ) -> IndexMap<DefId, String> {
     let mut out = IndexMap::default();
     for module in modules.values() {
         ast::for_each_function(module, |site, func| {
-            let reason = if site.allows_unavailable() {
-                func.unavailable()
-            } else {
-                unbuilt_extern_import(func, registry).then_some(
-                    "it takes or returns an extern handle in a form with no lowering yet: inside \
-                     a list, a record or a variant other than `Option`, among parameters passed \
-                     through memory, or in an `async` import",
-                )
-            };
-            let Some(reason) = reason else {
+            if !site.allows_unavailable() {
+                return;
+            }
+            let Some(reason) = func.unavailable() else {
                 return;
             };
             let def = defs.def_at(func.id);
@@ -180,14 +171,6 @@ pub(crate) fn collect_unavailable(
         });
     }
     out
-}
-
-fn unbuilt_extern_import(func: &ast::Function, registry: &CmInterfaceRegistry) -> bool {
-    func.attrs
-        .iter()
-        .find_map(ast::Attribute::as_cm_import)
-        .and_then(|import| registry.get_function(&cm_function_key(import, &func.name)))
-        .is_some_and(|info| registry.is_unbuilt_extern_import(info))
 }
 
 pub use types::TypeError;

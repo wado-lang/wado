@@ -16,6 +16,7 @@ use crate::tir::{
     TirLocal, TirModule, TirStmt, TirStmtKind, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{cast, internal_call, option_none, synth_span};
@@ -546,6 +547,37 @@ pub(super) fn collect_effect_calls_in_block(
         call_sites,
     }
     .visit_block(block);
+}
+
+/// Every call in `block` of a web import no lowering is built for yet, as the
+/// import's registry key and where the call is.
+pub(super) fn unbuilt_extern_import_calls(
+    block: &TirBlock,
+    call_sites: &CmCallSites,
+) -> Vec<(String, Span)> {
+    struct Calls<'a> {
+        call_sites: &'a CmCallSites<'a>,
+        found: Vec<(String, Span)>,
+    }
+    impl TirRefVisitor for Calls<'_> {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            let registry = self.call_sites.registry;
+            if let Some((key, _)) = self.call_sites.key_of(expr)
+                && registry
+                    .get_function(&key)
+                    .is_some_and(|func| registry.is_unbuilt_extern_import(func))
+            {
+                self.found.push((key, expr.span));
+            }
+            self.walk_expr(expr);
+        }
+    }
+    let mut calls = Calls {
+        call_sites,
+        found: Vec::new(),
+    };
+    calls.visit_block(block);
+    calls.found
 }
 
 /// Records the registry key of every CM import call, for
