@@ -7950,7 +7950,7 @@ mod tests {
     use super::*;
     use crate::ast::{
         AstVisitor, ConditionElement, EffectHandlerBinding, Item, Visibility,
-        declared_handle_classes, written_params,
+        declared_handle_classes, declares_extern_handle, written_params,
     };
     use crate::lexer::lex;
     use crate::name::INTERNAL_PREFIX;
@@ -8638,7 +8638,7 @@ mod tests {
             .items
             .iter()
             .map(|item| match item {
-                Item::Resource(decl) => crate::ast::declares_extern_handle(&decl.attrs),
+                Item::Resource(decl) => declares_extern_handle(&decl.attrs),
                 _ => panic!("expected resource declaration"),
             })
             .collect();
