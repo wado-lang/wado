@@ -709,7 +709,7 @@ fn try_fold_eqz(instr: &mut WirInstr) -> bool {
 /// in tight loops (e.g., `while x <= limit` lowers to `if !(x <= limit) break`).
 /// A float's `eq` and `ne` negate each other, NaN included. Its other
 /// comparisons are each false on a NaN, so their negations are no instruction.
-fn try_negate_eqz_comparison(instr: &mut WirInstr) -> bool {
+pub(super) fn try_negate_eqz_comparison(instr: &mut WirInstr) -> bool {
     let WirInstr::I32Eqz(inner) = instr else {
         return false;
     };

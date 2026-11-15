@@ -32,11 +32,11 @@
 //! [`Search`]). A substring search ran +40% on it, level with the same loop
 //! unrolled by hand.
 
-use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef};
+use crate::wir::{WirInstr, WirLocals, WirPackage, WirType, WirTypeDef};
 use crate::wir_visitor::WirMutVisitor;
 
 use super::nullability::Nullability;
-use super::peephole::i32_comparison;
+use super::peephole::{i32_comparison, try_negate_eqz_comparison};
 use super::util::{Footprint, is_side_effect_free, may_trap_in};
 
 /// The most nodes the copy's iterations may hold together, which picks the
@@ -111,7 +111,7 @@ fn unrolled(
     else {
         return None;
     };
-    let search = Search::of(exit);
+    let search = Search::of(exit, null.locals());
     let test = search.as_ref().map_or(exit.as_ref(), |search| search.guard);
     if !is_local_arith(test, null) {
         return None;
@@ -188,75 +188,125 @@ fn copy_of(leaves: Vec<WirInstr>, work: &[WirInstr], factor: usize) -> WirInstr 
 }
 
 /// The test of a loop that searches: it leaves unless `guard` holds and then
-/// `data` does, `(if guard { data } else { 0 }) == 0`, where `data` reads what
-/// `guard` keeps in range, as `i < n && x[i] != needle` does. `temps` are the
-/// locals `data` is computed through, each set ahead of it.
+/// each of `data` in turn, `(if (if guard { d0 } else { 0 }) { d1 } else { 0 })
+/// == 0`, where `data` reads what `guard` keeps in range, as
+/// `i < n && x[i] != a && x[i] != b` does. `temps` are the locals the first of
+/// `data` is computed through, each set ahead of it.
 struct Search<'a> {
     guard: &'a WirInstr,
-    temps: Vec<(&'a str, &'a WirInstr)>,
-    data: WirInstr,
+    temps: Vec<(String, WirInstr)>,
+    data: Vec<WirInstr>,
 }
 
-/// `data` without the temporaries it sets on the way to its value, which go to
-/// `temps` in the order they are set.
-fn without_temps<'a>(
-    data: &'a [WirInstr],
-    temps: &mut Vec<(&'a str, &'a WirInstr)>,
-) -> Option<WirInstr> {
+/// Move what `value` sets on the way to its value out to `temps`, in the order
+/// it sets them. A node evaluates its first operand first, so what that
+/// operand sets is set ahead of the node too.
+fn lift_temps(
+    value: &mut WirInstr,
+    temps: &mut Vec<(String, WirInstr)>,
+    locals: &WirLocals,
+) -> Option<()> {
     use WirInstr as I;
-    let (value, sets) = data.split_last()?;
-    for set in sets {
-        let I::LocalSet { name, value } = set else {
-            return None;
-        };
-        temps.push((name, value));
+    match value {
+        I::Seq(body) => {
+            let mut body = std::mem::take(body);
+            let mut last = body.pop()?;
+            for set in body {
+                let I::LocalSet {
+                    name,
+                    value: mut set_to,
+                } = set
+                else {
+                    return None;
+                };
+                lift_temps(&mut set_to, temps, locals)?;
+                temps.push((name, *set_to));
+            }
+            lift_temps(&mut last, temps, locals)?;
+            *value = last;
+        }
+        I::LocalTee {
+            name,
+            value: set_to,
+        } => {
+            lift_temps(set_to, temps, locals)?;
+            let read = I::LocalGet {
+                name: name.clone(),
+                result_ty: locals.get(name)?.clone(),
+            };
+            let I::LocalTee {
+                name,
+                value: set_to,
+            } = std::mem::replace(value, read)
+            else {
+                unreachable!("matched a tee");
+            };
+            temps.push((name, *set_to));
+        }
+        I::If { .. } | I::Block { .. } | I::Loop { .. } => {}
+        _ => {
+            let mut first = true;
+            let mut lifted = Some(());
+            value.for_each_boxed_child_mut(&mut |operand| {
+                if std::mem::take(&mut first) {
+                    lifted = lift_temps(operand, temps, locals);
+                }
+            });
+            lifted?;
+        }
     }
-    // A node evaluates its first operand first, so what that operand sets on
-    // the way is set ahead of the node too.
-    let mut first =
-        |operand: &'a WirInstr| without_temps(std::slice::from_ref(operand), temps).map(Box::new);
-    Some(match value {
-        I::Seq(body) => without_temps(body, temps)?,
-        I::I32Eqz(tested) => I::I32Eqz(first(tested)?),
-        I::I32Eq(tested, with) => I::I32Eq(first(tested)?, with.clone()),
-        I::I32Ne(tested, with) => I::I32Ne(first(tested)?, with.clone()),
-        value => value.clone(),
-    })
+    Some(())
 }
 
 impl<'a> Search<'a> {
-    fn of(exit: &'a WirInstr) -> Option<Self> {
+    fn of(exit: &'a WirInstr, locals: &WirLocals) -> Option<Self> {
         use WirInstr as I;
-        let tested = match exit {
-            I::I32Eqz(tested) => tested,
+        let mut test = match exit {
+            I::I32Eqz(tested) => tested.as_ref(),
             I::I32Eq(tested, zero) | I::I32Eq(zero, tested)
                 if matches!(zero.as_ref(), I::I32Const(0)) =>
             {
-                tested
+                tested.as_ref()
             }
             _ => return None,
         };
-        let I::If {
-            condition: guard,
+        let mut last_first = Vec::new();
+        while let I::If {
+            condition,
             result: Some(_),
             then_body,
             else_body: Some(else_body),
-        } = tested.as_ref()
-        else {
-            return None;
-        };
-        let [I::I32Const(0)] = else_body.as_slice() else {
-            return None;
-        };
+        } = test
+            && let [I::I32Const(0)] = else_body.as_slice()
+        {
+            last_first.push(then_body);
+            test = condition;
+        }
         let mut temps = Vec::new();
-        let data = without_temps(then_body, &mut temps)?;
-        Some(Self { guard, temps, data })
+        let mut data = Vec::with_capacity(last_first.len());
+        for body in last_first.into_iter().rev() {
+            // A later test runs only where the ones before it hold, so what
+            // it set would say which of them did.
+            let unconditional = data.is_empty();
+            let temps_before = temps.len();
+            let mut value = I::Seq(body.clone());
+            lift_temps(&mut value, &mut temps, locals)?;
+            if !unconditional && temps.len() > temps_before {
+                return None;
+            }
+            data.push(value);
+        }
+        (!data.is_empty()).then_some(Self {
+            guard: test,
+            temps,
+            data,
+        })
     }
 
     /// What the copy sizes itself by, beside the loop's work.
     fn computed(&self) -> impl Iterator<Item = &WirInstr> {
-        let values = self.temps.iter().map(|&(_, value)| value);
-        values.chain(std::iter::once(&self.data))
+        let values = self.temps.iter().map(|(_, value)| value);
+        values.chain(&self.data)
     }
 
     /// Whether `instr` reads a temporary. The copy runs every iteration's
@@ -287,45 +337,52 @@ impl<'a> Search<'a> {
         // A temporary is set before anything reads it, so it never carries one
         // iteration's value into the next.
         let set_before_read = (0..self.temps.len()).all(|at| {
-            let (temp, value) = self.temps[at];
+            let (temp, value) = &self.temps[at];
             let read = Footprint::reads(value);
             self.temps[at..]
                 .iter()
                 .all(|(later, _)| !read.has_local(later))
-                && self.temps[at + 1..].iter().all(|(later, _)| *later != temp)
+                && self.temps[at + 1..].iter().all(|(later, _)| later != temp)
         });
         if !set_before_read
-            || self.temps.iter().any(|(temp, _)| temp == &var)
+            || self.temps.iter().any(|(temp, _)| temp == var)
             || self.lends_temp_to(self.guard)
             || self.lends_temp_to(step)
         {
             return None;
         }
-        let guard_fails = furthest_exit(&negated(self.guard)?, var, step, factor)?;
+        let guard_fails = furthest_exit(&not(self.guard), var, step, factor)?;
         let mut reads = Reads {
             var,
             reach: reach(step, var, factor)?,
             null,
             types,
             temps: &self.temps,
+            own: true,
             outside: None,
         };
-        for computed in self.computed() {
+        let own = self.temps.len() + 1;
+        for (nth, computed) in self.computed().enumerate() {
+            reads.own = nth < own;
             let mut reads_none = computed.clone();
             reads.take(&mut reads_none)?;
             if !is_local_arith(&reads_none, null) {
                 return None;
             }
         }
-        let data_fails =
-            negated(&self.data).unwrap_or_else(|| I::I32Eqz(Box::new(self.data.clone())));
+        let data_fails = self
+            .data
+            .iter()
+            .map(not)
+            .reduce(|nearer, fails| I::I32Or(Box::new(nearer), Box::new(fails)))
+            .expect("a search tests something");
         let mut data_fails_ahead: Option<WirInstr> = None;
         for ahead in 0..factor {
             let mut fails: Vec<WirInstr> = self
                 .temps
                 .iter()
-                .map(|&(temp, value)| I::LocalSet {
-                    name: temp.to_string(),
+                .map(|(temp, value)| I::LocalSet {
+                    name: temp.clone(),
                     value: Box::new(value.clone()),
                 })
                 .chain(std::iter::once(data_fails.clone()))
@@ -349,7 +406,17 @@ impl<'a> Search<'a> {
     }
 }
 
-fn reads_any(instr: &WirInstr, temps: &[(&str, &WirInstr)]) -> bool {
+/// What is nonzero exactly where `test` is zero.
+fn not(test: &WirInstr) -> WirInstr {
+    if let WirInstr::I32Eqz(tested) = test {
+        return tested.as_ref().clone();
+    }
+    let mut not = WirInstr::I32Eqz(Box::new(test.clone()));
+    try_negate_eqz_comparison(&mut not);
+    not
+}
+
+fn reads_any(instr: &WirInstr, temps: &[(String, WirInstr)]) -> bool {
     let read = Footprint::reads(instr);
     temps.iter().any(|(temp, _)| read.has_local(temp))
 }
@@ -362,7 +429,10 @@ struct Reads<'a> {
     reach: i64,
     null: &'a Nullability<'a>,
     types: &'a [WirTypeDef],
-    temps: &'a [(&'a str, &'a WirInstr)],
+    temps: &'a [(String, WirInstr)],
+    /// Whether the loop makes the reads being taken whenever its guard holds,
+    /// rather than only where an earlier test does too.
+    own: bool,
     outside: Option<WirInstr>,
 }
 
@@ -385,8 +455,8 @@ impl Reads<'_> {
             *data = I::I32Const(0);
             return Some(());
         }
-        // Every read is one the loop makes whenever it gets to `data`, which
-        // `outside_of` relies on for the copy's first iteration.
+        // A read under a branch is not one the loop makes whenever it gets
+        // here, which `outside_of` relies on for the copy's first iteration.
         if matches!(data, I::If { .. } | I::Block { .. } | I::Loop { .. }) {
             return (!Footprint::reads(data).touches_heap()).then_some(());
         }
@@ -426,17 +496,20 @@ impl Reads<'_> {
         // In `i64` the sum cannot wrap, and one inside the array is the index
         // the `i32` sum gives. Compared unsigned, a last index below zero
         // lies outside too. A first index below zero with the last inside is
-        // the copy's first read, the one the loop makes and traps on.
+        // the copy's first read: where that is the loop's own, the loop traps
+        // on it as the copy does, and it needs no test.
         let first = terms
             .into_iter()
             .map(|term| I::I64ExtendI32S(Box::new(term.clone())))
             .reduce(|sum, term| I::I64Add(Box::new(sum), Box::new(term)))
             .expect("the index reads the loop variable");
-        let last = I::I64Add(Box::new(first), Box::new(I::I64Const(self.reach)));
-        Some(I::I64GeU(
-            Box::new(last),
-            Box::new(I::I64ExtendI32U(Box::new(len))),
-        ))
+        let last = I::I64Add(Box::new(first.clone()), Box::new(I::I64Const(self.reach)));
+        let last_outside = I::I64GeU(Box::new(last), Box::new(I::I64ExtendI32U(Box::new(len))));
+        if self.own {
+            return Some(last_outside);
+        }
+        let first_outside = I::I64LtS(Box::new(first), Box::new(I::I64Const(0)));
+        Some(I::I32Or(Box::new(first_outside), Box::new(last_outside)))
     }
 
     /// Whether `index` is a byte read from an array, itself or through a
@@ -456,39 +529,9 @@ impl Reads<'_> {
             || index.local_read().is_some_and(|name| {
                 self.temps
                     .iter()
-                    .any(|&(temp, value)| temp == name && reads_byte(value))
+                    .any(|(temp, value)| temp == name && reads_byte(value))
             })
     }
-}
-
-/// The comparison that holds exactly where `test` does not.
-fn negated(test: &WirInstr) -> Option<WirInstr> {
-    use WirInstr as I;
-    let (a, b) = match test {
-        I::I32Eq(a, b)
-        | I::I32Ne(a, b)
-        | I::I32LtS(a, b)
-        | I::I32LeS(a, b)
-        | I::I32GtS(a, b)
-        | I::I32GeS(a, b)
-        | I::I32LtU(a, b)
-        | I::I32LeU(a, b)
-        | I::I32GtU(a, b)
-        | I::I32GeU(a, b) => (a.clone(), b.clone()),
-        _ => return None,
-    };
-    Some(match test {
-        I::I32Eq(..) => I::I32Ne(a, b),
-        I::I32Ne(..) => I::I32Eq(a, b),
-        I::I32LtS(..) => I::I32GeS(a, b),
-        I::I32LeS(..) => I::I32GtS(a, b),
-        I::I32GtS(..) => I::I32LeS(a, b),
-        I::I32GeS(..) => I::I32LtS(a, b),
-        I::I32LtU(..) => I::I32GeU(a, b),
-        I::I32LeU(..) => I::I32GtU(a, b),
-        I::I32GtU(..) => I::I32LeU(a, b),
-        _ => I::I32LtU(a, b),
-    })
 }
 
 /// The terms `index` adds up, and how many of them read `var` itself. A term

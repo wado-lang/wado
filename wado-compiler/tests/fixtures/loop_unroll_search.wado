@@ -31,7 +31,39 @@ fn first_marked(x: &Array<u8>, n: i32, marked: &Array<u8>) -> i32 {
     return i;
 }
 
+// The byte is tested twice, so it is read once into a temporary.
+fn first_of_either(x: &Array<u8>, n: i32) -> i32 {
+    let mut i = 0;
+    while i < n && x[i] != 7 && x[i] != 9 {
+        i += 1;
+    }
+    return i;
+}
+
+fn neither(c: u8) -> bool {
+    return c != 7 && c != 9;
+}
+
+fn first_of_either_called(x: &Array<u8>, n: i32) -> i32 {
+    let mut i = 0;
+    while i < n && neither(x[i]) {
+        i += 1;
+    }
+    return i;
+}
+
 export fn run() with Stdout {
+    let mut either: List<i32> = [];
+    for let at of 0..=11 {
+        let mut x = Array::<u8>::filled(builtin::black_box(11), 0);
+        if at < 11 {
+            x[at] = (7 + at % 2 * 2) as u8;
+        }
+        either.push(first_of_either(&x, 11));
+        assert first_of_either_called(&x, 11) == at;
+    }
+    println(`${either:?}`);
+
     let mut marked = Array::<u8>::filled(builtin::black_box(256), 0);
     marked[7] = 1;
     let mut by_table: List<i32> = [];
@@ -71,10 +103,11 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]\n9\n[0, 9, 1, 9, 2, 0, 3, 1, 4, 2, 5, 3, 6, 4, 7, 5, 8, 6, 9, 7, 10, 8, 11, 9]\n1 0\n5 4\n",
+    "stdout": "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]\n[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]\n9\n[0, 9, 1, 9, 2, 0, 3, 1, 4, 2, 5, 3, 6, 4, 7, 5, 8, 6, 9, 7, 10, 8, 11, 9]\n1 0\n5 4\n",
     "wir_pass": {"O2": ["wir/unroll_array_loops"]},
     "wir_expect:O2": [
         " + 3_i64) >=u builtin::i64_extend_i32_u(builtin::array_len(",
-        ") <u 256)"
+        ") <u 256)",
+        " == 7) | (builtin::array_get_value<u8>("
     ]
 }
