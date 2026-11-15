@@ -14,7 +14,7 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::callee::StaticMethodRef;
-use super::method_call::{MethodSignatureFacts, StaticReceiver};
+use super::method_call::{MethodSignatureFacts, StaticReceiver, primitive_receiver_type};
 use super::method_lookup::narrow_to_reaching;
 use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
@@ -595,8 +595,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // alias's declaration, since a namespaced `lib::Q::twice()` leaves
             // the caller's frame no `Q` to look one up by. With no link owning
             // the name, the call stays the head's.
-            let Some((link_key, _, declared)) = self.newtype_link_target(&owner.receiver.key)
-            else {
+            let Some((link_key, declared)) = self.newtype_link_target(&owner.receiver.key) else {
                 return StaticOwner {
                     nearest,
                     ..at_head()
@@ -1097,7 +1096,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // settle.
                     None if args.is_empty() => self
                         .type_declared_by(Some(receiver_key))
-                        .or_else(|| self.static_receiver_type(receiver)),
+                        .or(receiver_type)
+                        .or_else(|| primitive_receiver_type(receiver_key)),
                     None => receiver_type,
                 };
                 let (trait_decl, impl_def) = (supply.trait_decl, supply.impl_def);

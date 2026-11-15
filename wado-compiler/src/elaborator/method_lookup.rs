@@ -3971,18 +3971,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TypeId> {
         let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
         let base_type_id = self.tysys.through_ref(container_type);
-        let table = self.tysys.type_table.borrow();
-        let nominal = match table.get(base_type_id) {
-            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => false,
-            ResolvedType::Struct { .. }
-            | ResolvedType::Variant { .. }
-            | ResolvedType::Resource { .. }
-            | ResolvedType::Tuple(_)
-            | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. } => table.nominal_head(base_type_id).is_some(),
-            _ => false,
-        };
-        nominal.then_some(base_type_id)
+        let is_array = matches!(
+            self.tysys.type_table.borrow().get(base_type_id),
+            ResolvedType::BuiltinArray(_)
+        );
+        (self.tysys.has_struct_head(base_type_id) && !is_array).then_some(base_type_id)
     }
 
     /// The key `index_expr` writes into `container` through, its literal typed

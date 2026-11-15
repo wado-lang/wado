@@ -84,6 +84,19 @@ fn nominal_receiver(type_table: &TypeTable, ty: TypeId) -> QualifiedReceiver {
     (name, module_source, fq, type_args)
 }
 
+/// The primitive a receiver keyed `Builtin` names, whose type no declaration
+/// registers.
+pub(super) fn primitive_receiver_type(key: &ImplTargetKey) -> Option<TypeId> {
+    match key {
+        ImplTargetKey::Builtin(name) => TypeTable::primitive_by_name(name),
+        ImplTargetKey::Decl(_)
+        | ImplTargetKey::Undeclared(..)
+        | ImplTargetKey::Ref(_)
+        | ImplTargetKey::TypeParam { .. }
+        | ImplTargetKey::Function { .. } => None,
+    }
+}
+
 fn primitive_receiver(prim: PrimitiveType) -> QualifiedReceiver {
     (
         prim.as_str().to_string(),
@@ -1900,12 +1913,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // key comes from the resolved target type, as every lookup below does.
         if let Some(receiver) = &lookup_receiver {
             self.check_static_call_visibility(
-                receiver.key(),
-                &format!(
-                    "{}::{}",
-                    receiver.spelled(self.tysys.resolutions.defs()),
-                    static_call.method
-                ),
+                receiver,
+                &static_call.method,
                 Some(static_call.id),
                 static_call.span,
             );
@@ -3101,15 +3110,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// caller's frame no `Pt`, or another one. `None` for a declaration that
     /// registers no type, such as a local `variant`.
     pub(super) fn static_receiver_type(&mut self, receiver: &ReceiverId) -> Option<TypeId> {
-        if let Some(ty) = receiver.ty() {
-            return Some(ty);
-        }
-        if let ImplTargetKey::Builtin(name) = receiver.key()
-            && let Some(ty) = TypeTable::primitive_by_name(name)
-        {
-            return Some(ty);
-        }
-        self.type_declared_by(Some(receiver.key()))
+        receiver
+            .ty()
+            .or_else(|| primitive_receiver_type(receiver.key()))
+            .or_else(|| self.type_declared_by(Some(receiver.key())))
     }
 
     /// The type the declaration `key` reaches declares, if it reaches one

@@ -726,27 +726,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The type the newtype `key` declares wraps, one link down its chain: the
-    /// key its impls answer at, the name it answers under, and the type as the
-    /// declaration writes it. Keyed on the declaration: a caller reaching the
-    /// type only through a namespace (`lib::Q`) has no bare name its frame
-    /// answers for.
+    /// key its impls answer at, and the type as the declaration writes it.
+    /// Keyed on the declaration: a caller reaching the type only through a
+    /// namespace (`lib::Q`) has no bare name its frame answers for.
     pub(super) fn newtype_link_target(
         &mut self,
         key: &trait_env::ImplTargetKey,
-    ) -> Option<(trait_env::ImplTargetKey, String, tir::TypeId)> {
+    ) -> Option<(trait_env::ImplTargetKey, tir::TypeId)> {
         let trait_env::ImplTargetKey::Decl(def) = key else {
             return None;
         };
         let newtype = self.newtype_self_type(*def)?;
         let link = self.tysys.type_table.borrow().get_newtype_base(newtype)?;
-        let link_name = match *self.tysys.type_table.borrow().get(link) {
-            tir::ResolvedType::Newtype { def, .. } | tir::ResolvedType::Flags { def } => {
-                self.tysys.type_table.borrow().decl_name(def).to_string()
-            }
-            _ => self.tysys.get_ultimate_base_struct_name(link),
-        };
-        let link_key = self.impl_target_of(link);
-        Some((link_key, link_name, link))
+        Some((self.impl_target_of(link), link))
     }
 
     /// The declaring node of `receiver::method_name` written qualified.

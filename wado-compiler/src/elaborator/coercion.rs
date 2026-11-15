@@ -1944,6 +1944,9 @@ impl TypeSystem {
     /// (`core:value::Value`).
     fn is_literal_target(&self, target_type: TypeId) -> bool {
         self.has_struct_head(target_type)
-            || self.type_table.borrow().nominal_head(target_type).is_some()
+            || matches!(
+                self.type_table.borrow().get(target_type),
+                ResolvedType::Enum { .. } | ResolvedType::Variant { .. }
+            )
     }
 }

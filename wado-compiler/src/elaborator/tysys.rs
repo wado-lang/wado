@@ -480,29 +480,38 @@ pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
 /// stringification). They touch only `self.type_table`; the body walk and
 /// reify both reach them through `self.tysys`.
 impl TypeSystem {
-    /// Whether [`Self::struct_name_for_type`] names `type_id`.
+    /// Whether `type_id` is a struct, generic instance, newtype, flags or
+    /// `Array`, the types [`Self::struct_name_for_type`] names.
     pub(crate) fn has_struct_head(&self, type_id: TypeId) -> bool {
-        self.struct_name_for_type(type_id).is_some()
-    }
-
-    /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
-    pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {
-            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => None,
+            ResolvedType::Variant { type_args, .. } => !type_args.is_empty(),
             ResolvedType::Struct { .. }
-            | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. } => self
-                .type_table
-                .borrow()
-                .nominal_head(type_id)
-                .map(|(n, _)| n),
+            | ResolvedType::Flags { .. }
+            | ResolvedType::BuiltinArray(_) => true,
+            _ => false,
+        }
+    }
+
+    /// The name `type_id`'s impls are looked up under, where
+    /// [`Self::has_struct_head`] holds.
+    pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
+        if !self.has_struct_head(type_id) {
+            return None;
+        }
+        let table = self.type_table.borrow();
+        match table.get(type_id) {
             // `Array<T>` is declared definitionless, so it has no nominal head
             // to read; its declaration names it `Array` and carries its impls.
             ResolvedType::BuiltinArray(_) => Some(ARRAY_TYPE_NAME.to_string()),
-            _ => None,
+            _ => Some(
+                table
+                    .nominal_head(type_id)
+                    .expect("a struct head is nominal")
+                    .0,
+            ),
         }
     }
 

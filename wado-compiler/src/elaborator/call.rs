@@ -1764,12 +1764,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if callee_kind.case_owner().is_none()
             && let Some(receiver) = &call_receiver
         {
-            self.check_static_call_visibility(
-                receiver.key(),
-                effective_name,
-                Some(call.id),
-                call.span,
-            );
+            let (_, method_name) = effective_name
+                .rsplit_once("::")
+                .expect("a receiver comes with a qualified name");
+            self.check_static_call_visibility(receiver, method_name, Some(call.id), call.span);
         }
 
         if let Some((owner, variant, case_data)) = self.case_of_callee(&callee_kind, ident) {
@@ -2244,16 +2242,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         clippy::disallowed_methods,
                         reason = "the walk answers for `ns::Type` under the import's `ns$Type` alias"
                     )]
-                    let ns_key = self.namespace_member(prefix, type_name).map(|def| {
-                        trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
-                    });
-                    // The receiver's own type, off the declaration the namespace
-                    // named. A trait-frame signature is read at it, and the
-                    // importing module cannot name `Type` to re-resolve one.
-                    let ns_receiver_type = self.type_declared_by(ns_key.as_ref());
+                    let ns_member = self.namespace_member(prefix, type_name);
                     let receiver_segment = ident.owner_segment();
-                    let receiver = match &ns_key {
-                        Some(key) => Some(ReceiverId::keyed(key.clone(), None)),
+                    let receiver = match ns_member {
+                        Some(def) => Some(ReceiverId::of_decl(
+                            self.tysys.resolutions.defs(),
+                            def,
+                            None,
+                        )),
                         None => receiver_segment.and_then(|seg| self.receiver_at(seg)),
                     };
                     // The branch below reads the middle segment as a type, so a
@@ -2267,11 +2263,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         return TypeTable::ERROR;
                     };
+                    // The receiver's own type, off its declaration. A
+                    // trait-frame signature is read at it, and the importing
+                    // module cannot name `Type` to re-resolve one.
+                    let ns_receiver_type = self.type_declared_by(Some(receiver.key()));
                     // `ns::Type::method` never reaches the bare-spelling check,
                     // so the ladder is enforced here.
                     self.check_static_call_visibility(
-                        receiver.key(),
-                        &format!("{type_name}::{method_name}"),
+                        &receiver,
+                        method_name,
                         Some(call.id),
                         call.span,
                     );
@@ -2308,12 +2308,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_args: method_type_args,
                         ..
                     } = static_args;
-                    // The importing module never names `Type`, so a receiver
-                    // the namespace did not resolve has no newtype to retype to.
-                    let inherited = ns_key.as_ref().and_then(|key| {
-                        let owner = self.static_owner_key(key, method_name);
-                        self.inherited_static(key, &owner, &impl_type_args_inferred)
-                    });
+                    let owner = self.static_owner_key(receiver.key(), method_name);
+                    let inherited =
+                        self.inherited_static(receiver.key(), &owner, &impl_type_args_inferred);
                     let typed = receiver.at_type(ns_receiver_type);
                     let resolved = self.resolve_static_callee(StaticQuery {
                         arg_types: &args,
@@ -2401,17 +2398,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // A concrete block hosts its function under the head it
                     // wrote, arguments included, as the two-segment spelling
                     // names it.
-                    let receiver =
-                        if let Some(head) = self.tysys.concrete_impl_head_of(Some(&method_ref)) {
-                            head
-                        } else if method_ref.type_name == type_name {
-                            ns_key.as_ref().and_then(ImplTargetKey::decl).map_or_else(
-                                || FqTypeName::shape(&struct_module, type_name),
-                                |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),
-                            )
-                        } else {
-                            FqTypeName::shape(&struct_module, &method_ref.type_name)
-                        };
+                    let receiver = if let Some(head) =
+                        self.tysys.concrete_impl_head_of(Some(&method_ref))
+                    {
+                        head
+                    } else if method_ref.type_name == receiver.name(self.tysys.resolutions.defs()) {
+                        receiver.key().decl().map_or_else(
+                            || FqTypeName::shape(&struct_module, type_name),
+                            |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),
+                        )
+                    } else {
+                        FqTypeName::shape(&struct_module, &method_ref.type_name)
+                    };
                     let final_mangled = MethodName::format_local(
                         &receiver,
                         method_ref.trait_name.as_ref(),
@@ -5172,23 +5170,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// re-derived from the spelling, which a splice can make mean another type.
     pub(super) fn check_static_call_visibility(
         &mut self,
-        receiver: &ImplTargetKey,
-        effective_name: &str,
+        receiver: &ReceiverId,
+        method_name: &str,
         node: Option<AstId>,
         span: token::Span,
     ) {
-        let Some((struct_name, method_name)) = effective_name.rsplit_once("::") else {
-            return;
-        };
         // At the link the resolution reaches: checking the spelled receiver
         // alone found an empty bucket, so `type Q = P` passed a call the same
         // call through `P` is rejected for.
-        let owner = self.static_owner_key(receiver, method_name);
+        let owner = self.static_owner_key(receiver.key(), method_name);
         let Some(entry) = self.static_method_entry(&owner, method_name) else {
             return;
         };
         let (module, visibility) = (entry.module.clone(), entry.inherent_visibility);
-        let owner = struct_name.to_string();
+        let owner = receiver.spelled(self.tysys.resolutions.defs()).to_string();
         self.check_inherent_member_visibility(
             visibility,
             Some(&module),
