@@ -31,7 +31,7 @@ use crate::tir::{
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
-use crate::{format_spec, tir};
+use crate::format_spec;
 
 /// Every `core:prelude/format` symbol this synthesiser needs, resolved once
 /// through the [`CompilerItem`] registry.
@@ -166,11 +166,6 @@ fn hole_fmt_helper(
     };
     let mut helper = build_hole_fmt_helper(struct_type, &holes, s.span, &ctx);
     helper.module_source = s.module_source.clone();
-    // The index is a constant at every site `TemplateHole::fmt` reaches after
-    // `members()` folds, so the splice keeps one arm; as a call it would
-    // keep the whole dispatch, and its arms are what the threshold
-    // refuses.
-    helper.inline_hint = tir::InlineHint::Always;
     Some(helper)
 }
 

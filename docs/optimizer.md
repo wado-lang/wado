@@ -356,7 +356,7 @@ Architectural work is tracked in
   inlining it first.
 - [ ] Pricing a splice by what its call site keeps: one arm of a dispatch
   every site decides (`$hole_fmt`), or one element of a returned tuple
-  (`default_slot`). Both carry a synthesized `#[inline(always)]` until then.
+  (`default_slot`).
 - [ ] An array literal's length as a known constant.
 
 ## Tried and Found Ineffective
