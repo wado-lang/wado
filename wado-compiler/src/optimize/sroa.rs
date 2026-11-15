@@ -1401,7 +1401,12 @@ fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
         let write_backs = ctx.write_backs.get(&stmt).map_or(&[][..], Vec::as_slice);
         let handed: Vec<(&WriteBack, u32)> = write_backs
             .iter()
-            .map(|w| (w, hand_rebuilt_literal(engine, stmt, w, ctx, &mut new_stmts)))
+            .map(|w| {
+                (
+                    w,
+                    hand_rebuilt_literal(engine, stmt, w, ctx, &mut new_stmts),
+                )
+            })
             .collect();
         rewrite_node(engine, NodeRef::Stmt(stmt), ctx);
         new_stmts.push(stmt);

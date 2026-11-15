@@ -1286,7 +1286,11 @@ fn binds_hot_field(
             .iter()
             .position(|p| p == param)
             .expect("a binding names a parameter");
-        let arg = args.iter().nth(position).expect("a bound parameter has an argument").expr;
+        let arg = args
+            .iter()
+            .nth(position)
+            .expect("a bound parameter has an argument")
+            .expr;
         !match argument_local(body, arg) {
             Some((local, _)) => built_in_cold_run(body, cold, local),
             None => arg.as_expr().is_some_and(|e| cold.contains(&e)),
