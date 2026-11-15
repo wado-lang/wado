@@ -41,7 +41,7 @@ type "functype//core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]$dae[ret
 
 type "functype//core:rt/cm_stream_write_raw_all_u8$spec3$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(17)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(18)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(18)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
@@ -97,7 +97,7 @@ fn "newtype_generic.wado/run"() with Stdout {
     $sroa_arr2_repr_33 = array.new_fixed<i32>(10, 20);
     if @unlikely(2 >= builtin::array_len($sroa_arr2_repr_33)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(local.tee $sroa_write_back_37(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_arr2_repr_33, used: 2 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_37(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_arr2_repr_33, used: 2 }));
         $sroa_arr2_repr_33 = $sroa_write_back_37.repr;
     }
     builtin::array_set<i32>($sroa_arr2_repr_33, 2, 30);
@@ -444,11 +444,11 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec3$sroa[data.repr]$dae[return]"(handle
     };
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(self) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
     let $load_0: ref Array<i32>;
     let new_repr: ref Array<i32>;
     let a: i32;
-    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, 2);
+    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 

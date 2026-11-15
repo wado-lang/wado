@@ -353,17 +353,15 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<c
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(126)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(127)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(127)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(128)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(128)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(129)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(129)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(130)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(130)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(131)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(132)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(131)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -401,7 +399,7 @@ fn "nested_mut_ref_destructure.wado/$cm_export__$test_0_a_nested_struct_destruct
     $sroa_$sroa_$sroa_o_inner_28_items_29_repr_30 = array.new_fixed<i32>(1);
     if @unlikely(1 >= builtin::array_len($sroa_$sroa_$sroa_o_inner_28_items_29_repr_30)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(local.tee $sroa_write_back_32(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$sroa_$sroa_o_inner_28_items_29_repr_30, used: 1 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_32(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$sroa_$sroa_o_inner_28_items_29_repr_30, used: 1 }));
         $sroa_$sroa_$sroa_o_inner_28_items_29_repr_30 = $sroa_write_back_32.repr;
     }
     builtin::array_set<i32>($sroa_$sroa_$sroa_o_inner_28_items_29_repr_30, 1, 2);
@@ -419,7 +417,7 @@ fn "nested_mut_ref_destructure.wado/$cm_export__$test_1_a_struct_nested_in_a_tup
     $sroa_$sroa_$sroa_t_0_14_items_16_repr_17 = array.new_fixed<i32>(1);
     if @unlikely(1 >= builtin::array_len($sroa_$sroa_$sroa_t_0_14_items_16_repr_17)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(local.tee $sroa_write_back_19(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$sroa_$sroa_t_0_14_items_16_repr_17, used: 1 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_19(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$sroa_$sroa_t_0_14_items_16_repr_17, used: 1 }));
         $sroa_$sroa_$sroa_t_0_14_items_16_repr_17 = $sroa_write_back_19.repr;
     }
     builtin::array_set<i32>($sroa_$sroa_$sroa_t_0_14_items_16_repr_17, 1, 2);
@@ -432,7 +430,7 @@ fn "nested_mut_ref_destructure.wado/$cm_export__$test_2_a_tuple_nested_in_a_stru
     $sroa_$sroa_$sroa_h_pair_14_0_15_repr_17 = array.new_fixed<i32>(1);
     if @unlikely(1 >= builtin::array_len($sroa_$sroa_$sroa_h_pair_14_0_15_repr_17)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(local.tee $sroa_write_back_19(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$sroa_$sroa_h_pair_14_0_15_repr_17, used: 1 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_19(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$sroa_$sroa_h_pair_14_0_15_repr_17, used: 1 }));
         $sroa_$sroa_$sroa_h_pair_14_0_15_repr_17 = $sroa_write_back_19.repr;
     }
     builtin::array_set<i32>($sroa_$sroa_$sroa_h_pair_14_0_15_repr_17, 1, 2);
@@ -463,7 +461,7 @@ fn "nested_mut_ref_destructure.wado/$cm_export__$test_4_a_nested_by_value_destru
     $sroa_items_repr_19 = array.new_fixed<i32>(1);
     if @unlikely(1 >= builtin::array_len($sroa_items_repr_19)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(local.tee $sroa_write_back_21(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_items_repr_19, used: 1 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_21(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_items_repr_19, used: 1 }));
         $sroa_items_repr_19 = $sroa_write_back_21.repr;
     }
     builtin::array_set<i32>($sroa_items_repr_19, 1, 2);
@@ -2094,14 +2092,6 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($mv$self$repr, $mv$self$start, end) {
     return struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$self$repr, start: $mv$self$start, end: $mv$self$start + end };
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(self) {
-    let $load_0: ref Array<i32>;
-    let new_repr: ref Array<i32>;
-    let a: i32;
-    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, 1);
-    self.repr = new_repr;
 }
 
 export fn "nested_mut_ref_destructure.wado/$cm_export__$test_0_a_nested_struct_destructure_writes_through" as "$test_0_a_nested_struct_destructure_writes_through"

@@ -407,7 +407,6 @@ fn "value_copy_new_owner_needs_a_proof.wado/$test_1_a_repoint_that_never_runs_li
     let $load_1: i32;
     let $v0_1: bool;
     let a: ref "core:prelude/list.wado//List<i32>";
-    let used_19: i32;
     let $sroa_h_held_26: ref null "core:prelude/list.wado//List<i32>";
     $sroa_h_held_26 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
     if @unlikely(local.tee $load_1($inline_maybe_repoint_1: block -> i32 {
@@ -422,13 +421,13 @@ fn "value_copy_new_owner_needs_a_proof.wado/$test_1_a_repoint_that_never_runs_li
             $load_1 = a.used;
             let $array_clone_dst_2: ref Array<i32>;
             builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1);
-            if @unlikely(local.tee used_19($load_1) >= builtin::array_len($array_clone_dst_2)) {
+            if @unlikely($load_1 >= builtin::array_len($array_clone_dst_2)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee a(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: $load_1 }));
                 $array_clone_dst_2 = a.repr;
             }
-            builtin::array_set<i32>($array_clone_dst_2, used_19, 9);
-            break $inline_maybe_repoint_1: used_19 + 1;
+            builtin::array_set<i32>($array_clone_dst_2, $load_1, 9);
+            break $inline_maybe_repoint_1: $load_1 + 1;
         } else {
         }
         break $inline_maybe_repoint_1: 0;
@@ -453,7 +452,6 @@ fn "value_copy_new_owner_needs_a_proof.wado/$test_1_a_repoint_that_never_runs_li
 fn "value_copy_new_owner_needs_a_proof.wado/$test_2_an_arm_binding_out_of_a_fresh_holder_is_not_its_owner"() {
     let $load_1: i32;
     let a_2: ref "core:prelude/list.wado//List<i32>";
-    let used_14: i32;
     let $sroa_h_held_24: ref null "core:prelude/list.wado//List<i32>";
     a_2 = ref.as_non_null(local.tee $sroa_h_held_24(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }));
     let $array_clone_src_1: ref Array<i32>;
@@ -461,13 +459,13 @@ fn "value_copy_new_owner_needs_a_proof.wado/$test_2_an_arm_binding_out_of_a_fres
     $load_1 = a_2.used;
     let $array_clone_dst_2: ref Array<i32>;
     builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1);
-    if @unlikely(local.tee used_14($load_1) >= builtin::array_len($array_clone_dst_2)) {
+    if @unlikely($load_1 >= builtin::array_len($array_clone_dst_2)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee a_2(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: $load_1 }));
         $array_clone_dst_2 = a_2.repr;
     }
-    builtin::array_set<i32>($array_clone_dst_2, used_14, 9);
-    if @unlikely(local.tee $load_1(used_14 + 1) != 3) {
+    builtin::array_set<i32>($array_clone_dst_2, $load_1, 9);
+    if @unlikely(local.tee $load_1($load_1 + 1) != 3) {
         cold_path;
         "value_copy_new_owner_needs_a_proof.wado/$test_2_an_arm_binding_out_of_a_fresh_holder_is_not_its_owner$cold1"($load_1);
         unreachable;

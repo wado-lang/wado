@@ -458,17 +458,15 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(164)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(165)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(165)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(166)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(166)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(167)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(167)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(168)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(168)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(169)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(170)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(169)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -508,7 +506,7 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_0_the_field_is_written_in_
     t = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $sroa_$sroa_p_y_29_repr_35, 0, 2); $array_clone_dst_2, used: 2 };
     if @unlikely(2 >= builtin::array_len($sroa_$sroa_p_y_29_repr_35)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(local.tee $sroa_write_back_37(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$sroa_p_y_29_repr_35, used: 2 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_37(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$sroa_p_y_29_repr_35, used: 2 }));
         $sroa_$sroa_p_y_29_repr_35 = $sroa_write_back_37.repr;
     }
     builtin::array_set<i32>($sroa_$sroa_p_y_29_repr_35, 2, 3);
@@ -887,7 +885,7 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_4_a_reference_to_the_local
     $sroa_$sroa_p_x_57_repr_67 = $array_clone_dst_2;
     if @unlikely(2 >= builtin::array_len($sroa_$sroa_p_x_57_repr_67)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(local.tee $sroa_write_back_75(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$sroa_p_x_57_repr_67, used: 2 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_75(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$sroa_p_x_57_repr_67, used: 2 }));
         $sroa_$sroa_p_x_57_repr_67 = $sroa_write_back_75.repr;
     }
     builtin::array_set<i32>($sroa_$sroa_p_x_57_repr_67, 2, 7);
@@ -3103,14 +3101,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($mv$self$repr, $mv$self$start, end) {
     return struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$self$repr, start: $mv$self$start, end: $mv$self$start + end };
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(self) {
-    let $load_0: ref Array<i32>;
-    let new_repr: ref Array<i32>;
-    let a: i32;
-    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, 2);
-    self.repr = new_repr;
 }
 
 export fn "value_copy_field_read_again_keeps_copy.wado/$cm_export__$test_0_the_field_is_written_in_place_before_it_is_overwritten" as "$test_0_the_field_is_written_in_place_before_it_is_overwritten"

@@ -521,11 +521,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/format.wado/$tmpl$47518b5dd822a983,[i32]>$spec0$spec0$sroa[t.h0]"(t) {
     let val_i64_72: i64;
     let q: i32;
+    let digit: i32;
     let $sroa_out_repr_408: ref Array<u8>;
-    let $sroa_out_used_409: i32;
     let $sroa_write_back_410: ref "core:prelude/string.wado//String";
     $sroa_out_repr_408 = builtin::array_new<u8>(16);
-    $sroa_out_used_409 = 0;
     $inline_core_prelude_string_wado_String__internal_push_view_9: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_9;
     };
@@ -539,20 +538,17 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_410(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_408, used: 0 }), t);
         $sroa_out_repr_408 = $sroa_write_back_410.repr;
-        $sroa_out_used_409 = $sroa_write_back_410.used;
     }
-    q = $sroa_out_used_409;
-    $sroa_out_used_409 = t;
-    t = q + t;
+    q = t;
     if val_i64_72 == 0_i64 {
-        builtin::array_set_u8($sroa_out_repr_408, q, 48);
+        builtin::array_set_u8($sroa_out_repr_408, 0, 48);
     } else {
         b57: block {
             l58: loop {
                 break_if b57 val_i64_72 == 0_i64;
-                t = t - 1;
-                q = builtin::i32_wrap_i64(val_i64_72 & 15_i64);
-                builtin::array_set_u8($sroa_out_repr_408, t, select i32(q < 10, 48 + q, (97 + q) - 10));
+                q = q - 1;
+                digit = builtin::i32_wrap_i64(val_i64_72 & 15_i64);
+                builtin::array_set_u8($sroa_out_repr_408, q, select i32(digit < 10, 48 + digit, (97 + digit) - 10));
                 val_i64_72 = val_i64_72 >>u 4_i64;
                 continue l58;
             };
@@ -561,7 +557,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     $inline_core_prelude_string_wado_String__internal_push_view_21: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_21;
     };
-    return $sroa_out_repr_408, $sroa_out_used_409;
+    return $sroa_out_repr_408, t;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<assert_escape_in_condition.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>$spec0$spec0$sroa[t.h0]"(t) {

@@ -64,7 +64,6 @@ fn "opt_deref_of_taken_struct_reference_is_the_struct.wado/run"() with Stdout {
     let s: ref "core:prelude/string.wado//String";
     let a: i32;
     let n_33: i32;
-    let start_39: i32;
     let $cm_pair_7: i64;
     let $sroa_out_repr_71: ref Array<u8>;
     let $sroa_out_used_72: i32;
@@ -80,11 +79,9 @@ fn "opt_deref_of_taken_struct_reference_is_the_struct.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee s(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_71, used: 0 }), n_33);
             $sroa_out_repr_71 = s.repr;
-            $sroa_out_used_72 = s.used;
         }
-        start_39 = $sroa_out_used_72;
         $sroa_out_used_72 = n_33;
-        builtin::array_copy<u8>($sroa_out_repr_71, start_39, $sroa_self_repr_73, a, n_33);
+        builtin::array_copy<u8>($sroa_out_repr_71, 0, $sroa_self_repr_73, a, n_33);
     };
     a = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     n_33 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);

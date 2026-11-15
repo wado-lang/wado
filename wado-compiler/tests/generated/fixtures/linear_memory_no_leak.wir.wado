@@ -977,7 +977,6 @@ fn "linear_memory_no_leak.wado/run"() with Stdout {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_75(struct.new "core:prelude/string.wado//String" { repr: $sroa_text_repr_70, used: $sroa_text_used_71 }), new_used_25);
                     $sroa_text_repr_70 = $sroa_write_back_75.repr;
-                    $sroa_text_used_71 = $sroa_write_back_75.used;
                 }
                 start_26 = $sroa_text_used_71;
                 $sroa_text_used_71 = new_used_25;
@@ -3441,13 +3440,13 @@ fn "core:zlib/deflate_stored"($mv$input$repr, $mv$input$used) {
                 $sroa_output_repr_105 = $sroa_write_back_110.repr;
             }
             builtin::array_set_u8($sroa_output_repr_105, $sroa_output_used_106, len_lo);
-            if @unlikely(local.tee len_lo(local.tee $sroa_output_used_106($sroa_output_used_106 + 1)) >= builtin::array_len($sroa_output_repr_105)) {
+            if @unlikely(local.tee $sroa_output_used_106($sroa_output_used_106 + 1) >= builtin::array_len($sroa_output_repr_105)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(local.tee $sroa_write_back_110(struct.new "core:prelude/list.wado//List<u8>" { repr: $sroa_output_repr_105, used: $sroa_output_used_106 }));
                 $sroa_output_repr_105 = $sroa_write_back_110.repr;
             }
-            builtin::array_set_u8($sroa_output_repr_105, len_lo, len_hi);
-            $sroa_output_used_106 = len_lo + 1;
+            builtin::array_set_u8($sroa_output_repr_105, $sroa_output_used_106, len_hi);
+            $sroa_output_used_106 = $sroa_output_used_106 + 1;
             len_hi = local.tee len_lo(a_11 ^ 65535) & 255;
             if @unlikely($sroa_output_used_106 >= builtin::array_len($sroa_output_repr_105)) {
                 cold_path;
@@ -3481,7 +3480,6 @@ fn "core:zlib/deflate_stored"($mv$input$repr, $mv$input$used) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(local.tee $sroa_write_back_110(struct.new "core:prelude/list.wado//List<u8>" { repr: $sroa_output_repr_105, used: $sroa_output_used_106 }), new_used);
                     $sroa_output_repr_105 = $sroa_write_back_110.repr;
-                    $sroa_output_used_106 = $sroa_write_back_110.used;
                 }
                 builtin::array_copy<u8>($sroa_output_repr_105, $sroa_output_used_106, $mv$input$repr, len_hi, len_lo);
                 $sroa_output_used_106 = new_used;
@@ -5839,7 +5837,6 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
 }
 
 fn "core:zlib/zlib_wrap$dae[level]"($mv$input$repr, $mv$input$used, $mv$deflated$repr, $mv$deflated$used) {
-    let new_used: i32;
     let $sroa_output_repr_58: ref Array<u8>;
     let $sroa_output_used_59: i32;
     let $sroa_write_back_60: ref "core:prelude/list.wado//List<u8>";
@@ -5859,14 +5856,12 @@ fn "core:zlib/zlib_wrap$dae[level]"($mv$input$repr, $mv$input$used, $mv$deflated
     $sroa_output_used_59 = 2;
     $inline_core_prelude_list_wado_List_u8___extend_8: block {
         break_if $inline_core_prelude_list_wado_List_u8___extend_8 $mv$deflated$used == 0;
-        if @unlikely(local.tee new_used(2 + $mv$deflated$used) > builtin::array_len($sroa_output_repr_58)) {
+        if @unlikely(local.tee $sroa_output_used_59(2 + $mv$deflated$used) > builtin::array_len($sroa_output_repr_58)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(local.tee $sroa_write_back_60(struct.new "core:prelude/list.wado//List<u8>" { repr: $sroa_output_repr_58, used: 2 }), new_used);
+            "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(local.tee $sroa_write_back_60(struct.new "core:prelude/list.wado//List<u8>" { repr: $sroa_output_repr_58, used: 2 }), $sroa_output_used_59);
             $sroa_output_repr_58 = $sroa_write_back_60.repr;
-            $sroa_output_used_59 = $sroa_write_back_60.used;
         }
-        builtin::array_copy<u8>($sroa_output_repr_58, $sroa_output_used_59, $mv$deflated$repr, 0, $mv$deflated$used);
-        $sroa_output_used_59 = new_used;
+        builtin::array_copy<u8>($sroa_output_repr_58, 2, $mv$deflated$repr, 0, $mv$deflated$used);
     };
     $mv$deflated$used = local.tee $mv$input$used("core:zlib/adler32$sroa[buf.repr]$dae[adler,offset]"($mv$input$repr, $mv$input$used)) >>u 24;
     if @unlikely($sroa_output_used_59 >= builtin::array_len($sroa_output_repr_58)) {
@@ -10950,7 +10945,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<linear_memo
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_507(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_504, used: $sroa_out_used_505 }), is_negative_65);
         $sroa_out_repr_504 = $sroa_write_back_507.repr;
-        $sroa_out_used_505 = $sroa_write_back_507.used;
     }
     start_208 = $sroa_out_used_505;
     $sroa_out_used_505 = is_negative_65;
@@ -10974,7 +10968,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<linear_memo
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_507(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_504, used: $sroa_out_used_505 }), t);
         $sroa_out_repr_504 = $sroa_write_back_507.repr;
-        $sroa_out_used_505 = $sroa_write_back_507.used;
     }
     is_negative_65 = $sroa_out_used_505;
     $sroa_out_used_505 = t;

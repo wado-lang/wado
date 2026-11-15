@@ -55,11 +55,11 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<newtype_generic_container_return.wado/Point>::grow" = fn(ref "core:prelude/list.wado//List<newtype_generic_container_return.wado/Location>");  // TypeId(22)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<newtype_generic_container_return.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec1$spec0" = fn(i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(23)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(23)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<newtype_generic_container_return.wado/Point>::grow$spec0" = fn(ref "core:prelude/list.wado//List<newtype_generic_container_return.wado/Location>");  // TypeId(24)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<newtype_generic_container_return.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec1$spec0" = fn(i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(24)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
@@ -112,7 +112,7 @@ fn "newtype_generic_container_return.wado/run"() with Stdout {
     $sroa_arr_repr_175 = array.new_fixed<ref "newtype_generic_container_return.wado//Point">();
     if @unlikely(0 >= builtin::array_len($sroa_arr_repr_175)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<newtype_generic_container_return.wado/Point>::grow$spec0"(local.tee $sroa_write_back_188(struct.new "core:prelude/list.wado//List<newtype_generic_container_return.wado/Location>" { repr: $sroa_arr_repr_175, used: 0 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<newtype_generic_container_return.wado/Point>::grow"(local.tee $sroa_write_back_188(struct.new "core:prelude/list.wado//List<newtype_generic_container_return.wado/Location>" { repr: $sroa_arr_repr_175, used: 0 }));
         $sroa_arr_repr_175 = $sroa_write_back_188.repr;
     }
     builtin::array_set<ref "newtype_generic_container_return.wado//Point">($sroa_arr_repr_175, 0, struct.new "newtype_generic_container_return.wado//Point" { x: 5, y: 10 });
@@ -441,6 +441,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
+fn "core:prelude/list.wado/core:prelude/list.wado/List<newtype_generic_container_return.wado/Point>::grow"(self) {
+    let $load_0: ref "Array<newtype_generic_container_return.wado/Point>";
+    let new_repr: ref "Array<newtype_generic_container_return.wado/Point>";
+    let a: i32;
+    builtin::array_copy<ref "newtype_generic_container_return.wado//Point">(local.tee new_repr(builtin::array_new<ref "newtype_generic_container_return.wado//Point">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    self.repr = new_repr;
+}
+
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_27: i32;
     if is_negative {
@@ -492,14 +500,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<newtype_gen
     out_3.used = $mv$t$h0;
     builtin::array_copy<u8>(out_3.repr, $mv$t$h1, global:core:prelude/string.wado::$const_obj_4, 0, 1);
     return out_3;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<newtype_generic_container_return.wado/Point>::grow$spec0"(self) {
-    let $load_0: ref "Array<newtype_generic_container_return.wado/Point>";
-    let new_repr: ref "Array<newtype_generic_container_return.wado/Point>";
-    let a: i32;
-    builtin::array_copy<ref "newtype_generic_container_return.wado//Point">(local.tee new_repr(builtin::array_new<ref "newtype_generic_container_return.wado//Point">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, 0);
-    self.repr = new_repr;
 }
 
 export fn "newtype_generic_container_return.wado/$cm_export__run" as "run"

@@ -1252,25 +1252,61 @@ struct Site {
     bindings: Vec<Binding>,
     /// In a cold run. Such a call is pointed at a clone
     /// other calls pay for, and never has one minted for it: a clone for a call
-    /// that rarely runs buys no time for its size, unless it binds a field:
-    /// see [`Site::binds_field`].
+    /// that rarely runs buys no time for its size, unless it binds a field of
+    /// an object the hot path builds: see [`binds_hot_field`].
     cold: bool,
     /// Returns `!`, so it runs at most once per call of its caller and never
     /// has a clone minted for it, whatever it binds.
     diverges: bool,
+    /// See [`binds_hot_field`]. Read only on a cold site.
+    binds_hot_field: bool,
 }
 
-impl Site {
-    /// Whether the clone replaces a field of an argument passed by reference.
-    /// A cold call is free where it stands but not where it reaches: passing
-    /// the whole object keeps `sroa_param` off that parameter in every hot
-    /// caller, so the object is allocated on the hot path for a field the
-    /// clone would have folded away.
-    fn binds_field(&self) -> bool {
-        self.bindings
+/// Whether `site`'s clone replaces a field of an argument passed by reference
+/// that the hot path builds. A cold call is free where it stands but not where
+/// it reaches: passing the whole object keeps `sroa_param` off that parameter
+/// in every hot caller, so the object is allocated on the hot path for a field
+/// the clone would have folded away. An object the cold run builds itself, as
+/// `sroa` rebuilds one for a cold call, costs the hot path nothing.
+fn binds_hot_field(
+    body: &Body,
+    cold: &IndexSet<ExprId>,
+    signatures: &Signatures,
+    site: &Site,
+) -> bool {
+    let ExprKind::Call { args, .. } = &body.exprs[site.call].kind else {
+        panic!("a site is a call");
+    };
+    let param_locals = &signatures.of[site.callee.index()].param_locals;
+    site.bindings.iter().any(|(param, slot, _)| {
+        if !matches!(slot, Slot::Field(_)) {
+            return false;
+        }
+        let position = param_locals
             .iter()
-            .any(|(_, slot, _)| matches!(slot, Slot::Field(_)))
-    }
+            .position(|p| p == param)
+            .expect("a binding names a parameter");
+        let arg = args.iter().nth(position).expect("a bound parameter has an argument").expr;
+        !match argument_local(body, arg) {
+            Some((local, _)) => built_in_cold_run(body, cold, local),
+            None => arg.as_expr().is_some_and(|e| cold.contains(&e)),
+        }
+    })
+}
+
+/// Whether every binding of `local` takes a value the cold run computes.
+fn built_in_cold_run(body: &Body, cold: &IndexSet<ExprId>, local: u32) -> bool {
+    let mut values = body
+        .stmts
+        .values()
+        .filter_map(|stmt| match &stmt.kind {
+            StmtKind::Let {
+                local_index, value, ..
+            } if *local_index == local => Some(*value),
+            _ => None,
+        })
+        .peekable();
+    values.peek().is_some() && values.all(|v| v.as_expr().is_some_and(|e| cold.contains(&e)))
 }
 
 fn select_sites(
@@ -1359,6 +1395,7 @@ fn select_sites(
             bindings,
             cold: false,
             diverges: false,
+            binds_hot_field: false,
         });
     }
     sites
@@ -1704,6 +1741,9 @@ fn collect_sites(
         for site in &mut sites {
             site.diverges = types.is_never(body.exprs[site.call].type_id);
             site.cold = scan.cold_calls.contains(&site.call) || site.diverges;
+            if site.cold {
+                site.binds_hot_field = binds_hot_field(body, &scan.cold_calls, signatures, site);
+            }
         }
         (!sites.is_empty()).then_some((index, sites))
     })
@@ -1753,7 +1793,7 @@ fn plan_clones<'s>(
         }
         let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
         if site.diverges
-            || (site.cold && !site.binds_field())
+            || (site.cold && !site.binds_hot_field)
             || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
         {
             continue;

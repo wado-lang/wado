@@ -12,6 +12,7 @@ use super::arena_query::{
     MarkerBuiltins, RareRuns, operand_read_locals, rebound_locals, strip_one_value_copy,
 };
 use super::gate::{FunctionGate, GatedPass};
+use super::heap_effect::{HeapEffects, HeapEffectsCache};
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::minted_what;
@@ -95,12 +96,17 @@ fn build_stores_lookup(project: &NirPackage) -> StoresLookup {
     lookup
 }
 
-pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+pub fn scalar_replace_aggregates(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    heap: &mut HeapEffectsCache,
+) -> bool {
     let stores_lookup = build_stores_lookup(project);
     let value_copy_ids = project.value_copy_func_ids();
     let builtins = build_ctfe_builtin_map(project);
     let markers = MarkerBuiltins::of(project);
     let type_table = project.type_table.borrow();
+    let effects = heap.effects(project, &type_table, gate.exec());
     let type_table = &*type_table;
     let functions = &project.functions;
     gate.run_gated_par(GatedPass::Sroa, functions.len(), |buffers, fid| {
@@ -113,6 +119,7 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
             value_copy_ids: &value_copy_ids,
             builtins: &builtins,
             markers,
+            effects: &effects,
             applied: Cell::new(false),
         };
         let FuncParts {
@@ -144,6 +151,8 @@ pub(super) struct SroaRule<'a> {
     builtins: &'a CtfeBuiltinMap,
     /// What marks a call cold, where a [`WriteBack`] may rebuild a candidate.
     markers: MarkerBuiltins,
+    /// Which fields a [`WriteBack`]'s call may write, the only ones read back.
+    effects: &'a HeapEffects<'a>,
     /// Whole-function rewrite: only run once per session. The engine's
     /// re-try-after-success loop and any block re-enqueue triggered by edits
     /// could otherwise call `apply_block` at the root again.
@@ -182,6 +191,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         &candidates,
         &RareRuns::of(engine.body, rule.markers, Rarity::Cold).exprs(engine.body),
         rule.stores_lookup,
+        rule.effects,
         engine.type_table(),
     );
     let write_back_args: IndexSet<ExprId> = write_backs.values().flatten().map(|w| w.arg).collect();
@@ -1220,6 +1230,8 @@ struct WriteBack {
     /// The argument naming the candidate: `&mut c`, or `c` passed `&mut`.
     arg: ExprId,
     candidate: u32,
+    /// The fields the call may write, the only ones read back.
+    written: IndexSet<u32>,
 }
 
 /// The [`WriteBack`]s of `body`, keyed by the statement whose call takes them.
@@ -1233,13 +1245,15 @@ fn write_back_sites(
     candidates: &[SroaCandidate],
     cold: &IndexSet<ExprId>,
     stores_lookup: &StoresLookup,
+    effects: &HeapEffects,
     type_table: &TypeTable,
 ) -> IndexMap<StmtId, Vec<WriteBack>> {
-    let projected: IndexSet<u32> = candidates
+    let shapes: IndexMap<u32, &SroaCandidate> = candidates
         .iter()
         .filter(|c| c.kind == AggKind::Projected && !c.referenced)
-        .map(|c| c.local_index)
+        .map(|c| (c.local_index, c))
         .collect();
+    let projected: IndexSet<u32> = shapes.keys().copied().collect();
     let mut hot_accessed: IndexSet<u32> = IndexSet::default();
     body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(e) = node
@@ -1285,10 +1299,18 @@ fn write_back_sites(
             if named_elsewhere || callee_stores_param_at(*func_id, i, stores_lookup) {
                 continue;
             }
-            sites
-                .entry(stmt)
-                .or_default()
-                .push(WriteBack { arg: e, candidate });
+            let shape = shapes[&candidate];
+            let key = type_table
+                .heap_object_key(shape.aggregate_type_id)
+                .expect("a projected candidate is a heap object");
+            let written = (0..shape.fields.len() as u32)
+                .filter(|&f| effects.call_may_write_field(body, call, key, f))
+                .collect();
+            sites.entry(stmt).or_default().push(WriteBack {
+                arg: e,
+                candidate,
+                written,
+            });
         }
     });
     sites
@@ -1377,19 +1399,14 @@ fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
             continue;
         }
         let write_backs = ctx.write_backs.get(&stmt).map_or(&[][..], Vec::as_slice);
-        let handed: Vec<(u32, u32)> = write_backs
+        let handed: Vec<(&WriteBack, u32)> = write_backs
             .iter()
-            .map(|w| {
-                (
-                    w.candidate,
-                    hand_rebuilt_literal(engine, stmt, w, ctx, &mut new_stmts),
-                )
-            })
+            .map(|w| (w, hand_rebuilt_literal(engine, stmt, w, ctx, &mut new_stmts)))
             .collect();
         rewrite_node(engine, NodeRef::Stmt(stmt), ctx);
         new_stmts.push(stmt);
-        for (candidate, literal) in handed {
-            read_fields_back(engine, stmt, candidate, literal, ctx, &mut new_stmts);
+        for (w, literal) in handed {
+            read_fields_back(engine, stmt, w, literal, ctx, &mut new_stmts);
         }
     }
     engine.set_block_stmts(block, new_stmts);
@@ -1444,22 +1461,26 @@ fn hand_rebuilt_literal(
     local_index
 }
 
-/// Assign each of `candidate`'s slots the field the call left in `literal`.
+/// Assign each slot of `w`'s candidate the call may have written the field it
+/// left in `literal`.
 fn read_fields_back(
     engine: &mut Engine,
     stmt: StmtId,
-    candidate: u32,
+    w: &WriteBack,
     literal: u32,
     ctx: &Rewrite,
     new_stmts: &mut Vec<StmtId>,
 ) {
     let span = engine.body.stmts[stmt].span;
-    let info = &ctx.reconstruct_info[&candidate];
+    let info = &ctx.reconstruct_info[&w.candidate];
     let type_id = info.aggregate_type_id;
     let fields = info.fields.clone();
     let literal_name = engine.local_name(literal);
     for (i, (field_name, field_type)) in fields.into_iter().enumerate() {
-        let key = (candidate, i as u32);
+        if !w.written.contains(&(i as u32)) {
+            continue;
+        }
+        let key = (w.candidate, i as u32);
         let base = engine.alloc_expr(
             ExprKind::Local {
                 index: literal,

@@ -239,7 +239,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<tir_optimize_bool_identity.wado/$tmpl$82976a53828ad9fe,[bool]>$spec0$spec0$sroa[t.h0]"(t) {
-    let start_110: i32;
     let $sroa_slot_310: ref null Array<u8>;
     let $sroa_out_repr_314: ref Array<u8>;
     let $sroa_out_used_315: i32;
@@ -259,15 +258,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<tir_optimiz
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
             break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 t == 0;
-            if @unlikely(t > 16) {
+            if @unlikely(local.tee $sroa_out_used_315(t) > 16) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_323(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_314, used: 0 }), t);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_323(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_314, used: 0 }), $sroa_out_used_315);
                 $sroa_out_repr_314 = $sroa_write_back_323.repr;
-                $sroa_out_used_315 = $sroa_write_back_323.used;
             }
-            start_110 = $sroa_out_used_315;
-            $sroa_out_used_315 = t;
-            builtin::array_copy<u8>($sroa_out_repr_314, start_110, $sroa_slot_310, 0, t);
+            builtin::array_copy<u8>($sroa_out_repr_314, 0, $sroa_slot_310, 0, t);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
     };

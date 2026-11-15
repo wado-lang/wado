@@ -110,19 +110,17 @@ type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<move_ref
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<move_referenced_local_after_reference_ends.wado/$tmpl$7ab51489603b688b,[core:prelude/list.wado/List<i32>]>$spec0$spec0$sroa[t.h0]" = fn(ref "core:prelude/list.wado//List<i32>") -> ref "core:prelude/string.wado//String";  // TypeId(41)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(42)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(43)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(44)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(44)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(45)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(45)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(46)
+type "functype//move_referenced_local_after_reference_ends.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(46)
 
-type "functype//move_referenced_local_after_reference_ends.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(47)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(48)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -182,7 +180,7 @@ fn "move_referenced_local_after_reference_ends.wado/ref_held_in_a_local"() with 
     u = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(1)), 0, $sroa_t_repr_28, 0, 1); $array_clone_dst_2, used: 1 };
     if @unlikely(1 >= builtin::array_len($sroa_t_repr_28)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(local.tee $sroa_write_back_30(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_t_repr_28, used: 1 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_30(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_t_repr_28, used: 1 }));
         $sroa_t_repr_28 = $sroa_write_back_30.repr;
     }
     builtin::array_set<i32>($sroa_t_repr_28, 1, 2);
@@ -206,7 +204,7 @@ fn "move_referenced_local_after_reference_ends.wado/ref_held_in_a_struct"() with
     u = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(1)), 0, $sroa_t_repr_28, 0, 1); $array_clone_dst_2, used: 1 };
     if @unlikely(1 >= builtin::array_len($sroa_t_repr_28)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(local.tee $sroa_write_back_30(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_t_repr_28, used: 1 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_30(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_t_repr_28, used: 1 }));
         $sroa_t_repr_28 = $sroa_write_back_30.repr;
     }
     builtin::array_set<i32>($sroa_t_repr_28, 1, 2);
@@ -1078,14 +1076,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<move_refere
         break $inline_core_prelude_string_wado_String__internal_push_view_36;
     };
     return out_3;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(self) {
-    let $load_0: ref Array<i32>;
-    let new_repr: ref Array<i32>;
-    let a: i32;
-    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, 1);
-    self.repr = new_repr;
 }
 
 export fn "move_referenced_local_after_reference_ends.wado/$cm_export__run" as "run"

@@ -1025,17 +1025,14 @@ fn "parser_synth_id_collision_test.wado/post_process"($mv$raw$repr, $mv$raw$used
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $mv_arg_5(struct.new "core:prelude/string.wado//String" { repr: $mv$raw$repr, used: 0 }), $mv$raw$used);
                 $mv$raw$repr = $mv_arg_5.repr;
-                i = $mv_arg_5.used;
             }
-            $mv_end_3 = i;
             i = $mv$raw$used;
-            builtin::array_copy<u8>($mv$raw$repr, $mv_end_3, self_4.repr, self_4.start, $mv$raw$used);
+            builtin::array_copy<u8>($mv$raw$repr, 0, self_4.repr, self_4.start, $mv$raw$used);
         };
         if @unlikely(local.tee $mv$raw$used(i + 1) > builtin::array_len($mv$raw$repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $mv_arg_5(struct.new "core:prelude/string.wado//String" { repr: $mv$raw$repr, used: i }), $mv$raw$used);
             $mv$raw$repr = $mv_arg_5.repr;
-            i = $mv_arg_5.used;
         }
         $mv_end_3 = i;
         i = $mv$raw$used;
@@ -3021,7 +3018,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::replacen<core:pr
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_129(struct.new "core:prelude/string.wado//String" { repr: $sroa_result_repr_121, used: $sroa_result_used_122 }), j);
                         $sroa_result_repr_121 = $sroa_write_back_129.repr;
-                        $sroa_result_used_122 = $sroa_write_back_129.used;
                     }
                     start_64 = $sroa_result_used_122;
                     $sroa_result_used_122 = j;
@@ -3045,7 +3041,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::replacen<core:pr
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_129(struct.new "core:prelude/string.wado//String" { repr: $sroa_result_repr_121, used: $sroa_result_used_122 }), $mv$self$end);
             $sroa_result_repr_121 = $sroa_write_back_129.repr;
-            $sroa_result_used_122 = $sroa_write_back_129.used;
         }
         pos_7 = $sroa_result_used_122;
         $sroa_result_used_122 = $mv$self$end;

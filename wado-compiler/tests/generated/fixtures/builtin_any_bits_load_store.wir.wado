@@ -6307,13 +6307,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<builtin_any
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<builtin_any_bits_load_store.wado/$tmpl$0a5c592a1d2b1307,[i64,u8]>$spec0$spec0"($mv$t$h0, $mv$t$h1) {
     let self_78: i32;
     let q_80: i32;
-    let start_332: i32;
+    let start_124: i32;
     let $sroa_out_repr_1033: ref Array<u8>;
-    let $sroa_out_used_1034: i32;
     let $sroa_write_back_1036: ref "core:prelude/string.wado//String";
-    $sroa_out_repr_1033 = builtin::array_new<u8>(46);
-    $sroa_out_used_1034 = 7;
-    builtin::array_copy<u8>($sroa_out_repr_1033, 0, global:core:prelude/string.wado::$const_obj_85, 0, 7);
+    builtin::array_copy<u8>(local.tee $sroa_out_repr_1033(builtin::array_new<u8>(46)), 0, global:core:prelude/string.wado::$const_obj_85, 0, 7);
     self_78 = $inline_count_digits_u64_base_31: block -> i32 {
         if $mv$t$h0 == 0_i64 {
             break $inline_count_digits_u64_base_31: 1;
@@ -6324,20 +6321,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<builtin_any
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_1036(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1033, used: 7 }), q_80);
         $sroa_out_repr_1033 = $sroa_write_back_1036.repr;
-        $sroa_out_used_1034 = $sroa_write_back_1036.used;
     }
-    start_332 = $sroa_out_used_1034;
-    $sroa_out_used_1034 = q_80;
-    "core:prelude/primitive.wado/write_u64_base_digits$dae[bits_per_digit,mask,upper]"($sroa_out_repr_1033, start_332, $mv$t$h0, self_78);
-    if @unlikely(local.tee self_78($sroa_out_used_1034 + 7) > builtin::array_len($sroa_out_repr_1033)) {
+    "core:prelude/primitive.wado/write_u64_base_digits$dae[bits_per_digit,mask,upper]"($sroa_out_repr_1033, 7, $mv$t$h0, self_78);
+    if @unlikely(local.tee self_78(q_80 + 7) > builtin::array_len($sroa_out_repr_1033)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_1036(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1033, used: $sroa_out_used_1034 }), self_78);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_1036(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1033, used: q_80 }), self_78);
         $sroa_out_repr_1033 = $sroa_write_back_1036.repr;
-        $sroa_out_used_1034 = $sroa_write_back_1036.used;
     }
-    q_80 = $sroa_out_used_1034;
-    $sroa_out_used_1034 = self_78;
-    builtin::array_copy<u8>($sroa_out_repr_1033, q_80, global:core:prelude/string.wado::$const_obj_53, 0, 7);
+    start_124 = q_80;
+    q_80 = self_78;
+    builtin::array_copy<u8>($sroa_out_repr_1033, start_124, global:core:prelude/string.wado::$const_obj_53, 0, 7);
     $mv$t$h0 = builtin::i64_extend_i32_u($mv$t$h1);
     $mv$t$h1 = $inline_count_digits_u64_base_63: block -> i32 {
         if $mv$t$h0 == 0_i64 {
@@ -6345,19 +6338,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<builtin_any
         }
         break $inline_count_digits_u64_base_63: select i32(($mv$t$h1 - (self_78 * 4)) != 0, (local.tee self_78(local.tee $mv$t$h1(64 - builtin::i32_wrap_i64(builtin::i64_clz($mv$t$h0))) / 4) + 1) + (($mv$t$h1 ^ 4) >> 31), self_78);
     };
-    if @unlikely(local.tee self_78($sroa_out_used_1034 + $mv$t$h1) > builtin::array_len($sroa_out_repr_1033)) {
+    if @unlikely(local.tee self_78(q_80 + $mv$t$h1) > builtin::array_len($sroa_out_repr_1033)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_1036(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1033, used: $sroa_out_used_1034 }), self_78);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_1036(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1033, used: q_80 }), self_78);
         $sroa_out_repr_1033 = $sroa_write_back_1036.repr;
-        $sroa_out_used_1034 = $sroa_write_back_1036.used;
     }
-    q_80 = $sroa_out_used_1034;
-    $sroa_out_used_1034 = self_78;
-    "core:prelude/primitive.wado/write_u64_base_digits$dae[bits_per_digit,mask,upper]"($sroa_out_repr_1033, q_80, $mv$t$h0, $mv$t$h1);
+    start_124 = q_80;
+    q_80 = self_78;
+    "core:prelude/primitive.wado/write_u64_base_digits$dae[bits_per_digit,mask,upper]"($sroa_out_repr_1033, start_124, $mv$t$h0, $mv$t$h1);
     $inline_core_prelude_string_wado_String__internal_push_view_74: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_74;
     };
-    return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1033, used: $sroa_out_used_1034 };
+    return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1033, used: q_80 };
 }
 
 export fn "builtin_any_bits_load_store.wado/$cm_export__run" as "run"

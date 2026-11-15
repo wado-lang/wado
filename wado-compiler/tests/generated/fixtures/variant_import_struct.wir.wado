@@ -257,7 +257,6 @@ fn "variant_import_struct_module.wado/format_with_opts"(s, $mv$opts$align, $mv$o
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_211(struct.new "core:prelude/string.wado//String" { repr: $sroa_pad_repr_205, used: $av_219 }), new_used_26);
                 $sroa_pad_repr_205 = $sroa_write_back_211.repr;
-                $av_219 = $sroa_write_back_211.used;
             }
             start_27 = $av_219;
             $av_219 = new_used_26;
@@ -327,7 +326,6 @@ fn "variant_import_struct_module.wado/format_with_opts"(s, $mv$opts$align, $mv$o
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_211(struct.new "core:prelude/string.wado//String" { repr: $sroa_pad_repr_205, used: i_4 }), new_used_115);
                     $sroa_pad_repr_205 = $sroa_write_back_211.repr;
-                    i_4 = $sroa_write_back_211.used;
                 }
                 start_116 = i_4;
                 i_4 = new_used_115;
@@ -344,7 +342,6 @@ fn "variant_import_struct_module.wado/format_with_opts"(s, $mv$opts$align, $mv$o
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_211(struct.new "core:prelude/string.wado//String" { repr: $sroa_rpad_repr_209, used: new_used_26 }), start_27);
                     $sroa_rpad_repr_209 = $sroa_write_back_211.repr;
-                    new_used_26 = $sroa_write_back_211.used;
                 }
                 new_used_115 = new_used_26;
                 new_used_26 = start_27;
@@ -357,15 +354,12 @@ fn "variant_import_struct_module.wado/format_with_opts"(s, $mv$opts$align, $mv$o
         $mv$opts$width = 0;
         $inline_core_prelude_string_wado_String__internal_push_string_63: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_63 i_4 == 0;
-            if @unlikely(i_4 > builtin::array_len($sroa_result_repr_214)) {
+            if @unlikely(local.tee $mv$opts$width(i_4) > builtin::array_len($sroa_result_repr_214)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_211(struct.new "core:prelude/string.wado//String" { repr: $sroa_result_repr_214, used: 0 }), i_4);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_211(struct.new "core:prelude/string.wado//String" { repr: $sroa_result_repr_214, used: 0 }), $mv$opts$width);
                 $sroa_result_repr_214 = $sroa_write_back_211.repr;
-                $mv$opts$width = $sroa_write_back_211.used;
             }
-            $av_219 = $mv$opts$width;
-            $mv$opts$width = i_4;
-            builtin::array_copy<u8>($sroa_result_repr_214, $av_219, $sroa_pad_repr_205, 0, i_4);
+            builtin::array_copy<u8>($sroa_result_repr_214, 0, $sroa_pad_repr_205, 0, i_4);
         };
         $inline_core_prelude_string_wado_String__internal_push_string_69: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_69 local.tee $av_219(s.used) == 0;
@@ -373,7 +367,6 @@ fn "variant_import_struct_module.wado/format_with_opts"(s, $mv$opts$align, $mv$o
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_211(struct.new "core:prelude/string.wado//String" { repr: $sroa_result_repr_214, used: $mv$opts$width }), i_4);
                 $sroa_result_repr_214 = $sroa_write_back_211.repr;
-                $mv$opts$width = $sroa_write_back_211.used;
             }
             start_27 = $mv$opts$width;
             $mv$opts$width = i_4;
@@ -420,9 +413,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<variant_import_struct.wado/$tmpl$5d09a9f8d325483d,[core:prelude/string.wado/String]>$spec0$spec0$sroa[t.h0]"(t) {
+    let start_106: i32;
     let n_126: i32;
-    let new_used_130: i32;
-    let start_131: i32;
     let $sroa_out_repr_555: ref Array<u8>;
     let $sroa_out_used_556: i32;
     let $sroa_write_back_564: ref "core:prelude/string.wado//String";
@@ -433,15 +425,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<variant_imp
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
                 break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_126(t.used) == 0;
-                if @unlikely(local.tee new_used_130(1 + n_126) > 18) {
+                if @unlikely(local.tee $sroa_out_used_556(1 + n_126) > 18) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_564(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_555, used: 1 }), new_used_130);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_564(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_555, used: 1 }), $sroa_out_used_556);
                     $sroa_out_repr_555 = $sroa_write_back_564.repr;
-                    $sroa_out_used_556 = $sroa_write_back_564.used;
                 }
-                start_131 = $sroa_out_used_556;
-                $sroa_out_used_556 = new_used_130;
-                builtin::array_copy<u8>($sroa_out_repr_555, start_131, t.repr, 0, n_126);
+                builtin::array_copy<u8>($sroa_out_repr_555, 1, t.repr, 0, n_126);
             };
             break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
         };
@@ -451,11 +440,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<variant_imp
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee t(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_555, used: $sroa_out_used_556 }), n_126);
         $sroa_out_repr_555 = t.repr;
-        $sroa_out_used_556 = t.used;
     }
-    new_used_130 = $sroa_out_used_556;
+    start_106 = $sroa_out_used_556;
     $sroa_out_used_556 = n_126;
-    builtin::array_copy<u8>($sroa_out_repr_555, new_used_130, global:core:prelude/string.wado::$const_obj_6, 0, 1);
+    builtin::array_copy<u8>($sroa_out_repr_555, start_106, global:core:prelude/string.wado::$const_obj_6, 0, 1);
     return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_555, used: $sroa_out_used_556 };
 }
 

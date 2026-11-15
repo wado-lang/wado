@@ -72,23 +72,19 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" =
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(30)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(31)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<inline.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(31)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec1" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(32)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<inline.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(33)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(33)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(35)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(35)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
+type "functype//inline.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(36)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(37)
-
-type "functype//inline.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(38)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(39)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(37)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -242,19 +238,19 @@ fn "inline.wado/test_method_minimal"() with Stdout {
     $sroa_arr2_repr_55 = array.new_fixed<i32>();
     if @unlikely(0 >= builtin::array_len($sroa_arr1_repr_53)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec1"(local.tee $sroa_write_back_57(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_arr1_repr_53, used: 0 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_57(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_arr1_repr_53, used: 0 }));
         $sroa_arr1_repr_53 = $sroa_write_back_57.repr;
     }
     builtin::array_set<i32>($sroa_arr1_repr_53, 0, 1);
     if @unlikely(1 >= builtin::array_len($sroa_arr1_repr_53)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(local.tee $sroa_write_back_57(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_arr1_repr_53, used: 1 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_57(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_arr1_repr_53, used: 1 }));
         $sroa_arr1_repr_53 = $sroa_write_back_57.repr;
     }
     builtin::array_set<i32>($sroa_arr1_repr_53, 1, 2);
     if @unlikely(0 >= builtin::array_len($sroa_arr2_repr_55)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec1"(local.tee $sroa_write_back_57(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_arr2_repr_55, used: 0 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_57(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_arr2_repr_55, used: 0 }));
         $sroa_arr2_repr_55 = $sroa_write_back_57.repr;
     }
     builtin::array_set<i32>($sroa_arr2_repr_55, 0, 3);
@@ -847,22 +843,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     return digit_count;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec0"(self) {
-    let $load_0: ref Array<i32>;
-    let new_repr: ref Array<i32>;
-    let a: i32;
-    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, 1);
-    self.repr = new_repr;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow$spec1"(self) {
-    let $load_0: ref Array<i32>;
-    let new_repr: ref Array<i32>;
-    let a: i32;
-    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, 0);
-    self.repr = new_repr;
-}
-
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<inline.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]"(t) {
     let is_negative_65: bool;
     let x: i64;
@@ -949,7 +929,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<inline.wado
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_506(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_503, used: $sroa_out_used_504 }), is_negative_65);
         $sroa_out_repr_503 = $sroa_write_back_506.repr;
-        $sroa_out_used_504 = $sroa_write_back_506.used;
     }
     start_198 = $sroa_out_used_504;
     $sroa_out_used_504 = is_negative_65;

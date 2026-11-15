@@ -1856,8 +1856,8 @@ fn "mut_ref_write_back_variant_field.wado/takes_a_snapshot$sroa[seen.n]"(seen, p
 
 fn "mut_ref_write_back_variant_field.wado/appends$sroa[p.value]"(p) {
     let s_1: ref "core:prelude/string.wado//String";
+    let start_86: i32;
     let n_217: i32;
-    let start_222: i32;
     let $sroa_out_repr_477: ref Array<u8>;
     let $sroa_out_used_478: i32;
     let $sroa_write_back_479: ref "core:prelude/string.wado//String";
@@ -1876,11 +1876,9 @@ fn "mut_ref_write_back_variant_field.wado/appends$sroa[p.value]"(p) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_479(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_477, used: 0 }), n_217);
                         $sroa_out_repr_477 = $sroa_write_back_479.repr;
-                        $sroa_out_used_478 = $sroa_write_back_479.used;
                     }
-                    start_222 = $sroa_out_used_478;
                     $sroa_out_used_478 = n_217;
-                    builtin::array_copy<u8>($sroa_out_repr_477, start_222, s_1.repr, 0, n_217);
+                    builtin::array_copy<u8>($sroa_out_repr_477, 0, s_1.repr, 0, n_217);
                 };
                 break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
             };
@@ -1890,11 +1888,10 @@ fn "mut_ref_write_back_variant_field.wado/appends$sroa[p.value]"(p) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_479(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_477, used: $sroa_out_used_478 }), n_217);
             $sroa_out_repr_477 = $sroa_write_back_479.repr;
-            $sroa_out_used_478 = $sroa_write_back_479.used;
         }
-        start_222 = $sroa_out_used_478;
+        start_86 = $sroa_out_used_478;
         $sroa_out_used_478 = n_217;
-        builtin::array_copy<u8>($sroa_out_repr_477, start_222, global:mut_ref_write_back_variant_field.wado::$const_obj_27, 0, 1);
+        builtin::array_copy<u8>($sroa_out_repr_477, start_86, global:mut_ref_write_back_variant_field.wado::$const_obj_27, 0, 1);
         s_1.repr = $sroa_out_repr_477;
         s_1.used = $sroa_out_used_478;
     } else {

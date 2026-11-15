@@ -2300,7 +2300,7 @@ fn "display_manual_impl.wado/display_manual_impl.wado/Point^core:prelude/traits.
     s_5 = struct.new "core:prelude/string.wado//String" { repr: $mv_repr_1, used: $mv$self$x };
     $inline_core_prelude_string_wado_String__internal_push_string_5: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_5 $mv$self$x == 0;
-        if @unlikely(local.tee new_used_62(f.used + $mv$self$x) > builtin::array_len(f.repr)) {
+        if @unlikely(local.tee new_used_62(new_used_62 + $mv$self$x) > builtin::array_len(f.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_62);
         }
@@ -2315,17 +2315,17 @@ fn "display_manual_impl.wado/display_manual_impl.wado/Point^core:prelude/traits.
     new_used_62 = f.used;
     f.used = $mv$self$x;
     builtin::array_copy<u8>(f.repr, new_used_62, global:display_manual_impl.wado::$const_obj_30, 0, 2);
-    multivalue_bind [$mv_repr_1, $mv$self$x] = "core:prelude/string.wado/core:prelude/string.wado/String::format<display_manual_impl.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"($mv$self$y);
-    s_5 = struct.new "core:prelude/string.wado//String" { repr: $mv_repr_1, used: $mv$self$x };
+    multivalue_bind [$mv_repr_1, $mv$self$y] = "core:prelude/string.wado/core:prelude/string.wado/String::format<display_manual_impl.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"($mv$self$y);
+    s_5 = struct.new "core:prelude/string.wado//String" { repr: $mv_repr_1, used: $mv$self$y };
     $inline_core_prelude_string_wado_String__internal_push_string_19: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_19 $mv$self$x == 0;
-        if @unlikely(local.tee $mv$self$y(f.used + $mv$self$x) > builtin::array_len(f.repr)) {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_19 $mv$self$y == 0;
+        if @unlikely(local.tee $mv$self$x($mv$self$x + $mv$self$y) > builtin::array_len(f.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, $mv$self$y);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, $mv$self$x);
         }
         new_used_62 = f.used;
-        f.used = $mv$self$y;
-        builtin::array_copy<u8>(f.repr, new_used_62, s_5.repr, 0, $mv$self$x);
+        f.used = $mv$self$x;
+        builtin::array_copy<u8>(f.repr, new_used_62, s_5.repr, 0, $mv$self$y);
     };
     if @unlikely(local.tee $mv$self$x(f.used + 1) > builtin::array_len(f.repr)) {
         cold_path;
@@ -2942,23 +2942,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<display_man
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_558(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_549, used: 0 }), 1);
             $sroa_out_repr_549 = $sroa_write_back_558.repr;
-            $sroa_out_used_550 = $sroa_write_back_558.used;
         }
-        is_negative_65 = $sroa_out_used_550;
         $sroa_out_used_550 = 1;
-        if @unlikely(is_negative_65 >=u 1) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(is_negative_65, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
-            unreachable;
-        }
-        builtin::array_set_u8($sroa_out_repr_549, is_negative_65, 45);
+        builtin::array_set_u8($sroa_out_repr_549, 0, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_65($sroa_out_used_550 + t) > builtin::array_len($sroa_out_repr_549)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_558(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_549, used: $sroa_out_used_550 }), is_negative_65);
         $sroa_out_repr_549 = $sroa_write_back_558.repr;
-        $sroa_out_used_550 = $sroa_write_back_558.used;
     }
     start_192 = $sroa_out_used_550;
     $sroa_out_used_550 = is_negative_65;

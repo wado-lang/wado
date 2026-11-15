@@ -13328,11 +13328,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::char_prefix_end$
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/format.wado/$tmpl$47518b5dd822a983,[i32]>$spec0$spec0$sroa[t.h0]"(t) {
     let val_i64_66: i64;
     let q: i32;
+    let digit: i32;
     let $sroa_out_repr_515: ref Array<u8>;
-    let $sroa_out_used_516: i32;
     let $sroa_write_back_517: ref "core:prelude/string.wado//String";
     $sroa_out_repr_515 = builtin::array_new<u8>(16);
-    $sroa_out_used_516 = 0;
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
     };
@@ -13346,20 +13345,17 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_517(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_515, used: 0 }), t);
         $sroa_out_repr_515 = $sroa_write_back_517.repr;
-        $sroa_out_used_516 = $sroa_write_back_517.used;
     }
-    q = $sroa_out_used_516;
-    $sroa_out_used_516 = t;
-    t = q + t;
+    q = t;
     if val_i64_66 == 0_i64 {
-        builtin::array_set_u8($sroa_out_repr_515, q, 48);
+        builtin::array_set_u8($sroa_out_repr_515, 0, 48);
     } else {
         b2556: block {
             l2557: loop {
                 break_if b2556 val_i64_66 == 0_i64;
-                t = t - 1;
-                q = builtin::i32_wrap_i64(val_i64_66 & 15_i64);
-                builtin::array_set_u8($sroa_out_repr_515, t, select i32(q < 10, 48 + q, (97 + q) - 10));
+                q = q - 1;
+                digit = builtin::i32_wrap_i64(val_i64_66 & 15_i64);
+                builtin::array_set_u8($sroa_out_repr_515, q, select i32(digit < 10, 48 + digit, (97 + digit) - 10));
                 val_i64_66 = val_i64_66 >>u 4_i64;
                 continue l2557;
             };
@@ -13368,7 +13364,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     $inline_core_prelude_string_wado_String__internal_push_view_40: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_40;
     };
-    return $sroa_out_repr_515, $sroa_out_used_516;
+    return $sroa_out_repr_515, t;
 }
 
 fn "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec1$sroa[f.buf]"(self, f) {

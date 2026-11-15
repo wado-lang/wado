@@ -68,26 +68,19 @@ global global:opt_value_copy_array_copy_of_plain_data_is_confined.wado::$const_o
 fn "opt_value_copy_array_copy_of_plain_data_is_confined.wado/bracketed"(s) {
     let self_18: i32;
     let new_used_21: i32;
-    let start_22: i32;
     let $sroa_out_repr_34: ref Array<u8>;
-    let $sroa_out_used_35: i32;
     let $sroa_write_back_39: ref "core:prelude/string.wado//String";
-    $sroa_out_repr_34 = builtin::array_new<u8>(8);
-    $sroa_out_used_35 = 1;
-    builtin::array_copy<u8>($sroa_out_repr_34, 0, global:opt_value_copy_array_copy_of_plain_data_is_confined.wado::$const_obj_1, 0, 1);
+    builtin::array_copy<u8>(local.tee $sroa_out_repr_34(builtin::array_new<u8>(8)), 0, global:opt_value_copy_array_copy_of_plain_data_is_confined.wado::$const_obj_1, 0, 1);
     self_18 = s.used;
     if @unlikely(local.tee new_used_21(1 + (1 + self_18)) > 8) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_39(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_34, used: 1 }), new_used_21);
         $sroa_out_repr_34 = $sroa_write_back_39.repr;
-        $sroa_out_used_35 = $sroa_write_back_39.used;
     }
-    start_22 = $sroa_out_used_35;
-    $sroa_out_used_35 = new_used_21;
-    builtin::array_copy<u8>($sroa_out_repr_34, start_22, s.repr, 0, self_18);
-    self_18 = start_22 + self_18;
+    builtin::array_copy<u8>($sroa_out_repr_34, 1, s.repr, 0, self_18);
+    self_18 = 1 + self_18;
     builtin::array_copy<u8>($sroa_out_repr_34, self_18, global:opt_value_copy_array_copy_of_plain_data_is_confined.wado::$const_obj_0, 0, 1);
-    return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_34, used: $sroa_out_used_35 };
+    return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_34, used: new_used_21 };
 }
 
 fn "opt_value_copy_array_copy_of_plain_data_is_confined.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

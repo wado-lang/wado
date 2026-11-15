@@ -220,19 +220,19 @@ fn "contract_clause_mutates_own_locals.wado/total"(xs) {
     };
     let $array_clone_dst_2: ref Array<i32>;
     builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_0)), 0, $load_1, 0, $load_0);
-    if @unlikely(local.tee $sroa_$iter_0_index_64($load_0) >= builtin::array_len($array_clone_dst_2)) {
+    if @unlikely($load_0 >= builtin::array_len($array_clone_dst_2)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_71(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: $load_0 }));
         $array_clone_dst_2 = $sroa_write_back_71.repr;
     }
-    builtin::array_set<i32>($array_clone_dst_2, $sroa_$iter_0_index_64, 0);
-    if @unlikely(local.tee $sroa_$iter_0_index_64(local.tee $load_0($sroa_$iter_0_index_64 + 1)) >= builtin::array_len($array_clone_dst_2)) {
+    builtin::array_set<i32>($array_clone_dst_2, $load_0, 0);
+    if @unlikely(local.tee $load_0($load_0 + 1) >= builtin::array_len($array_clone_dst_2)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_71(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: $load_0 }));
         $array_clone_dst_2 = $sroa_write_back_71.repr;
     }
-    builtin::array_set<i32>($array_clone_dst_2, $sroa_$iter_0_index_64, 1);
-    $load_0 = $sroa_$iter_0_index_64 + 1;
+    builtin::array_set<i32>($array_clone_dst_2, $load_0, 1);
+    $load_0 = $load_0 + 1;
     if @unlikely((if sum_1 >= 0 -> i32 {
         $load_0 == (xs.used + 2);
     } else {

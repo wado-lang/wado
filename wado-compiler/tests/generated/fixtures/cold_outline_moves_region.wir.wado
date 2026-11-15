@@ -315,7 +315,6 @@ fn "cold_outline_moves_region.wado/run"() {
     let $sroa_cols_a_58: ref "core:prelude/list.wado//List<i32>";
     let $sroa_cols_b_59: ref "core:prelude/list.wado//List<i32>";
     let $sroa_cols_c_60: ref "core:prelude/list.wado//List<i32>";
-    let $sroa_write_back_61: ref "cold_outline_moves_region.wado//Cols";
     $sroa_cols_a_58 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     $sroa_cols_b_59 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     $sroa_cols_c_60 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
@@ -325,10 +324,7 @@ fn "cold_outline_moves_region.wado/run"() {
             break_if b0 i >= 50;
             if @unlikely($sroa_cols_a_58.used >= builtin::array_len($sroa_cols_a_58.repr)) {
                 cold_path;
-                "cold_outline_moves_region.wado/cold_outline_moves_region.wado/Cols::push_row$cold0$dae[x]"(local.tee $sroa_write_back_61(struct.new "cold_outline_moves_region.wado//Cols" { a: $sroa_cols_a_58, b: $sroa_cols_b_59, c: $sroa_cols_c_60 }));
-                $sroa_cols_a_58 = $sroa_write_back_61.a;
-                $sroa_cols_b_59 = $sroa_write_back_61.b;
-                $sroa_cols_c_60 = $sroa_write_back_61.c;
+                "cold_outline_moves_region.wado/cold_outline_moves_region.wado/Cols::push_row$cold0$dae[x]"(struct.new "cold_outline_moves_region.wado//Cols" { a: $sroa_cols_a_58, b: $sroa_cols_b_59, c: $sroa_cols_c_60 });
             }
             if @unlikely(local.tee used_39($sroa_cols_a_58.used) >= builtin::array_len($sroa_cols_a_58.repr)) {
                 cold_path;

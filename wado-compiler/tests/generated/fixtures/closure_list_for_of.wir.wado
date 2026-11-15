@@ -103,13 +103,13 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(33)
 
-type "functype//closure_list_for_of.wado/closure_list_for_of.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(34)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<fn mut()->i32>::grow" = fn(ref "core:prelude/list.wado//List<fn mut()->i32>");  // TypeId(34)
 
-type "functype//closure_list_for_of.wado/closure_list_for_of.wado/$Closure_1::$call" = fn(ref "closure_list_for_of.wado//$Closure_1") -> i32;  // TypeId(35)
+type "functype//closure_list_for_of.wado/closure_list_for_of.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(35)
 
-type "functype//closure_list_for_of.wado/closure_list_for_of.wado/$Closure_2::$call$dae[self]" = fn(i32) -> i32;  // TypeId(36)
+type "functype//closure_list_for_of.wado/closure_list_for_of.wado/$Closure_1::$call" = fn(ref "closure_list_for_of.wado//$Closure_1") -> i32;  // TypeId(36)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<fn mut()->i32>::grow$spec0" = fn(ref "core:prelude/list.wado//List<fn mut()->i32>");  // TypeId(37)
+type "functype//closure_list_for_of.wado/closure_list_for_of.wado/$Closure_2::$call$dae[self]" = fn(i32) -> i32;  // TypeId(37)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
 
@@ -202,7 +202,7 @@ fn "closure_list_for_of.wado/run"() with Stdout {
     item_27 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "closure_list_for_of.wado//$Closure_1" { $capture_0: struct.new "core:prelude//$Cell<i32>" { value: 0 } }, func: ref.func "closure/closure_list_for_of.wado/$closure_wrapper_1" };
     if @unlikely(0 >= builtin::array_len($sroa_counters_repr_184)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<fn mut()->i32>::grow$spec0"(local.tee $sroa_write_back_191(struct.new "core:prelude/list.wado//List<fn mut()->i32>" { repr: $sroa_counters_repr_184, used: 0 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<fn mut()->i32>::grow"(local.tee $sroa_write_back_191(struct.new "core:prelude/list.wado//List<fn mut()->i32>" { repr: $sroa_counters_repr_184, used: 0 }));
         $sroa_counters_repr_184 = $sroa_write_back_191.repr;
     }
     builtin::array_set<ref struct>($sroa_counters_repr_184, 0, item_27);
@@ -591,6 +591,14 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
+fn "core:prelude/list.wado/core:prelude/list.wado/List<fn mut()->i32>::grow"(self) {
+    let $load_0: ref "Array<fn mut()->i32>";
+    let new_repr: ref "Array<fn mut()->i32>";
+    let a: i32;
+    builtin::array_copy<ref struct>(local.tee new_repr(builtin::array_new<ref struct>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    self.repr = new_repr;
+}
+
 fn "closure_list_for_of.wado/closure_list_for_of.wado/$Closure_0::$call$dae[self]"(v) {
     return v * 10;
 }
@@ -604,14 +612,6 @@ fn "closure_list_for_of.wado/closure_list_for_of.wado/$Closure_1::$call"(self) {
 
 fn "closure_list_for_of.wado/closure_list_for_of.wado/$Closure_2::$call$dae[self]"(v) {
     return v * 10;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<fn mut()->i32>::grow$spec0"(self) {
-    let $load_0: ref "Array<fn mut()->i32>";
-    let new_repr: ref "Array<fn mut()->i32>";
-    let a: i32;
-    builtin::array_copy<ref struct>(local.tee new_repr(builtin::array_new<ref struct>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, 0);
-    self.repr = new_repr;
 }
 
 fn "closure/closure_list_for_of.wado/$closure_wrapper_0"($env, $p0) {

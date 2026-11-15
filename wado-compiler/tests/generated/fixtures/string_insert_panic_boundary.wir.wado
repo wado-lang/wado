@@ -188,12 +188,10 @@ fn "string_insert_panic_boundary.wado/$cm_export__run"() {
     let capacity: i32;
     let new_repr: ref Array<u8>;
     let $sroa_s_repr_35: ref Array<u8>;
-    let $sroa_write_back_37: ref null "core:prelude/string.wado//String";
     if @unlikely((builtin::array_get_value<u8>(local.tee $sroa_s_repr_35(array.new_data<u8>("日本語")), 1) & 192) == 128) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::insert$contract_report0"(struct.new "core:prelude/string.wado//String" { repr: $sroa_s_repr_35, used: 9 }, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("string_insert_panic_boundary.wado:4"), used: 35 });
         unreachable;
-        $sroa_s_repr_35 = $sroa_write_back_37.repr;
     }
     if 10 > builtin::array_len($sroa_s_repr_35) {
         $inline_core_prelude_string_wado_String__grow_11: block {

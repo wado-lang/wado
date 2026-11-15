@@ -65,47 +65,39 @@ global global:serde_generic_trait_method.wado::$const_obj_1: ref Array<u8> = arr
 global global:serde_generic_trait_method.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(52, 50);
 
 fn "serde_generic_trait_method.wado/run"() with Stdout {
-    let start_19: i32;
     let $cm_pair_7: i64;
+    let $sroa_$pattern_temp_0_0_69: i32;
+    let $sroa_$pattern_temp_0_1_70: i32;
     let new_repr: ref Array<u8>;
     let $sroa_$sroa_buf_data_67_repr_86: ref Array<u8>;
-    let $sroa_$sroa_buf_data_67_used_87: i32;
     let $sroa_write_back_90: ref "core:prelude/string.wado//String";
     $sroa_$sroa_buf_data_67_repr_86 = builtin::array_new<u8>(0);
-    $sroa_$sroa_buf_data_67_used_87 = 0;
     if @unlikely(2 > builtin::array_len($sroa_$sroa_buf_data_67_repr_86)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_90(struct.new "core:prelude/string.wado//String" { repr: $sroa_$sroa_buf_data_67_repr_86, used: 0 }), 2);
         $sroa_$sroa_buf_data_67_repr_86 = $sroa_write_back_90.repr;
-        $sroa_$sroa_buf_data_67_used_87 = $sroa_write_back_90.used;
     }
-    start_19 = $sroa_$sroa_buf_data_67_used_87;
-    $sroa_$sroa_buf_data_67_used_87 = 2;
-    builtin::array_copy<u8>($sroa_$sroa_buf_data_67_repr_86, start_19, global:serde_generic_trait_method.wado::$const_obj_2, 0, 2);
+    builtin::array_copy<u8>($sroa_$sroa_buf_data_67_repr_86, 0, global:serde_generic_trait_method.wado::$const_obj_2, 0, 2);
     if @unlikely(3 > builtin::array_len($sroa_$sroa_buf_data_67_repr_86)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_90(struct.new "core:prelude/string.wado//String" { repr: $sroa_$sroa_buf_data_67_repr_86, used: 2 }), 3);
         $sroa_$sroa_buf_data_67_repr_86 = $sroa_write_back_90.repr;
-        $sroa_$sroa_buf_data_67_used_87 = $sroa_write_back_90.used;
     }
-    start_19 = $sroa_$sroa_buf_data_67_used_87;
-    $sroa_$sroa_buf_data_67_used_87 = 3;
-    builtin::array_copy<u8>($sroa_$sroa_buf_data_67_repr_86, start_19, global:serde_generic_trait_method.wado::$const_obj_1, 0, 1);
+    builtin::array_copy<u8>($sroa_$sroa_buf_data_67_repr_86, 2, global:serde_generic_trait_method.wado::$const_obj_1, 0, 1);
     if @unlikely(8 > builtin::array_len($sroa_$sroa_buf_data_67_repr_86)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_90(struct.new "core:prelude/string.wado//String" { repr: $sroa_$sroa_buf_data_67_repr_86, used: 3 }), 8);
         $sroa_$sroa_buf_data_67_repr_86 = $sroa_write_back_90.repr;
-        $sroa_$sroa_buf_data_67_used_87 = $sroa_write_back_90.used;
     }
-    builtin::array_copy<u8>($sroa_$sroa_buf_data_67_repr_86, $sroa_$sroa_buf_data_67_used_87, global:serde_generic_trait_method.wado::$const_obj_0, 0, 5);
-    $sroa_$sroa_buf_data_67_used_87 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    start_19 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$sroa_buf_data_67_used_87 = "serde_generic_trait_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$sroa_buf_data_67_used_87);
+    builtin::array_copy<u8>($sroa_$sroa_buf_data_67_repr_86, 3, global:serde_generic_trait_method.wado::$const_obj_0, 0, 5);
+    $sroa_$pattern_temp_0_0_69 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_70 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_$pattern_temp_0_0_69 = "serde_generic_trait_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_69);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(9)), 0, $sroa_$sroa_buf_data_67_repr_86, 0, 8);
     builtin::array_set_u8(new_repr, 8, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(start_19, new_repr);
-    "wasi/stream-drop-writable"(start_19);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$sroa_buf_data_67_used_87);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_70, new_repr);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_70);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_69);
 }
 
 fn "serde_generic_trait_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

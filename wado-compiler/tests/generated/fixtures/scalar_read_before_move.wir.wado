@@ -409,17 +409,15 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<c
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(146)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>::grow$spec0" = fn(ref "core:prelude/list.wado//List<scalar_read_before_move.wado/S>");  // TypeId(147)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(147)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(148)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(148)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(149)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(149)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(150)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(150)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(151)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(152)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(151)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -636,7 +634,7 @@ fn "scalar_read_before_move.wado/$test_3_a_scalar_read_before_a_move_of_a_local"
     $sroa_out_repr_47 = array.new_fixed<ref "scalar_read_before_move.wado//S">();
     if @unlikely(0 >= builtin::array_len($sroa_out_repr_47)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>::grow$spec0"(local.tee $sroa_write_back_49(struct.new "core:prelude/list.wado//List<scalar_read_before_move.wado/S>" { repr: $sroa_out_repr_47, used: 0 }));
+        "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>::grow"(local.tee $sroa_write_back_49(struct.new "core:prelude/list.wado//List<scalar_read_before_move.wado/S>" { repr: $sroa_out_repr_47, used: 0 }));
         $sroa_out_repr_47 = $sroa_write_back_49.repr;
     }
     builtin::array_set<ref "scalar_read_before_move.wado//S">($sroa_out_repr_47, 0, struct.new "scalar_read_before_move.wado//S" { items: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }, tag: 7 });
@@ -2521,14 +2519,6 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($mv$self$repr, $mv$self$start, end) {
     return struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$self$repr, start: $mv$self$start, end: $mv$self$start + end };
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>::grow$spec0"(self) {
-    let $load_0: ref "Array<scalar_read_before_move.wado/S>";
-    let new_repr: ref "Array<scalar_read_before_move.wado/S>";
-    let a: i32;
-    builtin::array_copy<ref "scalar_read_before_move.wado//S">(local.tee new_repr(builtin::array_new<ref "scalar_read_before_move.wado//S">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, 0);
-    self.repr = new_repr;
 }
 
 export fn "scalar_read_before_move.wado/$cm_export__$test_0_a_scalar_read_before_a_move_leaves_the_source_untouched" as "$test_0_a_scalar_read_before_a_move_leaves_the_source_untouched"
