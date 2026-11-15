@@ -34,6 +34,7 @@ fn elide_calls_to_empty_functions(module: &mut WirPackage) -> bool {
     }
     let nonnull_calls = nonnull_result_functions(module);
     let mut changed = false;
+    let types = &module.types;
     for func in &mut module.functions {
         let Some(body) = &func.body else {
             continue;
@@ -41,7 +42,7 @@ fn elide_calls_to_empty_functions(module: &mut WirPackage) -> bool {
         if !body.iter().any(|instr| holds_call_into(instr, &empty)) {
             continue;
         }
-        let locals = func.declared_locals();
+        let locals = func.typed_locals(types);
         let body = func.body.as_mut().expect("checked above");
         EmptyCallElider {
             empty: &empty,

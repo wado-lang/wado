@@ -366,36 +366,17 @@ impl Dfa {
                 return end;
             }
             if state == self.idle {
-                // Four bytes for each bounds check of the text: reads of one
-                // array in one block share it.
-                if self.exit >= 0 {
-                    let n = self.exit as u8;
-                    while pos + 4 <= len {
-                        let a = unchecked text.byte_at(pos);
-                        let b = unchecked text.byte_at(pos + 1);
-                        let c = unchecked text.byte_at(pos + 2);
-                        let d = unchecked text.byte_at(pos + 3);
-                        if (a == n) | (b == n) | (c == n) | (d == n) {
-                            break;
-                        }
-                        pos += 4;
-                    }
-                } else {
-                    while pos + 4 <= len {
-                        let a = unchecked self.idles_on[unchecked text.byte_at(pos) as i32];
-                        let b = unchecked self.idles_on[unchecked text.byte_at(pos + 1) as i32];
-                        let c = unchecked self.idles_on[unchecked text.byte_at(pos + 2) as i32];
-                        let d = unchecked self.idles_on[unchecked text.byte_at(pos + 3) as i32];
-                        if a & b & c & d == 0 {
-                            break;
-                        }
-                        pos += 4;
-                    }
-                }
                 // Up to the byte that leaves, so that the run below starts
                 // on it and does not hand back at once.
-                while pos < len && unchecked self.idles_on[unchecked text.byte_at(pos) as i32] != 0 {
-                    pos += 1;
+                if self.exit >= 0 {
+                    let exit = self.exit as u8;
+                    while pos < len && unchecked text.byte_at(pos) != exit {
+                        pos += 1;
+                    }
+                } else {
+                    while pos < len && unchecked self.idles_on[unchecked text.byte_at(pos) as i32] != 0 {
+                        pos += 1;
+                    }
                 }
             }
             // The run of transitions with nothing to report, `UNKNOWN`

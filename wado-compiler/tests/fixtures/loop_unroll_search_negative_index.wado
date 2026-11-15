@@ -1,0 +1,28 @@
+// A search whose first read lies below the array traps on that read, unrolled
+// or not: the copy tests only that its last read lies inside, and its first
+// read is the loop's own.
+use { println, Stdout } from "core:cli";
+
+fn first_of_from(x: &Array<u8>, base: i32, n: i32, needle: u8) -> i32 {
+    let mut i = 0;
+    while i < n && x[base + i] != needle {
+        i += 1;
+    }
+    return i;
+}
+
+export fn run() with Stdout {
+    let x = Array::<u8>::filled(builtin::black_box(11), 0);
+    println("searching");
+    println(`${first_of_from(&x, builtin::black_box(-1), 8, 7)}`);
+}
+
+__DATA__
+{
+    "stdout": "searching\n",
+    "trapped": true,
+    "wir_pass": {"O2": ["wir/unroll_array_loops"]},
+    "wir_expect:O2": [
+        " + 3_i64) >=u builtin::i64_extend_i32_u(builtin::array_len("
+    ]
+}

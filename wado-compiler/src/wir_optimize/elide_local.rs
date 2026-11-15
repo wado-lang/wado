@@ -16,10 +16,11 @@ use super::nullability::Nullability;
 use super::util::{count_local_gets, is_side_effect_free, may_trap_in};
 
 pub(super) fn elide_dead_stores(module: &mut WirPackage) {
+    let types = &module.types;
     for func in &mut module.functions {
         // Declared locals are stable across the sweep (elision only nops stores;
         // `DeclareLocal`s go later in `cleanup`), so read the SSoT once.
-        let locals = func.declared_locals();
+        let locals = func.typed_locals(types);
         if let Some(body) = &mut func.body {
             let null = Nullability::new(&locals);
             while elide_dead_stores_in_body(body, &null) {}
