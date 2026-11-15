@@ -334,6 +334,28 @@ See WEP 2026-01-20.
 Marker every affine resource holds, and nothing else. Sealed and
 compiler-stated; user impls are rejected. See WEP: Affine Types.
 
+### `pub trait ExternHandle with ()`
+
+Marker of an extern handle: a resource declared `repr = "externref"`.
+Sealed and compiler-stated; user impls are rejected. See WEP: Extern
+Handles.
+
+### `pub trait Backing with ()`
+
+What every extern handle offers: it is the host's object, or backed by a
+value of the guest. Only a `RefMut` type backs one: a reference to any
+other is a cell, which carries neither the value's identity nor its type.
+
+#### `fn backed_by<T: RefMut>(value: &mut T) -> Self`
+
+A handle `value` stands behind. Backing one value twice gives equal
+handles. The reference is `&mut`, since `backing` hands one back.
+
+#### `fn backing<T: RefMut>(&self) -> Option<&mut T>`
+
+The value behind this handle: `None` for the host's object, and for a
+handle a value of another type backs.
+
 ### `pub trait AnyBits with ()`
 
 Marker of a type every bit pattern of its width is a value of: the
@@ -4703,6 +4725,10 @@ result type `T`. Returned by the synthesised adapter for a WIT
 which the host writes the async result. `wait` blocks until the call
 returns and takes the lifted result; `cancel` aborts the in-flight call.
 Either one consumes the call, and dropping a call cancels it.
+
+An `async` web import answers a promise of the host's in place of a
+subtask. `wait` suspends until it settles; `cancel` and a drop stop the
+waiting and nothing else, since a promise cannot be cancelled.
 
 The subtask begins running the moment the adapter returns, so writes to
 stream parameters (e.g. a request body) made after the adapter call and
