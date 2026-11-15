@@ -912,23 +912,27 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
     return Result::Ok(element);
 }
 
-/// `nodes`, their subgraphs' among them, with each `CastLike` the `Cast` it
-/// is, by the element types `primitives` holds once a check of them passed.
-pub fn cast_likes_resolved(nodes: List<Node>, primitives: &HashMap<String, String>) -> List<Node> {
+/// `nodes`, their branches' among them, with each `CastLike` the `Cast` it
+/// is, by the element types `checked`, the scope that checked them, holds.
+pub fn cast_likes_resolved(nodes: List<Node>, checked: &Checked) -> List<Node> {
     let mut out: List<Node> = [];
     for let node of nodes {
         let mut attrs: List<Attr> = [];
         for let a of node.attrs {
             attrs.push(match a.graph {
-                Some(g) => Attr {
-                    ..a,
-                    graph: Option::Some(Graph { ..g, nodes: cast_likes_resolved(g.nodes, primitives) }),
+                Some(g) => {
+                    let [then_scope, else_scope] = checked.branches[node.outputs[0]];
+                    let scope = if a.name == "then_branch" { then_scope } else { else_scope };
+                    Attr {
+                        ..a,
+                        graph: Option::Some(Graph { ..g, nodes: cast_likes_resolved(g.nodes, &scope) }),
+                    };
                 },
                 None => a,
             });
         }
         let node = Node { ..node, attrs };
-        out.push(if node.op == "CastLike" { settled(cast_like(&node, primitives)) } else { node });
+        out.push(if node.op == "CastLike" { settled(cast_like(&node, &checked.primitives)) } else { node });
     }
     return out;
 }

@@ -204,6 +204,8 @@ fn stretched(
 }
 
 /// The value `operand` refers to, of `element` and axes `shape`, times `factor`.
+/// A half is scaled in f32 and rounded once, since `factor` is an f32
+/// attribute a half may not hold.
 fn scaled(
     operand: &String,
     element: &String,
@@ -211,11 +213,16 @@ fn scaled(
     factor: f32,
     symbols: &mut Symbols,
 ) -> Result<String, EmitError> {
-    let typed = `${*element}, [${axis_list(shape)}]`;
-    let by = `&full::<${BACKEND_PARAM}, ${typed}>(backend, ${float_literal(element, factor)}, ${symbols.spell_shape(
+    let axes = `[${axis_list(shape)}]`;
+    let by = `&full::<${BACKEND_PARAM}, f32, ${axes}>(backend, ${float_literal(&"f32", factor)}, ${symbols.spell_shape(
         shape,
     )?})`;
-    return Result::Ok(`backend.binary::<${typed}>(Binary::Multiply, ${*operand}, ${by})`);
+    if *element == "f32" {
+        return Result::Ok(`backend.binary::<f32, ${axes}>(Binary::Multiply, ${*operand}, ${by})`);
+    }
+    let wide = `&backend.convert::<${*element}, f32, ${axes}>(${*operand})`;
+    let product = `backend.binary::<f32, ${axes}>(Binary::Multiply, ${wide}, ${by})`;
+    return Result::Ok(`backend.convert::<f32, ${*element}, ${axes}>(&${product})`);
 }
 
 /// `dot_general` of `lhs`, of axes `left`, by `rhs`, of axes `right`, into

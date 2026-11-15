@@ -107,6 +107,16 @@ add('GemmTransposedScaled', {
   inputs: { A: float([3, 2]), B: float([4, 3]), C: float([1, 4]) },
   nodes: [node('Gemm', ['A', 'B', 'C'], 'Y', { alpha: f32(0.5), beta: f32(2), transA: 1, transB: 1 })],
 });
+// An alpha no half holds scales the product in f32.
+add('GemmHalfScaled', {
+  inputs: { A: float([1, 1], [100]), B: float([1, 1], [100]) },
+  nodes: [
+    node('Cast', ['A'], 'HA', { to: FLOAT16 }),
+    node('Cast', ['B'], 'HB', { to: FLOAT16 }),
+    node('Gemm', ['HA', 'HB'], 'H', { alpha: f32(1e-8) }),
+    node('Cast', ['H'], 'Y', { to: FLOAT }),
+  ],
+});
 add('GemmScalarBias', {
   inputs: { A: float([2, 3]), B: float([3, 4]), C: float([]) },
   nodes: [node('Gemm', ['A', 'B', 'C'], 'Y')],

@@ -414,52 +414,62 @@ pub fn decomposed_attention<affine G: Graph, E: Float, B, S, Q, K, H, P, T, D, P
         lhs_contracting: [3],
         rhs_contracting: [3],
     };
-    let raw: G::Tensor<E, [B, Heads, S, T]> = g.dot_general(&query, &keys, &product);
+    // The scores and their softmax stay in f32 until the attended values round
+    // to `E`: a half's dot product overflows before its scale shrinks it.
+    let wide_query: G::Tensor<f32, [B, Heads, S, D]> = g.convert::<E, f32, [B, Heads, S, D]>(&query);
+    let wide_keys: G::Tensor<f32, [B, Heads, T, D]> = g.convert::<E, f32, [B, Heads, T, D]>(&keys);
+    let raw: G::Tensor<f32, [B, Heads, S, T]> = g.dot_general(&wide_query, &wide_keys, &product);
     let score_extents: List<i32> = [batch, heads, s, total];
     let mut scores = g.binary(
         if options.divides { Binary::Divide } else { Binary::Multiply },
         &raw,
-        &full::<G, E, [B, Heads, S, T]>(g, E::from_f32(options.scale), score_extents),
+        &full::<G, f32, [B, Heads, S, T]>(g, options.scale, score_extents),
     );
+    let wide_bias: Option<G::Tensor<f32, [BB, BH, BS, T]>> = match bias {
+        Some(b) => Option::Some(g.convert::<E, f32, [BB, BH, BS, T]>(b)),
+        None => null,
+    };
     if options.softcap > 0.0 {
-        let cap = full::<G, E, [B, Heads, S, T]>(g, E::from_f32(options.softcap), score_extents);
+        let cap = full::<G, f32, [B, Heads, S, T]>(g, options.softcap, score_extents);
         let tanh = g.unary(Unary::Tanh, &g.binary(Binary::Divide, &scores, &cap));
         scores = g.binary(Binary::Multiply, &cap, &tanh);
     }
     let bias_first = options.hidden matches { None };
-    if let Some(b) = bias && bias_first {
-        scores = biased::<G, E, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
+    if let Some(b) = &wide_bias && bias_first {
+        scores = biased::<G, f32, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
     }
     if options.causal || options.window > 0 {
         let hidden = attention_mask::<G, B, Heads, S, T>(g, &first, options, &score_extents);
-        let lowest = full::<G, E, [B, Heads, S, T]>(
+        let lowest = full::<G, f32, [B, Heads, S, T]>(
             g,
-            E::from_f32(options.hidden.unwrap_or(f32::NEG_INFINITY)),
+            options.hidden.unwrap_or(f32::NEG_INFINITY),
             score_extents,
         );
         scores = g.select(&hidden, &lowest, &scores);
     }
-    if let Some(b) = bias && !bias_first {
-        scores = biased::<G, E, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
+    if let Some(b) = &wide_bias && !bias_first {
+        scores = biased::<G, f32, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
     }
     if let Some(length) = reach {
-        scores = masked::<G, E, [B, Heads, S, T]>(
+        scores = masked::<G, f32, [B, Heads, S, T]>(
             g,
             &scores,
             3,
             length,
             Option::Some(0),
-            E::from_f32(f32::NEG_INFINITY),
+            f32::NEG_INFINITY,
         );
     }
-    let weights = softmax::<G, E, [B, Heads, S, T]>(g, &scores, 3);
+    let weights = softmax::<G, f32, [B, Heads, S, T]>(g, &scores, 3);
     let attend = DotDims {
         lhs_batch: [0, 1],
         rhs_batch: [0, 1],
         lhs_contracting: [3],
         rhs_contracting: [2],
     };
-    let attended: G::Tensor<E, [B, Heads, S, D]> = g.dot_general(&weights, &values, &attend);
+    let wide_values: G::Tensor<f32, [B, Heads, T, D]> = g.convert::<E, f32, [B, Heads, T, D]>(&values);
+    let wide: G::Tensor<f32, [B, Heads, S, D]> = g.dot_general(&weights, &wide_values, &attend);
+    let attended: G::Tensor<E, [B, Heads, S, D]> = g.convert::<f32, E, [B, Heads, S, D]>(&wide);
     let back: G::Tensor<E, [B, S, Heads, D]> = g.transpose(&attended, [0, 2, 1, 3]);
     return [g.reshape(&back, [batch, s, heads * d]), present_k, present_v];
 }
@@ -527,7 +537,8 @@ pub fn full<affine G: Graph, E: Element, Axes>(g: &mut G, value: E, extents: Lis
 }
 
 /// ONNX's `Softmax` along `axis`: less the greatest along it, exponentiated,
-/// over the sum along it.
+/// over the sum along it. A half's is computed in f32 and rounded once, since
+/// the sum of a long row outgrows f16.
 pub fn softmax<affine G: Graph, E: Float, Axes>(
     g: &mut G,
     x: &G::Tensor<E, Axes>,
@@ -540,11 +551,12 @@ pub fn softmax<affine G: Graph, E: Float, Axes>(
             kept.push(i);
         }
     }
-    let top: G::Tensor<E, Rows> = g.reduce(x, Binary::Maximum, f32::NEG_INFINITY, [axis]);
-    let shifted = g.binary(Binary::Subtract, x, &g.broadcast_in_dim(&top, extents, kept));
+    let wide: G::Tensor<f32, Axes> = g.convert::<E, f32, Axes>(x);
+    let top: G::Tensor<f32, Rows> = g.reduce(&wide, Binary::Maximum, f32::NEG_INFINITY, [axis]);
+    let shifted = g.binary(Binary::Subtract, &wide, &g.broadcast_in_dim(&top, extents, kept));
     let e = g.unary(Unary::Exponential, &shifted);
-    let sum: G::Tensor<E, Rows> = g.reduce(&e, Binary::Add, 0.0, [axis]);
-    return g.binary(Binary::Divide, &e, &g.broadcast_in_dim(&sum, extents, kept));
+    let sum: G::Tensor<f32, Rows> = g.reduce(&e, Binary::Add, 0.0, [axis]);
+    return g.convert::<f32, E, Axes>(&g.binary(Binary::Divide, &e, &g.broadcast_in_dim(&sum, extents, kept)));
 }
 
 /// `Softmax` before opset 13: the axes from `axis` on normalized as one.

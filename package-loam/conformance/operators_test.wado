@@ -285,6 +285,10 @@ test "Gemm adds a bias along the columns" {
     assert_agrees(#include_bytes("./operators/Gemm.onnx"), #include_str("./operators/Gemm.txt"));
 }
 
+test "Gemm of halves scales by an alpha no half holds" {
+    assert_agrees(#include_bytes("./operators/GemmHalfScaled.onnx"), #include_str("./operators/GemmHalfScaled.txt"));
+}
+
 test "Gemm transposes both operands and scales by alpha and beta" {
     assert_agrees(
         #include_bytes("./operators/GemmTransposedScaled.onnx"),

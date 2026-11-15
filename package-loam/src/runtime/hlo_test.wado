@@ -164,6 +164,14 @@ test "reduce_mean divides each sum by the count it summed" {
     assert mean.data == [1.5, 4.5] as List<f32>;
 }
 
+test "softmax of halves sums a row in f32" {
+    let g = &mut Cpu {};
+    let x = Tensor::<f16, [A, B]> { data: List::<f16>::filled(65536, 0.0), extents: [1, 65536] };
+    // The row sums to 65536, which f16 rounds to infinity.
+    let y = softmax::<Cpu, f16, [A, B]>(g, &x, 1);
+    assert y.data[0] == f16::from_f32(1.0 / 65536.0);
+}
+
 test "reduce_mean of halves divides in f32 by a count bf16 cannot hold" {
     let g = &mut Cpu {};
     let mut data = List::<bf16>::filled(257, 1.0);

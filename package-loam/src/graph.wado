@@ -673,7 +673,8 @@ fn rms_normalization(node: &Node, body: &mut FunctionBody) -> Result<(), String>
         },
     ]);
     let root = body.unary("Sqrt", &body.binary("Add", &mean, &body.constant(epsilon)));
-    let normalized = body.node("CastLike", [body.binary("Div", &x, &root), given], []);
+    // The result takes the scale's element, which may differ from the input's.
+    let normalized = body.node("CastLike", [body.binary("Div", &x, &root), scale], []);
     body.output("Mul", [normalized, scale], node);
     return Result::Ok(());
 }
