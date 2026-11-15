@@ -133,7 +133,10 @@ impl Regex {
                 let Some(end) = end else {
                     return null;
                 };
-                let from = self.start_by_dfa(text, start, end);
+                let from = match self.program.match_len {
+                    Some(len) => end - len,
+                    None => self.start_by_dfa(text, start, end),
+                };
                 if !self.lazy.off {
                     if !groups || self.program.captures == 2 {
                         return Some([from, end]);

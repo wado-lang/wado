@@ -69,6 +69,8 @@ internal struct Dfa {
     idle: i32,
     /// For each byte, 1 where `idle` stays in itself on it.
     idles_on: List<u8>,
+    /// The one byte `idle` leaves on, or -1 where several do.
+    exit: i32,
     internal gave_up: bool,
 }
 
@@ -104,6 +106,7 @@ impl Dfa {
             starts: [UNKNOWN, UNKNOWN],
             idle: UNKNOWN,
             idles_on: [],
+            exit: -1,
             gave_up: false,
         };
     }
@@ -296,7 +299,11 @@ impl Dfa {
             self.idles_on.push(stays as u8);
             if !stays {
                 exits += 1;
+                self.exit = b;
             }
+        }
+        if exits != 1 {
+            self.exit = -1;
         }
         let reports = state & (ACCEPT | DEAD) != 0;
         self.idle = if reports || exits > MAX_IDLE_EXITS { NO_IDLE } else { state };
@@ -361,15 +368,34 @@ impl Dfa {
             if state == self.idle {
                 // Four bytes for each bounds check of the text: reads of one
                 // array in one block share it.
-                while pos + 4 <= len {
-                    let a = unchecked self.idles_on[(unchecked text.byte_at(pos)) as i32];
-                    let b = unchecked self.idles_on[(unchecked text.byte_at(pos + 1)) as i32];
-                    let c = unchecked self.idles_on[(unchecked text.byte_at(pos + 2)) as i32];
-                    let d = unchecked self.idles_on[(unchecked text.byte_at(pos + 3)) as i32];
-                    if a & b & c & d == 0 {
-                        break;
+                if self.exit >= 0 {
+                    let n = self.exit as u8;
+                    while pos + 4 <= len {
+                        let a = unchecked text.byte_at(pos);
+                        let b = unchecked text.byte_at(pos + 1);
+                        let c = unchecked text.byte_at(pos + 2);
+                        let d = unchecked text.byte_at(pos + 3);
+                        if (a == n) | (b == n) | (c == n) | (d == n) {
+                            break;
+                        }
+                        pos += 4;
                     }
-                    pos += 4;
+                } else {
+                    while pos + 4 <= len {
+                        let a = unchecked self.idles_on[(unchecked text.byte_at(pos)) as i32];
+                        let b = unchecked self.idles_on[(unchecked text.byte_at(pos + 1)) as i32];
+                        let c = unchecked self.idles_on[(unchecked text.byte_at(pos + 2)) as i32];
+                        let d = unchecked self.idles_on[(unchecked text.byte_at(pos + 3)) as i32];
+                        if a & b & c & d == 0 {
+                            break;
+                        }
+                        pos += 4;
+                    }
+                }
+                // Up to the byte that leaves, so that the run below starts
+                // on it and does not hand back at once.
+                while pos < len && unchecked self.idles_on[(unchecked text.byte_at(pos)) as i32] != 0 {
+                    pos += 1;
                 }
             }
             // The run of transitions with nothing to report, `UNKNOWN`
