@@ -1682,10 +1682,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 self.skip_generated_bodies && module_source.is_user_authored();
             let (mut ast, skipped) = {
                 let _span = self.logger.span(&format!("parse {mod_name}"));
-                if matches!(module_source, ModuleSource::Dependency { .. })
-                    && !self.skip_generated_bodies
+                if matches!(
+                    module_source,
+                    ModuleSource::Dependency { .. } | ModuleSource::Redirected { .. }
+                ) && !self.skip_generated_bodies
                 {
-                    (self.parse_dependency(&source, &module_source)?, None)
+                    (self.parse_kept(&source, &module_source)?, None)
                 } else {
                     self.parse_source_with(&source, &module_source, skip_generated_bodies)?
                 }
@@ -2428,18 +2430,16 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         Ok(self.parse_source_with(source, module_source, false)?.0)
     }
 
-    /// The parse of a dependency module's `source`: the one an earlier compile
-    /// took while the source is unchanged, since a dependency snapshot's facts
-    /// key on the `AstId`s one parse mints.
-    fn parse_dependency(
-        &self,
-        source: &str,
-        module_source: &ModuleSource,
-    ) -> Result<Module, LoadError> {
+    /// The parse of a dependency or Kiln-generated module's `source`: the one
+    /// an earlier compile took while the source is unchanged, since a
+    /// dependency snapshot's facts key on the `AstId`s one parse mints.
+    fn parse_kept(&self, source: &str, module_source: &ModuleSource) -> Result<Module, LoadError> {
         static PARSES: LazyLock<Mutex<IndexMap<String, Arc<Module>>>> =
             LazyLock::new(Mutex::default);
-        let ModuleSource::Dependency { path, .. } = module_source else {
-            panic!("only a dependency module's parse is kept: {module_source}");
+        let (ModuleSource::Dependency { path, .. } | ModuleSource::Redirected { uri: path, .. }) =
+            module_source
+        else {
+            panic!("only a dependency or Kiln module's parse is kept: {module_source}");
         };
         let kept = |parses: &IndexMap<String, Arc<Module>>| {
             parses

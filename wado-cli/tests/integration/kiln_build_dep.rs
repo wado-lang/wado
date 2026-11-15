@@ -371,7 +371,7 @@ export fn run() with Stdout {
 }
 
 /// A generator package at `dir` whose one output says `greeting`.
-fn greeting_generator(dir: &Path, greeting: &str) {
+pub(crate) fn greeting_generator(dir: &Path, greeting: &str) {
     fs::create_dir_all(dir.join("src")).unwrap();
     let name = dir.file_name().unwrap().to_str().unwrap();
     fs::write(

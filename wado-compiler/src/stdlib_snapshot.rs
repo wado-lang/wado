@@ -236,6 +236,7 @@ pub(crate) fn is_snapshot_kind(ms: &ModuleSource) -> bool {
             | ModuleSource::Binding { .. }
             | ModuleSource::Wasm { .. }
             | ModuleSource::Dependency { .. }
+            | ModuleSource::Redirected { .. }
     )
 }
 

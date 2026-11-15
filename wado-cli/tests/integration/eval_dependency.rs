@@ -6,6 +6,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::common::wado_in;
+use crate::kiln_build_dep::greeting_generator;
 
 /// `greet`, whose `hello` returns `greeting`, and `app`, whose test evaluates a
 /// program printing `hello()` and asserts it printed `expected`.
@@ -111,6 +112,51 @@ fn successive_programs_over_one_dependency_compile_on_its_snapshot() {
          pub fn hello() -> String { return if contains(BinaryProperty::Uppercase, 'A') { \"upper\" } else { \"lower\" }; }\n",
     )
     .unwrap();
+    assert_programs_compile_on_a_snapshot(&app, "upper");
+}
+
+/// A dependency's Kiln-generated module is served from the snapshot with the
+/// dependency's own modules. The test files reach it, not evaluated programs:
+/// `core:eval` runs no generator.
+#[test]
+fn a_dependencys_generated_module_compiles_on_its_snapshot() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_packages(tmp.path(), "hello", "hello");
+    greeting_generator(&tmp.path().join("gen"), "generated");
+    let greet = tmp.path().join("greet");
+    fs::write(
+        greet.join("wado.toml"),
+        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+         [build-dependencies]\n\"lib:gen\" = { path = \"../gen\" }\n",
+    )
+    .unwrap();
+    fs::write(greet.join("src/schema.idl"), "anything\n").unwrap();
+    fs::write(
+        greet.join("src/lib.wado"),
+        "use { greeting } from \"./schema.idl\" with { generator: { module: \"lib:gen\" } };\n\
+         pub fn hello() -> String { return greeting(); }\n",
+    )
+    .unwrap();
+    let app = tmp.path().join("app");
+    for n in 1..=3 {
+        fs::write(
+            app.join(format!("t{n}_test.wado")),
+            "use { hello } from \"greet\";\ntest { assert hello() == \"generated\"; }\n",
+        )
+        .unwrap();
+    }
+    let output = wado_in(&app)
+        .env("WADO_TRACE", "dependency_snapshot")
+        .args(["test", "-p", "1", "t1_test.wado", "t2_test.wado", "t3_test.wado"])
+        .output()
+        .unwrap();
+    assert_compiled_on_a_snapshot(&output);
+}
+
+/// Run a test in `app` evaluating three programs that print `hello()` from
+/// `greet`, expected to say `greeting`, and assert the later ones compiled on
+/// the snapshot of `greet` the second one built.
+fn assert_programs_compile_on_a_snapshot(app: &Path, greeting: &str) {
     let program = |suffix: &str| {
         format!(
             "eval(`use {{ println, Stdout }} from \"core:cli\";\n\
@@ -121,28 +167,37 @@ fn successive_programs_over_one_dependency_compile_on_its_snapshot() {
     let check = |n: u32| {
         format!(
             "\x20   let out{n} = {};\n\
-             \x20   assert out{n} matches {{ Ok(o) && o.stdout == \"upper\\n{n}\\n\" }}, `${{out{n}:?}}`;\n",
+             \x20   assert out{n} matches {{ Ok(o) && o.stdout == \"{greeting}\\n{n}\\n\" }}, `${{out{n}:?}}`;\n",
             program(&n.to_string())
         )
     };
     fs::write(
         app.join("app_test.wado"),
         format!(
-            "use {{ eval }} from \"core:eval\";\n\n\
-             test \"each program reaches the dependency\" {{\n{}{}{}}}\n",
+            "use {{ eval }} from \"core:eval\";\n\
+             use {{ hello }} from \"greet\";\n\n\
+             test \"each program reaches the dependency\" {{\n\
+             \x20   assert hello() == \"{greeting}\";\n{}{}{}}}\n",
             check(1),
             check(2),
             check(3),
         ),
     )
     .unwrap();
-    let output = wado_in(&app)
+    let output = wado_in(app)
         .env("WADO_TRACE", "dependency_snapshot")
         .args(["test", "app_test.wado"])
         .output()
         .unwrap();
+    assert_compiled_on_a_snapshot(&output);
+}
+
+/// Assert `output`'s run succeeded, and built a dependency snapshot that a later
+/// compile was seeded from.
+fn assert_compiled_on_a_snapshot(output: &std::process::Output) {
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success(), "{stderr}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "{stdout}{stderr}");
     assert!(
         stderr.contains("[dependency_snapshot] built over"),
         "{stderr}"
