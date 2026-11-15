@@ -1,7 +1,6 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::fs;
-use std::num::NonZero;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -25,6 +24,7 @@ use crate::compile::{
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
 use crate::discover;
+use crate::knobs::cores;
 use crate::manifest::ProjectManifest;
 
 /// The synthetic entry a query opens at its base directory. It is never read
@@ -160,8 +160,7 @@ pub async fn run_scip(dir: &str, output: &str, excludes: &[String]) -> Result<()
         })
         .collect();
     files.sort();
-    let cores = std::thread::available_parallelism().map_or(1, NonZero::get);
-    let slots = Arc::new(Semaphore::new(cores));
+    let slots = Arc::new(Semaphore::new(cores()));
     let mut analyses = JoinSet::new();
     for (order, file) in files.into_iter().enumerate() {
         let slot = Arc::clone(&slots)
