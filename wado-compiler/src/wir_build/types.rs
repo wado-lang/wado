@@ -425,8 +425,9 @@ fn register_resource_object(ctx: &mut WirContext<'_>) -> WirTypeId {
     )
 }
 
-/// Register canonical closure types for all `Function` types found in type tables.
-/// Each unique function signature `fn(P1, P2, ...) -> R` gets:
+/// Register a canonical closure type for every `Function` type in the type
+/// table, the type a value of it lowers to. Each unique function signature
+/// `fn(P1, P2, ...) -> R` gets:
 /// - A canonical func type: `(ref struct, P1, P2, ...) -> R`
 /// - A canonical closure struct: `{ env: ref struct, func: ref $func_type }`
 fn register_canonical_closure_types(ctx: &mut WirContext<'_>, type_table: &TypeTable) {
@@ -454,9 +455,11 @@ fn register_fn_closure(ctx: &mut WirContext<'_>, type_table: &TypeTable, type_id
         return;
     }
     let registered = |t| ctx.wado_types.contains_key(&t);
-    if params.iter().chain([return_type]).any(|&p| {
-        type_table.contains_type_param(p) || !buildable(type_table, p, registered)
-    }) {
+    if params
+        .iter()
+        .chain([return_type])
+        .any(|&p| type_table.contains_type_param(p) || !buildable(type_table, p, registered))
+    {
         return;
     }
     for &part in params.iter().chain([return_type]) {

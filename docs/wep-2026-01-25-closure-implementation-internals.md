@@ -92,6 +92,10 @@ The subtype keeps the base's prefix and adds `func` last. `$canonical_callback_f
 
 A stub is synthesized as a bodyless `FunctionKind::FnCanonicalDispatch` and WIR build supplies its body, a `call_ref` through the vtable slot. Bodyless functions are skipped by the inliner and the other body walkers, so the placeholder costs nothing during optimization.
 
+A value of a function type is a `(ref $CanonicalClosure_K)` of its signature,
+wherever it is held, so a call through it casts nothing. A signature no
+closure has lowers to `structref`.
+
 Per-literal wrappers cast the canonical `env` back to `$Closure_N` and forward to `$call` or `^Inspect`. The specialised path never touches the vtable: lowering rewrites an `Inspect` call on a known-local closure receiver into a direct call, and DCE removes the impls when nothing calls them.
 
 ### A closure crosses the Component Model boundary only as a key

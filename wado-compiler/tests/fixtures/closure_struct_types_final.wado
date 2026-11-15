@@ -1,7 +1,7 @@
 // A struct type nothing extends is declared final. wasmtime tests a cast to a
 // final type with one compare; a cast to any other type calls out on a
 // mismatch, which costs the function a stack frame even when the cast holds.
-// Calling a closure casts both the closure and its environment, so each pays.
+// A closure's wrapper casts its environment on every call.
 
 use { println, Stdout } from "core:cli";
 

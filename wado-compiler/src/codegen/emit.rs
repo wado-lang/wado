@@ -7,7 +7,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirExportDesc, WirFuncType, WirFunction, WirImportDesc,
-    WirInstr, WirPackage, WirScalarKind, WirStructType, WirType, WirTypeDef, WirVariantType,
+    WirInstr, WirPackage, WirScalarKind, WirStructType, WirType, WirTypeDef, WirTypeId,
+    WirVariantType,
 };
 
 use crate::codegen_flags::CodegenFlags;
@@ -228,7 +229,7 @@ impl<'a> WirEmitter<'a> {
                 let WirTypeDef::Struct(s) = typedef else {
                     return None;
                 };
-                s.supertype.as_ref().map(|id| id.index())
+                s.supertype.as_ref().map(WirTypeId::index)
             })
             .collect();
 
@@ -2484,6 +2485,7 @@ mod tests {
             meta: WirMeta::default(),
             generic_origin: None,
             newtype_origin: None,
+            supertype: None,
         }
     }
 
