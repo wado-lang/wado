@@ -54,9 +54,9 @@ lower is then available to each interface the slice adds.
 
 ### 4. Promises
 
-- [ ] Lower `Promise<T>` to the `Promise<T>` handle of
-  [WEP: Extern Handles](../docs/wep-2026-11-14-extern-handles.md#a-promiset-is-a-handle-that-is-waited-on),
-  in the bindings and in the glue
+- [ ] Lower a member returning `Promise<T>` to an `AsyncCall`, as
+  [WEP: Extern Handles](../docs/wep-2026-11-14-extern-handles.md#a-member-returning-a-promiset-returns-an-asynccall)
+  decides, in the bindings and in the glue
 - [ ] `fetch` and `Response` join the slice, with an effect of their own
 
 ### 5. A wider slice

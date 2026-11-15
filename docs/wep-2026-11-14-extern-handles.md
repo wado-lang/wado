@@ -277,32 +277,47 @@ own GC struct. The registry in `core:rt` and its `u32` keys go away.
 - A listener the page drops takes its closure with it. A closure and an element
   that hold each other are collected together.
 
-### A `Promise<T>` is a handle that is waited on
+### A member returning a `Promise<T>` returns an `AsyncCall`
 
-A WebIDL `Promise<T>` is `Promise<T>` in Wado, an extern handle to the
-JavaScript promise. The call that returns one returns at once, as a call
-returning an `AsyncCall<T>` does, and the work goes on behind it:
+A WebIDL member that returns `Promise<T>` is declared as any async operation
+is, `async fn … -> AsyncCall<Result<T, Rejection>>`. The program meets no new
+type:
 
 ```wado
-let pending = window.fetch("/api");   // Promise<Response>
-let response = pending.wait()?;       // Result<Response, Rejection>
+let call = window.fetch("/api");   // AsyncCall<Result<Response, Rejection>>
+let response = call.wait()?;       // blocks until the promise settles
 ```
 
-- `wait` blocks the current task until the promise settles. It is a web import
-  the glue wraps in `WebAssembly.Suspending`, so the Wasm stack is suspended
-  and the page keeps running.
+An `AsyncCall` then holds one of two things: the Component Model subtask it has
+always held, or an extern handle to a JavaScript promise.
+
+- `wait` on a promise blocks the current task until it settles. It is a web
+  import the glue wraps in `WebAssembly.Suspending`, so the Wasm stack is
+  suspended and the page keeps running.
 - A rejection is an `Err`, not a trap. A failed `fetch` or a refused permission
   is an ordinary outcome, unlike the DOM exceptions of a synchronous call.
   `Rejection` is an extern handle to the reason, answering `name()` and
   `message()`.
-- `wait` is an operation like any member, so a handler answers it for the
-  promises it backs.
+- `cancel`, and dropping the call unawaited, stop the waiting and nothing else.
+  A promise cannot be cancelled, so the work behind it goes on.
+- The call stays affine, as every `AsyncCall` is.
+- A handler answers the operation with a call of its own making, so
+  `SurfaceDom` serves these members as it serves the rest.
 
-A `Promise<T>` is not an `AsyncCall<T>`. A promise cannot be cancelled, so there
-is no `cancel` and dropping one stops nothing. It is copyable, and `wait` may
-be called on each copy. It is no member of a `WaitableSet`, which waits on what
-the Component Model reports. `Promise.all` and `Promise.race` are members to
-bind like any other.
+A real Component Model async import was the alternative, and it would need no
+second kind of call. It was run under jco 1.30.0 with a listener that waits on
+a `wasi:clocks` timer:
+
+| The page calls the listener through        | The listener's `wait`           | Its body starts during the dispatch |
+| ------------------------------------------ | ------------------------------- | ----------------------------------- |
+| A synchronously lifted export, as today    | fails: the stack cannot suspend | yes                                 |
+| The same export under jco's `asyncExports` | works, two at once included     | no                                  |
+| The core export, with no lift              | fails: no task is current       | yes                                 |
+
+A wait on a subtask needs a Component Model task, and jco starts a task's body
+after the dispatch has returned. A listener that starts late cannot
+`prevent_default` or `stop_propagation`, whether it waits or not. The promise
+keeps the body inside the dispatch, at the cost of a second kind of call.
 
 ### Every callback may wait
 
@@ -346,9 +361,9 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
   and the registry and `wado:callback/callback` are removed
 - [ ] The handle table: a handle in linear memory is a slot index, and
   `sequence<T>` and `FrozenArray<T>` of an interface lower to `List<T>`
-- [ ] `Promise<T>` and `Rejection`: `wait` through a suspending import, every
-  callback entered through `WebAssembly.promising`, and `SurfaceDom` answering
-  `wait` for a promise it backs
+- [ ] An `AsyncCall` over a promise, and `Rejection`: `wait` through a
+  suspending import, every callback entered through `WebAssembly.promising`,
+  and `SurfaceDom` answering a `Promise<T>` member
 - [ ] A collection test in the jsdom run: dropped handles, dropped listeners,
   and a cycle through both heaps are collected
 - [ ] `Hash` for a handle
@@ -364,13 +379,16 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
 - A suspended `wait` was run on core modules alone. It was not run inside a
   jco-transpiled component, where jco's own task bookkeeping surrounds the
   export that waits.
-- A promise and a Component Model waitable cannot be waited on together: no
-  one wait covers a `fetch` and a `wasi:clocks` timer.
+- An `AsyncCall` over a promise is no member of a `WaitableSet`, which waits on
+  what the Component Model reports. No one wait covers a `fetch` and a
+  `wasi:clocks` timer, or two `fetch`es.
+- A listener runs outside any Component Model task. A synchronously lowered
+  import works from there. A wait on a Component Model async import, such as a
+  `wasi:clocks` timer, does not: only a promise is waited on in a listener.
+- A `Promise<T>` that is not a member's result has no form: one in a
+  dictionary, a list or a callback's argument.
 - A callback that resumes after a `wait` runs with the handlers installed at
   that moment, not those of its registration.
-- A callback runs outside any Component Model task when the event loop calls
-  it. A synchronously lowered import works from there. An asynchronously
-  lowered one was not tried.
 - `class-of` costs a call for each narrowing of a host object. It was not
   measured against the range test it replaces.
 - `class-of` reads prototypes of the glue's own realm. An object from another
