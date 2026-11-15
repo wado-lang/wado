@@ -15,7 +15,8 @@ use crate::wir::{
     WirStructType, WirType, WirTypeDef, WirTypeId, WirVariantCase, WirVariantRepr, WirVariantType,
 };
 
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
+use crate::nir_arena::ExprKind;
 
 use super::context::WirContext;
 use crate::name::{
@@ -431,18 +432,52 @@ fn register_resource_object(ctx: &mut WirContext<'_>) -> WirTypeId {
 /// - A canonical func type: `(ref struct, P1, P2, ...) -> R`
 /// - A canonical closure struct: `{ env: ref struct, func: ref $func_type }`
 fn register_canonical_closure_types(ctx: &mut WirContext<'_>, type_table: &TypeTable) {
+    let erased = cross_signature_casts(ctx.package, type_table);
     for type_id in type_table.iter_type_ids() {
-        register_fn_closure(ctx, type_table, type_id);
+        register_fn_closure(ctx, type_table, &erased, type_id);
     }
+}
+
+/// The function types a cast converts to or from another signature, such as
+/// the `fn()` the Component Model callback registry holds every callback as.
+/// Their values lower to `structref`, so each such cast stays a no-op.
+fn cross_signature_casts(package: &NirPackage, type_table: &TypeTable) -> IndexSet<TypeId> {
+    let mut erased = IndexSet::default();
+    for func in &package.functions {
+        let func = func.borrow();
+        let Some(body) = &func.body else {
+            continue;
+        };
+        for node in body.exprs.values() {
+            let ExprKind::Cast { expr, target_type } = node.kind else {
+                continue;
+            };
+            let from = type_table.representation_head(body.operand_type(expr));
+            let to = type_table.representation_head(target_type);
+            let is_fn = |t| matches!(type_table.get(t), ResolvedType::Function { .. });
+            if from != to && is_fn(from) && is_fn(to) {
+                erased.insert(from);
+                erased.insert(to);
+            }
+        }
+    }
+    erased
 }
 
 /// Register the `CanonicalClosure_K` function type `type_id` lowers to, after
 /// those of the function types its signature names: their closure types are
 /// part of its key. A signature over a type parameter, or over a type no value
-/// has, types no closure. The first function type of a key decides whether its
+/// has, types no closure. An `erased` type keeps its closure struct, for the
+/// closures built and called at it, but its values lower to `structref`. The
+/// first function type of a key decides whether its
 /// struct takes the inspectable `{ env, inspect, func }` schema, by whether a
 /// `fn(..)^Inspect` for its `(arity, return_type)` survived DCE.
-fn register_fn_closure(ctx: &mut WirContext<'_>, type_table: &TypeTable, type_id: TypeId) {
+fn register_fn_closure(
+    ctx: &mut WirContext<'_>,
+    type_table: &TypeTable,
+    erased: &IndexSet<TypeId>,
+    type_id: TypeId,
+) {
     let ResolvedType::Function {
         params,
         return_type,
@@ -463,7 +498,7 @@ fn register_fn_closure(ctx: &mut WirContext<'_>, type_table: &TypeTable, type_id
         return;
     }
     for &part in params.iter().chain([return_type]) {
-        register_fn_closure(ctx, type_table, type_table.representation_head(part));
+        register_fn_closure(ctx, type_table, erased, type_table.representation_head(part));
     }
 
     // Unit params are erased from the canonical signature, matching the
@@ -484,7 +519,9 @@ fn register_fn_closure(ctx: &mut WirContext<'_>, type_table: &TypeTable, type_id
         .contains(&(params.len(), *return_type));
     let (_, closure) =
         ctx.get_or_create_canonical_closure_type(param_wirs, result_wirs, is_inspectable);
-    ctx.fn_closure_types.insert(type_id, closure);
+    if !erased.contains(&type_id) {
+        ctx.fn_closure_types.insert(type_id, closure);
+    }
 }
 
 /// The WIR name of variant `def` at `type_args` (none for a plain variant):

@@ -3128,7 +3128,6 @@ impl TypeTable {
     pub fn cell_struct_name(&self, cell: TypeId) -> String {
         let payload = self.representation_head(self.cell_payload(cell).expect("a cell reference"));
         let spelled = match self.get(payload) {
-            ResolvedType::Function { .. } => name::CELL_FN_PAYLOAD.to_string(),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 match self.cell_payload(payload) {
                     Some(_) => self.cell_struct_name(payload),

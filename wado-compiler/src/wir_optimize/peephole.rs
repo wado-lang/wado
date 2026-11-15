@@ -1706,20 +1706,22 @@ fn descent_blocked(instr: &WirInstr, reach: TeeReach) -> bool {
     }
 }
 
-/// Relax `LocalGet.result_ty` from non-null to nullable for the operands that
+/// Relax a read's `result_ty` from non-null to nullable for the operands that
 /// accept a nullable reference. `finalize_locals` narrows a nullable local's
-/// read only where `result_ty` is non-null, so relaxing it here suppresses the
-/// redundant `ref.as_non_null`.
+/// read, and codegen a nullable global or array slot's, only where `result_ty`
+/// is non-null, so relaxing it here suppresses the redundant `ref.as_non_null`.
 fn try_relax_gc_operands(instr: &mut WirInstr, locals: &WirLocals) -> bool {
     let mut changed = false;
     for_each_nullable_ref_operand(instr, locals, |operand| {
-        changed |= relax_ref_local_get(operand);
+        changed |= relax_ref_read(operand);
     });
     changed
 }
 
-fn relax_ref_local_get(instr: &mut WirInstr) -> bool {
-    if let WirInstr::LocalGet { result_ty, .. } = instr
+fn relax_ref_read(instr: &mut WirInstr) -> bool {
+    if let WirInstr::LocalGet { result_ty, .. }
+    | WirInstr::GlobalGet { result_ty, .. }
+    | WirInstr::ArrayGet { result_ty, .. } = instr
         && result_ty.is_nonnull_ref()
     {
         *result_ty = result_ty.clone().as_nullable();

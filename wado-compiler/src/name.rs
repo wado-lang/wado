@@ -855,10 +855,6 @@ pub const CELL_STRUCT: &str = "$Cell";
 /// The one field of a [`CELL_STRUCT`].
 pub const CELL_FIELD: &str = "value";
 
-/// How a cell's name spells a function payload: every function value lowers
-/// to one representation, so its cells are one struct.
-pub const CELL_FN_PAYLOAD: &str = "fn";
-
 /// The WIR struct a cell holding the payload spelled `payload` lowers to.
 #[must_use]
 pub fn cell_struct_name(payload: &str) -> String {

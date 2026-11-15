@@ -1609,11 +1609,12 @@ impl FunctionTranslator<'_, '_> {
             );
         };
 
-        // Generate a temp local for the callee as canonical closure struct ref
+        // Nullable, so a callee read from a nullable slot is not narrowed: the
+        // `struct.get`s that read it trap on null themselves.
         let temp_name = self.fresh_local("$indirect_call");
         let callee_ref_type = WirType::Ref {
             type_id: closure_struct_type_id.clone(),
-            nullable: false,
+            nullable: true,
         };
 
         // A function type with no closure of its own lowers to `structref`,
