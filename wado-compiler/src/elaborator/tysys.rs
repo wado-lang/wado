@@ -480,6 +480,11 @@ pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
 /// stringification). They touch only `self.type_table`; the body walk and
 /// reify both reach them through `self.tysys`.
 impl TypeSystem {
+    /// Whether [`Self::struct_name_for_type`] names `type_id`.
+    pub(crate) fn has_struct_head(&self, type_id: TypeId) -> bool {
+        self.struct_name_for_type(type_id).is_some()
+    }
+
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
     pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {
@@ -612,7 +617,11 @@ impl TypeSystem {
             Some(link) if link != type_id => (self.type_table.borrow().base_type_name(link), link),
             _ => match self.newtype_base_lookup(type_id) {
                 base if base == type_id => (name.to_string(), type_id),
-                base => (self.lookup_head_name(base), base),
+                base => (
+                    self.struct_name_for_type(base)
+                        .expect("a newtype's lookup base names a struct"),
+                    base,
+                ),
             },
         }
     }
@@ -624,27 +633,9 @@ impl TypeSystem {
     /// have stopped there.
     pub(crate) fn newtype_base_lookup(&self, type_id: TypeId) -> TypeId {
         match self.type_table.borrow().newtype_representation(type_id) {
-            Some(base) if self.has_lookup_head(base) => base,
+            Some(base) if self.has_struct_head(base) => base,
             Some(_) | None => type_id,
         }
-    }
-
-    fn has_lookup_head(&self, ty: TypeId) -> bool {
-        matches!(
-            self.type_table.borrow().get(ty),
-            ResolvedType::BuiltinArray(_)
-        ) || self.struct_name_for_type(ty).is_some()
-    }
-
-    fn lookup_head_name(&self, ty: TypeId) -> String {
-        if matches!(
-            self.type_table.borrow().get(ty),
-            ResolvedType::BuiltinArray(_)
-        ) {
-            return ARRAY_TYPE_NAME.to_string();
-        }
-        self.struct_name_for_type(ty)
-            .expect("a lookup head is an array or names a struct")
     }
 
     /// Peel a chain of trailing newtypes / generic instances down to the

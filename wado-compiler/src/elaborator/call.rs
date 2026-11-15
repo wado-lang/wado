@@ -1871,7 +1871,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // phase 4): see `resolve_static_method_call` — same rule, for the
         // `Wrapper::from(42)` spelling that arrives as a plain call.
         if let Some(receiver) = &call_receiver {
-            let method_name = effective_name.split_once("::").map_or("", |(_, m)| m);
+            let (_, method_name) = effective_name
+                .split_once("::")
+                .expect("a receiver comes with a qualified name");
             let typed = receiver.at_type(rewritten_receiver);
             let preselected = self.preselect_static_args(
                 StaticReceiver {
@@ -2981,7 +2983,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(receiver) = receiver {
                 let key = receiver.key();
                 let owner = self.static_owner_key(key, suffix);
-                if let Some(sig) = self.unique_qualified_method_sig_keyed(&owner, suffix) {
+                if let Some(sig) = self.unique_qualified_method_sig(&owner, suffix) {
                     return Some(CalleeSignature::of_method(&sig));
                 }
                 if let Some(sig) = self.derived_method_signature(key, suffix) {
@@ -3019,7 +3021,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let ns_key =
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
                     let owner = self.static_owner_key(&ns_key, method_name);
-                    if let Some(sig) = self.lookup_static_method_sig_keyed(&owner, method_name) {
+                    if let Some(sig) = self.lookup_static_method_sig(&owner, method_name) {
                         return Some(CalleeSignature {
                             param_types: sig.value_param_types(),
                             ..CalleeSignature::of_method(&sig)
@@ -5203,13 +5205,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.impl_method_entries(receiver, method_name).next()
     }
 
-    /// [`Self::qualified_method_sig_keyed`] where the name resolves to exactly one
+    /// [`Self::qualified_method_sig`] where the name resolves to exactly one
     /// declaration. An overloaded name (several `From` impls on one target)
     /// answers `None`: the call site chooses among the candidates by argument,
     /// so committing to the first indexed one would decide the overload here.
     /// Both kinds of declaration count, or a name carried by one static and one
     /// instance method reads as unique and the two never meet to be compared.
-    pub(super) fn unique_qualified_method_sig_keyed(
+    pub(super) fn unique_qualified_method_sig(
         &self,
         key: &trait_env::ImplTargetKey,
         method_name: &str,
@@ -5218,7 +5220,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if declared.next().is_some() && declared.next().is_some() {
             return None;
         }
-        self.qualified_method_sig_keyed(key, method_name)
+        self.qualified_method_sig(key, method_name)
     }
 
     /// The signature a static call on the receiver `key` names.
@@ -5231,7 +5233,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<MethodSig> {
         match choice {
             SigChoice::Any => self.qualified_method_sig_reaching(key, method_name, receiver_args),
-            SigChoice::Unique => self.unique_qualified_method_sig_keyed(key, method_name),
+            SigChoice::Unique => self.unique_qualified_method_sig(key, method_name),
         }
     }
 
@@ -5270,7 +5272,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// instantiates its slots from whichever it names. Deriving a second key
     /// from the bare name answers from another vantage than the one the call
     /// resolved at.
-    pub(super) fn qualified_method_sig_keyed(
+    pub(super) fn qualified_method_sig(
         &self,
         key: &ImplTargetKey,
         method_name: &str,
@@ -5278,7 +5280,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.qualified_method_sig_reaching(key, method_name, &[])
     }
 
-    /// [`Self::qualified_method_sig_keyed`] among the declarations whose block
+    /// [`Self::qualified_method_sig`] among the declarations whose block
     /// reaches a receiver with `receiver_args`; empty arguments admit every block.
     pub(super) fn qualified_method_sig_reaching(
         &self,

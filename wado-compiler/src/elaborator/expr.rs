@@ -2439,7 +2439,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TypeId> {
         let recv_type = self.resolve_expr(&index_expr.expr, ctx, None);
         let base_type_id = self.tysys.through_ref(recv_type);
-        self.tysys.struct_name_for_type(base_type_id)?;
+        if !self.tysys.has_struct_head(base_type_id) {
+            return None;
+        }
         let lookup_type_id = self.tysys.newtype_base_lookup(base_type_id);
         self.index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
             s.find_index_trait_impl(t, None)

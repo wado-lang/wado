@@ -521,7 +521,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_param {
             return self.bound_declared_rhs_type(trait_, method_name, self_type_id);
         }
-        self.tysys.struct_name_for_type(self_type_id)?;
+        if !self.tysys.has_struct_head(self_type_id) {
+            return None;
+        }
         let admitted = self.find_arithmetic_trait_impls(self_type_id, trait_, method_name, rhs);
         self.report_ambiguous_operator_rhs(&admitted, self_type_id, *op, span);
         let [trait_info] = admitted.as_slice() else {
@@ -614,7 +616,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         rhs_type_id: TypeId,
         op: &BinaryOp,
     ) -> Option<TypeId> {
-        self.tysys.struct_name_for_type(rhs_type_id)?;
+        if !self.tysys.has_struct_head(rhs_type_id) {
+            return None;
+        }
         let (item, method_name) = operator_trait_method(op)?;
         let trait_ = self.tysys.compiler_trait_def(item)?;
         // `1 + m` reads the impl on the right operand's type and gives the
@@ -1119,7 +1123,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
         loop {
-            if self.tysys.struct_name_for_type(link).is_some() {
+            if self.tysys.has_struct_head(link) {
                 let target = self.impl_target_of(link);
                 let (args, decl) = {
                     let table = self.tysys.type_table.borrow();
@@ -3965,33 +3969,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// The container's nominal head in `xs[i]`, for the receiver paths that ask
-    /// what `[]` dispatches on. The types are the ones `resolve_index` looks an
+    /// The container's type in `xs[i]`, for the receiver paths that ask what
+    /// `[]` dispatches on. The types are the ones `resolve_index` looks an
     /// impl up for, so both ask about the route it takes; `None` for the rest,
     /// which have no subscript impl to find.
-    fn index_container_head(
+    fn index_container_type(
         &mut self,
         index_expr: &ast::IndexExpr,
         ctx: &mut FunctionContext,
-    ) -> Option<(String, TypeId)> {
+    ) -> Option<TypeId> {
         let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
         let base_type_id = self.tysys.through_ref(container_type);
-        let head = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => return None,
+        let table = self.tysys.type_table.borrow();
+        let nominal = match table.get(base_type_id) {
+            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => false,
             ResolvedType::Struct { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. } => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(base_type_id)
-                .map(|(n, _)| n)?,
-            _ => return None,
+            | ResolvedType::Flags { .. } => table.nominal_head(base_type_id).is_some(),
+            _ => false,
         };
-        Some((head, base_type_id))
+        nominal.then_some(base_type_id)
     }
 
     /// The key `index_expr` writes into `container` through, its literal typed
@@ -4025,7 +4025,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         index_expr: &ast::IndexExpr,
         ctx: &mut FunctionContext,
     ) -> bool {
-        let Some((_, base_type_id)) = self.index_container_head(index_expr, ctx) else {
+        let Some(base_type_id) = self.index_container_type(index_expr, ctx) else {
             return false;
         };
         let Some(index_type) = self.index_key_at(index_expr, base_type_id, ctx) else {
@@ -4054,7 +4054,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> Option<TypeId> {
-        let (_, base_type_id) = self.index_container_head(index_expr, ctx)?;
+        let base_type_id = self.index_container_type(index_expr, ctx)?;
         let index_type = self.index_key_at(index_expr, base_type_id, ctx)?;
         let index_mut_info =
             self.find_index_mut_trait_impl_as_ref(base_type_id, Some(index_type))?;

@@ -645,7 +645,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if self.tysys.type_table.borrow().is_numeric(t) {
                     return ArgClass::Exact(t);
                 }
-                if self.tysys.struct_name_for_type(t).is_none() {
+                if !self.tysys.has_struct_head(t) {
                     return open;
                 }
                 let Some(trait_) = self.tysys.compiler_trait_def(item) else {
@@ -768,7 +768,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// never selects.
     fn method_return_type(&mut self, receiver: TypeId, method: &str, span: Span) -> Option<TypeId> {
         let base = self.tysys.get_base_type(receiver);
-        self.tysys.struct_name_for_type(base)?;
+        if !self.tysys.has_struct_head(base) {
+            return None;
+        }
         let type_args = self
             .tysys
             .type_table
@@ -850,7 +852,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
         let base = self.tysys.get_base_type(container);
-        if self.tysys.struct_name_for_type(base).is_none() {
+        if !self.tysys.has_struct_head(base) {
             return ArgClass::Opaque(OpaqueReason::Inference);
         }
         let lookup_type = self.tysys.newtype_base_lookup(base);
@@ -943,7 +945,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         access: KeyedAccess,
     ) -> LiteralKey {
         let base = self.tysys.get_base_type(container);
-        if self.tysys.struct_name_for_type(base).is_none() {
+        if !self.tysys.has_struct_head(base) {
             return LiteralKey::Unsettled;
         }
         let lookup_type = self.tysys.newtype_base_lookup(base);

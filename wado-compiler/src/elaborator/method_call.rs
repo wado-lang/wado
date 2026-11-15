@@ -479,47 +479,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // only if the candidate set turns out to be an overload set.
         let mut probe = ArgProbe::new(args_ast, ctx, expected_type);
 
-        // Get struct name and module source from base type
-        // The struct_module is where the struct is defined (and inherent methods live)
-        let (_, struct_module) = match self.tysys.type_table.borrow().get(base_type_id) {
-            ResolvedType::Struct { .. } | ResolvedType::Tuple(_) => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(base_type_id)
-                .expect("a nominal type names a declaration"),
+        // Where the receiver is declared, which is where its inherent methods live.
+        let struct_module = match self.tysys.type_table.borrow().get(base_type_id) {
             // `v128` has no prelude impl block of its own, and lookup finds its
             // `core:simd` methods by name from this key anyway.
-            ResolvedType::Primitive(prim) => (
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .mangle_type_name(base_type_id),
-                ModuleSource::of_primitive(*prim),
-            ),
+            ResolvedType::Primitive(prim) => ModuleSource::of_primitive(*prim),
             // Unit type () has impl blocks in core:prelude/primitive
-            ResolvedType::Unit => (UNIT_TYPE_NAME.to_string(), ModuleSource::primitive()),
-            // Every other nominal type is named by the declaration it carries.
-            ResolvedType::Enum { .. }
+            ResolvedType::Unit => ModuleSource::primitive(),
+            // Every nominal type is named by the declaration it carries.
+            ResolvedType::Struct { .. }
+            | ResolvedType::Tuple(_)
+            | ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. } => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(base_type_id)
-                .expect("a nominal type names a declaration"),
-            // Raw GC array `Array<T>`: inherent methods live in
-            // `impl Array<T>` (core:prelude/array.wado), keyed by "Array".
-            ResolvedType::BuiltinArray(_) => (ARRAY_TYPE_NAME.to_string(), ModuleSource::array()),
-            _ => (
+            | ResolvedType::Flags { .. } => {
                 self.tysys
                     .type_table
                     .borrow()
-                    .mangle_type_name(base_type_id),
-                self.current_module_source.clone(),
-            ),
+                    .nominal_head(base_type_id)
+                    .expect("a nominal type names a declaration")
+                    .1
+            }
+            // Raw GC array `Array<T>`: inherent methods live in
+            // `impl Array<T>` (core:prelude/array.wado).
+            ResolvedType::BuiltinArray(_) => ModuleSource::array(),
+            _ => self.current_module_source.clone(),
         };
 
         let receiver_type_args_for_trait = self.tysys.impl_position_args(base_type_id);
@@ -2021,7 +2006,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .found()
                 .and_then(|callee| self.selected_static_sig(&callee.method_ref)),
             Some(key) => self
-                .unique_qualified_method_sig_keyed(key, &static_call.method)
+                .unique_qualified_method_sig(key, &static_call.method)
                 .or_else(|| {
                     self.inherited_default_method_sig(key, &static_call.method, SigChoice::Unique)
                 }),
@@ -2527,7 +2512,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             match declaration.and_then(|def| self.tysys.signatures.method_sig(def)) {
                 Some(sig) => sig.cm_name.clone(),
                 None => static_receiver
-                    .and_then(|key| self.qualified_method_sig_keyed(key, &static_call.method))
+                    .and_then(|key| self.qualified_method_sig(key, &static_call.method))
                     .and_then(|sig| sig.cm_name),
             };
 
@@ -3076,7 +3061,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `None` is a receiver / method pair nothing declares, which an empty
     /// parameter list would otherwise report as "declares no parameters" — and
     /// a count checked against that drops the arguments a caller wrote.
-    pub(super) fn lookup_static_method_sig_keyed(
+    pub(super) fn lookup_static_method_sig(
         &self,
         static_key: &ImplTargetKey,
         method_name: &str,
