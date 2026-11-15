@@ -56,10 +56,20 @@ internal struct Program {
     /// around it it entered at the current position: past a `Progress`,
     /// threads that differ in that differ in what they can match.
     internal state_base: List<i32>,
+    /// How many bytes every match spans, where they all span as many.
+    internal match_len: Option<i32>,
+}
+
+/// Which way a program reads the text.
+internal enum Direction {
+    Forward,
+    /// From a match's end back to its start: the program matches what the
+    /// forward one matches, reversed. Its preferences and slots mean nothing.
+    Reverse,
 }
 
 /// The program matching `node`, whose capturing groups number `groups`.
-internal fn compile(node: &Node, groups: i32) -> Result<Program, PatternError> {
+internal fn compile(node: &Node, groups: i32, direction: Direction) -> Result<Program, PatternError> {
     let captures = 2 * (groups + 1);
     let mut c = Compiler {
         insts: [],
@@ -68,12 +78,61 @@ internal fn compile(node: &Node, groups: i32) -> Result<Program, PatternError> {
         depth: 0,
         flags: Flag::none(),
         slots: captures,
+        direction,
     };
     c.push(Inst::Save(0))?;
     c.node(node)?;
     c.push(Inst::Save(1))?;
     c.push(Inst::Match)?;
-    return Ok(Program { insts: c.insts, slots: c.slots, captures, state_base: c.state_base });
+    let match_len = match_len(&c.insts);
+    return Ok(Program {
+        insts: c.insts,
+        slots: c.slots,
+        captures,
+        state_base: c.state_base,
+        match_len,
+    });
+}
+
+/// How many bytes every match of `insts` spans, if they all span as many.
+fn match_len(insts: &List<Inst>) -> Option<i32> {
+    // From each instruction to `Match`: a length, or one of these.
+    let varies = -1;
+    let no_match = -2;
+    let merge = |a: i32, b: i32| {
+        return if a == no_match || a == b {
+            b;
+        } else if b == no_match {
+            a;
+        } else {
+            varies;
+        };
+    };
+    let mut to_match: List<i32> = List::filled(insts.len(), varies);
+    // A target that lies back is a loop, whose matches vary in length, so
+    // one pass from the end settles every instruction after those it needs.
+    let at = |target: i32, from: i32, known: &List<i32>| {
+        return if target > from { known[target] } else { varies };
+    };
+    for let back of 0..<insts.len() {
+        let pc = insts.len() - 1 - back;
+        to_match[pc] = match insts[pc] {
+            Match => 0,
+            Fail => no_match,
+            Byte(_) => {
+                let rest = to_match[pc + 1];
+                if rest >= 0 {
+                    rest + 1;
+                } else {
+                    rest;
+                }
+            },
+            Jump(target) => at(target, pc, &to_match),
+            Split([first, second]) => merge(at(first, pc, &to_match), at(second, pc, &to_match)),
+            Save(_) | Clear(_) | Assert(_) | Progress(_) => to_match[pc + 1],
+        };
+    }
+    return if to_match[0] >= 0 { Some(to_match[0]) } else { null };
 }
 
 struct Compiler {
@@ -85,6 +144,7 @@ struct Compiler {
     depth: i32,
     flags: Flag,
     slots: i32,
+    direction: Direction,
 }
 
 /// Whether `node` can match without consuming a character.
@@ -232,13 +292,19 @@ impl Compiler {
             },
             Repeat(r) => self.repeat(&r.body, r.min, r.max, r.greedy)?,
             Concat(nodes) => {
-                for let n of &nodes {
-                    self.node(n)?;
+                for let i of 0..<nodes.len() {
+                    self.node(&nodes[self.in_reading_order(i, nodes.len())])?;
                 }
             },
             Alternation(nodes) => self.choice(&nodes, |c, n| c.node(n))?,
         }
         return Ok(());
+    }
+
+    /// The index of the `i`th of `len` parts in a sequence, as this program
+    /// reads them.
+    fn in_reading_order(&self, i: i32, len: i32) -> i32 {
+        return if self.direction == Direction::Reverse { len - 1 - i } else { i };
     }
 
     fn multiline(&self) -> bool {
@@ -370,8 +436,8 @@ impl Compiler {
             return Ok(());
         }
         return self.choice(&seqs, |c, seq| {
-            for let b of seq {
-                c.push(Inst::Byte(*b))?;
+            for let i of 0..<seq.len() {
+                c.push(Inst::Byte(seq[c.in_reading_order(i, seq.len())]))?;
             }
             return Ok(());
         });

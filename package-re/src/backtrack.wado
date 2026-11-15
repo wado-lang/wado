@@ -1,0 +1,125 @@
+//! A backtracker over a span the DFAs found: it follows the Pike VM's threads
+//! one at a time, the preferred first, and never enters a state at a position
+//! twice, so it takes time linear in the span as the Pike VM does. It holds one
+//! set of slots where the Pike VM copies one for each thread, and pays for
+//! that with a bit for each state at each position, which is why it reads
+//! short spans only.
+
+use { Cache, holds } from "./pike.wado";
+use { Program } from "./program.wado";
+
+/// How many bits a search may mark: the program's states times the span's
+/// positions. The Pike VM reads what would take more.
+global MAX_VISITED_BITS: i32 = 1 << 18;
+
+/// Whether `backtrack` reads the span `[start, end)`.
+internal fn fits(program: &Program, start: i32, end: i32) -> bool {
+    return program.state_base[program.insts.len()] <= MAX_VISITED_BITS / (end - start + 1);
+}
+
+/// The capture slots of the leftmost-first match starting at `start`, which
+/// the DFAs found to end at `end`; an unset slot is -1.
+internal fn backtrack(program: &Program, cache: &mut Cache, text: StrSlice, start: i32, end: i32) -> List<i32>
+    contract fits(program, start, end)
+{
+    let positions = end - start + 1;
+    let words = (program.state_base[program.insts.len()] * positions + 31) / 32;
+    cache.visited.truncate(0);
+    for let _w of 0..<words {
+        cache.visited.push(0);
+    }
+    let mut slots = cache.unset_slots(program);
+    // Three numbers an entry: a thread to resume, as its instruction, its
+    // position and how many optional iterations it entered there; or, under
+    // a negative first number, a slot to restore and its value.
+    cache.stack.truncate(0);
+    cache.stack.push(0);
+    cache.stack.push(start);
+    cache.stack.push(0);
+    while let Some(third) = cache.stack.pop() {
+        let second = cache.stack.pop().unwrap();
+        let first = cache.stack.pop().unwrap();
+        if first < 0 {
+            slots[-1 - first] = second;
+            continue;
+        }
+        let mut pc = first;
+        let mut pos = second;
+        let mut entered = third;
+        loop {
+            let inst = program.insts[pc];
+            if inst matches { Byte(_) | Match } {
+                entered = 0;
+            }
+            let bit = (program.state_base[pc] + entered) * positions + (pos - start);
+            let mask = 1 << (bit & 31);
+            if cache.visited[bit >> 5] & mask != 0 {
+                break;
+            }
+            cache.visited[bit >> 5] |= mask;
+            match inst {
+                Byte([lo, hi]) => {
+                    if pos >= end {
+                        break;
+                    }
+                    let b = text.byte_at(pos);
+                    if b < lo || b > hi {
+                        break;
+                    }
+                    pc += 1;
+                    pos += 1;
+                },
+                Match => {
+                    assert pos == end;
+                    slots.truncate(program.captures);
+                    return slots;
+                },
+                Jump(target) => pc = target,
+                Split([preferred, other]) => {
+                    cache.stack.push(other);
+                    cache.stack.push(pos);
+                    cache.stack.push(entered);
+                    pc = preferred;
+                },
+                Save(slot) => {
+                    cache.stack.push(-1 - slot);
+                    cache.stack.push(slots[slot]);
+                    cache.stack.push(0);
+                    slots[slot] = pos;
+                    // A `Progress` slot opens an optional iteration.
+                    if slot >= program.captures {
+                        entered += 1;
+                    }
+                    pc += 1;
+                },
+                Clear([from, until]) => {
+                    for let k of from..<until {
+                        if slots[k] != -1 {
+                            cache.stack.push(-1 - k);
+                            cache.stack.push(slots[k]);
+                            cache.stack.push(0);
+                            slots[k] = -1;
+                        }
+                    }
+                    pc += 1;
+                },
+                Assert(look) => {
+                    if !holds(look, text, pos) {
+                        break;
+                    }
+                    pc += 1;
+                },
+                Progress(slot) => {
+                    if slots[slot] == pos {
+                        break;
+                    }
+                    pc += 1;
+                },
+                Fail => {
+                    break;
+                },
+            }
+        }
+    }
+    unreachable();
+}

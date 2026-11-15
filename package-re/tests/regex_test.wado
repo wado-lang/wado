@@ -235,3 +235,32 @@ test "i folds the classes of a whole pattern" {
     assert r.is_match("STRAẞEſ");
     assert !r.is_match("STRASSE_");
 }
+
+test "groups of a match too long for the backtracker" {
+    let mut text = "x";
+    for let _i of 0..<60000 {
+        text.push('a');
+    }
+    text.push_str("bbb!");
+    let caps = re(#"(a+)(b+)"#).captures(&text).unwrap();
+    assert caps.get(0).unwrap().start() == 1;
+    assert caps.get(1).unwrap().as_str().len() == 60000;
+    assert `${caps.get(2).unwrap().as_str()}` == "bbb";
+}
+
+test "a search skips to whichever of several bytes can start a match" {
+    let words: List<String> = ["x1", "yq", "z2", "y3"];
+    let mut text = "";
+    for let i of 0..<40 {
+        for let _j of 0..<i % 7 {
+            text.push('-');
+        }
+        text.push_str(&words[i % 4]);
+    }
+    let mut starts: List<i32> = [];
+    for let m of re(#"[xyz]\d"#).find_iter(&text) {
+        assert text.as_str_slice().slice(m.start() + 1, m.end()).chars().next().unwrap().is_ascii_digit();
+        starts.push(m.start());
+    }
+    assert starts.len() == 30;
+}

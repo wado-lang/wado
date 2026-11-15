@@ -1,0 +1,452 @@
+//! The lazy DFA: each of its states is the set of threads the Pike VM would
+//! hold at one position, built the first time a search reaches it, so a
+//! search does one table lookup for each byte it reads. It tells where a
+//! match ends, or where one starts when it runs the reversed program, and
+//! leaves the groups to the Pike VM.
+
+use { HashMap } from "core:collections";
+use { Direction, Look, Program } from "./program.wado";
+
+/// How many transitions a DFA may hold. Some patterns reach a number of states
+/// exponential in their size, and a search that would pass this gives up
+/// instead, for the Pike VM to take over.
+global MAX_TRANSITIONS: i32 = 1 << 20;
+
+/// How many threads the states of a DFA may hold between them. A counted
+/// repetition makes few states of many threads each, which the bound on
+/// transitions does not see.
+global MAX_STATE_THREADS: i32 = 1 << 19;
+
+// A state as a transition holds it: its index above these two bits, and
+// `UNKNOWN` where no search has taken the transition yet.
+global DEAD: i32 = 1;
+global ACCEPT: i32 = 2;
+global UNKNOWN: i32 = -1;
+
+global NO_IDLE: i32 = -2;
+
+/// How many bytes may leave the idle state for a scan to skip through the
+/// others. The skip pays where it runs long, so where few bytes end it.
+global MAX_IDLE_EXITS: i32 = 16;
+
+/// Whether the DFA can run `program`: it resolves `^` and `$` outside `m` at
+/// the ends of the text, and no other assertion.
+internal fn runs(program: &Program) -> bool {
+    for let inst of &program.insts {
+        if let Assert(look) = *inst && !look matches { StartText | EndText } {
+            return false;
+        }
+    }
+    return true;
+}
+
+internal struct Dfa {
+    program: Program,
+    direction: Direction,
+    /// The class of each byte: two bytes share one when every `Byte` of the
+    /// program takes both or neither.
+    class_of: List<u8>,
+    /// `transitions[state * 256 + byte]`. A row is as wide as the bytes are,
+    /// not the classes, so that a scan reads one table for each byte and not
+    /// two.
+    transitions: List<i32>,
+    /// State `i`'s key is `keys[bounds[i]..<bounds[i + 1]]`: whether a match
+    /// was found before it, then its threads in priority order, each an
+    /// instruction and how many optional iterations it entered. A thread
+    /// waits at a `Byte`, a `Match`, or the assertion that holds only where
+    /// the scan ends.
+    keys: List<i32>,
+    bounds: List<i32>,
+    /// Whether a state accepts where the scan ends: -1 until asked.
+    accepts_at_end: List<i32>,
+    /// The state each key names, as a transition holds it.
+    index: HashMap<List<i32>, i32>,
+    /// `seen[s] == stamp` marks the Pike VM's state `s` taken in the thread
+    /// list being built.
+    seen: List<i32>,
+    stamp: i32,
+    /// The state a scan starts in, by whether it starts where the text does;
+    /// `UNKNOWN` until one did.
+    starts: List<i32>,
+    /// The state a forward scan waits in for a match to start, where few
+    /// bytes start one; `UNKNOWN` until the first scan, and `NO_IDLE` where
+    /// too many do.
+    idle: i32,
+    /// For each byte, 1 where `idle` stays in itself on it.
+    idles_on: List<u8>,
+    /// The one byte `idle` leaves on, or -1 where several do.
+    exit: i32,
+    internal gave_up: bool,
+}
+
+impl Dfa {
+    internal fn new(program: Program, direction: Direction) -> Dfa {
+        let mut starts_class: List<bool> = List::filled(257, false);
+        for let inst of &program.insts {
+            if let Byte([lo, hi]) = *inst {
+                starts_class[lo as i32] = true;
+                starts_class[hi as i32 + 1] = true;
+            }
+        }
+        let mut class_of: List<u8> = [];
+        let mut class: u8 = 0;
+        for let b of 0..<256 {
+            if b > 0 && starts_class[b] {
+                class += 1;
+            }
+            class_of.push(class);
+        }
+        let seen: List<i32> = List::filled(program.state_base[program.insts.len()], -1);
+        return Dfa {
+            program,
+            direction,
+            class_of,
+            transitions: [],
+            keys: [],
+            bounds: [0],
+            accepts_at_end: [],
+            index: HashMap::<List<i32>, i32>::new(),
+            seen,
+            stamp: 0,
+            starts: [UNKNOWN, UNKNOWN],
+            idle: UNKNOWN,
+            idles_on: [],
+            exit: -1,
+            gave_up: false,
+        };
+    }
+
+    /// The assertion that holds only where the scan starts.
+    fn start_look(&self) -> Look {
+        return if self.direction == Direction::Reverse { Look::EndText } else { Look::StartText };
+    }
+
+    /// Follows every instruction that consumes nothing from `from`, as the Pike
+    /// VM's `add` does, appending the threads it reaches to `out`. A reverse
+    /// scan asks only what matches, not which match is preferred, so there a
+    /// thread is its instruction alone and every `Progress` passes: an empty
+    /// iteration adds nothing to what matches.
+    fn close(&mut self, from: i32, at_start: bool, at_end: bool, out: &mut List<i32>) {
+        let forward = self.direction == Direction::Forward;
+        let start_look = self.start_look();
+        let mut stack: List<i32> = [from, 0];
+        while let Some(came_entered) = stack.pop() {
+            let pc = stack.pop().unwrap();
+            let inst = self.program.insts[pc];
+            let entered = if forward && !inst matches { Byte(_) | Match } { came_entered } else { 0 };
+            let state = self.program.state_base[pc] + entered;
+            if self.seen[state] == self.stamp {
+                continue;
+            }
+            self.seen[state] = self.stamp;
+            match inst {
+                Jump(target) => {
+                    stack.push(target);
+                    stack.push(entered);
+                },
+                Split([first, second]) => {
+                    stack.push(second);
+                    stack.push(entered);
+                    stack.push(first);
+                    stack.push(entered);
+                },
+                Save(slot) => {
+                    let opened = if forward && slot >= self.program.captures { 1 } else { 0 };
+                    stack.push(pc + 1);
+                    stack.push(entered + opened);
+                },
+                Clear(_) => {
+                    stack.push(pc + 1);
+                    stack.push(entered);
+                },
+                Assert(look) => {
+                    if look == start_look {
+                        if at_start {
+                            stack.push(pc + 1);
+                            stack.push(entered);
+                        }
+                    } else if at_end {
+                        stack.push(pc + 1);
+                        stack.push(entered);
+                    } else {
+                        out.push(pc);
+                        out.push(entered);
+                    }
+                },
+                Progress(_) => {
+                    // The thread entered this iteration at this position
+                    // exactly when it entered any here: one entered here and
+                    // not left is the innermost around the thread.
+                    if entered == 0 {
+                        stack.push(pc + 1);
+                        stack.push(entered);
+                    }
+                },
+                Fail => {
+                },
+                Byte(_) | Match => {
+                    out.push(pc);
+                    out.push(0);
+                },
+            }
+        }
+    }
+
+    /// The state holding `threads`, reached after a match if `found`.
+    fn intern(&mut self, found: bool, threads: List<i32>) -> i32 {
+        let mut key: List<i32> = [found as i32];
+        let mut accept = false;
+        if self.direction == Direction::Forward {
+            for let i of 0..<threads.len() / 2 {
+                key.push(threads[2 * i]);
+                key.push(threads[2 * i + 1]);
+                // The threads below a match never run.
+                if self.program.insts[threads[2 * i]] matches { Match } {
+                    accept = true;
+                    break;
+                }
+            }
+        } else {
+            // No thread is preferred, so one order stands for every order.
+            let mut pcs: List<i32> = [];
+            for let i of 0..<threads.len() / 2 {
+                pcs.push(threads[2 * i]);
+            }
+            pcs.sort();
+            for let pc of pcs {
+                key.push(pc);
+                key.push(0);
+                accept = accept || self.program.insts[pc] matches { Match };
+            }
+        }
+        if let Some(state) = self.index.get(key) {
+            return state;
+        }
+        let mut state = self.accepts_at_end.len() << 2;
+        if accept {
+            state |= ACCEPT;
+        }
+        if key.len() == 1 {
+            state |= DEAD;
+        }
+        for let k of &key {
+            self.keys.push(*k);
+        }
+        self.bounds.push(self.keys.len());
+        self.accepts_at_end.push(-1);
+        for let _b of 0..<256 {
+            self.transitions.push(UNKNOWN);
+        }
+        self.index.try_insert(key, state);
+        return state;
+    }
+
+    /// The state a scan starts in. A forward scan starts a thread at every
+    /// position until it finds a match, a reverse one only where it starts.
+    fn start(&mut self, at_start: bool) -> i32 {
+        let slot = at_start as i32;
+        if self.starts[slot] == UNKNOWN {
+            let mut threads: List<i32> = [];
+            self.stamp += 1;
+            self.close(0, at_start, false, &mut threads);
+            self.starts[slot] = self.intern(false, threads);
+        }
+        return self.starts[slot];
+    }
+
+    /// Fills the transitions leaving state `from` on `byte` and on every byte
+    /// of its class.
+    fn step(&mut self, from: i32, byte: u8) -> i32 {
+        if self.transitions.len() >= MAX_TRANSITIONS || self.keys.len() >= 2 * MAX_STATE_THREADS {
+            self.gave_up = true;
+            return DEAD;
+        }
+        let forward = self.direction == Direction::Forward;
+        let mut found = self.keys[self.bounds[from]] != 0;
+        let mut threads: List<i32> = [];
+        self.stamp += 1;
+        for let i of (self.bounds[from] + 1..<self.bounds[from + 1]).step_by(2) {
+            let pc = self.keys[i];
+            match self.program.insts[pc] {
+                Byte([lo, hi]) => {
+                    if byte >= lo && byte <= hi {
+                        self.close(pc + 1, false, false, &mut threads);
+                    }
+                },
+                // A new start has the lowest priority, and none is tried once
+                // a match is found.
+                Match => found = found || forward,
+                // An assertion about the scan's end, which is not here.
+                _ => {
+                },
+            }
+        }
+        if forward && !found {
+            self.close(0, false, false, &mut threads);
+        }
+        let to = self.intern(found, threads);
+        let class = self.class_of[byte as i32];
+        for let b of 0..<256 {
+            if self.class_of[b] == class {
+                self.transitions[from * 256 + b] = to;
+            }
+        }
+        return to;
+    }
+
+    /// Settles `idle`: the state a scan starts in past the text's start, if
+    /// it reports nothing and few bytes leave it.
+    fn find_idle(&mut self) {
+        let state = self.start(false);
+        let mut exits = 0;
+        for let b of 0..<256 {
+            let stays = self.next(state, b as u8) == state;
+            self.idles_on.push(stays as u8);
+            if !stays {
+                exits += 1;
+                self.exit = b;
+            }
+        }
+        if exits != 1 {
+            self.exit = -1;
+        }
+        let reports = state & (ACCEPT | DEAD) != 0;
+        self.idle = if reports || exits > MAX_IDLE_EXITS { NO_IDLE } else { state };
+    }
+
+    /// The state `state` leads to on `byte`.
+    fn next(&mut self, state: i32, byte: u8) -> i32 {
+        let next = self.transitions[(state >> 2 << 8) + byte as i32];
+        return if next == UNKNOWN { self.step(state >> 2, byte) } else { next };
+    }
+
+    /// Whether `state` accepts where the scan ends, which is not where it
+    /// started.
+    fn accepts_end(&mut self, state: i32) -> bool {
+        if self.accepts_at_end[state] < 0 {
+            let mut threads: List<i32> = [];
+            self.stamp += 1;
+            for let i of (self.bounds[state] + 1..<self.bounds[state + 1]).step_by(2) {
+                let pc = self.keys[i];
+                match self.program.insts[pc] {
+                    Byte(_) => {
+                    },
+                    Match => {
+                        threads.push(pc);
+                        threads.push(0);
+                    },
+                    _ => self.close(pc + 1, false, true, &mut threads),
+                }
+            }
+            let mut accepts = false;
+            for let i of (0..<threads.len()).step_by(2) {
+                accepts = accepts || self.program.insts[threads[i]] matches { Match };
+            }
+            self.accepts_at_end[state] = accepts as i32;
+        }
+        return self.accepts_at_end[state] == 1;
+    }
+
+    /// Where the leftmost-first match at or after `start` ends, or, under
+    /// `earliest`, where any match does. `text` is not empty, and the answer
+    /// means nothing once the DFA gave up.
+    internal fn scan_forward(&mut self, text: StrSlice, start: i32, earliest: bool) -> Option<i32>
+        contract !text.is_empty()
+    {
+        let len = text.len();
+        if self.idle == UNKNOWN {
+            self.find_idle();
+        }
+        let mut state = self.start(start == 0);
+        let mut end: Option<i32> = null;
+        let mut pos = start;
+        loop {
+            if state & ACCEPT != 0 {
+                end = Some(pos);
+                if earliest {
+                    return end;
+                }
+            }
+            if state & DEAD != 0 {
+                return end;
+            }
+            if state == self.idle {
+                // Up to the byte that leaves, so that the run below starts
+                // on it and does not hand back at once.
+                if self.exit >= 0 {
+                    let exit = self.exit as u8;
+                    while pos < len && unchecked text.byte_at(pos) != exit {
+                        pos += 1;
+                    }
+                } else {
+                    while pos < len && unchecked self.idles_on[unchecked text.byte_at(pos) as i32] != 0 {
+                        pos += 1;
+                    }
+                }
+            }
+            // The run of transitions with nothing to report, `UNKNOWN`
+            // included: it sets both flags. It stops back in the idle state,
+            // for the skip above to take over.
+            let mut next = state;
+            while pos < len {
+                let byte = unchecked text.byte_at(pos);
+                next = unchecked self.transitions[(state >> 2 << 8) + byte as i32];
+                if next & (ACCEPT | DEAD) != 0 {
+                    break;
+                }
+                state = next;
+                pos += 1;
+                if state == self.idle {
+                    break;
+                }
+            }
+            if pos == len {
+                if self.accepts_end(state >> 2) {
+                    end = Some(len);
+                }
+                return end;
+            }
+            if next & (ACCEPT | DEAD) != 0 {
+                state = self.next(state, text.byte_at(pos));
+                pos += 1;
+            }
+        }
+    }
+
+    /// Where the match ending at `end` and starting leftmost, no further left
+    /// than `floor`, starts. `text` is not empty and holds such a match.
+    internal fn scan_reverse(&mut self, text: StrSlice, floor: i32, end: i32) -> i32
+        contract !text.is_empty()
+    {
+        let mut state = self.start(end == text.len());
+        let mut start = -1;
+        let mut pos = end;
+        loop {
+            if state & ACCEPT != 0 {
+                start = pos;
+            }
+            if state & DEAD != 0 {
+                break;
+            }
+            while pos > floor {
+                let byte = unchecked text.byte_at(pos - 1);
+                let next = unchecked self.transitions[(state >> 2 << 8) + byte as i32];
+                if next & (ACCEPT | DEAD) != 0 {
+                    break;
+                }
+                state = next;
+                pos -= 1;
+            }
+            if pos == floor {
+                if floor == 0 && self.accepts_end(state >> 2) {
+                    start = 0;
+                }
+                break;
+            }
+            state = self.next(state, text.byte_at(pos - 1));
+            pos -= 1;
+        }
+        assert start >= 0 || self.gave_up;
+        return start;
+    }
+}

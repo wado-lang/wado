@@ -1,0 +1,123 @@
+// Search throughput of Re against Node's `RegExp` (`node.mjs`), which runs the
+// same patterns over the same text: a literal, the literal ignoring case, an
+// email address, a URI, a timestamp read through its groups, and a pattern a
+// backtracking engine takes exponential time on. The literal is also searched
+// for with no regular expression, by each side's substring search.
+
+use { Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
+use { Regex, re } from "../src/lib.wado";
+
+global INPUT: String = #include_str("./input.txt");
+
+/// The text the `literal` pattern spells.
+global NEEDLE: String = "Sherlock Holmes";
+
+// `node.mjs` holds the same length, sized to what Node's backtracking affords.
+global PATHOLOGICAL_LEN: i32 = 24;
+
+struct Cases {
+    literal: Regex,
+    literal_ignore_case: Regex,
+    email: Regex,
+    uri: Regex,
+    timestamp: Regex,
+    pathological: Regex,
+}
+
+fn cases() -> Cases {
+    return Cases {
+        literal: re#`Sherlock Holmes`#,
+        literal_ignore_case: re#`(?i:sherlock holmes)`#,
+        email: re#`[\w.+-]+@[\w-]+(?:\.[\w-]+)+`#,
+        uri: re#`[a-z][a-z0-9+.-]*://[^\s/?#]+[^\s?#]*(?:\?[^\s#]*)?(?:#\S*)?`#,
+        timestamp: re#`(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z`#,
+        pathological: re#`(?:x+x+)+y`#,
+    };
+}
+
+fn count_matches(regex: &Regex, text: &String) -> i32 {
+    return regex.find_iter(text).count();
+}
+
+/// What `literal` counts, by the standard library's substring search and no
+/// regular expression: the bar a literal pattern is held to.
+fn count_finds(text: &String, needle: &String) -> i32 {
+    let view = text.as_str_slice();
+    let mut count = 0;
+    let mut from = 0;
+    while let Some(at) = view.slice(from, view.len()).find(needle) {
+        count += 1;
+        from += at + needle.len();
+    }
+    return count;
+}
+
+/// The sum of every timestamp's hour, so that each match's groups are read.
+fn sum_hours(regex: &Regex, text: &String) -> i32 {
+    let mut sum = 0;
+    for let caps of regex.captures_iter(text) {
+        sum += i32::from_str(caps.get(4).unwrap().as_str()).unwrap();
+    }
+    return sum;
+}
+
+fn pathological_text() -> String {
+    return "x".repeat(PATHOLOGICAL_LEN);
+}
+
+/// Each case finds what Node's `RegExp` finds, so a throughput is never that
+/// of a wrong answer.
+fn check(c: &Cases) {
+    assert count_matches(&c.literal, &INPUT) == 223;
+    assert count_finds(&INPUT, &NEEDLE) == 223;
+    assert count_matches(&c.literal_ignore_case, &INPUT) == 452;
+    assert count_matches(&c.email, &INPUT) == 176;
+    assert count_matches(&c.uri, &INPUT) == 176;
+    assert sum_hours(&c.timestamp, &INPUT) == 1904;
+    assert !c.pathological.is_match(pathological_text());
+}
+
+test "each case finds what Node's RegExp finds" {
+    check(&cases());
+}
+
+test "fuel" {
+    let c = cases();
+    let text = pathological_text();
+    // A first search builds the DFA states it reaches; `first-search` holds
+    // that, and each region after it a search that finds them built.
+    measure("re/first-search", || {
+        count_matches(&c.literal, &INPUT);
+        count_matches(&c.literal_ignore_case, &INPUT);
+        count_matches(&c.email, &INPUT);
+        count_matches(&c.uri, &INPUT);
+        sum_hours(&c.timestamp, &INPUT);
+        c.pathological.is_match(&text);
+    });
+    measure("re/literal", || count_matches(&c.literal, &INPUT));
+    measure("re/literal-find", || count_finds(&INPUT, &NEEDLE));
+    measure("re/literal-ignore-case", || count_matches(&c.literal_ignore_case, &INPUT));
+    measure("re/email", || count_matches(&c.email, &INPUT));
+    measure("re/uri", || count_matches(&c.uri, &INPUT));
+    measure("re/timestamp-captures", || sum_hours(&c.timestamp, &INPUT));
+    measure("re/pathological", || c.pathological.is_match(&text));
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    let c = cases();
+    check(&c);
+    let mut b = Benchmark { name: "re (Wado)", input_size: Option::Some(INPUT.len()) };
+    b.run("literal", || count_matches(&c.literal, &INPUT));
+    b.run("literal-find", || count_finds(&INPUT, &NEEDLE));
+    b.run("literal-ignore-case", || count_matches(&c.literal_ignore_case, &INPUT));
+    b.run("email", || count_matches(&c.email, &INPUT));
+    b.run("uri", || count_matches(&c.uri, &INPUT));
+    b.run("timestamp-captures", || sum_hours(&c.timestamp, &INPUT));
+
+    let text = pathological_text();
+    b.input_size = Option::Some(text.len());
+    b.run("pathological", || c.pathological.is_match(&text));
+}

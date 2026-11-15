@@ -5,7 +5,7 @@ wado() {
     if [ -n "${WADO_BIN:-}" ]; then
         "$WADO_BIN" "$@"
     else
-        cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- "$@"
+        cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- "$@"
     fi
 }
 

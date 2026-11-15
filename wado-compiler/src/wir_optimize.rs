@@ -194,7 +194,7 @@ fn optimize_scoped(
         wir_pass(scope, "run_peephole", module, profiler, |m| {
             let types = &m.types;
             for func in &mut m.functions {
-                let locals = func.declared_locals();
+                let locals = func.typed_locals(types);
                 if let Some(body) = &mut func.body {
                     let null = nullability::Nullability::new(&locals);
                     run_peephole(body, &null, types);
