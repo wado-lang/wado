@@ -1,7 +1,8 @@
 // A call in a cold arm forgets every field, even one its callee never writes.
 // The cold call here grows the `List`s, writing only their `repr`, yet `b.tag`
 // and its `used` load again after it: keeping them live across the call would
-// cost the hot path a callee-saved register to spare one reload.
+// cost the hot path a callee-saved register to spare one reload. `b` is a
+// parameter because `sroa` would split a local one into its fields.
 
 struct Rows {
     tag: List<i32>,
@@ -20,15 +21,15 @@ impl Rows {
     }
 }
 
-fn fill(n: i32) -> Rows {
-    let mut b = Rows { tag: [], id: [] };
+#[inline("never")]
+fn fill(b: &mut Rows, n: i32) {
     b.push_row(n, n * 2);
     b.push_row(n + 1, n * 3);
-    return b;
 }
 
 export fn run() {
-    let b = fill(builtin::black_box(10));
+    let mut b = Rows { tag: [], id: [] };
+    fill(&mut b, builtin::black_box(10));
     assert b.tag.len() == 2 && b.id[1] == 30;
 }
 
@@ -36,6 +37,6 @@ __DATA__
 {
     "stdout": "",
     "wir_pass": {"O2": ["wir/reuse_struct_loads"]},
-    "wir_scope": "wir_reuse_struct_load_across_call.wado/run",
-    "wir_expect:O2": ["(b_{}.tag).used;"]
+    "wir_scope": "wir_reuse_struct_load_across_call.wado/fill",
+    "wir_expect:O2": ["= local.tee $load_{}(b.tag).used;"]
 }
