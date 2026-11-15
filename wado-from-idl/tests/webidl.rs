@@ -195,13 +195,13 @@ fn an_interface_is_an_unrestricted_resource_with_its_own_cm_interface() {
     let (code, _) = chain().generate();
     assert!(
         code.contains(
-            "#[cm(\"wado-lang:web/event-target\", linearity = \"unrestricted\", classes = \"0..=3\")]\npub resource EventTarget {"
+            "#[cm(\"wado-lang:web/event-target\", linearity = \"unrestricted\", repr = \"externref\", classes = \"0..=3\")]\npub resource EventTarget {"
         ),
         "{code}"
     );
     assert!(
         code.contains(
-            "#[cm(\"wado-lang:web/node\", linearity = \"unrestricted\", classes = \"1..=2\")]\npub resource Node extends EventTarget {"
+            "#[cm(\"wado-lang:web/node\", linearity = \"unrestricted\", repr = \"externref\", classes = \"1..=2\")]\npub resource Node extends EventTarget {"
         ),
         "{code}"
     );
@@ -224,7 +224,7 @@ fn classes_number_the_inheritance_forest_in_pre_order() {
     ] {
         assert!(
             code.contains(&format!(
-                "#[cm(\"wado-lang:web/{resource}\", linearity = \"unrestricted\", classes = \"{classes}\")]"
+                "#[cm(\"wado-lang:web/{resource}\", linearity = \"unrestricted\", repr = \"externref\", classes = \"{classes}\")]"
             )),
             "{resource} should carry {classes}: {code}"
         );

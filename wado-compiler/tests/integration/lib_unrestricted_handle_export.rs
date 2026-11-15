@@ -18,7 +18,7 @@ const LIB_WORLD_FQ: &str = "test:handles/handles@0.1.0";
 const TIMEOUT_MS: u64 = 5_000;
 
 const SOURCE: &str = r#"
-#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted", classes = "0..=1")]
+#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
 pub resource Node {}
 
 export fn make(x: f64) -> Node {

@@ -14,7 +14,7 @@ use crate::ast;
 use crate::ast::{
     AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericType, InterfaceDecl, Item,
     NamedType, NamespacedGenericType, Type, UseItem, cm_function_path, cm_import_of,
-    declares_unrestricted, world_import_of,
+    declares_extern_handle, world_import_of,
 };
 use crate::attribute::CM_PARAMS;
 use crate::canonical::{CmDecl, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
@@ -2142,7 +2142,7 @@ impl CmInterfaceRegistry {
                 // An unrestricted resource is erased at the boundary, which sees
                 // the universal handle, a copyable `f64`, so it registers as a
                 // newtype and every `own`/`borrow` path passes it by.
-                if declares_unrestricted(&resource.attrs) {
+                if declares_extern_handle(&resource.attrs) {
                     self.unrestricted_resources
                         .insert((source_interface.clone(), resource.name.clone()), cm_name);
                     register_unique(
@@ -5161,7 +5161,7 @@ mod tests {
         let registry = registry_from(
             "dom.wado",
             r#"
-            #[cm("wado-lang:web/handle", linearity = "unrestricted")]
+            #[cm("wado-lang:web/handle", linearity = "unrestricted", repr = "externref")]
             pub resource Handle {
                 #[cm("wado-lang:web/handle#sibling")]
                 #[cm_params("self", "other")]

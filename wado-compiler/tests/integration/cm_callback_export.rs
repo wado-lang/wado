@@ -18,7 +18,7 @@ use crate::common::{
 const DECLARATIONS: &str = r#"
 use { MonotonicClock } from "wasi:clocks";
 
-#[cm("example:demo/target", linearity = "unrestricted", classes = "0..=0")]
+#[cm("example:demo/target", linearity = "unrestricted", repr = "externref", classes = "0..=0")]
 resource Target {
     #[cm("example:demo/target#listen")]
     #[cm_params("self", "listener")]

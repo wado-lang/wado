@@ -211,7 +211,7 @@ impl WadoCodeGenerator {
     fn write_resource(&mut self, resource: &WadoResource) {
         self.write_doc_comment(resource.doc_comment.as_ref());
         let linearity = if resource.unrestricted {
-            ", linearity = \"unrestricted\""
+            ", linearity = \"unrestricted\", repr = \"externref\""
         } else {
             ""
         };

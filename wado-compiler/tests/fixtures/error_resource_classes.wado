@@ -1,28 +1,28 @@
 // A class range numbers a resource and everything that extends it, so a child's
 // range sits past its parent's own class and inside the parent's range, and no
 // two siblings share a class. An `extends` tree is numbered whole or not at all.
-#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted", classes = "0..=3")]
+#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted", repr = "externref", classes = "0..=3")]
 resource EventTarget {}
 
-#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted", classes = "1..=2")]
+#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted", repr = "externref", classes = "1..=2")]
 resource Node extends EventTarget {}
 
-#[cm("wasi:demo/events@0.1.0#window", linearity = "unrestricted", classes = "2..=3")]
+#[cm("wasi:demo/events@0.1.0#window", linearity = "unrestricted", repr = "externref", classes = "2..=3")]
 resource Window extends EventTarget {}
 
-#[cm("wasi:demo/events@0.1.0#element", linearity = "unrestricted", classes = "1..=1")]
+#[cm("wasi:demo/events@0.1.0#element", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
 resource Element extends Node {}
 
-#[cm("wasi:demo/events@0.1.0#text", linearity = "unrestricted")]
+#[cm("wasi:demo/events@0.1.0#text", linearity = "unrestricted", repr = "externref")]
 resource Text extends Node {}
 
-#[cm("wasi:demo/events@0.1.0#other", linearity = "unrestricted", classes = "0..=1")]
+#[cm("wasi:demo/events@0.1.0#other", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
 resource Other {}
 
-#[cm("wasi:demo/events@0.1.0#below", linearity = "unrestricted", classes = "1..=1")]
+#[cm("wasi:demo/events@0.1.0#below", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
 resource Below extends Other {}
 
-#[cm("wasi:demo/events@0.1.0#past", linearity = "unrestricted", classes = "5..=5")]
+#[cm("wasi:demo/events@0.1.0#past", linearity = "unrestricted", repr = "externref", classes = "5..=5")]
 resource Past extends Other {}
 
 export fn run() {}

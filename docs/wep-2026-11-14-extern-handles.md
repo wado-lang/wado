@@ -116,8 +116,9 @@ Everything below follows from `repr`, and nothing from `linearity`.
   `linearity = "unrestricted"` before. One Wasm value for a whole tree is what
   makes an upcast free.
 - A resource without `repr` is represented as the Component Model represents
-  it, so `linearity = "unrestricted"` alone stays available to a copyable token
-  that crosses as a canonical ABI value.
+  it, which is an owned handle. `linearity = "unrestricted"` alone therefore
+  names no representation and is an error, until a copyable canonical ABI
+  token gives it one (see [Known gaps](#known-gaps)).
 
 ### An extern handle is a nullable `externref`
 
@@ -348,7 +349,7 @@ no number of its own, and giving it one is the last step of the roadmap.
 
 Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
 
-- [ ] `repr = "externref"` on `#[cm]`, validated beside `linearity`, `extends` and
+- [x] `repr = "externref"` on `#[cm]`, validated beside `linearity`, `extends` and
   `classes`, and declared by `wado-from-idl` on every resource of the slice
 - [ ] The representation: an extern handle is `(ref null extern)` in
   the guest, `Option<R>` is the nullable reference, and the `f64` cast is gone
@@ -408,10 +409,9 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
   import, since no other host has a reference to give.
 - A component that imports another component's extern handle has no path: the
   handle does not cross a component boundary.
-- `linearity = "unrestricted"` without `repr` has no consumer once the web
-  bindings declare `repr = "externref"`. The `f64` handle it means today is
-  removed with the table, and what a copyable canonical ABI token such as
-  `Waitable` needs from it is undecided.
+- `linearity = "unrestricted"` without `repr` is rejected: the web bindings were
+  its only consumer. What a copyable canonical ABI token such as `Waitable`
+  needs from it is undecided.
 
 ## Supersedes
 

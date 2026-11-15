@@ -345,7 +345,7 @@ fn full_scope_reconstructs_resource_methods_and_reparses() {
 /// interface the host calls it back through, which a full scope declares.
 #[test]
 fn a_callback_exports_the_interface_the_host_calls_it_back_through() {
-    let source = "#[cm(\"example:demo/target\", linearity = \"unrestricted\", classes = \"0..=0\")]\n\
+    let source = "#[cm(\"example:demo/target\", linearity = \"unrestricted\", repr = \"externref\", classes = \"0..=0\")]\n\
          resource Target {\n\
              #[cm(\"example:demo/target#listen\")]\n\
              #[cm_params(\"self\", \"listener\")]\n\
@@ -371,7 +371,7 @@ fn a_callback_exports_the_interface_the_host_calls_it_back_through() {
 #[test]
 fn full_scope_reconstructs_an_import_the_program_declares() {
     let text = emit_scope(
-        "#[cm(\"wasi:demo/events@0.1.0#event-target\", linearity = \"unrestricted\")]\n\
+        "#[cm(\"wasi:demo/events@0.1.0#event-target\", linearity = \"unrestricted\", repr = \"externref\")]\n\
          resource EventTarget {\n\
              #[cm(\"wasi:demo/events@0.1.0#tag\")]\n\
              #[cm_params(\"self\")]\n\

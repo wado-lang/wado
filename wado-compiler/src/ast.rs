@@ -2028,11 +2028,16 @@ impl CmResourceLinearity {
     }
 }
 
-/// Whether these attributes declare `#[cm(..., linearity = "unrestricted")]`.
-pub fn declares_unrestricted(attrs: &[Attribute]) -> bool {
+/// The one representation `#[cm(..., repr = "...")]` names: a Wasm `externref`,
+/// which the collector reclaims.
+pub const EXTERNREF_REPR: &str = "externref";
+
+/// Whether these attributes declare `#[cm(..., repr = "externref")]`, which the
+/// parser admits only beside `linearity = "unrestricted"`.
+pub fn declares_extern_handle(attrs: &[Attribute]) -> bool {
     attrs
         .iter()
-        .any(|a| a.cm_resource_linearity() == Some(CmResourceLinearity::Unrestricted))
+        .any(|a| a.name == CM && a.kv_value("repr") == Some(EXTERNREF_REPR))
 }
 
 /// The class numbers `#[cm(..., classes = "lo..=hi")]` gives a resource's

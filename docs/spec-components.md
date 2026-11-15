@@ -123,7 +123,7 @@ included).
 <!-- {"fixture":"spec_functions_cm_callback.wado"} -->
 
 ```wado
-#[cm("example:demo/target", linearity = "unrestricted")]
+#[cm("example:demo/target", linearity = "unrestricted", repr = "externref")]
 resource Target {
     #[cm("example:demo/target#listen")]
     #[cm_params("self", "listener")]
@@ -419,11 +419,15 @@ an operation.
 
 A `#[cm(...)]` resource may declare what may be done with its handle: `linearity = "affine"` or `linearity = "unrestricted"`. Omitting the field reads as `"affine"`, and a resource without `#[cm(...)]` is affine.
 
+`repr = "externref"` declares how the handle is represented: one reference to a host object, which the collector reclaims. Nothing runs when such a handle dies, so it requires `linearity = "unrestricted"`. An unrestricted resource has no representation of its own, so it requires `repr = "externref"` in turn.
+
+> Not yet implemented: an unrestricted handle is still the `f64` the paragraphs below describe. [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md) replaces it.
+
 An affine resource is move-only and carries a drop obligation (see [Affine Types](./spec-affine.md)). An unrestricted one owns nothing, so it is an ordinary copyable value. Assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
 
 The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain `f64` the host interprets (see [Handle Encoding](#handle-encoding)). `as` converts an unrestricted handle to or from `f64`, keeping every bit, or upcasts it to a resource it extends. No other cast accepts one, so an affine resource and an unrestricted one never convert into each other.
 
-An unrestricted resource is not a Component Model `resource`. Its operations are plain CM functions that take the handle as an ordinary parameter, so a `#[cm(...)]` name written in the `[constructor]T`, `[method]T.m` or `[static]T.m` form is an error on one. `classes = "..."` (see [Resource Inheritance](#resource-inheritance)) is accepted only beside `linearity = "unrestricted"`.
+An unrestricted resource is not a Component Model `resource`. Its operations are plain CM functions that take the handle as an ordinary parameter, so a `#[cm(...)]` name written in the `[constructor]T`, `[method]T.m` or `[static]T.m` form is an error on one. `classes = "..."` (see [Resource Inheritance](#resource-inheritance)) is accepted only beside `repr = "externref"`.
 
 ### Resource Ownership
 
@@ -441,18 +445,18 @@ Rationale: [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md).
 
 ### Resource Inheritance
 
-`resource Child extends Parent` declares that a child handle is usable wherever the parent is. The clause stands between the resource's name and its body, and names one resource as the parent. Both resources must declare `linearity = "unrestricted"`, because an upcast copies the handle and an affine one may not be copied. Single inheritance only, and a cycle is an error.
+`resource Child extends Parent` declares that a child handle is usable wherever the parent is. The clause stands between the resource's name and its body, and names one resource as the parent. Both resources must declare `repr = "externref"`, because an upcast copies the handle and an affine one may not be copied. Single inheritance only, and a cycle is an error.
 
 <!-- {"fixture":"spec_components_resource_extends.wado"} -->
 
 ```wado
-#[cm("example:ui/target", linearity = "unrestricted", classes = "0..=1")]
+#[cm("example:ui/target", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
 resource Target {
     #[cm("example:ui/target#add-listener")]
     fn add_listener(&self, kind: String);
 }
 
-#[cm("example:ui/widget", linearity = "unrestricted", classes = "1..=1")]
+#[cm("example:ui/widget", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
 resource Widget extends Target {
     #[cm("example:ui/widget#label")]
     fn label(&self) -> Option<String>;
