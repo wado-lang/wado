@@ -2,6 +2,7 @@
 
 use { Node } from "./ast.wado";
 use { Hole, PatternError, Syntax, parse } from "./parse.wado";
+use { backtrack, fits } from "./backtrack.wado";
 use { Dfa, runs } from "./dfa.wado";
 use { Cache, Goal, Within, search } from "./pike.wado";
 use { print } from "./print.wado";
@@ -136,6 +137,9 @@ impl Regex {
                 if !self.lazy.off {
                     if !groups || self.program.captures == 2 {
                         return Some([from, end]);
+                    }
+                    if fits(&self.program, from, end) {
+                        return Some(backtrack(&self.program, cache, text, from, end));
                     }
                     return search(&self.program, cache, text, from, Within::Span(end), Goal::Groups);
                 }

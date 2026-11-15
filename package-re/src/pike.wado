@@ -52,7 +52,11 @@ internal struct Cache {
     current: Threads,
     next: Threads,
     /// Every slot unset.
-    fresh: List<i32>,
+    internal fresh: List<i32>,
+    /// The backtracker's: a bit for each state at each position, and the
+    /// threads it has yet to run.
+    internal visited: List<i32>,
+    internal stack: List<i32>,
 }
 
 impl Cache {
@@ -66,6 +70,8 @@ impl Cache {
             current: Threads::new(size),
             next: Threads::new(size),
             fresh,
+            visited: [],
+            stack: [],
         };
     }
 }
@@ -202,7 +208,7 @@ fn add(program: &Program, text: StrSlice, to: &mut Threads, pc: i32, slots: List
     }
 }
 
-fn holds(look: Look, text: StrSlice, pos: i32) -> bool {
+internal fn holds(look: Look, text: StrSlice, pos: i32) -> bool {
     return match look {
         StartText => pos == 0,
         EndText => pos == text.len(),
