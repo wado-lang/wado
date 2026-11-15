@@ -624,6 +624,15 @@ Architectural work is tracked in
   every site decides (`$hole_fmt`), or one element of a returned tuple
   (`default_slot`).
 - [ ] An array literal's length as a known constant.
+- [ ] Declaring final every struct type no other type extends. wasmtime tests a
+  cast to a final type with one compare, and calls out for any other, which
+  costs the function a frame even when the cast succeeds.
+- [ ] Refining a field to the most specific type every write stores. A closure
+  kept in a field typed `structref` is cast back before each call.
+- [ ] Dropping the code pointer from a closure no call reaches indirectly.
+- [ ] Merging functions that differ only in a constant, a type index or a
+  callee, such as the `next_field<T>` of each derived `Deserialize` or the
+  clones `param_spec` makes on one constant.
 
 ## Tried and Found Ineffective
 
