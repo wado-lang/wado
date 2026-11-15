@@ -1,16 +1,11 @@
-//! What the evaluation-set tools share: running `git`, the pull requests merged
-//! into `main`, and the census they exchange as JSON.
+//! What the evaluation-set tools share: the pull requests merged into `main`,
+//! what one of them changed, and the census they exchange as JSON.
 
-use { env, Environment } from "core:cli";
-use fs from "core:fs";
-use { Preopens } from "core:fs";
-use { Command, Process, ProcessError } from "core:process";
-use { Deserialize } from "core:serde";
-use { from_string } from "core:json";
-use { Client } from "wasi:http";
-use { ask, Usage } from "../src/anthropic.wado";
+use { Process } from "core:process";
+use { Usage } from "../src/anthropic.wado";
 use { Call } from "../src/agent.wado";
-use { Runner } from "../src/tools.wado";
+use { git, paths_between, diff_between } from "../src/git.wado";
+use { Finding } from "../src/review.wado";
 
 /// One pull request, as the merge commit that landed it on `main` records it.
 pub struct Merge {
@@ -124,12 +119,6 @@ pub struct Run {
     pub error: Option<String> = null,
 }
 
-pub struct Finding {
-    pub file: String,
-    pub summary: String,
-    pub detail: String,
-}
-
 pub struct Grade {
     pub hit: bool,
     pub finding: i32,
@@ -143,238 +132,14 @@ impl CheckedPair {
     }
 }
 
-/// `git`'s stdout, or `null` when it exits other than 0.
-pub fn try_git(args: List<String>) -> Option<String> with Process {
-    return match run_git(args) {
-        Ok(out) => Some(out),
-        Err(_) => null,
-    };
-}
-
-pub fn git(args: List<String>) -> String with Process {
-    return match run_git(args) {
-        Ok(out) => out,
-        Err(e) => panic(`${e}`),
-    };
-}
-
-fn run_git(args: List<String>) -> Result<String, ProcessError> with Process {
-    // Unquoted, a non-ASCII path reads back as the name `git` takes.
-    let mut full = ["-c", "core.quotePath=false"] as List<String>;
-    full.extend(&args);
-    return Command::new("git").args(full).capture_limit(i32::MAX).read().map(|out| String::from_utf8_lossy(out));
-}
-
-/// The paths `.gitattributes` marked generated or vendored at `rev`.
-pub fn generated(rev: &String, paths: &List<String>) -> List<String> with Process {
-    let mut marked: List<String> = [];
-    if paths.is_empty() {
-        return marked;
-    }
-    let mut check = ["check-attr", "--source", *rev, "linguist-generated", "linguist-vendored", "--"] as List<String>;
-    check.extend(paths);
-    for let line of git(check).lines() {
-        if !(line.ends_with(": set") || line.ends_with(": true")) {
-            continue;
-        }
-        if let Some(at) = line.find(": linguist-") {
-            marked.push(line.slice(0, at).to_string());
-        }
-    }
-    return marked;
-}
-
-/// A checkout of `sha` for a reviewer to read, and its directory. It is a
-/// worktree, so it shares the repository's objects, later commits included:
-/// only the tools' refusal to leave the tree keeps them out of reach. A
-/// symbolic link is checked out as a file holding its target, so no path
-/// resolves out of the tree through one. A tree an interrupted run left is
-/// checked out again rather than trusted.
-pub fn snapshot(sha: &String) -> String with Process {
-    let root = `scratchpad/eddy-trees/${*sha}`;
-    try_git(["worktree", "remove", "--force", root]);
-    tree_git(&".", ["worktree", "add", "--force", "--detach", root, *sha]);
-    return root;
-}
-
-/// `git` run in `dir`, a checkout a reviewer reaches, with every symbolic link
-/// kept a file: a command that rewrites the tree, such as `reset --hard`,
-/// would otherwise make it a link again.
-fn tree_git(dir: &String, args: List<String>) -> String with Process {
-    let mut full = ["-c", "core.symlinks=false", "-C", *dir] as List<String>;
-    full.extend(&args);
-    return git(full);
-}
-
-/// Checks out in the snapshot at `root` the submodules its `Cargo.toml` builds
-/// from, at the commits the tree records, so `cargo` builds it. Each is a
-/// worktree of the repository's own checkout of that submodule, which fetches
-/// a commit it lacks.
-pub fn add_build_submodules(root: &String) with (Process, Preopens) {
-    for let [path, sha] of build_submodules(root) {
-        assert fs::exists(fs::join(path, ".git")), `the submodule must be checked out: git submodule update --init ${path}`;
-        if try_git(["-C", path, "cat-file", "-e", `${sha}^{commit}`]) matches { None } {
-            git(["-C", path, "fetch", "--quiet", "--depth", "1", "origin", sha]);
-        }
-        tree_git(&path, ["worktree", "add", "--force", "--detach", from_submodule(&path, root), sha]);
-    }
-}
-
-/// The submodules `root`'s `Cargo.toml` names by path, as path and the commit
-/// HEAD records. Both are read from HEAD, so a reviewer's edit to the manifest
-/// or a commit checked out in a submodule changes nothing.
-fn build_submodules(root: &String) -> List<[String, String]> with Process {
-    let manifest = git(["-C", *root, "show", "HEAD:Cargo.toml"]);
-    let mut found: List<[String, String]> = [];
-    // A line is a status flag, a commit, and the path: `-<sha> vendor/x`.
-    for let line of git(["-C", *root, "submodule", "status"]).lines() {
-        let path = line.slice(1, line.len()).split(" ").collect()[1].to_string();
-        // A path is matched to its end, or `vendor/wasm` would match
-        // `vendor/wasmtime/...` too.
-        if manifest.contains(`${path}/`) || manifest.contains(`${path}"`) {
-            let recorded = git(["-C", *root, "rev-parse", `HEAD:${path}`]).trim().to_string();
-            found.push([path, recorded]);
-        }
-    }
-    return found;
-}
-
-/// `path` under `root`, as a path from the submodule checkout at `path`.
-fn from_submodule(path: &String, root: &String) -> String {
-    let up = "../".repeat(path.split("/").count());
-    return `${up}${*root}/${*path}`;
-}
-
-/// How Run builds a snapshot: with the toolchain the user's homes hold, into
-/// one target directory every snapshot shares.
-pub fn home_runner() -> Runner with Environment {
-    let home = env("HOME").expect("rustup's default homes are under HOME");
-    return Runner {
-        target_dir: "scratchpad/eddy-target",
-        cargo_home: env("CARGO_HOME").unwrap_or(`${home}/.cargo`),
-        rustup_home: env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`),
-    };
-}
-
-/// The snapshot of `sha` at `root`, its submodules included, back as checked
-/// out: a run may have written, committed or checked out anything in it.
-pub fn reset_snapshot(root: &String, sha: &String) with Process {
-    reset_checkout(root, sha);
-    // Read once the tree is back at `sha`, so HEAD records what it checked out.
-    for let [path, recorded] of build_submodules(root) {
-        reset_checkout(&`${*root}/${path}`, &recorded);
-    }
-}
-
-fn reset_checkout(dir: &String, commit: &String) with Process {
-    tree_git(dir, ["reset", "--hard", "--quiet", *commit]);
-    tree_git(dir, ["clean", "-fdx", "--quiet"]);
-}
-
-pub fn drop_snapshot(root: &String) with (Process, Preopens) {
-    for let [path, _] of build_submodules(root) {
-        // Absent unless Run checked it out.
-        try_git(["-C", path, "worktree", "remove", "--force", from_submodule(&path, root)]);
-    }
-    git(["worktree", "remove", "--force", *root]);
-    fs::remove_dir_all(index_dir(root)).unwrap();
-}
-
-fn index_dir(root: &String) -> String {
-    return `${*root}-index`;
-}
-
-/// SCIP indexes of the tree at `root`, outside it so Glob never lists them:
-/// its Rust by rust-analyzer and its Wado by `wado`, the binary at
-/// `wado_path`. The Wado index reads the old tree with today's compiler, so a
-/// file that no longer compiles indexes only what still resolves.
-pub fn index(root: &String, wado_path: &String) -> List<String> with (Process, Environment, Preopens) {
-    let dir = index_dir(root);
-    let rust = `${dir}/rust.scip`;
-    let wado = `${dir}/wado.scip`;
-    fs::create_dir_all(&dir).unwrap();
-    // A child gets a private HOME, where rustup would find no toolchain.
-    let homes = home_runner();
-    let analyzer = Command::new("rust-analyzer").args(["scip", *root, "--output", rust, "--exclude-vendored-libraries"]).env(
-        "RUSTUP_HOME",
-        homes.rustup_home,
-    ).env("CARGO_HOME", homes.cargo_home);
-    succeed(&analyzer);
-    // The generated and fixture tests are most of the tree's Wado and use the
-    // stdlib thousands of times over, which would bury a reference a reviewer
-    // wants.
-    succeed(&Command::new(*wado_path).args([
-        "query", "scip", "--output", wado, "--exclude", "wado-compiler/tests/**", "--exclude",
-        "package-gale/tests/generated/**", *root,
-    ]));
-    return [rust, wado];
-}
-
-fn succeed(command: &Command) with Process {
-    let out = command.capture_limit(i32::MAX).output().unwrap();
-    assert out.status == Exited(0), `${String::from_utf8_lossy(out.stderr)}`;
-}
-
-/// The paths merge `sha` changed, both sides of a rename: a diff given only
-/// the new path shows the renamed file as wholly added.
+/// The paths merge `sha` changed.
 pub fn changed_paths(sha: &String) -> List<String> with Process {
-    let mut paths: List<String> = [];
-    for let f of git(["diff", "--name-only", "--no-renames", `${*sha}^1`, *sha]).lines() {
-        paths.push(f.to_string());
-    }
-    return paths;
+    return paths_between(&`${*sha}^1`, sha);
 }
 
-/// What merge `sha` changed in `paths`, generated, vendored and Markdown files
-/// left out. A diff past `limit` bytes is an error rather than clipped: the
-/// part left out may be the one that matters.
+/// What merge `sha` changed in `paths`, as a reviewer reads it.
 pub fn source_diff(sha: &String, paths: &List<String>, what: String, limit: i32) -> Result<String, String> with Process {
-    let base = `${*sha}^1`;
-    let gen = generated(&base, paths);
-    let mut diff_args = ["diff", base, *sha, "--"] as List<String>;
-    let mut any = false;
-    for let p of paths {
-        if !gen.contains_str(p) && !p.ends_with(".md") {
-            diff_args.push(*p);
-            any = true;
-        }
-    }
-    // With no path, `git diff` would show the whole merge.
-    let diff = if any { git(diff_args) } else { "" };
-    if diff.is_empty() {
-        return Err(`the ${what} diff is empty`);
-    }
-    if diff.len() > limit {
-        return Err(`the ${what} diff is ${diff.len()} bytes, over ${limit}`);
-    }
-    return Ok(diff);
-}
-
-/// `model`'s reply to `user`, read as the one JSON object it holds.
-pub fn ask_json<T: Deserialize>(
-    api_key: &String,
-    model: String,
-    system: String,
-    user: String,
-    max_tokens: i32,
-) -> Result<T, String> with Client {
-    let text = ask(*api_key, model, system, user, max_tokens)?;
-    return json_object::<T>(&text);
-}
-
-/// The one JSON object in a model's reply, from its first `{` to its last `}`.
-pub fn json_object<T: Deserialize>(text: &String) -> Result<T, String> {
-    if let [Some(start), Some(end)] = [
-        text.find("{"),
-        text.rfind("}"),
-    ]
-        && start < end {
-        return match from_string::<T, String>(text.substr_bytes(start, end + 1)) {
-            Ok(v) => Ok(v),
-            Err(e) => Err(`unparsed: ${e:?}: ${*text}`),
-        };
-    }
-    return Err(`unparsed: ${*text}`);
+    return diff_between(&`${*sha}^1`, sha, paths, what, limit);
 }
 
 /// The pull requests merged into `origin/main`, oldest first. A merge's

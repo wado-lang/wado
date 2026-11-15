@@ -1,7 +1,116 @@
-//! Eddy's CLI — a `wasi:cli/command` program.
+//! Eddy's CLI: reviews what a branch changes, prints the findings as JSON, and
+//! adds the review to the record of its head commit.
+//!
+//! The reviewer reads the diff from the merge base of `--base` (`origin/main`)
+//! to `--head` (`HEAD`), and a checkout of the head under `scratchpad/`,
+//! through Read, Grep and Glob. `--run` adds Write and Run, which build that
+//! checkout with `cargo`; it needs `--process-read` on `~/.cargo` and
+//! `~/.rustup`. The record is `<--reviews>/<head>.json`, one entry per review.
+//!
+//! Run it from the repository root, every commit to review made. The reviewer
+//! is a build input: `CLAUDE_MODEL` in the environment, or
+//! `-D CLAUDE_MODEL=...`.
+//!
+//! ```sh
+//! CLAUDE_API_KEY=... wado run package-eddy/src/main.wado -- --run
+//! ```
 
-use { println, Stdout } from "core:cli";
+use { from_env } from "core:args";
+use { env, eprintln, println, exit_error, Environment, Exit, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { to_bytes_pretty, from_string } from "core:json";
+use { Process } from "core:process";
+use { Deserialize } from "core:serde";
+use { Client } from "wasi:http";
+use { git, paths_between, diff_between } from "./git.wado";
+use { change, review, Finding, Reviewed } from "./review.wado";
+use { snapshot, add_build_submodules, home_runner, drop_snapshot } from "./snapshot.wado";
+use { Runner, Workspace } from "./tools.wado";
 
-export fn run() with Stdout {
-    println("eddy: a code review bot (not implemented yet)");
+#[param(from_env = "CLAUDE_MODEL")]
+global CLAUDE_MODEL: String = "claude-opus-5-5";
+
+#[param(name = "diff_limit")]
+global LIMIT: i32 = 2_000_000;
+
+struct Options {
+    base: String = "origin/main",
+    head: String = "HEAD",
+    run: bool = false,
+    max_turns: i32 = 40,
+    reviews: String = "package-eddy/reviews",
+}
+impl Deserialize for Options;
+
+/// Every review of one head commit.
+struct Record {
+    head: String,
+    base: String,
+    reviews: List<Attempt>,
+}
+
+struct Attempt {
+    reviewer: String,
+    run: bool,
+    max_turns: i32,
+    result: Reviewed,
+}
+
+struct Report {
+    findings: List<Finding>,
+}
+
+export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Client) {
+    let options = match from_env::<Options>() {
+        Ok(options) => options,
+        Err(e) => fail(`${e}\nusage: eddy [--base <rev>] [--head <rev>] [--run] [--max-turns <n>] [--reviews <dir>]`),
+    };
+    let Some(api_key) = env("CLAUDE_API_KEY") else {
+        fail("CLAUDE_API_KEY is not set");
+    };
+    let head = git(["rev-parse", "--verify", `${options.head}^{commit}`]).trim().to_string();
+    let base = git(["merge-base", options.base, head]).trim().to_string();
+    let diff = match diff_between(&base, &head, &paths_between(&base, &head), "branch", LIMIT) {
+        Ok(diff) => diff,
+        Err(e) => fail(e),
+    };
+    // Nothing else says what the change means to do before it has a pull
+    // request to describe it.
+    let commits = git(["log", "--reverse", "--no-merges", "--format=%B", `${base}..${head}`]);
+    let heading = `PULL REQUEST, not opened yet. Its commit messages, oldest first:
+
+${commits.trim()}`;
+
+    let root = snapshot(&head);
+    let runner: Option<Runner> = if options.run {
+        add_build_submodules(&root);
+        Some(home_runner());
+    } else {
+        null
+    };
+    let ws: Option<Workspace> = Some(Workspace { root, runner });
+    let result = review(&api_key, CLAUDE_MODEL, &change(&heading, &diff), &ws, options.max_turns);
+    drop_snapshot(&root);
+
+    let path = fs::join(&options.reviews, `${head}.json`);
+    let mut record = match fs::read_to_string(&path) {
+        Ok(text) => from_string::<Record, String>(text).unwrap(),
+        Err(e) && e.kind matches { NotFound } => Record { head, base, reviews: [] },
+        Err(e) => fail(`${e}`),
+    };
+    record.reviews.push(Attempt { reviewer: CLAUDE_MODEL, run: options.run, max_turns: options.max_turns, result });
+    fs::create_dir_all(&options.reviews).unwrap();
+    fs::write(&path, &to_bytes_pretty(&record).unwrap()).unwrap();
+    eprintln(`recorded in ${path}: ${result.turns} turns, ${result.calls.len()} tool calls`);
+
+    if let Some(e) = &result.error {
+        fail(*e);
+    }
+    println(String::from_utf8_lossy(to_bytes_pretty(&Report { findings: result.findings }).unwrap()));
+}
+
+fn fail(message: String) -> ! with (Stderr, Exit) {
+    eprintln(`eddy: ${message}`);
+    exit_error();
 }

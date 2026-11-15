@@ -4,9 +4,9 @@ The tools a reviewer agent reads and checks a change with. A checked item is
 built; an unchecked one is wanted. The reasons come from the evaluation set in
 [`eval/`](../eval/README.md).
 
-Each tool sees the repository as it stood once the change merged, and nothing
-later. In the evaluation that tree is a `git worktree` of the merge, so no
-answer leaks from the fix that came after.
+Each tool sees the repository as the change leaves it, and nothing later. That
+tree is a `git worktree`: of the branch's head in a review, and of the merge in
+the evaluation, so no answer leaks from the fix that came after.
 
 ## Reading
 

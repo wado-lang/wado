@@ -450,6 +450,24 @@ scripts/dev-bin.sh wado test "-${level}" -D log.level=warn wado-compiler/lib/cor
 description = "Run the Claude Code hook tests"
 run = "node --test .claude/hooks/*.test.mts"
 
+[tasks.eddy-review]
+description = "Review this branch with Eddy; arguments go to it (`--run` lets it build and run the code)"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+# A child of `wado run` may run only a system-wide program, and mise's `rg`
+# shim is ahead of `/usr/bin/rg` on PATH otherwise.
+export PATH="/usr/bin:$PATH"
+# Run builds with cargo, which would starve a test run and be starved by it.
+lock=()
+case " $* " in
+    *" --run "*) lock=(./scripts/exclusive.sh test) ;;
+esac
+"${lock[@]}" scripts/dev-bin.sh wado run \
+    --process-read "$HOME/.cargo" --process-read "$HOME/.rustup" \
+    package-eddy/src/main.wado -- "$@"
+"""
+
 # The oracle tasks run the ANTLR4 jar, so Java is installed for them alone. A
 # child the guest spawns reaches it only where `[process] read` in
 # ~/.config/wado/config.toml names mise's installs (~/.local/share/mise/installs).

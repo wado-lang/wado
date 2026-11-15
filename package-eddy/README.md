@@ -2,7 +2,27 @@
 
 Eddy is a code review bot written in Wado. It runs on the Anthropic API for
 now; later, models from several providers will review a change together,
-exchanging opinions. It is not implemented yet.
+exchanging opinions.
+
+What runs today is one reviewer over one branch, from the command line; the
+rest of the pipeline below is not implemented yet.
+
+## Reviewing a Branch
+
+From the repository root, with `CLAUDE_API_KEY` set and the branch committed:
+
+```sh
+mise run eddy-review          # the reviewer reads the diff and the tree
+mise run eddy-review --run    # it also writes tests and runs them with cargo
+```
+
+The findings go to stdout as JSON. Each run is also added to
+`reviews/<head>.json`, the record of every review of that commit, which is
+committed with the branch: outcomes are what Eddy learns from, and an outcome
+needs the finding it answers. In a Claude Code session the `eddy` skill runs
+the review and hands the findings to `code-review-response`.
+
+`src/main.wado` states the options.
 
 - [Design notes](./docs/design.md): the decisions taken, and the leanings not
   yet settled.

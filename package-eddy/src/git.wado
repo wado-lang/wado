@@ -1,0 +1,85 @@
+//! Running `git` in the repository `wado run` grants, and the diff of a change
+//! as a reviewer reads it.
+
+use { Command, Process, ProcessError } from "core:process";
+
+/// `git`'s stdout, or `null` when it exits other than 0.
+pub fn try_git(args: List<String>) -> Option<String> with Process {
+    return match run_git(args) {
+        Ok(out) => Some(out),
+        Err(_) => null,
+    };
+}
+
+pub fn git(args: List<String>) -> String with Process {
+    return match run_git(args) {
+        Ok(out) => out,
+        Err(e) => panic(`${e}`),
+    };
+}
+
+fn run_git(args: List<String>) -> Result<String, ProcessError> with Process {
+    // Unquoted, a non-ASCII path reads back as the name `git` takes.
+    let mut full = ["-c", "core.quotePath=false"] as List<String>;
+    full.extend(&args);
+    return Command::new("git").args(full).capture_limit(i32::MAX).read().map(|out| String::from_utf8_lossy(out));
+}
+
+/// The paths `.gitattributes` marked generated or vendored at `rev`.
+pub fn generated(rev: &String, paths: &List<String>) -> List<String> with Process {
+    let mut marked: List<String> = [];
+    if paths.is_empty() {
+        return marked;
+    }
+    let mut check = ["check-attr", "--source", *rev, "linguist-generated", "linguist-vendored", "--"] as List<String>;
+    check.extend(paths);
+    for let line of git(check).lines() {
+        if !(line.ends_with(": set") || line.ends_with(": true")) {
+            continue;
+        }
+        if let Some(at) = line.find(": linguist-") {
+            marked.push(line.slice(0, at).to_string());
+        }
+    }
+    return marked;
+}
+
+/// The paths that differ from `base` to `head`, both sides of a rename: a diff
+/// given only the new path shows the renamed file as wholly added.
+pub fn paths_between(base: &String, head: &String) -> List<String> with Process {
+    let mut paths: List<String> = [];
+    for let f of git(["diff", "--name-only", "--no-renames", *base, *head]).lines() {
+        paths.push(f.to_string());
+    }
+    return paths;
+}
+
+/// What changed in `paths` from `base` to `head`, generated, vendored and
+/// Markdown files left out. A diff past `limit` bytes is an error rather than
+/// clipped: the part left out may be the one that matters.
+pub fn diff_between(
+    base: &String,
+    head: &String,
+    paths: &List<String>,
+    what: String,
+    limit: i32,
+) -> Result<String, String> with Process {
+    let gen = generated(base, paths);
+    let mut diff_args = ["diff", *base, *head, "--"] as List<String>;
+    let mut any = false;
+    for let p of paths {
+        if !gen.contains_str(p) && !p.ends_with(".md") {
+            diff_args.push(*p);
+            any = true;
+        }
+    }
+    // With no path, `git diff` would show every path.
+    let diff = if any { git(diff_args) } else { "" };
+    if diff.is_empty() {
+        return Err(`the ${what} diff is empty`);
+    }
+    if diff.len() > limit {
+        return Err(`the ${what} diff is ${diff.len()} bytes, over ${limit}`);
+    }
+    return Ok(diff);
+}
