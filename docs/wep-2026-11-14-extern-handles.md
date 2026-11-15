@@ -81,6 +81,18 @@ turns a JavaScript object that is not an exported Wasm object into `ref.host`
 The host replaces the functions through jco's `instantiation` mode, which hands
 the embedder each core module and its imports before instantiating it.
 
+The handle table and `wait` were run on a core module alone, with no component
+around it, on the same two engines:
+
+| Check                                                                 | V8     | JavaScriptCore |
+| --------------------------------------------------------------------- | ------ | -------------- |
+| A list of 1000 handles crosses both ways through an exported table    | passes | passes         |
+| Cleared slots keep nothing alive: every element is collected          | passes | passes         |
+| A list copied into a guest GC array survives, and dies with the array | passes | passes         |
+| Two promises in flight are waited on in the other order               | passes | passes         |
+| The instance is re-entered while a `wait` is suspended                | passes | passes         |
+| Entering through `WebAssembly.promising`, relative to an empty call   | 42     | 7              |
+
 ## Decision
 
 ### `repr = "externref"` declares an extern handle
@@ -130,19 +142,30 @@ in linear memory, and a result that does not fit in one value still returns
 through a pointer. The host reads the memory and calls `cabi_realloc` through
 the core instance, as the canonical ABI's lowering did for it before.
 
-A handle never reaches linear memory, which cannot hold a reference. The
-canonical ABI spills there past 16 flat parameters and past one flat result,
-and those limits are its own, not Wasm's. A web import drops both where a
-handle is involved:
-
-- Its parameters never spill, however many they flatten to.
-- A result holding a handle returns as several values, which the glue returns
-  as an array. A record or a tuple with a handle in it crosses this way.
-
-A list's elements always live in linear memory, so a list of handles is the one
-shape left without a form. A signature holding one is rejected.
-
 These imports are not component imports. The emitted WIT does not list them.
+
+### A handle in memory is a slot in the handle table
+
+Linear memory cannot hold a reference, and the canonical ABI puts a value there
+in three cases: a list's elements, parameters past 16 flat values, and a result
+past one. A handle in any of them is written as an `i32`, the index of a slot
+in a table of `externref` the main module exports.
+
+- The side that sends writes each handle into a slot and the index into memory.
+  The side that receives reads the slot.
+- The guest allocates slots, as it allocates the memory beside them, and clears
+  them once it has read or the call has returned. A cleared slot holds nothing
+  alive.
+- Slots are not freed in the order they were taken: a call suspended in `wait`
+  (below) keeps its slots while another call runs.
+
+`List<Node>` therefore crosses both ways with no host call per element, and so
+does a record with a handle in it, alone or in a list. No shape is left without
+a form, and the flat limits stay the canonical ABI's.
+
+Returning a handle beside other values as several Wasm results was the
+alternative for results. It needs the limits lifted for these imports alone,
+and it leaves a list of handles unanswered.
 
 ### One component runs on every host
 
@@ -254,6 +277,47 @@ own GC struct. The registry in `core:rt` and its `u32` keys go away.
 - A listener the page drops takes its closure with it. A closure and an element
   that hold each other are collected together.
 
+### A `Promise<T>` is a handle that is waited on
+
+A WebIDL `Promise<T>` is `Promise<T>` in Wado, an extern handle to the
+JavaScript promise. The call that returns one returns at once, as a call
+returning an `AsyncCall<T>` does, and the work goes on behind it:
+
+```wado
+let pending = window.fetch("/api");   // Promise<Response>
+let response = pending.wait()?;       // Result<Response, Rejection>
+```
+
+- `wait` blocks the current task until the promise settles. It is a web import
+  the glue wraps in `WebAssembly.Suspending`, so the Wasm stack is suspended
+  and the page keeps running.
+- A rejection is an `Err`, not a trap. A failed `fetch` or a refused permission
+  is an ordinary outcome, unlike the DOM exceptions of a synchronous call.
+  `Rejection` is an extern handle to the reason, answering `name()` and
+  `message()`.
+- `wait` is an operation like any member, so a handler answers it for the
+  promises it backs.
+
+A `Promise<T>` is not an `AsyncCall<T>`. A promise cannot be cancelled, so there
+is no `cancel` and dropping one stops nothing. It is copyable, and `wait` may
+be called on each copy. It is no member of a `WaitableSet`, which waits on what
+the Component Model reports. `Promise.all` and `Promise.race` are members to
+bind like any other.
+
+### Every callback may wait
+
+A stack can be suspended only when JavaScript entered it through
+`WebAssembly.promising`. The glue enters every callback that way, so `wait`
+works in a listener as it does in `run`.
+
+A listener that waits returns to the page at its first `wait` and resumes
+later. What it does after that comes too late for the event:
+`prevent_default` after a `wait` has no effect, as in a JavaScript `async`
+listener.
+
+Whether a closure can reach `wait` is a static property of that closure, so the
+entry stays free to differ per closure without a change to any program.
+
 ### A handle is not hashable yet
 
 A handle implements no `Hash` and no `Ord`, so it keys no map. A host object has
@@ -280,6 +344,11 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
   the trapping module's functions with the glue
 - [ ] Closures cross as `externref`, called back through unlifted core exports,
   and the registry and `wado:callback/callback` are removed
+- [ ] The handle table: a handle in linear memory is a slot index, and
+  `sequence<T>` and `FrozenArray<T>` of an interface lower to `List<T>`
+- [ ] `Promise<T>` and `Rejection`: `wait` through a suspending import, every
+  callback entered through `WebAssembly.promising`, and `SurfaceDom` answering
+  `wait` for a promise it backs
 - [ ] A collection test in the jsdom run: dropped handles, dropped listeners,
   and a cycle through both heaps are collected
 - [ ] `Hash` for a handle
@@ -289,12 +358,16 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
 - No browser was measured, only V8 in Node and JavaScriptCore in Bun, both
   against jsdom. SpiderMonkey was not run at all. Collection across the two
   heaps with a browser's own DOM objects is unseen.
-- A list of handles has no crossing form, since a list's elements live in
-  linear memory. `sequence<Node>` waits on this.
-- A JavaScript import returning several values was not run. The JS API
-  specifies it, and no check here covers it.
-- `Promise<T>` has no crossing form. A `Future<T>` is a canonical ABI handle,
-  and a web import no longer passes through the canonical ABI.
+- Every callback pays for the `WebAssembly.promising` entry, whether it waits
+  or not. Its cost was measured against an empty call only (below), not in a
+  program.
+- A suspended `wait` was run on core modules alone. It was not run inside a
+  jco-transpiled component, where jco's own task bookkeeping surrounds the
+  export that waits.
+- A promise and a Component Model waitable cannot be waited on together: no
+  one wait covers a `fetch` and a `wasi:clocks` timer.
+- A callback that resumes after a `wait` runs with the handlers installed at
+  that moment, not those of its registration.
 - A callback runs outside any Component Model task when the event loop calls
   it. A synchronously lowered import works from there. An asynchronously
   lowered one was not tried.
@@ -322,7 +395,8 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
   shows the dynamic type", "Lowering", "Lifecycle" and "Known gap: the handle is
   an index, not a reference". Its language rules stand: linearity, `extends`,
   subtyping, method resolution, and narrowing as a pattern.
-- [The Web Interface for Wado](./wep-2026-04-01-web.md): "Callbacks", the handle
+- [The Web Interface for Wado](./wep-2026-04-01-web.md): "Callbacks", the
+  `Promise<T>` row of "Compound Types", the handle
   table and the transpile steps of "Browser Glue", and "Premise: the handle is a
   value, not a CM resource". Its WebIDL mapping, effect design and handler-served
   DOM stand.
