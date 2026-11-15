@@ -60,12 +60,11 @@ the two `Cast`s give `int32`.
    path's logits from onnxruntime's is recorded.
 2. [ ] Loading a tensor at a time. `load` reads the checkpoint from a source
    that yields one tensor's bytes at a time, rather than from the whole file
-   the guest holds. A range is 64 bits wide and names one of several data
-   files. A tensor reaches the device in its stored type, where today each
-   passes through the guest as a list of f32. Finished when a checkpoint
-   larger than the guest's memory, spread over several data files, loads onto
-   `WebGpuBackend` and `PjrtBackend`, and `Cpu` loads one it can hold through
-   the same source.
+   the guest holds. A range names one of several data files. A tensor reaches
+   the device in its stored type, where today each passes through the guest as
+   a list of f32. Finished when a checkpoint larger than the guest's memory,
+   spread over several data files, loads onto `WebGpuBackend` and
+   `PjrtBackend`, and `Cpu` loads one it can hold through the same source.
 3. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
    which onnx-community's `q4` exports use. gpt-oss-20b has the first alone. A
    weight stays packed on the device, read by the quantized product composite
@@ -107,6 +106,10 @@ the two `Cast`s give `int32`.
 ## Later
 
 Work the road to gpt-oss-20b does not pass. It is unordered.
+
+- [ ] A data file of 2 GiB or more. A range into a data file fits 32 bits,
+  which each of gpt-oss-20b's seven does. Finished when a tensor stored past
+  a data file's first 2 GiB loads on every device.
 
 - [ ] TPU and WebGPU at their best speed. A pass is a graph built once per
   shape class and compiled for each device: StableHLO through `core:pjrt` for
