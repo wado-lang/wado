@@ -12,6 +12,11 @@ use { Direction, Look, Program } from "./program.wado";
 /// instead, for the Pike VM to take over.
 global MAX_TRANSITIONS: i32 = 1 << 20;
 
+/// How many threads the states of a DFA may hold between them. A counted
+/// repetition makes few states of many threads each, which the bound on
+/// transitions does not see.
+global MAX_STATE_THREADS: i32 = 1 << 19;
+
 // A state as a transition holds it: its index above these two bits, and
 // `UNKNOWN` where no search has taken the transition yet.
 global DEAD: i32 = 1;
@@ -116,15 +121,15 @@ impl Dfa {
         return if self.direction == Direction::Reverse { Look::EndText } else { Look::StartText };
     }
 
-    /// Follows every instruction that consumes nothing from `pc`, as the Pike
+    /// Follows every instruction that consumes nothing from `from`, as the Pike
     /// VM's `add` does, appending the threads it reaches to `out`. A reverse
     /// scan asks only what matches, not which match is preferred, so there a
     /// thread is its instruction alone and every `Progress` passes: an empty
     /// iteration adds nothing to what matches.
-    fn close(&mut self, pc: i32, at_start: bool, at_end: bool, out: &mut List<i32>) {
+    fn close(&mut self, from: i32, at_start: bool, at_end: bool, out: &mut List<i32>) {
         let forward = self.direction == Direction::Forward;
         let start_look = self.start_look();
-        let mut stack: List<i32> = [pc, 0];
+        let mut stack: List<i32> = [from, 0];
         while let Some(came_entered) = stack.pop() {
             let pc = stack.pop().unwrap();
             let inst = self.program.insts[pc];
@@ -252,7 +257,7 @@ impl Dfa {
     /// Fills the transitions leaving state `from` on `byte` and on every byte
     /// of its class.
     fn step(&mut self, from: i32, byte: u8) -> i32 {
-        if self.transitions.len() >= MAX_TRANSITIONS {
+        if self.transitions.len() >= MAX_TRANSITIONS || self.keys.len() >= 2 * MAX_STATE_THREADS {
             self.gave_up = true;
             return DEAD;
         }

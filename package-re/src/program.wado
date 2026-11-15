@@ -111,8 +111,8 @@ fn match_len(insts: &List<Inst>) -> Option<i32> {
     let mut to_match: List<i32> = List::filled(insts.len(), varies);
     // A target that lies back is a loop, whose matches vary in length, so
     // one pass from the end settles every instruction after those it needs.
-    let at = |target: i32, from: i32, to_match: &List<i32>| {
-        return if target > from { to_match[target] } else { varies };
+    let at = |target: i32, from: i32, known: &List<i32>| {
+        return if target > from { known[target] } else { varies };
     };
     for let back of 0..<insts.len() {
         let pc = insts.len() - 1 - back;

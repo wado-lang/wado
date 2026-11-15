@@ -29,6 +29,40 @@ struct Lazy {
     off: bool,
 }
 
+impl Lazy {
+    /// Leaves every later search to the Pike VM, and the tables to the
+    /// collector.
+    fn retire(&mut self) {
+        self.off = true;
+        self.forward = null;
+        self.reverse = null;
+    }
+}
+
+// What a search caches is no part of the expression: two that compile alike
+// stay equal, hash alike and print alike whichever has searched.
+impl Eq for Lazy {
+    fn eq(&self, _other: &Lazy) -> bool {
+        return true;
+    }
+}
+
+impl Ord for Lazy {
+    fn cmp(&self, _other: &Lazy) -> Ordering {
+        return Ordering::Equal;
+    }
+}
+
+impl Hash for Lazy {
+    fn hash<H: Hasher>(&self, _h: &mut H) {}
+}
+
+impl Inspect for Lazy {
+    fn inspect(&self, f: &mut Formatter) {
+        f.write_str("Lazy");
+    }
+}
+
 /// The pattern in `re`'s syntax, which `Regex::new` reads back to the same
 /// regular expression: a template's text holes escaped, its `Regex` holes as
 /// groups, and `rex`'s whitespace and comments gone.
@@ -103,7 +137,9 @@ impl Regex {
             unreachable();
         };
         let end = dfa.scan_forward(text, start, earliest);
-        lazy.off = dfa.gave_up;
+        if dfa.gave_up {
+            lazy.retire();
+        }
         return end;
     }
 
@@ -120,7 +156,9 @@ impl Regex {
             unreachable();
         };
         let start = dfa.scan_reverse(text, floor, end);
-        lazy.off = dfa.gave_up;
+        if dfa.gave_up {
+            lazy.retire();
+        }
         return start;
     }
 
@@ -538,4 +576,61 @@ impl Iterator for Split {
         self.done = true;
         return Some(text.slice(self.piece, text.len()));
     }
+}
+
+/// `len` bytes of `a` and `b` in an order no short pattern predicts.
+fn noise(len: i32) -> ByteList {
+    let mut bytes: List<u8> = [];
+    let mut x: u32 = 0x9E3779B9;
+    for let _i of 0..<len {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        bytes.push(if x & 1 == 0 { b'a' } else { b'b' });
+    }
+    return bytes as ByteList;
+}
+
+test "a DFA with too many states hands over to the Pike VM, and is released" {
+    let bytes = noise(30000);
+    let text = String::try_from_utf8(bytes).unwrap();
+
+    let forward = Regex::new(#"[ab]*a[ab]{13}"#).unwrap();
+    let mut last = bytes.len() - 14;
+    while bytes[last] != b'a' {
+        last -= 1;
+    }
+    let m = forward.find(&text).unwrap();
+    assert m.start() == 0 && m.end() == last + 14;
+    assert forward.lazy.off;
+    assert forward.lazy.forward matches { None };
+
+    let reverse = Regex::new(#"[ab]{13}a[ab]*"#).unwrap();
+    let mut first = 13;
+    while bytes[first] != b'a' {
+        first += 1;
+    }
+    let tail = reverse.find(&text).unwrap();
+    assert tail.start() == first - 13 && tail.end() == bytes.len();
+    assert reverse.lazy.off;
+    assert reverse.lazy.reverse matches { None };
+}
+
+test "a DFA whose states are large gives up before its tables are" {
+    let mut text = "";
+    for let _i of 0..<1300 {
+        text.push('a');
+    }
+    let r = Regex::new(#"a[ab]{1200}b"#).unwrap();
+    assert !r.is_match(&text);
+    assert r.lazy.off;
+}
+
+test "what a search caches is no part of the expression" {
+    let a = Regex::new(#"a+b"#).unwrap();
+    let b = Regex::new(#"a+b"#).unwrap();
+    let inspected = `${a:?}`;
+    assert a.is_match("xaab");
+    assert a == b;
+    assert `${a:?}` == inspected;
 }
