@@ -16,6 +16,7 @@ use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketParamSource, BlanketReceiver, ImplReceiver, TraitEnv,
 };
 use crate::elaborator::{InstanceBody, InstanceImpl, InstanceOrder, SolverBridge};
+use crate::format_spec;
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, RefKind, hole_fmt_helper_name};
@@ -31,7 +32,6 @@ use crate::tir::{
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
-use crate::format_spec;
 
 /// Every `core:prelude/format` symbol this synthesiser needs, resolved once
 /// through the [`CompilerItem`] registry.

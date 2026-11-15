@@ -8,7 +8,9 @@ use std::cell::Cell;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{MarkerBuiltins, RareRuns, rebound_locals, strip_one_value_copy};
+use super::arena_query::{
+    MarkerBuiltins, RareRuns, operand_read_locals, rebound_locals, strip_one_value_copy,
+};
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -182,11 +184,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         rule.stores_lookup,
         engine.type_table(),
     );
-    let write_back_args: IndexSet<ExprId> = write_backs
-        .values()
-        .flatten()
-        .map(|w| w.arg)
-        .collect();
+    let write_back_args: IndexSet<ExprId> = write_backs.values().flatten().map(|w| w.arg).collect();
     let uses = scan_candidate_uses(
         engine.body,
         &candidates,
@@ -1265,7 +1263,9 @@ fn write_back_sites(
             return;
         };
         for (i, arg) in args.iter().enumerate() {
-            let Some(e) = arg.expr.as_expr() else { continue };
+            let Some(e) = arg.expr.as_expr() else {
+                continue;
+            };
             let candidate = match &body.exprs[e].kind {
                 ExprKind::Local { index, .. } if arg.is_mut => Some(*index),
                 ExprKind::Unary {
@@ -1280,14 +1280,7 @@ fn write_back_sites(
                 continue;
             };
             let named_elsewhere = args.iter().enumerate().any(|(j, other)| {
-                j != i
-                    && other.expr.as_expr().is_some_and(|o| {
-                        body.find_in_nodes_under(NodeRef::Expr(o), |n| match n {
-                            NodeRef::Expr(x) => (bare_local(body, x) == Some(candidate)).then_some(()),
-                            _ => None,
-                        })
-                        .is_some()
-                    })
+                j != i && operand_read_locals(body, other.expr).contains(&candidate)
             });
             if named_elsewhere || callee_stores_param_at(*func_id, i, stores_lookup) {
                 continue;
@@ -1386,7 +1379,12 @@ fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
         let write_backs = ctx.write_backs.get(&stmt).map_or(&[][..], Vec::as_slice);
         let handed: Vec<(u32, u32)> = write_backs
             .iter()
-            .map(|w| (w.candidate, hand_rebuilt_literal(engine, stmt, w, ctx, &mut new_stmts)))
+            .map(|w| {
+                (
+                    w.candidate,
+                    hand_rebuilt_literal(engine, stmt, w, ctx, &mut new_stmts),
+                )
+            })
             .collect();
         rewrite_node(engine, NodeRef::Stmt(stmt), ctx);
         new_stmts.push(stmt);
@@ -1436,7 +1434,13 @@ fn hand_rebuilt_literal(
         ExprKind::Unary { expr, .. } => expr.as_expr().expect("a write-back borrows a local"),
         _ => w.arg,
     };
-    engine.replace_expr_kind(named, ExprKind::Local { index: local_index, name });
+    engine.replace_expr_kind(
+        named,
+        ExprKind::Local {
+            index: local_index,
+            name,
+        },
+    );
     local_index
 }
 
