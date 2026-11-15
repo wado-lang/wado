@@ -1,0 +1,52 @@
+// The Component Model callback registry keeps every callback as an `fn()`, so
+// that function type lowers to `structref`. An `fn()` value still reaches a
+// `fn mut()` slot with no cast between them, and both must agree on what a
+// value of the shared signature is.
+
+#[cm("example:demo/target", linearity = "unrestricted")]
+resource Target {
+    #[cm("example:demo/target#listen")]
+    #[cm_params("self", "listener")]
+    fn listen(&self, listener: fn mut(i32));
+}
+
+global mut hits: i32 = 0;
+
+struct Slot {
+    f: fn mut(),
+}
+
+#[inline(never)]
+fn call_mut(f: fn mut()) {
+    let mut g = f;
+    g();
+}
+
+test {
+    let target = 0.0 as Target;
+    let mut seen: List<i32> = [];
+    with Target => &mut EchoTarget {} do {
+        target.listen(|v| seen.push(v));
+    }
+    let p: fn() = || { hits += 1; };
+    call_mut(p);
+    let mut slot = Slot { f: p };
+    (slot.f)();
+    let mut fs: List<fn mut()> = [p];
+    (fs[0])();
+    assert seen == [7];
+    assert hits == 3;
+}
+
+struct EchoTarget {}
+
+impl Target for EchoTarget {
+    fn listen(&mut self, this: &Target, listener: fn mut(i32)) {
+        let mut l = listener;
+        l(7);
+        resume ();
+    }
+}
+
+__DATA__
+{}

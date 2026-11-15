@@ -3122,8 +3122,7 @@ impl TypeTable {
     }
 
     /// The WIR struct the cell `cell` lowers to, named by its payload's
-    /// representation: `&X` and `&mut X` share one, and so do the cells of two
-    /// function types.
+    /// representation: `&X` and `&mut X` share one.
     #[must_use]
     pub fn cell_struct_name(&self, cell: TypeId) -> String {
         let payload = self.representation_head(self.cell_payload(cell).expect("a cell reference"));

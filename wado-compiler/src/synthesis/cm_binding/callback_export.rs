@@ -33,7 +33,8 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
             .map(|&param| boundary(&type_table.borrow(), param))
             .collect();
         let cm_name = callback_export_name(boundary.iter().map(|b| b.word));
-        if exports.contains_key(&cm_name) {
+        if let Some(export) = exports.get_mut(&cm_name) {
+            export.closures.push(closure);
             continue;
         }
         let core_func = cm_callback_func_name(&cm_name);
@@ -95,6 +96,7 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
                 cm_name,
                 core_func,
                 params: export_params,
+                closures: vec![closure],
             },
         );
     }

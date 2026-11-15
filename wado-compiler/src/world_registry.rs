@@ -14,7 +14,7 @@ use crate::ast::{
 use crate::defs::DefId;
 use crate::kiln::GENERATOR_WORLD_FQ;
 use crate::module_source::ModuleSource;
-use crate::tir::TirFunction;
+use crate::tir::{TirFunction, TypeId};
 
 /// Well-known world name for the test world.
 ///
@@ -37,6 +37,9 @@ pub struct CallbackExport {
     pub core_func: String,
     /// `(name, Wado primitive)` per parameter, the key first.
     pub params: Vec<(String, &'static str)>,
+    /// The closure types called back through it. The registry holds each as
+    /// an `fn()` and casts it back at the call.
+    pub closures: Vec<TypeId>,
 }
 
 /// An operation of a guest effect a dependency component imports, which the
