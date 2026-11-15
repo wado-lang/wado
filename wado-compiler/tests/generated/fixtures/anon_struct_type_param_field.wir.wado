@@ -5734,9 +5734,9 @@ fn "core:serde/core:prelude/list.wado/List<core:prelude/string.wado/String>^core
     builtin::array_copy<u8>(s.repr, start_26, global:core:serde::$const_obj_209, 0, 1);
     new_used_25 = 0;
     start_26 = 0;
-    b738: block {
-        l739: loop {
-            break_if b738 start_26 >= $mv$self$used;
+    b752: block {
+        l753: loop {
+            break_if b752 start_26 >= $mv$self$used;
             ref_val = builtin::array_get_value<ref "core:prelude/string.wado//String">($mv$self$repr, start_26);
             start_26 = start_26 + 1;
             if new_used_25 > 0 {
@@ -5750,7 +5750,7 @@ fn "core:serde/core:prelude/list.wado/List<core:prelude/string.wado/String>^core
             }
             "core:json/core:json/write_escaped_string<&core:prelude/string.wado/String>"(s, ref_val);
             new_used_25 = new_used_25 + 1;
-            continue l739;
+            continue l753;
         };
     };
     if @unlikely(local.tee $mv$self$used(s.used + 1) > builtin::array_len(s.repr)) {
@@ -5774,69 +5774,29 @@ fn "core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]"(self
     valid = 1;
     stop = -1;
     $load_2 = self.repr;
-<<<<<<< HEAD
-    b743: block {
-        l744: loop {
-            break_if b743 from >= len;
-||||||| d7329c8aa
-    b738: block {
-        l739: loop {
-            break_if b738 from >= len;
-=======
-    b752: block {
-        l753: loop {
-            break_if b752 from >= len;
->>>>>>> origin/main
+    b757: block {
+        l758: loop {
+            break_if b757 from >= len;
             if (local.tee b(builtin::array_get_value<u8>($load_2, $load_1 + from)) - 32) <u 96 {
                 if (b == 34) | (b == 92) {
                     stop = b;
-<<<<<<< HEAD
-                    break b743;
-||||||| d7329c8aa
-                    break b738;
-=======
-                    break b752;
->>>>>>> origin/main
+                    break b757;
                 }
                 from = from + 1;
-<<<<<<< HEAD
-                continue l744;
-||||||| d7329c8aa
-                continue l739;
-=======
-                continue l753;
->>>>>>> origin/main
+                continue l758;
             }
             if b < 32 {
                 stop = b;
-<<<<<<< HEAD
-                break b743;
-||||||| d7329c8aa
-                break b738;
-=======
-                break b752;
->>>>>>> origin/main
+                break b757;
             }
             if @unlikely(local.tee b("core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"($load_2, $load_1, from, len)) <= 0) {
                 cold_path;
                 valid = 0;
                 from = from + 1;
-<<<<<<< HEAD
-                continue l744;
-||||||| d7329c8aa
-                continue l739;
-=======
-                continue l753;
->>>>>>> origin/main
+                continue l758;
             }
             from = from + b;
-<<<<<<< HEAD
-            continue l744;
-||||||| d7329c8aa
-            continue l739;
-=======
-            continue l753;
->>>>>>> origin/main
+            continue l758;
         };
     };
     return from, stop, valid;
@@ -5969,28 +5929,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     } else {
     }
     is_negative = 0;
-<<<<<<< HEAD
-    b766: block {
-        l767: loop {
-            break_if b766 is_negative >= content_len;
-||||||| d7329c8aa
-    b761: block {
-        l762: loop {
-            break_if b761 is_negative >= content_len;
-=======
-    b775: block {
-        l776: loop {
-            break_if b775 is_negative >= content_len;
->>>>>>> origin/main
+    b780: block {
+        l781: loop {
+            break_if b780 is_negative >= content_len;
             "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(self, 48);
             is_negative = is_negative + 1;
-<<<<<<< HEAD
-            continue l767;
-||||||| d7329c8aa
-            continue l762;
-=======
-            continue l776;
->>>>>>> origin/main
+            continue l781;
         };
     };
     if @unlikely(local.tee is_negative(self.used + digit_count) > builtin::array_len(self.repr)) {
@@ -6002,7 +5946,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     return digit_count;
 }
 
-<<<<<<< HEAD
 fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]$spec0$sroa[f.buf]"(self, f) {
     let val_i64_7: i64;
     let q: i32;
@@ -6012,75 +5955,6 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower
             break $inline_count_digits_u64_base_1: 1;
         }
         break $inline_count_digits_u64_base_1: select i32((self - (q * 4)) != 0, (local.tee q(local.tee self(64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_7))) / 4) + 1) + ((self ^ 4) >> 31), q);
-||||||| d7329c8aa
-fn "core:serde/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[s.buf]"($mv$self$repr, $mv$self$used, s) {
-    let new_used_25: i32;
-    let start_26: i32;
-    let ref_val: ref "core:prelude/string.wado//String";
-    let new_used_48: i32;
-    let start_49: i32;
-    if @unlikely(local.tee new_used_25(s.used + 1) > builtin::array_len(s.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_25);
-    }
-    start_26 = s.used;
-    s.used = new_used_25;
-    builtin::array_copy<u8>(s.repr, start_26, global:core:serde::$const_obj_260, 0, 1);
-    new_used_25 = 0;
-    start_26 = 0;
-    b765: block {
-        l766: loop {
-            break_if b765 start_26 >= $mv$self$used;
-            ref_val = builtin::array_get_value<ref "core:prelude/string.wado//String">($mv$self$repr, start_26);
-            start_26 = start_26 + 1;
-            if new_used_25 > 0 {
-                if @unlikely(local.tee new_used_48(s.used + 1) > builtin::array_len(s.repr)) {
-                    cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_48);
-                }
-                start_49 = s.used;
-                s.used = new_used_48;
-                builtin::array_copy<u8>(s.repr, start_49, global:core:serde::$const_obj_259, 0, 1);
-            }
-            "core:json/core:json/write_escaped_string<&core:prelude/string.wado/String>"(s, ref_val);
-            new_used_25 = new_used_25 + 1;
-            continue l766;
-        };
-=======
-fn "core:serde/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[s.buf]"($mv$self$repr, $mv$self$used, s) {
-    let new_used_25: i32;
-    let start_26: i32;
-    let ref_val: ref "core:prelude/string.wado//String";
-    let new_used_48: i32;
-    let start_49: i32;
-    if @unlikely(local.tee new_used_25(s.used + 1) > builtin::array_len(s.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_25);
-    }
-    start_26 = s.used;
-    s.used = new_used_25;
-    builtin::array_copy<u8>(s.repr, start_26, global:core:serde::$const_obj_260, 0, 1);
-    new_used_25 = 0;
-    start_26 = 0;
-    b779: block {
-        l780: loop {
-            break_if b779 start_26 >= $mv$self$used;
-            ref_val = builtin::array_get_value<ref "core:prelude/string.wado//String">($mv$self$repr, start_26);
-            start_26 = start_26 + 1;
-            if new_used_25 > 0 {
-                if @unlikely(local.tee new_used_48(s.used + 1) > builtin::array_len(s.repr)) {
-                    cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_48);
-                }
-                start_49 = s.used;
-                s.used = new_used_48;
-                builtin::array_copy<u8>(s.repr, start_49, global:core:serde::$const_obj_259, 0, 1);
-            }
-            "core:json/core:json/write_escaped_string<&core:prelude/string.wado/String>"(s, ref_val);
-            new_used_25 = new_used_25 + 1;
-            continue l780;
-        };
->>>>>>> origin/main
     };
     q = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$spec0$sroa[self.buf]$dae[alt_prefix]"(f, 0, self);
     "core:prelude/primitive.wado/write_u64_base_digits$dae[bits_per_digit,mask,upper]"(f.repr, q, val_i64_7, self);
