@@ -110,7 +110,7 @@ struct core:prelude/string.wado//$tmpl$b145b32c9a586330 {  // TypeId(9)
 }
 
 struct spec_effects_generic.wado//$tmpl$f51f1d6833b5aa4b {  // TypeId(10)
-    mut h0: ref struct,
+    mut h0: ref "canonical//CanonicalClosure_0",
     mut h1: ref "core:prelude/list.wado//List<i32>",
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
@@ -135,8 +135,8 @@ array Array<u8> (mut u8);  // TypeId(15)
 
 array Array<i32> (mut i32);  // TypeId(16)
 
-struct core:prelude//$Cell<fn> {  // TypeId(17)
-    mut value: ref struct,
+struct core:prelude//$Cell<fn(i32)->i32> {  // TypeId(17)
+    mut value: ref "canonical//CanonicalClosure_0",
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> i32;  // TypeId(18)
@@ -178,7 +178,7 @@ type "functype//spec_effects_generic.wado/$hole_fmt$spec_effects_generic.wado/$t
 
 type "functype//spec_effects_generic.wado/$cm_export__$test_0" = fn();  // TypeId(33)
 
-type "functype//spec_effects_generic.wado/spec_effects_generic.wado/map<i32,i32>$spec0" = fn(ref Array<i32>, i32, ref struct) -> ref "core:prelude/list.wado//List<i32>";  // TypeId(34)
+type "functype//spec_effects_generic.wado/spec_effects_generic.wado/map<i32,i32>$spec0" = fn(ref Array<i32>, i32, ref "canonical//CanonicalClosure_0") -> ref "core:prelude/list.wado//List<i32>";  // TypeId(34)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(35)
 
@@ -340,7 +340,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>" = fn(ref "core:prelude/string.wado//$tmpl$afdf3efc359fee73") -> ref "core:prelude/string.wado//String";  // TypeId(114)
 
-type "functype//spec_effects_generic.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(115)
+type "functype//spec_effects_generic.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(115)
 
 type "functype//spec_effects_generic.wado/spec_effects_generic.wado/$Closure_1::$call$dae[self]" = fn(i32) -> i32;  // TypeId(116)
 
@@ -429,7 +429,7 @@ global global:spec_effects_generic.wado::$const_obj_12: ref Array<u8> = array.ne
 global global:core:prelude/primitive.wado::$const_obj_13: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "spec_effects_generic.wado/$test_0"() {
-    let $v0: ref null struct;
+    let $v0: ref null "canonical//CanonicalClosure_0";
     let $licm_repr_21: ref Array<i32>;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_13: i32;
@@ -520,7 +520,7 @@ fn "spec_effects_generic.wado/$template_segment$spec_effects_generic.wado/$tmpl$
 
 fn "spec_effects_generic.wado/$hole_fmt$spec_effects_generic.wado/$tmpl$f51f1d6833b5aa4b"(t, index, f) {
     if index == 0 {
-        "spec_effects_generic.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t.h0 }, f);
+        "spec_effects_generic.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn(i32)->i32>" { value: t.h0 }, f);
     } else if @likely(index == 1) {
         let $mv_arg_1: ref "core:prelude/list.wado//List<i32>";
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(local.tee $mv_arg_1(t.h1).repr, $mv_arg_1.used, f);
@@ -553,8 +553,7 @@ fn "spec_effects_generic.wado/spec_effects_generic.wado/map<i32,i32>$spec0"($mv$
             item = builtin::array_get_value<i32>($mv$arr$repr, $sroa_$iter_0_index_26);
             $sroa_$iter_0_index_26 = $sroa_$iter_0_index_26 + 1;
             item = block -> i32 {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f)).env, item);
+                call_ref "functype/$canonical_closure_fn_0"(f.func, f.env, item);
             };
             if @unlikely($sroa_out_used_23 >= builtin::array_len($sroa_out_repr_22)) {
                 cold_path;

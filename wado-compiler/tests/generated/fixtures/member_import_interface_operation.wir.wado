@@ -53,8 +53,8 @@ struct core:prelude/types.wado//CopyBuffer {  // TypeId(5)
 
 struct member_import_interface_operation.wado//$Dispatch_sub/member_import_op_iface.wado/Greeting {  // TypeId(6)
     mut outer: ref null "member_import_interface_operation.wado//$Dispatch_sub/member_import_op_iface.wado/Greeting",
-    mut op_hello: ref struct,
-    mut op_bye: ref struct,
+    mut op_hello: ref "canonical//CanonicalClosure_0",
+    mut op_bye: ref "canonical//CanonicalClosure_1",
 }
 
 struct core:prelude/list.wado//List<core:prelude/types.wado/CopySettlement> {  // TypeId(7)
@@ -96,23 +96,23 @@ variant core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode> {  // 
     Err("wasi:cli/types.wado//enum:ErrorCode"),
 }
 
-struct core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>::Err {  // TypeId(19)
-    discriminant: i32,
-    payload_0: "wasi:cli/types.wado//enum:ErrorCode",
-}
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(19)
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(20)
-
-struct canonical//CanonicalClosure_0 {  // TypeId(21)
+struct canonical//CanonicalClosure_0 {  // TypeId(20)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> ref "core:prelude/string.wado//String";  // TypeId(22)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> ref "core:prelude/string.wado//String";  // TypeId(21)
 
-struct canonical//CanonicalClosure_1 {  // TypeId(23)
+struct canonical//CanonicalClosure_1 {  // TypeId(22)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_1",
+}
+
+struct core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>::Err {  // TypeId(23)
+    discriminant: i32,
+    payload_0: "wasi:cli/types.wado//enum:ErrorCode",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(24)
@@ -279,8 +279,8 @@ fn "member_import_interface_operation.wado/greet"() with Greeting {
         if ref.is_null(local.tee $local_1_4(global:member_import_interface_operation.wado::$effect_sub/member_import_op_iface.wado/Greeting)) == 0 {
             global:member_import_interface_operation.wado::$effect_sub/member_import_op_iface.wado/Greeting = local.tee $local_2_5(ref.as_non_null($local_1_4)).outer;
             name_3 = block -> ref "core:prelude/string.wado//String" {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_2_5.op_hello)).env, name_3);
+                let $indirect_call_1: ref null "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1($local_2_5.op_hello).env, name_3);
             };
             global:member_import_interface_operation.wado::$effect_sub/member_import_op_iface.wado/Greeting = $local_1_4;
             break $inline__effect_dispatch__sub_member_import_op_iface_wado_Greeting__hello_1: name_3;
@@ -296,7 +296,7 @@ fn "member_import_interface_operation.wado/greet"() with Greeting {
             if ref.is_null(local.tee $local_1_4(global:member_import_interface_operation.wado::$effect_sub/member_import_op_iface.wado/Greeting)) == 0 {
                 global:member_import_interface_operation.wado::$effect_sub/member_import_op_iface.wado/Greeting = local.tee $local_2_5(ref.as_non_null($local_1_4)).outer;
                 name_9 = block -> ref "core:prelude/string.wado//String" {
-                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_2_5.op_hello)).env, name_9);
+                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1($local_2_5.op_hello).env, name_9);
                 };
                 global:member_import_interface_operation.wado::$effect_sub/member_import_op_iface.wado/Greeting = $local_1_4;
                 break $inline__effect_dispatch__sub_member_import_op_iface_wado_Greeting__hello_4: name_9;
@@ -310,8 +310,8 @@ fn "member_import_interface_operation.wado/greet"() with Greeting {
             if ref.is_null(local.tee $local_1_4(global:member_import_interface_operation.wado::$effect_sub/member_import_op_iface.wado/Greeting)) == 0 {
                 global:member_import_interface_operation.wado::$effect_sub/member_import_op_iface.wado/Greeting = local.tee $local_2_5(ref.as_non_null($local_1_4)).outer;
                 $local_2_17 = block -> ref "core:prelude/string.wado//String" {
-                    let $indirect_call_11: ref "canonical//CanonicalClosure_1";
-                    call_ref "functype/$canonical_closure_fn_1"($indirect_call_11.func, local.tee $indirect_call_11(ref.cast "canonical//CanonicalClosure_1"($local_2_5.op_bye)).env);
+                    let $indirect_call_11: ref null "canonical//CanonicalClosure_1";
+                    call_ref "functype/$canonical_closure_fn_1"($indirect_call_11.func, local.tee $indirect_call_11($local_2_5.op_bye).env);
                 };
                 global:member_import_interface_operation.wado::$effect_sub/member_import_op_iface.wado/Greeting = $local_1_4;
                 break $inline__effect_dispatch__sub_member_import_op_iface_wado_Greeting__bye_7: $local_2_17;

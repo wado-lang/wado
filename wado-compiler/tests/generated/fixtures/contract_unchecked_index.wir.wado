@@ -46,7 +46,7 @@ struct core:prelude/string.wado//StrSlice {  // TypeId(4)
 
 struct core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char> {  // TypeId(5)
     mut inner: ref "core:prelude/string.wado//StrCharIter",
-    mut f: ref struct,
+    mut f: ref "canonical//CanonicalClosure_0",
 }
 
 struct contract_unchecked_index.wado//$Closure_0 {}  // TypeId(6)
@@ -700,7 +700,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>"(iter) {
     let s: ref "core:prelude/string.wado//String";
     let v_8: ref "core:prelude/string.wado//StrCharIter";
-    let $sroa_$iter_0_f_21: ref struct;
+    let $sroa_$iter_0_f_21: ref "canonical//CanonicalClosure_0";
     let b0: u32;
     let b2_29: u32;
     let b3: u32;
@@ -745,8 +745,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:pre
                     };
                     $sroa_$sroa_$iter_0_inner_20_byte_index_51 = $sroa_$sroa_$iter_0_inner_20_byte_index_51 + $sroa_slot_48;
                     b0 = block -> char {
-                        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_$iter_0_f_21)).env, b0);
+                        call_ref "functype/$canonical_closure_fn_0"($sroa_$iter_0_f_21.func, $sroa_$iter_0_f_21.env, b0);
                     };
                     "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, b0);
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_fn_mut_char___char__core_prelude_traits_wado_Iterator__next_sroa_return__4;

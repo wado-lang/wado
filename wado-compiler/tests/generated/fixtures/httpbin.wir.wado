@@ -372,7 +372,7 @@ struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,c
 
 struct core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char> {  // TypeId(36)
     mut inner: ref "core:prelude/string.wado//StrCharIter",
-    mut f: ref struct,
+    mut f: ref "canonical//CanonicalClosure_0",
 }
 
 struct core:prelude/types.wado//$tmpl$916608dc3c99bb2c {  // TypeId(37)
@@ -469,71 +469,71 @@ struct core:prelude//$Cell<core:prelude/string.wado/String> {  // TypeId(60)
     mut value: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/types.wado//Option<char>::Some {  // TypeId(61)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> char;  // TypeId(61)
+
+struct canonical//CanonicalClosure_0 {  // TypeId(62)
+    env: ref null struct,
+    func: ref "functype/$canonical_closure_fn_0",
+}
+
+struct core:prelude/types.wado//Option<char>::Some {  // TypeId(63)
     discriminant: i32,
     payload_0: char,
 }
 
-struct core:value//Value::Bool {  // TypeId(62)
+struct core:value//Value::Bool {  // TypeId(64)
     discriminant: i32,
     payload_0: bool,
 }
 
-struct core:value//Value::Int {  // TypeId(63)
+struct core:value//Value::Int {  // TypeId(65)
     discriminant: i32,
     payload_0: i64,
 }
 
-struct core:value//Value::UInt {  // TypeId(64)
+struct core:value//Value::UInt {  // TypeId(66)
     discriminant: i32,
     payload_0: u64,
 }
 
-struct core:value//Value::Int128 {  // TypeId(65)
+struct core:value//Value::Int128 {  // TypeId(67)
     discriminant: i32,
     payload_0: ref "core:prelude/int128.wado//i128",
 }
 
-struct core:value//Value::UInt128 {  // TypeId(66)
+struct core:value//Value::UInt128 {  // TypeId(68)
     discriminant: i32,
     payload_0: ref "core:prelude/int128.wado//u128",
 }
 
-struct core:value//Value::Float {  // TypeId(67)
+struct core:value//Value::Float {  // TypeId(69)
     discriminant: i32,
     payload_0: f64,
 }
 
-struct core:value//Value::String {  // TypeId(68)
+struct core:value//Value::String {  // TypeId(70)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
 }
 
-struct core:value//Value::Bytes {  // TypeId(69)
+struct core:value//Value::Bytes {  // TypeId(71)
     discriminant: i32,
     payload_0: ref "core:prelude/list.wado//List<u8>",
 }
 
-struct core:value//Value::List {  // TypeId(70)
+struct core:value//Value::List {  // TypeId(72)
     discriminant: i32,
     payload_0: ref "core:prelude/list.wado//List<core:value/Value>",
 }
 
-struct core:value//Value::Object {  // TypeId(71)
+struct core:value//Value::Object {  // TypeId(73)
     discriminant: i32,
     payload_0: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:value/Value>",
 }
 
-struct core:value//Value::Unknown {  // TypeId(72)
+struct core:value//Value::Unknown {  // TypeId(74)
     discriminant: i32,
     payload_0: ref "core:prelude/list.wado//List<u8>",
-}
-
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> char;  // TypeId(73)
-
-struct canonical//CanonicalClosure_0 {  // TypeId(74)
-    env: ref null struct,
-    func: ref "functype/$canonical_closure_fn_0",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(75)
@@ -9368,7 +9368,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>"(iter) {
     let s: ref "core:prelude/string.wado//String";
     let v_8: ref "core:prelude/string.wado//StrCharIter";
-    let $sroa_$iter_0_f_14: ref struct;
+    let $sroa_$iter_0_f_14: ref "canonical//CanonicalClosure_0";
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
     v_8 = struct.new "core:prelude/string.wado//StrCharIter" { repr: local.tee v_8(iter.inner).repr, used: v_8.used, byte_index: v_8.byte_index };
     $sroa_$iter_0_f_14 = iter.f;
@@ -9380,8 +9380,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:pre
                 multivalue_bind [$mv$$match_2$0, $mv$$match_2$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"(v_8);
                 if $mv$$match_2$0 == 1 {
                     $mv$$match_2$0 = block -> char {
-                        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_$iter_0_f_14)).env, $mv$$match_2$1);
+                        call_ref "functype/$canonical_closure_fn_0"($sroa_$iter_0_f_14.func, $sroa_$iter_0_f_14.env, $mv$$match_2$1);
                     };
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_fn_mut_char___char__core_prelude_traits_wado_Iterator__next_sroa_return__4: "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, $mv$$match_2$0);
                 } else {

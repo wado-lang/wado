@@ -163,15 +163,15 @@ struct spec_effects_rest_clause.wado//$tmpl$2e4b604754e48185 {  // TypeId(17)
 
 struct spec_effects_rest_clause.wado//$Dispatch_spec_effects_rest_clause.wado/Log {  // TypeId(18)
     mut outer: ref null "spec_effects_rest_clause.wado//$Dispatch_spec_effects_rest_clause.wado/Log",
-    mut op_enabled: ref struct,
-    mut op_emit: ref struct,
+    mut op_enabled: ref "canonical//CanonicalClosure_0",
+    mut op_emit: ref "canonical//CanonicalClosure_1",
 }
 
 struct spec_effects_rest_clause.wado//$Dispatch_wasi:sockets/types.wado/TcpSocket {  // TypeId(19)
     mut outer: ref null "spec_effects_rest_clause.wado//$Dispatch_wasi:sockets/types.wado/TcpSocket",
-    mut op_create: ref struct,
-    mut op_get_is_listening: ref struct,
-    mut op_drop: ref struct,
+    mut op_create: ref "canonical//CanonicalClosure_2",
+    mut op_get_is_listening: ref "canonical//CanonicalClosure_3",
+    mut op_drop: ref "canonical//CanonicalClosure_4",
 }
 
 struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(20)
@@ -265,54 +265,54 @@ struct core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/string.wa
     mut value: ref null "core:prelude/string.wado//String",
 }
 
-struct wasi:sockets/types.wado//ErrorCode::Other {  // TypeId(42)
-    discriminant: i32,
-    payload_0: ref null "core:prelude/string.wado//String",
-}
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(42)
 
-struct core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok {  // TypeId(43)
-    discriminant: i32,
-    payload_0: ref null "core:prelude//$Resource",
-}
-
-struct core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Err {  // TypeId(44)
-    discriminant: i32,
-    payload_0: ref "wasi:sockets/types.wado//ErrorCode",
-}
-
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(45)
-
-struct canonical//CanonicalClosure_0 {  // TypeId(46)
+struct canonical//CanonicalClosure_0 {  // TypeId(43)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct, ref "core:prelude/string.wado//String");  // TypeId(47)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, ref "core:prelude/string.wado//String");  // TypeId(44)
 
-struct canonical//CanonicalClosure_1 {  // TypeId(48)
+struct canonical//CanonicalClosure_1 {  // TypeId(45)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_1",
 }
 
-type "functype/$canonical_closure_fn_2" = fn(ref null struct, "wasi:sockets/types.wado//enum:IpAddressFamily") -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(49)
+type "functype/$canonical_closure_fn_2" = fn(ref null struct, "wasi:sockets/types.wado//enum:IpAddressFamily") -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(46)
 
-struct canonical//CanonicalClosure_2 {  // TypeId(50)
+struct canonical//CanonicalClosure_2 {  // TypeId(47)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_2",
 }
 
-type "functype/$canonical_closure_fn_3" = fn(ref null struct, ref null "core:prelude//$Resource") -> bool;  // TypeId(51)
+type "functype/$canonical_closure_fn_3" = fn(ref null struct, ref null "core:prelude//$Resource") -> bool;  // TypeId(48)
 
-struct canonical//CanonicalClosure_3 {  // TypeId(52)
+struct canonical//CanonicalClosure_3 {  // TypeId(49)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_3",
 }
 
-type "functype/$canonical_closure_fn_4" = fn(ref null struct, ref null "core:prelude//$Resource");  // TypeId(53)
+type "functype/$canonical_closure_fn_4" = fn(ref null struct, ref null "core:prelude//$Resource");  // TypeId(50)
 
-struct canonical//CanonicalClosure_4 {  // TypeId(54)
+struct canonical//CanonicalClosure_4 {  // TypeId(51)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_4",
+}
+
+struct wasi:sockets/types.wado//ErrorCode::Other {  // TypeId(52)
+    discriminant: i32,
+    payload_0: ref null "core:prelude/string.wado//String",
+}
+
+struct core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok {  // TypeId(53)
+    discriminant: i32,
+    payload_0: ref null "core:prelude//$Resource",
+}
+
+struct core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Err {  // TypeId(54)
+    discriminant: i32,
+    payload_0: ref "wasi:sockets/types.wado//ErrorCode",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(55)
@@ -799,8 +799,8 @@ fn "spec_effects_rest_clause.wado/$test_0"() {
         if @likely(ref.is_null(local.tee $local_1_28(global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log)) == 0) {
             global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = local.tee $local_2_29(ref.as_non_null($local_1_28)).outer;
             $local_3_30 = block -> bool {
-                let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_2_29.op_enabled)).env, 1);
+                let $indirect_call_2: ref null "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_29.op_enabled).env, 1);
             };
             global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = $local_1_28;
             break $inline__effect_dispatch__spec_effects_rest_clause_wado_Log__enabled_1: $local_3_30;
@@ -817,7 +817,7 @@ fn "spec_effects_rest_clause.wado/$test_0"() {
             if @likely(ref.is_null(local.tee $local_1_28(global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log)) == 0) {
                 global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = local.tee $local_2_29(ref.as_non_null($local_1_28)).outer;
                 $v2_seen = block -> bool {
-                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_2_29.op_enabled)).env, 2);
+                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_29.op_enabled).env, 2);
                 };
                 global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = $local_1_28;
                 break $inline__effect_dispatch__spec_effects_rest_clause_wado_Log__enabled_2: $v2_seen;
@@ -840,8 +840,8 @@ fn "spec_effects_rest_clause.wado/$test_0"() {
         $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("forwarded"), used: 9 };
         if @likely(ref.is_null(local.tee $local_1_28(global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log)) == 0) {
             global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = local.tee $local_2_29(ref.as_non_null($local_1_28)).outer;
-            let $indirect_call_6: ref "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_6.func, local.tee $indirect_call_6(ref.cast "canonical//CanonicalClosure_1"($local_2_29.op_emit)).env, $mv_arg_1);
+            let $indirect_call_6: ref null "canonical//CanonicalClosure_1";
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_6.func, local.tee $indirect_call_6($local_2_29.op_emit).env, $mv_arg_1);
             break $inline__effect_dispatch__spec_effects_rest_clause_wado_Log__emit_3: global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = $local_1_28;
         } else {
             "core:rt/panic"(local.tee $mv_arg_1(global:spec_effects_rest_clause.wado::$const_obj_3).repr, $mv_arg_1.used);
@@ -854,7 +854,7 @@ fn "spec_effects_rest_clause.wado/$test_0"() {
         if @likely(ref.is_null(local.tee $local_1_28(global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log)) == 0) {
             global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = local.tee $local_2_29(ref.as_non_null($local_1_28)).outer;
             $local_3_30 = block -> bool {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_2_29.op_enabled)).env, 1);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_29.op_enabled).env, 1);
             };
             global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = $local_1_28;
             break $inline__effect_dispatch__spec_effects_rest_clause_wado_Log__enabled_4: $local_3_30;
@@ -956,8 +956,8 @@ base.lines: "), used: 115 }, s1: struct.new "core:prelude/string.wado//String" {
         if ref.is_null(local.tee $local_1_70(global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket)) == 0 {
             global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = local.tee $local_2_71(ref.as_non_null($local_1_70)).outer;
             $local_3_72 = block -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>" {
-                let $indirect_call_15: ref "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_15.func, local.tee $indirect_call_15(ref.cast "canonical//CanonicalClosure_2"($local_2_71.op_create)).env, 0);
+                let $indirect_call_15: ref null "canonical//CanonicalClosure_2";
+                call_ref "functype/$canonical_closure_fn_2"($indirect_call_15.func, local.tee $indirect_call_15($local_2_71.op_create).env, 0);
             };
             global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $local_1_70;
             break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_1: $local_3_72;
@@ -976,8 +976,8 @@ base.lines: "), used: 115 }, s1: struct.new "core:prelude/string.wado//String" {
             $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_2: block {
                 if ref.is_null(local.tee $local_1_70(global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket)) == 0 {
                     global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = local.tee $local_2_71(ref.as_non_null($local_1_70)).outer;
-                    let $indirect_call_18: ref "canonical//CanonicalClosure_4";
-                    call_ref "functype/$canonical_closure_fn_4"($indirect_call_18.func, local.tee $indirect_call_18(ref.cast "canonical//CanonicalClosure_4"($local_2_71.op_drop)).env, $drop_v_24);
+                    let $indirect_call_18: ref null "canonical//CanonicalClosure_4";
+                    call_ref "functype/$canonical_closure_fn_4"($indirect_call_18.func, local.tee $indirect_call_18($local_2_71.op_drop).env, $drop_v_24);
                     break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_2: global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $local_1_70;
                 } else {
                     $local_3_30 = $drop_v_24.value;
@@ -1007,8 +1007,8 @@ fn "spec_effects_rest_clause.wado/$test_trap_1____trap__traps_on_an_operation_th
         if ref.is_null(local.tee $local_1_21(global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket)) == 0 {
             global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = local.tee $local_2_22(ref.as_non_null($local_1_21)).outer;
             $local_3_23 = block -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>" {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($local_2_22.op_create)).env, 0);
+                let $indirect_call_1: ref null "canonical//CanonicalClosure_2";
+                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1($local_2_22.op_create).env, 0);
             };
             global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $local_1_21;
             break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_1: $local_3_23;
@@ -1031,8 +1031,8 @@ fn "spec_effects_rest_clause.wado/$test_trap_1____trap__traps_on_an_operation_th
             $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_2: block {
                 if ref.is_null(local.tee $local_1_21(global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket)) == 0 {
                     global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = local.tee $local_2_22(ref.as_non_null($local_1_21)).outer;
-                    let $indirect_call_4: ref "canonical//CanonicalClosure_4";
-                    call_ref "functype/$canonical_closure_fn_4"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_4"($local_2_22.op_drop)).env, $drop_v_5_18);
+                    let $indirect_call_4: ref null "canonical//CanonicalClosure_4";
+                    call_ref "functype/$canonical_closure_fn_4"($indirect_call_4.func, local.tee $indirect_call_4($local_2_22.op_drop).env, $drop_v_5_18);
                     break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_2: global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $local_1_21;
                 } else {
                     let $cm_handle_3: i32;
@@ -1049,8 +1049,8 @@ fn "spec_effects_rest_clause.wado/$test_trap_1____trap__traps_on_an_operation_th
         if ref.is_null(local.tee $local_1_21(global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket)) == 0 {
             global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = local.tee $local_2_22(ref.as_non_null($local_1_21)).outer;
             $cm_handle_3 = block -> bool {
-                let $indirect_call_5: ref "canonical//CanonicalClosure_3";
-                call_ref "functype/$canonical_closure_fn_3"($indirect_call_5.func, local.tee $indirect_call_5(ref.cast "canonical//CanonicalClosure_3"($local_2_22.op_get_is_listening)).env, v);
+                let $indirect_call_5: ref null "canonical//CanonicalClosure_3";
+                call_ref "functype/$canonical_closure_fn_3"($indirect_call_5.func, local.tee $indirect_call_5($local_2_22.op_get_is_listening).env, v);
             };
             global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $local_1_21;
             break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__get_is_listening_0: $cm_handle_3;
@@ -1063,7 +1063,7 @@ fn "spec_effects_rest_clause.wado/$test_trap_1____trap__traps_on_an_operation_th
         $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_3: block {
             if ref.is_null(local.tee $local_1_21(global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket)) == 0 {
                 global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = local.tee $local_2_22(ref.as_non_null($local_1_21)).outer;
-                call_ref "functype/$canonical_closure_fn_4"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_4"($local_2_22.op_drop)).env, v);
+                call_ref "functype/$canonical_closure_fn_4"($indirect_call_4.func, local.tee $indirect_call_4($local_2_22.op_drop).env, v);
                 break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_3: global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $local_1_21;
             } else {
                 $cm_handle_3 = v.value;
@@ -3345,8 +3345,8 @@ fn "spec_effects_rest_clause.wado/spec_effects_rest_clause.wado/$Closure_3::$cal
             if @likely(ref.is_null(local.tee $local_1(global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log)) == 0) {
                 global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
                 level = block -> bool {
-                    let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_2.op_enabled)).env, level);
+                    let $indirect_call_2: ref null "canonical//CanonicalClosure_0";
+                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2.op_enabled).env, level);
                 };
                 global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = $local_1;
                 break $inline__effect_dispatch__spec_effects_rest_clause_wado_Log__enabled_1: level;
@@ -3368,8 +3368,8 @@ fn "spec_effects_rest_clause.wado/spec_effects_rest_clause.wado/$Closure_4::$cal
     $inline__effect_dispatch__spec_effects_rest_clause_wado_Log__emit_0: block {
         if @likely(ref.is_null(local.tee $local_1(global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log)) == 0) {
             global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
-            let $indirect_call_2: ref "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($local_2.op_emit)).env, message);
+            let $indirect_call_2: ref null "canonical//CanonicalClosure_1";
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2($local_2.op_emit).env, message);
             break $inline__effect_dispatch__spec_effects_rest_clause_wado_Log__emit_0: global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = $local_1;
         } else {
             "core:rt/panic"(local.tee message(global:spec_effects_rest_clause.wado::$const_obj_3).repr, message.used);
@@ -3385,8 +3385,8 @@ fn "spec_effects_rest_clause.wado/spec_effects_rest_clause.wado/$Closure_5::$cal
         if @likely(ref.is_null(local.tee $local_1(global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log)) == 0) {
             global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
             level = block -> bool {
-                let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_2.op_enabled)).env, level);
+                let $indirect_call_2: ref null "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2.op_enabled).env, level);
             };
             global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = $local_1;
             break $inline__effect_dispatch__spec_effects_rest_clause_wado_Log__enabled_0: level;
@@ -3405,8 +3405,8 @@ fn "spec_effects_rest_clause.wado/spec_effects_rest_clause.wado/$Closure_6::$cal
     $inline__effect_dispatch__spec_effects_rest_clause_wado_Log__emit_0: block {
         if @likely(ref.is_null(local.tee $local_1(global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log)) == 0) {
             global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
-            let $indirect_call_2: ref "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($local_2.op_emit)).env, message);
+            let $indirect_call_2: ref null "canonical//CanonicalClosure_1";
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2($local_2.op_emit).env, message);
             break $inline__effect_dispatch__spec_effects_rest_clause_wado_Log__emit_0: global:spec_effects_rest_clause.wado::$effect_spec_effects_rest_clause.wado/Log = $local_1;
         } else {
             "core:rt/panic"(local.tee message(global:spec_effects_rest_clause.wado::$const_obj_3).repr, message.used);
@@ -3426,8 +3426,8 @@ fn "spec_effects_rest_clause.wado/spec_effects_rest_clause.wado/$Closure_7::$cal
         if ref.is_null(local.tee $local_1_10(global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket)) == 0 {
             global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = local.tee $local_2_11(ref.as_non_null($local_1_10)).outer;
             $local_3 = block -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>" {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($local_2_11.op_create)).env, 0);
+                let $indirect_call_1: ref null "canonical//CanonicalClosure_2";
+                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1($local_2_11.op_create).env, 0);
             };
             global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $local_1_10;
             break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_1: $local_3;
@@ -3449,8 +3449,8 @@ fn "spec_effects_rest_clause.wado/spec_effects_rest_clause.wado/$Closure_7::$cal
             $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_2: block {
                 if ref.is_null(local.tee $local_1_10(global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket)) == 0 {
                     global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = local.tee $local_2_11(ref.as_non_null($local_1_10)).outer;
-                    let $indirect_call_4: ref "canonical//CanonicalClosure_4";
-                    call_ref "functype/$canonical_closure_fn_4"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_4"($local_2_11.op_drop)).env, $drop_v_5_7);
+                    let $indirect_call_4: ref null "canonical//CanonicalClosure_4";
+                    call_ref "functype/$canonical_closure_fn_4"($indirect_call_4.func, local.tee $indirect_call_4($local_2_11.op_drop).env, $drop_v_5_7);
                     break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_2: global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $local_1_10;
                 } else {
                     let $cm_handle_3: i32;
@@ -3475,8 +3475,8 @@ fn "spec_effects_rest_clause.wado/spec_effects_rest_clause.wado/$Closure_32::$ca
     $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_0: block {
         if ref.is_null(local.tee $local_1(global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket)) == 0 {
             global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = local.tee $local_2_8(ref.as_non_null($local_1)).outer;
-            let $indirect_call_3: ref "canonical//CanonicalClosure_4";
-            call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_4"($local_2_8.op_drop)).env, self);
+            let $indirect_call_3: ref null "canonical//CanonicalClosure_4";
+            call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3($local_2_8.op_drop).env, self);
             break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_0: global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $local_1;
         } else {
             let $cm_handle_2: i32;
@@ -3499,8 +3499,8 @@ fn "spec_effects_rest_clause.wado/spec_effects_rest_clause.wado/$Closure_33::$ca
         if ref.is_null(local.tee $local_1_10(global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket)) == 0 {
             global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = local.tee $local_2_11(ref.as_non_null($local_1_10)).outer;
             $local_3 = block -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>" {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($local_2_11.op_create)).env, 0);
+                let $indirect_call_1: ref null "canonical//CanonicalClosure_2";
+                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1($local_2_11.op_create).env, 0);
             };
             global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $local_1_10;
             break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__create_1: $local_3;
@@ -3522,8 +3522,8 @@ fn "spec_effects_rest_clause.wado/spec_effects_rest_clause.wado/$Closure_33::$ca
             $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_2: block {
                 if ref.is_null(local.tee $local_1_10(global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket)) == 0 {
                     global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = local.tee $local_2_11(ref.as_non_null($local_1_10)).outer;
-                    let $indirect_call_4: ref "canonical//CanonicalClosure_4";
-                    call_ref "functype/$canonical_closure_fn_4"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_4"($local_2_11.op_drop)).env, $drop_v_5_7);
+                    let $indirect_call_4: ref null "canonical//CanonicalClosure_4";
+                    call_ref "functype/$canonical_closure_fn_4"($indirect_call_4.func, local.tee $indirect_call_4($local_2_11.op_drop).env, $drop_v_5_7);
                     break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_2: global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $local_1_10;
                 } else {
                     let $cm_handle_3: i32;
@@ -3548,8 +3548,8 @@ fn "spec_effects_rest_clause.wado/spec_effects_rest_clause.wado/$Closure_58::$ca
     $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_0: block {
         if ref.is_null(local.tee $local_1(global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket)) == 0 {
             global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = local.tee $local_2_8(ref.as_non_null($local_1)).outer;
-            let $indirect_call_3: ref "canonical//CanonicalClosure_4";
-            call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_4"($local_2_8.op_drop)).env, self);
+            let $indirect_call_3: ref null "canonical//CanonicalClosure_4";
+            call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3($local_2_8.op_drop).env, self);
             break $inline__effect_dispatch__wasi_sockets_types_wado_TcpSocket__drop_0: global:spec_effects_rest_clause.wado::$effect_wasi:sockets/types.wado/TcpSocket = $local_1;
         } else {
             let $cm_handle_2: i32;

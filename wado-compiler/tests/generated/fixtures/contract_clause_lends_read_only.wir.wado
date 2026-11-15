@@ -4,7 +4,7 @@
 
 struct contract_clause_lends_read_only.wado//$tmpl$5f18e7a9bf589608 {  // TypeId(0)
     mut h0: ref "core:prelude/string.wado//String",
-    mut h1: ref struct,
+    mut h1: ref "canonical//CanonicalClosure_0",
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
     mut s1: ref "core:prelude/string.wado//String",
@@ -52,8 +52,8 @@ array Array<u8> (mut u8);  // TypeId(8)
 
 array Array<i32> (mut i32);  // TypeId(9)
 
-struct core:prelude//$Cell<fn> {  // TypeId(10)
-    mut value: ref struct,
+struct core:prelude//$Cell<fn(i32)->bool> {  // TypeId(10)
+    mut value: ref "canonical//CanonicalClosure_0",
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(11)
@@ -149,7 +149,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(53)
 
-type "functype//contract_clause_lends_read_only.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(54)
+type "functype//contract_clause_lends_read_only.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn(i32)->bool>", ref "core:prelude/format.wado//Formatter");  // TypeId(54)
 
 type "functype//contract_clause_lends_read_only.wado/contract_clause_lends_read_only.wado/$Closure_0::$call$dae[self]" = fn(i32) -> bool;  // TypeId(55)
 
@@ -202,7 +202,7 @@ global global:contract_clause_lends_read_only.wado::$const_obj_5: ref Array<u8> 
 
 fn "contract_clause_lends_read_only.wado/run"() with Stdout {
     let $load_4: ref Array<u8>;
-    let $v0_44: ref null struct;
+    let $v0_44: ref null "canonical//CanonicalClosure_0";
     let item_56: i32;
     let $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__all_8_0_index_74: i32;
     let x_320: i64;
@@ -215,8 +215,7 @@ fn "contract_clause_lends_read_only.wado/run"() with Stdout {
                 item_56 = builtin::array_get_value<i32>(global:contract_clause_lends_read_only.wado::$const_obj_2, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__all_8_0_index_74);
                 $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__all_8_0_index_74 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__all_8_0_index_74 + 1;
                 if block -> bool {
-                    let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($v0_44)).env, item_56);
+                    call_ref "functype/$canonical_closure_fn_0"($v0_44.func, $v0_44.env, item_56);
                 } == 0 {
                     break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__all_8: 0;
                 }
@@ -355,7 +354,7 @@ fn "contract_clause_lends_read_only.wado/$hole_fmt$contract_clause_lends_read_on
         self = t.h0;
         "core:prelude/format.wado/core:prelude/format.wado/pad_text<core:prelude/string.wado/String>"(f, self);
     } else if @likely(index == 1) {
-        "contract_clause_lends_read_only.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t.h1 }, f);
+        "contract_clause_lends_read_only.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn(i32)->bool>" { value: t.h1 }, f);
     } else {
         unreachable;
     }

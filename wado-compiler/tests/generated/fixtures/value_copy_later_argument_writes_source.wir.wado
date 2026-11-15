@@ -195,7 +195,7 @@ type "functype//value_copy_later_argument_writes_source.wado/bump_global" = fn()
 
 type "functype//value_copy_later_argument_writes_source.wado/bump_global_held" = fn();  // TypeId(34)
 
-type "functype//value_copy_later_argument_writes_source.wado/call" = fn(ref struct);  // TypeId(35)
+type "functype//value_copy_later_argument_writes_source.wado/call" = fn(ref "canonical//CanonicalClosure_0");  // TypeId(35)
 
 type "functype//value_copy_later_argument_writes_source.wado/two" = fn(i32, ref "core:prelude/list.wado//List<i32>", i32, ref "core:prelude/list.wado//List<i32>") -> i32;  // TypeId(36)
 
@@ -506,8 +506,7 @@ fn "value_copy_later_argument_writes_source.wado/bump_global_held"() {
 }
 
 fn "value_copy_later_argument_writes_source.wado/call"(f) {
-    let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-    call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f)).env);
+    call_ref "functype/$canonical_closure_fn_0"(f.func, f.env);
 }
 
 fn "value_copy_later_argument_writes_source.wado/two"($mv$p$a, $mv$p$s, $mv$q$a, $mv$q$s) {
@@ -536,7 +535,7 @@ fn "value_copy_later_argument_writes_source.wado/run"() {
     let $load_3: i32;
     let x: ref "value_copy_later_argument_writes_source.wado//Pair";
     let $v1_1: ref null "value_copy_later_argument_writes_source.wado//Pair";
-    let bump_u: ref struct;
+    let bump_u: ref "canonical//CanonicalClosure_0";
     let held: ref "value_copy_later_argument_writes_source.wado//Holder";
     let $v1_54: ref "value_copy_later_argument_writes_source.wado//Pair";
     let elements_140: ref "Array<value_copy_later_argument_writes_source.wado/Pair>";
@@ -633,8 +632,8 @@ two(v, then: { bump_v(); v; }): "), used: 33 }, s3: struct.new "core:prelude/str
     if @unlikely(local.tee $mv_field_1(block -> i32 {
         $mv_field_1 = x.a;
         $load_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
-        let $indirect_call_46: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_46.func, local.tee $indirect_call_46(ref.cast "canonical//CanonicalClosure_0"(bump_u)).env);
+        let $indirect_call_46: ref null "canonical//CanonicalClosure_0";
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_46.func, local.tee $indirect_call_46(bump_u).env);
         $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_src_2 = local.tee $mv_field_5(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
         "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $load_1, $v1_1.a, $v1_1.s);
     }) != 1011) {

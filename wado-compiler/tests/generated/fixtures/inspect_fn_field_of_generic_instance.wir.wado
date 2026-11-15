@@ -118,7 +118,7 @@ struct inspect_fn_field_of_generic_instance.wado//$tmpl$1dc7001ebd971fa8 {  // T
 }
 
 struct inspect_fn_field_of_generic_instance.wado//Holder<i64> {  // TypeId(11)
-    mut f: ref struct,
+    mut f: ref "canonical//CanonicalClosure_0",
 }
 
 struct inspect_fn_field_of_generic_instance.wado//$Closure_0 {}  // TypeId(12)
@@ -129,8 +129,8 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 array Array<u8> (mut u8);  // TypeId(15)
 
-struct core:prelude//$Cell<fn> {  // TypeId(16)
-    mut value: ref struct,
+struct core:prelude//$Cell<fn(i32)->i64> {  // TypeId(16)
+    mut value: ref "canonical//CanonicalClosure_0",
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> i64;  // TypeId(17)
@@ -334,7 +334,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>" = fn(ref "core:prelude/string.wado//$tmpl$afdf3efc359fee73") -> ref "core:prelude/string.wado//String";  // TypeId(113)
 
-type "functype//core:prelude/traits.wado/fn(i32)->i64^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(114)
+type "functype//core:prelude/traits.wado/fn(i32)->i64^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn(i32)->i64>", ref "core:prelude/format.wado//Formatter");  // TypeId(114)
 
 type "functype//inspect_fn_field_of_generic_instance.wado/inspect_fn_field_of_generic_instance.wado/$Closure_0::$call$dae[self,x]" = fn() -> i64;  // TypeId(115)
 
@@ -476,8 +476,8 @@ fn "inspect_fn_field_of_generic_instance.wado/$test_0"() {
         unreachable;
     }
     if @unlikely((local.tee $v0(block -> i64 {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(h_0.f)).env, 1);
+        let $indirect_call_1: ref null "canonical//CanonicalClosure_0";
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(h_0.f).env, 1);
     }) == 0_i64) == 0) {
         cold_path;
         "inspect_fn_field_of_generic_instance.wado/$test_0$cold0"($v0);
@@ -1108,7 +1108,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<i
     start_26 = f_8.used;
     f_8.used = new_used_25;
     builtin::array_copy<u8>(f_8.repr, start_26, global:core:prelude/traits.wado::$const_obj_2, 0, 2);
-    "core:prelude/traits.wado/fn(i32)->i64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: v.f }, f);
+    "core:prelude/traits.wado/fn(i32)->i64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn(i32)->i64>" { value: v.f }, f);
     if @unlikely(local.tee new_used_25(local.tee f_8(f.buf).used + 1) > builtin::array_len(f_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_8, new_used_25);
@@ -1853,7 +1853,7 @@ fn "core:prelude/traits.wado/inspect_fn_field_of_generic_instance.wado/Holder<i6
     start_25 = f_7.used;
     f_7.used = new_used_24;
     builtin::array_copy<u8>(f_7.repr, start_25, global:core:prelude/traits.wado::$const_obj_2, 0, 2);
-    "core:prelude/traits.wado/fn(i32)->i64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: self.f }, f);
+    "core:prelude/traits.wado/fn(i32)->i64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn(i32)->i64>" { value: self.f }, f);
     if @unlikely(local.tee new_used_24(local.tee f_7(f.buf).used + 2) > builtin::array_len(f_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_7, new_used_24);

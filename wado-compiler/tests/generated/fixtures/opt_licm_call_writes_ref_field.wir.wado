@@ -48,7 +48,7 @@ type "functype//opt_licm_call_writes_ref_field.wado/bump_global" = fn();  // Typ
 
 type "functype//opt_licm_call_writes_ref_field.wado/through_global" = fn(ref "opt_licm_call_writes_ref_field.wado//P") -> i32;  // TypeId(16)
 
-type "functype//opt_licm_call_writes_ref_field.wado/through_closure" = fn(ref "opt_licm_call_writes_ref_field.wado//P", ref struct) -> i32;  // TypeId(17)
+type "functype//opt_licm_call_writes_ref_field.wado/through_closure" = fn(ref "opt_licm_call_writes_ref_field.wado//P", ref "canonical//CanonicalClosure_0") -> i32;  // TypeId(17)
 
 type "functype//opt_licm_call_writes_ref_field.wado/bump_inner" = fn(ref "opt_licm_call_writes_ref_field.wado//Outer");  // TypeId(18)
 
@@ -130,8 +130,7 @@ fn "opt_licm_call_writes_ref_field.wado/through_closure"(r, f) {
         l3: loop {
             break_if b2 i >= 3;
             s = s + r.x;
-            let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f)).env);
+            call_ref "functype/$canonical_closure_fn_0"(f.func, f.env);
             i = i + 1;
             continue l3;
         };
@@ -163,7 +162,7 @@ fn "opt_licm_call_writes_ref_field.wado/through_container"(o, r) {
 
 fn "opt_licm_call_writes_ref_field.wado/run"() with Stdout {
     let p: ref "opt_licm_call_writes_ref_field.wado//P";
-    let g: ref struct;
+    let g: ref "canonical//CanonicalClosure_0";
     let o: ref "opt_licm_call_writes_ref_field.wado//Outer";
     let message_5: ref "core:prelude/string.wado//String";
     let $cm_pair_7_12: i64;

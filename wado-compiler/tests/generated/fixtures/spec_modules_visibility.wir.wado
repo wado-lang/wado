@@ -110,7 +110,7 @@ struct core:prelude/string.wado//$tmpl$b145b32c9a586330 {  // TypeId(9)
 }
 
 struct spec_modules_visibility.wado//$tmpl$f51f1d6833b5aa4b {  // TypeId(10)
-    mut h0: ref struct,
+    mut h0: ref "canonical//CanonicalClosure_0",
     mut h1: ref "core:prelude/list.wado//List<i32>",
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
@@ -135,8 +135,8 @@ array Array<u8> (mut u8);  // TypeId(15)
 
 array Array<i32> (mut i32);  // TypeId(16)
 
-struct core:prelude//$Cell<fn> {  // TypeId(17)
-    mut value: ref struct,
+struct core:prelude//$Cell<fn(i32)->i32> {  // TypeId(17)
+    mut value: ref "canonical//CanonicalClosure_0",
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> i32;  // TypeId(18)
@@ -348,7 +348,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>" = fn(ref "core:prelude/string.wado//$tmpl$afdf3efc359fee73") -> ref "core:prelude/string.wado//String";  // TypeId(118)
 
-type "functype//spec_modules_visibility.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(119)
+type "functype//spec_modules_visibility.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(119)
 
 type "functype//spec_modules_visibility.wado/spec_modules_visibility.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(120)
 
@@ -433,7 +433,7 @@ global global:spec_modules_visibility.wado::$const_obj_11: ref Array<u8> = array
 global global:core:prelude/primitive.wado::$const_obj_12: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "spec_modules_visibility.wado/$test_0"() {
-    let $v0_9: ref struct;
+    let $v0_9: ref "canonical//CanonicalClosure_0";
     let result: ref "core:prelude/list.wado//List<i32>";
     let item_37: i32;
     let used_40: i32;
@@ -450,8 +450,7 @@ fn "spec_modules_visibility.wado/$test_0"() {
                     item_37 = builtin::array_get_value<i32>(global:spec_modules_visibility.wado::$const_obj_2, $sroa_self_index_72);
                     $sroa_self_index_72 = $sroa_self_index_72 + 1;
                     item_37 = block -> i32 {
-                        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($v0_9)).env, item_37);
+                        call_ref "functype/$canonical_closure_fn_0"($v0_9.func, $v0_9.env, item_37);
                     };
                     if @unlikely(local.tee used_40(result.used) >= builtin::array_len($licm_repr_65)) {
                         cold_path;
@@ -540,7 +539,7 @@ fn "spec_modules_visibility.wado/$template_segment$spec_modules_visibility.wado/
 
 fn "spec_modules_visibility.wado/$hole_fmt$spec_modules_visibility.wado/$tmpl$f51f1d6833b5aa4b"(t, index, f) {
     if index == 0 {
-        "spec_modules_visibility.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t.h0 }, f);
+        "spec_modules_visibility.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn(i32)->i32>" { value: t.h0 }, f);
     } else if @likely(index == 1) {
         let $mv_arg_1: ref "core:prelude/list.wado//List<i32>";
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(local.tee $mv_arg_1(t.h1).repr, $mv_arg_1.used, f);

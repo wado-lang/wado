@@ -383,12 +383,10 @@ fn "cast_never_operand.wado/$template_segment$cast_never_operand.wado/$tmpl$ebaa
 }
 
 fn "cast_never_operand.wado/$cm_export__$test_0_never_to_a_function_type"() {
-    let f: ref struct;
+    let f: ref "canonical//CanonicalClosure_0";
     if black_box(0) {
         "core:rt/unreachable"();
-        f = unreachable;
-        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f)).env);
+        call_ref "functype/$canonical_closure_fn_0"(f.func, local.tee f(unreachable).env);
     }
     "wasi/task-return"(0);
 }

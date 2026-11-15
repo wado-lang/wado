@@ -12,7 +12,7 @@ struct affine_with_handler_generic_moves.wado//Total {  // TypeId(1)
 
 struct affine_with_handler_generic_moves.wado//$Dispatch_affine_with_handler_generic_moves.wado/Sink {  // TypeId(2)
     mut outer: ref null "affine_with_handler_generic_moves.wado//$Dispatch_affine_with_handler_generic_moves.wado/Sink",
-    mut op_put: ref struct,
+    mut op_put: ref "canonical//CanonicalClosure_0",
 }
 
 struct core:prelude/string.wado//String {  // TypeId(3)
@@ -37,16 +37,16 @@ variant core:prelude/types.wado//Option<affine_with_handler_generic_moves.wado/T
     Some(ref null "affine_with_handler_generic_moves.wado//Tok"),
 }
 
-struct core:prelude/types.wado//Option<affine_with_handler_generic_moves.wado/Tok>::Some {  // TypeId(9)
-    discriminant: i32,
-    payload_0: ref null "affine_with_handler_generic_moves.wado//Tok",
-}
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, ref null "affine_with_handler_generic_moves.wado//Tok") -> i32;  // TypeId(9)
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, ref null "affine_with_handler_generic_moves.wado//Tok") -> i32;  // TypeId(10)
-
-struct canonical//CanonicalClosure_0 {  // TypeId(11)
+struct canonical//CanonicalClosure_0 {  // TypeId(10)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
+}
+
+struct core:prelude/types.wado//Option<affine_with_handler_generic_moves.wado/Tok>::Some {  // TypeId(11)
+    discriminant: i32,
+    payload_0: ref null "affine_with_handler_generic_moves.wado//Tok",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(12)
@@ -136,8 +136,8 @@ fn "affine_with_handler_generic_moves.wado/run"() with Stdout {
         if @likely(ref.is_null(local.tee $local_1_24(global:affine_with_handler_generic_moves.wado::$effect_affine_with_handler_generic_moves.wado/Sink)) == 0) {
             global:affine_with_handler_generic_moves.wado::$effect_affine_with_handler_generic_moves.wado/Sink = local.tee $local_2_25(ref.as_non_null($local_1_24)).outer;
             $local_3_26 = block -> i32 {
-                let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_2_25.op_put)).env, struct.new "affine_with_handler_generic_moves.wado//Tok" { id: 1 });
+                let $indirect_call_2: ref null "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_25.op_put).env, struct.new "affine_with_handler_generic_moves.wado//Tok" { id: 1 });
             };
             global:affine_with_handler_generic_moves.wado::$effect_affine_with_handler_generic_moves.wado/Sink = $local_1_24;
             break $inline__effect_dispatch__affine_with_handler_generic_moves_wado_Sink__put_2: $local_3_26;
@@ -163,7 +163,7 @@ fn "affine_with_handler_generic_moves.wado/run"() with Stdout {
             if @likely(ref.is_null(local.tee $local_1_24(global:affine_with_handler_generic_moves.wado::$effect_affine_with_handler_generic_moves.wado/Sink)) == 0) {
                 global:affine_with_handler_generic_moves.wado::$effect_affine_with_handler_generic_moves.wado/Sink = local.tee $local_2_25(ref.as_non_null($local_1_24)).outer;
                 $local_3_26 = block -> i32 {
-                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_2_25.op_put)).env, struct.new "affine_with_handler_generic_moves.wado//Tok" { id: 3 });
+                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2_25.op_put).env, struct.new "affine_with_handler_generic_moves.wado//Tok" { id: 3 });
                 };
                 global:affine_with_handler_generic_moves.wado::$effect_affine_with_handler_generic_moves.wado/Sink = $local_1_24;
                 break $inline_affine_with_handler_generic_moves_wado_early_affine_with_handler_generic_moves_wado_Tok__0__$inline__effect_dispatch__affine_with_handler_generic_moves_wado_Sink__put_0: $local_3_26;

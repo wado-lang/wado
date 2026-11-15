@@ -67,7 +67,7 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 array Array<u8> (mut u8);  // TypeId(10)
 
-array Array<fn()->i32> (mut ref struct);  // TypeId(11)
+array Array<fn()->i32> (mut ref "canonical//CanonicalClosure_0");  // TypeId(11)
 
 struct core:prelude//$Cell<i32> {  // TypeId(12)
     mut value: i32,
@@ -246,7 +246,7 @@ fn "closure_capture_boxed_local_beside_ref_to_ref.wado/run"() {
     let $sroa_fs_repr_44: ref Array<fn()->i32>;
     let $sroa_fs_used_45: i32;
     let $sroa_write_back_46: ref "core:prelude/list.wado//List<fn()->i32>";
-    $sroa_fs_repr_44 = array.new_fixed<ref struct>();
+    $sroa_fs_repr_44 = array.new_fixed<ref "canonical//CanonicalClosure_0">();
     $sroa_fs_used_45 = 0;
     i = struct.new "core:prelude//$Cell<i32>" { value: 0 };
     b0: block {
@@ -259,7 +259,7 @@ fn "closure_capture_boxed_local_beside_ref_to_ref.wado/run"() {
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(local.tee $sroa_write_back_46(struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: $sroa_fs_repr_44, used: $sroa_fs_used_45 }));
                 $sroa_fs_repr_44 = $sroa_write_back_46.repr;
             }
-            builtin::array_set<ref struct>($sroa_fs_repr_44, $sroa_fs_used_45, struct.new "canonical//CanonicalClosure_0" { env: value_23, func: ref.func "closure/closure_capture_boxed_local_beside_ref_to_ref.wado/$closure_wrapper_0" });
+            builtin::array_set<ref "canonical//CanonicalClosure_0">($sroa_fs_repr_44, $sroa_fs_used_45, struct.new "canonical//CanonicalClosure_0" { env: value_23, func: ref.func "closure/closure_capture_boxed_local_beside_ref_to_ref.wado/$closure_wrapper_0" });
             $sroa_fs_used_45 = $sroa_fs_used_45 + 1;
             local.tee i(struct.new "core:prelude//$Cell<i32>" { value: i.value }).value = i.value + 1;
             continue l1;
@@ -271,23 +271,25 @@ fn "closure_capture_boxed_local_beside_ref_to_ref.wado/run"() {
         unreachable;
     }
     if @unlikely(local.tee $load_0(block -> i32 {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(0 >= $sroa_fs_used_45) {
+        let $indirect_call_1: ref null "canonical//CanonicalClosure_0";
+        if @unlikely(0 >= $sroa_fs_used_45) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $sroa_fs_used_45, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_boxed_local_beside_ref_to_ref.wado:17"), used: 53 });
             unreachable;
-        }; builtin::array_get_value<ref struct>($sroa_fs_repr_44, 0))).env);
+        }
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(builtin::array_get_value<ref "canonical//CanonicalClosure_0">($sroa_fs_repr_44, 0)).env);
     }) != 1) {
         cold_path;
         "closure_capture_boxed_local_beside_ref_to_ref.wado/run$cold1"($load_0);
         unreachable;
     }
     if @unlikely(local.tee $sroa_fs_used_45(block -> i32 {
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(1 >= $sroa_fs_used_45) {
+        if @unlikely(1 >= $sroa_fs_used_45) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, $sroa_fs_used_45, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_boxed_local_beside_ref_to_ref.wado:18"), used: 53 });
             unreachable;
-        }; builtin::array_get_value<ref struct>($sroa_fs_repr_44, 1))).env);
+        }
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(builtin::array_get_value<ref "canonical//CanonicalClosure_0">($sroa_fs_repr_44, 1)).env);
     }) != 3) {
         cold_path;
         "closure_capture_boxed_local_beside_ref_to_ref.wado/run$cold0"($sroa_fs_used_45);
@@ -948,7 +950,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(self) {
     let $load_0: ref Array<fn()->i32>;
     let new_repr: ref Array<fn()->i32>;
     let a: i32;
-    builtin::array_copy<ref struct>(local.tee new_repr(builtin::array_new<ref struct>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    builtin::array_copy<ref "canonical//CanonicalClosure_0">(local.tee new_repr(builtin::array_new<ref "canonical//CanonicalClosure_0">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 

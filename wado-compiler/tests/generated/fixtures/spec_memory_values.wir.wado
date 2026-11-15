@@ -151,7 +151,7 @@ struct spec_memory_values.wado//$tmpl$d48748ffcad618c0 {  // TypeId(13)
 
 struct core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char> {  // TypeId(14)
     mut inner: ref "core:prelude/string.wado//StrCharIter",
-    mut f: ref struct,
+    mut f: ref "canonical//CanonicalClosure_0",
 }
 
 struct spec_memory_values.wado//$Closure_0 {}  // TypeId(15)
@@ -2102,7 +2102,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>"(iter) {
     let s: ref "core:prelude/string.wado//String";
     let v_8: ref "core:prelude/string.wado//StrCharIter";
-    let $sroa_$iter_0_f_14: ref struct;
+    let $sroa_$iter_0_f_14: ref "canonical//CanonicalClosure_0";
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
     v_8 = struct.new "core:prelude/string.wado//StrCharIter" { repr: local.tee v_8(iter.inner).repr, used: v_8.used, byte_index: v_8.byte_index };
     $sroa_$iter_0_f_14 = iter.f;
@@ -2114,8 +2114,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:pre
                 multivalue_bind [$mv$$match_2$0, $mv$$match_2$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"(v_8);
                 if $mv$$match_2$0 == 1 {
                     $mv$$match_2$0 = block -> char {
-                        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_$iter_0_f_14)).env, $mv$$match_2$1);
+                        call_ref "functype/$canonical_closure_fn_0"($sroa_$iter_0_f_14.func, $sroa_$iter_0_f_14.env, $mv$$match_2$1);
                     };
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_fn_mut_char___char__core_prelude_traits_wado_Iterator__next_sroa_return__4: "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, $mv$$match_2$0);
                 } else {

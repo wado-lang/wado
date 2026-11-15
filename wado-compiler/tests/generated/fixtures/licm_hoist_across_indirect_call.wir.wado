@@ -87,7 +87,7 @@ type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//licm_hoist_across_indirect_call.wado/scan" = fn(ref "licm_hoist_across_indirect_call.wado//Acc", i32, ref struct) -> i32;  // TypeId(22)
+type "functype//licm_hoist_across_indirect_call.wado/scan" = fn(ref "licm_hoist_across_indirect_call.wado//Acc", i32, ref "canonical//CanonicalClosure_0") -> i32;  // TypeId(22)
 
 type "functype//licm_hoist_across_indirect_call.wado/run" = fn();  // TypeId(23)
 
@@ -225,8 +225,7 @@ fn "licm_hoist_across_indirect_call.wado/scan"(a, n, f) {
             $contract_arg_0 = builtin::array_get_value<i32>($licm_repr_20, $contract_arg_0);
             sum = sum + $contract_arg_0;
             if $contract_arg_0 < 0 {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f)).env, a);
+                call_ref "functype/$canonical_closure_fn_0"(f.func, f.env, a);
             }
             i = i + 1;
             continue l1;
@@ -238,7 +237,7 @@ fn "licm_hoist_across_indirect_call.wado/scan"(a, n, f) {
 fn "licm_hoist_across_indirect_call.wado/run"() with Stdout {
     let $load_1: ref Array<u8>;
     let a: ref "licm_hoist_across_indirect_call.wado//Acc";
-    let f_1: ref struct;
+    let f_1: ref "canonical//CanonicalClosure_0";
     let total: i32;
     let out_23: ref "core:prelude/string.wado//String";
     let is_negative_90: bool;

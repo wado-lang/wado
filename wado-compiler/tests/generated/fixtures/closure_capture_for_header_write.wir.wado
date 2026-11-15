@@ -79,7 +79,7 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 array Array<u8> (mut u8);  // TypeId(13)
 
-array Array<fn()->i32> (mut ref struct);  // TypeId(14)
+array Array<fn()->i32> (mut ref "canonical//CanonicalClosure_0");  // TypeId(14)
 
 struct core:prelude//$Cell<i32> {  // TypeId(15)
     mut value: i32,
@@ -270,13 +270,13 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 fn "closure_capture_for_header_write.wado/run"() {
     let n: ref "core:prelude//$Cell<i32>";
     let k_2: i32;
-    let value_72: ref struct;
+    let value_72: ref "canonical//CanonicalClosure_0";
     let value_141: ref "closure_capture_for_header_write.wado//$Closure_3";
     let $sroa_updated_repr_161: ref Array<fn()->i32>;
     let $sroa_updated_used_162: i32;
     let $sroa_write_back_169: ref "core:prelude/list.wado//List<fn()->i32>";
     n = struct.new "core:prelude//$Cell<i32>" { value: 0 };
-    $sroa_updated_repr_161 = array.new_fixed<ref struct>();
+    $sroa_updated_repr_161 = array.new_fixed<ref "canonical//CanonicalClosure_0">();
     $sroa_updated_used_162 = 0;
     k_2 = 0;
     b0: block {
@@ -288,7 +288,7 @@ fn "closure_capture_for_header_write.wado/run"() {
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(local.tee $sroa_write_back_169(struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: $sroa_updated_repr_161, used: $sroa_updated_used_162 }));
                 $sroa_updated_repr_161 = $sroa_write_back_169.repr;
             }
-            builtin::array_set<ref struct>($sroa_updated_repr_161, $sroa_updated_used_162, value_72);
+            builtin::array_set<ref "canonical//CanonicalClosure_0">($sroa_updated_repr_161, $sroa_updated_used_162, value_72);
             $sroa_updated_used_162 = $sroa_updated_used_162 + 1;
             k_2 = k_2 + 1;
             n.value = n.value + 1;
@@ -296,30 +296,32 @@ fn "closure_capture_for_header_write.wado/run"() {
         };
     };
     if @unlikely(local.tee k_2(block -> i32 {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(0 >= $sroa_updated_used_162) {
+        let $indirect_call_1: ref null "canonical//CanonicalClosure_0";
+        if @unlikely(0 >= $sroa_updated_used_162) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $sroa_updated_used_162, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_for_header_write.wado:11"), used: 40 });
             unreachable;
-        }; builtin::array_get_value<ref struct>($sroa_updated_repr_161, 0))).env);
+        }
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(builtin::array_get_value<ref "canonical//CanonicalClosure_0">($sroa_updated_repr_161, 0)).env);
     }) != 2) {
         cold_path;
         "closure_capture_for_header_write.wado/run$cold7"(k_2);
         unreachable;
     }
     if @unlikely(local.tee $sroa_updated_used_162(block -> i32 {
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(1 >= $sroa_updated_used_162) {
+        if @unlikely(1 >= $sroa_updated_used_162) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, $sroa_updated_used_162, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_for_header_write.wado:12"), used: 40 });
             unreachable;
-        }; builtin::array_get_value<ref struct>($sroa_updated_repr_161, 1))).env);
+        }
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(builtin::array_get_value<ref "canonical//CanonicalClosure_0">($sroa_updated_repr_161, 1)).env);
     }) != 2) {
         cold_path;
         "closure_capture_for_header_write.wado/run$cold6"($sroa_updated_used_162);
         unreachable;
     }
     n = struct.new "core:prelude//$Cell<i32>" { value: 0 };
-    $sroa_updated_repr_161 = array.new_fixed<ref struct>();
+    $sroa_updated_repr_161 = array.new_fixed<ref "canonical//CanonicalClosure_0">();
     $sroa_updated_used_162 = 0;
     b9: block {
         l10: loop {
@@ -330,35 +332,37 @@ fn "closure_capture_for_header_write.wado/run"() {
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(local.tee $sroa_write_back_169(struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: $sroa_updated_repr_161, used: $sroa_updated_used_162 }));
                 $sroa_updated_repr_161 = $sroa_write_back_169.repr;
             }
-            builtin::array_set<ref struct>($sroa_updated_repr_161, $sroa_updated_used_162, value_72);
+            builtin::array_set<ref "canonical//CanonicalClosure_0">($sroa_updated_repr_161, $sroa_updated_used_162, value_72);
             $sroa_updated_used_162 = $sroa_updated_used_162 + 1;
             continue l10;
         };
     };
     if @unlikely(local.tee k_2(block -> i32 {
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(0 >= $sroa_updated_used_162) {
+        if @unlikely(0 >= $sroa_updated_used_162) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $sroa_updated_used_162, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_for_header_write.wado:19"), used: 40 });
             unreachable;
-        }; builtin::array_get_value<ref struct>($sroa_updated_repr_161, 0))).env);
+        }
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(builtin::array_get_value<ref "canonical//CanonicalClosure_0">($sroa_updated_repr_161, 0)).env);
     }) != 3) {
         cold_path;
         "closure_capture_for_header_write.wado/run$cold5"(k_2);
         unreachable;
     }
     if @unlikely(local.tee $sroa_updated_used_162(block -> i32 {
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(1 >= $sroa_updated_used_162) {
+        if @unlikely(1 >= $sroa_updated_used_162) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, $sroa_updated_used_162, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_for_header_write.wado:20"), used: 40 });
             unreachable;
-        }; builtin::array_get_value<ref struct>($sroa_updated_repr_161, 1))).env);
+        }
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(builtin::array_get_value<ref "canonical//CanonicalClosure_0">($sroa_updated_repr_161, 1)).env);
     }) != 3) {
         cold_path;
         "closure_capture_for_header_write.wado/run$cold4"($sroa_updated_used_162);
         unreachable;
     }
     n = struct.new "core:prelude//$Cell<i32>" { value: 0 };
-    $sroa_updated_repr_161 = array.new_fixed<ref struct>();
+    $sroa_updated_repr_161 = array.new_fixed<ref "canonical//CanonicalClosure_0">();
     $sroa_updated_used_162 = 0;
     b18: block {
         l19: loop {
@@ -369,35 +373,37 @@ fn "closure_capture_for_header_write.wado/run"() {
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(local.tee $sroa_write_back_169(struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: $sroa_updated_repr_161, used: $sroa_updated_used_162 }));
                 $sroa_updated_repr_161 = $sroa_write_back_169.repr;
             }
-            builtin::array_set<ref struct>($sroa_updated_repr_161, $sroa_updated_used_162, value_72);
+            builtin::array_set<ref "canonical//CanonicalClosure_0">($sroa_updated_repr_161, $sroa_updated_used_162, value_72);
             $sroa_updated_used_162 = $sroa_updated_used_162 + 1;
             n.value = n.value + 1;
             continue l19;
         };
     };
     if @unlikely(local.tee k_2(block -> i32 {
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(0 >= $sroa_updated_used_162) {
+        if @unlikely(0 >= $sroa_updated_used_162) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $sroa_updated_used_162, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_for_header_write.wado:27"), used: 40 });
             unreachable;
-        }; builtin::array_get_value<ref struct>($sroa_updated_repr_161, 0))).env);
+        }
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(builtin::array_get_value<ref "canonical//CanonicalClosure_0">($sroa_updated_repr_161, 0)).env);
     }) != 2) {
         cold_path;
         "closure_capture_for_header_write.wado/run$cold3"(k_2);
         unreachable;
     }
     if @unlikely(local.tee $sroa_updated_used_162(block -> i32 {
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(1 >= $sroa_updated_used_162) {
+        if @unlikely(1 >= $sroa_updated_used_162) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, $sroa_updated_used_162, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_for_header_write.wado:28"), used: 40 });
             unreachable;
-        }; builtin::array_get_value<ref struct>($sroa_updated_repr_161, 1))).env);
+        }
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(builtin::array_get_value<ref "canonical//CanonicalClosure_0">($sroa_updated_repr_161, 1)).env);
     }) != 2) {
         cold_path;
         "closure_capture_for_header_write.wado/run$cold2"($sroa_updated_used_162);
         unreachable;
     }
-    $sroa_updated_repr_161 = array.new_fixed<ref struct>();
+    $sroa_updated_repr_161 = array.new_fixed<ref "canonical//CanonicalClosure_0">();
     $sroa_updated_used_162 = 0;
     k_2 = 0;
     b27: block {
@@ -409,29 +415,31 @@ fn "closure_capture_for_header_write.wado/run"() {
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(local.tee $sroa_write_back_169(struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: $sroa_updated_repr_161, used: $sroa_updated_used_162 }));
                 $sroa_updated_repr_161 = $sroa_write_back_169.repr;
             }
-            builtin::array_set<ref struct>($sroa_updated_repr_161, $sroa_updated_used_162, struct.new "canonical//CanonicalClosure_0" { env: value_141, func: ref.func "closure/closure_capture_for_header_write.wado/$closure_wrapper_3" });
+            builtin::array_set<ref "canonical//CanonicalClosure_0">($sroa_updated_repr_161, $sroa_updated_used_162, struct.new "canonical//CanonicalClosure_0" { env: value_141, func: ref.func "closure/closure_capture_for_header_write.wado/$closure_wrapper_3" });
             $sroa_updated_used_162 = $sroa_updated_used_162 + 1;
             k_2 = k_2 + 1;
             continue l28;
         };
     };
     if @unlikely((local.tee k_2(block -> i32 {
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(0 >= $sroa_updated_used_162) {
+        if @unlikely(0 >= $sroa_updated_used_162) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $sroa_updated_used_162, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_for_header_write.wado:34"), used: 40 });
             unreachable;
-        }; builtin::array_get_value<ref struct>($sroa_updated_repr_161, 0))).env);
+        }
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(builtin::array_get_value<ref "canonical//CanonicalClosure_0">($sroa_updated_repr_161, 0)).env);
     }) == 0) == 0) {
         cold_path;
         "closure_capture_for_header_write.wado/run$cold1"(k_2);
         unreachable;
     }
     if @unlikely(local.tee $sroa_updated_used_162(block -> i32 {
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(1 >= $sroa_updated_used_162) {
+        if @unlikely(1 >= $sroa_updated_used_162) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, $sroa_updated_used_162, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("closure_capture_for_header_write.wado:35"), used: 40 });
             unreachable;
-        }; builtin::array_get_value<ref struct>($sroa_updated_repr_161, 1))).env);
+        }
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(builtin::array_get_value<ref "canonical//CanonicalClosure_0">($sroa_updated_repr_161, 1)).env);
     }) != 1) {
         cold_path;
         "closure_capture_for_header_write.wado/run$cold0"($sroa_updated_used_162);
@@ -1142,7 +1150,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(self) {
     let $load_0: ref Array<fn()->i32>;
     let new_repr: ref Array<fn()->i32>;
     let a: i32;
-    builtin::array_copy<ref struct>(local.tee new_repr(builtin::array_new<ref struct>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    builtin::array_copy<ref "canonical//CanonicalClosure_0">(local.tee new_repr(builtin::array_new<ref "canonical//CanonicalClosure_0">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
