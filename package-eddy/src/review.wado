@@ -113,7 +113,7 @@ pub fn review(
     // Thinking spends from the same budget as the answer.
     let Some(w) = ws else {
         return match ask_json::<Answer>(api_key, model, REVIEW, *task, 32_000) {
-            Ok(a) => Reviewed { findings: a.findings.into_iter().map(|r| unreproduced(r)).collect() },
+            Ok(a) => Reviewed { findings: unreproduced_all(a.findings) },
             Err(e) => Reviewed { error: Some(e) },
         };
     };
@@ -123,7 +123,12 @@ pub fn review(
     let mut reviewed = Reviewed { turns: agent.turns, calls: agent.calls, usage: Some(agent.usage) };
     match agent.answer {
         Ok(answer) => match json_object::<Answer>(&answer) {
-            Ok(a) => reviewed.findings = reproduce(w, &commit, a.findings),
+            // Without Run the reviewer wrote nothing to try.
+            Ok(a) => reviewed.findings = if w.runner matches { Some(_) } {
+                reproduce(w, &commit, a.findings);
+            } else {
+                unreproduced_all(a.findings);
+            },
             Err(e) => reviewed.error = Some(e),
         },
         Err(e) => reviewed.error = Some(e),
@@ -133,6 +138,10 @@ pub fn review(
 
 fn unreproduced(r: Reported) -> Finding {
     return Finding { file: r.file, summary: r.summary, detail: r.detail };
+}
+
+fn unreproduced_all(reported: List<Reported>) -> List<Finding> {
+    return reported.into_iter().map(|r| unreproduced(r)).collect();
 }
 
 /// `reported` with each claim tried: its files cut from the tree the reviewer
