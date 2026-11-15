@@ -34,13 +34,36 @@ use super::tysys::TypeSystem;
 pub(super) struct ReceiverId {
     key: ImplTargetKey,
     ty: Option<TypeId>,
+    /// The receiver as the call's source wrote it, read off its AST where the
+    /// call is resolved. A diagnostic prints it; no lookup reads it.
+    written: Option<String>,
 }
 
 impl ReceiverId {
     /// A receiver whose key the caller already holds: a namespace member, a
     /// link of a newtype chain.
     pub(super) fn keyed(key: ImplTargetKey, ty: Option<TypeId>) -> Self {
-        Self { key, ty }
+        Self {
+            key,
+            ty,
+            written: None,
+        }
+    }
+
+    /// The same receiver, written as `spelling` at the call.
+    pub(super) fn written_as(self, spelling: &str) -> Self {
+        Self {
+            written: Some(spelling.to_string()),
+            ..self
+        }
+    }
+
+    /// How a diagnostic names the receiver: as the call wrote it, else by its
+    /// declaration, which is what a link of a newtype chain has.
+    pub(super) fn spelled<'a>(&'a self, defs: &'a DefTable) -> &'a str {
+        self.written
+            .as_deref()
+            .unwrap_or_else(|| self.key.display_name(defs))
     }
 
     /// The type `def` declares, as a receiver.
@@ -57,7 +80,8 @@ impl ReceiverId {
         self.ty
     }
 
-    /// The receiver's name: its declaration's, or the shape's.
+    /// The receiver's name, as a mangled name embeds it: its declaration's, or
+    /// the shape's.
     pub(super) fn name<'a>(&'a self, defs: &'a DefTable) -> &'a str {
         self.key.display_name(defs)
     }
@@ -714,7 +738,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// How a diagnostic spells `receiver`: its type where the call knows one.
     pub(super) fn receiver_display(&self, receiver: &ReceiverId) -> String {
         receiver.ty.map_or_else(
-            || receiver.name(self.tysys.resolutions.defs()).to_string(),
+            || receiver.spelled(self.tysys.resolutions.defs()).to_string(),
             |ty| self.tysys.type_id_to_string(ty),
         )
     }
@@ -986,7 +1010,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return StaticLookup::NotStatic;
         }
         StaticLookup::OutOfScope {
-            receiver: receiver.name(defs).to_string(),
+            receiver: receiver.spelled(defs).to_string(),
             traits,
         }
     }

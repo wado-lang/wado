@@ -1881,7 +1881,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|(link, _)| self.is_declaring_link(*link))
             .map(|(_, key)| key);
         let key = declaring_key.or_else(|| self.tysys.static_receiver_key(target_type_id));
-        let lookup_receiver = key.map(|key| ReceiverId::keyed(key, None));
+        // The head as written names the receiver only where the key is the
+        // target's own; a link below it has no spelling of its own.
+        let own_key = self.receiver_of(target_type_id);
+        let lookup_receiver = key.map(|key| {
+            let receiver = ReceiverId::keyed(key, None);
+            match &head {
+                Some(head) if receiver.key() == own_key.key() => {
+                    receiver.written_as(&unalias_namespace_member(&head.name))
+                }
+                _ => receiver,
+            }
+        });
         let static_receiver = lookup_receiver.as_ref().map(ReceiverId::key);
 
         // `Type::<T>::method()` parses as a static-method call and never
@@ -1892,7 +1903,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver.key(),
                 &format!(
                     "{}::{}",
-                    receiver.name(self.tysys.resolutions.defs()),
+                    receiver.spelled(self.tysys.resolutions.defs()),
                     static_call.method
                 ),
                 Some(static_call.id),
@@ -2221,7 +2232,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !sig.own_params.is_empty()
             && let Some(receiver) = &lookup_receiver
         {
-            let receiver = receiver.name(self.tysys.resolutions.defs()).to_string();
+            let receiver = receiver.spelled(self.tysys.resolutions.defs()).to_string();
             let own_ids = sig.own_type_param_ids();
             let declaring = sig
                 .declaring_impl
@@ -3190,7 +3201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let struct_name = recv
             .receiver
-            .name(self.tysys.resolutions.defs())
+            .spelled(self.tysys.resolutions.defs())
             .to_string();
         let survey = self.static_arg_survey(recv, method_name);
         let spelled = render_type_list(&self.tysys.type_table.borrow(), arg_types);
@@ -3282,7 +3293,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let _ = self.emit(TypeError::AmbiguousStaticArgument {
                     receiver: recv
                         .receiver
-                        .name(self.tysys.resolutions.defs())
+                        .spelled(self.tysys.resolutions.defs())
                         .to_string(),
                     method: method_name.to_string(),
                     candidates,
@@ -3621,8 +3632,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && (self.derived_for_no_instance(&link_receiver, method_name, impl_type_args)
                 || self.declared_by_no_reaching_block(&link_receiver, method_name, impl_type_args))
         {
+            let receiver = link_receiver.spelled(self.tysys.resolutions.defs());
             let _ = self.emit(TypeError::UnknownFunction {
-                name: format!("{actual_struct_name}::{method_name}"),
+                name: format!("{receiver}::{method_name}"),
                 span,
             });
             return TypeTable::ERROR;

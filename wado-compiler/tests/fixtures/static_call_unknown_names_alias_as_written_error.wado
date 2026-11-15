@@ -1,0 +1,10 @@
+// A static call names its receiver in a diagnostic as the call wrote it: an
+// alias, not the declaration it reaches.
+use { TreeMap as TM } from "core:collections";
+
+export fn run() {
+    let x: TM<i32, i32> = TM::nope();
+}
+
+__DATA__
+{ "compile_error": ":6:27: analysis error: unknown function 'TM::nope'" }

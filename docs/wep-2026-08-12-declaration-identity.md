@@ -256,6 +256,13 @@ compiler rewrites knows the receiver's type. So a static resolution takes the
 receiver as one identity, built from one of those two, and never as the text
 the source wrote. The identity has no constructor that takes a name.
 
+A diagnostic about a static call names the receiver as the call wrote it: `TM`
+for `use { TreeMap as TM }`, not `TreeMap`. The call is the last point that
+holds the AST, while the report is raised several lookups below it. So the call
+reads the spelling off its AST once and attaches it to the identity. Only a
+diagnostic prints it, and no lookup reads it. A link of a newtype chain below
+the written head has no spelling of its own, so it is named by its declaration.
+
 A receiver whose site resolves to nothing is reported where it is written, as
 any unresolved name is. The static resolution never sees it, so no lookup is
 keyed by the spelling of a type that does not exist.
@@ -915,7 +922,7 @@ the e2e fixtures passing.
 - [x] A receiver identity, built from a reference site's `Resolution` or from a
   `TypeId`, and `StaticQuery` built from it with no receiver name. Every
   static resolution's caller passes one.
-- [x] A diagnostic about a static call spells the receiver from its identity. A
+- [x] A diagnostic about a static call spells the receiver as the call wrote it. A
   receiver no site resolves is reported by the resolver alone. The wording
   that changes is reviewed fixture by fixture.
 - [x] `ImplTargetKey::TypeParam` keyed by the binder that declares the

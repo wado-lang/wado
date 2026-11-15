@@ -1754,7 +1754,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             callee_kind
                 .receiver_segment()
                 .and_then(|segment| self.receiver_at(segment))
-        };
+        }
+        .map(|receiver| match ident.name.rsplit_once("::") {
+            Some((written, _)) => receiver.written_as(written),
+            None => receiver,
+        });
         // A case is reachable wherever its type is; only a static method has
         // a visibility of its own to check.
         if callee_kind.case_owner().is_none()
@@ -2254,7 +2258,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     // The branch below reads the middle segment as a type, so a
                     // segment naming none is reported where it is written.
-                    let Some(receiver) = receiver else {
+                    let Some(receiver) = receiver
+                        .map(|receiver| receiver.written_as(&format!("{prefix}::{type_name}")))
+                    else {
                         let _ = self.emit(TypeError::UnknownType {
                             name: format!("{prefix}::{type_name}"),
                             span: receiver_segment.map_or(call.span, |seg| seg.span),
@@ -3816,7 +3822,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name: suffix,
         } = callee;
         let prefix = static_receiver
-            .name(self.tysys.resolutions.defs())
+            .spelled(self.tysys.resolutions.defs())
             .to_string();
         let StaticTypeArgs {
             impl_args: impl_type_args,
@@ -3985,7 +3991,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_type_args: &[TypeId],
         span: token::Span,
     ) {
-        let prefix = receiver.name(self.tysys.resolutions.defs()).to_string();
+        let prefix = receiver.spelled(self.tysys.resolutions.defs()).to_string();
         let Some(sig) = self.derived_method_signature(receiver.key(), suffix) else {
             return;
         };
@@ -5607,7 +5613,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) {
             return return_type;
         }
-        let prefix = receiver.name(self.tysys.resolutions.defs());
+        let prefix = receiver.spelled(self.tysys.resolutions.defs());
         let _ = self.emit(TypeError::UnknownFunction {
             name: format!("{prefix}::{suffix}"),
             span: call.span,
@@ -5651,7 +5657,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .and_then(|def| self.bare_generic_type_arity(def))
         {
             let _ = self.emit(TypeError::MissingTypeArguments {
-                name: receiver.name(self.tysys.resolutions.defs()).to_string(),
+                name: receiver.spelled(self.tysys.resolutions.defs()).to_string(),
                 expected,
                 span,
             });
@@ -6183,7 +6189,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|arg| self.resolve_expr(arg, ctx, None))
                 .collect(),
         };
-        let receiver = self.receiver_of(type_param_type_id);
+        let receiver = self
+            .receiver_of(type_param_type_id)
+            .written_as(type_param_name);
         self.blanket_static_or_unknown(
             &receiver,
             method_name,
