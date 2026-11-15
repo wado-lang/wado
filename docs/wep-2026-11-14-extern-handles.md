@@ -372,7 +372,10 @@ through the canonical ABI the present glue is called through.
   imports, which narrowing, `Inspect` and `==` call for a host object where
   they trap today
 - [ ] The loader: the jco transpile runs in `instantiation` mode and replaces
-  the trapping module's functions with the glue
+  the trapping module's functions with the glue. The programs that ran against
+  a wasmtime host stub (a two-level `extends`, narrowing by the host's class,
+  `==` as the host interned) run against jsdom instead: a Component Model host
+  cannot supply a web import
 - [ ] Closures cross as `externref`, called back through unlifted core exports,
   and the registry and `wado:callback/callback` are removed
 - [ ] The handle table: a handle in linear memory is a slot index, and
