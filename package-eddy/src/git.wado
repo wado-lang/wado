@@ -64,7 +64,9 @@ pub fn diff_between(
     what: String,
     limit: i32,
 ) -> Result<String, String> with Process {
-    let gen = generated(base, paths);
+    // At `head`: a change that adds a generated file marks it in the same
+    // change, which `base` does not know of yet.
+    let gen = generated(head, paths);
     let mut diff_args = ["diff", *base, *head, "--"] as List<String>;
     let mut any = false;
     for let p of paths {

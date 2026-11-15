@@ -3,16 +3,20 @@
 //!
 //! The reviewer reads the diff from the merge base of `--base` (`origin/main`)
 //! to `--head` (`HEAD`), and a checkout of the head under `scratchpad/`,
-//! through Read, Grep and Glob. `--run` adds Write and Run, which build that
-//! checkout with `cargo`; it needs `--process-read` on `~/.cargo` and
-//! `~/.rustup`. The record is `<--reviews>/<head>.json`, one entry per review.
+//! through Read, Grep and Glob. It also writes tests into that checkout and
+//! runs them with `cargo`, through Write and Run, and a finding it reproduced
+//! carries the patch and the run that show it, tried again alone before it is
+//! reported. That needs `--process-read` on the `cargo` and `rustup` homes;
+//! `--no-run` reviews by reading alone. The record is
+//! `<--reviews>/<head>.json`, one entry per review.
 //!
 //! Run it from the repository root, every commit to review made. The reviewer
 //! is a build input: `CLAUDE_MODEL` in the environment, or
 //! `-D CLAUDE_MODEL=...`.
 //!
 //! ```sh
-//! CLAUDE_API_KEY=... wado run package-eddy/src/main.wado -- --run
+//! CLAUDE_API_KEY=... wado run --process-read ~/.cargo --process-read ~/.rustup \
+//!     package-eddy/src/main.wado
 //! ```
 
 use { from_env } from "core:args";
@@ -23,7 +27,7 @@ use { to_bytes_pretty, from_string } from "core:json";
 use { Process } from "core:process";
 use { Deserialize } from "core:serde";
 use { Client } from "wasi:http";
-use { git, paths_between, diff_between } from "./git.wado";
+use { git, try_git, paths_between, diff_between } from "./git.wado";
 use { change, review, Finding, Reviewed } from "./review.wado";
 use { snapshot, add_build_submodules, home_runner, drop_snapshot } from "./snapshot.wado";
 use { Runner, Workspace } from "./tools.wado";
@@ -34,10 +38,12 @@ global CLAUDE_MODEL: String = "claude-opus-5-5";
 #[param(name = "diff_limit")]
 global LIMIT: i32 = 2_000_000;
 
+global USAGE: String = "usage: eddy [--base <rev>] [--head <rev>] [--no-run] [--max-turns <n>] [--reviews <dir>]";
+
 struct Options {
     base: String = "origin/main",
     head: String = "HEAD",
-    run: bool = false,
+    no_run: bool = false,
     max_turns: i32 = 40,
     reviews: String = "package-eddy/reviews",
 }
@@ -65,13 +71,31 @@ struct Report {
 export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Client) {
     let options = match from_env::<Options>() {
         Ok(options) => options,
-        Err(e) => fail(`${e}\nusage: eddy [--base <rev>] [--head <rev>] [--run] [--max-turns <n>] [--reviews <dir>]`),
+        Err(e) => fail(`${e}\n${USAGE}`),
     };
+    if options.max_turns < 1 {
+        fail(`--max-turns must be at least 1\n${USAGE}`);
+    }
     let Some(api_key) = env("CLAUDE_API_KEY") else {
         fail("CLAUDE_API_KEY is not set");
     };
-    let head = git(["rev-parse", "--verify", `${options.head}^{commit}`]).trim().to_string();
+    let Some(head) = try_git(["rev-parse", "--verify", `${options.head}^{commit}`]) else {
+        fail(
+            `git finds no commit ${options.head} here. Run from the root of the main checkout: a linked worktree keeps its git directory where a child of wado run cannot reach`,
+        );
+    };
+    let head = head.trim().to_string();
     let base = git(["merge-base", options.base, head]).trim().to_string();
+    // Before the review, so one that cannot be recorded is not paid for.
+    let path = fs::join(&options.reviews, `${head}.json`);
+    let mut record = match fs::read_to_string(&path) {
+        Ok(text) => match from_string::<Record, String>(text) {
+            Ok(record) => record,
+            Err(e) => fail(`${path} is not a record of reviews: ${e:?}`),
+        },
+        Err(e) && e.kind matches { NotFound } => Record { head, reviews: [] },
+        Err(e) => fail(`${e}`),
+    };
     let diff = match diff_between(&base, &head, &paths_between(&base, &head), "branch", LIMIT) {
         Ok(diff) => diff,
         Err(e) => fail(e),
@@ -84,32 +108,27 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Clie
 ${commits.trim()}`;
 
     let root = snapshot(&head);
-    let runner: Option<Runner> = if options.run {
+    let runner: Option<Runner> = if options.no_run {
+        null;
+    } else {
         add_build_submodules(&root);
         Some(home_runner());
-    } else {
-        null;
     };
     let ws: Option<Workspace> = Some(Workspace { root, runner });
     let result = review(&api_key, CLAUDE_MODEL, &change(&heading, &diff), &ws, options.max_turns);
-    drop_snapshot(&root);
 
-    let path = fs::join(&options.reviews, `${head}.json`);
-    let mut record = match fs::read_to_string(&path) {
-        Ok(text) => from_string::<Record, String>(text).unwrap(),
-        Err(e) && e.kind matches { NotFound } => Record { head, reviews: [] },
-        Err(e) => fail(`${e}`),
-    };
     record.reviews.push(Attempt {
         base,
         reviewer: CLAUDE_MODEL,
-        run: options.run,
+        run: !options.no_run,
         max_turns: options.max_turns,
         result,
     });
     fs::create_dir_all(&options.reviews).unwrap();
     fs::write(&path, &to_bytes_pretty(&record).unwrap()).unwrap();
     eprintln(`recorded in ${path}: ${result.turns} turns, ${result.calls.len()} tool calls`);
+    // After the record: a cleanup that fails must not take the review with it.
+    drop_snapshot(&root);
 
     if let Some(e) = &result.error {
         fail(*e);

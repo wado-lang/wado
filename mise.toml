@@ -451,20 +451,24 @@ description = "Run the Claude Code hook tests"
 run = "node --test .claude/hooks/*.test.mts"
 
 [tasks.eddy-review]
-description = "Review this branch with Eddy; arguments go to it (`--run` lets it build and run the code)"
+description = "Review this branch with Eddy; arguments go to it (`--no-run` keeps it from building and running the code)"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
-# A child of `wado run` may run only a system-wide program, and mise's `rg`
-# shim is ahead of `/usr/bin/rg` on PATH otherwise.
-export PATH="/usr/bin:$PATH"
-# Run builds with cargo, which would starve a test run and be starved by it.
+wado="$(scripts/dev-bin.sh --path wado)"
+set -- "$wado" run \
+    --process-read "${CARGO_HOME:-$HOME/.cargo}" --process-read "${RUSTUP_HOME:-$HOME/.rustup}" \
+    package-eddy/src/main.wado -- "$@"
+# The reviewer builds with cargo, which would starve a test run and be starved
+# by it.
 case " $* " in
-    *" --run "*) set -- ./scripts/exclusive.sh test scripts/dev-bin.sh wado run \
-        --process-read "$HOME/.cargo" --process-read "$HOME/.rustup" package-eddy/src/main.wado -- "$@" ;;
-    *) set -- scripts/dev-bin.sh wado run package-eddy/src/main.wado -- "$@" ;;
+    *" --no-run "*) ;;
+    *) set -- ./scripts/exclusive.sh test "$@" ;;
 esac
-exec "$@"
+# A child of `wado run` may run only a system-wide program, and mise's `rg`
+# shim is ahead of `/usr/bin/rg` on PATH otherwise. Set after `wado` is built,
+# which must find the toolchain mise installs.
+PATH="/usr/bin:$PATH" exec "$@"
 """
 
 # The oracle tasks run the ANTLR4 jar, so Java is installed for them alone. A

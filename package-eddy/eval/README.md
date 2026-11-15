@@ -75,7 +75,8 @@ CLAUDE_API_KEY=... PATH=/usr/bin:$PATH wado run \
 ```
 
 `run.json` joins three such runs, `only` set to 1915, 1697 and 1680, and
-`reproduce.json` two, 1697 and 1680, with the prompt as it stands. Each
+`reproduce.json` two, 1697 and 1680. Both ran the prompt as it stood before a
+finding carried a `repro`, so a rerun does not give these files back. Each
 `*-confirmed.json` is `confirm.wado` over one of them:
 
 ```sh

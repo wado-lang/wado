@@ -24,7 +24,7 @@ pub fn snapshot(sha: &String) -> String with Process {
 /// `git` run in `dir`, a checkout a reviewer reaches, with every symbolic link
 /// kept a file: a command that rewrites the tree, such as `reset --hard`,
 /// would otherwise make it a link again.
-fn tree_git(dir: &String, args: List<String>) -> String with Process {
+pub fn tree_git(dir: &String, args: List<String>) -> String with Process {
     let mut full = ["-c", "core.symlinks=false", "-C", *dir] as List<String>;
     full.extend(&args);
     return git(full);

@@ -12,11 +12,26 @@ rest of the pipeline below is not implemented yet.
 From the repository root, with `CLAUDE_API_KEY` set and the branch committed:
 
 ```sh
-mise run eddy-review          # the reviewer reads the diff and the tree
-mise run eddy-review --run    # it also writes tests and runs them with cargo
+mise run eddy-review             # the reviewer reads, writes tests and runs them
+mise run eddy-review --no-run    # it reads the diff and the tree, and runs nothing
 ```
 
-The findings go to stdout as JSON. Each run is also added to
+The findings go to stdout as JSON. A finding the reviewer reproduced carries
+its `repro`:
+
+- `patch` is the test it wrote, as a diff against the reviewed commit.
+- `run` is the `cargo` arguments that run it.
+- `expect` is a text the failing run prints. It tells an assertion that failed
+  from a test that did not compile.
+- `verified` says whether the run failed with that text when Eddy tried the
+  patch alone in a clean checkout, after the review. The reviewer's word is not
+  taken for it.
+- `output` is what that run reported.
+
+The test asserts the right behaviour, so `git apply` and `cargo <run>` give
+the failing test to fix against.
+
+Each run is also added to
 `reviews/<head>.json`, the record of every review of that commit, which is
 committed with the branch: outcomes are what Eddy learns from, and an outcome
 needs the finding it answers. In a Claude Code session the `eddy` skill runs

@@ -41,13 +41,20 @@ pub struct Runner {
     pub rustup_home: String,
 }
 
+/// One run of `cargo`: whether it exited 0, and how it ended with the end of
+/// its stderr and stdout, as Run reports it.
+pub struct Ran {
+    pub succeeded: bool,
+    pub report: String,
+}
+
 /// The most Runs one review makes. Retrying a defect that does not reproduce,
 /// such as a race, spends a review's turns on nothing, so past this the
 /// reviewer answers from what it has.
 global RUN_LIMIT: i32 = 12;
 
 /// How long one Run may take, in seconds, unless it asks for another time.
-global RUN_TIMEOUT: i32 = 900;
+pub global RUN_TIMEOUT: i32 = 900;
 
 /// The longest time, in seconds, a Run may ask for.
 global RUN_TIMEOUT_LIMIT: i32 = 1800;
@@ -316,19 +323,23 @@ impl Workspace {
     }
 
     fn run(&self, input: &RunInput) -> Result<String, String> with Process {
-        let Some(runner) = &self.runner else {
-            unreachable();  // dispatch offers Run only with a runner
-        };
         if input.timeout < 1 || input.timeout > RUN_TIMEOUT_LIMIT {
             return Err(`timeout must be from 1 to ${RUN_TIMEOUT_LIMIT}`);
         }
+        return Ok(self.cargo(&input.args, input.timeout)?.report);
+    }
+
+    /// What `cargo` with `cargo_args` did at the tree's root within `timeout`
+    /// seconds, or why it could not start.
+    pub fn cargo(&self, cargo_args: &List<String>, timeout: i32) -> Result<Ran, String> with Process {
+        let runner = self.runner.expect("only a workspace with a runner runs cargo");
         // `core:process` starts a child where the guest's grant is, so the
         // shell moves into the tree, the target directory resolved first.
         let mut args = [
-            "--kill-after=10", `${input.timeout}`, "sh", "-c",
+            "--kill-after=10", `${timeout}`, "sh", "-c",
             "export CARGO_TARGET_DIR=\"$PWD/$1\"; cd \"$0\" && shift && exec cargo \"$@\"", self.root, runner.target_dir,
         ] as List<String>;
-        args.extend(&input.args);
+        args.extend(cargo_args);
         let run = Command::new("timeout").args(args).env("CARGO_HOME", runner.cargo_home).env(
             "RUSTUP_HOME",
             runner.rustup_home,
@@ -342,25 +353,28 @@ impl Workspace {
             Ok(out) => out,
             // It ran, so it is an answer and spends a run, not an error.
             Err(e) && e.kind matches { OutputTooLarge } => {
-                return Ok("killed: its stdout passed the capture limit, so nothing it printed is kept");
+                return Ok(Ran {
+                    succeeded: false,
+                    report: "killed: its stdout passed the capture limit, so nothing it printed is kept",
+                });
             },
             Err(e) => {
                 return Err(`${e}`);
             },
         };
         let ended = match out.status {
-            Exited(124) => `timed out after ${input.timeout} seconds`,
+            Exited(124) => `timed out after ${timeout} seconds`,
             // What `timeout` exits with once it kills a command that outlived
             // SIGTERM, and what a kill for lack of memory gives too.
-            Exited(137) => `killed: it ran past ${input.timeout} seconds and ignored SIGTERM, or ran out of memory`,
+            Exited(137) => `killed: it ran past ${timeout} seconds and ignored SIGTERM, or ran out of memory`,
             Exited(code) => `exit code ${code}`,
             other => `${other:?}`,
         };
-        return Ok(`${ended}
+        return Ok(Ran { succeeded: out.status == Exited(0), report: `${ended}
 <stderr>
 ${tail(String::from_utf8_lossy(out.stderr))}</stderr>
 <stdout>
-${tail(String::from_utf8_lossy(out.stdout))}</stdout>`);
+${tail(String::from_utf8_lossy(out.stdout))}</stdout>` });
     }
 
     fn read(&self, input: &ReadInput) -> Result<String, String> with Preopens {
@@ -492,7 +506,7 @@ ${tail(String::from_utf8_lossy(out.stdout))}</stdout>`);
     }
 
     /// `path` inside the root, or an error when it leaves the root.
-    fn resolve(&self, path: &String) -> Result<String, String> {
+    pub fn resolve(&self, path: &String) -> Result<String, String> {
         let full = fs::normalize(fs::join(self.root, unrooted(path))).map_err(|e| `${e}`)?;
         if full != self.root && !full.starts_with(`${self.root}/`) {
             return Err(`${*path} is outside the repository`);
