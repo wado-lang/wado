@@ -1826,6 +1826,96 @@ SEMI : ';' ;";
     assert !output.contains("b';' | b';'");
 }
 
+// The expectations below are the jar's (antlr-4.13.2 on JDK 21), except where
+// a test says Gale departs from it.
+test "caseInsensitive adds a char's simple lowercase and uppercase" {
+    let input = "lexer grammar Test;
+options { caseInsensitive = true; }
+SHARP : '\\u1E9E' ;
+LONG_S : '\\u017F' ;
+SIGMA : '\\u03C3' ;
+KELVIN : '\\u212A' ;
+X : . ;";
+    let got = lexes(input, ["ßẞſSsσΣςkK\u{212A}"]);
+    assert got == "ßẞſSsσΣςkK\u{212A} => SHARP:ß SHARP:ẞ LONG_S:ſ LONG_S:S X:s SIGMA:σ SIGMA:Σ X:ς KELVIN:k X:K KELVIN:\u{212A}\n";
+}
+
+test "caseInsensitive maps a range by its bounds, or leaves it as written" {
+    // `[α-ω]` maps both bounds to the other case. `[à-ÿ]` does not: `ÿ`'s
+    // uppercase is `Ÿ`, outside Latin-1, so the uppercase bounds span another
+    // width. `[_-z]` does not either: `_` is its own uppercase and `z`'s is
+    // `Z`, below it.
+    let input = "lexer grammar Test;
+options { caseInsensitive = true; }
+GREEK : [α-ω]+ ;
+LATIN : [à-ÿ] ;
+TAIL : [_-z] ;
+WS : ' ' -> skip ;
+X : . ;";
+    let got = lexes(input, ["ΧΨΩ À ÷ _ A a"]);
+    assert got == "ΧΨΩ À ÷ _ A a => GREEK:ΧΨΩ X:À LATIN:÷ TAIL:_ X:A TAIL:a\n";
+}
+
+test "caseInsensitive keeps a range whose bounds differ in case as written" {
+    let input = "lexer grammar Test;
+options { caseInsensitive = true; }
+A : [Z-a] ;
+X : . ;";
+    let got = lexes(input, ["zAZa^"]);
+    assert got == "zAZa^ => X:z X:A A:Z A:a A:^\n";
+}
+
+test "a caseInsensitive range whose letter bounds differ in case warns" {
+    let input = "lexer grammar Test;
+options { caseInsensitive = true; }
+A : [Z-a] ;
+B : [0-z] ;
+C options { caseInsensitive = false; } : [A-z] ;
+D : [\\p{L}_]+ ;
+E : 'A'..'\\u00AA' ;";
+    let messages: List<String> = gen(input).diagnostics.into_iter().map(|d| `${d.owner.label()}: ${d.message}`).collect();
+    // `\\p{L}` holds runs such as Ø..ö, which no one wrote. `ª` is lowercase
+    // with no case mapping.
+    assert messages == [
+        "lexer rule 'A': range Z..a is kept as written, not widened by caseInsensitive: its bounds are letters of different case",
+        "lexer rule 'E': range A..ª is kept as written, not widened by caseInsensitive: its bounds are letters of different case",
+    ];
+}
+
+// Gale departs from the jar here: the jar's `'ǅ'` and `[Ǆ-ǅ]` match `Ǆ` and
+// `ǆ` but not the `ǅ` written in them.
+test "caseInsensitive matches a titlecase char as written" {
+    let input = "lexer grammar Test;
+options { caseInsensitive = true; }
+DZ : '\\u01C5' ;
+X : . ;";
+    assert lexes(input, ["ǄǅǆD"]) == "ǄǅǆD => DZ:Ǆ DZ:ǅ DZ:ǆ X:D\n";
+    let range = "lexer grammar Test;
+options { caseInsensitive = true; }
+DZ : [\\u01C4-\\u01C5] ;
+X : . ;";
+    assert lexes(range, ["ǄǅǆD"]) == "ǄǅǆD => DZ:Ǆ DZ:ǅ DZ:ǆ X:D\n";
+}
+
+test "caseInsensitive complements a negated set after mapping it" {
+    let input = "lexer grammar Test;
+options { caseInsensitive = true; }
+NOT_A : ~[a] ;
+X : . ;";
+    assert lexes(input, ["aAb"]) == "aAb => X:a X:A NOT_A:b\n";
+}
+
+test "caseInsensitive matches a literal's char of another length" {
+    // `ſ` is two bytes and its uppercase `S` one, so the literal's length in
+    // the input is not the literal's own.
+    let input = "grammar Test;
+options { caseInsensitive = true; }
+r : 'x\\u017F' 'y' EOF ;
+LONG : 'z\\u212A' ;
+WS : ' ' -> skip ;";
+    assert lexes(input, ["xS y zk", "xſ Y Zk"]) == "xS y zk => 'xſ':xS 'y':y LONG:zk\nxſ Y Zk => 'xſ':xſ 'y':Y LONG:Zk\n";
+}
+
 test "metadata comment lists grammar-level options" {
     let mut grammar = Grammar {
         name: "Test",
@@ -6968,6 +7058,19 @@ fn dump_source<S: AsStrSlice>(input: S) -> String {
 test "the dump lowers through the emitter's primed context" {
     let [_, ctx] = dump_pipeline("grammar G; a : B c ; c : C ; B : 'b' ; C : 'c' ;");
     assert ctx.follow.is_exact("a"), "the dump must install FOLLOW before lowering, as `generate` does";
+}
+
+test "the dump reports the lexer rules' warnings, as generation does" {
+    let input = "lexer grammar L;
+options { caseInsensitive = true; }
+A : [Z-a] ;
+C : '/*' ( C | {true}? . )*? '*/' ;";
+    let report = dump_source(input);
+    let messages: List<String> = gen(input).diagnostics.into_iter().map(|d| d.message).collect();
+    assert messages.len() == 2;
+    for let m of &messages {
+        assert report.contains(m);
+    }
 }
 
 // `--atn` reports the same grammar the GIR dump does, so it reports the same

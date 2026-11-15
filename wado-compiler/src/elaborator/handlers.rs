@@ -15,9 +15,8 @@ use super::tysys::TypeSystem;
 use crate::defs::DefId;
 use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
 use crate::elaborator::solver_bridge::{InstanceBody, InstanceImpl, InstanceOrder};
-use crate::elaborator::trait_env::ImplTargetKey;
 use crate::hashmap;
-use crate::name::{DeclName, DeclaredHead, FqTraitName, FqTypeName, TUPLE_TYPE_NAME};
+use crate::name::{DeclaredHead, FqTraitName, FqTypeName, TUPLE_TYPE_NAME};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
@@ -305,7 +304,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_env = &self.tysys.trait_env;
         let written = trait_env
             .impl_index
-            .get(&self.handler_impl_target(handler_type))
+            .get(&self.impl_target_of(handler_type))
             .into_iter()
             .flatten()
             .copied();
@@ -399,14 +398,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .solver()
             .instance_order(&tt, handler_type, effect_decl, &args)
-    }
-
-    /// The impl-index key for a handler type: its own declaration, not what
-    /// the installing module's scope makes of the written name — the handler
-    /// may be declared elsewhere, or shadowed by a same-named type here.
-    fn handler_impl_target(&self, handler_type: TypeId) -> ImplTargetKey {
-        let name = self.tysys.handler_impl_target_name(handler_type);
-        self.impl_target_of(handler_type, &DeclName::new(name))
     }
 }
 

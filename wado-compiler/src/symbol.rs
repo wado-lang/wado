@@ -266,6 +266,7 @@ pub struct SymbolTable {
     prelude_builtin_types: IndexMap<String, AstId>,
 }
 
+#[expect(clippy::disallowed_methods, reason = "the table's own lookups")]
 impl SymbolTable {
     /// Create a new empty symbol table
     pub fn new() -> Self {
@@ -726,6 +727,10 @@ fn interface_member(owner: &Symbol, member: &str) -> Option<(ModuleSource, Strin
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "a test names its fixture's declarations"
+)]
 mod tests {
     use super::*;
     use crate::ast::AstIdSpace;

@@ -81,173 +81,180 @@ fn "tuple_elision_multivalue.wado/run"() with Stdout {
     let lo1: i64;
     let hi1: i64;
     let digit_count_168: i32;
-    let out_1091: ref "core:prelude/string.wado//String";
-    let is_negative_1159: bool;
-    let digit_count_1161: i32;
+    let start_281: i32;
+    let out_1103: ref "core:prelude/string.wado//String";
+    let is_negative_1171: bool;
+    let digit_count_1173: i32;
     multivalue_bind [lo1, hi1] = i64.add128(100_i64, 200_i64, 50_i64, 25_i64);
-    local.tee out_1091(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(48), used: 0 }).used = 11;
-    builtin::array_copy<u8>(out_1091.repr, 0, global:tuple_elision_multivalue.wado::$const_obj_9, 0, 11);
-    is_negative_1159 = lo1 < 0_i64;
-    digit_count_1161 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(lo1 < 0_i64, 0_i64 - lo1, lo1)));
-    is_negative_1159 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1091, is_negative_1159, digit_count_1161);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_1091.repr), is_negative_1159, lo1, digit_count_1161);
-    if @unlikely(local.tee is_negative_1159(out_1091.used + 5) > builtin::array_len($load_2)) {
+    local.tee out_1103(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(48), used: 0 }).used = 11;
+    builtin::array_copy<u8>(out_1103.repr, 0, global:tuple_elision_multivalue.wado::$const_obj_9, 0, 11);
+    is_negative_1171 = lo1 < 0_i64;
+    digit_count_1173 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(lo1 < 0_i64, 0_i64 - lo1, lo1)));
+    is_negative_1171 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1103, is_negative_1171, digit_count_1173);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_1103.repr), is_negative_1171, lo1, digit_count_1173);
+    if @unlikely(local.tee is_negative_1171(out_1103.used + 5) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1091, is_negative_1159);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1103, is_negative_1171);
     }
-    digit_count_1161 = out_1091.used;
-    out_1091.used = is_negative_1159;
-    builtin::array_copy<u8>(out_1091.repr, digit_count_1161, global:tuple_elision_multivalue.wado::$const_obj_2, 0, 5);
-    is_negative_1159 = hi1 < 0_i64;
-    digit_count_1161 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(hi1 < 0_i64, 0_i64 - hi1, hi1)));
-    is_negative_1159 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1091, is_negative_1159, digit_count_1161);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_1091.repr, is_negative_1159, lo1, digit_count_1161);
+    digit_count_1173 = out_1103.used;
+    out_1103.used = is_negative_1171;
+    builtin::array_copy<u8>(out_1103.repr, digit_count_1173, global:tuple_elision_multivalue.wado::$const_obj_2, 0, 5);
+    is_negative_1171 = hi1 < 0_i64;
+    digit_count_1173 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(hi1 < 0_i64, 0_i64 - hi1, hi1)));
+    is_negative_1171 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1103, is_negative_1171, digit_count_1173);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_1103.repr, is_negative_1171, lo1, digit_count_1173);
     $inline_core_prelude_string_wado_String__format_tuple_elision_multivalue_wado__tmpl_6c8b9fd616cc152b__i64_i64___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70: block {
         break $inline_core_prelude_string_wado_String__format_tuple_elision_multivalue_wado__tmpl_6c8b9fd616cc152b__i64_i64___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70;
     };
-    is_negative_1159 = builtin::i32_wrap_i64(local.tee lo1("wasi/stream-new"()));
-    digit_count_1161 = builtin::i32_wrap_i64(lo1 >> 32_i64);
-    is_negative_1159 = "tuple_elision_multivalue.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_1159);
-    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_1161, out_1091.repr, out_1091.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_1159);
+    is_negative_1171 = builtin::i32_wrap_i64(local.tee lo1("wasi/stream-new"()));
+    digit_count_1173 = builtin::i32_wrap_i64(lo1 >> 32_i64);
+    is_negative_1171 = "tuple_elision_multivalue.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_1171);
+    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_1173, out_1103.repr, out_1103.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_1171);
     multivalue_bind [lo1, hi1] = i64.sub128(150_i64, 225_i64, 50_i64, 25_i64);
-    local.tee out_1091(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(48), used: 0 }).used = 11;
-    builtin::array_copy<u8>(out_1091.repr, 0, global:tuple_elision_multivalue.wado::$const_obj_7, 0, 11);
-    is_negative_1159 = lo1 < 0_i64;
-    digit_count_1161 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(lo1 < 0_i64, 0_i64 - lo1, lo1)));
-    is_negative_1159 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1091, is_negative_1159, digit_count_1161);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_1091.repr), is_negative_1159, lo1, digit_count_1161);
-    if @unlikely(local.tee is_negative_1159(out_1091.used + 5) > builtin::array_len($load_2)) {
+    local.tee out_1103(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(48), used: 0 }).used = 11;
+    builtin::array_copy<u8>(out_1103.repr, 0, global:tuple_elision_multivalue.wado::$const_obj_7, 0, 11);
+    is_negative_1171 = lo1 < 0_i64;
+    digit_count_1173 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(lo1 < 0_i64, 0_i64 - lo1, lo1)));
+    is_negative_1171 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1103, is_negative_1171, digit_count_1173);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_1103.repr), is_negative_1171, lo1, digit_count_1173);
+    if @unlikely(local.tee is_negative_1171(out_1103.used + 5) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1091, is_negative_1159);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1103, is_negative_1171);
     }
-    digit_count_1161 = out_1091.used;
-    out_1091.used = is_negative_1159;
-    builtin::array_copy<u8>(out_1091.repr, digit_count_1161, global:tuple_elision_multivalue.wado::$const_obj_2, 0, 5);
-    is_negative_1159 = hi1 < 0_i64;
-    digit_count_1161 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(hi1 < 0_i64, 0_i64 - hi1, hi1)));
-    is_negative_1159 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1091, is_negative_1159, digit_count_1161);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_1091.repr, is_negative_1159, lo1, digit_count_1161);
+    digit_count_1173 = out_1103.used;
+    out_1103.used = is_negative_1171;
+    builtin::array_copy<u8>(out_1103.repr, digit_count_1173, global:tuple_elision_multivalue.wado::$const_obj_2, 0, 5);
+    is_negative_1171 = hi1 < 0_i64;
+    digit_count_1173 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(hi1 < 0_i64, 0_i64 - hi1, hi1)));
+    is_negative_1171 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1103, is_negative_1171, digit_count_1173);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_1103.repr, is_negative_1171, lo1, digit_count_1173);
     $inline_core_prelude_string_wado_String__format_tuple_elision_multivalue_wado__tmpl_6c8b9fd616cc152b__i64_i64___spec0_spec1_1__$inline_core_prelude_string_wado_String__internal_push_view_70: block {
         break $inline_core_prelude_string_wado_String__format_tuple_elision_multivalue_wado__tmpl_6c8b9fd616cc152b__i64_i64___spec0_spec1_1__$inline_core_prelude_string_wado_String__internal_push_view_70;
     };
-    is_negative_1159 = builtin::i32_wrap_i64(local.tee lo1("wasi/stream-new"()));
-    digit_count_1161 = builtin::i32_wrap_i64(lo1 >> 32_i64);
-    is_negative_1159 = "tuple_elision_multivalue.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_1159);
-    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_1161, out_1091.repr, out_1091.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_1159);
+    is_negative_1171 = builtin::i32_wrap_i64(local.tee lo1("wasi/stream-new"()));
+    digit_count_1173 = builtin::i32_wrap_i64(lo1 >> 32_i64);
+    is_negative_1171 = "tuple_elision_multivalue.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_1171);
+    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_1173, out_1103.repr, out_1103.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_1171);
     multivalue_bind [lo1, hi1] = i64.mul_wide_u(10_i64, 20_i64);
-    local.tee out_1091(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 }).used = 15;
-    builtin::array_copy<u8>(out_1091.repr, 0, global:tuple_elision_multivalue.wado::$const_obj_5, 0, 15);
-    is_negative_1159 = lo1 < 0_i64;
-    digit_count_1161 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(lo1 < 0_i64, 0_i64 - lo1, lo1)));
-    is_negative_1159 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1091, is_negative_1159, digit_count_1161);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_1091.repr), is_negative_1159, lo1, digit_count_1161);
-    if @unlikely(local.tee is_negative_1159(out_1091.used + 5) > builtin::array_len($load_2)) {
+    local.tee out_1103(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 }).used = 15;
+    builtin::array_copy<u8>(out_1103.repr, 0, global:tuple_elision_multivalue.wado::$const_obj_5, 0, 15);
+    is_negative_1171 = lo1 < 0_i64;
+    digit_count_1173 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(lo1 < 0_i64, 0_i64 - lo1, lo1)));
+    is_negative_1171 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1103, is_negative_1171, digit_count_1173);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_1103.repr), is_negative_1171, lo1, digit_count_1173);
+    if @unlikely(local.tee is_negative_1171(out_1103.used + 5) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1091, is_negative_1159);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1103, is_negative_1171);
     }
-    digit_count_1161 = out_1091.used;
-    out_1091.used = is_negative_1159;
-    builtin::array_copy<u8>(out_1091.repr, digit_count_1161, global:tuple_elision_multivalue.wado::$const_obj_2, 0, 5);
-    is_negative_1159 = hi1 < 0_i64;
-    digit_count_1161 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(hi1 < 0_i64, 0_i64 - hi1, hi1)));
-    is_negative_1159 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1091, is_negative_1159, digit_count_1161);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_1091.repr, is_negative_1159, lo1, digit_count_1161);
+    digit_count_1173 = out_1103.used;
+    out_1103.used = is_negative_1171;
+    builtin::array_copy<u8>(out_1103.repr, digit_count_1173, global:tuple_elision_multivalue.wado::$const_obj_2, 0, 5);
+    is_negative_1171 = hi1 < 0_i64;
+    digit_count_1173 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(hi1 < 0_i64, 0_i64 - hi1, hi1)));
+    is_negative_1171 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1103, is_negative_1171, digit_count_1173);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_1103.repr, is_negative_1171, lo1, digit_count_1173);
     $inline_core_prelude_string_wado_String__format_tuple_elision_multivalue_wado__tmpl_6c8b9fd616cc152b__i64_i64___spec0_spec2_2__$inline_core_prelude_string_wado_String__internal_push_view_70: block {
         break $inline_core_prelude_string_wado_String__format_tuple_elision_multivalue_wado__tmpl_6c8b9fd616cc152b__i64_i64___spec0_spec2_2__$inline_core_prelude_string_wado_String__internal_push_view_70;
     };
-    is_negative_1159 = builtin::i32_wrap_i64(local.tee lo1("wasi/stream-new"()));
-    digit_count_1161 = builtin::i32_wrap_i64(lo1 >> 32_i64);
-    is_negative_1159 = "tuple_elision_multivalue.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_1159);
-    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_1161, out_1091.repr, out_1091.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_1159);
+    is_negative_1171 = builtin::i32_wrap_i64(local.tee lo1("wasi/stream-new"()));
+    digit_count_1173 = builtin::i32_wrap_i64(lo1 >> 32_i64);
+    is_negative_1171 = "tuple_elision_multivalue.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_1171);
+    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_1173, out_1103.repr, out_1103.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_1171);
     multivalue_bind [lo1, hi1] = i64.mul_wide_s(-10_i64, 20_i64);
-    local.tee out_1091(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 }).used = 15;
-    builtin::array_copy<u8>(out_1091.repr, 0, global:tuple_elision_multivalue.wado::$const_obj_3, 0, 15);
-    is_negative_1159 = lo1 < 0_i64;
-    digit_count_1161 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(lo1 < 0_i64, 0_i64 - lo1, lo1)));
-    is_negative_1159 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1091, is_negative_1159, digit_count_1161);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_1091.repr), is_negative_1159, lo1, digit_count_1161);
-    if @unlikely(local.tee is_negative_1159(out_1091.used + 5) > builtin::array_len($load_2)) {
+    local.tee out_1103(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 }).used = 15;
+    builtin::array_copy<u8>(out_1103.repr, 0, global:tuple_elision_multivalue.wado::$const_obj_3, 0, 15);
+    is_negative_1171 = lo1 < 0_i64;
+    digit_count_1173 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(lo1 < 0_i64, 0_i64 - lo1, lo1)));
+    is_negative_1171 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1103, is_negative_1171, digit_count_1173);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_1103.repr), is_negative_1171, lo1, digit_count_1173);
+    if @unlikely(local.tee is_negative_1171(out_1103.used + 5) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1091, is_negative_1159);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1103, is_negative_1171);
     }
-    digit_count_1161 = out_1091.used;
-    out_1091.used = is_negative_1159;
-    builtin::array_copy<u8>(out_1091.repr, digit_count_1161, global:tuple_elision_multivalue.wado::$const_obj_2, 0, 5);
-    is_negative_1159 = hi1 < 0_i64;
-    digit_count_1161 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(hi1 < 0_i64, 0_i64 - hi1, hi1)));
-    is_negative_1159 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1091, is_negative_1159, digit_count_1161);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_1091.repr, is_negative_1159, lo1, digit_count_1161);
+    digit_count_1173 = out_1103.used;
+    out_1103.used = is_negative_1171;
+    builtin::array_copy<u8>(out_1103.repr, digit_count_1173, global:tuple_elision_multivalue.wado::$const_obj_2, 0, 5);
+    is_negative_1171 = hi1 < 0_i64;
+    digit_count_1173 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(hi1 < 0_i64, 0_i64 - hi1, hi1)));
+    is_negative_1171 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_1103, is_negative_1171, digit_count_1173);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_1103.repr, is_negative_1171, lo1, digit_count_1173);
     $inline_core_prelude_string_wado_String__format_tuple_elision_multivalue_wado__tmpl_6c8b9fd616cc152b__i64_i64___spec0_spec3_3__$inline_core_prelude_string_wado_String__internal_push_view_70: block {
         break $inline_core_prelude_string_wado_String__format_tuple_elision_multivalue_wado__tmpl_6c8b9fd616cc152b__i64_i64___spec0_spec3_3__$inline_core_prelude_string_wado_String__internal_push_view_70;
     };
-    is_negative_1159 = builtin::i32_wrap_i64(local.tee lo1("wasi/stream-new"()));
-    digit_count_1161 = builtin::i32_wrap_i64(lo1 >> 32_i64);
-    is_negative_1159 = "tuple_elision_multivalue.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_1159);
-    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_1161, out_1091.repr, out_1091.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_1159);
+    is_negative_1171 = builtin::i32_wrap_i64(local.tee lo1("wasi/stream-new"()));
+    digit_count_1173 = builtin::i32_wrap_i64(lo1 >> 32_i64);
+    is_negative_1171 = "tuple_elision_multivalue.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_1171);
+    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_1173, out_1103.repr, out_1103.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_1171);
     multivalue_bind [lo1, _] = i64.mul_wide_u(100_i64, 100_i64);
-    local.tee out_1091(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }).used = local.tee is_negative_1159(20);
-    builtin::array_copy<u8>(local.tee $load_2(out_1091.repr), 0, global:tuple_elision_multivalue.wado::$const_obj_1, 0, 20);
-    digit_count_1161 = lo1 < 0_i64;
+    $load_2 = builtin::array_new<u8>(36);
+    is_negative_1171 = 20;
+    builtin::array_copy<u8>($load_2, 0, global:tuple_elision_multivalue.wado::$const_obj_1, 0, 20);
+    digit_count_1173 = lo1 < 0_i64;
     digit_count_168 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(lo1 < 0_i64, 0_i64 - lo1, lo1)));
-    if digit_count_1161 {
-        if @unlikely(local.tee is_negative_1159(is_negative_1159 + 1) > builtin::array_len($load_2)) {
+    if digit_count_1173 {
+        if @unlikely(21 > builtin::array_len($load_2)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1091, is_negative_1159);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee out_1103(struct.new "core:prelude/string.wado//String" { repr: $load_2, used: 20 }), 21);
+            $load_2 = out_1103.repr;
         }
-        digit_count_1161 = out_1091.used;
-        out_1091.used = is_negative_1159;
-        builtin::array_set_u8(out_1091.repr, digit_count_1161, 45);
+        is_negative_1171 = 21;
+        builtin::array_set_u8($load_2, 20, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_1159(out_1091.used + digit_count_168) > builtin::array_len(out_1091.repr)) {
+    if @unlikely(local.tee digit_count_1173(is_negative_1171 + digit_count_168) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1091, is_negative_1159);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee out_1103(struct.new "core:prelude/string.wado//String" { repr: $load_2, used: is_negative_1171 }), digit_count_1173);
+        $load_2 = out_1103.repr;
     }
-    digit_count_1161 = out_1091.used;
-    out_1091.used = is_negative_1159;
-    "core:prelude/primitive.wado/write_decimal_digits"(out_1091.repr, digit_count_1161, lo1, digit_count_168);
+    start_281 = is_negative_1171;
+    is_negative_1171 = digit_count_1173;
+    "core:prelude/primitive.wado/write_decimal_digits"($load_2, start_281, lo1, digit_count_168);
     $inline_core_prelude_string_wado_String__format_tuple_elision_multivalue_wado__tmpl_ada6efcb41a2657d__i64___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__format_tuple_elision_multivalue_wado__tmpl_ada6efcb41a2657d__i64___spec0_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39;
     };
-    is_negative_1159 = builtin::i32_wrap_i64(local.tee lo1("wasi/stream-new"()));
-    digit_count_1161 = builtin::i32_wrap_i64(lo1 >> 32_i64);
-    is_negative_1159 = "tuple_elision_multivalue.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_1159);
-    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_1161, out_1091.repr, out_1091.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_1159);
+    out_1103 = struct.new "core:prelude/string.wado//String" { repr: $load_2, used: is_negative_1171 };
+    digit_count_1173 = builtin::i32_wrap_i64(local.tee lo1("wasi/stream-new"()));
+    digit_count_168 = builtin::i32_wrap_i64(lo1 >> 32_i64);
+    digit_count_1173 = "tuple_elision_multivalue.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(digit_count_1173);
+    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_168, out_1103.repr, is_negative_1171);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(digit_count_1173);
     multivalue_bind [_, lo1] = i64.mul_wide_u(-9223372036854775808_i64, 2_i64);
-    local.tee out_1091(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 }).used = local.tee is_negative_1159(20);
-    builtin::array_copy<u8>(local.tee $load_2(out_1091.repr), 0, global:tuple_elision_multivalue.wado::$const_obj_0, 0, 20);
-    digit_count_1161 = lo1 < 0_i64;
+    $load_2 = builtin::array_new<u8>(36);
+    is_negative_1171 = 20;
+    builtin::array_copy<u8>($load_2, 0, global:tuple_elision_multivalue.wado::$const_obj_0, 0, 20);
+    digit_count_1173 = lo1 < 0_i64;
     digit_count_168 = "core:prelude/primitive.wado/count_digits_u64"(local.tee lo1(select i64(lo1 < 0_i64, 0_i64 - lo1, lo1)));
-    if digit_count_1161 {
-        if @unlikely(local.tee is_negative_1159(is_negative_1159 + 1) > builtin::array_len($load_2)) {
+    if digit_count_1173 {
+        if @unlikely(21 > builtin::array_len($load_2)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1091, is_negative_1159);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee out_1103(struct.new "core:prelude/string.wado//String" { repr: $load_2, used: 20 }), 21);
+            $load_2 = out_1103.repr;
         }
-        digit_count_1161 = out_1091.used;
-        out_1091.used = is_negative_1159;
-        builtin::array_set_u8(out_1091.repr, digit_count_1161, 45);
+        is_negative_1171 = 21;
+        builtin::array_set_u8($load_2, 20, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_1159(out_1091.used + digit_count_168) > builtin::array_len(out_1091.repr)) {
+    if @unlikely(local.tee digit_count_1173(is_negative_1171 + digit_count_168) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1091, is_negative_1159);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee out_1103(struct.new "core:prelude/string.wado//String" { repr: $load_2, used: is_negative_1171 }), digit_count_1173);
+        $load_2 = out_1103.repr;
     }
-    digit_count_1161 = out_1091.used;
-    out_1091.used = is_negative_1159;
-    "core:prelude/primitive.wado/write_decimal_digits"(out_1091.repr, digit_count_1161, lo1, digit_count_168);
+    start_281 = is_negative_1171;
+    is_negative_1171 = digit_count_1173;
+    "core:prelude/primitive.wado/write_decimal_digits"($load_2, start_281, lo1, digit_count_168);
     $inline_core_prelude_string_wado_String__format_tuple_elision_multivalue_wado__tmpl_ada6efcb41a2657d__i64___spec0_spec1_sroa_t_h0__1__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__format_tuple_elision_multivalue_wado__tmpl_ada6efcb41a2657d__i64___spec0_spec1_sroa_t_h0__1__$inline_core_prelude_string_wado_String__internal_push_view_39;
     };
-    is_negative_1159 = builtin::i32_wrap_i64(local.tee lo1("wasi/stream-new"()));
-    digit_count_1161 = builtin::i32_wrap_i64(lo1 >> 32_i64);
-    is_negative_1159 = "tuple_elision_multivalue.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_1159);
-    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_1161, out_1091.repr, out_1091.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_1159);
+    out_1103 = struct.new "core:prelude/string.wado//String" { repr: $load_2, used: is_negative_1171 };
+    digit_count_1173 = builtin::i32_wrap_i64(local.tee lo1("wasi/stream-new"()));
+    digit_count_168 = builtin::i32_wrap_i64(lo1 >> 32_i64);
+    digit_count_1173 = "tuple_elision_multivalue.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(digit_count_1173);
+    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_168, out_1103.repr, is_negative_1171);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(digit_count_1173);
 }
 
 fn "tuple_elision_multivalue.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

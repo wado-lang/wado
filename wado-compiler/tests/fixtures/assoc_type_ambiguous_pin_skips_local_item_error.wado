@@ -1,0 +1,15 @@
+// The parameter a pin suggestion names must shadow nothing, a function-local
+// item included: `P` is taken by the struct below, so the suggestion starts at
+// `Q`.
+fn take<T: Iterator + IntoIterator>(x: i32) -> i32 {
+    struct P { a: i32 }
+    let y: Option<T::Item> = null;
+    return x;
+}
+
+export fn run() {
+    take::<List<i32>>(1);
+}
+
+__DATA__
+{ "compile_error": "'T: Iterator<Item = Q> + IntoIterator<Item = R>'" }

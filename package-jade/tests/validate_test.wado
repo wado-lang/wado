@@ -298,6 +298,15 @@ test "a pattern outside the supported syntax is an error at compile" {
     assert e.pointer == "/pattern";
 }
 
+test "a pattern's `i` modifier ignores case where it reaches" {
+    let pattern = #"{"pattern": "^(?i:x)y$"}"#;
+    assert errors(pattern, #""Xy""#).is_empty();
+    assert errors(pattern, #""XY""#).len() == 1;
+    let properties = #"{"patternProperties": {"^(?i:x)y$": {}}, "additionalProperties": false}"#;
+    assert errors(properties, #"{"Xy": 1}"#).is_empty();
+    assert errors(properties, #"{"XY": 1}"#).len() == 1;
+}
+
 fn invalid(compiled: Result<Validator, CompileError>) -> SchemaError {
     let Err(Invalid(e)) = compiled else {
         panic("compiled, or failed otherwise");

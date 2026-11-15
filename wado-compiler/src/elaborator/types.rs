@@ -14,7 +14,6 @@ use crate::elaborator::assert::AssertCaptureContext;
 use crate::elaborator::call::DefaultTypeBinding;
 use crate::elaborator::reify::ReifyAssertCaptureContext;
 use crate::elaborator::sem::decls::ModuleDecls;
-use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::elaborator::trait_query::BoundUnmet;
 use crate::elaborator::tysys::TypeSystem;
@@ -4617,14 +4616,11 @@ impl DataDecls {
     }
 }
 
-/// Read-only view resolving a type name from a module's perspective without
-/// cloning per-module maps. Precedence, highest first: local additions found
-/// during resolution, the current module's own definitions, then its imports
-/// (with `use { Foo as Bar }` aliasing) — no global scan beyond that (#1416).
-/// All fields are borrowed, so a call site constructs one without allocating.
-/// The resolver for a written type over this view is in `type_resolution`.
+/// Read-only view of the declarations a written type reaches, by the site the
+/// resolve walk answered for, without cloning per-module maps. All fields are
+/// borrowed, so a call site constructs one without allocating. The resolver
+/// for a written type over this view is in `type_resolution`.
 pub(crate) struct TypeLookup<'a> {
-    pub(crate) current_module_source: &'a ModuleSource,
     /// What every name in the program resolves to, answered once by the resolve
     /// pass. The registries this view reads are keyed by declaration, so this is
     /// how a written name reaches one.
@@ -4653,28 +4649,18 @@ impl<'a> TypeLookup<'a> {
 
     /// The cases of the variant a *written* qualifier names — the `Color` of
     /// `Color::Red`, read off the site the resolve walk answered for.
-    ///
-    /// The spelling answers only where no walk saw the node.
-    pub(super) fn variant_cases_at(
-        &self,
-        site: Option<AstId>,
-        name: &str,
-    ) -> Option<&'a VariantInfo> {
-        self.variant_cases_of(self.declaration_at(site, name)?)
+    pub(super) fn variant_cases_at(&self, site: Option<AstId>) -> Option<&'a VariantInfo> {
+        self.variant_cases_of(self.declaration_at(site)?)
     }
 
     /// [`Self::variant_cases_at`] for an `enum`.
-    pub(super) fn enum_cases_at(&self, site: Option<AstId>, name: &str) -> Option<&'a EnumInfo> {
-        self.enum_cases_of(self.declaration_at(site, name)?)
+    pub(super) fn enum_cases_at(&self, site: Option<AstId>) -> Option<&'a EnumInfo> {
+        self.enum_cases_of(self.declaration_at(site)?)
     }
 
     /// [`Self::variant_cases_at`] for a `flags` type.
-    pub(super) fn flags_members_at(
-        &self,
-        site: Option<AstId>,
-        name: &str,
-    ) -> Option<&'a FlagsInfo> {
-        self.flags_members_of(self.declaration_at(site, name)?)
+    pub(super) fn flags_members_at(&self, site: Option<AstId>) -> Option<&'a FlagsInfo> {
+        self.flags_members_of(self.declaration_at(site)?)
     }
 
     /// `def`'s own type parameters as types, in declaration order. `None` for a
@@ -4779,11 +4765,10 @@ impl<'a> TypeLookup<'a> {
             .any(|default| {
                 let mut heads = Vec::new();
                 collect_type_heads(default, &mut heads);
-                heads.into_iter().any(|(site, name)| {
-                    self.declaration_at(Some(site), &name)
-                        .is_some_and(|target| {
-                            self.defaults_reach_a_cycle(target, expanding, settled)
-                        })
+                heads.into_iter().any(|(site, _)| {
+                    self.declaration_at(Some(site)).is_some_and(|target| {
+                        self.defaults_reach_a_cycle(target, expanding, settled)
+                    })
                 })
             });
         expanding.shift_remove(&def);
@@ -4845,21 +4830,8 @@ impl<'a> TypeLookup<'a> {
     }
 
     /// The declaration a type reference names.
-    pub(super) fn declaration_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
-        self.resolutions
-            .declared_or(site, || self.declaration(name))
-    }
-
-    /// Which declaration `name` names in the frame this view stands in, for a
-    /// caller holding a rendering; one with a site calls [`Self::declaration_at`].
-    pub(super) fn declaration(&self, name: &str) -> Option<DefId> {
-        let canon = canonical_ns_ref(self.namespace_imports, name);
-        let name = canon.as_deref().unwrap_or(name);
-        if let Some(def) = self.walk.fn_local_items.get(name) {
-            return Some(*def);
-        }
-        self.resolutions
-            .resolve_in(self.current_module_source, name)
+    pub(super) fn declaration_at(&self, site: Option<AstId>) -> Option<DefId> {
+        self.resolutions.declared_if_walked(site?)
     }
 }
 

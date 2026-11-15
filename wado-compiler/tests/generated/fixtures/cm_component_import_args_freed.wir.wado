@@ -131,47 +131,47 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:cm_component_import_args_freed.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "cm_component_import_args_freed.wado/run"() with Stdout {
-    let bytes: ref "core:prelude/list.wado//List<u8>";
     let text: ref "core:prelude/string.wado//String";
     let total: u64;
     let $temp_7: ref null "core:linear//ListView<u8>";
-    let used_24: i32;
+    let new_used_34: i32;
     let start_35: i32;
     let released_65: ref "core:prelude//$Cell<bool>";
-    let ptr_82: i32;
     let $sroa_$iter_0_start_131: i32;
-    let $licm_repr_139: ref Array<u8>;
-    let $licm_repr_142: ref Array<u8>;
-    let $licm_arith_143: i64;
-    let $licm_arith_144: i64;
-    bytes = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
+    let $sroa_bytes_repr_142: ref Array<u8>;
+    let $sroa_bytes_used_143: i32;
+    let $sroa_write_back_144: ref "core:prelude/list.wado//List<u8>";
+    let $licm_repr_145: ref Array<u8>;
+    let $licm_arith_146: i64;
+    let $licm_arith_147: i64;
+    $sroa_bytes_repr_142 = array.new_fixed<u8>();
+    $sroa_bytes_used_143 = 0;
     text = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(65536), used: 0 };
     $sroa_$iter_0_start_131 = 0;
-    $licm_repr_139 = bytes.repr;
-    $licm_repr_142 = text.repr;
+    $licm_repr_145 = text.repr;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_start_131 >= 65536;
             $sroa_$iter_0_start_131 = $sroa_$iter_0_start_131 + 1;
-            if @unlikely(local.tee used_24(bytes.used) >= builtin::array_len($licm_repr_139)) {
+            if @unlikely($sroa_bytes_used_143 >= builtin::array_len($sroa_bytes_repr_142)) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(bytes);
-                $licm_repr_139 = bytes.repr;
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(local.tee $sroa_write_back_144(struct.new "core:prelude/list.wado//List<u8>" { repr: $sroa_bytes_repr_142, used: $sroa_bytes_used_143 }));
+                $sroa_bytes_repr_142 = $sroa_write_back_144.repr;
             }
-            builtin::array_set_u8($licm_repr_139, used_24, 1);
-            bytes.used = used_24 + 1;
-            if @unlikely(local.tee used_24(text.used + 1) > builtin::array_len($licm_repr_142)) {
+            builtin::array_set_u8($sroa_bytes_repr_142, $sroa_bytes_used_143, 1);
+            $sroa_bytes_used_143 = $sroa_bytes_used_143 + 1;
+            if @unlikely(local.tee new_used_34(text.used + 1) > builtin::array_len($licm_repr_145)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(text, used_24);
-                $licm_repr_142 = text.repr;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(text, new_used_34);
+                $licm_repr_145 = text.repr;
             }
             start_35 = text.used;
-            text.used = used_24;
-            builtin::array_set_u8($licm_repr_142, start_35, 97);
+            text.used = new_used_34;
+            builtin::array_set_u8($licm_repr_145, start_35, 97);
             continue l1;
         };
     };
-    total = builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#sum"($sroa_$iter_0_start_131 = bytes.used; used_24 = builtin::i32_wrap_i64(used_24 = "mem/realloc"(0, 0, 1, $sroa_$iter_0_start_131); "core:rt/gc_array_to_memory$spec0$dae[src_start]"(bytes.repr, used_24, $sroa_$iter_0_start_131); builtin::i64_extend_i32_u(used_24) | (builtin::i64_extend_i32_s($sroa_$iter_0_start_131) << 32_i64)); released_65 = struct.new "core:prelude//$Cell<bool>" { value: 0 }; local.tee $temp_7(struct.new "core:linear//ListView<u8>" { ptr: used_24, len: $sroa_$iter_0_start_131, owned_bytes: $sroa_$iter_0_start_131, released: released_65 })));
+    total = builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#sum"($sroa_$iter_0_start_131 = builtin::i32_wrap_i64($sroa_$iter_0_start_131 = "mem/realloc"(0, 0, 1, $sroa_bytes_used_143); "core:rt/gc_array_to_memory$spec0$dae[src_start]"($sroa_bytes_repr_142, $sroa_$iter_0_start_131, $sroa_bytes_used_143); builtin::i64_extend_i32_u($sroa_$iter_0_start_131) | (builtin::i64_extend_i32_s($sroa_bytes_used_143) << 32_i64)); released_65 = struct.new "core:prelude//$Cell<bool>" { value: 0 }; local.tee $temp_7(struct.new "core:linear//ListView<u8>" { ptr: $sroa_$iter_0_start_131, len: $sroa_bytes_used_143, owned_bytes: $sroa_bytes_used_143, released: released_65 })));
     if ref.is_null($temp_7) == 0 {
         $temp_7.released.value = 1;
         if local.tee $sroa_$iter_0_start_131($temp_7.owned_bytes) > 0 {
@@ -179,58 +179,57 @@ fn "cm_component_import_args_freed.wado/run"() with Stdout {
         }
     }
     $sroa_$iter_0_start_131 = builtin::memory_size();
-    used_24 = 0;
-    $licm_repr_139 = bytes.repr;
-    $licm_arith_143 = builtin::i64_extend_i32_s(local.tee start_35(bytes.used)) << 32_i64;
-    $licm_arith_144 = builtin::i64_extend_i32_s(start_35) << 32_i64;
+    new_used_34 = 0;
+    $licm_arith_146 = builtin::i64_extend_i32_s($sroa_bytes_used_143) << 32_i64;
+    $licm_arith_147 = builtin::i64_extend_i32_s($sroa_bytes_used_143) << 32_i64;
     b6: block {
         l7: loop {
-            break_if b6 used_24 >= 8;
-            used_24 = used_24 + 1;
-            total = total + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#sum"(ptr_82 = builtin::i32_wrap_i64(ptr_82 = "mem/realloc"(0, 0, 1, start_35); "core:rt/gc_array_to_memory$spec0$dae[src_start]"($licm_repr_139, ptr_82, start_35); builtin::i64_extend_i32_u(ptr_82) | $licm_arith_143); released_65 = struct.new "core:prelude//$Cell<bool>" { value: 0 }; local.tee $temp_7(struct.new "core:linear//ListView<u8>" { ptr: ptr_82, len: start_35, owned_bytes: start_35, released: released_65 })));
+            break_if b6 new_used_34 >= 8;
+            new_used_34 = new_used_34 + 1;
+            total = total + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#sum"(start_35 = builtin::i32_wrap_i64(start_35 = "mem/realloc"(0, 0, 1, $sroa_bytes_used_143); "core:rt/gc_array_to_memory$spec0$dae[src_start]"($sroa_bytes_repr_142, start_35, $sroa_bytes_used_143); builtin::i64_extend_i32_u(start_35) | $licm_arith_146); released_65 = struct.new "core:prelude//$Cell<bool>" { value: 0 }; local.tee $temp_7(struct.new "core:linear//ListView<u8>" { ptr: start_35, len: $sroa_bytes_used_143, owned_bytes: $sroa_bytes_used_143, released: released_65 })));
             if ref.is_null($temp_7) == 0 {
                 $temp_7.released.value = 1;
-                if local.tee ptr_82($temp_7.owned_bytes) > 0 {
-                    drop("mem/realloc"($temp_7.ptr, ptr_82, 1, 0));
+                if local.tee start_35($temp_7.owned_bytes) > 0 {
+                    drop("mem/realloc"($temp_7.ptr, start_35, 1, 0));
                 }
             }
-            total = ((total + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#length"(text))) + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#sum-blob"(struct.new "tuple//[core:prelude/list.wado/List<u8>, u32]" { 0: struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_copy<u8>(local.tee $licm_repr_142(builtin::array_new<u8>(start_35)), 0, $licm_repr_139, 0, start_35); $licm_repr_142, used: start_35 }, 1: 1 }))) + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#wide"(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ptr_82 = builtin::i32_wrap_i64(ptr_82 = "mem/realloc"(0, 0, 1, start_35); "core:rt/gc_array_to_memory$spec0$dae[src_start]"($licm_repr_139, ptr_82, start_35); builtin::i64_extend_i32_u(ptr_82) | $licm_arith_144); released_65 = struct.new "core:prelude//$Cell<bool>" { value: 0 }; local.tee $temp_7(struct.new "core:linear//ListView<u8>" { ptr: ptr_82, len: start_35, owned_bytes: start_35, released: released_65 })));
+            total = ((total + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#length"(text))) + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#sum-blob"(struct.new "tuple//[core:prelude/list.wado/List<u8>, u32]" { 0: struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_copy<u8>(local.tee $licm_repr_145(builtin::array_new<u8>($sroa_bytes_used_143)), 0, $sroa_bytes_repr_142, 0, $sroa_bytes_used_143); $licm_repr_145, used: $sroa_bytes_used_143 }, 1: 1 }))) + builtin::i64_extend_i32_u("cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#wide"(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, start_35 = builtin::i32_wrap_i64(start_35 = "mem/realloc"(0, 0, 1, $sroa_bytes_used_143); "core:rt/gc_array_to_memory$spec0$dae[src_start]"($sroa_bytes_repr_142, start_35, $sroa_bytes_used_143); builtin::i64_extend_i32_u(start_35) | $licm_arith_147); released_65 = struct.new "core:prelude//$Cell<bool>" { value: 0 }; local.tee $temp_7(struct.new "core:linear//ListView<u8>" { ptr: start_35, len: $sroa_bytes_used_143, owned_bytes: $sroa_bytes_used_143, released: released_65 })));
             if ref.is_null($temp_7) == 0 {
                 $temp_7.released.value = 1;
-                if local.tee ptr_82($temp_7.owned_bytes) > 0 {
-                    drop("mem/realloc"($temp_7.ptr, ptr_82, 1, 0));
+                if local.tee start_35($temp_7.owned_bytes) > 0 {
+                    drop("mem/realloc"($temp_7.ptr, start_35, 1, 0));
                 }
             }
             continue l7;
         };
     };
-    $sroa_$iter_0_start_131 = builtin::memory_size() - $sroa_$iter_0_start_131;
+    $sroa_bytes_used_143 = builtin::memory_size() - $sroa_$iter_0_start_131;
     text = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__format_cm_component_import_args_freed_wado__tmpl_a560ed98e358fd2b__u64_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__format_cm_component_import_args_freed_wado__tmpl_a560ed98e358fd2b__u64_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22;
     };
-    used_24 = "core:prelude/primitive.wado/count_digits_u64"(total);
-    start_35 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(text, 0, used_24);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $licm_repr_139(text.repr), start_35, total, used_24);
-    if @unlikely(local.tee used_24(text.used + 1) > builtin::array_len($licm_repr_139)) {
+    $sroa_$iter_0_start_131 = "core:prelude/primitive.wado/count_digits_u64"(total);
+    new_used_34 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(text, 0, $sroa_$iter_0_start_131);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $sroa_bytes_repr_142(text.repr), new_used_34, total, $sroa_$iter_0_start_131);
+    if @unlikely(local.tee $sroa_$iter_0_start_131(text.used + 1) > builtin::array_len($sroa_bytes_repr_142)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(text, used_24);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(text, $sroa_$iter_0_start_131);
     }
-    start_35 = text.used;
-    text.used = used_24;
-    builtin::array_copy<u8>(text.repr, start_35, global:cm_component_import_args_freed.wado::$const_obj_0, 0, 1);
-    used_24 = $sroa_$iter_0_start_131 < 0;
-    $sroa_$iter_0_start_131 = "core:prelude/primitive.wado/count_digits_u64"(local.tee total(total = builtin::i64_extend_i32_s($sroa_$iter_0_start_131); select i64(total < 0_i64, 0_i64 - total, total)));
-    used_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(text, used_24, $sroa_$iter_0_start_131);
-    "core:prelude/primitive.wado/write_decimal_digits"(text.repr, used_24, total, $sroa_$iter_0_start_131);
+    new_used_34 = text.used;
+    text.used = $sroa_$iter_0_start_131;
+    builtin::array_copy<u8>(text.repr, new_used_34, global:cm_component_import_args_freed.wado::$const_obj_0, 0, 1);
+    $sroa_$iter_0_start_131 = $sroa_bytes_used_143 < 0;
+    $sroa_bytes_used_143 = "core:prelude/primitive.wado/count_digits_u64"(local.tee total(total = builtin::i64_extend_i32_s($sroa_bytes_used_143); select i64(total < 0_i64, 0_i64 - total, total)));
+    $sroa_$iter_0_start_131 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(text, $sroa_$iter_0_start_131, $sroa_bytes_used_143);
+    "core:prelude/primitive.wado/write_decimal_digits"(text.repr, $sroa_$iter_0_start_131, total, $sroa_bytes_used_143);
     $inline_core_prelude_string_wado_String__format_cm_component_import_args_freed_wado__tmpl_a560ed98e358fd2b__u64_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_68: block {
         break $inline_core_prelude_string_wado_String__format_cm_component_import_args_freed_wado__tmpl_a560ed98e358fd2b__u64_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_68;
     };
-    $sroa_$iter_0_start_131 = builtin::i32_wrap_i64(local.tee total("wasi/stream-new"()));
-    used_24 = builtin::i32_wrap_i64(total >> 32_i64);
-    $sroa_$iter_0_start_131 = "cm_component_import_args_freed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_131);
-    "core:rt/write_string_to_stream$dae[add_newline]"(used_24, text.repr, text.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_start_131);
+    $sroa_bytes_used_143 = builtin::i32_wrap_i64(local.tee total("wasi/stream-new"()));
+    $sroa_$iter_0_start_131 = builtin::i32_wrap_i64(total >> 32_i64);
+    $sroa_bytes_used_143 = "cm_component_import_args_freed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_bytes_used_143);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_start_131, text.repr, text.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_bytes_used_143);
 }
 
 fn "cm_component_import_args_freed.wado/$cm_binding__wado:test-dependency081a2c66d224332f/lists@0.1.0#sum"(data) with Lists {

@@ -32,38 +32,41 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "value_copy_two_readers_of_one_place.wado/$cm_export__$test_0_two_reads_of_one_place"() {
-    let b: ref "core:prelude/list.wado//List<i32>";
-    b = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
-    if @unlikely(2 >= builtin::array_len(b.repr)) {
+    let $sroa_b_repr_17: ref Array<i32>;
+    let $sroa_write_back_19: ref "core:prelude/list.wado//List<i32>";
+    $sroa_b_repr_17 = array.new_fixed<i32>(1, 2);
+    if @unlikely(2 >= builtin::array_len($sroa_b_repr_17)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(b);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_19(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_b_repr_17, used: 2 }));
+        $sroa_b_repr_17 = $sroa_write_back_19.repr;
     }
-    builtin::array_set<i32>(b.repr, 2, 3);
-    b.used = 3;
+    builtin::array_set<i32>($sroa_b_repr_17, 2, 3);
     "wasi/task-return"(0);
 }
 
 fn "value_copy_two_readers_of_one_place.wado/$cm_export__$test_1_a_whole_local_move_alongside_a_place_move"() {
-    let b: ref "core:prelude/list.wado//List<i32>";
-    b = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
-    if @unlikely(2 >= builtin::array_len(b.repr)) {
+    let $sroa_a_repr_18: ref Array<i32>;
+    let $sroa_write_back_20: ref "core:prelude/list.wado//List<i32>";
+    $sroa_a_repr_18 = array.new_fixed<i32>(1, 2);
+    if @unlikely(2 >= builtin::array_len($sroa_a_repr_18)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(b);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_20(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_a_repr_18, used: 2 }));
+        $sroa_a_repr_18 = $sroa_write_back_20.repr;
     }
-    builtin::array_set<i32>(b.repr, 2, 3);
-    b.used = 3;
+    builtin::array_set<i32>($sroa_a_repr_18, 2, 3);
     "wasi/task-return"(0);
 }
 
 fn "value_copy_two_readers_of_one_place.wado/$cm_export__$test_2_the_mutation_arrives_through_a__mut_argument"() {
-    let z_2: ref "core:prelude/list.wado//List<i32>";
-    z_2 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
-    if @unlikely(2 >= builtin::array_len(z_2.repr)) {
+    let $sroa_z_repr_18: ref Array<i32>;
+    let $sroa_write_back_20: ref "core:prelude/list.wado//List<i32>";
+    $sroa_z_repr_18 = array.new_fixed<i32>(1, 2);
+    if @unlikely(2 >= builtin::array_len($sroa_z_repr_18)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(z_2);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_20(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_z_repr_18, used: 2 }));
+        $sroa_z_repr_18 = $sroa_write_back_20.repr;
     }
-    builtin::array_set<i32>(z_2.repr, 2, 3);
-    z_2.used = 3;
+    builtin::array_set<i32>($sroa_z_repr_18, 2, 3);
     "wasi/task-return"(0);
 }
 

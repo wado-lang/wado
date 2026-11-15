@@ -5,9 +5,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::synth::{ArgProbe, ArgSource};
 use crate::hashmap::IndexMap;
-use crate::name::{
-    ARRAY_TYPE_NAME, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, minted_name,
-};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, minted_name};
 use crate::primitive::PrimitiveType;
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TemplateId, TypeId};
 use crate::token::Span;
@@ -764,14 +762,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The right operand is resolved by now, so its type selects
                 // among the receiver's `Add<Rhs>` impls (WEP 2026-07-31).
                 let rhs_class = ArgClass::Exact(right);
-                let mut admitted = self.find_arithmetic_trait_impls(
-                    &struct_name,
-                    left,
-                    trait_,
-                    method_name,
-                    Some(&rhs_class),
-                );
-                let mut impl_name = struct_name.clone();
+                let mut admitted =
+                    self.find_arithmetic_trait_impls(left, trait_, method_name, Some(&rhs_class));
+                let mut impl_name = struct_name;
                 let mut impl_type_id = left;
                 if admitted.is_empty() {
                     // The impl is read on the link that wrote it, so the right
@@ -783,7 +776,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                     let rhs_class = ArgClass::Exact(rhs_base);
                     admitted = self.find_arithmetic_trait_impls(
-                        &lookup_name,
                         lookup_type_id,
                         trait_,
                         method_name,
@@ -1357,18 +1349,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 key: key.map(|key| tt.name(key)),
             }))
         };
-        let Some(head) = self.index_dispatch_head(base_type_id) else {
+        if !self.dispatches_index(base_type_id) {
             return no_index_swap(self, None);
-        };
-        let (lookup_name, lookup_type_id) = self.tysys.newtype_base_lookup(&head, base_type_id);
+        }
+        let lookup_type_id = self.tysys.newtype_base_lookup(base_type_id);
         let lookup = |this: &mut Self, key: Option<TypeId>| {
-            this.index_lookup_or_newtype_base(
-                &head,
-                base_type_id,
-                &lookup_name,
-                lookup_type_id,
-                |s, n, t| s.find_index_swap_trait_impl(n, t, key),
-            )
+            this.index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+                s.find_index_swap_trait_impl(t, key)
+            })
         };
         // The impl is the one at the key a read of `c[i]` selects.
         let key_class = self.synthesize_arg_class(transposition.i, ctx);
@@ -1487,22 +1475,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         writable && self.tysys.pointee_of(place_type).is_some()
     }
 
-    /// The name an indexing trait impl on `base_type_id` is looked up under,
-    /// or `None` for a type no such impl can be written for.
-    fn index_dispatch_head(&self, base_type_id: TypeId) -> Option<String> {
-        let tt = self.tysys.type_table.borrow();
-        match tt.get(base_type_id) {
-            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => None,
+    /// Whether an indexing trait impl can be written for `base_type_id`.
+    fn dispatches_index(&self, base_type_id: TypeId) -> bool {
+        match self.tysys.type_table.borrow().get(base_type_id) {
+            ResolvedType::Variant { type_args, .. } if type_args.is_empty() => false,
             ResolvedType::Struct { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::Tuple(_)
             | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. } => Some(tt.base_type_name(base_type_id)),
-            // `arr[i]` dispatches through `impl … for Array<T>`, keyed by the
-            // base name "Array".
-            ResolvedType::BuiltinArray(_) => Some(ARRAY_TYPE_NAME.to_string()),
-            _ => None,
+            | ResolvedType::Flags { .. }
+            // `arr[i]` dispatches through `impl … for Array<T>`.
+            | ResolvedType::BuiltinArray(_) => true,
+            _ => false,
         }
     }
 
@@ -1677,18 +1662,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             {
-                if let Some(struct_name) = self.index_dispatch_head(base_type_id) {
-                    // For newtypes, resolve the base type name for trait impl lookup
-                    let (lookup_name, lookup_type_id) =
-                        self.tysys.newtype_base_lookup(&struct_name, base_type_id);
+                if self.dispatches_index(base_type_id) {
+                    // For newtypes, the base type answers the trait impl lookup
+                    let lookup_type_id = self.tysys.newtype_base_lookup(base_type_id);
                     let lookup = |this: &mut Self, key: Option<TypeId>| {
-                        this.index_lookup_or_newtype_base(
-                            &struct_name,
-                            base_type_id,
-                            &lookup_name,
-                            lookup_type_id,
-                            |s, n, t| s.find_index_assign_trait_impl(n, t, key),
-                        )
+                        this.index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+                            s.find_index_assign_trait_impl(t, key)
+                        })
                     };
                     // The impl is the one at the key's type, as a read's is.
                     let key_class = self.synthesize_arg_class(&index_expr.index, ctx);
@@ -1743,13 +1723,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `IndexAssign` impl missing only its bound says why, and
                     // one at another key says the key is the mismatch.
                     let writes_through = self
-                        .index_lookup_or_newtype_base(
-                            &struct_name,
-                            base_type_id,
-                            &lookup_name,
-                            lookup_type_id,
-                            |s, n, t| s.find_index_mut_trait_impl_as_ref(n, t, Some(index_type)),
-                        )
+                        .index_lookup_or_newtype_base(base_type_id, lookup_type_id, |s, t| {
+                            s.find_index_mut_trait_impl_as_ref(t, Some(index_type))
+                        })
                         .is_some();
                     if !writes_through {
                         if self.report_unmet_trait_impl_bound(
@@ -2656,12 +2632,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let concrete_impl = resolved
             .impl_def
             .filter(|def| self.tysys.trait_env.impl_headers[def].is_concrete());
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "a dispatch through a bound names no block, so the chain is matched by head"
+        )]
         let module_source = match concrete_impl {
             Some(def) => defs.module(def).clone(),
             None => self
                 .impl_target_decl_key(receiver, &resolved.impl_name)
                 .map_or_else(
-                    || self.declaring_module_of(&resolved.impl_name),
+                    || self.declaring_module_of(receiver),
                     |def| defs.module(def).clone(),
                 ),
         };

@@ -6,7 +6,7 @@ use crate::attribute::{
 };
 use std::borrow::Cow;
 use std::fmt;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use crate::defs::DefId;
@@ -169,12 +169,62 @@ impl fmt::Debug for SourceText {
     }
 }
 
+/// A module's items, shared by every clone of one parse, so the compiles and
+/// snapshots a parse serves hold one copy of it. A write through a clone takes
+/// that clone a copy of its own first.
+#[derive(Clone, Default)]
+pub struct Items(Arc<Vec<Item>>);
+
+impl Deref for Items {
+    type Target = Vec<Item>;
+
+    fn deref(&self) -> &Vec<Item> {
+        &self.0
+    }
+}
+
+impl DerefMut for Items {
+    fn deref_mut(&mut self) -> &mut Vec<Item> {
+        Arc::make_mut(&mut self.0)
+    }
+}
+
+impl From<Vec<Item>> for Items {
+    fn from(items: Vec<Item>) -> Self {
+        Self(Arc::new(items))
+    }
+}
+
+impl<'a> IntoIterator for &'a Items {
+    type Item = &'a Item;
+    type IntoIter = std::slice::Iter<'a, Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut Items {
+    type Item = &'a mut Item;
+    type IntoIter = std::slice::IterMut<'a, Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.deref_mut().iter_mut()
+    }
+}
+
+impl fmt::Debug for Items {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Module {
     /// The text parsed, which every span's byte offsets index. Empty for a
     /// module built from tokens or by hand.
     source: SourceText,
-    pub items: Vec<Item>,
+    pub items: Items,
     /// Inner attributes like `#![no_prelude]`
     pub inner_attributes: Vec<InnerAttribute>,
     /// Shebang line, if present (e.g., "#!/usr/bin/env wado").
@@ -253,7 +303,7 @@ impl Module {
     pub fn new(items: Vec<Item>) -> Self {
         Self {
             source: SourceText(Arc::from("")),
-            items,
+            items: items.into(),
             inner_attributes: Vec::new(),
             shebang: None,
             data_section: None,
@@ -280,7 +330,7 @@ impl Module {
     ) -> Self {
         Self {
             source: SourceText(source),
-            items,
+            items: items.into(),
             inner_attributes,
             shebang,
             data_section,
@@ -5234,6 +5284,17 @@ mod ast_id_tests {
         let mut parser = Parser::new(r.tokens);
         parser.parse_strict().expect("parse")
     }
+
+    /// A cached parse is cloned into every compile, so a compile's edit of its
+    /// items must stay its own.
+    #[test]
+    fn a_write_through_a_clone_leaves_the_parse_alone() {
+        let parsed = parse("fn a() {}\n");
+        let mut clone = parsed.clone();
+        clone.items.clear();
+        assert_eq!(parsed.items.len(), 1);
+    }
+
     /// Each bound is its own reference site, so two `T: Ord`s are two ids —
     /// what lets `Ord` mean a different declaration in each, and what a bound
     /// keyed by its spelling cannot express.

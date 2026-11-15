@@ -347,6 +347,10 @@ impl DefTable {
     /// a type: an `export` type is published by its own module, an `export use`
     /// has the adopting module publish each type it names, and a `#[cm(…)]`
     /// type belongs to the interface it binds.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "an `export use` names its member in the module it adopts from, before any walk"
+    )]
     fn note_publication(&mut self, module: &ModuleSource, item: &Item, symbols: &SymbolTable) {
         if let Item::Use(decl) = item
             && decl.is_export
@@ -678,6 +682,10 @@ impl AstVisitor<'_> for LocalItems<'_> {
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "a test names its fixture's declarations"
+)]
 mod tests {
     use super::*;
     use crate::compiler_host::{InMemoryCompilerHost, LogLevel};

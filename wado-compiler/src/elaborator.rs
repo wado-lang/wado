@@ -74,7 +74,7 @@ use crate::kiln::InvocationIndex;
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, Receiver, RefKind};
-use crate::name::{DeclName, FqTraitName, FqTypeName, global_name, namespace_member_alias};
+use crate::name::{FqTraitName, FqTypeName, global_name, namespace_member_alias};
 use crate::resolve::{Resolution, head_site};
 use crate::symbol::{Symbol, SymbolKind, SymbolTable, VariableSymbol};
 use crate::tir::{self as tir, TypeId};
@@ -346,6 +346,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The symbol `name` reaches from `module`, for a caller whose reference site
     /// is not at hand — a mangled name, a synthesis target.
+    #[expect(clippy::disallowed_methods, reason = "the scope's own entry")]
     pub(crate) fn symbol_named(&self, module: &ModuleSource, name: &str) -> Option<&'a Symbol> {
         let def = self.tysys.resolutions.resolve_in(module, name)?;
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
@@ -366,8 +367,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let namespace_imports = self
             .namespace_imports_in(frame)
             .expect("a module the walk resolves in is one `TraitEnv` indexed");
-        self.tysys
-            .type_lookup(frame, namespace_imports, &self.sem.decls)
+        self.tysys.type_lookup(namespace_imports, &self.sem.decls)
     }
 
     /// Canonicalize a `<ns>::<member>` reference — one `::`, the prefix a
@@ -381,20 +381,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The cases of the variant a written qualifier names — see
     /// [`super::types::TypeLookup::variant_cases_at`].
-    pub(super) fn lookup_variant_cases_at(
-        &self,
-        site: Option<AstId>,
-        name: &str,
-    ) -> Option<&VariantInfo> {
-        self.type_lookup().variant_cases_at(site, name)
+    pub(super) fn lookup_variant_cases_at(&self, site: Option<AstId>) -> Option<&VariantInfo> {
+        self.type_lookup().variant_cases_at(site)
     }
 
-    pub(super) fn lookup_flags_members_at(
-        &self,
-        site: Option<AstId>,
-        name: &str,
-    ) -> Option<&FlagsInfo> {
-        self.type_lookup().flags_members_at(site, name)
+    pub(super) fn lookup_flags_members_at(&self, site: Option<AstId>) -> Option<&FlagsInfo> {
+        self.type_lookup().flags_members_at(site)
     }
 
     /// [`Self::lookup_flags_members_at`] through a newtype: the base's members
@@ -403,16 +395,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// is `None` when the qualifier owns the members itself.
     pub(super) fn flags_members_through_newtype(
         &self,
-        site: Option<AstId>,
-        name: &str,
+        def: DefId,
     ) -> Option<(FlagsInfo, Option<TypeId>)> {
         let lookup = self.type_lookup();
-        if let Some(def) = lookup.declaration_at(site, name)
-            && let Some((base, named)) = types::newtype_member_owner(&lookup, &self.tysys, def)
-        {
+        if let Some((base, named)) = types::newtype_member_owner(&lookup, &self.tysys, def) {
             return Some((lookup.flags_members_of(base)?.clone(), Some(named)));
         }
-        Some((lookup.flags_members_at(site, name)?.clone(), None))
+        Some((lookup.flags_members_of(def)?.clone(), None))
     }
 
     pub(super) fn lookup_variant_case_of_decl(&self, def: DefId) -> Option<&VariantInfo> {
@@ -566,6 +555,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The declaration `module` declares under `name`, for the positions no
     /// reference site answers. The module is named by the caller, not searched
     /// for.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the table's lookup, read as an identity"
+    )]
     pub(super) fn decl_in_module(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
         self.symbols
             .lookup_in_module(module, name)
@@ -573,6 +566,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// [`Self::decl_in_module`] as a callee identity.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "`builtin::f`, `ns::f` and a synthesized `panic` name the module they read"
+    )]
     fn callee_in_module(&self, module: &ModuleSource, name: &str) -> Option<callee::CalleeRef> {
         Some(self.tysys.callee_of(self.decl_in_module(module, name)?))
     }
@@ -605,6 +602,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// the current module under `name` (local item, imported item, imported
     /// namespace member, etc.). Looks up the defining [`AstId`](crate::ast::AstId) through
     /// the symbol table; no-op if the name is not declared.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "an identifier's use→def edge, where the walk answered no declaration for its site"
+    )]
     pub(super) fn record_item_reference_by_name(&mut self, use_id: AstId, name: &str) {
         // The name is spelled at `use_id`, so it means what its own module says
         // it means. A travelled expression otherwise records an edge to a
@@ -725,42 +726,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The type the newtype `key` declares wraps, one link down its chain: the
-    /// key its impls answer at, the name it answers under, and the type as the
-    /// declaration writes it. Keyed on the declaration: a caller reaching the
-    /// type only through a namespace (`lib::Q`) has no bare name its frame
-    /// answers for.
+    /// key its impls answer at, and the type as the declaration writes it.
+    /// Keyed on the declaration: a caller reaching the type only through a
+    /// namespace (`lib::Q`) has no bare name its frame answers for.
     pub(super) fn newtype_link_target(
         &mut self,
         key: &trait_env::ImplTargetKey,
-    ) -> Option<(trait_env::ImplTargetKey, String, tir::TypeId)> {
+    ) -> Option<(trait_env::ImplTargetKey, tir::TypeId)> {
         let trait_env::ImplTargetKey::Decl(def) = key else {
             return None;
         };
         let newtype = self.newtype_self_type(*def)?;
         let link = self.tysys.type_table.borrow().get_newtype_base(newtype)?;
-        let link_name = match *self.tysys.type_table.borrow().get(link) {
-            tir::ResolvedType::Newtype { def, .. } | tir::ResolvedType::Flags { def } => {
-                self.tysys.type_table.borrow().decl_name(def).to_string()
-            }
-            _ => self.tysys.get_ultimate_base_struct_name(link),
-        };
-        let link_key = self.impl_target_of(link, &name::DeclName::new(&link_name));
-        Some((link_key, link_name, link))
-    }
-
-    /// The declaration a `Type::method` call resolves to, at the link of a
-    /// newtype chain that owns it. Every site that records the use→def edge
-    /// for such a call ends its ladder here, so none of them stops one link
-    /// short.
-    pub(super) fn qualified_method_decl_at(
-        &mut self,
-        site: Option<AstId>,
-        type_name: &str,
-        method_name: &str,
-    ) -> Option<DefId> {
-        let key = self.impl_target_at(site, type_name);
-        let owner = self.static_owner_key(&key, method_name);
-        self.qualified_method_decl_id(&owner, method_name)
+        Some((self.receiver_of(link).key().clone(), link))
     }
 
     /// The declaring node of `receiver::method_name` written qualified.
@@ -1200,6 +1178,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// aliases, so this is the import tier answering the qualification the
     /// programmer wrote — the same answer the resolve walk gives `ns::Name` in
     /// type position, rather than a second lookup beside it.
+    #[expect(clippy::disallowed_methods, reason = "the import tier's own entry")]
     pub(super) fn namespace_member(&self, namespace: &str, name: &str) -> Option<DefId> {
         self.tysys.resolutions.imported_as(
             &self.current_module_source,
@@ -1210,35 +1189,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The declared name of the trait `trait_name` refers to at `site`, past a
     /// `use … as` or `ns$Trait` alias.
     pub(super) fn declared_trait_name(&self, site: Option<AstId>, trait_name: &str) -> String {
-        self.decl_key_at(site, trait_name).map_or_else(
+        self.decl_key_at(site).map_or_else(
             || trait_name.to_string(),
             |def| self.tysys.resolutions.defs().name(def).to_string(),
         )
     }
 
-    /// The declaration `name` names where it is written: the walk's answer at
-    /// `site`, or the frame's for a node no walk reached.
-    pub(crate) fn decl_key_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
-        self.tysys
-            .resolutions
-            .declared_or(site, || self.decl_key_or_local(name))
+    /// The declaration the walk answered at `site`; `None` for a node it never
+    /// reached, which only a spelling names.
+    pub(crate) fn decl_key_at(&self, site: Option<AstId>) -> Option<DefId> {
+        self.tysys.resolutions.declared_if_walked(site?)
     }
 
-    /// Whether `name` names a type declaration where it is written.
-    pub(crate) fn names_type_at(&self, site: Option<AstId>, name: &str) -> bool {
-        self.decl_key_at(site, name)
+    /// Whether `site` names a type declaration.
+    pub(crate) fn names_type_at(&self, site: AstId) -> bool {
+        self.decl_key_at(Some(site))
             .is_some_and(|def| self.tysys.resolutions.defs().kind(def).is_type())
-    }
-
-    /// The declaration `name` reaches where the AST under resolution was written,
-    /// for a caller with no reference site; one holding a site calls [`Self::decl_key_at`].
-    pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<DefId> {
-        // A binder shadows every declaration of its name and has no identity of
-        // its own; the module scope cannot see binders and would answer `struct T`.
-        if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
-            return None;
-        }
-        self.type_lookup().declaration(name)
     }
 
     /// The trait a reference site names, with the type arguments it writes; one
@@ -1513,37 +1479,60 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// The impl target a receiver spelling names in the current frame.
-    pub(crate) fn impl_target(&self, type_name: &str) -> trait_env::ImplTargetKey {
-        self.impl_target_at(None, type_name)
-    }
-
-    /// [`Self::impl_target`] for a receiver written at `site`, keyed to what it
-    /// names in the module that wrote it.
-    pub(crate) fn impl_target_at(
-        &self,
-        site: Option<AstId>,
-        type_name: &str,
-    ) -> trait_env::ImplTargetKey {
-        self.decl_key_at(site, type_name).map_or_else(
-            || trait_env::ImplTargetKey::of_undeclared(&self.current_module_source, type_name),
-            |def| trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def),
-        )
-    }
-
-    /// Impl-target key for a receiver whose `TypeId` is known. The type
-    /// already carries its declaring module, so this asks it rather than
-    /// re-resolving the name from the caller's vantage — which cannot
-    /// separate two modules' same-named types when the caller imports
-    /// neither, and reaches the receiver only through a return type.
-    pub(crate) fn impl_target_of(
-        &self,
-        type_id: tir::TypeId,
-        fallback_name: &DeclName,
-    ) -> trait_env::ImplTargetKey {
-        match self.type_decl_key(type_id) {
-            Some(def) => trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def),
-            None => self.impl_target(fallback_name.as_decl_str()),
+    /// Impl-target key for a receiver whose `TypeId` is known (refs peeled),
+    /// read off the type alone: the head [`TypeTable::impl_receiver_key`]
+    /// indexes the method form under, so a static and a method call on one
+    /// type meet the same impls.
+    pub(crate) fn impl_target_of(&self, type_id: tir::TypeId) -> trait_env::ImplTargetKey {
+        if let Some(def) = self.type_decl_key(type_id) {
+            return trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
+        }
+        let tt = self.tysys.type_table.borrow();
+        let peeled = tt.peel_refs(type_id);
+        match tt.get(peeled) {
+            tir::ResolvedType::TypeParam { id } => trait_env::ImplTargetKey::TypeParam {
+                owner: id.owner,
+                name: tt.param_name(*id).to_string(),
+            },
+            tir::ResolvedType::Struct {
+                def: tir::StructDef::Anon(id),
+                ..
+            } => trait_env::ImplTargetKey::Undeclared(
+                tt.anon_struct_module(*id).clone(),
+                tt.anon_struct_mangle(*id),
+            ),
+            resolved @ tir::ResolvedType::Function { .. } => {
+                let name = tt.fn_receiver_name(resolved);
+                trait_env::ImplTargetKey::Function {
+                    display: name.to_display(),
+                    name,
+                }
+            }
+            // A type no declaration answered for: a builtin shape, or one still
+            // unsettled or already reported (`unknown`, an inference variable),
+            // which keys a bucket no impl is indexed under.
+            tir::ResolvedType::Primitive(_)
+            | tir::ResolvedType::Unit
+            | tir::ResolvedType::Never
+            | tir::ResolvedType::Tuple(_)
+            | tir::ResolvedType::BuiltinArray(_)
+            | tir::ResolvedType::Struct { .. }
+            | tir::ResolvedType::Enum { .. }
+            | tir::ResolvedType::Resource { .. }
+            | tir::ResolvedType::Variant { .. }
+            | tir::ResolvedType::Newtype { .. }
+            | tir::ResolvedType::Flags { .. }
+            | tir::ResolvedType::Ref(_)
+            | tir::ResolvedType::MutRef(_)
+            | tir::ResolvedType::InferVar(_)
+            | tir::ResolvedType::TypePack { .. }
+            | tir::ResolvedType::PackElement { .. }
+            | tir::ResolvedType::AssocParam { .. }
+            | tir::ResolvedType::AssocTypeProjection { .. }
+            | tir::ResolvedType::Unknown
+            | tir::ResolvedType::Error => {
+                trait_env::ImplTargetKey::Builtin(tt.base_type_name(peeled))
+            }
         }
     }
 
@@ -1553,6 +1542,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// For a generic instance it is the *base* type's declaration — type
     /// arguments are dropped, so it cannot tell `Foo<A>` from `Foo<B>`.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "a builtin type's declaration is the prelude's, which has no vantage"
+    )]
     pub(crate) fn type_decl_key(&self, type_id: tir::TypeId) -> Option<DefId> {
         // No vantage: an import aliasing a builtin's name never steers the type.
         if let Some(name) = self.tysys.builtin_type_name(type_id) {
@@ -1624,6 +1617,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         effect
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "a `use` names its member in the module it imports from"
+    )]
     fn record_use_reference(&mut self, source: &ModuleSource, site: AstId, name: &str) {
         if let Some(sym) = self.symbols.lookup_in_module(source, name) {
             self.record_reference_to_def(site, sym.defined_at);
@@ -1718,7 +1715,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.associated_constants.clear();
         type AssocConstInput = (
             AstId,
-            String,
+            DefId,
             String,
             ast::Type,
             ast::Expr,
@@ -1734,30 +1731,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     None
                 }
             })
-            .flat_map(|impl_block| {
-                let type_name = self.get_type_name(&impl_block.ty);
+            .filter_map(|impl_block| {
+                let owner = self.tysys.resolutions.head_decl(&impl_block.ty)?;
                 let is_inherent = impl_block.trait_type.is_none();
-                impl_block
-                    .constants
-                    .iter()
-                    .map(move |assoc_const| {
-                        (
-                            assoc_const.id,
-                            type_name.clone(),
-                            assoc_const.name.clone(),
-                            assoc_const.ty.clone(),
-                            assoc_const.value.clone(),
-                            is_inherent.then_some(assoc_const.visibility),
-                        )
-                    })
-                    .collect::<Vec<_>>()
+                Some(impl_block.constants.iter().map(move |assoc_const| {
+                    (
+                        assoc_const.id,
+                        owner,
+                        assoc_const.name.clone(),
+                        assoc_const.ty.clone(),
+                        assoc_const.value.clone(),
+                        is_inherent.then_some(assoc_const.visibility),
+                    )
+                }))
             })
+            .flatten()
             .collect();
-        for (decl, type_name, const_name, ty, value, inherent_visibility) in assoc_const_inputs {
+        for (decl, owner, const_name, ty, value, inherent_visibility) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
-            let Some(owner) = self.decl_key_or_local(&type_name) else {
-                continue;
-            };
             self.sem.decls.associated_constants.insert(
                 (owner, const_name),
                 sig::AssocConstSig {

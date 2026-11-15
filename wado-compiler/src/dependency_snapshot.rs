@@ -21,6 +21,7 @@ use crate::compiler_host::{
 };
 use crate::compiler_trace;
 use crate::elaborator::liveness::LivenessScope;
+use crate::hashmap::IndexSet;
 use crate::loader::{LoadResult, ModuleLoader};
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
@@ -65,7 +66,11 @@ pub(crate) async fn dependency_snapshot<H: CompilerHost>(
     host: &H,
 ) -> Option<Rc<Semantics>> {
     let key = key_of(load);
-    if key.is_empty() || !key.iter().all(|(source, ..)| servable(load, source)) {
+    if key.is_empty() {
+        return None;
+    }
+    if let Some((unservable, ..)) = key.iter().find(|(source, ..)| !servable(load, source)) {
+        compiler_trace!("dependency_snapshot", "cannot serve {unservable}");
         return None;
     }
     let (slot, snapshot) = match SNAPSHOT.take() {
@@ -97,31 +102,47 @@ pub(crate) async fn dependency_snapshot<H: CompilerHost>(
     snapshot
 }
 
-/// The dependency modules `load` holds, ordered by name.
+/// The modules `load`'s dependency modules reach outside `core:` and `wasi:`,
+/// those included, ordered by name.
 fn key_of(load: &LoadResult) -> Key {
-    let mut key: Key = load
+    let mut reached: IndexSet<&ModuleSource> = load
         .modules
-        .iter()
-        .filter(|(source, _)| matches!(source, ModuleSource::Dependency { .. }))
-        .map(|(source, module)| {
+        .keys()
+        .filter(|source| matches!(source, ModuleSource::Dependency { .. }))
+        .collect();
+    let mut next = 0;
+    while let Some(source) = reached.get_index(next) {
+        next += 1;
+        let imported = load.imports.get(*source).map_or(&[][..], Vec::as_slice);
+        reached.extend(
+            imported
+                .iter()
+                .filter(|target| !target.is_core() && !target.is_binding()),
+        );
+    }
+    let mut key: Key = reached
+        .into_iter()
+        .map(|source| {
             let imports = load.imports.get(source).cloned().unwrap_or_default();
-            (source.clone(), module.ast_id_space(), imports)
+            (source.clone(), load.modules[source].ast_id_space(), imports)
         })
         .collect();
     key.sort_by_cached_key(|(source, ..)| source.to_string());
     key
 }
 
-/// Whether a snapshot can serve the dependency module `source`: what it is
-/// made of is its own source and what a snapshot serves, and it declares no
-/// resource a program could extend, since `extends` validation reads the
-/// parent's methods from a pass a served module skips.
+/// Whether a snapshot can serve `source`: a module whose parse a later compile
+/// takes again, made of its own source alone, declaring no resource a program
+/// could extend, since `extends` validation reads the parent's methods from a
+/// pass a served module skips.
 fn servable(load: &LoadResult, source: &ModuleSource) -> bool {
     let module = &load.modules[source];
-    module.include_paths().is_empty()
+    source.keeps_parse()
+        && module.include_paths().is_empty()
         && !module
             .items
             .iter()
+<<<<<<< HEAD
             .any(|item| matches!(item, Item::Resource(decl) if declares_extern_handle(&decl.attrs)))
         && load.imports.get(source).is_none_or(|imported| {
             imported.iter().all(|target| {
@@ -133,6 +154,21 @@ fn servable(load: &LoadResult, source: &ModuleSource) -> bool {
                 )
             })
         })
+||||||| 3297b1bd9
+            .any(|item| matches!(item, Item::Resource(decl) if declares_unrestricted(&decl.attrs)))
+        && load.imports.get(source).is_none_or(|imported| {
+            imported.iter().all(|target| {
+                matches!(
+                    target,
+                    ModuleSource::Dependency { .. }
+                        | ModuleSource::Core { .. }
+                        | ModuleSource::Binding { .. }
+                )
+            })
+        })
+=======
+            .any(|item| matches!(item, Item::Resource(decl) if declares_unrestricted(&decl.attrs)))
+>>>>>>> origin/main
 }
 
 /// Load the modules `key` names from an empty entry beside `load`'s, so they
@@ -151,6 +187,7 @@ async fn build<H: CompilerHost>(load: &LoadResult, host: &H, key: &Key) -> Optio
     };
     let roots = key.iter().map(|(source, ..)| source.clone()).collect();
     let loaded = ModuleLoader::new(&host, LogLevel::Off)
+        .with_invocations(load.invocations.clone())
         .with_roots(roots)
         .load_all("", Some(&entry))
         .await

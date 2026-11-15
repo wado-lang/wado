@@ -177,7 +177,6 @@ fn receiver_head(method: Option<&LocalMethodName>) -> Option<TypeHead> {
 fn settled(head: TypeHead) -> Option<TypeHead> {
     match head {
         TypeHead::Binder { .. }
-        | TypeHead::ParamBucket { .. }
         | TypeHead::Projection(_)
         | TypeHead::Unresolved(_)
         | TypeHead::Infer { .. } => None,

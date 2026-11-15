@@ -5,6 +5,7 @@
 //! root and drives the analyse/substitute fixpoint to convergence in one shot.
 
 use std::cell::Cell;
+use std::cmp::Ordering;
 
 use cranelift_entity::EntityRef;
 
@@ -20,7 +21,7 @@ use crate::nir_value_graph::ValueId;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
-use super::arena_query::{MutRefAliases, RootMutation, for_each_mutated_root};
+use super::arena_query::{MutRefAliases, RootMutation, for_each_mutated_root, operand_read_locals};
 use super::gate::{FunctionGate, GatedPass};
 use super::value_copy::mutation::MutationOracle;
 use crate::optimize::arena_query::{
@@ -289,11 +290,13 @@ impl AnalysisCtx<'_> {
 /// indices. `mut_indices` holds each local's sorted mutating statements: a
 /// binding at `k` is source-scope-stable iff its source has none after `k`, and
 /// the full list answers the projection check's open-interval question.
-/// `first_read` is the earliest read, which guards against backward reads.
+/// `first_read` is the earliest read, which guards against backward reads, and
+/// `last_read` the latest, past which a source may change freely.
 #[derive(Default)]
 struct BlockScan {
     mut_indices: IndexMap<u32, Vec<usize>>,
     first_read: IndexMap<u32, usize>,
+    last_read: IndexMap<u32, usize>,
 }
 
 /// Build every block's [`BlockScan`] in ONE top-down walk, recording each read /
@@ -354,26 +357,19 @@ fn scan_node(
             body.values.collect_opaque_locals(v, &mut promoted);
         }
     });
-    for index in &promoted {
+    let record_read = |scans: &mut IndexMap<BlockId, BlockScan>, index: u32| {
         for &(b, i) in frames.iter() {
-            scans
-                .get_mut(&b)
-                .expect("enclosing block was scanned")
-                .first_read
-                .entry(*index)
-                .or_insert(i);
+            let scan = scans.get_mut(&b).expect("enclosing block was scanned");
+            scan.first_read.entry(index).or_insert(i);
+            scan.last_read.insert(index, i);
         }
+    };
+    for index in &promoted {
+        record_read(scans, *index);
     }
     if let NodeRef::Expr(id) = node {
         if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
-            for &(b, i) in frames.iter() {
-                scans
-                    .get_mut(&b)
-                    .expect("enclosing block was scanned")
-                    .first_read
-                    .entry(*index)
-                    .or_insert(i);
-            }
+            record_read(scans, *index);
         }
         for_each_mutated_root(body, id, type_table, oracle, aliases, &mut |rm| {
             let l = rm.local();
@@ -462,15 +458,26 @@ fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: 
                         // A target read at or before the binding is a
                         // backward / cross-iteration read the "mutations
                         // after `k`" interval cannot reason about — the same
-                        // guard the `RefProjection` path applies.
-                        scan.first_read
-                            .get(&binding.target_local)
-                            .is_none_or(|&u| u > k)
-                            && scan
-                                .mut_indices
-                                .get(&src)
-                                .and_then(|v| v.last())
-                                .is_none_or(|&i| i <= k)
+                        // guard the `RefProjection` path applies. Past the
+                        // target's last read, `src = …` gives the source a new
+                        // value and leaves the one the target shared alone; an
+                        // in-place write would reach wherever the target went.
+                        // At that read only `src = target` is admitted, which
+                        // reads the target before anything writes the source.
+                        let target = binding.target_local;
+                        let last_read = scan.last_read.get(&target).copied();
+                        scan.first_read.get(&target).is_none_or(|&u| u > k)
+                            && scan.mut_indices.get(&src).is_none_or(|muts| {
+                                muts.iter().filter(|&&i| i > k).all(|&i| {
+                                    last_read.is_some_and(|u| match i.cmp(&u) {
+                                        Ordering::Greater => replaces_local(body, stmts[i], src),
+                                        Ordering::Equal => {
+                                            assigns_read_of(body, stmts[i], src, target)
+                                        }
+                                        Ordering::Less => false,
+                                    })
+                                })
+                            })
                     }
                     None => true,
                 },
@@ -479,6 +486,44 @@ fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: 
         }
         analyze_stmt(body, stmt, result, ctx);
     }
+}
+
+/// Whether `stmt` is `local = …` whose value neither reads nor writes `local`.
+fn replaces_local(body: &Body, stmt: StmtId, local: u32) -> bool {
+    assign_of(body, stmt).is_some_and(|(target, value)| {
+        assigned_local(body, target) == Some(local)
+            && !operand_read_locals(body, value).contains(&local)
+    })
+}
+
+/// Whether `stmt` is `to = from`.
+fn assigns_read_of(body: &Body, stmt: StmtId, to: u32, from: u32) -> bool {
+    assign_of(body, stmt).is_some_and(|(target, value)| {
+        assigned_local(body, target) == Some(to)
+            && body.local_read(value).map(|(v, _)| v) == Some(from)
+    })
+}
+
+/// Whether `stmt` is `x = x`, which copy propagation leaves of `let t = x; …;
+/// x = t`.
+fn assigns_itself(body: &Body, stmt: StmtId) -> bool {
+    assign_of(body, stmt)
+        .and_then(|(target, _)| assigned_local(body, target))
+        .is_some_and(|x| assigns_read_of(body, stmt, x, x))
+}
+
+fn assign_of(body: &Body, stmt: StmtId) -> Option<(ExprId, Operand)> {
+    let StmtKind::Expr(op) = &body.stmts[stmt].kind else {
+        return None;
+    };
+    match &body.exprs[op.as_expr()?].kind {
+        ExprKind::Assign { target, value } => Some((*target, *value)),
+        _ => None,
+    }
+}
+
+fn assigned_local(body: &Body, target: ExprId) -> Option<u32> {
+    body.local_read(target.into()).map(|(index, _)| index)
 }
 
 /// Stability for a `RefProjection` source rooted at `root`, bound at statement
@@ -810,9 +855,14 @@ fn apply_in_block(
     engine.set_block_stmts(block, kept);
 
     let stmts = engine.body.blocks[block].stmts.clone();
-    for stmt in stmts {
+    for &stmt in &stmts {
         apply_in_node(engine, NodeRef::Stmt(stmt), substitutions, dead_locals);
     }
+    let kept: Vec<StmtId> = stmts
+        .into_iter()
+        .filter(|&s| !assigns_itself(engine.body, s))
+        .collect();
+    engine.set_block_stmts(block, kept);
 }
 
 fn apply_in_node(

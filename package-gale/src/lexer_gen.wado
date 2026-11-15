@@ -36,6 +36,7 @@ use { MemberDecls, members_present } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
 use { clip_to_scalars, complement_code_points, scalar_count, SCALAR_COUNT } from "./g4/unicode.wado";
 use { is_ident_char } from "./text.wado";
+use { BinaryProperty, contains, simple_lowercase, simple_uppercase } from "core:icu";
 use {
     ModeAttrUse,
     body_mode_attr_use,
@@ -104,41 +105,52 @@ pub fn resolve_ci(grammar_opts: &List<GrammarOption>, rule_opts: &List<GrammarOp
     return false;
 }
 
-/// Expand one char range into the set of ranges needed to match it
-/// case-insensitively. The original range is always included. When the range
-/// intersects ASCII letters, the opposing-case sub-range is appended.
-/// Non-letter chars are not folded (ANTLR4 only does one-length transforms).
-/// Whether `start..=end`, widened as `fold_range_ci` widens it under `ci`,
-/// holds `c`: the set's membership without building it.
-pub fn folded_range_contains(start: char, end: char, ci: bool, c: char) -> bool {
-    if start <= c <= end {
-        return true;
-    }
-    if !ci || !c.is_ascii_alphabetic() {
-        return false;
-    }
-    let partner = if c.is_ascii_lowercase() { c.to_ascii_uppercase() } else { c.to_ascii_lowercase() };
-    return start <= partner <= end;
+fn class_holds(cc: &CharClass, c: char) -> bool {
+    return cc.negated != cc.ranges.iter_ref().any(|r: &CharRange| r.start <= c <= r.end);
 }
 
+/// The ranges `start..=end` matches under `caseInsensitive`: itself, and, where
+/// both bounds share a case, the range between their simple lowercases and the
+/// one between their simple uppercases, when the two span the same width. A
+/// range the mapping would not carry whole keeps only itself, as the jar does.
+///
+/// The jar leaves out the range itself, so its `'ǅ'` misses the titlecase `ǅ`
+/// it names; Gale keeps it.
 pub fn fold_range_ci(start: char, end: char, out: &mut List<CharRange>) {
     out.push(CharRange { start, end });
-    if start <= 'z' && end >= 'a' {
-        let lo = if start < 'a' { 'a' } else { start };
-        let hi = if end > 'z' { 'z' } else { end };
-        out.push(CharRange {
-            start: lo.to_ascii_uppercase(),
-            end: hi.to_ascii_uppercase(),
-        });
+    if !bounds_share_case(start, end) {
+        return;
     }
-    if start <= 'Z' && end >= 'A' {
-        let lo = if start < 'A' { 'A' } else { start };
-        let hi = if end > 'Z' { 'Z' } else { end };
-        out.push(CharRange {
-            start: lo.to_ascii_lowercase(),
-            end: hi.to_ascii_lowercase(),
-        });
+    let lower = CharRange {
+        start: simple_lowercase(start),
+        end: simple_lowercase(end),
+    };
+    let upper = CharRange {
+        start: simple_uppercase(start),
+        end: simple_uppercase(end),
+    };
+    let width = |r: &CharRange| r.end as i32 - r.start as i32;
+    if width(&lower) < 0 || width(&lower) != width(&upper) {
+        return;
     }
+    for let r of [lower, upper] {
+        if r != (CharRange { start, end }) {
+            out.push(r);
+        }
+    }
+}
+
+/// Whether `r`'s bounds are letters of different case, which `caseInsensitive`
+/// keeps as written.
+pub fn is_case_mixed(r: &CharRange) -> bool {
+    let cased = |c: char| contains(BinaryProperty::Cased, c);
+    return cased(r.start) && cased(r.end) && !bounds_share_case(r.start, r.end);
+}
+
+/// Whether a range's bounds are both lowercase or both not, the test under
+/// which the jar maps a range rather than keeping it as written.
+fn bounds_share_case(start: char, end: char) -> bool {
+    return contains(BinaryProperty::Lowercase, start) == contains(BinaryProperty::Lowercase, end);
 }
 
 pub fn collect_literal_tokens(parser_rules: &List<ParserRule>) -> List<LitToken> {
@@ -3602,6 +3614,10 @@ fn gen_lexer_leaf<S: AsStrSlice>(w: &mut CodeWriter, elem: &LexerElement, fail_a
     match *elem {
         Literal(text) => {
             for let c of text.chars() {
+                if folds_beyond_itself(c, ci) {
+                    gen_char_class(w, &folded_class(c, c, ci), fail_action);
+                    continue;
+                }
                 let n = c.len_utf8();
                 let bound = if n == 1 { String::from("pos >= src.len()") } else { `pos + ${n} > src.len()` };
                 let mismatch = literal_char_mismatches("pos", 0, c, ci).join(" || ");
@@ -3699,12 +3715,22 @@ fn literal_char_mismatches<S: AsStrSlice>(base: S, offset: i32, c: char, ci: boo
         }
         return [`${read} != ${byte_lit(code)}`];
     }
+    assert !folds_beyond_itself(c, ci), "a char matching another of its own length or not is stepped as a class";
     let encoded = String::from(c);
     let mut out: List<String> = [];
     for let mut i = 0; i < encoded.len(); i += 1 {
         out.push(`${src_byte(base, offset + i)} != ${byte_lit(unchecked encoded.byte_at(i) as u32)}`);
     }
     return out;
+}
+
+/// Whether a literal's non-ASCII `c` matches some other char under `ci`, whose
+/// UTF-8 need not be as long as its own: the literal then steps over it as a
+/// class rather than comparing its bytes. An ASCII char's case pair is ASCII.
+fn folds_beyond_itself(c: char, ci: bool) -> bool {
+    return ci
+        && c as u32 >= 0x80
+        && folded_class(c, c, ci).ranges.iter_ref().any(|r: &CharRange| r.start != c || r.end != c);
 }
 
 /// A class with more ranges than this is tested by a function defined once,
@@ -4204,13 +4230,13 @@ fn keyword_elem_ends(
     let len = kw.text.len();
     match elem {
         Literal(s) => {
-            let cs: List<char> = s.chars().collect();
+            let classes: List<CharClass> = s.chars().map(|c| folded_class(c, c, ci)).collect();
             return starts.iter_ref().filter(
-                |p| *p + cs.len() <= len
-                    && (0..<cs.len()).all(
-                        |i| keyword_chars_admitted(kw, *p + i, reading, |c| folded_range_contains(cs[i], cs[i], ci, c)),
+                |p| *p + classes.len() <= len
+                    && (0..<classes.len()).all(
+                        |i| keyword_chars_admitted(kw, *p + i, reading, |c| class_holds(&classes[i], c)),
                     ),
-            ).map(|p| *p + cs.len()).collect();
+            ).map(|p| *p + classes.len()).collect();
         },
         RuleRef(name) => {
             let callee = find_lexer_rule(all_rules, name);
@@ -4264,18 +4290,14 @@ fn keyword_elem_ends(
             }
         },
         CharRange(pair) => {
+            let folded = folded_class(pair.0, pair.1, ci);
             return starts.iter_ref().filter(
-                |p| *p < len
-                    && keyword_chars_admitted(kw, *p, reading, |c| folded_range_contains(pair.0, pair.1, ci, c)),
+                |p| *p < len && keyword_chars_admitted(kw, *p, reading, |c| class_holds(&folded, c)),
             ).map(|p| *p + 1).collect();
         },
         CharClass(cc) => {
-            let admits = |c: char| cc.negated != cc.ranges.iter_ref().any(|r| folded_range_contains(
-                r.start,
-                r.end,
-                ci,
-                c,
-            ));
+            let folded = folded_char_class(cc, ci);
+            let admits = |c: char| class_holds(&folded, c);
             return starts.iter_ref().filter(|p| *p < len && keyword_chars_admitted(kw, *p, reading, admits)).map(
                 |p| *p + 1,
             ).collect();
@@ -4670,6 +4692,14 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bo
         }
         let len = lit.text.len();
         assert len > 0, "a literal token has text";
+        if lit.text.chars().any(|c| folds_beyond_itself(c, ci)) {
+            w.line("let mut pos = start;");
+            gen_lexer_leaf(w, &LexerElement::Literal(lit.text), "return -1", ci, hm);
+            w.line("return pos;");
+            w.end();
+            w.blank();
+            continue;
+        }
         let mut mismatches: List<String> = [];
         let mut offset = 0;
         for let c of lit.text.chars() {

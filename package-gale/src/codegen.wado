@@ -28,6 +28,8 @@ use {
     lexer_grammar_run_action_ids,
     lexer_mode_attr_use,
     splice_suffixed_alternations,
+    is_case_mixed,
+    resolve_ci,
 } from "./lexer_gen.wado";
 use { gen_parser } from "./parser_gen.wado";
 use { collect_members, translate_gate_bodies } from "./action_gen.wado";
@@ -242,6 +244,12 @@ pub fn lower_for_analysis(grammar: &mut Grammar, token_kinds: TokenKinds) -> [Lo
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut diagnostics = Diagnostics {};
     let settings = install_action_context(grammar, GenSettings {}, &mut diagnostics).settings;
+    let atn_class_rules: List<String> = if grammar_needs_latn(grammar) {
+        build_latn(grammar).atn_class_rules;
+    } else {
+        [];
+    };
+    warn_lexer_rules(grammar, &settings, &atn_class_rules, &mut diagnostics);
     let mut ctx = lower_context(grammar, &lit_tokens, token_kinds, settings, diagnostics);
     let lowered = lower(grammar, &lit_tokens, &mut ctx);
     return [lowered, ctx];
@@ -338,8 +346,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_node_kinds(&mut w, &lowered.parser_rules);
     gen_alt_enums(&mut w, grammar);
     gen_parser(&mut w, grammar, &lowered, &parser_members, &mut ctx);
-    warn_unhandled_lexer_actions(grammar, &ctx.settings, &mut ctx.diagnostics);
-    warn_atn_class_lexer_predicates(grammar, &latn.atn_class_rules, &mut ctx.diagnostics);
+    warn_lexer_rules(grammar, &ctx.settings, &latn.atn_class_rules, &mut ctx.diagnostics);
     gen_string_tree_helper(&mut w, grammar, &lit_tokens);
     if let Some(query) = &options.highlight_query {
         gen_highlight(&mut w, grammar, &lit_tokens, query, &ctx.settings, &mut ctx.diagnostics);
@@ -482,6 +489,36 @@ fn warn_superclass_refused<S: AsStrSlice, S1: AsStrSlice>(diagnostics: &mut Diag
         DiagnosticKind::UnsupportedAction,
         `superClass '${base}' ${refusal}, so the base is not wired`,
     );
+}
+
+/// The warnings about lexer rules, which `gale dump` reports as `generate` does.
+fn warn_lexer_rules(
+    grammar: &Grammar,
+    settings: &GenSettings,
+    atn_class_rules: &List<String>,
+    diagnostics: &mut Diagnostics,
+) {
+    warn_unhandled_lexer_actions(grammar, settings, diagnostics);
+    warn_case_mixed_ranges(grammar, diagnostics);
+    warn_atn_class_lexer_predicates(grammar, atn_class_rules, diagnostics);
+}
+
+fn warn_case_mixed_ranges(grammar: &Grammar, diagnostics: &mut Diagnostics) {
+    for let rule of &grammar.lexer_rules {
+        if !resolve_ci(&grammar.options, &rule.options) {
+            continue;
+        }
+        for let r of &rule.written_ranges {
+            if !is_case_mixed(r) {
+                continue;
+            }
+            diagnostics.warn(
+                &DiagnosticOwner { site: DiagnosticSite::LexerRule(rule.name) },
+                DiagnosticKind::CaseMixedRange,
+                `range ${r.start}..${r.end} is kept as written, not widened by caseInsensitive: its bounds are letters of different case`,
+            );
+        }
+    }
 }
 
 /// Loud safety net for lexer `{ ... }` actions codegen does not execute:

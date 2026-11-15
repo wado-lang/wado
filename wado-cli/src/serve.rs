@@ -35,7 +35,7 @@ use crate::args::{self, CliExit};
 use crate::build::build_for_driver;
 use crate::host_memory::FreedMemory;
 use crate::knobs::{
-    CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs,
+    CompileKnobOpt, CompileKnobs, HostKnobOpt, HostKnobs, RuntimeKnobOpt, RuntimeKnobs, cores,
 };
 use crate::manifest;
 use crate::runtime::{self, Preopens, ProfileMode, WasiState};
@@ -1266,11 +1266,7 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     // An explicit `--workers` is already validated against an explicit
     // `--max-concurrency` in `parse_args`; the auto-derived default is
     // clamped so it never sizes more workers than the bound can back.
-    let mut workers = opts.workers.unwrap_or_else(|| {
-        std::thread::available_parallelism()
-            .map(std::num::NonZero::get)
-            .unwrap_or(1)
-    });
+    let mut workers = opts.workers.unwrap_or_else(cores);
     if let Some(max_concurrency) = opts.max_concurrency {
         workers = workers.min(max_concurrency);
     }

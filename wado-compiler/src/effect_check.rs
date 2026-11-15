@@ -1611,6 +1611,10 @@ fn build_propagation_closure_sem(
 
 /// The effect an attribute argument written in `module` refers to. It has no
 /// reference site, so the module's scope decides.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "an attribute argument is a spelling no walk visits"
+)]
 fn effect_named_in(name: &str, module: &ModuleSource, index: &EffectIndex) -> Option<EffectRef> {
     let resolutions = index.resolutions;
     resolutions.effect_decl(resolutions.resolve_in(module, name)?)

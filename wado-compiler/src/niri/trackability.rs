@@ -335,8 +335,13 @@ pub(super) fn aggregate_safe_locals(
             }
             ExprKind::Assign { target, value } => {
                 read_value(*value, &mut value_reads);
+                // A store the frame performs replaces a value. Over a reference
+                // it would repoint an alias instead, which stays a disqualifying
+                // mention.
                 if !reached.place_assigns.contains(&e) {
                     disqualify_root(body, (*target).into(), &mut disqualified);
+                } else if !type_table.is_reference(body.exprs[*target].type_id) {
+                    read_value((*target).into(), &mut value_reads);
                 }
             }
             ExprKind::Unary {

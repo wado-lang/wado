@@ -1,0 +1,39 @@
+// A struct local handed `&mut` to a call on a cold path still splits into
+// scalars: the call gets a literal rebuilt from them, and they read back the
+// fields it may write once it returns. The hot loop then keeps `acc`'s fields
+// in locals, and only the rare call pays for the object.
+use { println, Stdout } from "core:cli";
+
+struct Acc {
+    total: i32,
+    resets: i32,
+    limit: i32,
+}
+
+#[inline("never")]
+fn reset(acc: &mut Acc) {
+    acc.total = 0;
+    acc.resets += 1;
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(100);
+    let mut acc = Acc { total: 0, resets: 0, limit: builtin::black_box(500) };
+    for let i of 0..<n {
+        acc.total += i;
+        if acc.total > acc.limit {
+            builtin::cold_path();
+            reset(&mut acc);
+        }
+    }
+    println(`${acc.total} ${acc.resets}`);
+}
+
+__DATA__
+{
+    "stdout": "99 9\n",
+    "wir_contrast": {"O2": [{"builtin::cold_path();": ""}]},
+    "wir_scope": "sroa_mut_ref_cold_call.wado/run",
+    "wir_expect:O2": ["= $sroa_write_back_{}.resets;\n            }"],
+    "wir_not_expect:O2": ["acc.total"]
+}
