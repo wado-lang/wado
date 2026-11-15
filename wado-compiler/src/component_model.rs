@@ -1891,8 +1891,33 @@ impl CmInterfaceRegistry {
         .then_some(ExternRef::Optional)
     }
 
+    /// Whether `ty` is or holds an extern handle, through the fields of a
+    /// record and the payloads of a variant too.
     fn mentions_extern_handle(&self, ty: &Type) -> bool {
-        ty.any(&mut |ty| self.extern_handle(ty).is_some())
+        ty.any(&mut |ty| {
+            if self.extern_handle(ty).is_some() {
+                return true;
+            }
+            let Type::Named(named) = ty else {
+                return false;
+            };
+            let Some(source) = self.source_interface(named) else {
+                return false;
+            };
+            let fields = self
+                .get_struct_fields_by_source(&source, &named.name)
+                .into_iter()
+                .flatten()
+                .map(|(_, field)| field);
+            let payloads = self
+                .get_variant_cases_by_source(&source, &named.name)
+                .into_iter()
+                .flatten()
+                .filter_map(|case| case.payload.as_ref());
+            fields
+                .chain(payloads)
+                .any(|inner| self.mentions_extern_handle(inner))
+        })
     }
 
     /// Whether `func` is a web import: its signature holds an extern handle, so
