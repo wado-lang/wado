@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794733454417,
+  "lastUpdate": 1794738476643,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77673,6 +77673,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cbfdec9ef60331a6a1d44f0d6b27090e84de5f2b"
         },
         "date": 1794733453117,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7295,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24494,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435516,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "96aacce3eac5229cedf2293e6c1bd586d23ef511",
+          "message": "Merge pull request #2631 from wado-lang/compiler/static-candidates-by-identity\n\nrefactor(compiler): resolve static calls from the receiver's identity, never its spelling",
+          "timestamp": "2026-11-15T19:14:34+09:00",
+          "tree_id": "ada1e7d6fe435f13cc6e9f3ab249f0454ee76089",
+          "url": "https://github.com/wado-lang/wado/commit/96aacce3eac5229cedf2293e6c1bd586d23ef511"
+        },
+        "date": 1794738476261,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
