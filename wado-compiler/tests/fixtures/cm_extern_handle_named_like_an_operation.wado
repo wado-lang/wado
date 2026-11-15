@@ -1,5 +1,5 @@
-// An unrestricted handle crosses as a bare `f64`, not an exported type, so
-// `Window` leaves the name `window` to the operation.
+// A web import is a core import of the main module. The component declares
+// neither the resource nor the operation, so `Window` and `window` do not meet.
 
 #[cm("example:demo/window", linearity = "unrestricted", repr = "externref", classes = "0..=0")]
 resource Window {}
@@ -19,7 +19,7 @@ __DATA__
   "compile_only": true,
   "skip_os": true,
   "wat_lines": [
-    { "contains": ["(export", "\"window\"", "(func"], "count": 1 },
-    { "contains": ["(export", "\"window\"", "(type (eq"], "count": 0 }
+    { "contains": ["(import \"extern\" \"$example:demo/global#window\"", "(result (ref extern))"], "count": 1 },
+    { "contains": ["(import \"example:demo/"], "count": 0 }
   ]
 }
