@@ -83,7 +83,7 @@ lower is then available to each interface the slice adds.
   the program passes such a closure or not.
 - A mixin's members are folded into each interface that includes it, rather
   than declared once as a trait.
-- A handle has no `Inspect`, `Display` or `serde` rule.
+- A handle has no `Display` or `serde` rule. `Inspect` writes its class's name.
 - `wado-lang:web` publishes no WIT.
 - An event handler attribute (`onclick`) is skipped, since its type is a
   callback in a result. `add_event_listener` covers the same events.
