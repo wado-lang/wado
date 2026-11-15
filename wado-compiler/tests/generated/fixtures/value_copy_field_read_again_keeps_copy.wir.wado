@@ -498,18 +498,17 @@ global global:core:prelude/primitive.wado::$const_obj_22: ref "core:prelude/stri
 fn "value_copy_field_read_again_keeps_copy.wado/$test_0_the_field_is_written_in_place_before_it_is_overwritten"() {
     let t: ref "core:prelude/list.wado//List<i32>";
     let i: i32;
+    let $sroa_p_y_29: ref "core:prelude/list.wado//List<i32>";
     let $sroa_$sroa_p_x_28_repr_33: ref Array<i32>;
-    let $sroa_$sroa_p_y_29_repr_35: ref Array<i32>;
-    let $sroa_write_back_37: ref "core:prelude/list.wado//List<i32>";
     $sroa_$sroa_p_x_28_repr_33 = array.new_fixed<i32>(1);
-    $sroa_$sroa_p_y_29_repr_35 = array.new_fixed<i32>(2, 2);
-    t = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $sroa_$sroa_p_y_29_repr_35, 0, 2); $array_clone_dst_2, used: 2 };
-    if @unlikely(2 >= builtin::array_len($sroa_$sroa_p_y_29_repr_35)) {
+    $sroa_p_y_29 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(2, 2), used: 2 };
+    t = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $sroa_p_y_29.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $array_clone_src_1, 0, 2); $array_clone_dst_2, used: 2 };
+    if @unlikely(2 >= builtin::array_len($sroa_p_y_29.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_37(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_$sroa_p_y_29_repr_35, used: 2 }));
-        $sroa_$sroa_p_y_29_repr_35 = $sroa_write_back_37.repr;
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_p_y_29);
     }
-    builtin::array_set<i32>($sroa_$sroa_p_y_29_repr_35, 2, 3);
+    builtin::array_set<i32>($sroa_p_y_29.repr, 2, 3);
+    $sroa_p_y_29.used = 3;
     builtin::array_copy<i32>(builtin::array_new<i32>(1), 0, $sroa_$sroa_p_x_28_repr_33, 0, 1);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_i32__9: block -> bool {
         block {
@@ -562,12 +561,12 @@ t: "), used: 159 }, s1: struct.new "core:prelude/string.wado//String" { repr: ar
 }
 
 fn "value_copy_field_read_again_keeps_copy.wado/$test_1_a_whole_read_takes_every_field_not_overwritten_yet"() {
-    let $load_0: ref Array<i32>;
     let t: ref "core:prelude/list.wado//List<i32>";
     let i: i32;
     let $sroa_p_x_32: ref "core:prelude/list.wado//List<i32>";
-    t = struct.new "core:prelude/list.wado//List<i32>" { repr: $load_0 = local.tee $sroa_p_x_32(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }).repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(1)), 0, $load_0, 0, 1); $array_clone_dst_2, used: 1 };
-    if @unlikely(1 >= builtin::array_len($load_0)) {
+    $sroa_p_x_32 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
+    t = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $sroa_p_x_32.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(1)), 0, $array_clone_src_1, 0, 1); $array_clone_dst_2, used: 1 };
+    if @unlikely(1 >= builtin::array_len($sroa_p_x_32.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_p_x_32);
     }
@@ -577,23 +576,23 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_1_a_whole_read_takes_every
         block {
         };
         i = 0;
-        $load_0 = t.repr;
+        $array_clone_src_1 = t.repr;
         b15: block {
             l16: loop {
                 break_if b15 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(1);
-                if builtin::array_get_value<i32>($load_0, i) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_2, i) {
+                if builtin::array_get_value<i32>($array_clone_src_1, i) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_2, i) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<i32>($load_0, i) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_2, i) {
+                if builtin::array_get_value<i32>($array_clone_src_1, i) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_2, i) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<i32>($load_0, i) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_2, i) {
+                if builtin::array_get_value<i32>($array_clone_src_1, i) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_2, i) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<i32>($load_0, i) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_2, i) {
+                if builtin::array_get_value<i32>($array_clone_src_1, i) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_2, i) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
                 }
                 i = i + 1;
@@ -603,7 +602,7 @@ fn "value_copy_field_read_again_keeps_copy.wado/$test_1_a_whole_read_takes_every
         b21: block {
             l22: loop {
                 break_if b21 i >= 1;
-                if builtin::array_get_value<i32>($load_0, i) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_2, i) {
+                if builtin::array_get_value<i32>($array_clone_src_1, i) != builtin::array_get_value<i32>(global:value_copy_field_read_again_keeps_copy.wado::$const_obj_2, i) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
                 }
                 i = i + 1;

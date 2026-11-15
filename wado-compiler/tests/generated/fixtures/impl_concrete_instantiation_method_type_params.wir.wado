@@ -312,19 +312,15 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<impl_concrete_instantiation_method_type_params.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>$spec0$spec0$sroa[t.h0]" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(111)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow$spec0" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(112)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(112)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to$spec0" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(113)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(113)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(114)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(114)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(115)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(115)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(116)
-
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(117)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(118)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(116)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -2511,7 +2507,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
         break $inline_count_digits_u64_base_29: select i32((t - (q * 4)) != 0, (local.tee q(local.tee t(64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_66))) / 4) + 1) + ((t ^ 4) >> 31), q);
     }) > 16) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow$spec0"(local.tee $sroa_write_back_575(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_573, used: 0 }), t);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_575(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_573, used: 0 }), t);
         $sroa_out_repr_573 = $sroa_write_back_575.repr;
     }
     q = t;
@@ -2544,21 +2540,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<impl_concre
         break $inline_core_prelude_string_wado_String__internal_push_view_35;
     };
     return out_3;
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::grow$spec0"(self, min_capacity) {
-    let capacity: i32;
-    capacity = builtin::array_len(self.repr);
-    if min_capacity <= capacity {
-        return;
-    }
-    "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to$spec0"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to$spec0"(self, new_capacity) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(new_capacity)), 0, self.repr, 0, 0);
-    self.repr = new_repr;
 }
 
 export fn "impl_concrete_instantiation_method_type_params.wado/$cm_export__$test_0_the_impl_for_one_instantiation_wins_even_when_the_method_is_generic" as "$test_0_the_impl_for_one_instantiation_wins_even_when_the_method_is_generic"

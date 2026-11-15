@@ -3440,13 +3440,13 @@ fn "core:zlib/deflate_stored"($mv$input$repr, $mv$input$used) {
                 $sroa_output_repr_105 = $sroa_write_back_110.repr;
             }
             builtin::array_set_u8($sroa_output_repr_105, $sroa_output_used_106, len_lo);
-            if @unlikely(local.tee $sroa_output_used_106($sroa_output_used_106 + 1) >= builtin::array_len($sroa_output_repr_105)) {
+            if @unlikely(local.tee len_lo(local.tee $sroa_output_used_106($sroa_output_used_106 + 1)) >= builtin::array_len($sroa_output_repr_105)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(local.tee $sroa_write_back_110(struct.new "core:prelude/list.wado//List<u8>" { repr: $sroa_output_repr_105, used: $sroa_output_used_106 }));
                 $sroa_output_repr_105 = $sroa_write_back_110.repr;
             }
-            builtin::array_set_u8($sroa_output_repr_105, $sroa_output_used_106, len_hi);
-            $sroa_output_used_106 = $sroa_output_used_106 + 1;
+            builtin::array_set_u8($sroa_output_repr_105, len_lo, len_hi);
+            $sroa_output_used_106 = len_lo + 1;
             len_hi = local.tee len_lo(a_11 ^ 65535) & 255;
             if @unlikely($sroa_output_used_106 >= builtin::array_len($sroa_output_repr_105)) {
                 cold_path;

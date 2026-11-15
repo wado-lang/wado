@@ -1550,13 +1550,13 @@ fn "serde_struct_derive.wado/$test_4_a_deserialized_field_copies_on_assignment__
                 continue l80;
             };
         };
-        if @unlikely($mv$$vr_6$0 >= builtin::array_len($array_clone_dst_6)) {
+        if @unlikely(local.tee $mv_kind_1($mv$$vr_6$0) >= builtin::array_len($array_clone_dst_6)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(local.tee v_31(struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: $array_clone_dst_6, used: $mv$$vr_6$0 }));
             $array_clone_dst_6 = v_31.repr;
         }
-        builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_6, $mv$$vr_6$0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 });
-        $mv$$vr_6$0 = $mv$$vr_6$0 + 1;
+        builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_6, $mv_kind_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 });
+        $mv$$vr_6$0 = $mv_kind_1 + 1;
         if @unlikely(local.tee $mv_kind_1(v_15.tags.used) != 1) {
             cold_path;
             "serde_struct_derive.wado/$test_4_a_deserialized_field_copies_on_assignment__like_any_other_value$cold2"($mv_kind_1);

@@ -186,13 +186,13 @@ fn "opt_value_copy_match_binding_live_scrutinee.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_181, out_256.repr, out_256.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_8);
     builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(local.tee used_8(builtin::array_len(local.tee elements_7(array.new_fixed<i32>(black_box(7))))))), 0, elements_7, 0, used_8);
-    if @unlikely(used_8 >= builtin::array_len($array_clone_dst_2)) {
+    if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_181(used_8) >= builtin::array_len($array_clone_dst_2)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee xs_1(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: used_8 }));
         $array_clone_dst_2 = xs_1.repr;
     }
-    builtin::array_set<i32>($array_clone_dst_2, used_8, 9);
-    used_8 = used_8 + 1;
+    builtin::array_set<i32>($array_clone_dst_2, $sroa_$pattern_temp_0_1_14_181, 9);
+    used_8 = $sroa_$pattern_temp_0_1_14_181 + 1;
     local.tee out_256(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }).used = 2;
     builtin::array_copy<u8>(out_256.repr, 0, global:opt_value_copy_match_binding_live_scrutinee.wado::$const_obj_0, 0, 2);
     $sroa_$pattern_temp_0_1_14_181 = used_8 < 0;

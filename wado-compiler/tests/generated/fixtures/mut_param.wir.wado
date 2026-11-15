@@ -844,6 +844,7 @@ fn "mut_param.wado/$test_6_rebinding__writing_and_appending_to_a_list_param"() {
     let $v0_2: i32;
     let elements_38: ref Array<i32>;
     let used_39: i32;
+    let used_104: i32;
     let $sroa_write_back_124: ref "core:prelude/list.wado//List<i32>";
     used_39 = builtin::array_len(local.tee elements_38(array.new_fixed<i32>(black_box(1), 2, 3)));
     builtin::array_copy<i32>(builtin::array_new<i32>(used_39), 0, elements_38, 0, used_39);
@@ -882,13 +883,13 @@ fn "mut_param.wado/$test_6_rebinding__writing_and_appending_to_a_list_param"() {
         unreachable;
     }
     builtin::array_copy<i32>(local.tee $array_clone_dst_5(builtin::array_new<i32>(local.tee used_39(builtin::array_len(local.tee elements_38(array.new_fixed<i32>(black_box(1), 2, 3)))))), 0, elements_38, 0, used_39);
-    if @unlikely(local.tee $v0_2(used_39) >= builtin::array_len($array_clone_dst_5)) {
+    if @unlikely(local.tee used_104(local.tee $v0_2(used_39)) >= builtin::array_len($array_clone_dst_5)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_124(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_5, used: $v0_2 }));
         $array_clone_dst_5 = $sroa_write_back_124.repr;
     }
-    builtin::array_set<i32>($array_clone_dst_5, $v0_2, 0);
-    if @unlikely(local.tee $v0_2($v0_2 + 1) != 4) {
+    builtin::array_set<i32>($array_clone_dst_5, used_104, 0);
+    if @unlikely(local.tee $v0_2(used_104 + 1) != 4) {
         cold_path;
         "mut_param.wado/$test_6_rebinding__writing_and_appending_to_a_list_param$cold1"($v0_2);
         unreachable;

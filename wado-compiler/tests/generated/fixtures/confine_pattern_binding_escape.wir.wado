@@ -254,7 +254,7 @@ global global:core:prelude/traits.wado::$const_obj_31: ref "core:prelude/string.
 
 fn "confine_pattern_binding_escape.wado/run"() {
     let $load_3: i32;
-    let self_92: i32;
+    let used_85: i32;
     let $sroa_$sroa_q_l_94_repr_99: ref Array<i32>;
     let $sroa_one_1_102: ref null "confine_pattern_binding_escape.wado//P";
     let $sroa_write_back_107: ref "core:prelude/list.wado//List<i32>";
@@ -289,16 +289,16 @@ fn "confine_pattern_binding_escape.wado/run"() {
     builtin::array_set<i32>($sroa_$sroa_q_l_94_repr_99, 1, 3);
     $sroa_$sroa_q_l_94_repr_99 = local.tee $sroa_write_back_107(local.tee $sroa_one_1_102(struct.new "confine_pattern_binding_escape.wado//P" { l: struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 } }).l).repr;
     builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(local.tee $load_3($sroa_write_back_107.used))), 0, $sroa_$sroa_q_l_94_repr_99, 0, $load_3);
-    if @unlikely($load_3 >= builtin::array_len($array_clone_dst_2)) {
+    if @unlikely(local.tee used_85($load_3) >= builtin::array_len($array_clone_dst_2)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_107(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: $load_3 }));
         $array_clone_dst_2 = $sroa_write_back_107.repr;
     }
-    builtin::array_set<i32>($array_clone_dst_2, $load_3, 3);
-    $load_3 = $load_3 + 1;
-    if @unlikely(local.tee self_92($sroa_one_1_102.l.used) != 1) {
+    builtin::array_set<i32>($array_clone_dst_2, used_85, 3);
+    $load_3 = used_85 + 1;
+    if @unlikely(local.tee used_85($sroa_one_1_102.l.used) != 1) {
         cold_path;
-        "confine_pattern_binding_escape.wado/run$cold1"($sroa_one_1_102, self_92);
+        "confine_pattern_binding_escape.wado/run$cold1"($sroa_one_1_102, used_85);
         unreachable;
     }
     if @unlikely($load_3 != 2) {
