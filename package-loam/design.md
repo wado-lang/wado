@@ -191,6 +191,12 @@ path on every device.
 `forgo_shader_f16` makes a backend compute as a device without the feature
 does, so one device tests both paths.
 
+A node of halves that takes several steps computes them in f32 and rounds its
+result once, on every device: a mean, a softmax, an attention, a
+normalization, and a `Gemm` or `Conv` through its scale and bias. A step
+rounded on the way would turn a value past a half's range into an infinity
+that the next step could have brought back.
+
 On the CPU, onnxruntime computes the float16 nodes of Gemma 3 (270M)'s `fp16`
 export in f32. Loam rounds each node's result to f16, as the graph says, so
 its logits sit apart from onnxruntime's while the tokens match. Each row is the

@@ -341,8 +341,9 @@ fn built_gemm(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
     if alpha != 1.0 {
         call = scaled(&`&${call}`, &product, alpha, symbols)?;
     }
-    let out = if has_bias(node) { shapes[node.outputs[0]] } else { product };
+    let mut out = product;
     if has_bias(node) {
+        out = shapes[node.outputs[0]];
         if !same_axes(&product, &out) {
             call = broadcast_call(&element, &product, &out, &`&${call}`, 0, symbols)?;
         }
