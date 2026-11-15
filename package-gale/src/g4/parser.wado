@@ -74,6 +74,7 @@ pub struct G4Parser {
     imports: List<String>,
     pending_refs: List<PendingRef>,
     current_rule: String,
+    written_ranges: List<CharRange>,
     alt_labels: List<AltLabel>,
     rule_labels: List<AltLabel>,
     kind: GrammarKind,
@@ -266,6 +267,7 @@ impl G4Parser {
             imports: [],
             pending_refs: [],
             current_rule: "",
+            written_ranges: [],
             alt_labels: [],
             rule_labels: [],
             kind: GrammarKind::Combined,
@@ -1261,6 +1263,8 @@ impl G4Parser {
         self.current_rule = name.to_string();
         let body = self.parse_lexer_alternatives()?;
         self.current_rule = "";
+        let written_ranges = self.written_ranges;
+        self.written_ranges = [];
 
         let mut actions = LexerCommands::empty();
         if self.is_kind(G4Token::Arrow) {
@@ -1285,6 +1289,7 @@ impl G4Parser {
                 is_virtual: false,
                 options,
                 body,
+                written_ranges,
             },
         );
     }
@@ -1467,13 +1472,14 @@ impl G4Parser {
                 // unpaired surrogate escape to U+FFFD.
                 let lo = string_literal_code_points(&self.src, start_span)[0];
                 let hi = string_literal_code_points(&self.src, end_tok.span)[0];
+                clip_to_scalars(&mut self.written_ranges, lo, hi);
                 return Result::<LexerElement, ParseError>::Ok(scalar_char_range(lo, hi));
             }
             return Result::<LexerElement, ParseError>::Ok(LexerElement::Literal(text));
         }
         if self.is_kind(G4Token::CharClass) {
             let tok = self.advance();
-            let cc = parse_char_class(&tok.text, tok.span)?;
+            let cc = parse_char_class(&tok.text, tok.span, &mut self.written_ranges)?;
             return Result::<LexerElement, ParseError>::Ok(LexerElement::CharClass(cc));
         }
         if self.is_kind(G4Token::Dot) {
@@ -1602,7 +1608,8 @@ fn take_char_code(src: &StrSlice, pos: &mut i32, class_span: Span) -> Result<i32
     );
 }
 
-fn parse_char_class<S: AsStrSlice>(text: S, span: Span) -> Result<CharClass, ParseError> {
+/// The class `text` spells, its spelled-out ranges also added to `written`.
+fn parse_char_class<S: AsStrSlice>(text: S, span: Span, written: &mut List<CharRange>) -> Result<CharClass, ParseError> {
     let src = text.as_str_slice();
     let end = src.len() - 1;
     let mut pos = 1;
@@ -1646,16 +1653,16 @@ fn parse_char_class<S: AsStrSlice>(text: S, span: Span) -> Result<CharClass, Par
         }
 
         let c = take_char_code(&src, &mut pos, span)?;
+        let mut c2 = c;
         if opens_char_range(&src, pos, end) {
             pos += 1;
             if at_property_escape(&src, pos, end) {
                 return Result::<CharClass, ParseError>::Err(property_range_error(span));
             }
-            let c2 = take_char_code(&src, &mut pos, span)?;
-            clip_to_scalars(&mut ranges, c, c2);
-        } else {
-            clip_to_scalars(&mut ranges, c, c);
+            c2 = take_char_code(&src, &mut pos, span)?;
         }
+        clip_to_scalars(&mut ranges, c, c2);
+        clip_to_scalars(written, c, c2);
     }
 
     return Result::<CharClass, ParseError>::Ok(CharClass { ranges, negated: false });

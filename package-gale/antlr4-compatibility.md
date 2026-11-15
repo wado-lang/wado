@@ -61,6 +61,15 @@ Where Gale departs from the jar:
   contributed to admits it. Pinned by "a wildcard takes a kind past the
   grammar's" in `src/codegen_test.wado` and "a wildcard predicts a kind past
   the grammar's" in `src/lower_test.wado`. No upstream report names it yet.
+- **A titlecase char under `caseInsensitive`.** The jar maps a range to the
+  ranges between its bounds' lowercases and uppercases and leaves out the range
+  itself (see [`caseInsensitive`](#caseinsensitive-maps-a-range-by-its-bounds)).
+  For a titlecase char that drops the char: `'ǅ'` matches `Ǆ` and `ǆ` but not
+  the `ǅ` it names, against `options.md`'s own account of `a` becoming `[aA]`.
+  Gale keeps the range as written beside the mapped ones, which changes nothing
+  where each bound is its own lowercase or uppercase. Pinned by "caseInsensitive
+  matches a titlecase char as written" in `src/codegen_test.wado`. No upstream
+  report names it yet.
 
 ### Grammars Gale accepts and ANTLR4 rejects
 
@@ -165,6 +174,39 @@ Measured against [antlr/grammars-v4](https://github.com/antlr/grammars-v4)'s
 1,150 grammars: `Block` and `Decomposition_Type` never appear, and every
 `Other_*` occurrence sits in a comment. Python's and Rust's lexers spell the
 code points out by hand rather than use the property.
+
+### `caseInsensitive` maps a range by its bounds
+
+`vendor/antlr4/doc/options.md` says only that a char becomes its upper and
+lower case equivalents. The rule below is what the jar (4.13.2 on JDK 21) was
+seen to do, across 72 ranges around ASCII, Latin-1, Greek and the `Ǆ`–`ǌ`
+titlecase block.
+
+A range `[lo-hi]`, a single char being `[c-c]`, matches the range between
+`simple_lowercase(lo)` and `simple_lowercase(hi)` and the one between
+`simple_uppercase(lo)` and `simple_uppercase(hi)`, when both hold:
+
+- `lo` and `hi` are both lowercase or both not (the Unicode `Lowercase`
+  property);
+- the two mapped ranges run upward and span the same width.
+
+Otherwise the range matches only what it spans. So `[a-z]` takes `A-Z`, and
+`[À-Þ]` takes `à-þ`, `÷` included. `'k'` takes `K` but not the Kelvin sign,
+and the Kelvin sign takes `k`. `[à-ÿ]` stays as written, because `ÿ`'s
+uppercase `Ÿ` lies outside Latin-1, and so does `[_-z]`, whose `_` maps to
+itself. A negated set is the complement of the mapped set. A literal maps
+char by char, and a char whose other case is a different length in UTF-8
+(`ſ` and `S`) is matched by decoding it.
+
+The mappings are `core:icu`'s, at its Unicode version, where the jar's are the
+JDK's. Gale also keeps the range as written beside the mapped ones; see the
+titlecase entry under [Bugs in ANTLR4 itself](#bugs-in-antlr4-itself).
+
+A range whose bounds are letters of different case, as `[Z-a]`, is kept as
+written, so the other case of the letters it spans does not match. Gale warns
+on every such range the grammar writes out (`case-mixed-range`), though not on
+the runs a `\p{…}` expands to. The jar's warning 185 covers only
+ranges reaching across the ASCII gap between `Z` and `a`.
 
 ### EOF in parse trees
 

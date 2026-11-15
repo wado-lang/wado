@@ -314,6 +314,54 @@ fn test_format_prints_an_empty_brace_list_as_two_braces() {
     assert_format_preserves_ast(source);
 }
 
+/// Where a `{` opens the block that follows, a struct literal outside any
+/// delimiter is parenthesized, or it would re-parse as that block.
+#[test]
+fn test_format_parenthesizes_a_struct_literal_where_a_block_follows() {
+    let source = concat!(
+        "struct P {\n",
+        "    a: i32,\n",
+        "}\n",
+        "\n",
+        "fn f(p: P, a: i32) -> i32\n",
+        "    contract p != (P { a })\n",
+        "{\n",
+        "    if p != (P { a }) {\n",
+        "        return 1;\n",
+        "    }\n",
+        "    if let P { a: 1 } = (P { a }) && p == (P { a }) {\n",
+        "        return 2;\n",
+        "    }\n",
+        "    while (P { a }) == p {\n",
+        "        return 3;\n",
+        "    }\n",
+        "    for let mut i = 0; (P { a: i }) != p; i += 1 {\n",
+        "        return 4;\n",
+        "    }\n",
+        "    for let mut i = 0; i < a; p = (P { a: i }) {\n",
+        "        return 4;\n",
+        "    }\n",
+        "    for let x of (P { a }).list() {\n",
+        "        return x;\n",
+        "    }\n",
+        "    let t = [for let v of (P { a }).parts() { v }];\n",
+        "    match (P { a }) {\n",
+        "        _ => 6,\n",
+        "    }\n",
+        "    match if a == 0 { P { a } } else { p } {\n",
+        "        _ => 7,\n",
+        "    }\n",
+        "    if f(P { a }, a) == 0 {\n",
+        "        return 5;\n",
+        "    }\n",
+        "    return 0;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
 /// A string outside an expression keeps its escapes as written, as an
 /// expression's string literal does, though the compiler reads its value.
 #[test]

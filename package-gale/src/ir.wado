@@ -1281,6 +1281,9 @@ pub struct LexerRule {
     /// Rule-level options from `options { ... }` prequel blocks.
     pub options: List<GrammarOption>,
     pub body: List<LexerAlternative>,
+    /// The ranges the source spells out, `\p{…}` aside: what a diagnostic
+    /// about a written range reads.
+    pub written_ranges: List<CharRange> = [],
 }
 
 impl LexerRule {

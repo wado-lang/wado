@@ -54,8 +54,6 @@ leaves this file, and the documents here state what it built.
 - No inverse for the three simple case mappings. A caller that wants every
   character whose `simple_lowercase` lands in a set has no set operation for
   it, only `simple_fold_closure`.
-- Gale's `caseInsensitive` widens a range by ASCII case alone, and whether
-  ANTLR4 widens it further is unsettled.
 
 ## Open questions
 
