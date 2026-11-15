@@ -465,7 +465,7 @@ fn callback_registry_keys(ctx: &WirContext<'_>, type_table: &TypeTable) -> Index
                 .all(|&p| !matches!(type_table.get(p), ResolvedType::Function { .. })),
             "a callback takes scalars and handles, whose lowering no erasure changes"
         );
-        let (param_wirs, result_wirs) = canonical_signature(ctx, type_table, params, *return_type);
+        let (param_wirs, result_wirs) = ctx.canonical_signature(type_table, params, *return_type);
         keys.insert(WirContext::canonical_closure_key(&param_wirs, &result_wirs));
     }
     keys
@@ -515,8 +515,11 @@ fn register_fn_closure(
         );
     }
 
-    let (param_wirs, result_wirs) = canonical_signature(ctx, type_table, params, *return_type);
-    let is_erased = erased.contains(&WirContext::canonical_closure_key(&param_wirs, &result_wirs));
+    let (param_wirs, result_wirs) = ctx.canonical_signature(type_table, params, *return_type);
+    let is_erased = erased.contains(&WirContext::canonical_closure_key(
+        &param_wirs,
+        &result_wirs,
+    ));
     let is_inspectable = ctx
         .inspectable_fn_dispatch
         .contains(&(params.len(), *return_type));
@@ -525,28 +528,6 @@ fn register_fn_closure(
     if !is_erased {
         ctx.fn_closure_types.insert(type_id, closure);
     }
-}
-
-/// The Wasm parameters and results of a function signature, as its canonical
-/// closure key spells them. Unit params are left out, matching the
-/// function-signature convention (unit has no Wasm representation).
-fn canonical_signature(
-    ctx: &WirContext<'_>,
-    type_table: &TypeTable,
-    params: &[TypeId],
-    return_type: TypeId,
-) -> (Vec<WirType>, Vec<WirType>) {
-    let param_wirs = params
-        .iter()
-        .map(|p| ctx.type_id_to_wir_type(type_table, *p))
-        .filter(|t| !matches!(t, WirType::Unit))
-        .collect();
-    let result_wirs = if type_table.is_stackless(return_type) {
-        vec![]
-    } else {
-        vec![ctx.type_id_to_wir_type(type_table, return_type)]
-    };
-    (param_wirs, result_wirs)
 }
 
 /// The WIR name of variant `def` at `type_args` (none for a plain variant):

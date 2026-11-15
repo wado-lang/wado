@@ -1589,15 +1589,9 @@ impl FunctionTranslator<'_, '_> {
             ),
         };
 
-        // Compute canonical closure types directly by signature key. Unit
-        // params are erased from the canonical signature (they have no Wasm
-        // representation); every canonical-key site filters identically.
-        let param_wirs: Vec<WirType> = param_types
-            .iter()
-            .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
-            .filter(|t| !matches!(t, WirType::Unit))
-            .collect();
-        let result_wirs = self.result_wir_types(return_type);
+        let (param_wirs, result_wirs) =
+            self.ctx
+                .canonical_signature(self.type_table, &param_types, return_type);
         let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
         let (fn_type_id, closure_struct_type_id) = if let Some((ftid, stid, _)) =
             self.ctx.canonical_closure_types.get(&key)
@@ -1711,14 +1705,9 @@ impl FunctionTranslator<'_, '_> {
             ),
         };
 
-        // Unit params are erased from the canonical signature; every
-        // canonical-key site filters identically.
-        let param_wirs: Vec<WirType> = param_types
-            .iter()
-            .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
-            .filter(|t| !matches!(t, WirType::Unit))
-            .collect();
-        let result_wirs = self.result_wir_types(return_type);
+        let (param_wirs, result_wirs) =
+            self.ctx
+                .canonical_signature(self.type_table, &param_types, return_type);
 
         // Get canonical closure type and its inspectable schema flag.
         let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);

@@ -1042,10 +1042,6 @@ impl FunctionTranslator<'_, '_> {
         self.ctx.type_id_to_wir_type(self.type_table, type_id)
     }
 
-    pub(super) fn result_wir_types(&self, type_id: TypeId) -> Vec<WirType> {
-        self.ctx.result_wir_types(self.type_table, type_id)
-    }
-
     /// The WIR type index of a `TypeId` that must lower to a concrete reference
     /// — a struct, variant, array, or list.
     ///

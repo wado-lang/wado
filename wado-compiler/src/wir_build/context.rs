@@ -716,6 +716,23 @@ impl<'a> WirContext<'a> {
         }
     }
 
+    /// The Wasm parameters and results of a function signature, as its
+    /// canonical closure key spells them. Unit params are left out: unit has no
+    /// Wasm representation.
+    pub fn canonical_signature(
+        &self,
+        type_table: &TypeTable,
+        params: &[TypeId],
+        return_type: TypeId,
+    ) -> (Vec<WirType>, Vec<WirType>) {
+        let param_wirs = params
+            .iter()
+            .map(|p| self.type_id_to_wir_type(type_table, *p))
+            .filter(|t| !matches!(t, WirType::Unit))
+            .collect();
+        (param_wirs, self.result_wir_types(type_table, return_type))
+    }
+
     /// Whether a place holding a `type_id` is nullable: it holds an affine
     /// value, which a move empties (WEP: Affine Types).
     pub fn is_affine(&self, type_table: &TypeTable, type_id: TypeId) -> bool {
