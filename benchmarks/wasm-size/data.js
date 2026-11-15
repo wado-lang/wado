@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794718917928,
+  "lastUpdate": 1794720320223,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77541,6 +77541,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/352e9b656717fd3c6685c3f2d76313f62ab50913"
         },
         "date": 1794718916869,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7295,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24494,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435516,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "120c682f7d937830a3c5394bc2a1d52abd5a0be4",
+          "message": "Merge pull request #2627 from wado-lang/ccr-0ea92ac8-1fra6x\n\nfix(gale): match caseInsensitive across all of Unicode, as the jar does",
+          "timestamp": "2026-11-15T13:47:03+09:00",
+          "tree_id": "a832d00843876ea5861de6fdbb2e21e8b79877c7",
+          "url": "https://github.com/wado-lang/wado/commit/120c682f7d937830a3c5394bc2a1d52abd5a0be4"
+        },
+        "date": 1794720318870,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
