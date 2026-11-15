@@ -635,10 +635,11 @@ fn cm_attr_cm_name(attrs: &[Attribute], wado_name: &str) -> String {
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
 
-/// The CM type an unrestricted resource crosses the boundary as. No CM value
-/// type is a reference, so a copyable handle is a number: an `f64`, which jco
-/// hands JavaScript as a plain number where a `u64` would be a `BigInt`.
-fn extern_handle_type(span: Span) -> Type {
+/// The base an extern handle registers as a newtype of. Nothing lowers it: a
+/// handle crosses as an `externref` ([`CmInterfaceRegistry::extern_ref`]), and
+/// an import holding one any other way is refused
+/// ([`CmInterfaceRegistry::is_unbuilt_extern_import`]).
+fn extern_handle_placeholder(span: Span) -> Type {
     Type::Named(NamedType::new(AstId::fresh(), "f64".to_string(), span))
 }
 
@@ -1028,7 +1029,7 @@ pub struct CmInterfaceRegistry {
     /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
     resources: IndexMap<(String, String), String>,
 
-    /// Resources declared `linearity = "unrestricted"`, registered as `f64` newtypes.
+    /// Resources declared `repr = "externref"`: the extern handles.
     /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
     unrestricted_resources: IndexMap<(String, String), String>,
 
@@ -1856,15 +1857,15 @@ impl CmInterfaceRegistry {
         &self.type_decls
     }
 
-    /// Whether the resource `name` declared in `source` is unrestricted, and so
-    /// crosses the boundary as the universal handle rather than a CM handle.
+    /// Whether the resource `name` declared in `source` is an extern handle,
+    /// and so no CM resource.
     #[must_use]
     pub fn is_unrestricted_resource(&self, source: &str, name: &str) -> bool {
         self.unrestricted_resources
             .contains_key(&(source.to_string(), name.to_string()))
     }
 
-    /// The unrestricted resource `ty` is, or references.
+    /// The extern handle `ty` is, or references.
     #[must_use]
     pub fn extern_handle(&self, ty: &Type) -> Option<Type> {
         let handle = self.deref_extern_handle(ty);
@@ -2246,8 +2247,7 @@ impl CmInterfaceRegistry {
                 }
                 // Use the #[cm] fragment as the CM name (preserves acronym casing like DNS, TLS)
                 let cm_name = cm_attr_cm_name(&resource.attrs, &resource.name);
-                // An unrestricted resource is erased at the boundary, which sees
-                // the universal handle, a copyable `f64`, so it registers as a
+                // An extern handle is no CM resource, so it registers as a
                 // newtype and every `own`/`borrow` path passes it by.
                 if declares_extern_handle(&resource.attrs) {
                     self.unrestricted_resources
@@ -2257,7 +2257,7 @@ impl CmInterfaceRegistry {
                         "newtype",
                         source_interface,
                         resource.name.clone(),
-                        extern_handle_type(resource.span),
+                        extern_handle_placeholder(resource.span),
                     );
                     continue;
                 }
@@ -2526,9 +2526,9 @@ impl CmInterfaceRegistry {
                 wado_name_under_cm_name(&self.unrestricted_resources, &iface, receiver);
             return Err(match unrestricted {
                 Some(wado_name) => format!(
-                    "{head}, but `{wado_name}` is declared unrestricted, so it crosses the \
-                     boundary as a plain handle and declares no resource to carry \
-                     operations. Bind a plain function taking the handle as a parameter."
+                    "{head}, but `{wado_name}` is an extern handle, which declares no \
+                     resource to carry operations. Bind a plain function taking the handle \
+                     as a parameter."
                 ),
                 None => format!("{head}, which interface `{iface}` does not declare."),
             });
@@ -3442,9 +3442,8 @@ impl CmInterfaceRegistry {
         self.newtypes
             .iter()
             .filter_map(move |((source, name), ty)| {
-                // An extern-handle handle registers here to reach the `f64` every
-                // boundary path lowers it to, but it names no CM type: the WIT
-                // spells the handle inline, so no alias declares it.
+                // An extern handle registers as a newtype but names no CM
+                // type, so no alias declares it.
                 if source.starts_with(interface_prefix)
                     && !self.is_unrestricted_resource(source, name)
                 {
@@ -3499,9 +3498,8 @@ impl CmInterfaceRegistry {
             resources: self.resources.keys().map(|(_, n)| n.as_str()).collect(),
             structs: self.structs.keys().map(|(_, n)| n.as_str()).collect(),
         };
-        // Parameter types at the boundary's view (an extern handle is an `f64`),
-        // and the return type with its newtypes (`Mark`, `Duration`, `Instant`)
-        // resolved to their bases.
+        // Each type with its newtypes (`Mark`, `Duration`, `Instant`, an extern
+        // handle) resolved to their bases.
         (!self.is_extern_import(func) || self.extern_handles_cross(func))
             && func
                 .params

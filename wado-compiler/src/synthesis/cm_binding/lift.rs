@@ -62,7 +62,7 @@ pub fn synthesize_lift(
 /// [`synthesize_lift`] into `target`, the Wado type the value is handed to: a
 /// list or map is built as that exact type, not one rebuilt from `ty` (a
 /// shared stdlib element type such as `InputFile` would resolve to a second GC
-/// `TypeId`), and an unrestricted handle is converted from its `f64`.
+/// `TypeId`).
 pub(super) fn synthesize_lift_into(
     ty: &Type,
     addr: TirExpr,
