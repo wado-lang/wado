@@ -1616,18 +1616,20 @@ impl FunctionTranslator<'_, '_> {
             nullable: false,
         };
 
-        // Build: declare temp, cast callee from abstract structref to canonical closure,
-        // store, extract env + args + funcref, call_ref
-        let mut stmts = declare_and_set_local(
-            temp_name.clone(),
-            callee_ref_type.clone(),
+        // A function type registered before its closure was is still the
+        // abstract `structref`, and casts down to the closure.
+        let callee_closure = if self.ctx.fn_closure_types.contains_key(&callee_ty) {
+            callee_wir
+        } else {
             WirInstr::RefCast {
                 type_id: closure_struct_type_id.clone(),
                 nullable: false,
                 expr: Box::new(callee_wir),
-            },
-        )
-        .to_vec();
+            }
+        };
+        let mut stmts =
+            declare_and_set_local(temp_name.clone(), callee_ref_type.clone(), callee_closure)
+                .to_vec();
 
         // Build args: env, then user args
         let env_result_ty = self.struct_field_wir_type(&closure_struct_type_id, "env");
