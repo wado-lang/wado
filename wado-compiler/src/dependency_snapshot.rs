@@ -142,33 +142,7 @@ fn servable(load: &LoadResult, source: &ModuleSource) -> bool {
         && !module
             .items
             .iter()
-<<<<<<< HEAD
             .any(|item| matches!(item, Item::Resource(decl) if declares_extern_handle(&decl.attrs)))
-        && load.imports.get(source).is_none_or(|imported| {
-            imported.iter().all(|target| {
-                matches!(
-                    target,
-                    ModuleSource::Dependency { .. }
-                        | ModuleSource::Core { .. }
-                        | ModuleSource::Binding { .. }
-                )
-            })
-        })
-||||||| 3297b1bd9
-            .any(|item| matches!(item, Item::Resource(decl) if declares_unrestricted(&decl.attrs)))
-        && load.imports.get(source).is_none_or(|imported| {
-            imported.iter().all(|target| {
-                matches!(
-                    target,
-                    ModuleSource::Dependency { .. }
-                        | ModuleSource::Core { .. }
-                        | ModuleSource::Binding { .. }
-                )
-            })
-        })
-=======
-            .any(|item| matches!(item, Item::Resource(decl) if declares_unrestricted(&decl.attrs)))
->>>>>>> origin/main
 }
 
 /// Load the modules `key` names from an empty entry beside `load`'s, so they
