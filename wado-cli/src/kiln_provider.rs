@@ -1372,10 +1372,8 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
 
-        let generator_src = VERBOSE_GENERATOR;
-
         let gen_path = tmp.join("generator.wado");
-        std::fs::write(&gen_path, generator_src).unwrap();
+        std::fs::write(&gen_path, VERBOSE_GENERATOR).unwrap();
 
         let provider = CliGeneratorProvider::new(tmp.clone());
         let module = GeneratorModule::LocalPath(InvocationPath::normalize("./generator.wado"));
