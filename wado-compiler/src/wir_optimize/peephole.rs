@@ -1719,15 +1719,18 @@ fn try_relax_gc_operands(instr: &mut WirInstr, locals: &WirLocals) -> bool {
 }
 
 fn relax_ref_read(instr: &mut WirInstr) -> bool {
-    if let WirInstr::LocalGet { result_ty, .. }
-    | WirInstr::GlobalGet { result_ty, .. }
-    | WirInstr::ArrayGet { result_ty, .. } = instr
-        && result_ty.is_nonnull_ref()
-    {
-        *result_ty = result_ty.clone().as_nullable();
-        return true;
+    match instr {
+        WirInstr::LocalGet { result_ty, .. }
+        | WirInstr::GlobalGet { result_ty, .. }
+        | WirInstr::ArrayGet { result_ty, .. }
+            if result_ty.is_nonnull_ref() =>
+        {
+            result_ty.set_nullable();
+            true
+        }
+        WirInstr::Seq(items) => items.last_mut().is_some_and(relax_ref_read),
+        _ => false,
     }
-    false
 }
 
 #[cfg(test)]
@@ -1765,6 +1768,31 @@ mod tests {
             }),
             len: Box::new(len),
         }
+    }
+
+    #[test]
+    fn an_element_read_stored_to_a_nullable_local_is_not_narrowed() {
+        let locals: WirLocals = [("c".to_string(), ref_ty(2, true))].into_iter().collect();
+        let mut instr = WirInstr::LocalSet {
+            name: "c".to_string(),
+            value: Box::new(WirInstr::Seq(vec![
+                WirInstr::Nop,
+                WirInstr::ArrayGet {
+                    type_id: tid(1),
+                    array: Box::new(local_get("a", ref_ty(1, false))),
+                    index: Box::new(WirInstr::I32Const(0)),
+                    result_ty: ref_ty(2, false),
+                },
+            ])),
+        };
+        assert!(try_relax_gc_operands(&mut instr, &locals));
+        let WirInstr::LocalSet { value, .. } = &instr else {
+            unreachable!();
+        };
+        let WirInstr::Seq(items) = value.as_ref() else {
+            unreachable!();
+        };
+        assert_matches!(&items[1], WirInstr::ArrayGet { result_ty, .. } if !result_ty.is_nonnull_ref());
     }
 
     fn fold_short_fill(instr: &mut WirInstr) -> bool {

@@ -1,5 +1,6 @@
 // A function value is typed as the closure struct of its signature, so a call
-// through one held in a field, a parameter or a list casts nothing.
+// through one held in a field, a parameter or a list casts nothing. The one
+// cast left is a closure wrapper's cast of its environment.
 
 use { println, Stdout } from "core:cli";
 
@@ -22,6 +23,8 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "7 8 18\n",
-    "wir_expect:O2": ["mut f: ref \"canonical//CanonicalClosure_"],
-    "wir_not_expect:O2": ["ref.cast \"canonical//CanonicalClosure_"]
+    "wat_lines": [
+        {"contains": ["(field (mut structref))"], "count": 0},
+        {"contains": ["ref.cast"], "count": 1}
+    ]
 }
