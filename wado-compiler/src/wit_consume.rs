@@ -32,6 +32,7 @@ use wit_parser::{
 };
 
 /// The Wado bindings synthesized from one decoded imported component.
+#[derive(Clone)]
 pub struct ComponentBindings {
     /// The AST module declaring the component's exported interfaces and types.
     pub module: Module,
