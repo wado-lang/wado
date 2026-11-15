@@ -759,6 +759,12 @@ pub enum WirType {
 }
 
 impl WirType {
+    /// An extern handle: a non-nullable `externref`.
+    pub const EXTERN: Self = Self::AbstractRef {
+        heap_type: WirAbstractHeapType::Extern,
+        nullable: false,
+    };
+
     /// A non-nullable reference to a registered WIR type.
     pub fn non_null_ref(type_id: WirTypeId) -> Self {
         Self::Ref {

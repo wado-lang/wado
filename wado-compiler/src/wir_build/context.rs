@@ -690,11 +690,7 @@ impl<'a> WirContext<'a> {
         if let Some(func_id) = self.func_map.get(&key) {
             return func_id.clone();
         }
-        let object = WirType::AbstractRef {
-            heap_type: WirAbstractHeapType::Extern,
-            nullable: false,
-        };
-        let mut params = vec![object; query.objects()];
+        let mut params = vec![WirType::EXTERN; query.objects()];
         if query.takes_address() {
             params.push(WirType::I32);
         }
@@ -846,10 +842,7 @@ impl<'a> WirContext<'a> {
             ResolvedType::Never => WirType::Unit,
             ResolvedType::Resource { .. } => {
                 if type_table.is_extern_handle(type_id) {
-                    WirType::AbstractRef {
-                        heap_type: WirAbstractHeapType::Extern,
-                        nullable: false,
-                    }
+                    WirType::EXTERN
                 } else {
                     Self::ref_to(self.handle_box())
                 }

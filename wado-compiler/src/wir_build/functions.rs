@@ -188,9 +188,9 @@ fn extern_import_core_func_type(
     registry: &CmInterfaceRegistry,
 ) -> (Vec<WirType>, Vec<WirType>) {
     let extern_ref = |ty: &Type| {
-        registry.extern_ref(ty).map(|shape| WirType::AbstractRef {
-            heap_type: WirAbstractHeapType::Extern,
-            nullable: shape == ExternRef::Optional,
+        registry.extern_ref(ty).map(|shape| match shape {
+            ExternRef::Handle => WirType::EXTERN,
+            ExternRef::Optional => WirType::EXTERN.as_nullable(),
         })
     };
     let flatten = |ty: &Type, out: &mut Vec<WirType>| {
@@ -212,10 +212,7 @@ fn extern_import_core_func_type(
     }
     let mut results = Vec::new();
     if func.is_async {
-        results.push(WirType::AbstractRef {
-            heap_type: WirAbstractHeapType::Extern,
-            nullable: false,
-        });
+        results.push(WirType::EXTERN);
     } else if let Some(ret) = &func.return_type {
         if cm_return_needs_outptr(ret, registry) {
             params.push(WirType::I32);
