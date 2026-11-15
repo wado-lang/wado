@@ -996,9 +996,17 @@ impl WirFunction {
     pub fn typed_locals(&self, types: &[WirTypeDef]) -> WirLocals {
         let params = &types[self.type_id.index() as usize].expect_func().params;
         assert_eq!(params.len(), self.param_names.len());
-        let mut locals: WirLocals = self.param_names.iter().cloned().zip(params.iter().cloned()).collect();
+        let mut locals: WirLocals = self
+            .param_names
+            .iter()
+            .cloned()
+            .zip(params.iter().cloned())
+            .collect();
         for (name, ty) in self.declared_locals().iter() {
-            locals.types.entry(name.to_string()).or_insert_with(|| ty.clone());
+            locals
+                .types
+                .entry(name.to_string())
+                .or_insert_with(|| ty.clone());
         }
         locals
     }

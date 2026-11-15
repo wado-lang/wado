@@ -213,9 +213,8 @@ fn without_temps<'a>(
     }
     // A node evaluates its first operand first, so what that operand sets on
     // the way is set ahead of the node too.
-    let mut first = |operand: &'a WirInstr| {
-        without_temps(std::slice::from_ref(operand), temps).map(Box::new)
-    };
+    let mut first =
+        |operand: &'a WirInstr| without_temps(std::slice::from_ref(operand), temps).map(Box::new);
     Some(match value {
         I::Seq(body) => without_temps(body, temps)?,
         I::I32Eqz(tested) => I::I32Eqz(first(tested)?),
@@ -264,8 +263,7 @@ impl<'a> Search<'a> {
     /// `data` ahead of the work, so by then each holds the last one's value,
     /// which only the next `data` may read.
     fn lends_temp_to(&self, instr: &WirInstr) -> bool {
-        let read = Footprint::reads(instr);
-        self.temps.iter().any(|(temp, _)| read.has_local(temp))
+        reads_any(instr, &self.temps)
     }
 
     /// The copy's tests, in the order it runs them: the furthest `guard`
@@ -291,7 +289,9 @@ impl<'a> Search<'a> {
         let set_before_read = (0..self.temps.len()).all(|at| {
             let (temp, value) = self.temps[at];
             let read = Footprint::reads(value);
-            self.temps[at..].iter().all(|(later, _)| !read.has_local(later))
+            self.temps[at..]
+                .iter()
+                .all(|(later, _)| !read.has_local(later))
                 && self.temps[at + 1..].iter().all(|(later, _)| *later != temp)
         });
         if !set_before_read
@@ -317,7 +317,8 @@ impl<'a> Search<'a> {
                 return None;
             }
         }
-        let data_fails = negated(&self.data).unwrap_or_else(|| I::I32Eqz(Box::new(self.data.clone())));
+        let data_fails =
+            negated(&self.data).unwrap_or_else(|| I::I32Eqz(Box::new(self.data.clone())));
         let mut data_fails_ahead: Option<WirInstr> = None;
         for ahead in 0..factor {
             let mut fails: Vec<WirInstr> = self
@@ -346,6 +347,11 @@ impl<'a> Search<'a> {
         }
         Some(vec![guard_fails, reads.outside?, data_fails_ahead?])
     }
+}
+
+fn reads_any(instr: &WirInstr, temps: &[(&str, &WirInstr)]) -> bool {
+    let read = Footprint::reads(instr);
+    temps.iter().any(|(temp, _)| read.has_local(temp))
 }
 
 /// The array reads of a search's `data`, and the test that one of them, over
@@ -395,10 +401,7 @@ impl Reads<'_> {
 
     fn outside_of(&mut self, array: &WirInstr, index: &WirInstr) -> Option<WirInstr> {
         use WirInstr as I;
-        let reads_temp = |instr: &WirInstr| {
-            let read = Footprint::reads(instr);
-            self.temps.iter().any(|(temp, _)| read.has_local(temp))
-        };
+        let reads_temp = |instr: &WirInstr| reads_any(instr, self.temps);
         if array.local_read().is_none() || !self.null.is_nonnull(array) || reads_temp(array) {
             return None;
         }
