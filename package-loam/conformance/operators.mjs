@@ -27,9 +27,9 @@ const int64 = (dims, values) => tensor(INT64, dims, values.map(BigInt));
 const halves = (count) => Array.from({ length: count }, (_, i) => (((i * 7) % 13) - 6) / 2);
 
 // Each case computes `Y`. `inputs` are fed and `inits` are initializers. A case
-// whose opset onnxruntime does not run names in `oracle` the nodes,
-// initializers and opset of a graph that computes the same, which onnxruntime
-// runs instead.
+// onnxruntime does not run as written names in `oracle` the nodes,
+// initializers, opset or output type of a graph that computes the same, which
+// onnxruntime runs instead.
 const cases = [];
 const add = (name, spec) => cases.push({ name, out: FLOAT, inits: {}, opset: 13, ...spec });
 
@@ -406,6 +406,20 @@ add('SimplifiedLayerNormalizationHalf', {
     node('Cast', ['N'], 'Y', { to: FLOAT }),
   ],
   opset: 17,
+});
+// The output takes the scale's element type, which may differ from the input's.
+// onnxruntime drops the rounding to f16 when a Cast back to f32 follows, so it
+// runs the graph that ends at the f16 output.
+const mixedNorm = (output) => [
+  node('Cast', ['C'], 'K', { to: FLOAT16 }),
+  node('SimplifiedLayerNormalization', ['A', 'K'], output, { epsilon: f32(1e-5), axis: -1 }),
+];
+add('SimplifiedLayerNormalizationMixed', {
+  inputs: { A: float([2, 3], [300, -400, 500, 1, 2, 3]) },
+  inits: { C: float([3], [1, -0.5, 2]) },
+  nodes: [...mixedNorm('N'), node('Cast', ['N'], 'Y', { to: FLOAT })],
+  opset: 17,
+  oracle: { nodes: mixedNorm('Y'), out: FLOAT16 },
 });
 add('GeluTanh', {
   inputs: { A: float([2, 3]) },

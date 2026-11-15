@@ -598,6 +598,13 @@ test "SimplifiedLayerNormalization of halves computes in f32" {
     );
 }
 
+test "SimplifiedLayerNormalization of f32s by a scale of halves gives halves" {
+    assert_agrees(
+        #include_bytes("./operators/SimplifiedLayerNormalizationMixed.onnx"),
+        #include_str("./operators/SimplifiedLayerNormalizationMixed.txt"),
+    );
+}
+
 test "SimplifiedLayerNormalization scales each row by the root of its mean square" {
     assert_agrees(
         #include_bytes("./operators/SimplifiedLayerNormalization.onnx"),
