@@ -687,7 +687,7 @@ model, and it does not price 94 and 93 of each program's operations
   none, so it uses neither `shader-f16` nor subgroups, and `WORKGROUP_BYTES` is
   WebGPU's default limit rather than the device's. It waits for a device or a
   model that a variant would serve. A half graph's `shader-f16` is the roadmap's
-  [A half graph keeps its type](./TODO.md#roadmap).
+  [A graph keeps its element types](./TODO.md#roadmap).
 - An `If` on a value on WebGPU reads its condition back, which submits the
   commands before it and waits for the device. So a step holding one cannot
   share a submission with the steps after it, and the loop on the device reads
