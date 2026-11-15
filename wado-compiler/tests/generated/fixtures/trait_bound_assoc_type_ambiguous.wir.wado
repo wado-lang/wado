@@ -82,21 +82,22 @@ global global:trait_bound_assoc_type_ambiguous.wado::$const_obj_0: ref Array<u8>
 global global:trait_bound_assoc_type_ambiguous.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(49, 50, 51), used: 3 };
 
 fn "trait_bound_assoc_type_ambiguous.wado/run"() with Stdout {
-    let out_5: ref "core:prelude/string.wado//String";
-    let start_219: i32;
-    let arr: ref Array<u8>;
     let q: u64;
+    let pair: i32;
     let tens: i32;
+    let new_repr_575: ref Array<u8>;
+    let $sroa_out_repr_586: ref Array<u8>;
+    let $sroa_write_back_588: ref "core:prelude/string.wado//String";
     let $mv$r$0: i32;
     let $mv$r$1: u64;
     let $mv$r$2: i32;
     multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "trait_bound_assoc_type_ambiguous.wado/trait_bound_assoc_type_ambiguous.wado/parse_scalar<u64>$sroa[return]$spec0"(global:trait_bound_assoc_type_ambiguous.wado::$const_obj_1);
     if $mv$r$0 == 0 {
-        out_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+        $sroa_out_repr_586 = builtin::array_new<u8>(16);
         $inline_core_prelude_string_wado_String__internal_push_view_22: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_22;
         };
-        $mv$r$0 = $inline_count_digits_u64_0: block -> i32 {
+        if @unlikely(local.tee $mv$r$0($inline_count_digits_u64_0: block -> i32 {
             if $mv$r$1 <u 100000_i64 {
                 if $mv$r$1 <u 100_i64 {
                     if $mv$r$1 <u 10_i64 {
@@ -155,51 +156,48 @@ fn "trait_bound_assoc_type_ambiguous.wado/run"() with Stdout {
                 break $inline_count_digits_u64_0: 19;
             }
             break $inline_count_digits_u64_0: 20;
-        };
-        if @unlikely(local.tee $mv$r$2(0 + $mv$r$0) > builtin::array_len(out_5.repr)) {
+        }) > 16) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_5, $mv$r$2);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_588(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_586, used: 0 }), $mv$r$0);
+            $sroa_out_repr_586 = $sroa_write_back_588.repr;
         }
-        start_219 = out_5.used;
-        out_5.used = $mv$r$2;
-        arr = out_5.repr;
-        $mv$r$0 = start_219 + $mv$r$0;
+        $mv$r$2 = $mv$r$0;
         b21: block {
             l22: loop {
-                break_if b21 ($mv$r$0 - start_219) < 2;
+                break_if b21 $mv$r$2 < 2;
                 q = $mv$r$1 /u 100_i64;
-                tens = local.tee $mv$r$2(builtin::i32_wrap_i64($mv$r$1 - (q * 100_i64))) / 10;
-                builtin::array_set_u8(arr, $mv$r$0 - 1, (48 + $mv$r$2) - (tens * 10));
-                builtin::array_set_u8(arr, $mv$r$0 - 2, 48 + tens);
-                $mv$r$0 = $mv$r$0 - 2;
+                tens = local.tee pair(builtin::i32_wrap_i64($mv$r$1 - (q * 100_i64))) / 10;
+                builtin::array_set_u8($sroa_out_repr_586, $mv$r$2 - 1, (48 + pair) - (tens * 10));
+                builtin::array_set_u8($sroa_out_repr_586, $mv$r$2 - 2, 48 + tens);
+                $mv$r$2 = $mv$r$2 - 2;
                 $mv$r$1 = q;
                 continue l22;
             };
         };
-        if $mv$r$0 > start_219 {
-            builtin::array_set_u8(arr, start_219, 48 + builtin::i32_wrap_i64($mv$r$1 %u 10_i64));
+        if $mv$r$2 > 0 {
+            builtin::array_set_u8($sroa_out_repr_586, 0, 48 + builtin::i32_wrap_i64($mv$r$1 %u 10_i64));
         }
         $inline_core_prelude_string_wado_String__internal_push_view_40: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_40;
         };
-        $mv$r$0 = builtin::i32_wrap_i64(local.tee $mv$r$1("wasi/stream-new"()));
-        $mv$r$2 = builtin::i32_wrap_i64($mv$r$1 >> 32_i64);
-        $mv$r$0 = "trait_bound_assoc_type_ambiguous.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$r$0);
-        builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_219(out_5.used) + 1)), 0, out_5.repr, 0, start_219);
-        builtin::array_set_u8(arr, start_219, 10);
+        $mv$r$2 = builtin::i32_wrap_i64(local.tee $mv$r$1("wasi/stream-new"()));
+        pair = builtin::i32_wrap_i64($mv$r$1 >> 32_i64);
+        $mv$r$2 = "trait_bound_assoc_type_ambiguous.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$r$2);
+        builtin::array_copy<u8>(local.tee new_repr_575(builtin::array_new<u8>($mv$r$0 + 1)), 0, $sroa_out_repr_586, 0, $mv$r$0);
+        builtin::array_set_u8(new_repr_575, $mv$r$0, 10);
         drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-            start_219 = start_219 + 1;
-            "core:rt/cm_stream_write_raw_all_u8"($mv$r$2, arr, 0, start_219);
+            $mv$r$0 = $mv$r$0 + 1;
+            "core:rt/cm_stream_write_raw_all_u8"(pair, new_repr_575, 0, $mv$r$0);
         });
-        "wasi/stream-drop-writable"($mv$r$2);
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$r$0);
+        "wasi/stream-drop-writable"(pair);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$r$2);
     } else {
         $mv$r$0 = builtin::i32_wrap_i64(local.tee $mv$r$1("wasi/stream-new"()));
         $mv$r$2 = builtin::i32_wrap_i64($mv$r$1 >> 32_i64);
         $mv$r$0 = "trait_bound_assoc_type_ambiguous.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$r$0);
-        builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(4)), 0, global:trait_bound_assoc_type_ambiguous.wado::$const_obj_0, 0, 3);
-        builtin::array_set_u8(arr, 3, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($mv$r$2, arr));
+        builtin::array_copy<u8>(local.tee $sroa_out_repr_586(builtin::array_new<u8>(4)), 0, global:trait_bound_assoc_type_ambiguous.wado::$const_obj_0, 0, 3);
+        builtin::array_set_u8($sroa_out_repr_586, 3, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($mv$r$2, $sroa_out_repr_586));
         "wasi/stream-drop-writable"($mv$r$2);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$r$0);
     }

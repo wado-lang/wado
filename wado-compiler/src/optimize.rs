@@ -1027,7 +1027,9 @@ fn run_optimization_passes(
                 GatedPass::LetBlockFlatten,
                 let_block_flatten::flatten_let_blocks
             );
-            gated!("nir/sroa", GatedPass::Sroa, scalar_replace_aggregates);
+            gated!("nir/sroa", GatedPass::Sroa, |p, g| {
+                scalar_replace_aggregates(p, g, &mut heap_effects)
+            });
             gated!("nir/copy_prop", GatedPass::CopyProp, |p, g| {
                 propagate_copies(p, g, &mut heap_effects)
             });

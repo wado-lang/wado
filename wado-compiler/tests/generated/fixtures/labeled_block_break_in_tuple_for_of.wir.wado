@@ -76,13 +76,16 @@ global global:labeled_block_break_in_tuple_for_of.wado::$const_obj_0: ref Array<
 
 fn "labeled_block_break_in_tuple_for_of.wado/per_outer_element"() {
     let $load_0: ref Array<u8>;
-    let out_0: ref "core:prelude/string.wado//String";
     let found_6: u8;
     let out_17: ref "core:prelude/string.wado//String";
     let is_negative: bool;
     let x: i64;
-    let start_117: i32;
-    out_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    let start_221: i32;
+    let $sroa_out_repr_233: ref Array<u8>;
+    let $sroa_out_used_234: i32;
+    let $sroa_write_back_257: ref "core:prelude/string.wado//String";
+    $sroa_out_repr_233 = builtin::array_new<u8>(0);
+    $sroa_out_used_234 = 0;
     found_6 = search: block -> u8 {
         if black_box(0) {
             break search: 0;
@@ -109,13 +112,13 @@ fn "labeled_block_break_in_tuple_for_of.wado/per_outer_element"() {
     builtin::array_copy<u8>(out_17.repr, is_negative, global:labeled_block_break_in_tuple_for_of.wado::$const_obj_0, 0, 1);
     $inline_core_prelude_string_wado_String__internal_push_string_46: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_46 found_6 == 0;
-        if @unlikely(local.tee is_negative(0 + found_6) > builtin::array_len(out_0.repr)) {
+        if @unlikely(found_6 > builtin::array_len($sroa_out_repr_233)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_0, is_negative);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_257(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_233, used: 0 }), found_6);
+            $sroa_out_repr_233 = $sroa_write_back_257.repr;
         }
-        start_117 = out_0.used;
-        out_0.used = is_negative;
-        builtin::array_copy<u8>(out_0.repr, start_117, out_17.repr, 0, found_6);
+        $sroa_out_used_234 = found_6;
+        builtin::array_copy<u8>($sroa_out_repr_233, 0, out_17.repr, 0, found_6);
     };
     x = search: block -> u64 {
         if black_box(0) {
@@ -142,15 +145,16 @@ fn "labeled_block_break_in_tuple_for_of.wado/per_outer_element"() {
     builtin::array_copy<u8>(out_17.repr, is_negative, global:labeled_block_break_in_tuple_for_of.wado::$const_obj_0, 0, 1);
     $inline_core_prelude_string_wado_String__internal_push_string_94: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_94 found_6 == 0;
-        if @unlikely(local.tee is_negative(out_0.used + found_6) > builtin::array_len(out_0.repr)) {
+        if @unlikely(local.tee is_negative($sroa_out_used_234 + found_6) > builtin::array_len($sroa_out_repr_233)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_0, is_negative);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_257(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_233, used: $sroa_out_used_234 }), is_negative);
+            $sroa_out_repr_233 = $sroa_write_back_257.repr;
         }
-        start_117 = out_0.used;
-        out_0.used = is_negative;
-        builtin::array_copy<u8>(out_0.repr, start_117, out_17.repr, 0, found_6);
+        start_221 = $sroa_out_used_234;
+        $sroa_out_used_234 = is_negative;
+        builtin::array_copy<u8>($sroa_out_repr_233, start_221, out_17.repr, 0, found_6);
     };
-    return out_0;
+    return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_233, used: $sroa_out_used_234 };
 }
 
 fn "labeled_block_break_in_tuple_for_of.wado/run"() with Stdout {

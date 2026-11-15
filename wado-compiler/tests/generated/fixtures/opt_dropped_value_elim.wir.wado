@@ -72,40 +72,40 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 fn "opt_dropped_value_elim.wado/drain"(n) {
-    let xs: ref "core:prelude/list.wado//List<i32>";
     let i: i32;
-    let used_7: i32;
-    let $licm_repr_19: ref Array<i32>;
-    xs = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    let $sroa_xs_repr_19: ref Array<i32>;
+    let $sroa_xs_used_20: i32;
+    let $sroa_write_back_21: ref "core:prelude/list.wado//List<i32>";
+    $sroa_xs_repr_19 = array.new_fixed<i32>();
+    $sroa_xs_used_20 = 0;
     i = 0;
-    $licm_repr_19 = xs.repr;
     b0: block {
         l1: loop {
             break_if b0 i >= n;
-            if @unlikely(local.tee used_7(xs.used) >= builtin::array_len($licm_repr_19)) {
+            if @unlikely($sroa_xs_used_20 >= builtin::array_len($sroa_xs_repr_19)) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs);
-                $licm_repr_19 = xs.repr;
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_21(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_xs_repr_19, used: $sroa_xs_used_20 }));
+                $sroa_xs_repr_19 = $sroa_write_back_21.repr;
             }
-            builtin::array_set<i32>($licm_repr_19, used_7, i);
-            xs.used = used_7 + 1;
+            builtin::array_set<i32>($sroa_xs_repr_19, $sroa_xs_used_20, i);
+            $sroa_xs_used_20 = $sroa_xs_used_20 + 1;
             i = i + 1;
             continue l1;
         };
     };
     $inline_core_prelude_list_wado_List_i32___pop_4: block {
-        break_if $inline_core_prelude_list_wado_List_i32___pop_4 local.tee n(xs.used) == 0;
-        xs.used = local.tee n(n - 1);
-        drop(builtin::array_get_value<i32>(xs.repr, n));
+        break_if $inline_core_prelude_list_wado_List_i32___pop_4 $sroa_xs_used_20 == 0;
+        $sroa_xs_used_20 = $sroa_xs_used_20 - 1;
+        drop(builtin::array_get_value<i32>($sroa_xs_repr_19, $sroa_xs_used_20));
         break $inline_core_prelude_list_wado_List_i32___pop_4;
     };
     $inline_core_prelude_list_wado_List_i32___pop_5: block {
-        break_if $inline_core_prelude_list_wado_List_i32___pop_5 local.tee n(xs.used) == 0;
-        xs.used = local.tee n(n - 1);
-        drop(builtin::array_get_value<i32>(xs.repr, n));
+        break_if $inline_core_prelude_list_wado_List_i32___pop_5 $sroa_xs_used_20 == 0;
+        $sroa_xs_used_20 = $sroa_xs_used_20 - 1;
+        drop(builtin::array_get_value<i32>($sroa_xs_repr_19, $sroa_xs_used_20));
         break $inline_core_prelude_list_wado_List_i32___pop_5;
     };
-    return xs.used;
+    return $sroa_xs_used_20;
 }
 
 fn "opt_dropped_value_elim.wado/run"() with Stdout {

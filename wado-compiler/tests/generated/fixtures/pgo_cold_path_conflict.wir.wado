@@ -45,7 +45,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(17)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<pgo_cold_path_conflict.wado/$tmpl$039317f8e40a52b7,[i32,bool]>$spec0$spec0$sroa[t.h1]" = fn(bool) -> ref "core:prelude/string.wado//String";  // TypeId(18)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<pgo_cold_path_conflict.wado/$tmpl$039317f8e40a52b7,[i32,bool]>$spec0$spec0$sroa[t.h1]" = fn(bool) -> [ref Array<u8>, i32];  // TypeId(18)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
@@ -74,9 +74,9 @@ global mut global:pgo_cold_path_conflict.wado::$const_obj_0: ref null "tuple//[i
 global global:core:prelude/string.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "pgo_cold_path_conflict.wado/run"() with Stdout {
-    let message_0: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
-    let self_25: i32;
+    let $sroa_$pattern_temp_0_1_19: i32;
+    let new_repr: ref Array<u8>;
     if ref.is_null(global:pgo_cold_path_conflict.wado::$const_obj_0) {
         global:pgo_cold_path_conflict.wado::$const_obj_0 = block -> ref "tuple//[i32, i32, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" {
             let $mv_field_1: ref Array<u8>;
@@ -88,18 +88,18 @@ fn "pgo_cold_path_conflict.wado/run"() with Stdout {
             struct.new "tuple//[i32, i32, core:prelude/types.wado/Option<core:prelude/string.wado/String>]" { 0: $mv_0_3, 1: $mv_1_4, 2: $mv_2_5 };
         };
     }
-    message_0 = "core:prelude/string.wado/core:prelude/string.wado/String::format<pgo_cold_path_conflict.wado/$tmpl$039317f8e40a52b7,[i32,bool]>$spec0$spec0$sroa[t.h1]"(global:pgo_cold_path_conflict.wado::$const_obj_0.0 == 0 == 0);
-    $mv_0_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $mv_1_4 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $mv_0_3 = "pgo_cold_path_conflict.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_0_3);
-    builtin::array_copy<u8>(local.tee $mv_field_1(builtin::array_new<u8>(local.tee self_25(message_0.used) + 1)), 0, message_0.repr, 0, self_25);
-    builtin::array_set_u8($mv_field_1, self_25, 10);
+    multivalue_bind [$mv_field_1, $mv_0_3] = "core:prelude/string.wado/core:prelude/string.wado/String::format<pgo_cold_path_conflict.wado/$tmpl$039317f8e40a52b7,[i32,bool]>$spec0$spec0$sroa[t.h1]"(global:pgo_cold_path_conflict.wado::$const_obj_0.0 == 0 == 0);
+    $mv_1_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_19 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $mv_1_4 = "pgo_cold_path_conflict.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_1_4);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv_0_3 + 1)), 0, $mv_field_1, 0, $mv_0_3);
+    builtin::array_set_u8(new_repr, $mv_0_3, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        self_25 = self_25 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($mv_1_4, $mv_field_1, 0, self_25);
+        $mv_0_3 = $mv_0_3 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_19, new_repr, 0, $mv_0_3);
     });
-    "wasi/stream-drop-writable"($mv_1_4);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv_0_3);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_19);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv_1_4);
 }
 
 fn "pgo_cold_path_conflict.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -272,51 +272,37 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<pgo_cold_path_conflict.wado/$tmpl$039317f8e40a52b7,[i32,bool]>$spec0$spec0$sroa[t.h1]"(t) {
-    let $load_3: ref Array<u8>;
-    let out_3: ref "core:prelude/string.wado//String";
     let pos_168: i32;
     let t_169: u64;
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let new_used_267: i32;
-    let start_268: i32;
     let $sroa_slot_870: ref null Array<u8>;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
+    let $sroa_out_repr_876: ref Array<u8>;
+    let $sroa_write_back_881: ref "core:prelude/string.wado//String";
+    $sroa_out_repr_876 = builtin::array_new<u8>(33);
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_22;
     };
-    if @unlikely(local.tee new_used_267(0 + 1) > builtin::array_len(out_3.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_267);
-    }
-    start_268 = out_3.used;
-    out_3.used = new_used_267;
-    $load_3 = out_3.repr;
-    pos_168 = start_268 + 1;
+    pos_168 = 1;
     t_169 = 3_i64;
-    b27: block {
-        l28: loop {
-            break_if b27 (pos_168 - start_268) < 2;
+    b26: block {
+        l27: loop {
+            break_if b26 pos_168 < 2;
             q = t_169 /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(t_169 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_3, pos_168 - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($load_3, pos_168 - 2, 48 + tens);
+            builtin::array_set_u8($sroa_out_repr_876, pos_168 - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($sroa_out_repr_876, pos_168 - 2, 48 + tens);
             pos_168 = pos_168 - 2;
             t_169 = q;
-            continue l28;
+            continue l27;
         };
     };
-    if pos_168 > start_268 {
-        builtin::array_set_u8($load_3, start_268, 48 + builtin::i32_wrap_i64(t_169 %u 10_i64));
+    if pos_168 > 0 {
+        builtin::array_set_u8($sroa_out_repr_876, 0, 48 + builtin::i32_wrap_i64(t_169 %u 10_i64));
     }
-    if @unlikely(local.tee new_used_267(new_used_267 + 1) > builtin::array_len($load_3)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_267);
-    }
-    start_268 = out_3.used;
-    out_3.used = new_used_267;
-    builtin::array_copy<u8>(local.tee $load_3(out_3.repr), start_268, global:core:prelude/string.wado::$const_obj_5, 0, 1);
+    pos_168 = 2;
+    builtin::array_copy<u8>($sroa_out_repr_876, 1, global:core:prelude/string.wado::$const_obj_5, 0, 1);
     if t {
         $sroa_slot_870 = array.new_fixed<u8>(116, 114, 117, 101);
         t = 4;
@@ -327,20 +313,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<pgo_cold_pa
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
             break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 t == 0;
-            if @unlikely(local.tee new_used_267(new_used_267 + t) > builtin::array_len($load_3)) {
+            if @unlikely(local.tee pos_168(2 + t) > 33) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_267);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_881(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_876, used: 2 }), pos_168);
+                $sroa_out_repr_876 = $sroa_write_back_881.repr;
             }
-            start_268 = out_3.used;
-            out_3.used = new_used_267;
-            builtin::array_copy<u8>(out_3.repr, start_268, $sroa_slot_870, 0, t);
+            builtin::array_copy<u8>($sroa_out_repr_876, 2, $sroa_slot_870, 0, t);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
     };
     $inline_core_prelude_string_wado_String__internal_push_view_64: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_64;
     };
-    return out_3;
+    return $sroa_out_repr_876, pos_168;
 }
 
 export fn "pgo_cold_path_conflict.wado/$cm_export__run" as "run"

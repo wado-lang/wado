@@ -121,7 +121,9 @@ Allocation and aggregates:
   own.
 - `sroa` — split into scalar locals a struct, tuple, or array local used only
   for element access, or a local bound to a reference to a struct or tuple
-  literal. The highest-impact WasmGC pass.
+  literal. A local handed `&mut` to a call on a cold path splits too: the call
+  gets a literal rebuilt from the scalars, which read its fields back after it.
+  The highest-impact WasmGC pass.
 - `container_sroa` — turn a `List` of structs or tuples into one list per field.
 - `sroa_param` — pass the one field a callee reads instead of the struct, by
   value or by reference.
@@ -348,7 +350,7 @@ Architectural work is tracked in
 - [ ] Compile-time evaluation through a `&mut` held in a struct field.
 - [ ] Argument promotion: passing a by-reference parameter's fields by value.
 - [ ] Factoring a conjunctive `if` chain into a decision tree.
-- [ ] Scalarizing a struct referenced by `&mut`.
+- [ ] Scalarizing a struct referenced by `&mut` off a cold path.
 - [ ] Tail calls (`return_call`).
 - [ ] Folding an effect-free call on constants whose callee exceeds the inline
   budget.
@@ -356,7 +358,7 @@ Architectural work is tracked in
   inlining it first.
 - [ ] Pricing a splice by what its call site keeps: one arm of a dispatch
   every site decides (`$hole_fmt`), or one element of a returned tuple
-  (`default_slot`). Both carry a synthesized `#[inline(always)]` until then.
+  (`default_slot`).
 - [ ] An array literal's length as a known constant.
 
 ## Tried and Found Ineffective

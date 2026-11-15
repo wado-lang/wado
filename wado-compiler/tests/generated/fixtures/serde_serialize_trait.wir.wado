@@ -85,38 +85,37 @@ global global:core:prelude/string.wado::$const_obj_7: ref Array<u8> = array.new_
 global global:core:prelude/string.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>(105, 51, 50, 58, 32);
 
 fn "serde_serialize_trait.wado/run"() with Stdout {
-    let start_20: i32;
-    let $sroa_ser_buf_41: ref "core:prelude/string.wado//String";
     let $cm_pair_7_49: i64;
+    let $sroa_$pattern_temp_0_0_13_55: i32;
     let $sroa_$pattern_temp_0_1_14_56: i32;
-    $sroa_ser_buf_41 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    if @unlikely(2 > builtin::array_len($sroa_ser_buf_41.repr)) {
+    let $sroa_$sroa_ser_buf_41_repr_72: ref Array<u8>;
+    let $sroa_write_back_74: ref "core:prelude/string.wado//String";
+    $sroa_$sroa_ser_buf_41_repr_72 = builtin::array_new<u8>(0);
+    if @unlikely(2 > builtin::array_len($sroa_$sroa_ser_buf_41_repr_72)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_ser_buf_41, 2);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_74(struct.new "core:prelude/string.wado//String" { repr: $sroa_$sroa_ser_buf_41_repr_72, used: 0 }), 2);
+        $sroa_$sroa_ser_buf_41_repr_72 = $sroa_write_back_74.repr;
     }
-    start_20 = $sroa_ser_buf_41.used;
-    $sroa_ser_buf_41.used = 2;
-    builtin::array_copy<u8>($sroa_ser_buf_41.repr, start_20, global:serde_serialize_trait.wado::$const_obj_1, 0, 2);
-    $sroa_ser_buf_41 = "core:prelude/string.wado/core:prelude/string.wado/String::format<serde_serialize_trait.wado/$tmpl$5d09a9f8d325483d,[core:prelude/string.wado/String]>$spec1$spec0$sroa[t.h0]"($sroa_ser_buf_41);
-    start_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_49("wasi/stream-new"()));
+    builtin::array_copy<u8>($sroa_$sroa_ser_buf_41_repr_72, 0, global:serde_serialize_trait.wado::$const_obj_1, 0, 2);
+    $sroa_write_back_74 = "core:prelude/string.wado/core:prelude/string.wado/String::format<serde_serialize_trait.wado/$tmpl$5d09a9f8d325483d,[core:prelude/string.wado/String]>$spec1$spec0$sroa[t.h0]"(struct.new "core:prelude/string.wado//String" { repr: $sroa_$sroa_ser_buf_41_repr_72, used: 2 });
+    $sroa_$pattern_temp_0_0_13_55 = builtin::i32_wrap_i64(local.tee $cm_pair_7_49("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_56 = builtin::i32_wrap_i64($cm_pair_7_49 >> 32_i64);
-    start_20 = "serde_serialize_trait.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_20);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_56, $sroa_ser_buf_41.repr, $sroa_ser_buf_41.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(start_20);
-    $sroa_ser_buf_41 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    if @unlikely(7 > builtin::array_len($sroa_ser_buf_41.repr)) {
+    $sroa_$pattern_temp_0_0_13_55 = "serde_serialize_trait.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_55);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_56, $sroa_write_back_74.repr, $sroa_write_back_74.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_55);
+    $sroa_$sroa_ser_buf_41_repr_72 = builtin::array_new<u8>(0);
+    if @unlikely(7 > builtin::array_len($sroa_$sroa_ser_buf_41_repr_72)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_ser_buf_41, 7);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_74(struct.new "core:prelude/string.wado//String" { repr: $sroa_$sroa_ser_buf_41_repr_72, used: 0 }), 7);
+        $sroa_$sroa_ser_buf_41_repr_72 = $sroa_write_back_74.repr;
     }
-    start_20 = $sroa_ser_buf_41.used;
-    $sroa_ser_buf_41.used = 7;
-    builtin::array_copy<u8>($sroa_ser_buf_41.repr, start_20, global:serde_serialize_trait.wado::$const_obj_0, 0, 7);
-    $sroa_ser_buf_41 = "core:prelude/string.wado/core:prelude/string.wado/String::format<serde_serialize_trait.wado/$tmpl$5d09a9f8d325483d,[core:prelude/string.wado/String]>$spec1$spec1$sroa[t.h0]"($sroa_ser_buf_41);
-    start_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_49("wasi/stream-new"()));
+    builtin::array_copy<u8>($sroa_$sroa_ser_buf_41_repr_72, 0, global:serde_serialize_trait.wado::$const_obj_0, 0, 7);
+    $sroa_write_back_74 = "core:prelude/string.wado/core:prelude/string.wado/String::format<serde_serialize_trait.wado/$tmpl$5d09a9f8d325483d,[core:prelude/string.wado/String]>$spec1$spec1$sroa[t.h0]"(struct.new "core:prelude/string.wado//String" { repr: $sroa_$sroa_ser_buf_41_repr_72, used: 7 });
+    $sroa_$pattern_temp_0_0_13_55 = builtin::i32_wrap_i64(local.tee $cm_pair_7_49("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_56 = builtin::i32_wrap_i64($cm_pair_7_49 >> 32_i64);
-    start_20 = "serde_serialize_trait.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_20);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_56, $sroa_ser_buf_41.repr, $sroa_ser_buf_41.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(start_20);
+    $sroa_$pattern_temp_0_0_13_55 = "serde_serialize_trait.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_55);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_56, $sroa_write_back_74.repr, $sroa_write_back_74.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_55);
 }
 
 fn "serde_serialize_trait.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
