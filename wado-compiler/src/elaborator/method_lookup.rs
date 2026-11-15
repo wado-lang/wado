@@ -1641,12 +1641,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn fill_static_default_type_args(
         &mut self,
         sig: &MethodSig,
-        receiver_type: TypeId,
+        receiver: &ReceiverId,
         inferred: &mut [TypeId],
     ) -> bool {
         if !sig.own_params.iter().any(|p| p.default.is_some()) {
             return false;
         }
+        let Some(receiver_type) = self.static_receiver_type(receiver) else {
+            return false;
+        };
         let declaring_module = Some(sig.defaults_module.clone());
         let trait_decl = self.tysys.signatures.declaring_trait(sig);
         self.fill_defaulted_method_type_args(

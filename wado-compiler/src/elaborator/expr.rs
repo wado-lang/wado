@@ -1370,11 +1370,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         }
 
-        if let Some(owner) = ident.owner_segment()
-            && let Some(pos) = ident.name.find("::")
-            && let receiver = self.receiver_at(Some(owner.id), &ident.name[..pos])
+        if ident.owner_segment().is_some()
+            && let receiver = match ident.segments.as_slice() {
+                [receiver, _] => self.receiver_at(receiver),
+                _ => None,
+            }
             && self
-                .lookup_function_signature(&ident.name, Some(&receiver), None, Some(ident.id))
+                .lookup_function_signature(&ident.name, receiver.as_ref(), None, Some(ident.id))
                 .is_some()
         {
             let _ = self.emit(TypeError::CallableAsValue {

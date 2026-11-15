@@ -34,25 +34,18 @@ use super::tysys::TypeSystem;
 pub(super) struct ReceiverId {
     key: ImplTargetKey,
     ty: Option<TypeId>,
-    /// How the call wrote the receiver. Output alone reads it: a diagnostic,
-    /// and the shape name a mangle spells.
-    spelled: String,
 }
 
 impl ReceiverId {
     /// A receiver whose key the caller already holds: a namespace member, a
     /// link of a newtype chain.
-    pub(super) fn keyed(key: ImplTargetKey, ty: Option<TypeId>, spelled: &str) -> Self {
-        Self {
-            key,
-            ty,
-            spelled: spelled.to_string(),
-        }
+    pub(super) fn keyed(key: ImplTargetKey, ty: Option<TypeId>) -> Self {
+        Self { key, ty }
     }
 
     /// The type `def` declares, as a receiver.
     pub(super) fn of_decl(defs: &DefTable, def: DefId, ty: Option<TypeId>) -> Self {
-        Self::keyed(ImplTargetKey::of_decl(defs, def), ty, defs.name(def))
+        Self::keyed(ImplTargetKey::of_decl(defs, def), ty)
     }
 
     pub(super) fn key(&self) -> &ImplTargetKey {
@@ -64,8 +57,9 @@ impl ReceiverId {
         self.ty
     }
 
-    pub(super) fn spelled(&self) -> &str {
-        &self.spelled
+    /// The receiver's name: its declaration's, or the shape's.
+    pub(super) fn name<'a>(&'a self, defs: &'a DefTable) -> &'a str {
+        self.key.display_name(defs)
     }
 
     /// The same receiver, known at `ty`.
@@ -442,32 +436,34 @@ impl StaticLookup {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The receiver `spelled` names where the call wrote it at `site`. A
+    /// The receiver the call wrote at `segment`, as the walk resolved it;
+    /// `None` where it names no type, which is all a static is declared on. A
     /// binder keys by the item binding it, which is how a blanket's own
     /// statics are indexed.
-    pub(super) fn receiver_at(&self, site: Option<ast::AstId>, spelled: &str) -> ReceiverId {
+    pub(super) fn receiver_at(&self, segment: &ast::PathSegment) -> Option<ReceiverId> {
         let resolutions = &self.tysys.resolutions;
-        let key = match site.and_then(|site| resolutions.walked(site)) {
-            Some(Resolution::Binder(binder)) => resolutions.binder_owner(binder).map_or_else(
-                || ImplTargetKey::of_undeclared(&self.current_module_source, spelled),
-                |owner| ImplTargetKey::TypeParam {
-                    owner,
-                    name: spelled.to_string(),
-                },
-            ),
-            _ => self.impl_target_at(site, spelled),
+        let key = match resolutions.walked(segment.id)? {
+            Resolution::Def(def) if resolutions.defs().kind(def).is_type() => {
+                ImplTargetKey::of_decl(resolutions.defs(), def)
+            }
+            Resolution::Def(_) => return None,
+            Resolution::Binder(binder) => ImplTargetKey::TypeParam {
+                owner: resolutions.binder_owner(binder)?,
+                name: segment.name.clone(),
+            },
+            Resolution::Projection(_) | Resolution::Unresolved => return None,
         };
-        ReceiverId::keyed(key, None, spelled)
+        Some(ReceiverId::keyed(key, None))
     }
 
     /// The receiver the call resolved to `ty`, which a reference keys by kind.
-    pub(super) fn receiver_of(&self, ty: TypeId, spelled: &str) -> ReceiverId {
+    pub(super) fn receiver_of(&self, ty: TypeId) -> ReceiverId {
         let kind = RefKind::from_resolved(self.tysys.type_table.borrow().get(ty));
         let key = match kind {
             Some(kind) => ImplTargetKey::Ref(kind),
             None => self.impl_target_of(ty),
         };
-        ReceiverId::keyed(key, Some(ty), spelled)
+        ReceiverId::keyed(key, Some(ty))
     }
 
     /// Resolve what `query`'s spelling names, once, for every site that used to
@@ -575,8 +571,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // alias's declaration, since a namespaced `lib::Q::twice()` leaves
             // the caller's frame no `Q` to look one up by. With no link owning
             // the name, the call stays the head's.
-            let Some((link_key, link_name, declared)) =
-                self.newtype_link_target(&owner.receiver.key)
+            let Some((link_key, _, declared)) = self.newtype_link_target(&owner.receiver.key)
             else {
                 return StaticOwner {
                     nearest,
@@ -589,8 +584,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .and_then(|ty| self.tysys.type_table.borrow().get_newtype_base(ty));
             owner.head = query.receiver.ty;
             owner.declared = Some(declared);
-            owner.receiver =
-                ReceiverId::keyed(link_key, link_type.or(owner.receiver.ty), &link_name);
+            owner.receiver = ReceiverId::keyed(link_key, link_type.or(owner.receiver.ty));
         }
     }
 
@@ -720,7 +714,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// How a diagnostic spells `receiver`: its type where the call knows one.
     pub(super) fn receiver_display(&self, receiver: &ReceiverId) -> String {
         receiver.ty.map_or_else(
-            || receiver.spelled.clone(),
+            || receiver.name(self.tysys.resolutions.defs()).to_string(),
             |ty| self.tysys.type_id_to_string(ty),
         )
     }
@@ -791,23 +785,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The link below the newtype `key` its static named `method_name`
-    /// belongs to, with its name. `None` where `key` is no newtype, where it
-    /// owns the static itself, or where no link answers the name.
+    /// belongs to. `None` where `key` is no newtype, where it owns the static
+    /// itself, or where no link answers the name.
     pub(super) fn newtype_static_target(
         &mut self,
         key: &ImplTargetKey,
         method_name: &str,
-    ) -> Option<(ImplTargetKey, String)> {
+    ) -> Option<ImplTargetKey> {
         if !self.is_newtype_key(key) {
             return None;
         }
         let def = key.decl().expect("a newtype is a declaration");
         let receiver = ReceiverId::of_decl(self.tysys.resolutions.defs(), def, None);
         let owner = self.static_owner(&StaticQuery::of(&receiver, method_name));
-        (owner.receiver.key != *key).then(|| {
-            let ReceiverId { key, spelled, .. } = owner.receiver;
-            (key, spelled)
-        })
+        (owner.receiver.key != *key).then_some(owner.receiver.key)
     }
 
     /// The key of the link a static named `method_name` on `key` belongs to:
@@ -818,7 +809,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> ImplTargetKey {
         self.newtype_static_target(key, method_name)
-            .map_or_else(|| key.clone(), |(owner, _)| owner)
+            .unwrap_or_else(|| key.clone())
     }
 
     /// The link of the newtype `head`'s chain that `owner` declares, and
@@ -995,7 +986,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return StaticLookup::NotStatic;
         }
         StaticLookup::OutOfScope {
-            receiver: receiver.spelled.clone(),
+            receiver: receiver.name(defs).to_string(),
             traits,
         }
     }
@@ -1055,7 +1046,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let method_ref = StaticMethodRef::new(
             module,
-            receiver.spelled.as_str(),
+            receiver.name(defs),
             method_name,
             candidate.supply.as_ref().map(|s| s.trait_name.clone()),
             Some(candidate.method_id),
@@ -1071,10 +1062,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the block's arguments fill.
             (CandidateOrigin::Inherited, Some(supply)) => {
                 let method_ref = method_ref.supplied_by(supply.impl_def);
-                // Resolved here rather than asked of every caller: the name
-                // costs a scope to resolve, and this is the one rung that needs
-                // it. The key's declaration answers first, as the name may not
-                // reach it from the caller's frame.
                 let args = self
                     .tysys
                     .receiver_declaring_args(receiver_type, receiver_args, receiver_key.decl())
@@ -1084,18 +1071,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // A bare spelling of a generic declaration (`W::m()`) is
                     // no instance: its parameters stay open for the call to
                     // settle.
-                    None if args.is_empty() => {
-                        self.type_declared_by(Some(receiver_key)).or(receiver_type)
-                    }
+                    None if args.is_empty() => self
+                        .type_declared_by(Some(receiver_key))
+                        .or_else(|| self.static_receiver_type(receiver)),
                     None => receiver_type,
-                }
-                .or_else(|| {
-                    let mut scope = self.enter_inherited_type_param_scope();
-                    let resolved =
-                        scope.resolve_unsited_type_name(&receiver.spelled, Span::default());
-                    drop(scope);
-                    Some(resolved)
-                });
+                };
                 let (trait_decl, impl_def) = (supply.trait_decl, supply.impl_def);
                 self.callee_of_trait_declaration(
                     trait_decl,

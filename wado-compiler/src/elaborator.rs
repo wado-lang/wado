@@ -1498,19 +1498,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// The impl target a receiver spelling written at `site` names, keyed to
-    /// what it names in the module that wrote it.
-    pub(crate) fn impl_target_at(
-        &self,
-        site: Option<AstId>,
-        type_name: &str,
-    ) -> trait_env::ImplTargetKey {
-        self.decl_key_at(site, type_name).map_or_else(
-            || trait_env::ImplTargetKey::of_undeclared(&self.current_module_source, type_name),
-            |def| trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def),
-        )
-    }
-
     /// Impl-target key for a receiver whose `TypeId` is known (refs peeled),
     /// read off the type alone: the head [`TypeTable::impl_receiver_key`]
     /// indexes the method form under, so a static and a method call on one

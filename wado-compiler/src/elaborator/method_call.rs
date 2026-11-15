@@ -1917,9 +1917,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
             None => self.tysys.static_receiver_struct_key(target_type_id),
         };
-        let lookup_receiver = key
-            .zip(name)
-            .map(|(key, name)| ReceiverId::keyed(key, None, &name));
+        let lookup_receiver = key.zip(name).map(|(key, _)| ReceiverId::keyed(key, None));
         let static_receiver = lookup_receiver.as_ref().map(ReceiverId::key);
 
         // `Type::<T>::method()` parses as a static-method call and never
@@ -1928,7 +1926,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(receiver) = &lookup_receiver {
             self.check_static_call_visibility(
                 receiver.key(),
-                &format!("{}::{}", receiver.spelled(), static_call.method),
+                &format!(
+                    "{}::{}",
+                    receiver.name(self.tysys.resolutions.defs()),
+                    static_call.method
+                ),
                 Some(static_call.id),
                 static_call.span,
             );
@@ -2255,8 +2257,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(sig) = callee_sig
             && turbofish_leaves_slot(&method_type_args, sig.own_params.len())
             && !sig.own_params.is_empty()
-            && let Some(receiver) = lookup_receiver.as_ref().map(ReceiverId::spelled)
+            && let Some(receiver) = &lookup_receiver
         {
+            let receiver = receiver.name(self.tysys.resolutions.defs()).to_string();
             let own_ids = sig.own_type_param_ids();
             let declaring = sig
                 .declaring_impl
@@ -2411,7 +2414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return converted;
         }
 
-        let Some((struct_name, struct_module, mangled_struct_name, struct_type_args)) =
+        let Some((_, struct_module, mangled_struct_name, struct_type_args)) =
             self.static_receiver_parts(target_type_id, &static_call.method, required_trait)
         else {
             // Resolving the target reported why it failed.
@@ -2427,10 +2430,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // A trait impl's static is mangled with its trait, so WIR resolves it.
-        // The receiver comes off the resolved type: re-deriving it from
-        // `struct_name` searches the caller's frame, which an aliased import
-        // leaves without that name at all.
-        let receiver = self.receiver_of(target_type_id, &struct_name);
+        let receiver = self.receiver_of(target_type_id);
         let Ok(resolution) = self.static_trait_ref(
             StaticQuery {
                 arg_types: &args,
@@ -2669,14 +2669,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the turbofish, the arguments, and the type expected of the call.
         let own_params = sig.own_params.clone();
         let slots = sig.own_type_param_ids();
-        let method_ref = StaticMethodRef::new(
-            blanket_module.clone(),
-            blanket_param.clone(),
-            method.to_string(),
-            Some(trait_name.clone()),
-            Some(method_def),
-        );
-        let template_return = self.lookup_static_method_return_type(&method_ref, &binder);
+        let template_return = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         if template_return == TypeTable::UNKNOWN {
             return None;
         }
@@ -3093,41 +3086,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// What a qualified call returns, off the declaration it selected where it
-    /// has one. `receiver` is the declaration the call site resolved, never a
-    /// spelling to re-resolve: beside a same-named local declaration, the
-    /// caller's own frame answers with the wrong one.
-    pub(super) fn lookup_static_method_return_type(
-        &mut self,
-        method_ref: &StaticMethodRef,
-        receiver: &FqTypeName,
-    ) -> TypeId {
-        let struct_name = method_ref.type_name.as_str();
-        let method_name = method_ref.method_name.as_str();
-        // The declaration the selection picked answers first: an overload's
-        // members may return differently, and the pick is what the call's
-        // mangled name was built from.
-        if let Some(sig) = method_ref
-            .method_id
-            .and_then(|def| self.tysys.signatures.method_sig(def))
-        {
-            return sig.decl.return_type.unwrap_or(TypeTable::UNIT);
-        }
-
-        // The receiver's own declaration is the key the resolution answers at.
-        // A head naming none leaves it to derive one from the name, which is
-        // the same vantage every other site now uses.
-        let receiver = match receiver.head().def() {
-            Some(def) => ReceiverId::of_decl(self.tysys.resolutions.defs(), def, None),
-            None => self.receiver_at(None, struct_name),
-        };
-        let resolved = self.resolve_static_callee(StaticQuery::of(&receiver, method_name));
-        // The outcome's own answer, not the picked declaration's: an overload
-        // returns where its candidates agree, and reading only `found()` threw
-        // that away for an `Unknown` the caller cannot act on.
-        resolved.return_type()
-    }
-
     /// A static method's signature, in the declaration's own frame — its slots
     /// still `TypeParam`, for the caller to substitute after inference.
     ///
@@ -3167,13 +3125,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The type a static call's receiver names: the call's own, else the one
     /// its declaration declares, since a namespaced `dep::Pt` leaves the
-    /// caller's frame no `Pt`, or another one.
-    pub(super) fn static_receiver_type(&mut self, receiver: &ReceiverId, span: Span) -> TypeId {
+    /// caller's frame no `Pt`, or another one. `None` for a declaration that
+    /// registers no type, such as a local `variant`.
+    pub(super) fn static_receiver_type(&mut self, receiver: &ReceiverId) -> Option<TypeId> {
         if let Some(ty) = receiver.ty() {
-            return ty;
+            return Some(ty);
+        }
+        if let ImplTargetKey::Builtin(name) = receiver.key()
+            && let Some(ty) = TypeTable::primitive_by_name(name)
+        {
+            return Some(ty);
         }
         self.type_declared_by(Some(receiver.key()))
-            .unwrap_or_else(|| self.resolve_unsited_type_name(receiver.spelled(), span))
     }
 
     /// The type the declaration `key` reaches declares, if it reaches one
@@ -3246,15 +3209,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         arg_types: &[TypeId],
         span: Span,
     ) -> bool {
-        let struct_name = recv.receiver.spelled();
         // A newtype inheriting the static answers with the impls of the link
         // that owns it, as the resolution does, so the survey reads them there.
-        if let Some((owner_key, owner_name)) =
-            self.newtype_static_target(recv.receiver.key(), method_name)
-        {
+        if let Some(owner_key) = self.newtype_static_target(recv.receiver.key(), method_name) {
             let (owner_type, owner_arg_types) =
                 self.at_owner_link(recv.receiver.ty(), &owner_key, arg_types);
-            let owner = ReceiverId::keyed(owner_key, owner_type, &owner_name);
+            let owner = ReceiverId::keyed(owner_key, owner_type);
             let owner_recv = StaticReceiver {
                 receiver: &owner,
                 ..recv
@@ -3266,6 +3226,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             );
         }
+        let struct_name = recv
+            .receiver
+            .name(self.tysys.resolutions.defs())
+            .to_string();
         let survey = self.static_arg_survey(recv, method_name);
         let spelled = render_type_list(&self.tysys.type_table.borrow(), arg_types);
         // The trait the first candidate names. Where several traits supply the
@@ -3342,9 +3306,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // here rather than asked of every caller: it costs a scope, and the
         // returns above are the calls that never survey (WEP: "Resolving is not
         // free").
-        let typed = recv
-            .receiver
-            .at_type(Some(self.static_receiver_type(recv.receiver, span)));
+        let Some(receiver_type) = self.static_receiver_type(recv.receiver) else {
+            return PreselectedArg::Undecided;
+        };
+        let typed = recv.receiver.at_type(Some(receiver_type));
         let recv = StaticReceiver {
             receiver: &typed,
             ..recv
@@ -3353,7 +3318,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ArgPreselect::Selected(params) => PreselectedArg::Types(params),
             ArgPreselect::Ambiguous(candidates) => {
                 let _ = self.emit(TypeError::AmbiguousStaticArgument {
-                    receiver: recv.receiver.spelled().to_string(),
+                    receiver: recv
+                        .receiver
+                        .name(self.tysys.resolutions.defs())
+                        .to_string(),
                     method: method_name.to_string(),
                     candidates,
                     span,
@@ -3590,7 +3558,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a static method call from a qualified name like `Point::origin()`
     pub(super) fn resolve_static_method_call_from_qualified(
         &mut self,
-        spelled_receiver: &ReceiverId,
+        call_receiver: &ReceiverId,
         receiver_type: TypeId,
         method_name: &str,
         args: &[TypeId],
@@ -3602,8 +3570,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        let struct_name = spelled_receiver.spelled();
-        let qualified_struct_name = self.qualified_receiver_name(struct_name, receiver_type);
+        let struct_name = call_receiver
+            .name(self.tysys.resolutions.defs())
+            .to_string();
+        let qualified_struct_name = self.qualified_receiver_name(&struct_name, receiver_type);
         let mangled_func_name_owned =
             MethodName::format_local(&qualified_struct_name, None, method_name);
         let mangled_func_name = mangled_func_name_owned.as_str();
@@ -3638,7 +3608,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (link_name, link_fq, mangled)
             }
             None => (
-                struct_name.to_string(),
+                struct_name,
                 qualified_struct_name,
                 mangled_func_name.to_string(),
             ),
@@ -3658,19 +3628,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // caller's to resolve — that frame can hold a same-named declaration of
         // its own.
         let link_receiver = match &newtype_dispatch {
-            Some((_, base_type_id, _)) => ReceiverId::keyed(
-                self.impl_target_of(*base_type_id),
-                None,
-                &actual_struct_name,
-            ),
-            None => spelled_receiver.clone(),
+            Some((_, base_type_id, _)) => {
+                ReceiverId::keyed(self.impl_target_of(*base_type_id), None)
+            }
+            None => call_receiver.clone(),
         };
         // The resolution walks from the newtype to its base itself, so it reads
         // the arguments at the base and answers in the newtype. It reads the
         // signature at `impl_type_args`, the only place they are substituted.
         let query_receiver = match &newtype_dispatch {
-            Some((newtype, _, _)) => self.receiver_of(*newtype, struct_name),
-            None => spelled_receiver.clone(),
+            Some((newtype, _, _)) => self.receiver_of(*newtype),
+            None => call_receiver.clone(),
         };
         let Ok(resolution) = self.static_trait_ref(
             StaticQuery {
