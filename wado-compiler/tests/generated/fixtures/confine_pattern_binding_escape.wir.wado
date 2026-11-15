@@ -161,11 +161,11 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(59)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<confine_pattern_binding_escape.wado/$tmpl$ebaa20f4a908b504,[i32]>" = fn(ref "confine_pattern_binding_escape.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//String";  // TypeId(60)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(60)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<confine_pattern_binding_escape.wado/$tmpl$8ee5fdd582749eb5,[core:prelude/types.wado/Option<confine_pattern_binding_escape.wado/P>,i32]>" = fn(ref "confine_pattern_binding_escape.wado//$tmpl$8ee5fdd582749eb5") -> ref "core:prelude/string.wado//String";  // TypeId(61)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<confine_pattern_binding_escape.wado/$tmpl$ebaa20f4a908b504,[i32]>" = fn(ref "confine_pattern_binding_escape.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//String";  // TypeId(61)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(62)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<confine_pattern_binding_escape.wado/$tmpl$8ee5fdd582749eb5,[core:prelude/types.wado/Option<confine_pattern_binding_escape.wado/P>,i32]>" = fn(ref "confine_pattern_binding_escape.wado//$tmpl$8ee5fdd582749eb5") -> ref "core:prelude/string.wado//String";  // TypeId(62)
 
 type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<confine_pattern_binding_escape.wado/P>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<core:prelude/types.wado/Option<confine_pattern_binding_escape.wado/P>>", ref "core:prelude/format.wado//Formatter");  // TypeId(63)
 
@@ -865,6 +865,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(s
     builtin::array_set_u8(self.repr, start, byte);
 }
 
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
+    let $load_0: ref Array<i32>;
+    let new_repr: ref Array<i32>;
+    let a: i32;
+    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    self.repr = new_repr;
+}
+
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<confine_pattern_binding_escape.wado/$tmpl$ebaa20f4a908b504,[i32]>"(t) {
     let $load_2: ref "core:prelude/string.wado//String";
     let $load_3: ref "core:prelude/string.wado//String";
@@ -905,14 +913,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<confine_pat
     self_11 = "confine_pattern_binding_escape.wado/confine_pattern_binding_escape.wado/$tmpl$8ee5fdd582749eb5^core:prelude/traits.wado/ReflectTemplate::tail"(t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_11.repr, self_11.start, self_11.end);
     return out_3;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
-    let $load_0: ref Array<i32>;
-    let new_repr: ref Array<i32>;
-    let a: i32;
-    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
 }
 
 fn "core:prelude/traits.wado/core:prelude/types.wado/Option<confine_pattern_binding_escape.wado/P>^core:prelude/traits.wado/Inspect::inspect"(self, f) {

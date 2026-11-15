@@ -320,17 +320,17 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/$tmpl$afdf3efc
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/$tmpl$b145b32c9a586330^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:prelude/string.wado//$tmpl$b145b32c9a586330") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(100)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>" = fn(ref "core:prelude/string.wado//$tmpl$59e16269228f9c88") -> ref "core:prelude/string.wado//String";  // TypeId(101)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(101)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<closure_return_from_never_turbofish.wado/$tmpl$8655094d5327a538,[core:prelude/list.wado/List<i32>,core:prelude/list.wado/List<i32>]>" = fn(ref "closure_return_from_never_turbofish.wado//$tmpl$8655094d5327a538") -> ref "core:prelude/string.wado//String";  // TypeId(102)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>" = fn(ref "core:prelude/string.wado//$tmpl$59e16269228f9c88") -> ref "core:prelude/string.wado//String";  // TypeId(102)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref Array<i32>, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(103)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<closure_return_from_never_turbofish.wado/$tmpl$8655094d5327a538,[core:prelude/list.wado/List<i32>,core:prelude/list.wado/List<i32>]>" = fn(ref "closure_return_from_never_turbofish.wado//$tmpl$8655094d5327a538") -> ref "core:prelude/string.wado//String";  // TypeId(103)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/$tmpl$256f02bdf0ff5977^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:prelude/types.wado//$tmpl$256f02bdf0ff5977") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(104)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref Array<i32>, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(104)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/types.wado/$tmpl$256f02bdf0ff5977,[core:prelude/string.wado/String,!]>" = fn(ref "core:prelude/types.wado//$tmpl$256f02bdf0ff5977") -> ref "core:prelude/string.wado//String";  // TypeId(105)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/$tmpl$256f02bdf0ff5977^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:prelude/types.wado//$tmpl$256f02bdf0ff5977") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(105)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(106)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/types.wado/$tmpl$256f02bdf0ff5977,[core:prelude/string.wado/String,!]>" = fn(ref "core:prelude/types.wado//$tmpl$256f02bdf0ff5977") -> ref "core:prelude/string.wado//String";  // TypeId(106)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//StrSlice");  // TypeId(107)
 
@@ -1680,6 +1680,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/$tmpl$b145b32c9a586330^cor
     };
 }
 
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
+    let $load_0: ref Array<i32>;
+    let new_repr: ref Array<i32>;
+    let a: i32;
+    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    self.repr = new_repr;
+}
+
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(t) {
     let $load_2: ref "core:prelude/string.wado//String";
     let $load_3: ref "core:prelude/string.wado//String";
@@ -1783,14 +1791,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_11.repr, self_11.start, self_11.end);
     unreachable;
     unreachable;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
-    let $load_0: ref Array<i32>;
-    let new_repr: ref Array<i32>;
-    let a: i32;
-    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(self, content) {
