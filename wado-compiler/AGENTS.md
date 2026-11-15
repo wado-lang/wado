@@ -48,7 +48,9 @@ The Wado compiler crate. The standard library under `lib/` has its own
 
 A fixture is a `.wado` file in `tests/fixtures/`, its expectations in a
 trailing `__DATA__` JSON section whose fields are the `serde` structs in
-`tests/e2e.rs`. A path in `__DATA__` is relative to the fixture's own
+`tests/e2e.rs`. A fixture with no `__DATA__` runs its `test` blocks under the
+test world; one with it targets the world its keys name, `wasi:cli/command`
+when none does. A path in `__DATA__` is relative to the fixture's own
 directory. `tests/` is a package of its own, `wado-compiler-tests`; its
 `Cargo.toml` says why.
 
