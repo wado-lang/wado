@@ -87,7 +87,7 @@ use {
     kept_any,
     kind_of,
 } from "./recorded.wado";
-use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted, reads_as, sliced } from "./webgpu.wado";
+use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, permuted, reads_as, sliced } from "./webgpu.wado";
 
 /// A pass recorded once per shape class and planned into kernels, which each
 /// call launches, and the values of the nodes that read no argument, kept on
@@ -441,7 +441,7 @@ impl Graph for WebGpuBackend {
         let mut extents = self.extents_of(x);
         let own = extents[axis];
         extents[axis] = extent;
-        let to = contiguous(self.allocated(element_count(&extents), false), 0, extents);
+        let to = self.new_tensor(extents, E::kind() matches { F16 });
         if element_count(&self.extents_of(x)) > 0 {
             let from = self.device_view(x);
             self.copy(&from, &sliced(&to, axis, 0, own));
@@ -555,7 +555,7 @@ impl Graph for WebGpuBackend {
         }
         let source = self.device_view(base);
         let update = self.device_view(updates);
-        let out = contiguous(self.allocated(element_count(&source.extents), false), 0, source.extents);
+        let out = self.new_tensor(source.extents, E::kind() matches { F16 });
         self.copy(&source, &out);
         for let [from, to] of scatter_windows(&out, &update, &index, dims) {
             self.copy(&from, &to);

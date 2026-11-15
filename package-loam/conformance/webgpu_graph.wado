@@ -100,9 +100,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     println(`elementwise ${apart(&mut gpu, &every, &cases::elementwise(cpu, &ex, &ey))}`);
 
     // A device without `shader-f16` computes a half as one with it does.
-    let Some(mut plain) = WebGpuBackend::new() else {
-        return;
-    };
+    let mut plain = WebGpuBackend::new().unwrap();
     plain.forgo_shader_f16();
     let [hx, edges] = cases::halved_inputs();
     for let [words, device] of [

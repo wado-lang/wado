@@ -177,9 +177,9 @@ The WEP has a device with `shader-f16` compute in f16. `WebGpuBackend` reads
 and writes f16s there, but computes in f32 between the two. A kernel widens
 each half it reads, computes in f32, rounds what it stores with `to_f16`, and
 stores the f16. A device without the feature reads two halves from each `u32`
-and stores the rounded value as an f32. Both give `Cpu`'s result bit for bit,
-so the feature changes what a half graph's kernels read and write, never what
-they compute. Arithmetic in f16 would be faster on some devices, and would hold
+and stores the rounded value as an f32. The two paths give one result bit for
+bit, so the feature changes what a half graph's kernels read and write, never
+what they compute. Arithmetic in f16 would be faster on some devices, and would hold
 the results to a tolerance instead. bf16 has no WGSL type, so it takes the f32
 path on every device.
 
