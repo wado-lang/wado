@@ -534,7 +534,7 @@ fn cast(x: &Known, to: i64) -> Result<Option<Known>, String> {
         });
     }
     // An integer would round to f32 and then to the half; the run rounds once.
-    if target matches { Some(Float16 | Bfloat16) } && !(x.elements matches { Floats(_) }) {
+    if target matches { Some(Float16 | Bfloat16) } && !x.elements matches { Floats(_) } {
         return Result::Ok(null);
     }
     let count = x.len();
