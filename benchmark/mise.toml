@@ -316,6 +316,21 @@ node $dir/highlighters.js
 wado_rows "Wado (Gale)" $dir/gale_html.wado
 """
 
+[tasks.re]
+description = "Run re benchmark (regular expression search: Re vs Node's RegExp)"
+run = """
+#!/usr/bin/env bash
+set -e
+source ./wado.sh
+dir=../package-re/benchmark
+
+echo "=== JavaScript (Node.js RegExp) ==="
+node $dir/node.mjs
+
+echo "=== Wado (Re) ==="
+wado run -O2 $WADO_BENCH_FLAGS $WADO_RUN_FLAGS $dir/re.wado
+"""
+
 [tasks.gale-gen]
 description = "Run gale-gen benchmark (Gale generator vs ANTLR4 over the same .g4)"
 run = """

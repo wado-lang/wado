@@ -453,6 +453,7 @@ mise run benchmark-sqlite-parse     # SQL parsing
 mise run benchmark-syntax-highlight # syntax highlighting
 mise run benchmark-gale-highlight-html # HTML with embedded CSS/JS
 mise run benchmark-gale-gen         # Gale generator over the Rust grammar
+mise run benchmark-re               # regular expression search (Re vs Node's RegExp)
 
 # application server
 mise run benchmark-http-routing     # HTTP routing (wado serve vs Hono vs Axum)
