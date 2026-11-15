@@ -1429,7 +1429,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/stri
         $v1 = self.end - local.tee $load_1(self.start);
         if @unlikely(((0 <= index) & (index < $v1)) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1769"), used: 29 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1772"), used: 29 });
             unreachable;
         }
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked"(self.repr, $load_1, index);
@@ -1580,11 +1580,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -1931,12 +1927,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b244: block {
-        l245: loop {
-            break_if b244 i >= n;
+    b243: block {
+        l244: loop {
+            break_if b243 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l245;
+            continue l244;
         };
     };
 }
@@ -2040,8 +2036,8 @@ fn "opt_value_copy_share_past_disjoint_write.wado/opt_value_copy_share_past_disj
     $licm_used_41 = local.tee $licm_buf_40(self.buf).used;
     $licm_repr_42 = $licm_buf_40.repr;
     $hfs_pos_47 = self.pos;
-    b257: block {
-        l258: loop {
+    b256: block {
+        l257: loop {
             if (if $hfs_pos_47 < 3 -> i32 {
                 if @unlikely(((0 <= $hfs_pos_47) & ($hfs_pos_47 < $licm_used_41)) == 0) {
                     cold_path;
@@ -2053,19 +2049,19 @@ fn "opt_value_copy_share_past_disjoint_write.wado/opt_value_copy_share_past_disj
                 0;
             }) == 0 {
                 self.pos = $hfs_pos_47;
-                break b257;
+                break b256;
             }
             $hfs_pos_47 = $hfs_pos_47 + 1;
-            continue l258;
+            continue l257;
         };
     };
     $licm_buf_40 = self.buf;
     $licm_used_41 = self.pos;
     $hfs_pos_47 = $licm_buf_40.used;
     $licm_repr_42 = $licm_buf_40.repr;
-    b262: block {
-        l263: loop {
-            break_if b262 $licm_used_41 >= 3;
+    b261: block {
+        l262: loop {
+            break_if b261 $licm_used_41 >= 3;
             if @unlikely(((0 <= $licm_used_41) & ($licm_used_41 < $hfs_pos_47)) == 0) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($licm_used_41, $hfs_pos_47, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_value_copy_share_past_disjoint_write.wado:25"), used: 48 });
@@ -2073,8 +2069,8 @@ fn "opt_value_copy_share_past_disjoint_write.wado/opt_value_copy_share_past_disj
             }
             if local.tee b(builtin::array_get_value<i32>($licm_repr_42, $licm_used_41)) > 0 {
                 self.pos = local.tee $licm_used_41($licm_used_41 + 1);
-                b266: block {
-                    l267: loop {
+                b265: block {
+                    l266: loop {
                         if (if $licm_used_41 < 3 -> i32 {
                             if @unlikely(((0 <= $licm_used_41) & ($licm_used_41 < $hfs_pos_47)) == 0) {
                                 cold_path;
@@ -2086,16 +2082,16 @@ fn "opt_value_copy_share_past_disjoint_write.wado/opt_value_copy_share_past_disj
                             0;
                         }) == 0 {
                             self.pos = $licm_used_41;
-                            break b266;
+                            break b265;
                         }
                         $licm_used_41 = $licm_used_41 + 1;
-                        continue l267;
+                        continue l266;
                     };
                 };
                 return b;
             }
             $licm_used_41 = $licm_used_41 + 1;
-            continue l263;
+            continue l262;
         };
     };
     return -1;

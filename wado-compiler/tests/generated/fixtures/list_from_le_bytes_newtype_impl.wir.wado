@@ -2005,11 +2005,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -2155,12 +2151,12 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<list_from_le_bytes_newtyp
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b261: block {
-        l262: loop {
-            break_if b261 i >= n;
+    b260: block {
+        l261: loop {
+            break_if b260 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l262;
+            continue l261;
         };
     };
 }
@@ -2180,9 +2176,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::count_chars_fro
     self_5 = self.used;
     count = 0;
     $licm_repr_15 = self.repr;
-    b263: block {
-        l264: loop {
-            break_if b263 (builtin::i64_extend_i32_s(start_pos) + 3_i64) >= builtin::i64_extend_i32_s(self_5);
+    b262: block {
+        l263: loop {
+            break_if b262 (builtin::i64_extend_i32_s(start_pos) + 3_i64) >= builtin::i64_extend_i32_s(self_5);
             b = builtin::array_get_value<u8>($licm_repr_15, start_pos);
             count = count + ((b & 192) != 128);
             start_pos = start_pos + 1;
@@ -2195,16 +2191,16 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::count_chars_fro
             b = builtin::array_get_value<u8>($licm_repr_15, start_pos);
             count = count + ((b & 192) != 128);
             start_pos = start_pos + 1;
-            continue l264;
+            continue l263;
         };
     };
-    b265: block {
-        l266: loop {
-            break_if b265 start_pos >= self_5;
+    b264: block {
+        l265: loop {
+            break_if b264 start_pos >= self_5;
             b = builtin::array_get_value<u8>($licm_repr_15, start_pos);
             count = count + ((b & 192) != 128);
             start_pos = start_pos + 1;
-            continue l266;
+            continue l265;
         };
     };
     return count;
@@ -2218,9 +2214,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::shift_right$sro
     content_bytes = content_bytes - 1;
     $licm_repr_26 = self.repr;
     gap = start_pos + gap;
-    b267: block {
-        l268: loop {
-            break_if b267 (((content_bytes < 0) | ((content_bytes - 1) < 0)) | (((content_bytes - 1) - 1) < 0)) | ((((content_bytes - 1) - 1) - 1) < 0);
+    b266: block {
+        l267: loop {
+            break_if b266 (((content_bytes < 0) | ((content_bytes - 1) < 0)) | (((content_bytes - 1) - 1) < 0)) | ((((content_bytes - 1) - 1) - 1) < 0);
             index_6 = gap + content_bytes;
             value_7 = builtin::array_get_value<u8>($licm_repr_26, start_pos + content_bytes);
             builtin::array_set_u8($licm_repr_26, index_6, value_7);
@@ -2237,17 +2233,17 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::shift_right$sro
             value_7 = builtin::array_get_value<u8>($licm_repr_26, start_pos + content_bytes);
             builtin::array_set_u8($licm_repr_26, index_6, value_7);
             content_bytes = content_bytes - 1;
-            continue l268;
+            continue l267;
         };
     };
-    b269: block {
-        l270: loop {
-            break_if b269 content_bytes < 0;
+    b268: block {
+        l269: loop {
+            break_if b268 content_bytes < 0;
             index_6 = gap + content_bytes;
             value_7 = builtin::array_get_value<u8>($licm_repr_26, start_pos + content_bytes);
             builtin::array_set_u8($licm_repr_26, index_6, value_7);
             content_bytes = content_bytes - 1;
-            continue l270;
+            continue l269;
         };
     };
 }
@@ -2412,12 +2408,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     if local.tee fill_len("core:prelude/primitive.wado/char::len_utf8$sroa[self.value]"(c)) == 1 {
         c = c & 255;
         fill_len = 0;
-        b286: block {
-            l287: loop {
-                break_if b286 fill_len >= n;
+        b285: block {
+            l286: loop {
+                break_if b285 fill_len >= n;
                 builtin::array_set_u8(self, at + fill_len, c);
                 fill_len = fill_len + 1;
-                continue l287;
+                continue l286;
             };
         };
         return;
@@ -2425,14 +2421,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee encoded(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(4), used: 0 }), c);
     c = 0;
     $licm_repr_46 = encoded.repr;
-    b288: block {
-        l289: loop {
-            break_if b288 c >= n;
+    b287: block {
+        l288: loop {
+            break_if b287 c >= n;
             k = 0;
             $licm_arith_48 = at + (c * fill_len);
-            b290: block {
-                l291: loop {
-                    break_if b290 (builtin::i64_extend_i32_s(k) + 3_i64) >= builtin::i64_extend_i32_s(fill_len);
+            b289: block {
+                l290: loop {
+                    break_if b289 (builtin::i64_extend_i32_s(k) + 3_i64) >= builtin::i64_extend_i32_s(fill_len);
                     index_25 = $licm_arith_48 + k;
                     value_26 = builtin::array_get_value<u8>($licm_repr_46, k);
                     builtin::array_set_u8(self, index_25, value_26);
@@ -2449,21 +2445,21 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
                     value_26 = builtin::array_get_value<u8>($licm_repr_46, k);
                     builtin::array_set_u8(self, index_25, value_26);
                     k = k + 1;
-                    continue l291;
+                    continue l290;
                 };
             };
-            b292: block {
-                l293: loop {
-                    break_if b292 k >= fill_len;
+            b291: block {
+                l292: loop {
+                    break_if b291 k >= fill_len;
                     index_25 = $licm_arith_48 + k;
                     value_26 = builtin::array_get_value<u8>($licm_repr_46, k);
                     builtin::array_set_u8(self, index_25, value_26);
                     k = k + 1;
-                    continue l293;
+                    continue l292;
                 };
             };
             c = c + 1;
-            continue l289;
+            continue l288;
         };
     };
 }
@@ -2476,9 +2472,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<list_from_le_bytes_newtyp
     out = struct.new "core:prelude/list.wado//List<list_from_le_bytes_newtype_impl.wado/Kelvin>" { repr: builtin::array_new<f32>(local.tee bytes(bytes / 4)), used: 0 };
     i = 0;
     $licm_repr_27 = out.repr;
-    b294: block {
-        l295: loop {
-            break_if b294 i >= bytes;
+    b293: block {
+        l294: loop {
+            break_if b293 i >= bytes;
             if @unlikely(local.tee used(out.used) >= builtin::array_len($licm_repr_27)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<list_from_le_bytes_newtype_impl.wado/Celsius>::grow"(out);
@@ -2487,7 +2483,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<list_from_le_bytes_newtyp
             builtin::array_set<f32>($licm_repr_27, used, 100_f32);
             out.used = used + 1;
             i = i + 1;
-            continue l295;
+            continue l294;
         };
     };
     return out;

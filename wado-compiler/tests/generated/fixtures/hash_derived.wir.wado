@@ -5047,7 +5047,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/stri
         $v1 = self.end - local.tee $load_1(self.start);
         if @unlikely(((0 <= index) & (index < $v1)) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1769"), used: 29 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1772"), used: 29 });
             unreachable;
         }
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked"(self.repr, $load_1, index);
@@ -6128,11 +6128,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
                 return -1 - $mv$self$shift;
             }
             if builtin::array_get_value<i32>($mv$self$fps, e) == fp {
-                if (if local.tee self_13(builtin::array_get_value<ref "hash_derived.wado//Point">($licm_keys_24, e)).x == key.x -> i32 {
-                    self_13.y == key.y;
-                } else {
-                    0;
-                }) {
+                if (local.tee self_13(builtin::array_get_value<ref "hash_derived.wado//Point">($licm_keys_24, e)).x == key.x) & (self_13.y == key.y) {
                     return $mv$self$shift;
                 }
             }
@@ -6270,11 +6266,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -6467,7 +6459,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
     $mv$self$shift = fp >>u $mv$self$shift;
     $licm_keys_20 = $mv$self$log.keys;
     block {
-        l786: loop {
+        l784: loop {
             if local.tee e(builtin::array_get_value<i32>($mv$self$table, $mv$self$shift)) == -1 {
                 return -1 - $mv$self$shift;
             }
@@ -6477,7 +6469,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
                 }
             }
             $mv$self$shift = ($mv$self$shift + 1) & mask;
-            continue l786;
+            continue l784;
         };
     };
 }
@@ -6664,22 +6656,22 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
     fps = self.fps;
     $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    b803: block {
-        l804: loop {
-            break_if b803 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
+    b801: block {
+        l802: loop {
+            break_if b801 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
             if builtin::array_get_value<bool>(alive, current) {
                 s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
-                b806: block {
-                    l807: loop {
-                        break_if b806 builtin::array_get_value<i32>(a, s) == -1;
+                b804: block {
+                    l805: loop {
+                        break_if b804 builtin::array_get_value<i32>(a, s) == -1;
                         s = (s + 1) & slots;
-                        continue l807;
+                        continue l805;
                     };
                 };
                 builtin::array_set<i32>(a, s, current);
             }
-            continue l804;
+            continue l802;
         };
     };
 }
@@ -6701,22 +6693,22 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
     fps = self.fps;
     $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    b808: block {
-        l809: loop {
-            break_if b808 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
+    b806: block {
+        l807: loop {
+            break_if b806 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
             if builtin::array_get_value<bool>(alive, current) {
                 s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
-                b811: block {
-                    l812: loop {
-                        break_if b811 builtin::array_get_value<i32>(a, s) == -1;
+                b809: block {
+                    l810: loop {
+                        break_if b809 builtin::array_get_value<i32>(a, s) == -1;
                         s = (s + 1) & slots;
-                        continue l812;
+                        continue l810;
                     };
                 };
                 builtin::array_set<i32>(a, s, current);
             }
-            continue l809;
+            continue l807;
         };
     };
 }
@@ -6738,22 +6730,22 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
     fps = self.fps;
     $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    b813: block {
-        l814: loop {
-            break_if b813 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
+    b811: block {
+        l812: loop {
+            break_if b811 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
             if builtin::array_get_value<bool>(alive, current) {
                 s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
-                b816: block {
-                    l817: loop {
-                        break_if b816 builtin::array_get_value<i32>(a, s) == -1;
+                b814: block {
+                    l815: loop {
+                        break_if b814 builtin::array_get_value<i32>(a, s) == -1;
                         s = (s + 1) & slots;
-                        continue l817;
+                        continue l815;
                     };
                 };
                 builtin::array_set<i32>(a, s, current);
             }
-            continue l814;
+            continue l812;
         };
     };
 }
@@ -6775,22 +6767,22 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
     fps = self.fps;
     $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    b818: block {
-        l819: loop {
-            break_if b818 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
+    b816: block {
+        l817: loop {
+            break_if b816 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
             if builtin::array_get_value<bool>(alive, current) {
                 s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
-                b821: block {
-                    l822: loop {
-                        break_if b821 builtin::array_get_value<i32>(a, s) == -1;
+                b819: block {
+                    l820: loop {
+                        break_if b819 builtin::array_get_value<i32>(a, s) == -1;
                         s = (s + 1) & slots;
-                        continue l822;
+                        continue l820;
                     };
                 };
                 builtin::array_set<i32>(a, s, current);
             }
-            continue l819;
+            continue l817;
         };
     };
 }
@@ -6812,22 +6804,22 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
     fps = self.fps;
     $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    b823: block {
-        l824: loop {
-            break_if b823 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
+    b821: block {
+        l822: loop {
+            break_if b821 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
             if builtin::array_get_value<bool>(alive, current) {
                 s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
-                b826: block {
-                    l827: loop {
-                        break_if b826 builtin::array_get_value<i32>(a, s) == -1;
+                b824: block {
+                    l825: loop {
+                        break_if b824 builtin::array_get_value<i32>(a, s) == -1;
                         s = (s + 1) & slots;
-                        continue l827;
+                        continue l825;
                     };
                 };
                 builtin::array_set<i32>(a, s, current);
             }
-            continue l824;
+            continue l822;
         };
     };
 }
@@ -6849,22 +6841,22 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
     fps = self.fps;
     $sroa_v_end_37 = $load_2.count;
     $sroa_$iter_2_start_38 = 0;
-    b828: block {
-        l829: loop {
-            break_if b828 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
+    b826: block {
+        l827: loop {
+            break_if b826 $sroa_$iter_2_start_38 >= $sroa_v_end_37;
             $sroa_$iter_2_start_38 = local.tee current($sroa_$iter_2_start_38) + 1;
             if builtin::array_get_value<bool>(alive, current) {
                 s = builtin::array_get_value<i32>(fps, current) >>u $load_1;
-                b831: block {
-                    l832: loop {
-                        break_if b831 builtin::array_get_value<i32>(a, s) == -1;
+                b829: block {
+                    l830: loop {
+                        break_if b829 builtin::array_get_value<i32>(a, s) == -1;
                         s = (s + 1) & slots;
-                        continue l832;
+                        continue l830;
                     };
                 };
                 builtin::array_set<i32>(a, s, current);
             }
-            continue l829;
+            continue l827;
         };
     };
 }
@@ -7086,12 +7078,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b859: block {
-        l860: loop {
-            break_if b859 i >= n;
+    b857: block {
+        l858: loop {
+            break_if b857 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l860;
+            continue l858;
         };
     };
 }
@@ -7207,7 +7199,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
         $licm_fps_16 = self.fps;
         $licm_keys_18 = $load_0.keys;
         block {
-            l869: loop {
+            l867: loop {
                 if local.tee e_65(builtin::array_get_value<i32>($load_2, $v2)) == -1 {
                     break $inline_core_collections_hashmap_wado_HashMap_hash_derived_wado_Perm_i32___find_slot_sroa_key_value__0: -1 - $v2;
                 }
@@ -7217,7 +7209,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
                     }
                 }
                 $v2 = ($v2 + 1) & $v1;
-                continue l869;
+                continue l867;
             };
         };
         unreachable;
@@ -7487,7 +7479,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
         $licm_fps_18 = self.fps;
         $licm_keys_20 = $load_0.keys;
         block {
-            l909: loop {
+            l907: loop {
                 if local.tee e_67(builtin::array_get_value<i32>($load_2, $v2)) == -1 {
                     break $inline_core_collections_hashmap_wado_HashMap_hash_derived_wado_Color______find_slot_sroa_key_value__0: -1 - $v2;
                 }
@@ -7497,7 +7489,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
                     }
                 }
                 $v2 = ($v2 + 1) & $v1;
-                continue l909;
+                continue l907;
             };
         };
         unreachable;
@@ -7563,7 +7555,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
     $mv$self$shift = fp >>u $mv$self$shift;
     $licm_keys_18 = $mv$self$log.keys;
     block {
-        l921: loop {
+        l919: loop {
             if local.tee e(builtin::array_get_value<i32>($mv$self$table, $mv$self$shift)) == -1 {
                 return -1 - $mv$self$shift;
             }
@@ -7611,7 +7603,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<hash_der
                 }
             }
             $mv$self$shift = ($mv$self$shift + 1) & mask;
-            continue l921;
+            continue l919;
         };
     };
 }
