@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794702978284,
+  "lastUpdate": 1794718917928,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77497,6 +77497,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3297b1bd9d1abf1564a13e883d4babb3f8aeaeee"
         },
         "date": 1794702977017,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7295,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24494,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435516,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "352e9b656717fd3c6685c3f2d76313f62ab50913",
+          "message": "Merge pull request #2628 from wado-lang/ccr-90954b67-c13smk\n\nperf(compiler): serve a dependency's Kiln-generated modules from the dependency snapshot",
+          "timestamp": "2026-11-15T13:46:50+09:00",
+          "tree_id": "380e5d4534e5517bf5cafe8987d990f8c4e38bd1",
+          "url": "https://github.com/wado-lang/wado/commit/352e9b656717fd3c6685c3f2d76313f62ab50913"
+        },
+        "date": 1794718916869,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
