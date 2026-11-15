@@ -4,10 +4,16 @@
 //! The reviewer reads the diff from the merge base of `--base` (`origin/main`)
 //! to `--head` (`HEAD`), and a checkout of the head under `scratchpad/`,
 //! through Read, Grep and Glob. It also writes tests into that checkout and
-//! runs them with `cargo`, through Write and Run, and a finding it reproduced
-//! carries the patch and the run that show it, tried again alone before it is
-//! reported. That needs `--process-read` on the `cargo` and `rustup` homes;
-//! `--no-run` reviews by reading alone. The record is
+//! runs them with `cargo`, through Write and Run. That needs `--process-read`
+//! on the `cargo` and `rustup` homes; `--no-run` reviews by reading alone.
+//!
+//! A second model, `--reporter` (`claude-haiku-5-5`), then reads what the
+//! reviewer did and gives each finding its line and the test that reproduced
+//! it, which is tried again alone before the finding carries it.
+//! `--report-again` reports the last recorded review of the head once more,
+//! with no new review, to try another reporter on the same findings.
+//!
+//! The record is
 //! `<--reviews>/<head>.json`, one entry per review. Each finding is also
 //! written under `<--out>/<head>/` (`scratchpad/eddy`): `<n>.md`, the body of
 //! a pull request comment that reproduces it from one pasted block, and
@@ -32,6 +38,7 @@ use { Deserialize } from "core:serde";
 use { Client } from "wasi:http";
 use { git, try_git, paths_between, diff_between } from "./git.wado";
 use { comment } from "./comment.wado";
+use { report } from "./report.wado";
 use { review, Submission, Finding, Reviewed } from "./review.wado";
 use { snapshot, add_build_submodules, home_runner, drop_snapshot } from "./snapshot.wado";
 use { Runner, Workspace } from "./tools.wado";
@@ -42,12 +49,14 @@ global CLAUDE_MODEL: String = "claude-opus-5-5";
 #[param(name = "diff_limit")]
 global LIMIT: i32 = 2_000_000;
 
-global USAGE: String = "usage: eddy [--base <rev>] [--head <rev>] [--no-run] [--max-turns <n>] [--reviews <dir>] [--out <dir>]";
+global USAGE: String = "usage: eddy [--base <rev>] [--head <rev>] [--no-run] [--reporter <model>] [--report-again] [--max-turns <n>] [--reviews <dir>] [--out <dir>]";
 
 struct Options {
     base: String = "origin/main",
     head: String = "HEAD",
     no_run: bool = false,
+    reporter: String = "claude-haiku-5-5",
+    report_again: bool = false,
     max_turns: i32 = 40,
     reviews: String = "package-eddy/reviews",
     out: String = "scratchpad/eddy",
@@ -64,9 +73,12 @@ struct Attempt {
     /// The merge base the diff was taken from, which moves with `--base`.
     base: String,
     reviewer: String,
+    /// Empty in a record written before a second model reported.
+    reporter: String = "",
     run: bool,
     max_turns: i32,
     result: Reviewed,
+    report_error: Option<String> = null,
 }
 
 struct Report {
@@ -119,15 +131,36 @@ ${commits.trim()}`;
         add_build_submodules(&root);
         Some(home_runner());
     };
-    let ws: Option<Workspace> = Some(Workspace { root, runner });
-    let result = review(&api_key, CLAUDE_MODEL, &Submission { heading, diff }, &ws, options.max_turns);
+    let w = Workspace { root, runner };
+    let change = Submission { heading, diff };
+    let mut result = if options.report_again {
+        let Some(earlier) = record.reviews.last() else {
+            fail(`--report-again reports a recorded review, and ${path} holds none`);
+        };
+        reviewed_again(&w, &earlier.result);
+    } else {
+        review(&api_key, CLAUDE_MODEL, &change, &Some(w), options.max_turns);
+    };
+    // A report that fails leaves the findings as the reviewer worded them.
+    let report_error: Option<String> = match &result.error {
+        Some(_) => null,
+        None => match report(&api_key, options.reporter, &change, &w, &head, &mut result) {
+            Ok(_) => null,
+            Err(e) => Some(e),
+        },
+    };
+    if let Some(e) = &report_error {
+        eprintln(`eddy: the findings are not placed or reproduced: ${*e}`);
+    }
 
     record.reviews.push(Attempt {
         base,
         reviewer: CLAUDE_MODEL,
+        reporter: options.reporter,
         run: !options.no_run,
         max_turns: options.max_turns,
         result,
+        report_error,
     });
     fs::create_dir_all(&options.reviews).unwrap();
     fs::write(&path, &to_bytes_pretty(&record).unwrap()).unwrap();
@@ -142,6 +175,26 @@ ${commits.trim()}`;
     write_findings(&dir, &head, &result.findings);
     eprintln(`each finding's comment, and the patch that reproduces it, in ${dir}`);
     println(String::from_utf8_lossy(to_bytes_pretty(&Report { findings: result.findings }).unwrap()));
+}
+
+/// `earlier`, a recorded review, as its reviewer left it: the findings in its
+/// words, and in the fresh tree at `w` the files it wrote. Reporting it again
+/// tries another reporter on one review, where a second review would find
+/// other things.
+fn reviewed_again(w: &Workspace, earlier: &Reviewed) -> Reviewed with (Preopens, Process) {
+    let mut again = *earlier;
+    for let f of &mut again.findings {
+        f.line = 0;
+        f.repro = null;
+    }
+    if w.runner matches { Some(_) } {
+        for let c of &again.calls {
+            if c.name == "Write" && !c.is_error {
+                w.call(&c.name, &c.input).unwrap();
+            }
+        }
+    }
+    return again;
 }
 
 /// Writes finding `n`, from 1, of a review of `head` into `dir` as `<n>.md`,

@@ -1,21 +1,20 @@
 //! One review of a change: a model reads its diff, and the tree it leaves
-//! where a workspace gives one, and reports the defects it introduces.
+//! where a workspace gives one, and reports the defects it introduces. The
+//! reviewer is asked for nothing else: what a report needs beyond a finding's
+//! words is drawn from it afterwards, in `report.wado`.
 
-use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Process } from "core:process";
 use { Client } from "wasi:http";
 use { ask_json, json_object, Usage } from "./anthropic.wado";
 use { run_agent, Call } from "./agent.wado";
-use { git, try_git } from "./git.wado";
-use { reset_snapshot, tree_git } from "./snapshot.wado";
 use { empty_index } from "./symbols.wado";
-use { Ran, Runner, Workspace, RUN_TIMEOUT } from "./tools.wado";
+use { Runner, Workspace } from "./tools.wado";
 
 global REVIEW: String = "You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
 Report the defects the change introduces: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.
 Answer with one JSON object and nothing else:
-{\"findings\": [{\"file\": \"<path>\", \"line\": <the line of that file, as the pull request leaves it, where the defect is>, \"summary\": \"<one sentence>\", \"detail\": \"<why it is wrong, and when it goes wrong>\"}]}
+{\"findings\": [{\"file\": \"<path>\", \"summary\": \"<one sentence>\", \"detail\": \"<why it is wrong, and when it goes wrong>\"}]}
 Report at most 10 findings, the most severe first. An empty list is a valid answer.";
 
 global READING: String = "You can read the repository as it stood once this pull request merged, with the tools Read, Grep and Glob. Before you report, read what the diff alone does not show: the callers of what changed, the definitions it relies on, the rest of a file. Your final reply is the JSON object.";
@@ -25,19 +24,17 @@ global SYMBOL_READING: String = "FindSymbol and FindReferences answer from the c
 global RUNNING: String = "You can also run the code: Write a test or a small program into the tree, and build and run it with Run, which runs cargo.
 Before you report a finding, reproduce it: write a test that asserts the right behaviour, so that it fails now and would pass once the defect is fixed, and run it. A finding you are already sure of from reading is still one to reproduce, since reading can be wrong either way. A suspicion a run refutes is one to drop.
 A defect that depends on timing, such as a race with another process, is reproduced by making the interleaving happen in the test, for example by deleting a file between the two steps the race separates, never by running it again in the hope of hitting it.
-Give each finding at most three runs. One that does not reproduce by then is reported only if the code makes it certain, saying in its detail that it was not reproduced and why.
-Give a finding you reproduced a \"repro\" beside its other fields: {\"paths\": [\"<each file you wrote or changed for it>\"], \"run\": [\"<the arguments to cargo of the run that fails>\"], \"expect\": \"<a short text that failing run prints and a passing one would not, such as the assertion's message>\"}. After you answer, each repro is tried alone: its files are put into a clean tree and its run is repeated, and the finding counts as reproduced only if that run fails and prints that text. So keep each finding's files apart from every other's, and leave repro out of a finding you did not reproduce.";
+Give each finding at most three runs. One that does not reproduce by then is reported only if the code makes it certain, saying in its detail that it was not reproduced and why.";
 
 pub struct Finding {
     pub file: String,
-    /// In `file` as the change leaves it, or 0 where the reviewer named none.
-    pub line: i32 = 0,
-    /// Whether the diff shows that line, which is where a pull request takes a
-    /// comment on a line.
-    pub in_diff: bool = false,
     pub summary: String,
     pub detail: String,
-    /// Absent where the reviewer did not reproduce the finding.
+    /// A line of `file` as the change leaves it that the diff shows, which is
+    /// where a pull request takes a comment on a line, or 0 where none was
+    /// placed.
+    pub line: i32 = 0,
+    /// Absent where no test of the reviewer's was found to reproduce it.
     pub repro: Option<Repro> = null,
 }
 
@@ -53,23 +50,6 @@ pub struct Repro {
     pub output: String,
 }
 
-/// A finding as the reviewer answers it.
-struct Reported {
-    file: String,
-    line: i32 = 0,
-    summary: String,
-    detail: String,
-    repro: Option<Claim> = null,
-}
-
-/// What the reviewer says reproduces a finding: the files it wrote, by path,
-/// rather than their content, which is read from the tree it left.
-struct Claim {
-    paths: List<String>,
-    run: List<String>,
-    expect: String,
-}
-
 /// What one review reported and what it took. A review that failed keeps what
 /// it spent before the error.
 pub struct Reviewed {
@@ -81,7 +61,7 @@ pub struct Reviewed {
 }
 
 struct Answer {
-    findings: List<Reported>,
+    findings: List<Finding>,
 }
 
 /// The change a reviewer is asked about: what it is, in `heading`, and its
@@ -99,32 +79,6 @@ impl Submission {
 ${self.diff}
 </diff>`;
     }
-
-    /// Whether the diff shows `line` of `file` as the change leaves it, as a
-    /// line it adds or one of a hunk's context.
-    fn shows(&self, file: &String, line: i32) -> bool {
-        let mut in_file = false;
-        for let l of self.diff.lines() {
-            if let Some(path) = l.strip_prefix("+++ ") {
-                in_file = path == `b/${*file}`;
-            } else if in_file && let Some(hunk) = l.strip_prefix("@@ ") {
-                let [start, count] = new_side(hunk.to_string());
-                if start <= line && line < start + count {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-}
-
-/// The first line and the line count of the new side of a hunk header's
-/// ranges, `-a,b +c,d @@ …`. A count left out is 1.
-fn new_side(ranges: String) -> [i32, i32] {
-    let new = ranges.split(" ").collect()[1];
-    let numbers: List<String> = new.trim_prefix("+").split(",").map(|n| n.to_string()).collect();
-    let count = if numbers.len() > 1 { i32::from_str(&numbers[1]).unwrap() } else { 1 };
-    return [i32::from_str(&numbers[0]).unwrap(), count];
 }
 
 /// What a reviewer reading `w` is told: the task, and each kind of tool `w`
@@ -152,137 +106,20 @@ pub fn review(
     // Thinking spends from the same budget as the answer.
     let Some(w) = ws else {
         return match ask_json::<Answer>(api_key, model, REVIEW, change.task(), 32_000) {
-            Ok(a) => Reviewed { findings: unreproduced_all(change, a.findings) },
+            Ok(a) => Reviewed { findings: a.findings },
             Err(e) => Reviewed { error: Some(e) },
         };
     };
-    // Read before the reviewer can move HEAD: a test it runs may run `git`.
-    let commit = tree_git(&w.root, ["rev-parse", "HEAD"]).trim().to_string();
     let agent = run_agent(api_key, model, instructions(w), change.task(), w, max_turns, 32_000);
     let mut reviewed = Reviewed { turns: agent.turns, calls: agent.calls, usage: Some(agent.usage) };
     match agent.answer {
         Ok(answer) => match json_object::<Answer>(&answer) {
-            // Without Run the reviewer wrote nothing to try.
-            Ok(a) => reviewed.findings = if w.runner matches { Some(_) } {
-                reproduce(change, w, &commit, a.findings);
-            } else {
-                unreproduced_all(change, a.findings);
-            },
-
-
+            Ok(a) => reviewed.findings = a.findings,
             Err(e) => reviewed.error = Some(e),
         },
         Err(e) => reviewed.error = Some(e),
     }
     return reviewed;
-}
-
-fn unreproduced(change: &Submission, r: Reported) -> Finding {
-    return Finding {
-        file: r.file,
-        line: r.line,
-        in_diff: change.shows(&r.file, r.line),
-        summary: r.summary,
-        detail: r.detail,
-    };
-}
-
-fn unreproduced_all(change: &Submission, reported: List<Reported>) -> List<Finding> {
-    return reported.into_iter().map(|r| unreproduced(change, r)).collect();
-}
-
-/// `reported` with each claim tried: its files cut from the tree the reviewer
-/// left as a patch against `commit`, and its run repeated on that patch alone.
-/// The reviewer's word is not taken for either, so a repro that leans on
-/// another finding's files, or on a file it did not name, does not verify.
-fn reproduce(
-    change: &Submission,
-    w: &Workspace,
-    commit: &String,
-    reported: List<Reported>,
-) -> List<Finding> with (Preopens, Process) {
-    // Every patch is cut before the first reset takes the reviewer's files.
-    let mut findings: List<Finding> = [];
-    for let r of reported {
-        let mut finding = unreproduced(change, r);
-        if let Some(claim) = r.repro {
-            let [patch, output] = match patch_of(w, commit, &claim.paths) {
-                Ok(patch) => [patch, ""],
-                Err(e) => ["", e],
-            };
-            finding.repro = Some(Repro { patch, run: claim.run, expect: claim.expect, verified: false, output });
-        }
-        findings.push(finding);
-    }
-    for let finding of &mut findings {
-        if let Some(repro) = &mut finding.repro && !repro.patch.is_empty() {
-            reset_snapshot(&w.root, commit);
-            match run_alone(w, repro) {
-                Ok(ran) => {
-                    repro.verified = reproduced(&ran, &repro.expect);
-                    repro.output = ran.report;
-                },
-                Err(e) => repro.output = e,
-            }
-        }
-    }
-    return findings;
-}
-
-/// What the tree at `w` changed in `paths` since `commit`, new files included.
-fn patch_of(w: &Workspace, commit: &String, paths: &List<String>) -> Result<String, String> with Process {
-    let mut inside: List<String> = [];
-    for let p of paths {
-        match w.resolve(p)?.strip_prefix(`${w.root}/`) {
-            Some(relative) => inside.push(relative.to_string()),
-            None => {
-                return Err(`${*p} names the whole tree, not a file of the reproduction`);
-            },
-        }
-    }
-    if inside.is_empty() {
-        return Err("the reproduction names no file");
-    }
-    // `git diff` shows an untracked file only once the index knows of it, and
-    // an ignored one only when forced in.
-    let mut add = ["-C", w.root, "add", "--force", "--intent-to-add", "--"] as List<String>;
-    add.extend(&inside);
-    if try_git(add) matches { None } {
-        return Err("a file of the reproduction is not in the tree");
-    }
-    let mut diff = ["diff", "--binary", *commit, "--"] as List<String>;
-    diff.extend(&inside);
-    let patch = tree_git(&w.root, diff);
-    if patch.is_empty() {
-        return Err("the files of the reproduction do not differ from the reviewed commit");
-    }
-    return Ok(patch);
-}
-
-/// `repro`'s run in the tree at `w`, a clean checkout, with its patch applied.
-fn run_alone(w: &Workspace, repro: &Repro) -> Result<Ran, String> with (Preopens, Process) {
-    apply(w, &repro.patch)?;
-    return w.cargo(&repro.run, RUN_TIMEOUT);
-}
-
-fn apply(w: &Workspace, patch: &String) -> Result<(), String> with (Preopens, Process) {
-    // Beside the tree, where no tool lists it.
-    let name = `${fs::file_name(&w.root).unwrap()}.patch`;
-    let path = `${w.root}.patch`;
-    fs::write(&path, patch).map_err(|e| `${e}`)?;
-    let applied = try_git(["-C", w.root, "apply", `../${name}`]);
-    fs::remove_file(&path).map_err(|e| `${e}`)?;
-    return match applied {
-        Some(_) => Ok(()),
-        None => Err("the patch does not apply to the reviewed commit"),
-    };
-}
-
-/// Whether `ran` shows the defect: a failure that prints `expect`. The text
-/// tells an assertion that failed from a test that did not compile, which
-/// `cargo` ends the same way.
-fn reproduced(ran: &Ran, expect: &String) -> bool {
-    return !ran.succeeded && !expect.is_empty() && ran.report.contains(expect);
 }
 
 test "a reviewer is told of the tools its workspace offers, and no others" {
@@ -299,81 +136,12 @@ test "a reviewer is told of the tools its workspace offers, and no others" {
     assert running.contains("FindSymbol") && running.contains("reproduce it");
 }
 
-test "a finding is reproduced only by a run that fails and prints what was expected" {
-    let failed = Ran { succeeded: false, report: "exit code 101\nassertion `left == right` failed" };
-    assert reproduced(&failed, &"left == right");
-    assert !reproduced(&failed, &"another message");
-    assert !reproduced(&failed, &"");
-    assert !reproduced(&Ran { succeeded: true, report: "left == right" }, &"left == right");
-}
-
-test "a reproduction's files leave the tree as a patch that applies to a clean one" {
-    let root = "build/repro-test";
-    fs::remove_dir_all(root).unwrap();
-    fs::create_dir_all(root).unwrap();
-    fs::write(`${root}/Cargo.toml`, &"[workspace]\n").unwrap();
-    fs::write(`${root}/kept.txt`, &"old\n").unwrap();
-    git(["-C", root, "init", "--quiet"]);
-    git(["-C", root, "add", "--all"]);
-    git(["-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet", "--message", "base"]);
-    let commit = git(["-C", root, "rev-parse", "HEAD"]).trim().to_string();
-    let w = Workspace { root, runner: Some(Runner { target_dir: "build/target", cargo_home: "", rustup_home: "" }) };
-
-    fs::create_dir_all(`${root}/tests`).unwrap();
-    fs::write(`${root}/tests/new.rs`, &"#[test] fn t() {}\n").unwrap();
-    fs::write(`${root}/kept.txt`, &"new\n").unwrap();
-    fs::write(`${root}/unnamed.txt`, &"another finding's\n").unwrap();
-    let patch = patch_of(&w, &commit, &["tests/new.rs", "/kept.txt"]).unwrap();
-    assert patch_of(&w, &commit, &["tests/absent.rs"]).is_err();
-    assert patch_of(&w, &commit, &["Cargo.toml"]).is_err();
-    assert patch_of(&w, &commit, &["../outside.rs"]).is_err();
-    assert patch_of(&w, &commit, &[]).is_err();
-
-    reset_snapshot(&w.root, &commit);
-    assert !fs::exists(`${root}/tests/new.rs`);
-    apply(&w, &patch).unwrap();
-    assert fs::read_to_string(`${root}/tests/new.rs`).unwrap() == "#[test] fn t() {}\n";
-    assert fs::read_to_string(`${root}/kept.txt`).unwrap() == "new\n";
-    assert !fs::exists(`${root}/unnamed.txt`);
-    assert apply(&w, &patch).is_err();
-}
-
-test "an answer's finding may carry what reproduces it" {
-    let answer = json_object::<Answer>(
-        &`{"findings": [
-            {"file": "a.rs", "summary": "s", "detail": "d"},
-            {"file": "b.rs", "summary": "s", "detail": "d",
-             "repro": {"paths": ["tests/b.rs"], "run": ["test", "--test", "b"], "expect": "boom"}}
-        ]}`,
-    ).unwrap();
-    assert answer.findings[0].repro matches { None };
-    assert answer.findings[1].repro matches { Some(r) && r.paths == ["tests/b.rs"] && r.expect == "boom" };
+test "a reviewer is asked for a finding's words and nothing a report adds" {
+    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "" };
+    let told = instructions(&Workspace { root: "src", runner: Some(runner) });
+    assert !told.contains("\"line\"") && !told.contains("\"repro\"") && !told.contains("\"paths\"");
 }
 
 test "a change is its heading and then its diff" {
     assert Submission { heading: "PULL REQUEST #1: t", diff: "+a" }.task() == "PULL REQUEST #1: t\n\n<diff>\n+a\n</diff>";
-}
-
-test "a line is in the diff where a hunk of its file shows it" {
-    let change = Submission {
-        heading: "",
-        diff: "diff --git a/src/a.rs b/src/a.rs
---- a/src/a.rs
-+++ b/src/a.rs
-@@ -10,3 +12,4 @@ fn f() {
- context
-+added
-@@ -40 +43 @@
--old
-+new
-diff --git a/src/b.rs b/src/b.rs
---- a/src/b.rs
-+++ b/src/b.rs
-@@ -1,2 +1,2 @@
-",
-    };
-    assert change.shows(&"src/a.rs", 12) && change.shows(&"src/a.rs", 15) && change.shows(&"src/a.rs", 43);
-    assert !change.shows(&"src/a.rs", 11) && !change.shows(&"src/a.rs", 16) && !change.shows(&"src/a.rs", 0);
-    assert change.shows(&"src/b.rs", 2) && !change.shows(&"src/b.rs", 12);
-    assert !change.shows(&"src/c.rs", 1);
 }

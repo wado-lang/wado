@@ -66,10 +66,10 @@ reasoning.
   (`cargo run --bin wado -- run`, `test` or `dump`). A review makes a bounded
   number of Runs, so a defect that will not reproduce cannot spend its turns.
 
-What a reviewer reproduced it reports as a `repro`, in `src/review.wado`: the
-files it wrote, the run that fails, and a text that run prints. The reviewer
-names the files and Eddy reads them from the tree, as a patch against the
-reviewed commit.
+What a reviewer reproduced becomes a finding's `repro`, in `src/report.wado`:
+the files it wrote, the run that fails, and a text that run prints. A second
+model names them from the reviewer's calls, and Eddy reads the files from the
+tree, as a patch against the reviewed commit.
 
 - [x] Try each `repro` alone after the review: its patch on a clean checkout,
   its run repeated. Only a run that fails with the expected text verifies the

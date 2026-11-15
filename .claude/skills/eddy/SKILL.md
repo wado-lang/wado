@@ -41,7 +41,8 @@ that patch alone to a clean checkout and saw the run fail with that text.
   it passes.
 - With `verified` false, `output` says why: the run passed, failed another way,
   or the patch did not stand alone. Verify the finding as any other claim.
-- With no `repro`, the reviewer did not reproduce it, and `detail` says why.
+- With no `repro`, no test of the reviewer's was found to reproduce it, and
+  `detail` often says why.
 
 One review is not repeatable: on the evaluation set
 (`package-eddy/eval/README.md`) the same change gets different findings from

@@ -39,8 +39,18 @@ Each finding is also written under `scratchpad/eddy/<head>/`, numbered from 1:
   out the reviewed commit, applies the patch and runs the test, so a reader
   with the repository alone reproduces it. Nothing posts it yet.
 
-A finding names its `line`, and `in_diff` says whether the diff shows that
-line, which is where a pull request takes a comment on a line.
+A finding's `line` is a line the diff shows, which is where a pull request
+takes a comment on a line, or 0.
+
+The reviewer is asked for none of this. Its instructions hold the review
+alone: what to look for, and to reproduce a finding with a test that asserts
+the right behaviour. A second, smaller model (`--reporter`, Claude Haiku 5.5)
+then reads the findings, the files the reviewer wrote and the runs it made,
+and names each finding's line, its test and the run that failed. Anything
+about how a finding is reported goes into that second prompt, so it cannot
+cost the review its attention. `--report-again` reports the last recorded
+review of a commit once more, which tries another reporter on the same
+findings.
 
 Each run is also added to
 `reviews/<head>.json`, the record of every review of that commit, which is
