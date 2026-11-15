@@ -3,6 +3,8 @@
 //! records where they are — nested ones the outer pointer cannot reach included
 //! — and the `synthesize_free_cm_*` pair releases them at either export
 //! boundary. [`cm_shape`] panics on an unrecognised shape rather than leaking.
+//! The slot an extern handle crosses a web import in is owned the same way,
+//! and freed by the same walk.
 
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
