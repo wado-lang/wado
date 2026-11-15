@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, AstId, BinaryOp, Expr, Type};
+use crate::ast::{self, BinaryOp, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
@@ -18,6 +18,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{
     ARRAY_TYPE_NAME, LocalMethodName, MethodName, TUPLE_TYPE_NAME, display_generic_name,
 };
+use crate::primitive::PrimitiveType;
 use crate::tir::{
     EffectRows, FunctionRef, MonomorphInfo, ProjectionAnswer, ResolvedType, SlotProjections,
     StructDef, SubstitutionContext, TemplateId, TraitRef, TypeArgMap, TypeId, TypeParamId,
@@ -693,30 +694,27 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// [`Self::declaring_module_at`] for a caller holding a mangled head and
-    /// no reference site.
-    pub(super) fn declaring_module_of(&self, struct_name: &str) -> ModuleSource {
-        self.declaring_module_at(None, struct_name)
-    }
-
-    /// The module declaring the type `struct_name` names as written at `site`,
-    /// which is what picks when two modules each declare the name. The frame
-    /// derivation and nothing wider (WEP 2026-08-12), so an unseen declaration
-    /// lands where the walk stands.
-    pub(super) fn declaring_module_at(
-        &self,
-        site: Option<AstId>,
-        struct_name: &str,
-    ) -> ModuleSource {
-        let Some(def) = self.decl_key_at(site, struct_name) else {
-            return self.current_module_source.clone();
-        };
+    /// The module whose methods the receiver `key` keys: its declaration's, a
+    /// primitive's own, and where the walk stands for a shape no module
+    /// declares.
+    pub(super) fn declaring_module_of(&self, key: &ImplTargetKey) -> ModuleSource {
         let defs = self.tysys.resolutions.defs();
         // A primitive's methods live apart from its declaration.
-        match defs.primitive(def) {
-            Some(primitive) => ModuleSource::of_primitive(primitive),
-            None => defs.module(def).clone(),
-        }
+        let primitive = match key {
+            ImplTargetKey::Decl(def) => match defs.primitive(*def) {
+                Some(primitive) => Some(primitive),
+                None => return defs.module(*def).clone(),
+            },
+            ImplTargetKey::Builtin(name) => PrimitiveType::from_name(name),
+            ImplTargetKey::Undeclared(..)
+            | ImplTargetKey::Ref(_)
+            | ImplTargetKey::TypeParam { .. }
+            | ImplTargetKey::Function { .. } => None,
+        };
+        primitive.map_or_else(
+            || self.current_module_source.clone(),
+            ModuleSource::of_primitive,
+        )
     }
 
     /// Look up method info based on receiver type and method name.

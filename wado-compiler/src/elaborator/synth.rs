@@ -447,7 +447,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Index(idx) => self.synth_index(idx, scope),
             Expr::Range(range) => self.synth_range(range, scope),
             Expr::StructLiteral(sl) => match &sl.name {
-                Some(name) => self.synth_named_type(sl.name_id, name),
+                Some(_) => self.synth_named_type(sl.name_id),
                 None => ArgClass::Opaque(OpaqueReason::CompoundLiteral),
             },
             Expr::Block(block) => self.synth_tail(&block.stmts, scope),
@@ -554,9 +554,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(pos) = name.rfind("::") else {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         };
-        let (prefix, suffix) = (&name[..pos], &name[pos + 2..]);
+        let suffix = &name[pos + 2..];
         let owner = id.owner_segment().map(|seg| seg.id);
-        if let Some(info) = self.lookup_variant_cases_at(owner, prefix) {
+        if let Some(info) = self.lookup_variant_cases_at(owner) {
             let declared_at = info.defined_at;
             let generic = !info.type_params.is_empty();
             if info.case_named(suffix).is_some() {
@@ -566,13 +566,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return self.synth_decl_type(declared_at);
             }
         }
-        if let Some(info) = self.type_lookup().enum_cases_at(owner, prefix) {
+        if let Some(info) = self.type_lookup().enum_cases_at(owner) {
             let declared_at = info.defined_at;
             if info.find_case(suffix).is_some() {
                 return self.synth_decl_type(declared_at);
             }
         }
-        if let Some(info) = self.lookup_flags_members_at(owner, prefix) {
+        if let Some(info) = self.lookup_flags_members_at(owner) {
             let type_id = info.type_id;
             if info.members.iter().any(|m| m.name == suffix) {
                 return self.class_of_type(type_id);
@@ -1177,8 +1177,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `Pair<i32, i64>`, and the declaration's own `TypeId` is not that type.
     /// A name that is not a known type resolves to nothing, so it claims no
     /// head either.
-    fn synth_named_type(&self, site: Option<ast::AstId>, name: &str) -> ArgClass {
-        let Some(def) = self.decl_key_at(site, name) else {
+    fn synth_named_type(&self, site: Option<ast::AstId>) -> ArgClass {
+        let Some(def) = self.decl_key_at(site) else {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         };
         if let Some(primitive) = TypeTable::primitive_of_decl(self.tysys.resolutions.defs(), def) {

@@ -278,9 +278,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map_or_else(|| bound.name.clone(), |named| named.to_display())
             })
             .collect();
+        // A suggested name must shadow nothing where the bound is written.
         let binders = &self.annotate_ctx.trait_ctx.type_params;
         let fresh = PIN_NAMES.iter().filter(|name| {
-            !binders.contains_key(**name) && **name != param_name && !self.names_type_at(None, name)
+            !binders.contains_key(**name)
+                && **name != param_name
+                && self
+                    .tysys
+                    .resolutions
+                    .resolve_in(&self.current_module_source, name)
+                    .is_none()
         });
         let pinned = traits
             .iter()
@@ -621,7 +628,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if name == "Self" || self.binder_at(site, name).is_some() {
             return None;
         }
-        if let Some(def) = self.decl_key_at(Some(site), name) {
+        if let Some(def) = self.decl_key_at(Some(site)) {
             return match self.tysys.resolutions.defs().kind(def) {
                 DefKind::Effect => Some("an interface"),
                 DefKind::Trait => Some("a trait"),
@@ -730,14 +737,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         enforce_arity: bool,
     ) -> TypeId {
         self.resolve_named_type_at(Some(site), name, span, enforce_arity)
-    }
-
-    /// [`Self::resolve_named_type`] for a receiver spelling the elaborator
-    /// itself produced, where no segment of the source names the type: a
-    /// `Self::` / `T::` prefix rewritten to a concrete name. The module scope
-    /// answers, since there is no site to ask.
-    pub(super) fn resolve_unsited_type_name(&mut self, name: &str, span: Span) -> TypeId {
-        self.resolve_named_type_at(None, name, span, false)
     }
 
     /// Report an application writing more type arguments than `params` declares,
@@ -918,7 +917,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return type_id;
         }
 
-        if let Some(def) = self.decl_key_at(site, name) {
+        if let Some(def) = self.decl_key_at(site) {
             if let Some(primitive) =
                 TypeTable::primitive_of_decl(self.tysys.resolutions.defs(), def)
             {
@@ -1012,7 +1011,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[Type],
         span: Span,
     ) -> TypeId {
-        let def = self.decl_key_at(site, name);
+        let def = self.decl_key_at(site);
         let builder =
             def.and_then(|def| self.tysys.type_table.borrow().compiler_generic_builder(def));
         if let Some(make) = builder {
@@ -1957,7 +1956,7 @@ impl TypeLookup<'_> {
             Type::Named(named) => {
                 // Which declaration the name means is the site's answer, taken
                 // once here and asked of every registry below.
-                let def = self.declaration_at(Some(named.id), &named.name);
+                let def = self.declaration_at(Some(named.id));
                 // Check newtypes first
                 if let Some(alias_type_id) = def.and_then(|def| self.newtype_of(def)) {
                     return alias_type_id;
@@ -1986,7 +1985,7 @@ impl TypeLookup<'_> {
                 self.nominal_type_of(def, type_table)
             }
             Type::Generic(generic) => {
-                let head = self.declaration_at(Some(generic.id), &generic.name);
+                let head = self.declaration_at(Some(generic.id));
                 // Arity is the elaborator's to report, where the same head
                 // resolves again with a span to report it at.
                 if let Some(make) = head.and_then(|def| type_table.compiler_generic_builder(def))

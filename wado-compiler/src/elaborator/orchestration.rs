@@ -764,7 +764,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             continue;
                         }
                         let lookup = TypeLookup {
-                            current_module_source: module_source,
                             resolutions: &resolutions,
                             namespace_imports: &namespace_imports,
                             program: &data,
@@ -806,7 +805,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for item in &module.items {
                 // Rebuilt per item: the tables it borrows grow between items.
                 let lookup = TypeLookup {
-                    current_module_source: module_source,
                     resolutions: &resolutions,
                     namespace_imports: &namespace_imports,
                     program: &data,

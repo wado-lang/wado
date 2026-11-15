@@ -366,8 +366,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let namespace_imports = self
             .namespace_imports_in(frame)
             .expect("a module the walk resolves in is one `TraitEnv` indexed");
-        self.tysys
-            .type_lookup(frame, namespace_imports, &self.sem.decls)
+        self.tysys.type_lookup(namespace_imports, &self.sem.decls)
     }
 
     /// Canonicalize a `<ns>::<member>` reference — one `::`, the prefix a
@@ -381,20 +380,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The cases of the variant a written qualifier names — see
     /// [`super::types::TypeLookup::variant_cases_at`].
-    pub(super) fn lookup_variant_cases_at(
-        &self,
-        site: Option<AstId>,
-        name: &str,
-    ) -> Option<&VariantInfo> {
-        self.type_lookup().variant_cases_at(site, name)
+    pub(super) fn lookup_variant_cases_at(&self, site: Option<AstId>) -> Option<&VariantInfo> {
+        self.type_lookup().variant_cases_at(site)
     }
 
-    pub(super) fn lookup_flags_members_at(
-        &self,
-        site: Option<AstId>,
-        name: &str,
-    ) -> Option<&FlagsInfo> {
-        self.type_lookup().flags_members_at(site, name)
+    pub(super) fn lookup_flags_members_at(&self, site: Option<AstId>) -> Option<&FlagsInfo> {
+        self.type_lookup().flags_members_at(site)
     }
 
     /// [`Self::lookup_flags_members_at`] through a newtype: the base's members
@@ -403,16 +394,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// is `None` when the qualifier owns the members itself.
     pub(super) fn flags_members_through_newtype(
         &self,
-        site: Option<AstId>,
-        name: &str,
+        def: DefId,
     ) -> Option<(FlagsInfo, Option<TypeId>)> {
         let lookup = self.type_lookup();
-        if let Some(def) = lookup.declaration_at(site, name)
-            && let Some((base, named)) = types::newtype_member_owner(&lookup, &self.tysys, def)
-        {
+        if let Some((base, named)) = types::newtype_member_owner(&lookup, &self.tysys, def) {
             return Some((lookup.flags_members_of(base)?.clone(), Some(named)));
         }
-        Some((lookup.flags_members_at(site, name)?.clone(), None))
+        Some((lookup.flags_members_of(def)?.clone(), None))
     }
 
     pub(super) fn lookup_variant_case_of_decl(&self, def: DefId) -> Option<&VariantInfo> {
@@ -1195,35 +1183,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The declared name of the trait `trait_name` refers to at `site`, past a
     /// `use … as` or `ns$Trait` alias.
     pub(super) fn declared_trait_name(&self, site: Option<AstId>, trait_name: &str) -> String {
-        self.decl_key_at(site, trait_name).map_or_else(
+        self.decl_key_at(site).map_or_else(
             || trait_name.to_string(),
             |def| self.tysys.resolutions.defs().name(def).to_string(),
         )
     }
 
-    /// The declaration `name` names where it is written: the walk's answer at
-    /// `site`, or the frame's for a node no walk reached.
-    pub(crate) fn decl_key_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
-        self.tysys
-            .resolutions
-            .declared_or(site, || self.decl_key_or_local(name))
+    /// The declaration the walk answered at `site`; `None` for a node it never
+    /// reached, which only a spelling names.
+    pub(crate) fn decl_key_at(&self, site: Option<AstId>) -> Option<DefId> {
+        self.tysys.resolutions.declared_if_walked(site?)
     }
 
-    /// Whether `name` names a type declaration where it is written.
-    pub(crate) fn names_type_at(&self, site: Option<AstId>, name: &str) -> bool {
-        self.decl_key_at(site, name)
+    /// Whether `site` names a type declaration.
+    pub(crate) fn names_type_at(&self, site: AstId) -> bool {
+        self.decl_key_at(Some(site))
             .is_some_and(|def| self.tysys.resolutions.defs().kind(def).is_type())
-    }
-
-    /// The declaration `name` reaches where the AST under resolution was written,
-    /// for a caller with no reference site; one holding a site calls [`Self::decl_key_at`].
-    pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<DefId> {
-        // A binder shadows every declaration of its name and has no identity of
-        // its own; the module scope cannot see binders and would answer `struct T`.
-        if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
-            return None;
-        }
-        self.type_lookup().declaration(name)
     }
 
     /// The trait a reference site names, with the type arguments it writes; one

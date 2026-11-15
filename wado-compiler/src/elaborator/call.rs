@@ -1144,14 +1144,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn variant_of_callee(
         &self,
         callee_kind: &CalleeIdentKind<'_>,
-        receiver_site: Option<ast::AstId>,
-        prefix: &str,
+        receiver_decl: Option<DefId>,
     ) -> Option<&VariantInfo> {
         match callee_kind {
             CalleeIdentKind::Case { owner, .. } => self.type_lookup().variant_cases_of(*owner),
             CalleeIdentKind::AbstractTypeParam { .. } => None,
             CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten { .. } => {
-                self.lookup_variant_cases_at(receiver_site, prefix)
+                self.type_lookup().variant_cases_of(receiver_decl?)
             }
         }
     }
@@ -1174,9 +1173,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return self.case_owner_of_type(self.annotate_ctx.trait_ctx.self_type?);
         }
-        let def = self
-            .type_lookup()
-            .declaration_at(Some(owner.id), &owner.name)?;
+        let def = self.decl_key_at(Some(owner.id))?;
         self.case_owner_of_decl(def)
     }
 
@@ -1722,7 +1719,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // does. Splitting at the path's *first* `::` instead asked whether the
         // namespace alias declared a method spelled `Trait::method`.
         if let [.., head, method] = ident.segments.as_slice()
-            && self.is_trait_instance_method_at(head.id, &head.name, &method.name)
+            && self.is_trait_instance_method_at(head.id, &method.name)
         {
             let (trait_name, method_name) = (head.name.clone(), method.name.clone());
             let head_site = head.id;
@@ -1774,6 +1771,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .receiver_segment()
                 .and_then(|segment| self.receiver_at(segment))
         };
+        let receiver_decl = call_receiver.as_ref().and_then(|r| r.key().decl());
         // A case is reachable wherever its type is; only a static method has
         // a visibility of its own to check.
         if callee_kind.case_owner().is_none()
@@ -2185,7 +2183,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A newtype reaches its base's constants and keeps its own type:
             // `M::none()` on `type M = Perm` is `Perm::none() as M`.
             else if let Some((flags_info, named)) =
-                self.flags_members_through_newtype(receiver_site, prefix)
+                receiver_decl.and_then(|def| self.flags_members_through_newtype(def))
                 && matches!(suffix, "none" | "all")
             {
                 self.record_receiver_reference(ident, prefix);
@@ -2197,7 +2195,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A type with no `from` of its own still converts to itself.
             else if suffix == "from"
                 && let [arg_type] = args[..]
-                && self.names_type_at(receiver_site, prefix)
+                && call_receiver.is_some()
                 && let receiver_type = self.static_receiver_written(
                     rewritten_receiver,
                     receiver_site,
@@ -2212,7 +2210,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // A variant's own case was constructed above; any other name is a static.
             else if self
-                .variant_of_callee(&callee_kind, receiver_site, prefix)
+                .variant_of_callee(&callee_kind, receiver_decl)
                 .is_some()
             {
                 let receiver_type = self.static_receiver_written(
@@ -2246,7 +2244,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             }
             // A type, resource included, with no such static method.
-            else if self.names_type_at(receiver_site, prefix) {
+            else if call_receiver.is_some() {
                 let receiver_type = self.static_receiver_written(
                     rewritten_receiver,
                     receiver_site,

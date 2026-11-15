@@ -100,12 +100,10 @@ impl TypeSystem {
     /// of the program's declarations.
     pub(crate) fn type_lookup<'s>(
         &'s self,
-        module: &'s ModuleSource,
         namespace_imports: &'s NamespaceImports,
         walk: &'s ModuleDecls,
     ) -> TypeLookup<'s> {
         TypeLookup {
-            current_module_source: module,
             resolutions: &self.resolutions,
             namespace_imports,
             program: &self.data,

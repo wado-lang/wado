@@ -1427,33 +1427,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether the trait named at `head_site` declares `method_name` with a
     /// receiver, making a call on it the trait-qualified (UFCS) form
     /// `Trait::method(recv, args…)` (WEP 2026-07-31).
-    pub(super) fn is_trait_instance_method_at(
-        &self,
-        head_site: AstId,
-        trait_name: &str,
-        method_name: &str,
-    ) -> bool {
-        self.tysys.trait_declares_method(
-            self.decl_key_at(Some(head_site), trait_name),
-            method_name,
-            |kind| kind != ast::SelfKind::None,
-        )
+    pub(super) fn is_trait_instance_method_at(&self, head_site: AstId, method_name: &str) -> bool {
+        self.tysys
+            .trait_declares_method(self.decl_key_at(Some(head_site)), method_name, |kind| {
+                kind != ast::SelfKind::None
+            })
     }
 
     /// [`Self::is_trait_instance_method_at`] for the receiver-less kind — what
     /// `Trait::<T>::method(…)` binds `Self` for, since it has no receiver
     /// argument to pin it.
-    pub(super) fn is_trait_static_method_at(
-        &self,
-        head_site: AstId,
-        trait_name: &str,
-        method_name: &str,
-    ) -> bool {
-        self.tysys.trait_declares_method(
-            self.decl_key_at(Some(head_site), trait_name),
-            method_name,
-            |kind| kind == ast::SelfKind::None,
-        )
+    pub(super) fn is_trait_static_method_at(&self, head_site: AstId, method_name: &str) -> bool {
+        self.tysys
+            .trait_declares_method(self.decl_key_at(Some(head_site)), method_name, |kind| {
+                kind == ast::SelfKind::None
+            })
     }
 
     /// `Trait::method(recv, args…)` — the receiver is the first argument, so
@@ -1806,7 +1794,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if target_type_id == TypeTable::UNKNOWN
             && let Some(head) = &head
             && self
-                .decl_key_at(Some(head.site), &head.name)
+                .decl_key_at(Some(head.site))
                 .is_some_and(|key| self.tysys.trait_env.declares_trait(&key))
         {
             // `Take::<A>::take(recv, …)` — the trait-turbofish qualified call
@@ -1819,11 +1807,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // (`Shape::<Sq>::area` writes the receiver — a pre-existing
             // misuse), so that shape keeps its unknown-function error.
             let trait_params = self
-                .decl_key_at(Some(head.site), &head.name)
+                .decl_key_at(Some(head.site))
                 .and_then(|key| self.tysys.trait_decl_type_params_of(&key))
                 .unwrap_or_default();
             let trait_arity = ast::written_params(&trait_params).count();
-            if self.is_trait_instance_method_at(head.site, &head.name, &static_call.method)
+            if self.is_trait_instance_method_at(head.site, &static_call.method)
                 && trait_arity != 0
                 && trait_arity == head.args.len()
             {
@@ -1861,7 +1849,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // above claims the turbofish for a trait that does, and there is
             // then nowhere left to write `Self`.
             if let [self_ty_ast] = head.args
-                && self.is_trait_static_method_at(head.site, &head.name, &static_call.method)
+                && self.is_trait_static_method_at(head.site, &static_call.method)
                 && trait_arity == 0
                 && self.resolve_type(self_ty_ast) != TypeTable::UNKNOWN
             {
@@ -1881,9 +1869,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The same spelling on a trait that does declare parameters: the
             // turbofish is already spoken for, so say that rather than let the
             // call read as an unknown function.
-            if self.is_trait_static_method_at(head.site, &head.name, &static_call.method)
-                && trait_arity != 0
-            {
+            if self.is_trait_static_method_at(head.site, &static_call.method) && trait_arity != 0 {
                 let _ = self.emit(TypeError::StaticNeedsWrittenReceiver {
                     trait_name: self.declared_trait_name(Some(head.site), &head.name),
                     method: static_call.method.clone(),
@@ -1940,9 +1926,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // turbofish of `Result::Ok`. A spelling naming a trait asks for no case.
         if required_trait.is_none()
             && let Some(head) = &head
-            && let Some(def) = self
-                .type_lookup()
-                .declaration_at(Some(head.site), &head.name)
+            && let Some(def) = self.decl_key_at(Some(head.site))
             && let Some(owner) = self.case_owner_of_decl(def)
             && let Some(variant) = self.type_lookup().variant_cases_of(owner.def).cloned()
             && let Some((_, case_data)) = variant.case_named(&static_call.method)
@@ -3677,7 +3661,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .find(|e| e.is_inherent())
                         .map(|e| e.module.clone())
                 })
-                .unwrap_or_else(|| self.declaring_module_at(Some(call_id), &actual_struct_name));
+                .unwrap_or_else(|| self.declaring_module_of(link_receiver.key()));
             StaticMethodRef::new(module, &actual_struct_name, method_name, None, declaration)
         });
 
