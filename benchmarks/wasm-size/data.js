@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794689449892,
+  "lastUpdate": 1794702978284,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77453,6 +77453,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8275b34d42c289bd763c8cfddb2b2d43aedba548"
         },
         "date": 1794689448726,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7295,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24494,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435516,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3297b1bd9d1abf1564a13e883d4babb3f8aeaeee",
+          "message": "Merge pull request #2626 from wado-lang/ccr-90954b67-c13smk\n\nperf(compiler): seed core:eval compiles from a snapshot of the caller's dependencies",
+          "timestamp": "2026-11-15T09:18:10+09:00",
+          "tree_id": "63b9407766bcc97ae97ddb4f4ec76aedd46758e1",
+          "url": "https://github.com/wado-lang/wado/commit/3297b1bd9d1abf1564a13e883d4babb3f8aeaeee"
+        },
+        "date": 1794702977017,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
