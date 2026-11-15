@@ -1150,7 +1150,22 @@ impl ModuleSource {
     /// Kiln-generated module.
     #[must_use]
     pub fn keeps_parse(&self) -> bool {
-        matches!(self, Self::Dependency { .. } | Self::Redirected { .. })
+        self.kept_parse_path().is_some()
+    }
+
+    /// The path a kept parse is filed under, where [`Self::keeps_parse`].
+    #[must_use]
+    pub fn kept_parse_path(&self) -> Option<&InternedStr> {
+        match self {
+            Self::Dependency { path, .. } | Self::Redirected { uri: path, .. } => Some(path),
+            Self::EntryPoint { .. }
+            | Self::Local { .. }
+            | Self::Remote { .. }
+            | Self::Core { .. }
+            | Self::Binding { .. }
+            | Self::Wasm { .. }
+            | Self::Effect(_) => None,
+        }
     }
 
     /// Whether a user wrote this module: the entry point and what it

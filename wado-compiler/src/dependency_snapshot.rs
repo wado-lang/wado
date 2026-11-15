@@ -102,8 +102,8 @@ pub(crate) async fn dependency_snapshot<H: CompilerHost>(
     snapshot
 }
 
-/// The modules `load`'s dependency modules reach outside the stdlib, those
-/// included, ordered by name.
+/// The modules `load`'s dependency modules reach outside `core:` and `wasi:`,
+/// those included, ordered by name.
 fn key_of(load: &LoadResult) -> Key {
     let mut reached: IndexSet<&ModuleSource> = load
         .modules
@@ -114,7 +114,11 @@ fn key_of(load: &LoadResult) -> Key {
     while let Some(source) = reached.get_index(next) {
         next += 1;
         let imported = load.imports.get(*source).map_or(&[][..], Vec::as_slice);
-        reached.extend(imported.iter().filter(|target| !is_stdlib(target)));
+        reached.extend(
+            imported
+                .iter()
+                .filter(|target| !target.is_core() && !target.is_binding()),
+        );
     }
     let mut key: Key = reached
         .into_iter()
@@ -125,13 +129,6 @@ fn key_of(load: &LoadResult) -> Key {
         .collect();
     key.sort_by_cached_key(|(source, ..)| source.to_string());
     key
-}
-
-fn is_stdlib(source: &ModuleSource) -> bool {
-    matches!(
-        source,
-        ModuleSource::Core { .. } | ModuleSource::Binding { .. }
-    )
 }
 
 /// Whether a snapshot can serve `source`: a module whose parse a later compile

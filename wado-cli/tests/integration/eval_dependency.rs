@@ -112,7 +112,37 @@ fn successive_programs_over_one_dependency_compile_on_its_snapshot() {
          pub fn hello() -> String { return if contains(BinaryProperty::Uppercase, 'A') { \"upper\" } else { \"lower\" }; }\n",
     )
     .unwrap();
-    assert_programs_compile_on_a_snapshot(&app, "upper");
+    let program = |suffix: &str| {
+        format!(
+            "eval(`use {{ println, Stdout }} from \"core:cli\";\n\
+             use {{ hello }} from \"greet\";\n\
+             export fn run() with Stdout {{ println(hello()); println(\"{suffix}\"); }}`)"
+        )
+    };
+    let check = |n: u32| {
+        format!(
+            "\x20   let out{n} = {};\n\
+             \x20   assert out{n} matches {{ Ok(o) && o.stdout == \"upper\\n{n}\\n\" }}, `${{out{n}:?}}`;\n",
+            program(&n.to_string())
+        )
+    };
+    fs::write(
+        app.join("app_test.wado"),
+        format!(
+            "use {{ eval }} from \"core:eval\";\n\n\
+             test \"each program reaches the dependency\" {{\n{}{}{}}}\n",
+            check(1),
+            check(2),
+            check(3),
+        ),
+    )
+    .unwrap();
+    let output = wado_in(&app)
+        .env("WADO_TRACE", "dependency_snapshot")
+        .args(["test", "app_test.wado"])
+        .output()
+        .unwrap();
+    assert_compiled_on_a_snapshot(&output);
 }
 
 /// A dependency's Kiln-generated module is served from the snapshot with the
@@ -155,45 +185,6 @@ fn a_dependencys_generated_module_compiles_on_its_snapshot() {
             "t2_test.wado",
             "t3_test.wado",
         ])
-        .output()
-        .unwrap();
-    assert_compiled_on_a_snapshot(&output);
-}
-
-/// Run a test in `app` evaluating three programs that print `hello()` from
-/// `greet`, expected to say `greeting`, and assert the later ones compiled on
-/// the snapshot of `greet` the second one built.
-fn assert_programs_compile_on_a_snapshot(app: &Path, greeting: &str) {
-    let program = |suffix: &str| {
-        format!(
-            "eval(`use {{ println, Stdout }} from \"core:cli\";\n\
-             use {{ hello }} from \"greet\";\n\
-             export fn run() with Stdout {{ println(hello()); println(\"{suffix}\"); }}`)"
-        )
-    };
-    let check = |n: u32| {
-        format!(
-            "\x20   let out{n} = {};\n\
-             \x20   assert out{n} matches {{ Ok(o) && o.stdout == \"{greeting}\\n{n}\\n\" }}, `${{out{n}:?}}`;\n",
-            program(&n.to_string())
-        )
-    };
-    fs::write(
-        app.join("app_test.wado"),
-        format!(
-            "use {{ eval }} from \"core:eval\";\n\
-             use {{ hello }} from \"greet\";\n\n\
-             test \"each program reaches the dependency\" {{\n\
-             \x20   assert hello() == \"{greeting}\";\n{}{}{}}}\n",
-            check(1),
-            check(2),
-            check(3),
-        ),
-    )
-    .unwrap();
-    let output = wado_in(app)
-        .env("WADO_TRACE", "dependency_snapshot")
-        .args(["test", "app_test.wado"])
         .output()
         .unwrap();
     assert_compiled_on_a_snapshot(&output);

@@ -2432,11 +2432,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     fn parse_kept(&self, source: &str, module_source: &ModuleSource) -> Result<Module, LoadError> {
         static PARSES: LazyLock<Mutex<IndexMap<String, Arc<Module>>>> =
             LazyLock::new(Mutex::default);
-        let (ModuleSource::Dependency { path, .. } | ModuleSource::Redirected { uri: path, .. }) =
-            module_source
-        else {
-            panic!("only a dependency or Kiln module's parse is kept: {module_source}");
-        };
+        let path = module_source
+            .kept_parse_path()
+            .unwrap_or_else(|| panic!("{module_source} keeps no parse"));
         let kept = |parses: &IndexMap<String, Arc<Module>>| {
             parses
                 .get(path.as_str())
