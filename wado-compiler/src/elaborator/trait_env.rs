@@ -115,7 +115,10 @@ pub(crate) enum ImplTargetKey {
     /// [`name::FqTypeName::binder_of`] gives a parameter. It indexes under that
     /// binder, which only a type the impl's own frame declares reaches, so a
     /// type sharing the parameter's spelling never meets the blanket.
-    TypeParam { owner: DefId, name: String },
+    TypeParam {
+        owner: DefId,
+        name: String,
+    },
     /// A builtin shape: a primitive, `Array`, the tuple family.
     /// Every mangler spells it bare, so a definition and a lookup agree on it.
     Builtin(String),

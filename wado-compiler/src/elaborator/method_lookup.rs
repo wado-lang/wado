@@ -35,7 +35,7 @@ use super::coercion::{ExpectedReturn, answers_last};
 use super::infer::{InferCtx, infer_var_answers, unify};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
-use super::static_call::{StaticLookup, StaticQuery};
+use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe, KeyedAccess};
 use super::trait_env::{
     BlanketReceiver, ImplHeader, ImplMethodHeader, TraitEnv, header_as_written, receiver_as_written,
@@ -2353,21 +2353,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// arity it checks.
     pub(super) fn static_callee_params(
         &mut self,
-        receiver: &ImplTargetKey,
-        receiver_type: TypeId,
+        receiver: &ReceiverId,
         method_name: &str,
-        receiver_name: &str,
         arg_types: &[TypeId],
         required_trait: Option<DefId>,
         expected_return: Option<TypeId>,
     ) -> StaticLookup {
         self.resolve_static_callee(StaticQuery {
-            receiver_key: Some(receiver),
             arg_types,
-            receiver_type: Some(receiver_type),
             required_trait,
             expected_return,
-            ..StaticQuery::of(receiver_name, method_name)
+            ..StaticQuery::of(receiver, method_name)
         })
     }
 
@@ -3832,17 +3828,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// does not restate.
     pub(super) fn lookup_static_method_type_params(
         &mut self,
-        struct_name: &str,
+        receiver: &ReceiverId,
         method_name: &str,
-        receiver_key: Option<&ImplTargetKey>,
     ) -> Vec<ast::GenericParam> {
-        self.resolve_static_callee(StaticQuery {
-            receiver_key,
-            ..StaticQuery::of(struct_name, method_name)
-        })
-        .found()
-        .map(|callee| callee.own_params.clone())
-        .unwrap_or_default()
+        self.resolve_static_callee(StaticQuery::of(receiver, method_name))
+            .found()
+            .map(|callee| callee.own_params.clone())
+            .unwrap_or_default()
     }
 
     /// Look up the type parameters of a function from its AST definition.
