@@ -48,24 +48,14 @@ The embedding is a `float16` table a `Gather` reads, so the model has no
 `GatherBlockQuantized`. The inputs and outputs are `int64` and `float16`, and
 the two `Cast`s give `int32`.
 
-1. [ ] A graph keeps its element types. `Element` admits `f32`, `i64` and
-   `bool`, and `Graph` spells its arithmetic in `f32`. Every operation and
-   kernel takes the element type the graph gives it instead: `f16` and `bf16`,
-   and the `u8` a packed int4 weight is stored in. `Params` holds a half weight
-   as a half. `WebGpuBackend` computes in f16 where the device offers
-   `shader-f16`, and a StableHLO program names the half type (see Wado Stores a
-   Half, a Device Computes In It). Finished when Gemma 3 (270M)'s `fp16` export
-   picks the tokens onnxruntime picks from it on `Cpu`, on `WebGpuBackend` with
-   and without `shader-f16`, and on `PjrtBackend`, and the deviation of each
-   path's logits from onnxruntime's is recorded.
-2. [ ] Loading a tensor at a time. `load` reads the checkpoint from a source
+1. [ ] Loading a tensor at a time. `load` reads the checkpoint from a source
    that yields one tensor's bytes at a time, rather than from the whole file
    the guest holds. A range names one of several data files. A tensor reaches
    the device in its stored type, where today each passes through the guest as
    a list of f32. Finished when a checkpoint larger than the guest's memory,
    spread over several data files, loads onto `WebGpuBackend` and
    `PjrtBackend`, and `Cpu` loads one it can hold through the same source.
-3. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
+2. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
    which onnx-community's `q4` exports use. gpt-oss-20b has the first alone. A
    weight stays packed on the device, read by the quantized product composite
    or by a quantized gather (see [Loam on TPU and WebGPU](./devices.md)). No
@@ -75,7 +65,7 @@ the two `Cast`s give `int32`.
    no type of its own, which the block formats under Known gaps wait for.
    Finished when Gemma 3 (270M)'s `q4` export picks the tokens onnxruntime
    picks from it on every device.
-4. [ ] The rest of gpt-oss-20b's operators: onnxruntime's `QMoE` and
+3. [ ] The rest of gpt-oss-20b's operators: onnxruntime's `QMoE` and
    `SkipSimplifiedLayerNormalization`, and a `GroupQueryAttention` with
    attention sinks. Stage 0 gives every node a shape per output, as it does
    `Split`'s, which the normalization's four outputs need. A `QMoE` decomposes
@@ -84,7 +74,7 @@ the two `Cast`s give `int32`.
    the experts the token routes to. Finished when `operators_test.wado` holds
    each to onnxruntime on every device, and `PjrtBackend::analyzing` reports
    the temporaries of both forms for a prompt and for a step.
-5. [ ] Experts held on demand. An expert is one slice along the first axis of
+4. [ ] Experts held on demand. An expert is one slice along the first axis of
    each `QMoE` input the operator's definition indexes by expert, so no model
    is named. A device holds as many experts as a budget the caller sets: all
    of them on a TPU chip, fewer on a GPU of 8 GB and on `Cpu`. The rest stay
@@ -95,7 +85,7 @@ the two `Cast`s give `int32`.
    them. So the host waits once a layer, which The MVP Is Tier 1 Only says a
    `QMoE` spares it. Finished when `operators_test.wado` holds a `QMoE` to
    onnxruntime with a budget of half its experts on every device.
-6. [ ] gpt-oss-20b, a mixture of experts. Finished when
+5. [ ] gpt-oss-20b, a mixture of experts. Finished when
    `example/gpt-oss-20b/` continues a prompt with the tokens onnxruntime picks
    from onnx-community's `q4f16` export on `Cpu`, under `wado run-webgpu` on a
    device with 8 GB, and under `wado run-pjrt`, with no line that names a
@@ -317,12 +307,12 @@ generator the model alone.
 
 ### Element types and precision
 
-A `WebGpuBackend` view holds a half as the f32 that equals it, so a half
-tensor takes an f32 one's memory there, and no kernel computes in f16 where the
-device offers `shader-f16`. Its attention kernel takes f32 alone, so a half
-graph's attention runs decomposed. One of `int64` is held in `i64`, and one
-of `bool` in `bool`. Every other element type stops the build naming it.
-Arithmetic in `double` and the integer types is a second instantiation of the
+`WebGpuBackend` computes in f32 between the f16s it reads and writes
+([Half Element Types](./design.md#half-element-types)). Its attention kernel
+writes f32s alone, so a half graph's attention runs decomposed. A tensor is
+held in `f32`, `f16`, `bf16`, `u8`, `i64` or `bool`, and every other element
+type stops the build naming it. So does a `CastLike` of a value computed at
+run, since it converts only a tensor the build knows. Arithmetic in `double` and the integer types is a second instantiation of the
 same kernels. Wado has a primitive for nearly every ONNX element type, so what
 a step adds is kernels that compute in one, never the mapping.
 

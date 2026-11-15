@@ -58,6 +58,10 @@ the first from are from onnxruntime's. A file runs it on each device:
     wado run-webgpu fp16_webgpu.wado
     wado run-pjrt --plugin libpjrt_cpu.so fp16_pjrt.wado
 
+`wado run-webgpu fp16_webgpu.wado -- --forgo-shader-f16` computes as a device
+without `shader-f16` does. What each prints is in
+[Half Element Types](../../design.md#half-element-types).
+
 `generate.mjs` writes `generate_fp16.json` beside `generate.json`, and the
 logits into `build/logits_fp16.bin`.
 

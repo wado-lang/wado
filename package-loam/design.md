@@ -165,3 +165,46 @@ A model under 2 GiB is published with its weights in the protobuf, each in a
 records where each weight's `raw_data` sits, and holds no payload it does not
 read. The loader is handed the model file itself, and checks its length against
 the one the build read before reading a weight.
+
+## Half Element Types
+
+A graph's `float16` and `bfloat16` tensors are `f16` and `bf16` on every device,
+as
+[WEP: Loam § Wado Stores a Half, a Device Computes In It](../docs/wep-2026-09-20-loam.md#wado-stores-a-half-a-device-computes-in-it)
+decided, with one departure on `WebGpuBackend`.
+
+The WEP has a device with `shader-f16` compute in f16. `WebGpuBackend` reads
+and writes f16s there, but computes in f32 between the two. A kernel widens
+each half it reads, computes in f32, rounds what it stores with `to_f16`, and
+stores the f16. A device without the feature reads two halves from each `u32`
+and stores the rounded value as an f32. Both give `Cpu`'s result bit for bit,
+so the feature changes what a half graph's kernels read and write, never what
+they compute. Arithmetic in f16 would be faster on some devices, and would hold
+the results to a tolerance instead. bf16 has no WGSL type, so it takes the f32
+path on every device.
+
+| Holds            | With `shader-f16` (f16) | Without, or bf16                     |
+| ---------------- | ----------------------- | ------------------------------------ |
+| A weight         | `array<f16>`            | two halves to a `u32`                |
+| What it computes | `array<f16>`            | f32s, each equal to its rounded half |
+
+`forgo_shader_f16` makes a backend compute as a device without the feature
+does, so one device tests both paths.
+
+On the CPU, onnxruntime computes the float16 nodes of Gemma 3 (270M)'s `fp16`
+export in f32. Loam rounds each node's result to f16, as the graph says, so
+its logits sit apart from onnxruntime's while the tokens match. The deviation
+is the largest of the first token's logits, from `fp16_cpu.wado`,
+`fp16_webgpu.wado` (with `-- --forgo-shader-f16` for the second WebGPU row) and
+`fp16_pjrt.wado` in `example/gemma3-270m/`, on an NVIDIA RTX 4060 Ti over
+Vulkan and XLA's CPU plugin:
+
+| Device                                | "Hello, my name is" | The France prompt |
+| ------------------------------------- | ------------------- | ----------------- |
+| `Cpu`                                 | 0.09375             | 0.1328125         |
+| `WebGpuBackend`, with `shader-f16`    | 0.0859375           | 0.09765625        |
+| `WebGpuBackend`, without `shader-f16` | 0.0859375           | 0.09765625        |
+| `PjrtBackend`                         | 0.1015625           | 0.21875           |
+
+Every row picks onnxruntime's tokens. The smallest lead the greedy pick has
+over the next logit in onnxruntime's run is 0.03125.

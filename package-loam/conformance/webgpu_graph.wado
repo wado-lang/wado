@@ -79,7 +79,7 @@ use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
         },
     };
 
-export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits,RecordOptionGpuSize64) {
+export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
     let Some(mut gpu) = WebGpuBackend::new() else {
         println("no WebGPU adapter");
         return;
@@ -105,7 +105,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     };
     plain.forgo_shader_f16();
     let [hx, edges] = cases::halved_inputs();
-    for let [words, device] of [["", &mut gpu], [" in f32 words", &mut plain]] {
+    for let [words, device] of [
+        ["", &mut gpu],
+        [" in f32 words", &mut plain],
+    ] {
         let [held_x, held_edges] = [
             device.upload(&hx),
             device.upload(&edges),

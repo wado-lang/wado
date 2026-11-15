@@ -357,8 +357,8 @@ fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
 }
 
 /// Graphs built through `Graph` compute on the device what they compute on the
-/// CPU: every operation, a chain stored in each half with no read back, a
-/// gather of consecutive rows as a view, a gather of a
+/// CPU: every operation, a chain stored in each half with no read back, with
+/// and without `shader-f16`, a gather of consecutive rows as a view, a gather of a
 /// mask's rows on the device, and of a run from each row's own start, a branch
 /// either way, attention through a shared
 /// cache, in one row and in rows of different pasts, and a model's `compute`

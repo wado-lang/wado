@@ -684,11 +684,11 @@ model, and it does not price 94 and 93 of each program's operations
   in use climbed through Gemma 3's run
   ([measured](#gemma-3s-device-memory)). A memory plan would spare that. It
   waits for a device or a model that runs short of memory.
-- No kernel has a variant for a device's features. `WebGpuBackend` requests
-  none, so it uses neither `shader-f16` nor subgroups, and `WORKGROUP_BYTES` is
-  WebGPU's default limit rather than the device's. It waits for a device or a
-  model that a variant would serve. A half graph's `shader-f16` is the roadmap's
-  [A graph keeps its element types](./TODO.md#roadmap).
+- No kernel has a variant for subgroups, and `WORKGROUP_BYTES` is WebGPU's
+  default limit rather than the device's. It waits for a device or a model that
+  a variant would serve. `shader-f16` is the one feature `WebGpuBackend`
+  requests, for what a half graph reads and writes
+  ([Half Element Types](./design.md#half-element-types)).
 - An `If` on a value on WebGPU reads its condition back, which submits the
   commands before it and waits for the device. So a step holding one cannot
   share a submission with the steps after it, and the loop on the device reads
