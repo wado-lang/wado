@@ -32,7 +32,7 @@ use { Deserialize } from "core:serde";
 use { Client } from "wasi:http";
 use { git, try_git, paths_between, diff_between } from "./git.wado";
 use { comment } from "./comment.wado";
-use { review, Change, Finding, Reviewed } from "./review.wado";
+use { review, Submission, Finding, Reviewed } from "./review.wado";
 use { snapshot, add_build_submodules, home_runner, drop_snapshot } from "./snapshot.wado";
 use { Runner, Workspace } from "./tools.wado";
 
@@ -120,7 +120,7 @@ ${commits.trim()}`;
         Some(home_runner());
     };
     let ws: Option<Workspace> = Some(Workspace { root, runner });
-    let result = review(&api_key, CLAUDE_MODEL, &Change { heading, diff }, &ws, options.max_turns);
+    let result = review(&api_key, CLAUDE_MODEL, &Submission { heading, diff }, &ws, options.max_turns);
 
     record.reviews.push(Attempt {
         base,

@@ -47,7 +47,7 @@ use {
     Run,
 } from "./eval.wado";
 use { ask_json } from "../src/anthropic.wado";
-use { review, Change } from "../src/review.wado";
+use { review, Submission } from "../src/review.wado";
 use { snapshot, add_build_submodules, home_runner, reset_snapshot, drop_snapshot, index } from "../src/snapshot.wado";
 use { Runner, Workspace } from "../src/tools.wado";
 use { load, SymbolIndex } from "../src/symbols.wado";
@@ -143,7 +143,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
         let r = fix_result(&census, fix);
         let culprit = &r.blamed[0];
         let review_prompt = match source_diff(&culprit.sha, &changed_paths(&culprit.sha), "culprit", LIMIT) {
-            Ok(diff) => Change { heading: `PULL REQUEST #${culprit.pr}: ${merge_title(&culprit.sha)}`, diff },
+            Ok(diff) => Submission { heading: `PULL REQUEST #${culprit.pr}: ${merge_title(&culprit.sha)}`, diff },
             Err(e) => panic(`#${fix}: ${e}`),
         };
         let fix_diff = source_diff(&r.sha, &changed_paths(&r.sha), "fix", LIMIT).unwrap();
@@ -208,7 +208,7 @@ fn judged_defect(judged: &Judged, fix: i32) -> String {
 /// review keeps what it spent.
 fn review_once(
     api_key: &String,
-    review_prompt: &Change,
+    review_prompt: &Submission,
     known: &String,
     ws: &Option<Workspace>,
 ) -> Run with (Client, Preopens, Process) {

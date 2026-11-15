@@ -86,12 +86,12 @@ struct Answer {
 
 /// The change a reviewer is asked about: what it is, in `heading`, and its
 /// diff.
-pub struct Change {
+pub struct Submission {
     pub heading: String,
     pub diff: String,
 }
 
-impl Change {
+impl Submission {
     fn task(&self) -> String {
         return `${self.heading}
 
@@ -145,7 +145,7 @@ fn instructions(w: &Workspace) -> String {
 pub fn review(
     api_key: &String,
     model: String,
-    change: &Change,
+    change: &Submission,
     ws: &Option<Workspace>,
     max_turns: i32,
 ) -> Reviewed with (Client, Preopens, Process) {
@@ -177,7 +177,7 @@ pub fn review(
     return reviewed;
 }
 
-fn unreproduced(change: &Change, r: Reported) -> Finding {
+fn unreproduced(change: &Submission, r: Reported) -> Finding {
     return Finding {
         file: r.file,
         line: r.line,
@@ -187,7 +187,7 @@ fn unreproduced(change: &Change, r: Reported) -> Finding {
     };
 }
 
-fn unreproduced_all(change: &Change, reported: List<Reported>) -> List<Finding> {
+fn unreproduced_all(change: &Submission, reported: List<Reported>) -> List<Finding> {
     return reported.into_iter().map(|r| unreproduced(change, r)).collect();
 }
 
@@ -196,7 +196,7 @@ fn unreproduced_all(change: &Change, reported: List<Reported>) -> List<Finding> 
 /// The reviewer's word is not taken for either, so a repro that leans on
 /// another finding's files, or on a file it did not name, does not verify.
 fn reproduce(
-    change: &Change,
+    change: &Submission,
     w: &Workspace,
     commit: &String,
     reported: List<Reported>,
@@ -351,11 +351,11 @@ test "an answer's finding may carry what reproduces it" {
 }
 
 test "a change is its heading and then its diff" {
-    assert Change { heading: "PULL REQUEST #1: t", diff: "+a" }.task() == "PULL REQUEST #1: t\n\n<diff>\n+a\n</diff>";
+    assert Submission { heading: "PULL REQUEST #1: t", diff: "+a" }.task() == "PULL REQUEST #1: t\n\n<diff>\n+a\n</diff>";
 }
 
 test "a line is in the diff where a hunk of its file shows it" {
-    let change = Change {
+    let change = Submission {
         heading: "",
         diff: "diff --git a/src/a.rs b/src/a.rs
 --- a/src/a.rs
