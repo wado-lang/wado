@@ -121,7 +121,11 @@ fn match_len(insts: &List<Inst>) -> Option<i32> {
             Fail => no_match,
             Byte(_) => {
                 let rest = to_match[pc + 1];
-                if rest >= 0 { rest + 1 } else { rest };
+                if rest >= 0 {
+                    rest + 1;
+                } else {
+                    rest;
+                }
             },
             Jump(target) => at(target, pc, &to_match),
             Split([first, second]) => merge(at(first, pc, &to_match), at(second, pc, &to_match)),

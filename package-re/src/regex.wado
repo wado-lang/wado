@@ -160,7 +160,7 @@ impl Regex {
                 return end matches { Some(_) };
             }
         }
-        return search(&self.program, &mut Cache::new(&self.program), view, 0, Within::Text, Goal::Any) matches { Some(_) };
+        return search(&self.program, &mut Cache::new(), view, 0, Within::Text, Goal::Any) matches { Some(_) };
     }
 
     /// The leftmost match in `text`.
@@ -174,7 +174,7 @@ impl Regex {
         contract text.as_str_slice().is_char_boundary(start), "start must lie on a character boundary"
     {
         let view = text.as_str_slice();
-        let Some(slots) = self.slots_at(&mut Cache::new(&self.program), view, start, false) else {
+        let Some(slots) = self.slots_at(&mut Cache::new(), view, start, false) else {
             return null;
         };
         return Some(Match { text: view, start: slots[0], end: slots[1] });
@@ -190,7 +190,7 @@ impl Regex {
         contract text.as_str_slice().is_char_boundary(start), "start must lie on a character boundary"
     {
         let view = text.as_str_slice();
-        let Some(slots) = self.slots_at(&mut Cache::new(&self.program), view, start, true) else {
+        let Some(slots) = self.slots_at(&mut Cache::new(), view, start, true) else {
             return null;
         };
         return Some(Captures { text: view, slots, names: &self.names });
@@ -202,7 +202,7 @@ impl Regex {
             text,
             next: 0,
             last_end: -1,
-            cache: Cache::new(&self.program),
+            cache: Cache::new(),
             groups,
         };
     }

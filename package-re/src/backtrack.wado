@@ -28,7 +28,7 @@ internal fn backtrack(program: &Program, cache: &mut Cache, text: StrSlice, star
     for let _w of 0..<words {
         cache.visited.push(0);
     }
-    let mut slots = cache.fresh;
+    let mut slots = cache.unset_slots(program);
     // Three numbers an entry: a thread to resume, as its instruction, its
     // position and how many optional iterations it entered there; or, under
     // a negative first number, a slot to restore and its value.
