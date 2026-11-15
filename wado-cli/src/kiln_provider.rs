@@ -1177,16 +1177,23 @@ impl CliGeneratorProvider {
 }
 
 impl CliGeneratorProvider {
-    /// Run-cache key. A run can span projects, and a module path means nothing
-    /// without the root it is relative to.
+    /// Run-cache key. A run can span projects: a spec means what the project's
+    /// manifest and lock say, so its key carries the root. A local generator
+    /// compiles from its own file alone, so every project reaching that file
+    /// shares one key.
     fn run_key(&self, module: &GeneratorModule) -> String {
-        let module = match module {
-            GeneratorModule::Spec(spec) => {
-                format!("spec:{}@{:?}#{:?}", spec.spec, spec.version, spec.registry)
+        match module {
+            GeneratorModule::Spec(spec) => format!(
+                "{}\u{1}spec:{}@{:?}#{:?}",
+                self.manifest_root.display(),
+                spec.spec,
+                spec.version,
+                spec.registry
+            ),
+            GeneratorModule::LocalPath(path) => {
+                format!("path:{}", self.resolve_path(path.as_str()).display())
             }
-            GeneratorModule::LocalPath(path) => format!("path:{}", path.as_str()),
-        };
-        format!("{}\u{1}{module}", self.manifest_root.display())
+        }
     }
 }
 
@@ -1555,6 +1562,44 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// A generator two packages of one run reach by their own relative paths
+    /// is one file, and compiles once.
+    #[test]
+    fn one_run_compiles_a_generator_once_for_every_consumer() {
+        let tmp = tempfile::tempdir().unwrap();
+        let generator = tmp.path().join("gen");
+        std::fs::create_dir(&generator).unwrap();
+        std::fs::write(
+            generator.join("generator.wado"),
+            "\
+use { Request, Response, Error } from \"core:kiln\";\n\
+\n\
+export struct Options {\n\
+    pub verbose: bool,\n\
+}\n\
+\n\
+export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
+    let _ = req.options.verbose;\n\
+    return Result::Ok(Response { files: [] });\n\
+}\n",
+        )
+        .unwrap();
+        let run = Arc::new(RunCache::new());
+        let consumer = |name: &str| {
+            let root = tmp.path().join(name);
+            std::fs::create_dir(&root).unwrap();
+            CliGeneratorProvider::new(root).with_run_cache(Arc::clone(&run))
+        };
+        let [a, b] = [consumer("a"), consumer("b")];
+        let module = GeneratorModule::LocalPath(InvocationPath::normalize("../gen/generator.wado"));
+        for provider in [&a, &b] {
+            runtime()
+                .block_on(async { provider.resolve(&module).await })
+                .unwrap_or_else(|e| panic!("resolve: {e:?}"));
+        }
+        assert_eq!(a.compile_count() + b.compile_count(), 1);
     }
 
     /// Which file a dependency's module names is the dependency's manifest's
