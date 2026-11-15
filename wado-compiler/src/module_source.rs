@@ -1145,6 +1145,14 @@ impl ModuleSource {
         !self.is_core() && !self.is_binding() && !self.is_wasm_asset()
     }
 
+    /// Whether a later compile takes this module's parse again while its source
+    /// is unchanged, as a dependency snapshot needs: a dependency or a
+    /// Kiln-generated module.
+    #[must_use]
+    pub fn keeps_parse(&self) -> bool {
+        matches!(self, Self::Dependency { .. } | Self::Redirected { .. })
+    }
+
     /// Whether a user wrote this module: the entry point and what it
     /// transitively imports, as against the stdlib. Stdlib is the `Core` /
     /// `Wasi` / `Wasm` variants plus the bundled `.wado` files the loader

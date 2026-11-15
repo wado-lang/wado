@@ -147,7 +147,14 @@ fn a_dependencys_generated_module_compiles_on_its_snapshot() {
     }
     let output = wado_in(&app)
         .env("WADO_TRACE", "dependency_snapshot")
-        .args(["test", "-p", "1", "t1_test.wado", "t2_test.wado", "t3_test.wado"])
+        .args([
+            "test",
+            "-p",
+            "1",
+            "t1_test.wado",
+            "t2_test.wado",
+            "t3_test.wado",
+        ])
         .output()
         .unwrap();
     assert_compiled_on_a_snapshot(&output);

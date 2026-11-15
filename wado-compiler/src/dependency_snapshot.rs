@@ -128,7 +128,10 @@ fn key_of(load: &LoadResult) -> Key {
 }
 
 fn is_stdlib(source: &ModuleSource) -> bool {
-    matches!(source, ModuleSource::Core { .. } | ModuleSource::Binding { .. })
+    matches!(
+        source,
+        ModuleSource::Core { .. } | ModuleSource::Binding { .. }
+    )
 }
 
 /// Whether a snapshot can serve `source`: a module whose parse a later compile
@@ -137,10 +140,8 @@ fn is_stdlib(source: &ModuleSource) -> bool {
 /// pass a served module skips.
 fn servable(load: &LoadResult, source: &ModuleSource) -> bool {
     let module = &load.modules[source];
-    matches!(
-        source,
-        ModuleSource::Dependency { .. } | ModuleSource::Redirected { .. }
-    ) && module.include_paths().is_empty()
+    source.keeps_parse()
+        && module.include_paths().is_empty()
         && !module
             .items
             .iter()
