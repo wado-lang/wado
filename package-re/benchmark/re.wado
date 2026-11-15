@@ -6,6 +6,7 @@
 use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
 use { Regex, re } from "../src/lib.wado";
 
 global INPUT: String = #include_str("./input.txt");
@@ -58,6 +59,27 @@ test "each case finds what Node's RegExp finds" {
     assert count_matches(&c.uri, &INPUT) == 176;
     assert sum_hours(&c.timestamp, &INPUT) == 1904;
     assert !c.pathological.is_match(pathological_text());
+}
+
+test "fuel" {
+    let c = cases();
+    let text = pathological_text();
+    // A first search builds the DFA states it reaches; `first-search` holds
+    // that, and each region after it a search that finds them built.
+    measure("re/first-search", || {
+        count_matches(&c.literal, &INPUT);
+        count_matches(&c.literal_ignore_case, &INPUT);
+        count_matches(&c.email, &INPUT);
+        count_matches(&c.uri, &INPUT);
+        sum_hours(&c.timestamp, &INPUT);
+        c.pathological.is_match(&text);
+    });
+    measure("re/literal", || count_matches(&c.literal, &INPUT));
+    measure("re/literal-ignore-case", || count_matches(&c.literal_ignore_case, &INPUT));
+    measure("re/email", || count_matches(&c.email, &INPUT));
+    measure("re/uri", || count_matches(&c.uri, &INPUT));
+    measure("re/timestamp-captures", || sum_hours(&c.timestamp, &INPUT));
+    measure("re/pathological", || c.pathological.is_match(&text));
 }
 
 export fn run() with (Stdout, MonotonicClock) {

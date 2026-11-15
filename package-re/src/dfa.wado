@@ -18,6 +18,12 @@ global DEAD: i32 = 1;
 global ACCEPT: i32 = 2;
 global UNKNOWN: i32 = -1;
 
+global NO_IDLE: i32 = -2;
+
+/// How many bytes may leave the idle state for a scan to skip through the
+/// others. The skip pays where it runs long, so where few bytes end it.
+global MAX_IDLE_EXITS: i32 = 16;
+
 /// Whether the DFA can run `program`: it resolves `^` and `$` outside `m` at
 /// the ends of the text, and no other assertion.
 internal fn runs(program: &Program) -> bool {
@@ -35,9 +41,9 @@ internal struct Dfa {
     /// The class of each byte: two bytes share one when every `Byte` of the
     /// program takes both or neither.
     class_of: List<u8>,
-    /// One byte of each class.
-    sample: List<u8>,
-    /// `transitions[state * sample.len() + class]`.
+    /// `transitions[state * 256 + byte]`. A row is as wide as the bytes are,
+    /// not the classes, so that a scan reads one table for each byte and not
+    /// two.
     transitions: List<i32>,
     /// State `i`'s key is `keys[bounds[i]..<bounds[i + 1]]`: whether a match
     /// was found before it, then its threads in priority order, each an
@@ -57,6 +63,12 @@ internal struct Dfa {
     /// The state a scan starts in, by whether it starts where the text does;
     /// `UNKNOWN` until one did.
     starts: List<i32>,
+    /// The state a forward scan waits in for a match to start, where few
+    /// bytes start one; `UNKNOWN` until the first scan, and `NO_IDLE` where
+    /// too many do.
+    idle: i32,
+    /// For each byte, 1 where `idle` stays in itself on it.
+    idles_on: List<u8>,
     internal gave_up: bool,
 }
 
@@ -70,19 +82,18 @@ impl Dfa {
             }
         }
         let mut class_of: List<u8> = [];
-        let mut sample: List<u8> = [0];
+        let mut class: u8 = 0;
         for let b of 0..<256 {
             if b > 0 && starts_class[b] {
-                sample.push(b as u8);
+                class += 1;
             }
-            class_of.push((sample.len() - 1) as u8);
+            class_of.push(class);
         }
         let seen: List<i32> = List::filled(program.state_base[program.insts.len()], -1);
         return Dfa {
             program,
             direction,
             class_of,
-            sample,
             transitions: [],
             keys: [],
             bounds: [0],
@@ -91,6 +102,8 @@ impl Dfa {
             seen,
             stamp: 0,
             starts: [UNKNOWN, UNKNOWN],
+            idle: UNKNOWN,
+            idles_on: [],
             gave_up: false,
         };
     }
@@ -213,7 +226,7 @@ impl Dfa {
         }
         self.bounds.push(self.keys.len());
         self.accepts_at_end.push(-1);
-        for let _c of 0..<self.sample.len() {
+        for let _b of 0..<256 {
             self.transitions.push(UNKNOWN);
         }
         self.index.try_insert(key, state);
@@ -233,13 +246,13 @@ impl Dfa {
         return self.starts[slot];
     }
 
-    /// Fills the transition `cell`, which leaves state `from` on `class`.
-    fn step(&mut self, cell: i32, from: i32, class: i32) -> i32 {
+    /// Fills the transitions leaving state `from` on `byte` and on every byte
+    /// of its class.
+    fn step(&mut self, from: i32, byte: u8) -> i32 {
         if self.transitions.len() >= MAX_TRANSITIONS {
             self.gave_up = true;
             return DEAD;
         }
-        let byte = self.sample[class];
         let forward = self.direction == Direction::Forward;
         let mut found = self.keys[self.bounds[from]] != 0;
         let mut threads: List<i32> = [];
@@ -264,8 +277,35 @@ impl Dfa {
             self.close(0, false, false, &mut threads);
         }
         let to = self.intern(found, threads);
-        self.transitions[cell] = to;
+        let class = self.class_of[byte as i32];
+        for let b of 0..<256 {
+            if self.class_of[b] == class {
+                self.transitions[from * 256 + b] = to;
+            }
+        }
         return to;
+    }
+
+    /// Settles `idle`: the state a scan starts in past the text's start, if
+    /// it reports nothing and few bytes leave it.
+    fn find_idle(&mut self) {
+        let state = self.start(false);
+        let mut exits = 0;
+        for let b of 0..<256 {
+            let stays = self.next(state, b as u8) == state;
+            self.idles_on.push(stays as u8);
+            if !stays {
+                exits += 1;
+            }
+        }
+        let reports = state & (ACCEPT | DEAD) != 0;
+        self.idle = if reports || exits > MAX_IDLE_EXITS { NO_IDLE } else { state };
+    }
+
+    /// The state `state` leads to on `byte`.
+    fn next(&mut self, state: i32, byte: u8) -> i32 {
+        let next = self.transitions[(state >> 2 << 8) + byte as i32];
+        return if next == UNKNOWN { self.step(state >> 2, byte) } else { next };
     }
 
     /// Whether `state` accepts where the scan ends, which is not where it
@@ -302,7 +342,9 @@ impl Dfa {
         contract !text.is_empty()
     {
         let len = text.len();
-        let width = self.sample.len();
+        if self.idle == UNKNOWN {
+            self.find_idle();
+        }
         let mut state = self.start(start == 0);
         let mut end: Option<i32> = null;
         let mut pos = start;
@@ -316,19 +358,46 @@ impl Dfa {
             if state & DEAD != 0 {
                 return end;
             }
+            if state == self.idle {
+                // Four bytes for each bounds check of the text: reads of one
+                // array in one block share it.
+                while pos + 4 <= len {
+                    let a = unchecked self.idles_on[(unchecked text.byte_at(pos)) as i32];
+                    let b = unchecked self.idles_on[(unchecked text.byte_at(pos + 1)) as i32];
+                    let c = unchecked self.idles_on[(unchecked text.byte_at(pos + 2)) as i32];
+                    let d = unchecked self.idles_on[(unchecked text.byte_at(pos + 3)) as i32];
+                    if a & b & c & d == 0 {
+                        break;
+                    }
+                    pos += 4;
+                }
+            }
+            // The run of transitions with nothing to report, `UNKNOWN`
+            // included: it sets both flags. It stops back in the idle state,
+            // for the skip above to take over.
+            let mut next = state;
+            while pos < len {
+                let byte = unchecked text.byte_at(pos);
+                next = unchecked self.transitions[(state >> 2 << 8) + byte as i32];
+                if next & (ACCEPT | DEAD) != 0 {
+                    break;
+                }
+                state = next;
+                pos += 1;
+                if state == self.idle {
+                    break;
+                }
+            }
             if pos == len {
                 if self.accepts_end(state >> 2) {
                     end = Some(len);
                 }
                 return end;
             }
-            let class = self.class_of[text.byte_at(pos) as i32] as i32;
-            let cell = (state >> 2) * width + class;
-            state = self.transitions[cell];
-            if state == UNKNOWN {
-                state = self.step(cell, cell / width, class);
+            if next & (ACCEPT | DEAD) != 0 {
+                state = self.next(state, text.byte_at(pos));
+                pos += 1;
             }
-            pos += 1;
         }
     }
 
@@ -337,7 +406,6 @@ impl Dfa {
     internal fn scan_reverse(&mut self, text: StrSlice, floor: i32, end: i32) -> i32
         contract !text.is_empty()
     {
-        let width = self.sample.len();
         let mut state = self.start(end == text.len());
         let mut start = -1;
         let mut pos = end;
@@ -348,18 +416,22 @@ impl Dfa {
             if state & DEAD != 0 {
                 break;
             }
+            while pos > floor {
+                let byte = unchecked text.byte_at(pos - 1);
+                let next = unchecked self.transitions[(state >> 2 << 8) + byte as i32];
+                if next & (ACCEPT | DEAD) != 0 {
+                    break;
+                }
+                state = next;
+                pos -= 1;
+            }
             if pos == floor {
                 if floor == 0 && self.accepts_end(state >> 2) {
                     start = 0;
                 }
                 break;
             }
-            let class = self.class_of[text.byte_at(pos - 1) as i32] as i32;
-            let cell = (state >> 2) * width + class;
-            state = self.transitions[cell];
-            if state == UNKNOWN {
-                state = self.step(cell, cell / width, class);
-            }
+            state = self.next(state, text.byte_at(pos - 1));
             pos -= 1;
         }
         assert start >= 0 || self.gave_up;
