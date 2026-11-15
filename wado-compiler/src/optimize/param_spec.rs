@@ -1287,8 +1287,7 @@ fn binds_hot_field(
             .position(|p| p == param)
             .expect("a binding names a parameter");
         let arg = args
-            .iter()
-            .nth(position)
+            .get(position)
             .expect("a bound parameter has an argument")
             .expr;
         !match argument_local(body, arg) {
