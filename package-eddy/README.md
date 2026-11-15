@@ -20,7 +20,8 @@ The findings go to stdout as JSON. A finding the reviewer reproduced carries
 its `repro`:
 
 - `patch` is the test it wrote, as a diff against the reviewed commit.
-- `run` is the `cargo` arguments that run it.
+- `run` is the command that runs it: `cargo`, or `mise` for a task of the
+  project, and its arguments.
 - `expect` is a text the failing run prints. It tells an assertion that failed
   from a test that did not compile.
 - `verified` says whether the run failed with that text when Eddy tried the
@@ -28,7 +29,7 @@ its `repro`:
   taken for it.
 - `output` is what that run reported.
 
-The test asserts the right behaviour, so `git apply` and `cargo <run>` give
+The test asserts the right behaviour, so `git apply` and that command give
 the failing test to fix against.
 
 Each finding is also written under `scratchpad/eddy/<head>/`, numbered from 1:

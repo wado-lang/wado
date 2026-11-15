@@ -40,10 +40,7 @@ fn steps(r: &Repro, commit: &String) -> String {
     while r.patch.lines().any(|l| l == end) {
         end.push_str("_");
     }
-    let mut command = "cargo";
-    for let arg of &r.run {
-        command.push_str(` ${shell_word(arg)}`);
-    }
+    let command = r.run.into_iter().map(|word| shell_word(&word)).collect().join(" ");
     let script = `git checkout ${*commit}
 git apply <<'${end}'
 ${r.patch.trim_suffix("\n")}
@@ -122,7 +119,7 @@ test "a reproduced finding's comment holds one block that reproduces it" {
         detail: "D",
         repro: Some(Repro {
             patch: "diff --git a/t.rs b/t.rs\n+x\n",
-            run: ["test", "--test", "t", "a b"],
+            run: ["cargo", "test", "--test", "t", "a b"],
             expect: "left: 1",
             verified: true,
             output: "exit code 101\nleft: 1\n",
@@ -152,10 +149,18 @@ test "what a patch holds cannot close the block around it" {
         file: "a",
         summary: "S",
         detail: "D",
-        repro: Some(Repro { patch, run: [], expect: "`e`", verified: true, output: "`e`\n" }),
+        repro: Some(Repro {
+            patch,
+            run: ["mise", "run", "t"],
+            expect: "`e`",
+            verified: true,
+            output: "`e`\n",
+        }),
     };
     let text = comment(&f, &"0123456789", &"i");
-    assert text.contains("````sh\n") && text.contains("git apply <<'EDDY_'\n") && text.contains("\nEDDY_\ncargo\n````");
+    assert text.contains("````sh\n")
+        && text.contains("git apply <<'EDDY_'\n")
+        && text.contains("\nEDDY_\nmise run t\n````");
     assert text.contains("Fails with `` `e` ``:");
 }
 
