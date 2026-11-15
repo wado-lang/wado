@@ -319,6 +319,12 @@ after the dispatch has returned. A listener that starts late cannot
 `prevent_default` or `stop_propagation`, whether it waits or not. The promise
 keeps the body inside the dispatch, at the cost of a second kind of call.
 
+The late start is jco's, not the Component Model's. `canon_lift` resumes the
+new task's thread before it returns to the caller, so the body runs up to its
+first block inside the call. It defers the start only under backpressure, which
+includes a call that arrives while another task of the instance holds its one
+stack: a listener the program itself fires with `dispatch_event`.
+
 ### Every callback may wait
 
 A stack can be suspended only when JavaScript entered it through
@@ -380,8 +386,10 @@ Each step lands with `SurfaceDom`'s tests and the jsdom run passing.
   jco-transpiled component, where jco's own task bookkeeping surrounds the
   export that waits.
 - An `AsyncCall` over a promise is no member of a `WaitableSet`, which waits on
-  what the Component Model reports. No one wait covers a `fetch` and a
-  `wasi:clocks` timer, or two `fetch`es.
+  what the Component Model reports. Calls started together run together, and
+  waiting on each in turn takes as long as the slowest. What is missing is the
+  first of several to settle: a race of two `fetch`es, or a `fetch` against a
+  `wasi:clocks` timer.
 - A listener runs outside any Component Model task. A synchronously lowered
   import works from there. A wait on a Component Model async import, such as a
   `wasi:clocks` timer, does not: only a promise is waited on in a listener.
