@@ -250,6 +250,21 @@ Four rules:
 - A diagnostic reads its spelling at the point of reporting, from the site and the
   AST — never from a name threaded down for the purpose.
 
+A static call's receiver follows these rules. `Type::method(…)` and
+`Trait::<Type>::method(…)` name the receiver at a reference site, and a call the
+compiler rewrites knows the receiver's type. So a static resolution takes the
+receiver as one identity, built from one of those two, and never as the text
+the source wrote. The identity has no constructor that takes a name.
+
+A receiver whose site resolves to nothing is reported where it is written, as
+any unresolved name is. The static resolution never sees it, so no lookup is
+keyed by the spelling of a type that does not exist.
+
+An impl written for its own type parameter (`impl<T: B> Tr for T`) is keyed by
+that parameter's identity. A body inside the impl that calls `Self::m()` or
+`T::m()` reaches the impl through it. Another item's parameter with the same
+name does not.
+
 ### 5. Declaration data is keyed by `DefId`
 
 Declaration data is `DefId`-indexed columns on `DefTable`: fields, cases,
@@ -543,9 +558,6 @@ Renderings still compared against a declaration's own name:
   the paths that name no block: an auto-derived `Eq` / `Ord`, and a method
   reached through a type parameter's bound, whose block monomorphization picks.
   A dispatch that matched a concrete block reads the module off it instead.
-- `impl_head_decl_name` — an impl header's own head, filtering a static call's
-  candidate blocks. Each side resolves in the module that wrote it, so an alias
-  on either steers neither.
 
 The Component Model boundary, permanent for the reason §9 gives:
 
@@ -896,7 +908,23 @@ Fixtures: `pattern_qualifier_type_args_read_error.wado`,
 
 ## Roadmap
 
-None. Every open item is a known gap below.
+A static call's receiver taken as an identity, as §4 states. Each step leaves
+the e2e fixtures passing.
+
+- [ ] A receiver identity, built from a reference site's `Resolution` or from a
+  `TypeId`, and `StaticQuery` built from it with no receiver name. Every
+  static resolution's caller passes one.
+- [ ] A diagnostic about a static call spells the receiver from its identity. A
+  receiver no site resolves is reported by the resolver alone. The wording
+  that changes is reviewed fixture by fixture.
+- [ ] `ImplTargetKey::TypeParam` keyed by the impl's own `TypeParamId` rather
+  than by the module and the parameter's name.
+- [ ] `decl_key_or_local` and `TypeLookup::declaration` leave the frame
+  derivation's list, and `impl_target(&str)`, `impl_target_at` and
+  `static_receiver_key` are deleted. The name-to-declaration entries left
+  in the list are listed under `disallowed-methods` in `clippy.toml`, so a
+  new caller fails `mise run clippy`. Each listed entry's own callers
+  carry an `expect` naming the reason.
 
 ## Known gap: a CM type can reach outer scope with no identity
 
