@@ -34,9 +34,11 @@ reviewed commit, the `cargo` arguments in `run`, and `expect`, a text the
 failing run prints. `verified` says whether Eddy, after the review, applied
 that patch alone to a clean checkout and saw the run fail with that text.
 
-- With `verified` true, the finding is already reproduced. Save `patch` to a
-  file, `git apply` it, and `cargo <run>` is the failing test to fix against.
-  Keep the test where it belongs in the tree once it passes.
+- With `verified` true, the finding is already reproduced. The log names the
+  directory that holds the patch of finding `<n>`, counted from 1:
+  `git apply scratchpad/eddy/<head>/<n>.patch`, and `cargo <run>` is the
+  failing test to fix against. Keep the test where it belongs in the tree once
+  it passes.
 - With `verified` false, `output` says why: the run passed, failed another way,
   or the patch did not stand alone. Verify the finding as any other claim.
 - With no `repro`, the reviewer did not reproduce it, and `detail` says why.

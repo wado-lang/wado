@@ -31,6 +31,17 @@ its `repro`:
 The test asserts the right behaviour, so `git apply` and `cargo <run>` give
 the failing test to fix against.
 
+Each finding is also written under `scratchpad/eddy/<head>/`, numbered from 1:
+
+- `<n>.patch` is that patch, for `git apply`.
+- `<n>.md` is the body of a pull request comment for the finding. It says
+  whether the finding was reproduced, and holds one shell block that checks
+  out the reviewed commit, applies the patch and runs the test, so a reader
+  with the repository alone reproduces it. Nothing posts it yet.
+
+A finding names its `line`, and `in_diff` says whether the diff shows that
+line, which is where a pull request takes a comment on a line.
+
 Each run is also added to
 `reviews/<head>.json`, the record of every review of that commit, which is
 committed with the branch: outcomes are what Eddy learns from, and an outcome

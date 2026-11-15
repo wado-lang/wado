@@ -1,0 +1,188 @@
+//! A finding as the body of a pull request comment, Markdown that stands
+//! alone: a reader with the repository and nothing else of Eddy's reproduces
+//! the finding by pasting one block into a shell.
+
+use { Finding, Repro } from "./review.wado";
+
+/// GitHub refuses a comment past 65,536 characters; a byte is at most one.
+global BODY_LIMIT: i32 = 60_000;
+
+/// How many lines of a run's output a comment shows on each side of the text
+/// that was expected.
+global EXCERPT_REACH: i32 = 12;
+
+/// The comment for `f`, found in a review of `commit`. `id` names the finding
+/// in a marker a reader does not see, which is all a later run may take from
+/// the comment: anyone can write one, so the rest is read from Eddy's record.
+pub fn comment(f: &Finding, commit: &String, id: &String) -> String {
+    let whole = body(f, commit, id, true);
+    return if whole.len() <= BODY_LIMIT { whole } else { body(f, commit, id, false) };
+}
+
+fn body(f: &Finding, commit: &String, id: &String, with_steps: bool) -> String {
+    let short = commit.substr_bytes(0, i32::min(commit.len(), 9));
+    let status = match &f.repro {
+        Some(r) && r.verified => `reproduced on \`${short}\``,
+        Some(_) => "not reproduced: the reviewer's test did not fail this way when tried alone",
+        None => "not reproduced",
+    };
+    let mut out = `**${f.summary}** — ${status}\n\n${f.detail}\n\n`;
+    if let Some(r) = &f.repro && !r.patch.is_empty() {
+        out.push_str(if with_steps { steps(r, commit) } else { "The reproduction is too large for a comment.\n\n" });
+    }
+    out.push_str(`<!-- eddy ${*id} -->\n`);
+    return out;
+}
+
+/// The block that reproduces `r`, and what its run printed.
+fn steps(r: &Repro, commit: &String) -> String {
+    let mut end = "EDDY";
+    while r.patch.lines().any(|l| l == end) {
+        end.push_str("_");
+    }
+    let mut command = "cargo";
+    for let arg of &r.run {
+        command.push_str(` ${shell_word(arg)}`);
+    }
+    let script = `git checkout ${*commit}
+git apply <<'${end}'
+${r.patch.trim_suffix("\n")}
+${end}
+${command}
+`;
+    let shown = excerpt(&r.output, &r.expect);
+    let lead = if r.verified {
+        `Fails with ${code_span(&r.expect)}:`;
+    } else {
+        `It was to fail with ${code_span(&r.expect)}. Tried alone, it gave:`;
+    };
+    return `<details><summary>Reproduce</summary>
+
+${fenced(&script, "sh")}
+
+${lead}
+
+${fenced(&shown, "")}
+
+</details>
+
+`;
+}
+
+/// `text` in a code fence longer than any run of backticks in it.
+fn fenced(text: &String, language: String) -> String {
+    let fence = "`".repeat(i32::max(3, longest_backticks(text) + 1));
+    return `${fence}${language}\n${text.trim_suffix("\n")}\n${fence}`;
+}
+
+fn code_span(text: &String) -> String {
+    let ticks = "`".repeat(longest_backticks(text) + 1);
+    return `${ticks} ${*text} ${ticks}`;
+}
+
+fn longest_backticks(text: &String) -> i32 {
+    let [mut longest, mut run] = [0, 0];
+    for let c of text.chars() {
+        run = if c == '`' { run + 1 } else { 0 };
+        longest = i32::max(longest, run);
+    }
+    return longest;
+}
+
+/// The lines of `output` around the first `expect`, or its last lines where
+/// `expect` is not in it.
+fn excerpt(output: &String, expect: &String) -> String {
+    let lines: List<String> = output.lines().map(|l| l.to_string()).collect();
+    let hit = match output.find(expect) {
+        Some(at) && !expect.is_empty() => output.substr_bytes(0, at).split("\n").count() - 1,
+        _ => lines.len() - 1,
+    };
+    let first = i32::max(0, hit - EXCERPT_REACH);
+    let last = i32::min(lines.len(), hit + EXCERPT_REACH + 1);
+    let mut out = if first > 0 { "…\n" } else { "" };
+    for let i of first..<last {
+        out.push_str(`${lines[i]}\n`);
+    }
+    if last < lines.len() {
+        out.push_str("…\n");
+    }
+    return out;
+}
+
+/// `arg` as one word of a POSIX shell.
+fn shell_word(arg: &String) -> String {
+    let plain = !arg.is_empty() && arg.chars().all(|c| c.is_ascii_alphanumeric() || "_-./:=@%+,".contains(`${c}`));
+    return if plain { *arg } else { `'${arg.replace("'", "'\\''")}'` };
+}
+
+test "a reproduced finding's comment holds one block that reproduces it" {
+    let f = Finding {
+        file: "src/a.rs",
+        summary: "S",
+        detail: "D",
+        repro: Some(Repro {
+            patch: "diff --git a/t.rs b/t.rs\n+x\n",
+            run: ["test", "--test", "t", "a b"],
+            expect: "left: 1",
+            verified: true,
+            output: "exit code 101\nleft: 1\n",
+        }),
+    };
+    let text = comment(&f, &"0123456789abcdef", &"012345678-1");
+    assert text.starts_with("**S** — reproduced on `012345678`\n\nD\n\n");
+    assert text.contains(
+        "```sh\ngit checkout 0123456789abcdef\ngit apply <<'EDDY'\ndiff --git a/t.rs b/t.rs\n+x\nEDDY\ncargo test --test t 'a b'\n```",
+    );
+    assert text.contains("Fails with ` left: 1 `:\n\n```\nexit code 101\nleft: 1\n```");
+    assert text.ends_with("<!-- eddy 012345678-1 -->\n");
+}
+
+test "a comment says which findings were not reproduced" {
+    let mut f = Finding { file: "a", summary: "S", detail: "D" };
+    assert comment(&f, &"0123456789", &"i").starts_with("**S** — not reproduced\n");
+    assert !comment(&f, &"0123456789", &"i").contains("<details>");
+    f.repro = Some(Repro { patch: "p\n", run: [], expect: "e", verified: false, output: "ok\n" });
+    let text = comment(&f, &"0123456789", &"i");
+    assert text.contains("did not fail this way") && text.contains("It was to fail with ` e `. Tried alone, it gave:");
+}
+
+test "what a patch holds cannot close the block around it" {
+    let patch = "+let s = ```;\nEDDY\n";
+    let f = Finding {
+        file: "a",
+        summary: "S",
+        detail: "D",
+        repro: Some(Repro { patch, run: [], expect: "`e`", verified: true, output: "`e`\n" }),
+    };
+    let text = comment(&f, &"0123456789", &"i");
+    assert text.contains("````sh\n") && text.contains("git apply <<'EDDY_'\n") && text.contains("\nEDDY_\ncargo\n````");
+    assert text.contains("Fails with `` `e` ``:");
+}
+
+test "a reproduction too large for a comment is named, not cut" {
+    let f = Finding {
+        file: "a",
+        summary: "S",
+        detail: "D",
+        repro: Some(Repro { patch: "+x\n".repeat(30_000), run: [], expect: "e", verified: true, output: "e" }),
+    };
+    let text = comment(&f, &"0123456789", &"i");
+    assert text.len() < BODY_LIMIT && text.contains("too large for a comment") && !text.contains("git apply");
+}
+
+test "an excerpt is the lines around what was expected" {
+    let mut output = "";
+    for let i of 0..<100 {
+        output.push_str(`line ${i}\n`);
+    }
+    let shown = excerpt(&output, &"line 50\n");
+    assert shown.starts_with("…\nline 38\n") && shown.ends_with("line 62\n…\n");
+    assert excerpt(&output, &"absent").ends_with("line 99\n")
+        && excerpt(&output, &"absent").starts_with("…\nline 87\n");
+    assert excerpt(&"one\n", &"one") == "one\n";
+}
+
+test "a shell word is quoted where the shell would read it otherwise" {
+    assert shell_word(&"--test=a/b.rs") == "--test=a/b.rs";
+    assert shell_word(&"a b") == "'a b'" && shell_word(&"") == "''" && shell_word(&"it's") == "'it'\\''s'";
+}

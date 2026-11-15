@@ -8,7 +8,10 @@
 //! carries the patch and the run that show it, tried again alone before it is
 //! reported. That needs `--process-read` on the `cargo` and `rustup` homes;
 //! `--no-run` reviews by reading alone. The record is
-//! `<--reviews>/<head>.json`, one entry per review.
+//! `<--reviews>/<head>.json`, one entry per review. Each finding is also
+//! written under `<--out>/<head>/` (`scratchpad/eddy`): `<n>.md`, the body of
+//! a pull request comment that reproduces it from one pasted block, and
+//! `<n>.patch` for `git apply`.
 //!
 //! Run it from the repository root, every commit to review made. The reviewer
 //! is a build input: `CLAUDE_MODEL` in the environment, or
@@ -28,7 +31,8 @@ use { Process } from "core:process";
 use { Deserialize } from "core:serde";
 use { Client } from "wasi:http";
 use { git, try_git, paths_between, diff_between } from "./git.wado";
-use { change, review, Finding, Reviewed } from "./review.wado";
+use { comment } from "./comment.wado";
+use { review, Change, Finding, Reviewed } from "./review.wado";
 use { snapshot, add_build_submodules, home_runner, drop_snapshot } from "./snapshot.wado";
 use { Runner, Workspace } from "./tools.wado";
 
@@ -38,7 +42,7 @@ global CLAUDE_MODEL: String = "claude-opus-5-5";
 #[param(name = "diff_limit")]
 global LIMIT: i32 = 2_000_000;
 
-global USAGE: String = "usage: eddy [--base <rev>] [--head <rev>] [--no-run] [--max-turns <n>] [--reviews <dir>]";
+global USAGE: String = "usage: eddy [--base <rev>] [--head <rev>] [--no-run] [--max-turns <n>] [--reviews <dir>] [--out <dir>]";
 
 struct Options {
     base: String = "origin/main",
@@ -46,6 +50,7 @@ struct Options {
     no_run: bool = false,
     max_turns: i32 = 40,
     reviews: String = "package-eddy/reviews",
+    out: String = "scratchpad/eddy",
 }
 impl Deserialize for Options;
 
@@ -115,7 +120,7 @@ ${commits.trim()}`;
         Some(home_runner());
     };
     let ws: Option<Workspace> = Some(Workspace { root, runner });
-    let result = review(&api_key, CLAUDE_MODEL, &change(&heading, &diff), &ws, options.max_turns);
+    let result = review(&api_key, CLAUDE_MODEL, &Change { heading, diff }, &ws, options.max_turns);
 
     record.reviews.push(Attempt {
         base,
@@ -133,7 +138,26 @@ ${commits.trim()}`;
     if let Some(e) = &result.error {
         fail(*e);
     }
+    let dir = fs::join(&options.out, &head);
+    write_findings(&dir, &head, &result.findings);
+    eprintln(`each finding's comment, and the patch that reproduces it, in ${dir}`);
     println(String::from_utf8_lossy(to_bytes_pretty(&Report { findings: result.findings }).unwrap()));
+}
+
+/// Writes finding `n`, from 1, of a review of `head` into `dir` as `<n>.md`,
+/// the pull request comment for it, and `<n>.patch` where it has one, for
+/// `git apply`. An earlier review's files there are removed first.
+fn write_findings(dir: &String, head: &String, findings: &List<Finding>) with Preopens {
+    fs::remove_dir_all(dir).unwrap();
+    fs::create_dir_all(dir).unwrap();
+    let short = head.substr_bytes(0, 9);
+    for let [i, f] of findings.into_iter().enumerate() {
+        let n = i + 1;
+        fs::write(fs::join(dir, `${n}.md`), &comment(f, head, &`${short}-${n}`)).unwrap();
+        if let Some(r) = &f.repro && !r.patch.is_empty() {
+            fs::write(fs::join(dir, `${n}.patch`), &r.patch).unwrap();
+        }
+    }
 }
 
 fn fail(message: String) -> ! with (Stderr, Exit) {

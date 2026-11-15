@@ -15,7 +15,7 @@ use { Ran, Runner, Workspace, RUN_TIMEOUT } from "./tools.wado";
 global REVIEW: String = "You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
 Report the defects the change introduces: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.
 Answer with one JSON object and nothing else:
-{\"findings\": [{\"file\": \"<path>\", \"summary\": \"<one sentence>\", \"detail\": \"<why it is wrong, and when it goes wrong>\"}]}
+{\"findings\": [{\"file\": \"<path>\", \"line\": <the line of that file, as the pull request leaves it, where the defect is>, \"summary\": \"<one sentence>\", \"detail\": \"<why it is wrong, and when it goes wrong>\"}]}
 Report at most 10 findings, the most severe first. An empty list is a valid answer.";
 
 global READING: String = "You can read the repository as it stood once this pull request merged, with the tools Read, Grep and Glob. Before you report, read what the diff alone does not show: the callers of what changed, the definitions it relies on, the rest of a file. Your final reply is the JSON object.";
@@ -30,6 +30,11 @@ Give a finding you reproduced a \"repro\" beside its other fields: {\"paths\": [
 
 pub struct Finding {
     pub file: String,
+    /// In `file` as the change leaves it, or 0 where the reviewer named none.
+    pub line: i32 = 0,
+    /// Whether the diff shows that line, which is where a pull request takes a
+    /// comment on a line.
+    pub in_diff: bool = false,
     pub summary: String,
     pub detail: String,
     /// Absent where the reviewer did not reproduce the finding.
@@ -51,6 +56,7 @@ pub struct Repro {
 /// A finding as the reviewer answers it.
 struct Reported {
     file: String,
+    line: i32 = 0,
     summary: String,
     detail: String,
     repro: Option<Claim> = null,
@@ -80,12 +86,45 @@ struct Answer {
 
 /// The change a reviewer is asked about: what it is, in `heading`, and its
 /// diff.
-pub fn change(heading: &String, diff: &String) -> String {
-    return `${*heading}
+pub struct Change {
+    pub heading: String,
+    pub diff: String,
+}
+
+impl Change {
+    fn task(&self) -> String {
+        return `${self.heading}
 
 <diff>
-${*diff}
+${self.diff}
 </diff>`;
+    }
+
+    /// Whether the diff shows `line` of `file` as the change leaves it, as a
+    /// line it adds or one of a hunk's context.
+    fn shows(&self, file: &String, line: i32) -> bool {
+        let mut in_file = false;
+        for let l of self.diff.lines() {
+            if let Some(path) = l.strip_prefix("+++ ") {
+                in_file = path == `b/${*file}`;
+            } else if in_file && let Some(hunk) = l.strip_prefix("@@ ") {
+                let [start, count] = new_side(hunk.to_string());
+                if start <= line && line < start + count {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+}
+
+/// The first line and the line count of the new side of a hunk header's
+/// ranges, `-a,b +c,d @@ …`. A count left out is 1.
+fn new_side(ranges: String) -> [i32, i32] {
+    let new = ranges.split(" ").collect()[1];
+    let numbers: List<String> = new.trim_prefix("+").split(",").map(|n| n.to_string()).collect();
+    let count = if numbers.len() > 1 { i32::from_str(&numbers[1]).unwrap() } else { 1 };
+    return [i32::from_str(&numbers[0]).unwrap(), count];
 }
 
 /// What a reviewer reading `w` is told: the task, and each kind of tool `w`
@@ -101,33 +140,33 @@ fn instructions(w: &Workspace) -> String {
     return system;
 }
 
-/// `model`'s review of `task`, a [`change`], in one call, or by an agent that
-/// reads `ws` for up to `max_turns` turns with every tool `ws` offers.
+/// `model`'s review of `change`, in one call, or by an agent that reads `ws`
+/// for up to `max_turns` turns with every tool `ws` offers.
 pub fn review(
     api_key: &String,
     model: String,
-    task: &String,
+    change: &Change,
     ws: &Option<Workspace>,
     max_turns: i32,
 ) -> Reviewed with (Client, Preopens, Process) {
     // Thinking spends from the same budget as the answer.
     let Some(w) = ws else {
-        return match ask_json::<Answer>(api_key, model, REVIEW, *task, 32_000) {
-            Ok(a) => Reviewed { findings: unreproduced_all(a.findings) },
+        return match ask_json::<Answer>(api_key, model, REVIEW, change.task(), 32_000) {
+            Ok(a) => Reviewed { findings: unreproduced_all(change, a.findings) },
             Err(e) => Reviewed { error: Some(e) },
         };
     };
     // Read before the reviewer can move HEAD: a test it runs may run `git`.
     let commit = tree_git(&w.root, ["rev-parse", "HEAD"]).trim().to_string();
-    let agent = run_agent(api_key, model, instructions(w), *task, w, max_turns, 32_000);
+    let agent = run_agent(api_key, model, instructions(w), change.task(), w, max_turns, 32_000);
     let mut reviewed = Reviewed { turns: agent.turns, calls: agent.calls, usage: Some(agent.usage) };
     match agent.answer {
         Ok(answer) => match json_object::<Answer>(&answer) {
             // Without Run the reviewer wrote nothing to try.
             Ok(a) => reviewed.findings = if w.runner matches { Some(_) } {
-                reproduce(w, &commit, a.findings);
+                reproduce(change, w, &commit, a.findings);
             } else {
-                unreproduced_all(a.findings);
+                unreproduced_all(change, a.findings);
             },
 
 
@@ -138,23 +177,34 @@ pub fn review(
     return reviewed;
 }
 
-fn unreproduced(r: Reported) -> Finding {
-    return Finding { file: r.file, summary: r.summary, detail: r.detail };
+fn unreproduced(change: &Change, r: Reported) -> Finding {
+    return Finding {
+        file: r.file,
+        line: r.line,
+        in_diff: change.shows(&r.file, r.line),
+        summary: r.summary,
+        detail: r.detail,
+    };
 }
 
-fn unreproduced_all(reported: List<Reported>) -> List<Finding> {
-    return reported.into_iter().map(|r| unreproduced(r)).collect();
+fn unreproduced_all(change: &Change, reported: List<Reported>) -> List<Finding> {
+    return reported.into_iter().map(|r| unreproduced(change, r)).collect();
 }
 
 /// `reported` with each claim tried: its files cut from the tree the reviewer
 /// left as a patch against `commit`, and its run repeated on that patch alone.
 /// The reviewer's word is not taken for either, so a repro that leans on
 /// another finding's files, or on a file it did not name, does not verify.
-fn reproduce(w: &Workspace, commit: &String, reported: List<Reported>) -> List<Finding> with (Preopens, Process) {
+fn reproduce(
+    change: &Change,
+    w: &Workspace,
+    commit: &String,
+    reported: List<Reported>,
+) -> List<Finding> with (Preopens, Process) {
     // Every patch is cut before the first reset takes the reviewer's files.
     let mut findings: List<Finding> = [];
     for let r of reported {
-        let mut finding = unreproduced(r);
+        let mut finding = unreproduced(change, r);
         if let Some(claim) = r.repro {
             let [patch, output] = match patch_of(w, commit, &claim.paths) {
                 Ok(patch) => [patch, ""],
@@ -301,5 +351,29 @@ test "an answer's finding may carry what reproduces it" {
 }
 
 test "a change is its heading and then its diff" {
-    assert change(&"PULL REQUEST #1: t", &"+a") == "PULL REQUEST #1: t\n\n<diff>\n+a\n</diff>";
+    assert Change { heading: "PULL REQUEST #1: t", diff: "+a" }.task() == "PULL REQUEST #1: t\n\n<diff>\n+a\n</diff>";
+}
+
+test "a line is in the diff where a hunk of its file shows it" {
+    let change = Change {
+        heading: "",
+        diff: "diff --git a/src/a.rs b/src/a.rs
+--- a/src/a.rs
++++ b/src/a.rs
+@@ -10,3 +12,4 @@ fn f() {
+ context
++added
+@@ -40 +43 @@
+-old
++new
+diff --git a/src/b.rs b/src/b.rs
+--- a/src/b.rs
++++ b/src/b.rs
+@@ -1,2 +1,2 @@
+",
+    };
+    assert change.shows(&"src/a.rs", 12) && change.shows(&"src/a.rs", 15) && change.shows(&"src/a.rs", 43);
+    assert !change.shows(&"src/a.rs", 11) && !change.shows(&"src/a.rs", 16) && !change.shows(&"src/a.rs", 0);
+    assert change.shows(&"src/b.rs", 2) && !change.shows(&"src/b.rs", 12);
+    assert !change.shows(&"src/c.rs", 1);
 }
