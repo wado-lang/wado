@@ -107,15 +107,15 @@ fn extends_links_two_unrestricted_resources() {
 }
 
 #[test]
-fn extends_requires_unrestricted_on_both_sides() {
+fn extends_requires_an_extern_handle_on_both_sides() {
     let source = "resource EventTarget {}
          resource Node extends EventTarget {}
          export fn run() {}
 ";
     let d = diagnostics(source);
     assert!(
-        d.iter().any(|e| e.contains("unrestricted")),
-        "expected a linearity-mismatch error, got {d:?}"
+        d.iter().any(|e| e.contains("repr = \"externref\"")),
+        "expected a representation-mismatch error, got {d:?}"
     );
 }
 
