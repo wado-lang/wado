@@ -107,16 +107,27 @@ add('GemmTransposedScaled', {
   inputs: { A: float([3, 2]), B: float([4, 3]), C: float([1, 4]) },
   nodes: [node('Gemm', ['A', 'B', 'C'], 'Y', { alpha: f32(0.5), beta: f32(2), transA: 1, transB: 1 })],
 });
-// An alpha no half holds scales the product in f32.
-add('GemmHalfScaled', {
-  inputs: { A: float([1, 1], [100]), B: float([1, 1], [100]) },
-  nodes: [
+// A Gemm of halves computes in f32 and rounds once, so neither a product past
+// a half's range nor an alpha no half holds is rounded on the way. onnxruntime
+// runs the graph that ends at the f16 output, as for the mixed normalization.
+const halfGemm = (a, b, c, attrs) => {
+  const operands = ['HA', 'HB', ...(c ? ['HC'] : [])];
+  const nodes = (output) => [
     node('Cast', ['A'], 'HA', { to: FLOAT16 }),
     node('Cast', ['B'], 'HB', { to: FLOAT16 }),
-    node('Gemm', ['HA', 'HB'], 'H', { alpha: f32(1e-8) }),
-    node('Cast', ['H'], 'Y', { to: FLOAT }),
-  ],
-});
+    ...(c ? [node('Cast', ['C'], 'HC', { to: FLOAT16 })] : []),
+    node('Gemm', operands, output, attrs),
+  ];
+  return {
+    inputs: { A: float([1, 1], [a]), B: float([1, 1], [b]), ...(c ? { C: float([1, 1], [c]) } : {}) },
+    nodes: [...nodes('H'), node('Cast', ['H'], 'Y', { to: FLOAT })],
+    oracle: { nodes: nodes('Y'), out: FLOAT16 },
+  };
+};
+add('GemmHalfScaled', halfGemm(100, 100, null, { alpha: f32(1e-8) }));
+add('GemmHalfScaledBack', halfGemm(256, 256, null, { alpha: f32(0.5) }));
+add('GemmHalfBiasedBack', halfGemm(256, 256, -32768, {}));
+add('GemmHalfBiasScaled', halfGemm(1, 1, 60000, { beta: f32(2), alpha: f32(-65000) }));
 add('GemmScalarBias', {
   inputs: { A: float([2, 3]), B: float([3, 4]), C: float([]) },
   nodes: [node('Gemm', ['A', 'B', 'C'], 'Y')],

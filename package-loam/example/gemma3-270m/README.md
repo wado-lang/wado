@@ -67,7 +67,8 @@ without `shader-f16` does. What each prints is in
 [Half Element Types](../../design.md#half-element-types).
 
 `generate.mjs` writes `generate_fp16.json` beside `generate.json`, and the
-logits into `build/logits_fp16.bin`.
+logits into `build/logits_fp16.bin`. It also times onnxruntime's WebGPU
+provider, so it needs a WebGPU device.
 
 ## What the build reads
 

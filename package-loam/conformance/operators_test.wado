@@ -289,6 +289,27 @@ test "Gemm of halves scales by an alpha no half holds" {
     assert_agrees(#include_bytes("./operators/GemmHalfScaled.onnx"), #include_str("./operators/GemmHalfScaled.txt"));
 }
 
+test "Gemm of halves scales a product past a half's range back into it" {
+    assert_agrees(
+        #include_bytes("./operators/GemmHalfScaledBack.onnx"),
+        #include_str("./operators/GemmHalfScaledBack.txt"),
+    );
+}
+
+test "Gemm of halves adds a bias to a product past a half's range" {
+    assert_agrees(
+        #include_bytes("./operators/GemmHalfBiasedBack.onnx"),
+        #include_str("./operators/GemmHalfBiasedBack.txt"),
+    );
+}
+
+test "Gemm of halves scales a bias past a half's range" {
+    assert_agrees(
+        #include_bytes("./operators/GemmHalfBiasScaled.onnx"),
+        #include_str("./operators/GemmHalfBiasScaled.txt"),
+    );
+}
+
 test "Gemm transposes both operands and scales by alpha and beta" {
     assert_agrees(
         #include_bytes("./operators/GemmTransposedScaled.onnx"),

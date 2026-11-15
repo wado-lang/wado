@@ -203,26 +203,13 @@ fn stretched(
     return Result::Ok(`&${broadcast_call(&element, &shape, out, &exprs.reference(tensor), trailing, symbols)?}`);
 }
 
-/// The value `operand` refers to, of `element` and axes `shape`, times `factor`.
-/// A half is scaled in f32 and rounded once, since `factor` is an f32
-/// attribute a half may not hold.
-fn scaled(
-    operand: &String,
-    element: &String,
-    shape: &Shape,
-    factor: f32,
-    symbols: &mut Symbols,
-) -> Result<String, EmitError> {
-    let axes = `[${axis_list(shape)}]`;
-    let by = `&full::<${BACKEND_PARAM}, f32, ${axes}>(backend, ${float_literal(&"f32", factor)}, ${symbols.spell_shape(
+/// The f32s `operand` refers to, of axes `shape`, times `factor`.
+fn scaled(operand: &String, shape: &Shape, factor: f32, symbols: &mut Symbols) -> Result<String, EmitError> {
+    let axes = axis_list(shape);
+    let by = `&full::<${BACKEND_PARAM}, f32, [${axes}]>(backend, ${float_literal(&"f32", factor)}, ${symbols.spell_shape(
         shape,
     )?})`;
-    if *element == "f32" {
-        return Result::Ok(`backend.binary::<f32, ${axes}>(Binary::Multiply, ${*operand}, ${by})`);
-    }
-    let wide = `&backend.convert::<${*element}, f32, ${axes}>(${*operand})`;
-    let product = `backend.binary::<f32, ${axes}>(Binary::Multiply, ${wide}, ${by})`;
-    return Result::Ok(`backend.convert::<f32, ${*element}, ${axes}>(&${product})`);
+    return Result::Ok(`backend.binary::<f32, [${axes}]>(Binary::Multiply, ${*operand}, ${by})`);
 }
 
 /// `dot_general` of `lhs`, of axes `left`, by `rhs`, of axes `right`, into
@@ -299,37 +286,50 @@ fn built_matmul(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
 /// `Gemm`'s `alpha * A' * B' + beta * C`: `dot_general` contracting the axes
 /// `transA` and `transB` choose, its scalars, and its bias broadcast to the
 /// output, whose axes the bias may rename where they meet at an extent of 1.
+/// Halves are computed in f32 and rounded once, so neither a product past a
+/// half's range nor a scalar no half holds is rounded on the way.
 fn built_gemm(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     let [alpha, beta, trans_a, trans_b] = settled(gemm_options(node));
     let product = gemm_product(node, shapes);
     let element = checked.primitives[node.outputs[0]];
+    let wide = (element == "f16" || element == "bf16") && (alpha != 1.0 || has_bias(node));
+    let computed = if wide { "f32" } else { element };
+    let widened = |operand: String, shape: &Shape| {
+        if !wide {
+            return operand;
+        }
+        return `&backend.convert::<${element}, f32, [${axis_list(shape)}]>(${operand})`;
+    };
     let mut call = dot_call(
-        &element,
+        &computed,
         &shapes[node.inputs[0]],
         &shapes[node.inputs[1]],
         &product,
-        &exprs.reference(&node.inputs[0]),
-        &exprs.reference(&node.inputs[1]),
+        &widened(exprs.reference(&node.inputs[0]), &shapes[node.inputs[0]]),
+        &widened(exprs.reference(&node.inputs[1]), &shapes[node.inputs[1]]),
         [],
         [if trans_a { 0 } else { 1 }, if trans_b { 1 } else { 0 }],
         symbols,
     )?;
     if alpha != 1.0 {
-        call = scaled(&`&${call}`, &element, &product, alpha, symbols)?;
+        call = scaled(&`&${call}`, &product, alpha, symbols)?;
     }
-    if !has_bias(node) {
+    let out = if has_bias(node) { shapes[node.outputs[0]] } else { product };
+    if has_bias(node) {
+        if !same_axes(&product, &out) {
+            call = broadcast_call(&computed, &product, &out, &`&${call}`, 0, symbols)?;
+        }
+        let mut bias = widened(stretched(checked, exprs, symbols, &node.inputs[2], &out, 0)?, &out);
+        if beta != 1.0 {
+            bias = `&${scaled(&bias, &out, beta, symbols)?}`;
+        }
+        call = `backend.binary::<${computed}, [${axis_list(&out)}]>(Binary::Add, &${call}, ${bias})`;
+    }
+    if !wide {
         return Result::Ok(call);
     }
-    let out = shapes[node.outputs[0]];
-    if !same_axes(&product, &out) {
-        call = broadcast_call(&element, &product, &out, &`&${call}`, 0, symbols)?;
-    }
-    let mut bias = stretched(checked, exprs, symbols, &node.inputs[2], &out, 0)?;
-    if beta != 1.0 {
-        bias = `&${scaled(&bias, &element, &out, beta, symbols)?}`;
-    }
-    return Result::Ok(`backend.binary::<${element}, [${axis_list(&out)}]>(Binary::Add, &${call}, ${bias})`);
+    return Result::Ok(`backend.convert::<f32, ${element}, [${axis_list(&out)}]>(&${call})`);
 }
 
 /// A `Conv` as `convolution`, its bias broadcast along the output's channels.
