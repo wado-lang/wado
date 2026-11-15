@@ -409,7 +409,7 @@ fn rewrite_everywhere(
 /// length.
 ///
 /// - `array.fill(a, 0, v, 0)` on a non-null `a` cannot trap, so it is dropped
-///   with its operands where they are side-effect free.
+///   with its operands where they are side-effect free and unable to trap.
 /// - `array.fill(a, i, v, 1)` → `array.set(a, i, v)`. Both trap exactly when
 ///   `a` is null or `i >= len(a)`, and evaluate their operands in the same
 ///   order.
@@ -427,8 +427,9 @@ fn try_fold_short_fill(instr: &mut WirInstr, null: &Nullability) -> bool {
     if matches!(len.as_ref(), WirInstr::I32Const(0))
         && matches!(offset.as_ref(), WirInstr::I32Const(0))
         && null.is_nonnull(array)
-        && is_side_effect_free(array)
-        && is_side_effect_free(value)
+        && [&*array, &*value]
+            .into_iter()
+            .all(|dropped| is_side_effect_free(dropped) && !may_trap_in(dropped, null))
     {
         *instr = WirInstr::Nop;
         return true;
@@ -1798,6 +1799,20 @@ mod tests {
             assert!(!fold_short_fill(&mut instr));
             assert_matches!(instr, WirInstr::ArrayFill { .. });
         }
+    }
+
+    #[test]
+    fn an_empty_fill_whose_value_may_trap_stays() {
+        let mut instr = fill(false, WirInstr::I32Const(0), WirInstr::I32Const(0));
+        let WirInstr::ArrayFill { value, .. } = &mut instr else {
+            unreachable!()
+        };
+        *value = Box::new(WirInstr::I32DivS(
+            Box::new(local_get("n", WirType::I32)),
+            Box::new(local_get("d", WirType::I32)),
+        ));
+        assert!(!fold_short_fill(&mut instr));
+        assert_matches!(instr, WirInstr::ArrayFill { .. });
     }
 
     #[test]

@@ -493,11 +493,12 @@ impl Reads<'_> {
         {
             return None;
         }
-        // In `i64` the sum cannot wrap, and one inside the array is the index
-        // the `i32` sum gives. Compared unsigned, a last index below zero
-        // lies outside too. A first index below zero with the last inside is
-        // the copy's first read: where that is the loop's own, the loop traps
-        // on it as the copy does, and it needs no test.
+        // In `i64` the sum cannot wrap, and `MAX_STRIDE` makes it the index
+        // the `i32` sum gives wherever the last one lies inside the array.
+        // Compared unsigned, a last index below zero lies outside too. A first
+        // index below zero with the last inside is the copy's first read:
+        // where that is the loop's own, the loop traps on it as the copy
+        // does, and it needs no test.
         let first = terms
             .into_iter()
             .map(|term| I::I64ExtendI32S(Box::new(term.clone())))
@@ -555,7 +556,14 @@ fn index_terms<'a>(
     terms.push(index);
 }
 
-/// The positive constant `c` of a loop stepping `var += c`.
+/// The longest stride a loop is unrolled at. With it the copy's reach stays far
+/// below `2^31`, so a last index inside an array puts the first above
+/// `i32::MIN`: the `i64` sum of an index's terms is the index the `i32` sum
+/// gives, for every iteration of the copy.
+const MAX_STRIDE: i32 = 1 << 16;
+
+/// The positive constant `c`, at most `MAX_STRIDE`, of a loop stepping
+/// `var += c`.
 fn stride(step: &WirInstr, var: &str) -> Option<i32> {
     use WirInstr as I;
     let I::I32Add(l, r) = step else {
@@ -563,7 +571,7 @@ fn stride(step: &WirInstr, var: &str) -> Option<i32> {
     };
     match (l.as_ref(), r.as_ref()) {
         (I::LocalGet { name, .. }, I::I32Const(c)) | (I::I32Const(c), I::LocalGet { name, .. })
-            if name == var && *c > 0 =>
+            if name == var && (1..=MAX_STRIDE).contains(c) =>
         {
             Some(*c)
         }
