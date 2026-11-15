@@ -1516,9 +1516,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     name,
                 }
             }
-            // A builtin shape, and a type still unsettled or already reported
-            // (`unknown`, an inference variable), which keys a bucket no impl
-            // is indexed under.
+            // A type no declaration answered for: a builtin shape, or one still
+            // unsettled or already reported (`unknown`, an inference variable),
+            // which keys a bucket no impl is indexed under.
             tir::ResolvedType::Primitive(_)
             | tir::ResolvedType::Unit
             | tir::ResolvedType::Never

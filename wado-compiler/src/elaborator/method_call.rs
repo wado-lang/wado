@@ -1880,7 +1880,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let declaring_key = owner
             .filter(|(link, _)| self.is_declaring_link(*link))
             .map(|(_, key)| key);
-        let key = declaring_key.or_else(|| self.tysys.static_receiver_struct_key(target_type_id));
+        let key = declaring_key.or_else(|| self.tysys.static_receiver_key(target_type_id));
         let lookup_receiver = key.map(|key| ReceiverId::keyed(key, None));
         let static_receiver = lookup_receiver.as_ref().map(ReceiverId::key);
 
@@ -3878,10 +3878,7 @@ impl TypeSystem {
 
     /// A static-method receiver's key for impl / parameter lookups: newtypes
     /// follow to the base, arrays to `core:array`.
-    pub(super) fn static_receiver_struct_key(
-        &self,
-        target_type_id: TypeId,
-    ) -> Option<ImplTargetKey> {
+    pub(super) fn static_receiver_key(&self, target_type_id: TypeId) -> Option<ImplTargetKey> {
         let table = self.type_table.borrow();
         // A reference buckets by its kind, as an `impl … for &A` header does.
         if let Some(kind) = RefKind::from_resolved(table.get(target_type_id)) {
