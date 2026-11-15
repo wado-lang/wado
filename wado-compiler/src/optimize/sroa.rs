@@ -1300,10 +1300,8 @@ fn write_back_sites(
             let shape = shapes[&candidate];
             // A result reaching the literal could be written through after its
             // fields were read back.
-            let result_reaches = type_table.reaches_object(
-                result_type,
-                type_table.object_kind(shape.aggregate_type_id),
-            );
+            let result_reaches = type_table
+                .reaches_object(result_type, type_table.object_kind(shape.aggregate_type_id));
             if named_elsewhere
                 || result_reaches
                 || callee_stores_param_at(*func_id, i, stores_lookup)

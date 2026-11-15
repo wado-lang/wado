@@ -21,9 +21,7 @@ use crate::nir_value_graph::ValueId;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
-use super::arena_query::{
-    MutRefAliases, RootMutation, for_each_mutated_root, operand_read_locals,
-};
+use super::arena_query::{MutRefAliases, RootMutation, for_each_mutated_root, operand_read_locals};
 use super::gate::{FunctionGate, GatedPass};
 use super::value_copy::mutation::MutationOracle;
 use crate::optimize::arena_query::{
@@ -501,7 +499,8 @@ fn replaces_local(body: &Body, stmt: StmtId, local: u32) -> bool {
 /// Whether `stmt` is `to = from`.
 fn assigns_read_of(body: &Body, stmt: StmtId, to: u32, from: u32) -> bool {
     assign_of(body, stmt).is_some_and(|(target, value)| {
-        assigned_local(body, target) == Some(to) && body.local_read(value).map(|(v, _)| v) == Some(from)
+        assigned_local(body, target) == Some(to)
+            && body.local_read(value).map(|(v, _)| v) == Some(from)
     })
 }
 

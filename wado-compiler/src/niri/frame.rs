@@ -665,12 +665,7 @@ impl Interpreter<'_> {
             return Flow::Fallthrough(Lattice::Unevaluated);
         }
         self.frame.replace_place(root, &path);
-        // The place stops holding whatever handle it held.
-        self.frame.handle_twins.retain(|twins| {
-            twins
-                .iter()
-                .all(|(r, p)| !(*r == root && p.starts_with(&path)))
-        });
+        self.retire_twins_under(root, &path);
         if self
             .update_place(root, &path, |place| {
                 *place = value;
@@ -727,10 +722,24 @@ impl Interpreter<'_> {
             return None;
         };
         update(container.place_mut(path)?)?;
-        for index in stale {
+        self.unbind_all(stale);
+        Some(())
+    }
+
+    /// End the pairs of every place under `(root, path)`, which a store there
+    /// leaves holding a handle other than the one it shared.
+    fn retire_twins_under(&mut self, root: u32, path: &[u32]) {
+        self.frame.handle_twins.retain(|twins| {
+            twins
+                .iter()
+                .all(|(r, p)| !(*r == root && p.starts_with(path)))
+        });
+    }
+
+    fn unbind_all(&mut self, locals: Vec<u32>) {
+        for index in locals {
             self.bind_local(index, Lattice::Unevaluated);
         }
-        Some(())
     }
 
     /// The locals a write at `(root, path)` leaves stale: each holding, through
@@ -1448,9 +1457,8 @@ impl Interpreter<'_> {
             if path.is_empty() {
                 // The callee may have written the array in place, which every
                 // twin of the local shares.
-                for index in self.stale_twins(root, &[])? {
-                    self.bind_local(index, Lattice::Unevaluated);
-                }
+                let stale = self.stale_twins(root, &[])?;
+                self.unbind_all(stale);
                 self.bind_ctfe_local(root, Lattice::Const(value));
             } else {
                 self.frame.replace_place(root, &path);
