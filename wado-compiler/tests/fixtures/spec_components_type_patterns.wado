@@ -13,7 +13,7 @@ resource HtmlInputElement extends Element {}
 struct Tag {}
 
 test "subtyping" {
-    let input = HtmlInputElement::backed_by(&Tag {});
+    let input = HtmlInputElement::backed_by(&mut Tag {});
     let r: Option<HtmlInputElement> = Option::Some(input);
     let n: Option<Node> = r.map(|el| el as Node);  // OK: each element is upcast
     assert n matches { Some(_: HtmlInputElement) };
@@ -36,6 +36,6 @@ fn kind(node: Node) -> String {
 }
 
 test "type patterns" {
-    check(HtmlInputElement::backed_by(&Tag {}), Element::backed_by(&Tag {}));
-    assert kind(Node::backed_by(&Tag {})) == "other";
+    check(HtmlInputElement::backed_by(&mut Tag {}), Element::backed_by(&mut Tag {}));
+    assert kind(Node::backed_by(&mut Tag {})) == "other";
 }

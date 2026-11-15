@@ -22,24 +22,24 @@ struct Tag {
 }
 
 test "a slot holds its handle until it is freed, and a freed slot is the next one filled" {
-    let [a, b, c] = [Tag {}, Tag {}, Tag {}];
-    let first = extern_slot_put(ExternObject::backed_by(&a));
-    let second = extern_slot_put(ExternObject::backed_by(&b));
+    let mut [a, b, c] = [Tag {}, Tag {}, Tag {}];
+    let first = extern_slot_put(ExternObject::backed_by(&mut a));
+    let second = extern_slot_put(ExternObject::backed_by(&mut b));
     assert first != second;
-    assert handle_eq(extern_slot_get(first), ExternObject::backed_by(&a));
-    assert handle_eq(extern_slot_get(first), ExternObject::backed_by(&a)), "a read leaves the slot";
+    assert handle_eq(extern_slot_get(first), ExternObject::backed_by(&mut a));
+    assert handle_eq(extern_slot_get(first), ExternObject::backed_by(&mut a)), "a read leaves the slot";
 
-    assert handle_eq(extern_slot_take(first), ExternObject::backed_by(&a));
-    assert extern_slot_put(ExternObject::backed_by(&c)) == first;
-    assert handle_eq(extern_slot_get(second), ExternObject::backed_by(&b));
+    assert handle_eq(extern_slot_take(first), ExternObject::backed_by(&mut a));
+    assert extern_slot_put(ExternObject::backed_by(&mut c)) == first;
+    assert handle_eq(extern_slot_get(second), ExternObject::backed_by(&mut b));
     extern_slot_free(first);
     extern_slot_free(second);
 }
 
 #[expect_trap]
 test "a freed slot holds no handle" {
-    let a = Tag {};
-    let slot = extern_slot_put(ExternObject::backed_by(&a));
+    let mut a = Tag {};
+    let slot = extern_slot_put(ExternObject::backed_by(&mut a));
     extern_slot_free(slot);
     let _ = extern_slot_get(slot);
 }

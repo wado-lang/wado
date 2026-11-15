@@ -57,6 +57,11 @@ await write(files);
 async function loader({ imports, exports }) {
   const glueDir = join(here, "../../package-web/glue");
   const glue = (await readdir(glueDir)).filter((file) => file.endsWith(".js"));
+  // Every glue module answers `$class-of` and its siblings from its own class
+  // table, and the loader merges their imports under those names.
+  if (glue.length !== 1) {
+    throw new Error(`the loader links one glue module, and ${glueDir} holds ${glue.length}`);
+  }
   const camel = (kebab) => kebab.replace(/-(\w)/g, (_, c) => c.toUpperCase());
   const lines = [`import { instantiate } from "./${name}.component.js";`];
   await mkdir(outDir, { recursive: true });

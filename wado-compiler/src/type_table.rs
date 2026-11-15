@@ -840,7 +840,7 @@ impl TypeTable {
     /// extending the other.
     #[must_use]
     pub fn handles_compare(&self, a: TypeId, b: TypeId) -> bool {
-        self.resource_join(a, b)
+        self.resource_join(self.representation_head(a), self.representation_head(b))
             .is_some_and(|joined| self.is_extern_handle(joined))
     }
 

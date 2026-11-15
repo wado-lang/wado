@@ -801,8 +801,8 @@ pub trait ExternHandle with () {
 /// other is a cell, which carries neither the value's identity nor its type.
 pub trait Backing with () {
     /// A handle `value` stands behind. Backing one value twice gives equal
-    /// handles.
-    fn backed_by<T: RefMut>(value: &T) -> Self;
+    /// handles. The reference is `&mut`, since `backing` hands one back.
+    fn backed_by<T: RefMut>(value: &mut T) -> Self;
 
     /// The value behind this handle: `None` for the host's object, and for a
     /// handle a value of another type backs.
@@ -810,7 +810,7 @@ pub trait Backing with () {
 }
 
 impl<R: ExternHandle> Backing for R {
-    fn backed_by<T: RefMut>(value: &T) -> R {
+    fn backed_by<T: RefMut>(value: &mut T) -> R {
         return builtin::extern_handle_backed_by::<R, T>(value);
     }
 

@@ -12,12 +12,12 @@ resource HtmlInputElement extends Node {
 
 fn read(n: Node) -> String {
     let _is_input = |m: Node| match m { _i: HtmlInputElement => true, _ => false };
-    let input = HtmlInputElement::backed_by(&"input");
+    let input = HtmlInputElement::backed_by(&mut "input");
     return input.value();
 }
 
 export fn run() with Node {
-    let _ = read(Node::backed_by(&"node"));
+    let _ = read(Node::backed_by(&mut "node"));
 }
 
 __DATA__

@@ -15,21 +15,21 @@ resource Plain {}
 struct Mark {}
 
 test "a handle inspects as its dynamic type" {
-    let n: Node = Element::backed_by(&Mark {});
+    let n: Node = Element::backed_by(&mut Mark {});
     assert `${n:?}` == "Element";
     assert `${n:#?}` == "Element";
-    assert `${Text::backed_by(&Mark {}):?}` == "Text";
-    assert `${Node::backed_by(&Mark {}):?}` == "Node";
+    assert `${Text::backed_by(&mut Mark {}):?}` == "Text";
+    assert `${Node::backed_by(&mut Mark {}):?}` == "Node";
 }
 
 test "a handle inside a value inspects in place" {
-    let n: Node = Text::backed_by(&Mark {});
+    let n: Node = Text::backed_by(&mut Mark {});
     assert `${Option::Some(n):?}` == "Option::Some(Text)";
     assert `${[n, n]:?}` == "[Text, Text]";
 }
 
 test "a resource without classes inspects as itself" {
-    assert `${Plain::backed_by(&Mark {}):?}` == "Plain";
+    assert `${Plain::backed_by(&mut Mark {}):?}` == "Plain";
 }
 
 __DATA__

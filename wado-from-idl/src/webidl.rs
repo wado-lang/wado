@@ -359,11 +359,9 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         .map(|(name, r)| (r.name.clone(), (*name).to_string()))
         .collect();
     module.resources = resources.into_values().collect();
-    let settles = module
-        .resources
-        .iter()
-        .flat_map(|r| &r.methods)
-        .any(|f| f.is_async);
+    let mut methods = module.resources.iter().flat_map(|r| &r.methods);
+    let mut functions = module.interfaces.iter().flat_map(|i| &i.functions);
+    let settles = methods.any(|f| f.is_async) || functions.any(|f| f.is_async);
     if settles {
         if module.resources.iter().any(|r| r.name == REJECTION) {
             bail!("the slice declares `{REJECTION}`, which names a rejected promise's reason");

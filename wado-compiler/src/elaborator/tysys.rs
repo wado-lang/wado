@@ -813,8 +813,8 @@ impl TypeSystem {
         self.type_table.borrow().name(type_id)
     }
 
-    /// Whether `==` / `!=` compares these operands as unrestricted resource
-    /// handles, which the host interns, by their bits.
+    /// Whether `==` / `!=` compares these operands as extern handles: whether
+    /// they are one object, which `core:rt::handle_eq` answers.
     pub(super) fn compares_handles(&self, op: BinaryOp, left: TypeId, right: TypeId) -> bool {
         matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
             && self.type_table.borrow().handles_compare(left, right)

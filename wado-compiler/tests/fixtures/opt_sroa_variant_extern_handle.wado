@@ -9,7 +9,7 @@ struct Weight {
 }
 
 #[inline("never")]
-fn maybe(w: &Weight) -> Option<Node> {
+fn maybe(w: &mut Weight) -> Option<Node> {
     if w.value > 0.0 {
         return Option::Some(Node::backed_by(w));
     }
@@ -17,7 +17,7 @@ fn maybe(w: &Weight) -> Option<Node> {
 }
 
 #[inline("never")]
-fn last_positive(ws: &List<Weight>) -> f64 {
+fn last_positive(ws: &mut List<Weight>) -> f64 {
     let mut found: Option<Node> = null;
     for let w of ws {
         if w.value > 0.0 {
@@ -31,16 +31,16 @@ fn last_positive(ws: &List<Weight>) -> f64 {
 }
 
 test "a returned handle round-trips" {
-    let heavy = builtin::black_box(Weight { value: 2.5 });
-    assert maybe(&heavy) matches { Some(n) && n == Node::backed_by(&heavy) };
-    assert maybe(&builtin::black_box(Weight { value: -2.5 })) matches { None };
+    let mut heavy = builtin::black_box(Weight { value: 2.5 });
+    assert maybe(&mut heavy) matches { Some(n) && n == Node::backed_by(&mut heavy) };
+    assert maybe(&mut builtin::black_box(Weight { value: -2.5 })) matches { None };
 }
 
 test "a handle local round-trips" {
     let ws: List<Weight> = [Weight { value: 1.5 }, Weight { value: -1.0 }, Weight { value: 3.5 }, Weight { value: -2.0 }];
-    assert last_positive(&builtin::black_box(ws)) == 3.5;
+    assert last_positive(&mut builtin::black_box(ws)) == 3.5;
     let none: List<Weight> = [Weight { value: -1.0 }];
-    assert last_positive(&builtin::black_box(none)) == -1.0;
+    assert last_positive(&mut builtin::black_box(none)) == -1.0;
 }
 
 __DATA__

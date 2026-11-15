@@ -16,14 +16,14 @@ fn answer() -> i32 {
 }
 
 export fn run() {
-    let tag = Tag { name: "a" };
-    let node = Node::backed_by(&tag);
-    let _of_handle = Node::backed_by(&node);
-    let _of_unit = Node::backed_by(&());
-    let _of_scalar = Node::backed_by(&1);
+    let mut tag = Tag { name: "a" };
+    let mut node =Node::backed_by(&mut tag);
+    let _of_handle = Node::backed_by(&mut node);
+    let _of_unit = Node::backed_by(&mut ());
+    let _of_scalar = Node::backed_by(&mut 1);
     let _as_handle = node.backing::<Element>();
     let _as_closure = node.backing::<fn() -> i32>();
-    let _of_closure = Node::backed_by(&answer);
+    let _of_closure = Node::backed_by(&mut answer);
 }
 
 __DATA__

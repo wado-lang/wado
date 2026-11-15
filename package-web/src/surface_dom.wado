@@ -58,7 +58,7 @@ struct SurfaceRejection {
 // The Fullscreen standard rejects with a `TypeError` where fullscreen is not
 // supported, and no screen shows this document.
 fn fullscreen_unsupported() -> Rejection {
-    return Rejection::backed_by(&SurfaceRejection { name: "TypeError", message: "fullscreen is not supported" });
+    return Rejection::backed_by(&mut SurfaceRejection { name: "TypeError", message: "fullscreen is not supported" });
 }
 
 fn surface_rejection(rejection: Rejection) -> &mut SurfaceRejection {
@@ -216,16 +216,16 @@ impl SurfaceDom {
         return self.push(Content::Element(local_name));
     }
 
-    fn element_handle(&self, index: i32) -> HtmlElement {
-        let node = &self.nodes[index];
+    fn element_handle(&mut self, index: i32) -> HtmlElement {
+        let node = &mut self.nodes[index];
         if node.content matches { Element(name) && name == "input" } {
             return HtmlInputElement::backed_by(node);
         }
         return HtmlElement::backed_by(node);
     }
 
-    fn node_handle(&self, index: i32) -> Node {
-        let node = &self.nodes[index];
+    fn node_handle(&mut self, index: i32) -> Node {
+        let node = &mut self.nodes[index];
         match node.content {
             Document => {
                 return Document::backed_by(node);
@@ -242,9 +242,9 @@ impl SurfaceDom {
     }
 
     // Every event target is a node here, the window included.
-    fn target_handle(&self, index: i32) -> EventTarget {
+    fn target_handle(&mut self, index: i32) -> EventTarget {
         if index == WINDOW_INDEX {
-            return Window::backed_by(&self.nodes[index]);
+            return Window::backed_by(&mut self.nodes[index]);
         }
         return self.node_handle(index);
     }
@@ -289,7 +289,7 @@ impl SurfaceDom {
         }
     }
 
-    fn node(&self, index: i32) -> Option<Node> {
+    fn node(&mut self, index: i32) -> Option<Node> {
         if index == NO_NODE {
             return null;
         }
@@ -303,7 +303,7 @@ impl SurfaceDom {
         return name;
     }
 
-    fn element(&self, index: i32) -> Option<Element> {
+    fn element(&mut self, index: i32) -> Option<Element> {
         if index == NO_NODE || !self.nodes[index].content matches { Element(_) } {
             return null;
         }
@@ -340,7 +340,7 @@ impl SurfaceDom {
 
     // The HTML standard's attr-associated elements of a reflected element
     // reference: the elements set, or else those its attribute names by id.
-    fn referenced_elements(&self, index: i32, attribute: String) -> Option<List<Element>> {
+    fn referenced_elements(&mut self, index: i32, attribute: String) -> Option<List<Element>> {
         let node = &self.nodes[index];
         let root = self.root_of(index);
         let mut found: List<Element> = [];
@@ -533,17 +533,17 @@ impl SurfaceDom {
 
 impl Dom for SurfaceDom {
     fn window(&mut self) -> Window {
-        resume Window::backed_by(&self.nodes[WINDOW_INDEX]);
+        resume Window::backed_by(&mut self.nodes[WINDOW_INDEX]);
     }
 
     fn document(&mut self) -> Document {
-        resume Document::backed_by(&self.nodes[DOCUMENT_INDEX]);
+        resume Document::backed_by(&mut self.nodes[DOCUMENT_INDEX]);
     }
 }
 
 impl Window for SurfaceDom {
     fn document(&mut self, this: &Window) -> Document {
-        resume Document::backed_by(&self.nodes[DOCUMENT_INDEX]);
+        resume Document::backed_by(&mut self.nodes[DOCUMENT_INDEX]);
     }
 
     ..trap
@@ -587,7 +587,7 @@ impl EventTarget for SurfaceDom {
 
 impl Event for SurfaceDom {
     fn new(&mut self, type: String) -> Event {
-        resume Event::backed_by(&SurfaceEvent { type, target: NO_NODE, path: [] });
+        resume Event::backed_by(&mut SurfaceEvent { type, target: NO_NODE, path: [] });
     }
 
     fn composed_path(&mut self, this: &Event) -> List<EventTarget> {

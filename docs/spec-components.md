@@ -436,7 +436,7 @@ An extern handle is one Wasm `externref`. It is either an object of the host, or
 
 Every extern handle type implements `ExternHandle`, a marker the compiler states, and through it `Backing`:
 
-- `R::backed_by(&value)` makes a handle of type `R` that `value` stands behind. The handle keeps the reference, not a copy. Its class is `R`'s own.
+- `R::backed_by(&mut value)` makes a handle of type `R` that `value` stands behind. The handle keeps the reference, not a copy, and the reference is `&mut` since `backing` hands one back. Its class is `R`'s own.
 - `handle.backing::<T>()` is the value behind the handle, as `Option<&mut T>`. It is `None` for an object of the host, and for a handle a value of another type backs.
 
 The value's type is one a reference reaches in place, which the bound `T: RefMut` states: a struct, a tuple, a list or a string. A scalar, a variant, a closure or an extern handle backs no handle.
@@ -453,14 +453,14 @@ struct Tag {
 
 test {
     let mut tag = Tag { name: "div", uses: 0 };
-    let node: Node = Element::backed_by(&tag);   // an upcast keeps the backing
+    let node: Node = Element::backed_by(&mut tag);   // an upcast keeps the backing
     let Some(back) = node.backing::<Tag>() else {
         panic("a Tag backs the handle");
     };
     back.uses += 1;
     assert tag.uses == 1;                        // the handle holds `tag` itself
     assert node.backing::<String>() matches { None };
-    assert node == Element::backed_by(&tag);     // one value, one handle
+    assert node == Element::backed_by(&mut tag);     // one value, one handle
 }
 ```
 
@@ -511,7 +511,7 @@ fn use_it(w: Widget) {
 }
 
 test {
-    let w = Widget::backed_by(&"button");
+    let w = Widget::backed_by(&mut "button");
     let t: Target = w;
     assert t == w && t matches { _: Widget };
 }

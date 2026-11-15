@@ -34,9 +34,9 @@ struct Page {
 impl Node for Page {
     fn load(&mut self, this: &Node, name: String) -> Result<Node, Rejection> {
         if name.is_empty() {
-            resume Result::Err(Rejection::backed_by(&Reason { message: "no name" }));
+            resume Result::Err(Rejection::backed_by(&mut Reason { message: "no name" }));
         } else {
-            resume Result::Ok(Node::backed_by(&Tag { name }));
+            resume Result::Ok(Node::backed_by(&mut Tag { name }));
         }
     }
 
@@ -54,7 +54,7 @@ impl Rejection for Page {
 
 test "a handled async operation is a call that has completed" {
     let mut page = Page { settled: 0 };
-    let root = Node::backed_by(&Tag { name: "root" });
+    let root = Node::backed_by(&mut Tag { name: "root" });
     with &mut page do {
         let Ok(loaded) = root.load("child").wait() else {
             panic("a named node loads");

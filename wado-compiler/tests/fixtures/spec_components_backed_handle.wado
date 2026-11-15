@@ -13,12 +13,12 @@ struct Tag {
 
 test {
     let mut tag = Tag { name: "div", uses: 0 };
-    let node: Node = Element::backed_by(&tag);   // an upcast keeps the backing
+    let node: Node = Element::backed_by(&mut tag);   // an upcast keeps the backing
     let Some(back) = node.backing::<Tag>() else {
         panic("a Tag backs the handle");
     };
     back.uses += 1;
     assert tag.uses == 1;                        // the handle holds `tag` itself
     assert node.backing::<String>() matches { None };
-    assert node == Element::backed_by(&tag);     // one value, one handle
+    assert node == Element::backed_by(&mut tag);     // one value, one handle
 }

@@ -196,12 +196,14 @@ A handler such as `SurfaceDom` answers web calls in Wado, so it must make
 handles. Every extern handle type has two functions for it:
 
 ```wado
-let node: Node = HtmlInputElement::backed_by(&input);
+let node: Node = HtmlInputElement::backed_by(&mut input);
 let back = node.backing::<SurfaceInput>();   // Option<&mut SurfaceInput>
 ```
 
-- `R::backed_by(&value)` makes a handle of type `R` that the value stands
-  behind. The handle's class is `R`'s own, so no class number is written, and
+- `R::backed_by(&mut value)` makes a handle of type `R` that the value stands
+  behind. The reference is `&mut` because `backing` hands one back: taken as
+  `&value`, a write through the handle changed a value the compiler held to
+  be unwritten, and optimized code read the old one. The handle's class is `R`'s own, so no class number is written, and
   the result upcasts like any `R`.
 - `handle.backing::<T>()` gives the value back. It is `None` for the host's
   object, and for a handle backed by a value of another type.
