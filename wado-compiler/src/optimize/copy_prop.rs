@@ -5,6 +5,7 @@
 //! root and drives the analyse/substitute fixpoint to convergence in one shot.
 
 use std::cell::Cell;
+use std::cmp::Ordering;
 
 use cranelift_entity::EntityRef;
 
@@ -20,7 +21,9 @@ use crate::nir_value_graph::ValueId;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
-use super::arena_query::{MutRefAliases, RootMutation, for_each_mutated_root};
+use super::arena_query::{
+    MutRefAliases, RootMutation, for_each_mutated_root, operand_read_locals,
+};
 use super::gate::{FunctionGate, GatedPass};
 use super::value_copy::mutation::MutationOracle;
 use crate::optimize::arena_query::{
@@ -457,18 +460,23 @@ fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: 
                         // A target read at or before the binding is a
                         // backward / cross-iteration read the "mutations
                         // after `k`" interval cannot reason about — the same
-                        // guard the `RefProjection` path applies. A mutation
-                        // past the target's last read reaches no read of it;
-                        // one at that read must be `src = …`, which reads
-                        // before it writes.
-                        let last_read = scan.last_read.get(&binding.target_local).copied();
-                        scan.first_read
-                            .get(&binding.target_local)
-                            .is_none_or(|&u| u > k)
+                        // guard the `RefProjection` path applies. Past the
+                        // target's last read, `src = …` gives the source a new
+                        // value and leaves the one the target shared alone; an
+                        // in-place write would reach wherever the target went.
+                        // At that read only `src = target` is admitted, which
+                        // reads the target before anything writes the source.
+                        let target = binding.target_local;
+                        let last_read = scan.last_read.get(&target).copied();
+                        scan.first_read.get(&target).is_none_or(|&u| u > k)
                             && scan.mut_indices.get(&src).is_none_or(|muts| {
                                 muts.iter().filter(|&&i| i > k).all(|&i| {
-                                    last_read.is_some_and(|u| {
-                                        i > u || (i == u && assigns_local(body, stmts[i], src))
+                                    last_read.is_some_and(|u| match i.cmp(&u) {
+                                        Ordering::Greater => replaces_local(body, stmts[i], src),
+                                        Ordering::Equal => {
+                                            assigns_read_of(body, stmts[i], src, target)
+                                        }
+                                        Ordering::Less => false,
                                     })
                                 })
                             })
@@ -482,18 +490,27 @@ fn analyze_block(body: &Body, block: BlockId, result: &mut AnalysisResult, ctx: 
     }
 }
 
-/// Whether `stmt` is `local = …`, a store whose value is read before it lands.
-fn assigns_local(body: &Body, stmt: StmtId, local: u32) -> bool {
-    assign_of(body, stmt).is_some_and(|(target, _)| assigned_local(body, target) == Some(local))
+/// Whether `stmt` is `local = …` whose value neither reads nor writes `local`.
+fn replaces_local(body: &Body, stmt: StmtId, local: u32) -> bool {
+    assign_of(body, stmt).is_some_and(|(target, value)| {
+        assigned_local(body, target) == Some(local)
+            && !operand_read_locals(body, value).contains(&local)
+    })
+}
+
+/// Whether `stmt` is `to = from`.
+fn assigns_read_of(body: &Body, stmt: StmtId, to: u32, from: u32) -> bool {
+    assign_of(body, stmt).is_some_and(|(target, value)| {
+        assigned_local(body, target) == Some(to) && body.local_read(value).map(|(v, _)| v) == Some(from)
+    })
 }
 
 /// Whether `stmt` is `x = x`, which copy propagation leaves of `let t = x; …;
 /// x = t`.
 fn assigns_itself(body: &Body, stmt: StmtId) -> bool {
-    assign_of(body, stmt).is_some_and(|(target, value)| {
-        assigned_local(body, target)
-            .is_some_and(|t| body.local_read(value).map(|(v, _)| v) == Some(t))
-    })
+    assign_of(body, stmt)
+        .and_then(|(target, _)| assigned_local(body, target))
+        .is_some_and(|x| assigns_read_of(body, stmt, x, x))
 }
 
 fn assign_of(body: &Body, stmt: StmtId) -> Option<(ExprId, Operand)> {

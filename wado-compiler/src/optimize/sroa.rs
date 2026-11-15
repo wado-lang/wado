@@ -1273,6 +1273,7 @@ fn write_back_sites(
         let Some(call) = op.as_expr().filter(|e| cold.contains(e)) else {
             return;
         };
+        let result_type = body.exprs[call].type_id;
         let ExprKind::Call { func_id, args, .. } = &body.exprs[call].kind else {
             return;
         };
@@ -1296,10 +1297,19 @@ fn write_back_sites(
             let named_elsewhere = args.iter().enumerate().any(|(j, other)| {
                 j != i && operand_read_locals(body, other.expr).contains(&candidate)
             });
-            if named_elsewhere || callee_stores_param_at(*func_id, i, stores_lookup) {
+            let shape = shapes[&candidate];
+            // A result reaching the literal could be written through after its
+            // fields were read back.
+            let result_reaches = type_table.reaches_object(
+                result_type,
+                type_table.object_kind(shape.aggregate_type_id),
+            );
+            if named_elsewhere
+                || result_reaches
+                || callee_stores_param_at(*func_id, i, stores_lookup)
+            {
                 continue;
             }
-            let shape = shapes[&candidate];
             let key = type_table
                 .heap_object_key(shape.aggregate_type_id)
                 .expect("a projected candidate is a heap object");

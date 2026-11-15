@@ -1293,24 +1293,35 @@ fn binds_hot_field(
             .expr;
         !match argument_local(body, arg) {
             Some((local, _)) => built_in_cold_run(body, cold, local),
-            None => arg.as_expr().is_some_and(|e| cold.contains(&e)),
+            None => arg.as_expr().is_some_and(|e| {
+                cold.contains(&e) && matches!(body.exprs[e].kind, ExprKind::StructLiteral { .. })
+            }),
         }
     })
 }
 
-/// Whether every binding of `local` takes a value the cold run computes.
+/// Whether every binding of `local` allocates its object in the cold run. A
+/// reference or a copy bound there names an object built elsewhere.
 fn built_in_cold_run(body: &Body, cold: &IndexSet<ExprId>, local: u32) -> bool {
-    let mut values = body
-        .stmts
-        .values()
-        .filter_map(|stmt| match &stmt.kind {
-            StmtKind::Let {
-                local_index, value, ..
-            } if *local_index == local => Some(*value),
-            _ => None,
-        })
-        .peekable();
-    values.peek().is_some() && values.all(|v| v.as_expr().is_some_and(|e| cold.contains(&e)))
+    let mut bound = false;
+    let mut all_cold = true;
+    body.for_each_reachable_node(|node| {
+        let NodeRef::Stmt(s) = node else { return };
+        let StmtKind::Let {
+            local_index, value, ..
+        } = &body.stmts[s].kind
+        else {
+            return;
+        };
+        if *local_index != local {
+            return;
+        }
+        bound = true;
+        all_cold &= value.as_expr().is_some_and(|e| {
+            cold.contains(&e) && matches!(body.exprs[e].kind, ExprKind::StructLiteral { .. })
+        });
+    });
+    bound && all_cold
 }
 
 fn select_sites(

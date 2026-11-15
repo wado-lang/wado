@@ -665,6 +665,12 @@ impl Interpreter<'_> {
             return Flow::Fallthrough(Lattice::Unevaluated);
         }
         self.frame.replace_place(root, &path);
+        // The place stops holding whatever handle it held.
+        self.frame.handle_twins.retain(|twins| {
+            twins
+                .iter()
+                .all(|(r, p)| !(*r == root && p.starts_with(&path)))
+        });
         if self
             .update_place(root, &path, |place| {
                 *place = value;
@@ -727,18 +733,28 @@ impl Interpreter<'_> {
         Some(())
     }
 
-    /// The locals a write at `(root, path)` leaves stale: each holding the
-    /// array handle a place the write overlaps holds too. `None` when a twin
-    /// lives in `root` itself, which unbinding would take the write down with.
+    /// The locals a write at `(root, path)` leaves stale: each holding, through
+    /// any chain of twins, the array handle a place the write overlaps holds.
+    /// `None` when one lives in `root` itself, which unbinding would take the
+    /// write down with.
     fn stale_twins(&self, root: u32, path: &[u32]) -> Option<Vec<u32>> {
-        let mut stale = Vec::new();
-        for [a, b] in &self.frame.handle_twins {
-            for (written, other) in [(a, b), (b, a)] {
-                if places_overlap((written.0, &written.1), (root, path)) {
+        let mut reached: Vec<(u32, Vec<u32>)> = vec![(root, path.to_vec())];
+        let mut stale: Vec<u32> = Vec::new();
+        let mut next = 0;
+        while let Some((at_root, at_path)) = reached.get(next).cloned() {
+            next += 1;
+            for [a, b] in &self.frame.handle_twins {
+                for (written, other) in [(a, b), (b, a)] {
+                    if !places_overlap((written.0, &written.1), (at_root, &at_path))
+                        || reached.contains(other)
+                    {
+                        continue;
+                    }
                     if other.0 == root {
                         return None;
                     }
                     stale.push(other.0);
+                    reached.push(other.clone());
                 }
             }
         }
@@ -1430,6 +1446,11 @@ impl Interpreter<'_> {
     fn apply_writes(&mut self, writes: Vec<(u32, Vec<u32>, Value)>) -> Option<()> {
         for (root, path, value) in writes {
             if path.is_empty() {
+                // The callee may have written the array in place, which every
+                // twin of the local shares.
+                for index in self.stale_twins(root, &[])? {
+                    self.bind_local(index, Lattice::Unevaluated);
+                }
                 self.bind_ctfe_local(root, Lattice::Const(value));
             } else {
                 self.frame.replace_place(root, &path);
