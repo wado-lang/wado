@@ -2618,11 +2618,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -2809,9 +2805,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$sroa[ret
     } else {
         $fused_$inline_settled_copy_at_sroa_return__0: block -> i32 {
             $mv$self$packed = 0;
-            b321: block {
-                l322: loop {
-                    break_if b321 $mv$self$packed >= global:core:prelude/types.wado::SETTLED_COPIES.used;
+            b320: block {
+                l321: loop {
+                    break_if b320 $mv$self$packed >= global:core:prelude/types.wado::SETTLED_COPIES.used;
                     if self_23 = global:core:prelude/types.wado::SETTLED_COPIES; self_29 = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely(((0 <= $mv$self$packed) & ($mv$self$packed < self_29)) == 0) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv$self$packed, self_29, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:725"), used: 27 });
@@ -2827,7 +2823,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/CopyBuffer::wait_on$sroa[ret
                         break $fused_$inline_settled_copy_at_sroa_return__0: builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_23.repr, $mv$self$packed).packed;
                     }
                     $mv$self$packed = $mv$self$packed + 1;
-                    continue l322;
+                    continue l321;
                 };
             };
             return 0, struct.new "core:prelude/types.wado//ResourceId" { handle: $mv$self$handle }, ref.null none;
@@ -2997,9 +2993,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     $slots_1_4 = $mv$self$members.repr;
     $end_2_5 = $mv$self$members.used;
     $index_3_6 = 0;
-    b360: block {
-        l361: loop {
-            break_if b360 (builtin::i64_extend_i32_s($index_3_6) + 3_i64) >= builtin::i64_extend_i32_s($end_2_5);
+    b359: block {
+        l360: loop {
+            break_if b359 (builtin::i64_extend_i32_s($index_3_6) + 3_i64) >= builtin::i64_extend_i32_s($end_2_5);
             drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
             drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
@@ -3008,23 +3004,23 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
             $index_3_6 = $index_3_6 + 1;
             drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
-            continue l361;
+            continue l360;
         };
     };
-    b362: block {
-        l363: loop {
-            break_if b362 $index_3_6 >= $end_2_5;
+    b361: block {
+        l362: loop {
+            break_if b361 $index_3_6 >= $end_2_5;
             drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
-            continue l363;
+            continue l362;
         };
     };
     $slots_1_9 = $mv$self$ready.repr;
     $end_2_5 = $mv$self$ready.used;
     $index_3_6 = 0;
-    b364: block {
-        l365: loop {
-            break_if b364 (builtin::i64_extend_i32_s($index_3_6) + 3_i64) >= builtin::i64_extend_i32_s($end_2_5);
+    b363: block {
+        l364: loop {
+            break_if b363 (builtin::i64_extend_i32_s($index_3_6) + 3_i64) >= builtin::i64_extend_i32_s($end_2_5);
             drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
             drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
@@ -3033,15 +3029,15 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
             $index_3_6 = $index_3_6 + 1;
             drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
-            continue l365;
+            continue l364;
         };
     };
-    b366: block {
-        l367: loop {
-            break_if b366 $index_3_6 >= $end_2_5;
+    b365: block {
+        l366: loop {
+            break_if b365 $index_3_6 >= $end_2_5;
             drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $index_3_6));
             $index_3_6 = $index_3_6 + 1;
-            continue l367;
+            continue l366;
         };
     };
     "wasi/waitable-set-drop"($mv$self$raw.value);
@@ -3179,12 +3175,12 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b395: block {
-        l396: loop {
-            break_if b395 i >= n;
+    b394: block {
+        l395: loop {
+            break_if b394 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l396;
+            continue l395;
         };
     };
 }

@@ -2,9 +2,11 @@
 
 use { Node } from "./ast.wado";
 use { Hole, PatternError, Syntax, parse } from "./parse.wado";
-use { Cache, Goal, search } from "./pike.wado";
+use { backtrack, fits } from "./backtrack.wado";
+use { Dfa, runs } from "./dfa.wado";
+use { Cache, Goal, Within, search } from "./pike.wado";
 use { print } from "./print.wado";
-use { Program, compile } from "./program.wado";
+use { Direction, Program, compile } from "./program.wado";
 
 /// A compiled regular expression.
 pub struct Regex {
@@ -13,6 +15,53 @@ pub struct Regex {
     names: List<Option<String>>,
     /// What a template splices where this stands in a hole.
     internal tree: Node,
+    /// Shared by every copy of the expression: what a search learns speeds up
+    /// the next one, whichever copy runs it.
+    lazy: &mut Lazy,
+}
+
+/// The DFAs of one expression, each built by the first search that needs it.
+struct Lazy {
+    forward: Option<Dfa>,
+    reverse: Option<Dfa>,
+    /// Whether the Pike VM answers alone: the program holds an assertion the
+    /// DFA does not resolve, or a DFA gave up.
+    off: bool,
+}
+
+impl Lazy {
+    /// Leaves every later search to the Pike VM, and the tables to the
+    /// collector.
+    fn retire(&mut self) {
+        self.off = true;
+        self.forward = null;
+        self.reverse = null;
+    }
+}
+
+// What a search caches is no part of the expression: two that compile alike
+// stay equal, hash alike and print alike whichever has searched.
+impl Eq for Lazy {
+    fn eq(&self, _other: &Lazy) -> bool {
+        return true;
+    }
+}
+
+impl Ord for Lazy {
+    fn cmp(&self, _other: &Lazy) -> Ordering {
+        return Ordering::Equal;
+    }
+}
+
+impl Hash for Lazy {
+    fn hash<H: Hasher>(&self, _h: &mut H) {
+    }
+}
+
+impl Inspect for Lazy {
+    fn inspect(&self, f: &mut Formatter) {
+        f.write_str("Lazy");
+    }
 }
 
 /// The pattern in `re`'s syntax, which `Regex::new` reads back to the same
@@ -52,27 +101,105 @@ internal fn build(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> 
         names.push(null);
     }
     collect_names(&tree, &mut names);
-    return Ok(Regex { program: compile(&tree, groups)?, names, tree });
+    let program = compile(&tree, groups, Direction::Forward)?;
+    let mut lazy = Lazy { forward: null, reverse: null, off: !runs(&program) };
+    return Ok(Regex { program, names, tree, lazy: &mut lazy });
+}
+
+fn has_name(names: &List<Option<String>>) -> bool {
+    for let n of names {
+        if *n matches { Some(_) } {
+            return true;
+        }
+    }
+    return false;
 }
 
 impl Regex {
-    fn has_names(&self) -> bool {
-        for let n of &self.names {
-            if *n matches { Some(_) } {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /// The regular expression `pattern` spells, or why it spells none.
     pub fn new<S: AsStrSlice>(pattern: S) -> Result<Regex, PatternError> {
         return build(pattern.as_str_slice(), Syntax::Plain);
     }
 
+    /// Whether the DFAs can search `text`. An empty text is both of its ends
+    /// at once, which a DFA's states do not tell apart.
+    fn scans(&self, text: StrSlice) -> bool {
+        return !self.lazy.off && !text.is_empty();
+    }
+
+    /// Where the forward DFA's scan from `start` ends. Once it gave up, the
+    /// answer means nothing and `self.lazy.off` is set.
+    fn end_by_dfa(&self, text: StrSlice, start: i32, earliest: bool) -> Option<i32> {
+        let lazy = self.lazy;
+        if lazy.forward matches { None } {
+            lazy.forward = Some(Dfa::new(self.program, Direction::Forward));
+        }
+        let Some(dfa) = &mut lazy.forward else {
+            unreachable();
+        };
+        let end = dfa.scan_forward(text, start, earliest);
+        if dfa.gave_up {
+            lazy.retire();
+        }
+        return end;
+    }
+
+    /// Where the match ending at `end` and starting leftmost, at or after
+    /// `floor`, starts, by the reverse DFA and under `end_by_dfa`'s terms.
+    fn start_by_dfa(&self, text: StrSlice, floor: i32, end: i32) -> i32 {
+        let lazy = self.lazy;
+        if lazy.reverse matches { None } {
+            // The forward program compiled, and this one is no larger.
+            let program = compile(&self.tree, self.names.len() - 1, Direction::Reverse).unwrap();
+            lazy.reverse = Some(Dfa::new(program, Direction::Reverse));
+        }
+        let Some(dfa) = &mut lazy.reverse else {
+            unreachable();
+        };
+        let start = dfa.scan_reverse(text, floor, end);
+        if dfa.gave_up {
+            lazy.retire();
+        }
+        return start;
+    }
+
+    /// The slots of the leftmost-first match at or after `start`: every
+    /// group's under `groups`, and otherwise at least the whole match's.
+    fn slots_at(&self, cache: &mut Cache, text: StrSlice, start: i32, groups: bool) -> Option<List<i32>> {
+        if self.scans(text) {
+            let end = self.end_by_dfa(text, start, false);
+            if !self.lazy.off {
+                let Some(end) = end else {
+                    return null;
+                };
+                let from = match self.program.match_len {
+                    Some(len) => end - len,
+                    None => self.start_by_dfa(text, start, end),
+                };
+                if !self.lazy.off {
+                    if !groups || self.program.captures == 2 {
+                        return Some([from, end]);
+                    }
+                    if fits(&self.program, from, end) {
+                        return Some(backtrack(&self.program, cache, text, from, end));
+                    }
+                    return search(&self.program, cache, text, from, Within::Span(end), Goal::Groups);
+                }
+            }
+        }
+        return search(&self.program, cache, text, start, Within::Text, Goal::Groups);
+    }
+
     /// Whether `text` holds a match.
     pub fn is_match<S: AsStrSlice>(&self, text: S) -> bool {
-        return search(&self.program, &mut Cache::new(&self.program), text.as_str_slice(), 0, Goal::Any) matches { Some(_) };
+        let view = text.as_str_slice();
+        if self.scans(view) {
+            let end = self.end_by_dfa(view, 0, true);
+            if !self.lazy.off {
+                return end matches { Some(_) };
+            }
+        }
+        return search(&self.program, &mut Cache::new(), view, 0, Within::Text, Goal::Any) matches { Some(_) };
     }
 
     /// The leftmost match in `text`.
@@ -85,10 +212,11 @@ impl Regex {
     pub fn find_at<S: AsStrSlice>(&self, text: S, start: i32) -> Option<Match>
         contract text.as_str_slice().is_char_boundary(start), "start must lie on a character boundary"
     {
-        let Some(caps) = self.captures_at(text, start) else {
+        let view = text.as_str_slice();
+        let Some(slots) = self.slots_at(&mut Cache::new(), view, start, false) else {
             return null;
         };
-        return caps.get(0);
+        return Some(Match { text: view, start: slots[0], end: slots[1] });
     }
 
     /// The groups of the leftmost match in `text`.
@@ -101,10 +229,21 @@ impl Regex {
         contract text.as_str_slice().is_char_boundary(start), "start must lie on a character boundary"
     {
         let view = text.as_str_slice();
-        let Some(slots) = search(&self.program, &mut Cache::new(&self.program), view, start, Goal::Groups) else {
+        let Some(slots) = self.slots_at(&mut Cache::new(), view, start, true) else {
             return null;
         };
-        return Some(Captures { text: view, slots, regex: self });
+        return Some(Captures { text: view, slots, names: &self.names });
+    }
+
+    fn each_match(&self, text: StrSlice, groups: bool) -> Matches {
+        return Matches {
+            regex: self,
+            text,
+            next: 0,
+            last_end: -1,
+            cache: Cache::new(),
+            groups,
+        };
     }
 
     /// Each match in `text`, left to right. After an empty match the search
@@ -112,19 +251,13 @@ impl Regex {
     /// ended is skipped: `a*` finds `""`, `"aaa"` and `""` in `"baaac"`, not a
     /// second `""` before the `c`.
     pub fn find_iter<S: AsStrSlice>(&self, text: S) -> Matches {
-        return Matches {
-            regex: self,
-            text: text.as_str_slice(),
-            next: 0,
-            last_end: -1,
-            cache: Cache::new(&self.program),
-        };
+        return self.each_match(text.as_str_slice(), false);
     }
 
     /// The groups of each match in `text`, left to right, resuming as
     /// `find_iter` does.
     pub fn captures_iter<S: AsStrSlice>(&self, text: S) -> CaptureMatches {
-        return CaptureMatches { matches: self.find_iter(text) };
+        return CaptureMatches { matches: self.each_match(text.as_str_slice(), true) };
     }
 
     /// `text` with its leftmost match replaced by what `replacer` writes.
@@ -260,7 +393,7 @@ fn substitute(template: StrSlice, caps: &Captures, out: &mut String) {
                 out.push('$');
                 i += 1;
             }
-        } else if next == b'<' && caps.regex.has_names() && let Some(gt) = template.slice(i, template.len()).find(">") {
+        } else if next == b'<' && has_name(caps.names) && let Some(gt) = template.slice(i, template.len()).find(">") {
             let name = template.slice(i + 2, i + gt);
             if let Some(m) = caps.name(name) {
                 out.push_str(m.as_str());
@@ -301,7 +434,9 @@ impl Match {
 pub struct Captures {
     text: StrSlice,
     slots: List<i32>,
-    regex: &Regex,
+    /// The expression's group names. Not the expression: it reaches the DFAs
+    /// its searches write, which no contract clause may reach.
+    names: &List<Option<String>>,
 }
 
 impl Captures {
@@ -324,7 +459,7 @@ impl Captures {
     /// The group named `name`, if it took part in the match.
     pub fn name<S: AsStrSlice>(&self, name: S) -> Option<Match> {
         for let i of 1..<self.len() {
-            if let Some(n) = self.regex.names[i] && n == name.as_str_slice() {
+            if let Some(n) = self.names[i] && n == name.as_str_slice() {
                 return self.get(i);
             }
         }
@@ -357,6 +492,8 @@ pub struct Matches {
     /// Where the match found last ended; -1 before the first.
     last_end: i32,
     cache: Cache,
+    /// Whether each match's slots hold every group's.
+    groups: bool,
 }
 
 impl Matches {
@@ -365,7 +502,7 @@ impl Matches {
             if self.next > self.text.len() {
                 return null;
             }
-            let Some(slots) = search(&self.regex.program, &mut self.cache, self.text, self.next, Goal::Groups) else {
+            let Some(slots) = self.regex.slots_at(&mut self.cache, self.text, self.next, self.groups) else {
                 self.next = self.text.len() + 1;
                 return null;
             };
@@ -403,7 +540,7 @@ impl Iterator for CaptureMatches {
         let Some(slots) = self.matches.next_slots() else {
             return null;
         };
-        return Some(Captures { text: self.matches.text, slots, regex: self.matches.regex });
+        return Some(Captures { text: self.matches.text, slots, names: &self.matches.regex.names });
     }
 }
 
@@ -440,4 +577,53 @@ impl Iterator for Split {
         self.done = true;
         return Some(text.slice(self.piece, text.len()));
     }
+}
+
+test "a DFA with too many states hands over to the Pike VM, and is released" {
+    // `a` and `b` in an order no short pattern predicts.
+    let mut bytes: List<u8> = [];
+    let mut x: u32 = 0x9E3779B9;
+    for let _i of 0..<30000 {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        bytes.push(if x & 1 == 0 { b'a' } else { b'b' });
+    }
+    let text = String::try_from_utf8(bytes as ByteList).unwrap();
+
+    let forward = Regex::new(#"[ab]*a[ab]{13}"#).unwrap();
+    let mut last = bytes.len() - 14;
+    while bytes[last] != b'a' {
+        last -= 1;
+    }
+    let m = forward.find(&text).unwrap();
+    assert m.start() == 0 && m.end() == last + 14;
+    assert forward.lazy.off;
+    assert forward.lazy.forward matches { None };
+
+    let reverse = Regex::new(#"[ab]{13}a[ab]*"#).unwrap();
+    let mut first = 13;
+    while bytes[first] != b'a' {
+        first += 1;
+    }
+    let tail = reverse.find(&text).unwrap();
+    assert tail.start() == first - 13 && tail.end() == bytes.len();
+    assert reverse.lazy.off;
+    assert reverse.lazy.reverse matches { None };
+}
+
+test "a DFA whose states are large gives up before its tables are" {
+    let text = "a".repeat(1300);
+    let r = Regex::new(#"a[ab]{1200}b"#).unwrap();
+    assert !r.is_match(&text);
+    assert r.lazy.off;
+}
+
+test "what a search caches is no part of the expression" {
+    let a = Regex::new(#"a+b"#).unwrap();
+    let b = Regex::new(#"a+b"#).unwrap();
+    let inspected = `${a:?}`;
+    assert a.is_match("xaab");
+    assert a == b;
+    assert `${a:?}` == inspected;
 }

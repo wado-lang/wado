@@ -1252,11 +1252,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -1331,12 +1327,12 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<builtin_v128_
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b187: block {
-        l188: loop {
-            break_if b187 i >= n;
+    b186: block {
+        l187: loop {
+            break_if b186 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l188;
+            continue l187;
         };
     };
 }
@@ -1373,78 +1369,78 @@ fn "core:prelude/primitive.wado/v128^core:prelude/traits.wado/Inspect::inspect$s
     let s_11: ref "core:prelude/string.wado//String";
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/primitive.wado::$const_obj_2);
     i = 0;
-    b191: block {
-        l192: loop {
-            break_if b191 i >= 16;
-            s_11 = "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/primitive.wado/$tmpl$8340625b1dfb65d8,[u8]>"(struct.new "core:prelude/primitive.wado//$tmpl$8340625b1dfb65d8" { h0: b193: block -> i32 {
-                b194: block {
-                    b195: block {
-                        b196: block {
-                            b197: block {
-                                b198: block {
-                                    b199: block {
-                                        b200: block {
-                                            b201: block {
-                                                b202: block {
-                                                    b203: block {
-                                                        b204: block {
-                                                            b205: block {
-                                                                b206: block {
-                                                                    b207: block {
-                                                                        b208: block {
-                                                                            b209: block {
+    b190: block {
+        l191: loop {
+            break_if b190 i >= 16;
+            s_11 = "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/primitive.wado/$tmpl$8340625b1dfb65d8,[u8]>"(struct.new "core:prelude/primitive.wado//$tmpl$8340625b1dfb65d8" { h0: b192: block -> i32 {
+                b193: block {
+                    b194: block {
+                        b195: block {
+                            b196: block {
+                                b197: block {
+                                    b198: block {
+                                        b199: block {
+                                            b200: block {
+                                                b201: block {
+                                                    b202: block {
+                                                        b203: block {
+                                                            b204: block {
+                                                                b205: block {
+                                                                    b206: block {
+                                                                        b207: block {
+                                                                            b208: block {
                                                                                 br_table i [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                             };
                                                                             i8x16.extract_lane_u(15, self);
-                                                                            break b193;
+                                                                            break b192;
                                                                         };
                                                                         i8x16.extract_lane_u(0, self);
-                                                                        break b193;
+                                                                        break b192;
                                                                     };
                                                                     i8x16.extract_lane_u(1, self);
-                                                                    break b193;
+                                                                    break b192;
                                                                 };
                                                                 i8x16.extract_lane_u(2, self);
-                                                                break b193;
+                                                                break b192;
                                                             };
                                                             i8x16.extract_lane_u(3, self);
-                                                            break b193;
+                                                            break b192;
                                                         };
                                                         i8x16.extract_lane_u(4, self);
-                                                        break b193;
+                                                        break b192;
                                                     };
                                                     i8x16.extract_lane_u(5, self);
-                                                    break b193;
+                                                    break b192;
                                                 };
                                                 i8x16.extract_lane_u(6, self);
-                                                break b193;
+                                                break b192;
                                             };
                                             i8x16.extract_lane_u(7, self);
-                                            break b193;
+                                            break b192;
                                         };
                                         i8x16.extract_lane_u(8, self);
-                                        break b193;
+                                        break b192;
                                     };
                                     i8x16.extract_lane_u(9, self);
-                                    break b193;
+                                    break b192;
                                 };
                                 i8x16.extract_lane_u(10, self);
-                                break b193;
+                                break b192;
                             };
                             i8x16.extract_lane_u(11, self);
-                            break b193;
+                            break b192;
                         };
                         i8x16.extract_lane_u(12, self);
-                        break b193;
+                        break b192;
                     };
                     i8x16.extract_lane_u(13, self);
-                    break b193;
+                    break b192;
                 };
                 i8x16.extract_lane_u(14, self);
             } & 255, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f, s_11);
             i = i + 1;
-            continue l192;
+            continue l191;
         };
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f, 41);

@@ -2764,11 +2764,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -2987,12 +2983,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>^core:prelud
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b357: block {
-        l358: loop {
-            break_if b357 i >= n;
+    b356: block {
+        l357: loop {
+            break_if b356 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l358;
+            continue l357;
         };
     };
 }
@@ -3125,34 +3121,43 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$
     let i: i32;
     let b0: u8;
     i = 0;
-    b367: block {
-        l368: loop {
-            break_if b367 i >= $mv$bytes$end;
+    b366: block {
+        l367: loop {
+            break_if b366 i >= $mv$bytes$end;
             if local.tee b0(builtin::array_get_value<u8>($mv$bytes$repr, i)) <u 128 {
                 i = i + 1;
-                b370: block {
-                    l371: loop {
-                        break_if b370 (if (i + 4) <= $mv$bytes$end -> i32 {
-                            ((((((builtin::array_get_value<u8>($mv$bytes$repr, i) | builtin::array_get_value<u8>($mv$bytes$repr, i + 1)) & 255) | builtin::array_get_value<u8>($mv$bytes$repr, i + 2)) & 255) | builtin::array_get_value<u8>($mv$bytes$repr, i + 3)) & 255) <u 128;
+                b369: block {
+                    l370: loop {
+                        break_if b369 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$bytes$end);
+                        break_if b369 (builtin::i64_extend_i32_s(i) + 3_i64) >=u builtin::i64_extend_i32_u(builtin::array_len($mv$bytes$repr));
+                        break_if b369 (((builtin::array_get_value<u8>($mv$bytes$repr, i) >=u 128) | (builtin::array_get_value<u8>($mv$bytes$repr, i + 1) >=u 128)) | (builtin::array_get_value<u8>($mv$bytes$repr, i + 2) >=u 128)) | (builtin::array_get_value<u8>($mv$bytes$repr, i + 3) >=u 128);
+                        i = i + 4;
+                        continue l370;
+                    };
+                };
+                b371: block {
+                    l372: loop {
+                        break_if b371 (if i < $mv$bytes$end -> i32 {
+                            builtin::array_get_value<u8>($mv$bytes$repr, i) <u 128;
                         } else {
                             0;
                         }) == 0;
-                        i = i + 4;
-                        continue l371;
+                        i = i + 1;
+                        continue l372;
                     };
                 };
-                continue l368;
+                continue l367;
             }
             if (((b0 >=u 225) & (b0 <u 240)) & (b0 != 237)) & ((i + 2) < $mv$bytes$end) {
                 if (((builtin::array_get_value<u8>($mv$bytes$repr, i + 1) ^ 128) & 255) | ((builtin::array_get_value<u8>($mv$bytes$repr, i + 2) ^ 128) & 255)) <u 64 {
                     i = i + 3;
-                    continue l368;
+                    continue l367;
                 }
             }
             if ((b0 >=u 194) & (b0 <u 224)) & ((i + 1) < $mv$bytes$end) {
                 if ((builtin::array_get_value<u8>($mv$bytes$repr, i + 1) ^ 128) & 255) <u 64 {
                     i = i + 2;
-                    continue l368;
+                    continue l367;
                 }
             }
             if @unlikely(local.tee b0("core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len$spec0$sroa[bytes.repr]"($mv$bytes$repr, i, $mv$bytes$end)) <= 0) {
@@ -3160,7 +3165,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$
                 return select i32(b0 < 0, i, -1 - i);
             }
             i = i + b0;
-            continue l368;
+            continue l367;
         };
     };
     return $mv$bytes$end;

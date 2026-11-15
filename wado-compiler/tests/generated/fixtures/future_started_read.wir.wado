@@ -2266,11 +2266,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -2565,9 +2561,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
     self.used = local.tee index($av_25 - 1);
     $arg_13 = index + 1;
     $av_25 = index;
-    b312: block {
-        l313: loop {
-            break_if b312 $av_25 >= $arg_13;
+    b311: block {
+        l312: loop {
+            break_if b311 $av_25 >= $arg_13;
             if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>">($load_0, $av_25))) == 0 {
                 if ref.is_null(local.tee $load_3($slot_20.member)) == 0 {
                     "core:prelude/types.wado/core:prelude/types.wado/FutureReadCopy<f64>^core:prelude/traits.wado/Drop::drop"($load_3);
@@ -2575,7 +2571,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
                 $slot_20.member = ref.null none;
             }
             $av_25 = $av_25 + 1;
-            continue l313;
+            continue l312;
         };
     };
     builtin::array_set<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>">($load_0, index, ref.null none);
@@ -2656,14 +2652,14 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/F
     self.used = local.tee index($av_25 - 1);
     $arg_13 = index + 1;
     $av_25 = index;
-    b323: block {
-        l324: loop {
-            break_if b323 $av_25 >= $arg_13;
+    b322: block {
+        l323: loop {
+            break_if b322 $av_25 >= $arg_13;
             if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude/types.wado//FutureReadCopy<f64>">($load_0, $av_25))) == 0 {
                 "core:prelude/types.wado/core:prelude/types.wado/FutureReadCopy<f64>^core:prelude/traits.wado/Drop::drop"($slot_20);
             }
             $av_25 = $av_25 + 1;
-            continue l324;
+            continue l323;
         };
     };
     builtin::array_set<ref null "core:prelude/types.wado//FutureReadCopy<f64>">($load_0, index, ref.null none);
@@ -2679,12 +2675,12 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b326: block {
-        l327: loop {
-            break_if b326 i >= n;
+    b325: block {
+        l326: loop {
+            break_if b325 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l327;
+            continue l326;
         };
     };
 }
@@ -3028,9 +3024,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     let $sroa_$iter_0_index_22: i32;
     at = 0;
     $sroa_$iter_0_index_22 = 0;
-    b377: block {
-        l378: loop {
-            break_if b377 $sroa_$iter_0_index_22 >= $mv$self$used;
+    b376: block {
+        l377: loop {
+            break_if b376 $sroa_$iter_0_index_22 >= $mv$self$used;
             ref_val = builtin::array_get_value<ref null "core:prelude/types.wado//FutureReadCopy<f64>">($mv$self$repr, $sroa_$iter_0_index_22);
             $sroa_$iter_0_index_22 = $sroa_$iter_0_index_22 + 1;
             let $match_scrut_0: ref null "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>";
@@ -3053,7 +3049,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
                 return at;
             }
             at = at + 1;
-            continue l378;
+            continue l377;
         };
     };
     cold_path;

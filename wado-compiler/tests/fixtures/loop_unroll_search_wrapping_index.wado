@@ -1,0 +1,26 @@
+// A search whose stride is so long that the copy's later indices wrap past
+// `i32` is left as written: the loop stops on its first read, and reads none
+// of the elements a copy would have tested ahead of it.
+use { println, Stdout } from "core:cli";
+
+fn first_of_strided(x: &Array<u8>, base: i32, start: i32, n: i32, needle: u8) -> i32 {
+    let mut i = start;
+    while i < n && x[base + i] != needle {
+        i += 1431655764;
+    }
+    return i;
+}
+
+export fn run() with Stdout {
+    let mut x = Array::<u8>::filled(builtin::black_box(11), 0);
+    x[4] = 7;
+    // `base + start` wraps to 4.
+    let base = builtin::black_box(i32::MIN + 4);
+    let start = builtin::black_box(i32::MIN);
+    println(`${first_of_strided(&x, base, start, i32::MAX, 7)}`);
+}
+
+__DATA__
+{
+    "stdout": "-2147483648\n"
+}

@@ -695,7 +695,7 @@ fn utf8_err(bytes: ByteList) -> Utf8Error {
     return String::try_from_utf8(bytes).unwrap_err();
 }
 
-test "String::try_from_utf8 finds a bad byte in every lane of an ASCII run" {
+test "String::try_from_utf8 finds a bad byte at every offset of an unrolled ASCII run" {
     // The scan reads an ASCII run four bytes per test, so place the bad byte
     // and the cut-short sequence at each offset a block can hold them, and end
     // runs on every length a block leaves over.
@@ -1025,6 +1025,26 @@ test "find" {
     assert "hello world".find("hello") matches { Some(idx) && idx == 0 };
     assert "hello world".find("xyz") matches { None };
     assert "abcabc".find("bc") matches { Some(idx) && idx == 1 };
+}
+
+test "find reaches a needle at every offset of an unrolled run, and in a view" {
+    // The scan reads four bytes per test, so place the needle at each offset
+    // a block can hold it, in texts of every length a block leaves over, and
+    // search a view whose start is not the string's.
+    for let len of 0..<12 {
+        for let at of 0..=len {
+            let text = `${"-".repeat(at)}ab${"-".repeat(len - at)}`;
+            assert text.find("ab") matches { Some(i) && i == at };
+            assert text.find("b") matches { Some(i) && i == at + 1 };
+            assert text.find("ax") matches { None };
+            let padded = `ab${text}`;
+            let view = padded.as_str_slice().slice(2, padded.len());
+            assert view.find("ab") matches { Some(i) && i == at };
+        }
+    }
+    assert "aaab".find("aab") matches { Some(i) && i == 1 };
+    assert "ab".find("abc") matches { None };
+    assert "".find("a") matches { None };
 }
 
 test "rfind" {

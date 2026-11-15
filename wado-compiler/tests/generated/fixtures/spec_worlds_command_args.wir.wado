@@ -1147,11 +1147,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -1228,11 +1224,11 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slic
     $licm_end_12 = local.tee $load_0(self.inner).end;
     $licm_repr_13 = $load_0.repr;
     $hfs_index_14 = $load_0.index;
-    b121: block {
-        l122: loop {
+    b120: block {
+        l121: loop {
             if local.tee $av_15(self.remaining) <= 0 {
                 $load_0.index = $hfs_index_14;
-                break b121;
+                break b120;
             }
             if $hfs_index_14 >= $licm_end_12 {
                 $load_0.index = $hfs_index_14;
@@ -1246,7 +1242,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slic
             builtin::array_copy<u8>(builtin::array_new<u8>($array_clone_len_3), 0, $array_clone_src_1, 0, $array_clone_len_3);
             $hfs_index_14 = $hfs_index_14 + 1;
             self.remaining = $av_15 - 1;
-            continue l122;
+            continue l121;
         };
     };
     return $inline_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String__core_prelude_traits_wado_Iterator__next_2: block -> ref null "core:prelude/string.wado//String" {
@@ -1295,12 +1291,12 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b127: block {
-        l128: loop {
-            break_if b127 i >= n;
+    b126: block {
+        l127: loop {
+            break_if b126 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l128;
+            continue l127;
         };
     };
 }

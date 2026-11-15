@@ -397,7 +397,9 @@ which CI holds every pull request to.
 ### A/B-ing a compiler change
 
 Build the head arm first: every command below compares against
-`target/release/wado`, and a stale one compares main with itself.
+`target/release/wado`, and a stale one compares main with itself. Both arms are
+release binaries named by `WADO_BIN`: the baseline is one, and without `WADO_BIN`
+the harness runs the dev build, whose host differs from it.
 
 ```sh
 cargo build --release --bin wado
@@ -423,7 +425,7 @@ cp "$(mise run benchmark-baseline)" scratchpad/wado-main   # slow the first time
 ```sh
 # alternate, so neither arm always goes second
 WADO_BIN="$PWD/scratchpad/wado-main" mise run benchmark-all > scratchpad/b1.log 2>&1
-mise run benchmark-all > scratchpad/h1.log 2>&1  # …and so on, 3 each
+WADO_BIN="$PWD/target/release/wado" mise run benchmark-all > scratchpad/h1.log 2>&1  # …and so on, 3 each
 mise exec -- node benchmark/ab.ts --base scratchpad/b{1,2,3}.log --head scratchpad/h{1,2,3}.log
 ```
 
@@ -522,11 +524,9 @@ done
 
 A change to `lib/core/*.wado` needs two compilers as well, which the source tree
 hides: a release build embeds the stdlib where a dev build reads it from disk.
-`benchmark/wado.sh` falls back to `cargo run --release` whenever `WADO_BIN` is
-unset, so swapping an arm's `.wado` files into the tree invalidates
-`wado-compiler` and rebuilds it under `lto=thin` / `codegen-units=1`. That is
-two full rebuilds per alternating round, and they are the wall clock rather than
-the benchmark.
+`benchmark/wado.sh` falls back to the dev build whenever `WADO_BIN` is unset, so
+an arm is a release binary, which carries its own stdlib wherever the tree
+stands.
 
 Build one binary per arm first, from the same compiler source with `lib/` at the
 branch's fork point and at `HEAD`, so `lib/` is all that differs. `git restore`

@@ -662,11 +662,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -717,12 +713,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b71: block {
-        l72: loop {
-            break_if b71 i >= n;
+    b70: block {
+        l71: loop {
+            break_if b70 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l72;
+            continue l71;
         };
     };
 }
@@ -747,11 +743,11 @@ fn "opt_field_scalarize_return_local.wado/opt_field_scalarize_return_local.wado/
     let $hfs_pos_3: i32;
     hit = -1;
     $hfs_pos_3 = self.pos;
-    b74: block {
-        l75: loop {
+    b73: block {
+        l74: loop {
             if $hfs_pos_3 >= 6 {
                 self.pos = $hfs_pos_3;
-                break b74;
+                break b73;
             }
             if $hfs_pos_3 == k {
                 hit = $hfs_pos_3;
@@ -761,7 +757,7 @@ fn "opt_field_scalarize_return_local.wado/opt_field_scalarize_return_local.wado/
             }
             $hfs_pos_3 = $hfs_pos_3 + 1;
             self.seen = self.seen + 1;
-            continue l75;
+            continue l74;
         };
     };
     return hit;
@@ -772,11 +768,11 @@ fn "opt_field_scalarize_return_local.wado/opt_field_scalarize_return_local.wado/
     let $hfs_pos_3: i32;
     hit = -1;
     $hfs_pos_3 = self.pos;
-    b78: block {
-        l79: loop {
+    b77: block {
+        l78: loop {
             if $hfs_pos_3 >= 4 {
                 self.pos = $hfs_pos_3;
-                break b78;
+                break b77;
             }
             if $hfs_pos_3 == k {
                 hit = $hfs_pos_3;
@@ -786,7 +782,7 @@ fn "opt_field_scalarize_return_local.wado/opt_field_scalarize_return_local.wado/
             }
             $hfs_pos_3 = $hfs_pos_3 + 1;
             self.seen = self.seen + 1;
-            continue l79;
+            continue l78;
         };
     };
     return hit;

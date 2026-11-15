@@ -2065,11 +2065,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let sign_len: i32;
     let prefix_len: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
-    sign_len = select i32((if is_negative -> i32 {
-        1;
-    } else {
-        self.sign_plus;
-    }), 1, 0);
+    sign_len = select i32(select i32(is_negative, 1, self.sign_plus), 1, 0);
     prefix_len = select i32(self.alternate, prefix.end - prefix.start, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_6(self.width) <= 0) | (sign_len >= $load_6) {
@@ -2225,12 +2221,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b298: block {
-        l299: loop {
-            break_if b298 i >= n;
+    b297: block {
+        l298: loop {
+            break_if b297 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l299;
+            continue l298;
         };
     };
 }
@@ -2373,34 +2369,59 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>$sroa[return]$spec0$spec0"($mv$self$repr, $mv$self$end, $mv$pat$repr, $mv$pat$used) {
-    let i: i32;
+    let first: u8;
+    let at: i32;
+    let pos: i32;
     let j: i32;
+    first = builtin::array_get_value<u8>($mv$pat$repr, 0);
     $mv$self$end = $mv$self$end - 1;
-    i = 0;
-    b309: block {
-        l310: loop {
-            break_if b309 i > $mv$self$end;
-            if $inline_bytes_match_at_5: block -> bool {
+    at = 0;
+    block {
+        l309: loop {
+            b310: block {
+                l311: loop {
+                    break_if b310 (builtin::i64_extend_i32_s(at) + 3_i64) > builtin::i64_extend_i32_s($mv$self$end);
+                    break_if b310 (builtin::i64_extend_i32_s(at) + 3_i64) >=u builtin::i64_extend_i32_u(builtin::array_len($mv$self$repr));
+                    break_if b310 (((builtin::array_get_value<u8>($mv$self$repr, at) == first) | (builtin::array_get_value<u8>($mv$self$repr, at + 1) == first)) | (builtin::array_get_value<u8>($mv$self$repr, at + 2) == first)) | (builtin::array_get_value<u8>($mv$self$repr, at + 3) == first);
+                    at = at + 4;
+                    continue l311;
+                };
+            };
+            b312: block {
+                l313: loop {
+                    break_if b312 (if at <= $mv$self$end -> i32 {
+                        builtin::array_get_value<u8>($mv$self$repr, at) != first;
+                    } else {
+                        0;
+                    }) == 0;
+                    at = at + 1;
+                    continue l313;
+                };
+            };
+            if at > $mv$self$end {
+                return 0, 0;
+            }
+            if $inline_bytes_match_at_6: block -> bool {
+                pos = at + 1;
                 j = 0;
-                b312: block {
-                    l313: loop {
-                        break_if b312 j >= 1;
-                        if builtin::array_get_value<u8>($mv$self$repr, i + j) != builtin::array_get_value<u8>($mv$pat$repr, j) {
-                            break $inline_bytes_match_at_5: 0;
+                b317: block {
+                    l318: loop {
+                        break_if b317 j >= 0;
+                        if builtin::array_get_value<u8>($mv$self$repr, pos + j) != builtin::array_get_value<u8>($mv$pat$repr, 1 + j) {
+                            break $inline_bytes_match_at_6: 0;
                         }
                         j = j + 1;
-                        continue l313;
+                        continue l318;
                     };
                 };
-                break $inline_bytes_match_at_5: 1;
+                break $inline_bytes_match_at_6: 1;
             } {
-                return 1, i;
+                return 1, at;
             }
-            i = i + 1;
-            continue l310;
+            at = at + 1;
+            continue l309;
         };
     };
-    return 0, 0;
 }
 
 export fn "opt_multi_value_option_null_field.wado/$cm_export__run" as "run"
