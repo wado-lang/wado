@@ -5276,7 +5276,7 @@ mod tests {
     }
 
     /// An extern handle is a value, so a `&Handle` argument crosses as the handle,
-    /// which the boundary sees as its `f64`.
+    /// which resolves to what it is in linear memory: the `u32` index of a slot.
     #[test]
     fn an_extern_handle_argument_is_peeled_outside_a_resource_method() {
         let registry = registry_from(
@@ -5304,7 +5304,7 @@ mod tests {
                     Type::Named(n) if n.name == "Handle",
                     "{interface}::{method} keeps a handle behind a reference"
                 );
-                assert_matches!(registry.resolve_type(&ty), Type::Named(n) if n.name == "f64");
+                assert_matches!(registry.resolve_type(&ty), Type::Named(n) if n.name == "u32");
             }
         }
     }
