@@ -363,10 +363,18 @@ listener.
 Whether a closure can reach `wait` is a static property of that closure, so the
 entry stays free to differ per closure without a change to any program.
 
-### A handle is not hashable yet
+### A reference to a handle is a cell
 
-A handle implements no `Hash` and no `Ord`, so it keys no map. A host object has
-no number of its own, and giving it one is the last step of the roadmap.
+An `externref` holds no place to write, so `&Node` and `&mut Node` point at a
+cell holding the handle, as a reference to a scalar or a variant does. A `&mut`
+to a field or an element holding a handle is the replace-on-assign error those
+types give, and a `&mut` argument is stored back after the call where the
+callee replaced the handle. A `&self` method on a handle therefore allocates a
+cell wherever its call is not inlined.
+
+### A handle is not hashable
+
+A handle implements no `Hash` and no `Ord`, so it keys no map.
 
 ## Roadmap
 
@@ -409,7 +417,6 @@ glue cannot be run without them.
 - [x] A collection test in the jsdom run: a dropped handle and a cycle through
   both heaps, a listener's closure in it, are collected, and a handle a global
   holds is not until the global lets go
-- [ ] `Hash` for a handle
 
 ## Known gaps
 
@@ -441,11 +448,9 @@ glue cannot be run without them.
   measured against the range test it replaces.
 - A `match` reads the class once for each type-pattern arm, not once for the
   `match`.
-- A scalar, a variant, a closure and an extern handle back no handle. A backed
-  handle that carried its backing's type beside the class would admit them, at
-  a word for each handle; nothing asked for one yet.
-- A reference to an extern handle is a cell holding it, so a `&self` method on
-  one allocates wherever the call is not inlined. The cost was not measured.
+- A handle has no `Hash`. A host object has no number of its own, and a backed
+  handle's identity is a GC reference, which has none either.
+- A scalar, a variant, a closure and an extern handle back no handle.
 - A `&mut` to a place holding a handle asks `same` of the host before storing
   back, once for each call that takes one.
 - The glue generator writes no shim for a member whose parameters are passed
