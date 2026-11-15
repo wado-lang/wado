@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794723916713,
+  "lastUpdate": 1794733454417,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77629,6 +77629,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/982cc2b8b6763419a2d20404a01092849fca32a8"
         },
         "date": 1794723915652,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7295,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24494,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435516,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cbfdec9ef60331a6a1d44f0d6b27090e84de5f2b",
+          "message": "Merge pull request #2630 from wado-lang/ccr-90954b67-snapshot-memory\n\nperf(compiler): halve a dependency snapshot's memory by sharing the stdlib it seeds from",
+          "timestamp": "2026-11-15T17:46:16+09:00",
+          "tree_id": "b017adf0a31179fb017632c6daa475399c809f82",
+          "url": "https://github.com/wado-lang/wado/commit/cbfdec9ef60331a6a1d44f0d6b27090e84de5f2b"
+        },
+        "date": 1794733453117,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
