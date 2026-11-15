@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794738476643,
+  "lastUpdate": 1794742325507,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77717,6 +77717,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/96aacce3eac5229cedf2293e6c1bd586d23ef511"
         },
         "date": 1794738476261,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7295,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24494,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435516,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7831907c5a73faae70a078d6ed43bc2fe3a7e670",
+          "message": "Merge pull request #2632 from wado-lang/ccr-90954b67-loam-cycle\n\nperf(kiln): halve the test cycle that rebuilds a generator",
+          "timestamp": "2026-11-15T20:18:50+09:00",
+          "tree_id": "504d5b066ee28dda36a6ad3e77ef08a49b94812a",
+          "url": "https://github.com/wado-lang/wado/commit/7831907c5a73faae70a078d6ed43bc2fe3a7e670"
+        },
+        "date": 1794742324673,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
