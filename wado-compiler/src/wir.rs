@@ -1038,9 +1038,7 @@ impl WirLocals {
 
     /// Whether `name` is declared with a nullable reference type.
     pub fn is_nullable_ref(&self, name: &str) -> bool {
-        self.types
-            .get(name)
-            .is_some_and(WirType::is_nullable_ref)
+        self.types.get(name).is_some_and(WirType::is_nullable_ref)
     }
 
     /// Declared locals, `(name, type)`, in table order.

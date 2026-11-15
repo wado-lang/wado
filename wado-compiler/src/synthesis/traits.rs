@@ -4636,9 +4636,9 @@ fn extern_handle_inspect_body(
     let mut next_local = u32::try_from(locals.len()).expect("a local index is a u32");
     let class_local = common::alloc_local(&mut next_local, locals, TypeTable::I32);
     let class = || common::local_ref(class_local, "$class", TypeTable::I32);
-    let name = tt.handle_class_owners(def).fold(
-        static_name,
-        |otherwise, (lo, owner)| {
+    let name = tt
+        .handle_class_owners(def)
+        .fold(static_name, |otherwise, (lo, owner)| {
             let is_owner = common::binary(
                 TirBinaryOp::Eq,
                 class(),
@@ -4655,8 +4655,7 @@ fn extern_handle_inspect_body(
                 string_type,
                 synth_span(),
             )
-        },
-    );
+        });
     common::block(vec![
         common::let_stmt(
             "$class",

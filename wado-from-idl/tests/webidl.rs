@@ -512,10 +512,7 @@ fn a_variadic_argument_is_a_list_the_glue_spreads() {
         glue.contains("  append(self, nodes) {\n    self.append(...nodes);\n  },"),
         "{glue}"
     );
-    assert!(
-        glue.contains("self.write(prefix, ...text);"),
-        "{glue}"
-    );
+    assert!(glue.contains("self.write(prefix, ...text);"), "{glue}");
 }
 
 fn callback(name: &str, ret: &str, args: &[String]) -> String {

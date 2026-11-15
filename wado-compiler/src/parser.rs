@@ -7,9 +7,9 @@ use crate::ast::{
     AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
     CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
     CmResourceLinearity, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ConditionElement, ContinueStmt, EFFECT_HOLE, EXTERNREF_REPR, EffectHandlerBinding, EffectName, EffectsSource,
-    EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, ExportTarget, Expr, ExprStmt,
-    FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
+    ConditionElement, ContinueStmt, EFFECT_HOLE, EXTERNREF_REPR, EffectHandlerBinding, EffectName,
+    EffectsSource, EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, ExportTarget, Expr,
+    ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
     FunctionType, GenericParam, GenericType, GlobalDecl, HandleClasses, IdentExpr, IfExpr,
     ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
     LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MAX_GENERIC_PARAMS, MatchArm,
@@ -7738,11 +7738,9 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
             );
         }
         if classes.is_some() && !extern_handle {
-            return Err(
-                "#[cm] `classes` numbers the handles of an extern handle; \
+            return Err("#[cm] `classes` numbers the handles of an extern handle; \
                  it needs `repr = \"externref\"` beside it"
-                    .to_string(),
-            );
+                .to_string());
         }
         if unrestricted && !extern_handle {
             return Err(

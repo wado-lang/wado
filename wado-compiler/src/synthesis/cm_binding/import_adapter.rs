@@ -17,10 +17,10 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
-    cm_raw_call, deref_expr, expr_stmt, field_access, i32_const,
-    if_stmt, internal_call, is_affine_resource, let_mut_stmt, let_stmt, linear_alloc, linear_free,
-    local_ref, loop_stmt, option_none, option_some, return_stmt, split_packed_ptr_len,
-    struct_literal, synth_param, synth_span, unreachable_call,
+    cm_raw_call, deref_expr, expr_stmt, field_access, i32_const, if_stmt, internal_call,
+    is_affine_resource, let_mut_stmt, let_stmt, linear_alloc, linear_free, local_ref, loop_stmt,
+    option_none, option_some, return_stmt, split_packed_ptr_len, struct_literal, synth_param,
+    synth_span, unreachable_call,
 };
 
 use super::cm_free::{FlatSlot, cm_shape, synthesize_free_cm_flat, synthesize_free_cm_value};
@@ -538,8 +538,8 @@ pub(super) fn synthesize_adapter(
         .as_ref()
         .filter(|ty| cm_interface_registry.extern_ref(ty).is_some())
         .map(|ty| builder.cm_type_id(ty));
-    let raw_call_return_type = extern_ref_return
-        .unwrap_or_else(|| wasi_return_type_id(func_info, cm_interface_registry));
+    let raw_call_return_type =
+        extern_ref_return.unwrap_or_else(|| wasi_return_type_id(func_info, cm_interface_registry));
     let mut raw_call = cm_raw_call(
         func_info,
         std::mem::take(&mut builder.flat_args),

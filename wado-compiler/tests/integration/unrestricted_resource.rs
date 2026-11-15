@@ -89,7 +89,8 @@ fn a_generic_resource_stays_move_only() {
     );
 }
 
-const UNRESTRICTED: &str = "#[cm(\"test:dom/event-target\", linearity = \"unrestricted\", repr = \"externref\")]";
+const UNRESTRICTED: &str =
+    "#[cm(\"test:dom/event-target\", linearity = \"unrestricted\", repr = \"externref\")]";
 
 #[test]
 fn extends_links_two_unrestricted_resources() {

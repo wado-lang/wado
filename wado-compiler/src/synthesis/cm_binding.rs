@@ -24,6 +24,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::Type;
 use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
+use crate::compiler_host::Code;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmInterfaceRegistry, CmNameSink, CmTypeGen, cm_payload_type_from_type_id,
@@ -43,7 +44,6 @@ use crate::tir::{
     TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
-use crate::compiler_host::Code;
 use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::unparse::unparse_type_into;
@@ -62,8 +62,7 @@ use task_return::{
     split_task_entry,
 };
 use type_fixup::{
-    CmCallSites, collect_effect_calls_in_block, rewrite_calls_in_block,
-    unbuilt_extern_import_calls,
+    CmCallSites, collect_effect_calls_in_block, rewrite_calls_in_block, unbuilt_extern_import_calls,
 };
 use types::{Boundary, Slot, flat_types_from_type_id};
 pub use types::{
@@ -420,8 +419,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, Vec<SynthesisE
     synthesize_export_adapters(&mut project)?;
     synthesize_guest_callback_bindings(&mut project);
     generate_test_world_bindings(&mut project);
-    let validated =
-        reject_unresolvable_record_payloads(&project).map_err(SynthesisError::from)?;
+    let validated = reject_unresolvable_record_payloads(&project).map_err(SynthesisError::from)?;
     reduce_unexpanded_task_returns(&project);
     resource_rewrite::rewrite_async_primitives(&mut project, validated);
     assert_task_returns_eliminated(&project);

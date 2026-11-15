@@ -7,9 +7,7 @@
 
 use crate::hashmap::IndexMap;
 use crate::name::{VARIANT_DISCRIMINANT_FIELD, is_variant_payload_field};
-use crate::wir::{
-    WirInstr, WirPackage, WirType, WirTypeDef, WirVariantCase, WirVariantRepr,
-};
+use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirVariantCase, WirVariantRepr};
 
 /// Lower eligible variants to the `NullableRef` representation. Mandatory at every
 /// `-O` — not gated like the optimization passes.

@@ -11,8 +11,9 @@ use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 use crate::wir::{
-    WirAbstractHeapType, WirArrayType, WirEnumCase, WirEnumType, WirField, WirGenericOrigin, WirMeta, WirName,
-    WirStructType, WirType, WirTypeDef, WirTypeId, WirVariantCase, WirVariantRepr, WirVariantType,
+    WirAbstractHeapType, WirArrayType, WirEnumCase, WirEnumType, WirField, WirGenericOrigin,
+    WirMeta, WirName, WirStructType, WirType, WirTypeDef, WirTypeId, WirVariantCase,
+    WirVariantRepr, WirVariantType,
 };
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -20,8 +21,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use super::context::WirContext;
 use crate::name::{
     BACKED_HANDLE_CLASS_FIELD, BACKED_HANDLE_STRUCT, BACKED_HANDLE_VALUE_FIELD, CELL_FIELD,
-    RESOURCE_OBJECT_STRUCT, mangle_builtin_array_type, mangle_generic_name,
-    wir_enum_type_key, wir_tuple_type_key, wir_type_key, wir_variant_case_key,
+    RESOURCE_OBJECT_STRUCT, mangle_builtin_array_type, mangle_generic_name, wir_enum_type_key,
+    wir_tuple_type_key, wir_type_key, wir_variant_case_key,
 };
 
 /// What a concrete Wado type's WIR type is built from.

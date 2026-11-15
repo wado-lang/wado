@@ -17,9 +17,9 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, cast, deref_expr,
-    expr_stmt, generic_method_call, generic_method_call_monomorphized, i32_const,
-    i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt, linear_alloc, local_ref, loop_stmt,
-    ref_expr, split_packed_ptr_len, synth_span,
+    expr_stmt, generic_method_call, generic_method_call_monomorphized, i32_const, i64_const,
+    if_stmt, internal_call, let_mut_stmt, let_stmt, linear_alloc, local_ref, loop_stmt, ref_expr,
+    split_packed_ptr_len, synth_span,
 };
 
 use super::types::{

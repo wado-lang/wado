@@ -27,14 +27,13 @@ use crate::demanded_imports;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::import_check::KILN_TYPES_INTERFACE;
 use crate::loader::WasmAsset;
+use crate::name::EXTERN_IMPORT_MODULE;
 use crate::nir_package::NirPackage;
 use crate::synthesis::cm_binding::types::kebab_to_pascal;
 use crate::test_names::{SECTION_NAME, encode};
 use crate::token::Span;
-use crate::name::EXTERN_IMPORT_MODULE;
 use crate::wir::{
-    ImportEntry, ImportKind, WirAbstractHeapType, WirImportDesc, WirPackage, WirScalarKind,
-    WirType,
+    ImportEntry, ImportKind, WirAbstractHeapType, WirImportDesc, WirPackage, WirScalarKind, WirType,
 };
 use crate::wir_build::component_plan::{CmExportType, ComponentPlan, WorldExportPlan};
 use crate::world_registry::fq_name_package;
