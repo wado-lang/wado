@@ -58,8 +58,16 @@ internal struct Program {
     internal state_base: List<i32>,
 }
 
+/// Which way a program reads the text.
+internal enum Direction {
+    Forward,
+    /// From a match's end back to its start: the program matches what the
+    /// forward one matches, reversed. Its preferences and slots mean nothing.
+    Reverse,
+}
+
 /// The program matching `node`, whose capturing groups number `groups`.
-internal fn compile(node: &Node, groups: i32) -> Result<Program, PatternError> {
+internal fn compile(node: &Node, groups: i32, direction: Direction) -> Result<Program, PatternError> {
     let captures = 2 * (groups + 1);
     let mut c = Compiler {
         insts: [],
@@ -68,6 +76,7 @@ internal fn compile(node: &Node, groups: i32) -> Result<Program, PatternError> {
         depth: 0,
         flags: Flag::none(),
         slots: captures,
+        direction,
     };
     c.push(Inst::Save(0))?;
     c.node(node)?;
@@ -85,6 +94,7 @@ struct Compiler {
     depth: i32,
     flags: Flag,
     slots: i32,
+    direction: Direction,
 }
 
 /// Whether `node` can match without consuming a character.
@@ -232,13 +242,19 @@ impl Compiler {
             },
             Repeat(r) => self.repeat(&r.body, r.min, r.max, r.greedy)?,
             Concat(nodes) => {
-                for let n of &nodes {
-                    self.node(n)?;
+                for let i of 0..<nodes.len() {
+                    self.node(&nodes[self.in_reading_order(i, nodes.len())])?;
                 }
             },
             Alternation(nodes) => self.choice(&nodes, |c, n| c.node(n))?,
         }
         return Ok(());
+    }
+
+    /// The index of the `i`th of `len` parts in a sequence, as this program
+    /// reads them.
+    fn in_reading_order(&self, i: i32, len: i32) -> i32 {
+        return if self.direction == Direction::Reverse { len - 1 - i } else { i };
     }
 
     fn multiline(&self) -> bool {
@@ -370,8 +386,8 @@ impl Compiler {
             return Ok(());
         }
         return self.choice(&seqs, |c, seq| {
-            for let b of seq {
-                c.push(Inst::Byte(*b))?;
+            for let i of 0..<seq.len() {
+                c.push(Inst::Byte(seq[c.in_reading_order(i, seq.len())]))?;
             }
             return Ok(());
         });

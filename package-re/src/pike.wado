@@ -78,22 +78,41 @@ internal enum Goal {
     Any,
 }
 
+/// Where a search looks for a match.
+internal variant Within {
+    /// Starting anywhere at or after the search's start.
+    Text,
+    /// Starting at the search's start and reading no further than this
+    /// offset, which is where the leftmost-first match there ends.
+    Span(i32),
+}
+
 /// The capture slots of the leftmost-first match at or after `start`, which
 /// lies on a character boundary of `text`; an unset slot is -1. Under
 /// `Goal::Any`, those of whichever match is found first.
-internal fn search(program: &Program, cache: &mut Cache, text: StrSlice, start: i32, goal: Goal) -> Option<List<i32>> {
+internal fn search(
+    program: &Program,
+    cache: &mut Cache,
+    text: StrSlice,
+    start: i32,
+    within: Within,
+    goal: Goal,
+) -> Option<List<i32>> {
     cache.current.clear();
-    let len = text.len();
+    let [len, anchored] = match within {
+        Text => [text.len(), false],
+        Span(end) => [end, true],
+    };
     let mut matched: Option<List<i32>> = null;
     let mut pos = start;
     loop {
         // A new start has the lowest priority, and none is tried once a match
         // is found, since any match it led to would lie further right.
         let found = matched matches { Some(_) };
-        if !found && text.is_char_boundary(pos) {
+        if !found && (pos == start || !anchored) && text.is_char_boundary(pos) {
             add(program, text, &mut cache.current, 0, cache.fresh, pos);
         }
-        if cache.current.list.is_empty() && (found || pos >= len) {
+        if cache.current.list.is_empty() && (found || anchored || pos >= len) {
             return matched;
         }
         cache.next.clear();
