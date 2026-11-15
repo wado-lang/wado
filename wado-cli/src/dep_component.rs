@@ -413,9 +413,9 @@ mod tests {
             .unwrap()
             .ast
             .items
-            .into_iter()
+            .iter()
             .filter_map(|item| match item {
-                wado_compiler::ast::Item::Use(u) => Some(u),
+                wado_compiler::ast::Item::Use(u) => Some(u.clone()),
                 _ => None,
             })
             .collect()
