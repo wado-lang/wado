@@ -46,9 +46,13 @@ billion weights outgrow a TPU chip of 16 GB. Packed, they are under it.
 4. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
    which onnx-community's `q4` exports use. A weight stays packed on the
    device, read by the quantized product composite or by a quantized gather
-   (see [Loam on TPU and WebGPU](./devices.md)). Finished when Gemma 3
-   (270M)'s `q4` export picks the tokens onnxruntime picks from it on every
-   device.
+   (see [Loam on TPU and WebGPU](./devices.md)). No path unpacks one when it
+   loads, since gpt-oss-20b unpacked fits no device. A quantized weight is the
+   tensors the operator takes, the packed `u8`, the scales and the zero points,
+   and the bit width and block size are the composite's attributes. So it has
+   no type of its own, which the block formats under Known gaps wait for.
+   Finished when Gemma 3 (270M)'s `q4` export picks the tokens onnxruntime
+   picks from it on every device.
 5. [ ] onnxruntime's `QMoE`, and a `GroupQueryAttention` with attention sinks.
    A `QMoE` decomposes in two forms. Over a prompt it loops over the experts
    and masks each one's rows, so its temporaries do not grow with the prompt.
