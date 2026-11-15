@@ -430,3 +430,30 @@ test "a listener sees the event and may call the DOM" {
         assert body.id() == "pinged";
     };
 }
+
+test "a member answering a promise is a call that has settled" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let body = Dom::document().body().unwrap();
+        // Nothing is laid out, so there is nowhere to scroll.
+        assert body.scroll_into_view().wait() matches { Ok(_) };
+    };
+}
+
+test "nothing is fullscreen where no screen is" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let Err(refused) = doc.body().unwrap().request_fullscreen().wait() else {
+            panic("no screen shows the element");
+        };
+        assert refused.name() == "TypeError";
+        assert refused.message() == "fullscreen is not supported";
+        let Err(nothing) = doc.exit_fullscreen().wait() else {
+            panic("no element is fullscreen");
+        };
+        assert nothing.name() == "TypeError";
+        // A call nobody waits on drops like any other.
+        let _ = doc.exit_fullscreen();
+    };
+}

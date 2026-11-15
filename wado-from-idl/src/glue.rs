@@ -72,6 +72,35 @@ export function $glue() {
     throw new TypeError(`${object} is an instance of no interface this package declares`);
   };
 
+  // What an `async` import answers: a promise of the function writing a
+  // `Result` at an address, its payload `offset` in. The guest hands the
+  // address over where it waits. A reason is any value, a null included,
+  // which no handle is.
+  const $settle = (promise, offset, ok) =>
+    Promise.resolve(promise).then(
+      (value) => (at) => {
+        $view().setUint8(at, 0);
+        ok(at + offset, value);
+      },
+      (reason) => (at) => {
+        const view = $view();
+        view.setUint8(at, 1);
+        view.setUint32(at + offset, $core.exports[$SLOT_PUT](reason ?? new Error(String(reason))), true);
+      },
+    );
+
+  // Each export a callback enters by, wrapped so that a `wait` inside it
+  // suspends the callback and not the page.
+  const $entries = new Map();
+  const $enter = (name) => {
+    let entry = $entries.get(name);
+    if (entry === undefined) {
+      entry = WebAssembly.promising($core.exports[name]);
+      $entries.set(name, entry);
+    }
+    return entry;
+  };
+
   // One function per closure, so `removeEventListener` is handed the very
   // function `addEventListener` was. The map holds neither alive.
   const $callbacks = new WeakMap();
@@ -101,20 +130,27 @@ pub fn generate(output: &WebIdlOutput, source: &str) -> String {
          const $CLASSES = [\n",
         module.package_name
     );
+    // A resource without a class is no interface of the host's.
     for resource in &module.resources {
-        let classes = resource
-            .classes
-            .expect("the WebIDL frontend numbers every resource");
-        let interface = &output.interfaces[&resource.name];
-        writeln!(out, "  [{interface:?}, {}],", classes.lo).unwrap();
+        if let Some(classes) = resource.classes {
+            let interface = &output.interfaces[&resource.name];
+            writeln!(out, "  [{interface:?}, {}],", classes.lo).unwrap();
+        }
     }
-    out.push_str("];\n");
+    writeln!(
+        out,
+        "];\nconst $SLOT_PUT = {:?};",
+        ExternSlotAccess::Put.export_name()
+    )
+    .unwrap();
     out.push_str(RUNTIME);
     writeln!(
         out,
-        "      {:?}: $classOf,\n      {:?}: (a, b) => (a === b ? 1 : 0),",
+        "      {:?}: $classOf,\n      {:?}: (a, b) => (a === b ? 1 : 0),\n      \
+         {:?}: new WebAssembly.Suspending(async (promise, at) => (await promise)(at)),",
         ExternHostQuery::ClassOf.import_name(),
-        ExternHostQuery::Same.import_name()
+        ExternHostQuery::Same.import_name(),
+        ExternHostQuery::PromiseWait.import_name()
     )
     .unwrap();
 
@@ -182,8 +218,25 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
         JsMember::New { interface } => format!("new globalThis.{interface}({})", call_args(0)),
         JsMember::Global => "globalThis".to_string(),
         JsMember::GlobalGet(attribute) => format!("globalThis.{attribute}"),
+        JsMember::ReasonName => format!("String({}.name ?? \"Error\")", receiver()),
+        JsMember::ReasonMessage => format!("String({0}.message ?? {0})", receiver()),
     };
     let body = match &function.return_type {
+        Some(WadoType::Result { ok, .. }) if function.is_async => {
+            // The reason's slot and the settled value share the payload.
+            let (_, align) = ok.as_deref().map_or((0, 1), layout);
+            let payload = align_to(1, align.max(Scalar::Handle.size()));
+            let mut lines = vec![format!(
+                "return $settle({value}, {payload}, ($ret, $value) => {{"
+            )];
+            if let Some(ok) = ok {
+                let mut written = Vec::new();
+                store(ok, "$ret", 0, "$value", &mut written);
+                lines.extend(written.into_iter().map(|line| format!("  {line}")));
+            }
+            lines.push("});".to_string());
+            lines
+        }
         None => vec![format!("{value};")],
         Some(ty) if flat_count(ty) == 1 => vec![format!("return {};", lower(ty, &value))],
         // A result of more than one core value returns through memory, at the
@@ -351,7 +404,7 @@ fn callback(params: &[WadoType], closure: &str) -> String {
         .collect();
     let taken: Vec<String> = names.iter().map(|name| format!(", {name}")).collect();
     format!(
-        "$callback({closure}, (closure{}) => $core.exports[{export:?}](closure{}))",
+        "$callback({closure}, (closure{}) => $enter({export:?})(closure{}))",
         taken.concat(),
         lowered.concat()
     )

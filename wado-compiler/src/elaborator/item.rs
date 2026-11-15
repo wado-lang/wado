@@ -2971,16 +2971,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             && kind.is_effect()
         {
             ctx.in_handler_method = true;
-            let is_resource_effect = kind == DefKind::Resource;
             let async_op = self
                 .tysys
                 .signatures
                 .resource_method_sig(handled, &func.name)
                 .filter(|op| op.is_async)
                 .map(|op| op.cm_name.is_some());
-            if let Some(cm_backed) = async_op
-                && (is_resource_effect || !cm_backed)
-            {
+            if async_op == Some(false) {
                 let _ = self.emit(TypeError::AsyncUserEffectHandlerUnsupported {
                     interface_name: self.tysys.resolutions.defs().name(handled).to_string(),
                     op_name: func.name.clone(),

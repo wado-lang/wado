@@ -11,6 +11,7 @@ const $CLASSES = [
   ["Document", 5],
   ["Window", 6],
 ];
+const $SLOT_PUT = "$cm_extern_slot_put";
 
 // One glue per instance of the component: it holds that instance's memory.
 export function $glue() {
@@ -64,6 +65,35 @@ export function $glue() {
     throw new TypeError(`${object} is an instance of no interface this package declares`);
   };
 
+  // What an `async` import answers: a promise of the function writing a
+  // `Result` at an address, its payload `offset` in. The guest hands the
+  // address over where it waits. A reason is any value, a null included,
+  // which no handle is.
+  const $settle = (promise, offset, ok) =>
+    Promise.resolve(promise).then(
+      (value) => (at) => {
+        $view().setUint8(at, 0);
+        ok(at + offset, value);
+      },
+      (reason) => (at) => {
+        const view = $view();
+        view.setUint8(at, 1);
+        view.setUint32(at + offset, $core.exports[$SLOT_PUT](reason ?? new Error(String(reason))), true);
+      },
+    );
+
+  // Each export a callback enters by, wrapped so that a `wait` inside it
+  // suspends the callback and not the page.
+  const $entries = new Map();
+  const $enter = (name) => {
+    let entry = $entries.get(name);
+    if (entry === undefined) {
+      entry = WebAssembly.promising($core.exports[name]);
+      $entries.set(name, entry);
+    }
+    return entry;
+  };
+
   // One function per closure, so `removeEventListener` is handed the very
   // function `addEventListener` was. The map holds neither alive.
   const $callbacks = new WeakMap();
@@ -83,14 +113,15 @@ export function $glue() {
     imports: {
       "$class-of": $classOf,
       "$same": (a, b) => (a === b ? 1 : 0),
+      "$promise-wait": new WebAssembly.Suspending(async (promise, at) => (await promise)(at)),
       "$wado-lang:web/event-target#new": () => {
         return new globalThis.EventTarget();
       },
       "$wado-lang:web/event-target#add-event-listener": (p0, p1, p2, p3, p4, p5) => {
-        p0.addEventListener($string(p1, p2), $callback(p3, (closure, a0) => $core.exports["$cm_callback__call-handle"](closure, a0)), (p4 === 0 ? undefined : (p5 !== 0)));
+        p0.addEventListener($string(p1, p2), $callback(p3, (closure, a0) => $enter("$cm_callback__call-handle")(closure, a0)), (p4 === 0 ? undefined : (p5 !== 0)));
       },
       "$wado-lang:web/event-target#remove-event-listener": (p0, p1, p2, p3, p4, p5) => {
-        p0.removeEventListener($string(p1, p2), $callback(p3, (closure, a0) => $core.exports["$cm_callback__call-handle"](closure, a0)), (p4 === 0 ? undefined : (p5 !== 0)));
+        p0.removeEventListener($string(p1, p2), $callback(p3, (closure, a0) => $enter("$cm_callback__call-handle")(closure, a0)), (p4 === 0 ? undefined : (p5 !== 0)));
       },
       "$wado-lang:web/event-target#dispatch-event": (p0, p1) => {
         return (p0.dispatchEvent(p1) ? 1 : 0);
@@ -290,6 +321,10 @@ export function $glue() {
       "$wado-lang:web/element#check-visibility": (p0) => {
         return (p0.checkVisibility() ? 1 : 0);
       },
+      "$wado-lang:web/element#scroll-into-view": (p0, p1, p2) => {
+        return $settle(p0.scrollIntoView((p1 === 0 ? undefined : (p2 !== 0))), 4, ($ret, $value) => {
+        });
+      },
       "$wado-lang:web/element#scroll-top": (p0) => {
         return p0.scrollTop;
       },
@@ -440,6 +475,10 @@ export function $glue() {
       "$wado-lang:web/element#set-element-timing": (p0, p1, p2) => {
         p0.elementTiming = $string(p1, p2);
       },
+      "$wado-lang:web/element#request-fullscreen": (p0) => {
+        return $settle(p0.requestFullscreen(), 4, ($ret, $value) => {
+        });
+      },
       "$wado-lang:web/element#set-html": (p0, p1, p2) => {
         p0.setHTML($string(p1, p2));
       },
@@ -467,6 +506,10 @@ export function $glue() {
       },
       "$wado-lang:web/element#has-pointer-capture": (p0, p1) => {
         return (p0.hasPointerCapture(p1) ? 1 : 0);
+      },
+      "$wado-lang:web/element#request-pointer-lock": (p0) => {
+        return $settle(p0.requestPointerLock(), 4, ($ret, $value) => {
+        });
       },
       "$wado-lang:web/element#first-element-child": (p0) => {
         return (p0.firstElementChild ?? null);
@@ -1737,6 +1780,10 @@ export function $glue() {
       "$wado-lang:web/document#fullscreen": (p0) => {
         return (p0.fullscreen ? 1 : 0);
       },
+      "$wado-lang:web/document#exit-fullscreen": (p0) => {
+        return $settle(p0.exitFullscreen(), 4, ($ret, $value) => {
+        });
+      },
       "$wado-lang:web/document#parse-html-unsafe": (p0, p1) => {
         return globalThis.Document.parseHTMLUnsafe($string(p0, p1));
       },
@@ -1879,11 +1926,39 @@ export function $glue() {
       "$wado-lang:web/document#picture-in-picture-enabled": (p0) => {
         return (p0.pictureInPictureEnabled ? 1 : 0);
       },
+      "$wado-lang:web/document#exit-picture-in-picture": (p0) => {
+        return $settle(p0.exitPictureInPicture(), 4, ($ret, $value) => {
+        });
+      },
       "$wado-lang:web/document#exit-pointer-lock": (p0) => {
         p0.exitPointerLock();
       },
       "$wado-lang:web/document#prerendering": (p0) => {
         return (p0.prerendering ? 1 : 0);
+      },
+      "$wado-lang:web/document#has-unpartitioned-cookie-access": (p0) => {
+        return $settle(p0.hasUnpartitionedCookieAccess(), 4, ($ret, $value) => {
+          $view().setUint8($ret, ($value ? 1 : 0));
+        });
+      },
+      "$wado-lang:web/document#has-storage-access": (p0) => {
+        return $settle(p0.hasStorageAccess(), 4, ($ret, $value) => {
+          $view().setUint8($ret, ($value ? 1 : 0));
+        });
+      },
+      "$wado-lang:web/document#request-storage-access": (p0) => {
+        return $settle(p0.requestStorageAccess(), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/document#has-private-token": (p0, p1, p2) => {
+        return $settle(p0.hasPrivateToken($string(p1, p2)), 4, ($ret, $value) => {
+          $view().setUint8($ret, ($value ? 1 : 0));
+        });
+      },
+      "$wado-lang:web/document#has-redemption-record": (p0, p1, p2) => {
+        return $settle(p0.hasRedemptionRecord($string(p1, p2)), 4, ($ret, $value) => {
+          $view().setUint8($ret, ($value ? 1 : 0));
+        });
       },
       "$wado-lang:web/document#get-element-by-id": (p0, p1, p2) => {
         return (p0.getElementById($string(p1, p2)) ?? null);
@@ -2049,6 +2124,22 @@ export function $glue() {
       "$wado-lang:web/window#cancel-idle-callback": (p0, p1) => {
         p0.cancelIdleCallback((p1 >>> 0));
       },
+      "$wado-lang:web/window#minimize": (p0) => {
+        return $settle(p0.minimize(), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/window#maximize": (p0) => {
+        return $settle(p0.maximize(), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/window#restore": (p0) => {
+        return $settle(p0.restore(), 4, ($ret, $value) => {
+        });
+      },
+      "$wado-lang:web/window#set-resizable": (p0, p1) => {
+        return $settle(p0.setResizable((p1 !== 0)), 4, ($ret, $value) => {
+        });
+      },
       "$wado-lang:web/window#origin": (p0, $ret) => {
         const $value = p0.origin;
         $putString($ret, $value);
@@ -2074,13 +2165,21 @@ export function $glue() {
         p0.clearInterval(p1);
       },
       "$wado-lang:web/window#queue-microtask": (p0, p1) => {
-        p0.queueMicrotask($callback(p1, (closure) => $core.exports["$cm_callback__call"](closure)));
+        p0.queueMicrotask($callback(p1, (closure) => $enter("$cm_callback__call")(closure)));
       },
       "$wado-lang:web/window#request-animation-frame": (p0, p1) => {
-        return p0.requestAnimationFrame($callback(p1, (closure, a0) => $core.exports["$cm_callback__call-f64"](closure, a0)));
+        return p0.requestAnimationFrame($callback(p1, (closure, a0) => $enter("$cm_callback__call-f64")(closure, a0)));
       },
       "$wado-lang:web/window#cancel-animation-frame": (p0, p1) => {
         p0.cancelAnimationFrame((p1 >>> 0));
+      },
+      "$wado-lang:web/rejection#name": (p0, $ret) => {
+        const $value = String(p0.name ?? "Error");
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/rejection#message": (p0, $ret) => {
+        const $value = String(p0.message ?? p0);
+        $putString($ret, $value);
       },
       "$wado-lang:web/global#window": () => {
         return globalThis;

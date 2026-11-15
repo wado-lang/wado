@@ -1,7 +1,8 @@
 //! What only the host's own objects answer, which `glue/dom.test.mjs` reads
 //! back from the attributes of `<body>`: identity, narrowing through more than
 //! one level of `extends`, the name `Inspect` writes, a list of handles each
-//! way, and a listener entered while `run` waits.
+//! way, a promise settled and rejected, and a listener entered while `run`
+//! waits, which waits itself.
 
 use { Dom, Event, EventTarget, HtmlElement, HtmlInputElement, Node } from "wado-lang:web";
 use { MonotonicClock } from "wasi:clocks";
@@ -23,6 +24,14 @@ export fn run() with (Dom, MonotonicClock) {
     let labels = div.aria_labelled_by_elements().unwrap();
     report("labels", `${labels.len()} ${labels[0] == input} ${labels[1] == div}`);
 
+    // A promise settles to its value, or to the reason it was rejected for.
+    report("settled", `${doc.has_storage_access().wait() matches { Ok(true) }}`);
+    if let Err(reason) = doc.exit_fullscreen().wait() {
+        report("rejected", `${reason.name()}: ${reason.message()}`);
+    }
+    // A call nobody waits on is dropped with its promise still pending.
+    let _ = doc.request_storage_access();
+
     let mut clicks = 0;
     let target: EventTarget = div;
     div.add_event_listener("click", |event: Event| {
@@ -30,6 +39,12 @@ export fn run() with (Dom, MonotonicClock) {
         report("clicks", `${clicks}`);
         let path = event.composed_path();
         report("path", `${path.len()} ${path[0] == target}`);
+    });
+    // A listener that waits suspends alone: the page and `run` go on.
+    input.add_event_listener("focus", |_event: Event| {
+        report("focus", "waiting");
+        let entered = input.request_fullscreen().wait();
+        report("focus", `${entered matches { Ok(_) }}`);
     });
     report("state", "waiting");
     MonotonicClock::wait_for(50_000_000).wait();

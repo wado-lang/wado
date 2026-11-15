@@ -12,17 +12,19 @@ covers eight interfaces: `EventTarget`, `Event`, `Node`, `Element`,
 `HTMLElement`, `HTMLInputElement`, `Document` and `Window`.
 
 `wado-from-idl` skips every member it cannot lower and names it on stderr. On
-the current snapshot it skips 559 members (`mise run update-package-web` prints
+the current snapshot it skips 539 members (`mise run update-package-web` prints
 each):
 
 | Reason                        | Members | Examples                                               |
 | ----------------------------- | ------- | ------------------------------------------------------ |
 | An event handler attribute    | 353     | `onclick`, `oninput`                                   |
-| A type outside the slice      | 151     | `NodeList`, `HTMLCollection`, `sequence<Range>`, `any` |
-| `Promise<T>`                  | 35      | `scroll_to`, `request_fullscreen`                      |
+| A type outside the slice      | 164     | `NodeList`, `HTMLCollection`, `sequence<Range>`, `any` |
 | A union                       | 13      | `append`, `prepend`, `before`, the `inner_html` getter |
-| More than one overload lowers | 2       | `Window.alert`                                         |
+| More than one overload lowers | 8       | `Window.alert`, `scroll_to`                            |
 | `ObservableArray<T>`          | 1       | `adopted_style_sheets`                                 |
+
+A member returning `Promise<T>` lowers where `T` does, so one whose `T` is
+outside the slice is counted there.
 
 A variadic argument lowers, but `append` and its siblings take
 `(Node or DOMString)`, so they wait on the union.
@@ -56,9 +58,11 @@ lower is then available to each interface the slice adds.
 
 ### 4. Promises
 
-- [ ] Lower a member returning `Promise<T>` to an `AsyncCall`, as
+- [x] Lower a member returning `Promise<T>` to an `AsyncCall`, as
   [WEP: Extern Handles](../docs/wep-2026-11-14-extern-handles.md#a-member-returning-a-promiset-returns-an-asynccall)
   decides, in the bindings and in the glue
+- [x] `SurfaceDom` answers `scroll_into_view`, `request_fullscreen` and
+  `exit_fullscreen`
 - [ ] `fetch` and `Response` join the slice, with an effect of their own
 
 ### 5. A wider slice

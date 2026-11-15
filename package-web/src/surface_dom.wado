@@ -2,7 +2,18 @@
 //! calls where no browser runs: `with &mut dom do { app(); }`.
 
 use { TreeMap } from "core:collections";
-use { Document, Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node, Window } from "./dom.wado";
+use {
+    Document,
+    Dom,
+    Element,
+    Event,
+    EventTarget,
+    HtmlElement,
+    HtmlInputElement,
+    Node,
+    Rejection,
+    Window,
+} from "./dom.wado";
 
 global NO_NODE: i32 = -1;
 global DOCUMENT_INDEX: i32 = 0;
@@ -33,6 +44,17 @@ struct SurfaceNode {
 struct SurfaceEvent {
     type: String,
     target: i32,
+}
+
+struct SurfaceRejection {
+    name: String,
+    message: String,
+}
+
+// The Fullscreen standard rejects with a `TypeError` where fullscreen is not
+// supported, and no screen shows this document.
+fn fullscreen_unsupported() -> Rejection {
+    return Rejection::backed_by(&SurfaceRejection { name: "TypeError", message: "fullscreen is not supported" });
 }
 
 struct Listener {
@@ -543,6 +565,22 @@ impl Document for SurfaceDom {
         resume ();
     }
 
+    fn exit_fullscreen(&mut self, this: &Document) -> Result<(), Rejection> {
+        resume Result::Err(fullscreen_unsupported());
+    }
+
+    ..trap
+}
+
+impl Rejection for SurfaceDom {
+    fn name(&mut self, this: &Rejection) -> String {
+        resume this.backing::<SurfaceRejection>().expect("a rejection of a SurfaceDom backs the handle").name;
+    }
+
+    fn message(&mut self, this: &Rejection) -> String {
+        resume this.backing::<SurfaceRejection>().expect("a rejection of a SurfaceDom backs the handle").message;
+    }
+
     ..trap
 }
 
@@ -687,6 +725,15 @@ impl Element for SurfaceDom {
         let mut html = "";
         self.serialize_children(self.index(*this), &mut html);
         resume html;
+    }
+
+    // Nothing is laid out, so there is nowhere to scroll.
+    fn scroll_into_view(&mut self, this: &Element, arg: Option<bool>) -> Result<(), Rejection> {
+        resume Result::Ok(());
+    }
+
+    fn request_fullscreen(&mut self, this: &Element) -> Result<(), Rejection> {
+        resume Result::Err(fullscreen_unsupported());
     }
 
     ..trap

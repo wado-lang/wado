@@ -405,11 +405,9 @@ fn the_global_yields_the_dom_effect_with_its_resource_typed_attributes() {
 
 #[test]
 fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
-    let promise = r#"{"type": "return-type", "extAttrs": [], "generic": "Promise", "nullable": false, "union": false, "idlType": [{"type": "return-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "undefined"}]}"#;
     let union = r#"{"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": true, "idlType": [{"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "DOMString"}, {"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "Node"}]}"#;
     let members = [
         attribute("attributes", &plain("NamedNodeMap"), true),
-        operation("requestFullscreen", promise, &[], ""),
         operation(
             "append",
             &plain("undefined"),
@@ -462,7 +460,6 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
         skipped,
         [
             "Element.attributes: `NamedNodeMap` is outside the slice",
-            "Element.request_fullscreen: `Promise<…>`",
             "Element.append: `nodes`: union of 2 expressible types",
             "Element.prepend: `nodes`: `NodeList` is outside the slice",
             "Element.alert: 2 overloads",
@@ -595,6 +592,76 @@ fn a_sequence_is_a_list_either_way() {
         glue.contains(
             "p0.observe($list(p1, p2, 4, (at) => \
              $core.exports[\"$cm_extern_slot_get\"]($view().getUint32(at, true))));"
+        ),
+        "{glue}"
+    );
+}
+
+#[test]
+fn a_promise_is_an_async_call_settling_to_a_result() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation("ready", &sequence("Promise", &plain("Node")), &[], ""),
+            operation("lock", &sequence("Promise", &plain("undefined")), &[], ""),
+            operation("title", &sequence("Promise", &plain("DOMString")), &[], ""),
+            // A promise is a member's whole result.
+            operation(
+                "all",
+                &sequence("sequence", &sequence("Promise", &plain("Node"))),
+                &[],
+                "",
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains("async fn ready(&self) -> AsyncCall<Result<Node, Rejection>>;"),
+        "{code}"
+    );
+    assert!(
+        code.contains("async fn lock(&self) -> AsyncCall<Result<(), Rejection>>;"),
+        "{code}"
+    );
+    assert!(
+        code.contains(
+            "#[cm(\"wado-lang:web/rejection\", linearity = \"unrestricted\", repr = \"externref\")]\n\
+             pub resource Rejection {"
+        ),
+        "{code}"
+    );
+    assert!(code.contains("fn message(&self) -> String;"), "{code}");
+    assert_eq!(skipped, ["Element.all: `sequence` of `Promise<…>`"]);
+
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    // The import answers the promise; `wait` has the result written.
+    assert!(
+        glue.contains(
+            "\"$wado-lang:web/element#ready\": (p0) => {\n        \
+             return $settle(p0.ready(), 4, ($ret, $value) => {\n          \
+             $view().setUint32($ret, $core.exports[\"$cm_extern_slot_put\"]($value), true);\n        \
+             });\n      },"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "\"$wado-lang:web/element#lock\": (p0) => {\n        \
+             return $settle(p0.lock(), 4, ($ret, $value) => {\n        });\n      },"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains("\"$promise-wait\": new WebAssembly.Suspending("),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "\"$wado-lang:web/rejection#message\": (p0, $ret) => {\n        \
+             const $value = String(p0.message ?? p0);"
         ),
         "{glue}"
     );

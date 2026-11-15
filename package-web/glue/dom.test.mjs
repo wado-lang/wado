@@ -59,12 +59,26 @@ assert.ok(probe, "WEB_PROBE_JS names the transpiled glue/probe");
 
 test("the host answers identity, narrowing and a listener while `run` waits", async () => {
   install('<input id="input"><div id="div"></div>');
+  // jsdom implements none of the members answering a promise.
+  const later = (settle) => new Promise((resolve, reject) => setTimeout(() => settle(resolve, reject), 2));
+  document.hasStorageAccess = () => later((resolve) => resolve(true));
+  document.exitFullscreen = () =>
+    later((_, reject) => reject(new DOMException("nothing is fullscreen", "NotAllowedError")));
+  document.requestStorageAccess = () => new Promise(() => {});
+  let enterFullscreen;
+  document.getElementById("input").requestFullscreen = () =>
+    new Promise((resolve) => {
+      enterFullscreen = resolve;
+    });
+
   const { run } = await import(probe);
   const found = document.body.dataset;
   const running = run.run();
   while (found.state !== "waiting") {
     await new Promise((resolve) => setTimeout(resolve, 1));
   }
+  assert.equal(found.settled, "true");
+  assert.equal(found.rejected, "NotAllowedError: nothing is fullscreen");
   assert.equal(found.same, "true false");
   // An input is an `HTMLElement` two levels up; a `<div>` is no input.
   assert.equal(found.narrow, "true true false");
@@ -79,11 +93,20 @@ test("the host answers identity, narrowing and a listener while `run` waits", as
   assert.equal(found.clicks, "1");
   // `<div>`, `<body>`, `<html>`, the document and the window.
   assert.equal(found.path, "5 true");
+
+  // The listener waits on a promise of its own, and the page goes on.
+  document.getElementById("input").dispatchEvent(new Event("focus"));
+  assert.equal(found.focus, "waiting");
+  div.dispatchEvent(new Event("click"));
+  assert.equal(found.clicks, "2");
+  enterFullscreen();
+  await new Promise((resolve) => setTimeout(resolve, 1));
+  assert.equal(found.focus, "true");
   await running;
   assert.equal(found.state, "done");
   // The closure outlives `run`, and keeps what it captured.
   div.dispatchEvent(new Event("click"));
-  assert.equal(found.clicks, "2");
+  assert.equal(found.clicks, "3");
 });
 
 test("an object's class is its nearest declared ancestor's", async () => {

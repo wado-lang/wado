@@ -187,6 +187,9 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#check-visibility")]
     #[cm_params("self")]
     fn check_visibility(&self) -> bool;
+    #[cm("wado-lang:web/element#scroll-into-view")]
+    #[cm_params("self", "arg")]
+    async fn scroll_into_view(&self, arg: Option<bool> = null) -> AsyncCall<Result<(), Rejection>>;
     #[cm("wado-lang:web/element#scroll-top")]
     #[cm_params("self")]
     fn scroll_top(&self) -> f64;
@@ -304,6 +307,9 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#set-element-timing")]
     #[cm_params("self", "value")]
     fn set_element_timing(&self, value: String);
+    #[cm("wado-lang:web/element#request-fullscreen")]
+    #[cm_params("self")]
+    async fn request_fullscreen(&self) -> AsyncCall<Result<(), Rejection>>;
     #[cm("wado-lang:web/element#set-html")]
     #[cm_params("self", "html")]
     fn set_html(&self, html: String);
@@ -331,6 +337,9 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#has-pointer-capture")]
     #[cm_params("self", "pointer-id")]
     fn has_pointer_capture(&self, pointer_id: i32) -> bool;
+    #[cm("wado-lang:web/element#request-pointer-lock")]
+    #[cm_params("self")]
+    async fn request_pointer_lock(&self) -> AsyncCall<Result<(), Rejection>>;
     #[cm("wado-lang:web/element#first-element-child")]
     #[cm_params("self")]
     fn first_element_child(&self) -> Option<Element>;
@@ -1218,6 +1227,9 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#fullscreen")]
     #[cm_params("self")]
     fn fullscreen(&self) -> bool;
+    #[cm("wado-lang:web/document#exit-fullscreen")]
+    #[cm_params("self")]
+    async fn exit_fullscreen(&self) -> AsyncCall<Result<(), Rejection>>;
     #[cm("wado-lang:web/document#parse-html-unsafe")]
     #[cm_params("html")]
     fn parse_html_unsafe(html: String) -> Document;
@@ -1347,12 +1359,30 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#picture-in-picture-enabled")]
     #[cm_params("self")]
     fn picture_in_picture_enabled(&self) -> bool;
+    #[cm("wado-lang:web/document#exit-picture-in-picture")]
+    #[cm_params("self")]
+    async fn exit_picture_in_picture(&self) -> AsyncCall<Result<(), Rejection>>;
     #[cm("wado-lang:web/document#exit-pointer-lock")]
     #[cm_params("self")]
     fn exit_pointer_lock(&self);
     #[cm("wado-lang:web/document#prerendering")]
     #[cm_params("self")]
     fn prerendering(&self) -> bool;
+    #[cm("wado-lang:web/document#has-unpartitioned-cookie-access")]
+    #[cm_params("self")]
+    async fn has_unpartitioned_cookie_access(&self) -> AsyncCall<Result<bool, Rejection>>;
+    #[cm("wado-lang:web/document#has-storage-access")]
+    #[cm_params("self")]
+    async fn has_storage_access(&self) -> AsyncCall<Result<bool, Rejection>>;
+    #[cm("wado-lang:web/document#request-storage-access")]
+    #[cm_params("self")]
+    async fn request_storage_access(&self) -> AsyncCall<Result<(), Rejection>>;
+    #[cm("wado-lang:web/document#has-private-token")]
+    #[cm_params("self", "issuer")]
+    async fn has_private_token(&self, issuer: String) -> AsyncCall<Result<bool, Rejection>>;
+    #[cm("wado-lang:web/document#has-redemption-record")]
+    #[cm_params("self", "issuer")]
+    async fn has_redemption_record(&self, issuer: String) -> AsyncCall<Result<bool, Rejection>>;
     #[cm("wado-lang:web/document#get-element-by-id")]
     #[cm_params("self", "element-id")]
     fn get_element_by_id(&self, element_id: String) -> Option<Element>;
@@ -1513,6 +1543,18 @@ pub resource Window extends EventTarget {
     #[cm("wado-lang:web/window#cancel-idle-callback")]
     #[cm_params("self", "handle")]
     fn cancel_idle_callback(&self, handle: u32);
+    #[cm("wado-lang:web/window#minimize")]
+    #[cm_params("self")]
+    async fn minimize(&self) -> AsyncCall<Result<(), Rejection>>;
+    #[cm("wado-lang:web/window#maximize")]
+    #[cm_params("self")]
+    async fn maximize(&self) -> AsyncCall<Result<(), Rejection>>;
+    #[cm("wado-lang:web/window#restore")]
+    #[cm_params("self")]
+    async fn restore(&self) -> AsyncCall<Result<(), Rejection>>;
+    #[cm("wado-lang:web/window#set-resizable")]
+    #[cm_params("self", "resizable")]
+    async fn set_resizable(&self, resizable: bool) -> AsyncCall<Result<(), Rejection>>;
     #[cm("wado-lang:web/window#origin")]
     #[cm_params("self")]
     fn origin(&self) -> String;
@@ -1543,6 +1585,17 @@ pub resource Window extends EventTarget {
     #[cm("wado-lang:web/window#cancel-animation-frame")]
     #[cm_params("self", "handle")]
     fn cancel_animation_frame(&self, handle: u32);
+}
+
+/// Why a promise was rejected: any value, which need not be an `Error`.
+#[cm("wado-lang:web/rejection", linearity = "unrestricted", repr = "externref")]
+pub resource Rejection {
+    #[cm("wado-lang:web/rejection#name")]
+    #[cm_params("self")]
+    fn name(&self) -> String;
+    #[cm("wado-lang:web/rejection#message")]
+    #[cm_params("self")]
+    fn message(&self) -> String;
 }
 
 /// The entry points, which hand out the first handle.

@@ -395,7 +395,7 @@ glue cannot be run without them.
   entered while `run` is suspended
 - [x] The handle table: a handle in linear memory is a slot index, and
   `sequence<T>` and `FrozenArray<T>` of an interface lower to `List<T>`
-- [ ] An `AsyncCall` over a promise, and `Rejection`: `wait` through a
+- [x] An `AsyncCall` over a promise, and `Rejection`: `wait` through a
   suspending import, every callback entered through `WebAssembly.promising`,
   and `SurfaceDom` answering a `Promise<T>` member
 - [ ] A collection test in the jsdom run: dropped handles, dropped listeners,
@@ -410,9 +410,11 @@ glue cannot be run without them.
 - Every callback pays for the `WebAssembly.promising` entry, whether it waits
   or not. Its cost was measured against an empty call only (below), not in a
   program.
-- A suspended `wait` was run on core modules alone. It was not run inside a
-  jco-transpiled component, where jco's own task bookkeeping surrounds the
-  export that waits.
+- A callback that traps rejects the promise its `WebAssembly.promising` entry
+  returns, which nothing handles. The DOM would report an exception thrown by a
+  listener; an unhandled rejection reaches `unhandledrejection` instead.
+- A rejection's reason that is `null` or `undefined` crosses as a new `Error`
+  naming it, since no handle is null.
 - An `AsyncCall` over a promise is no member of a `WaitableSet`, which waits on
   what the Component Model reports, and inserting one traps. Calls started
   together run together, and
