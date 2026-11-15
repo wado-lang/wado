@@ -1945,20 +1945,31 @@ impl CmInterfaceRegistry {
     }
 
     /// Whether a call of the web import `func` puts an extern handle in a slot:
-    /// one inside another value, or among parameters passed through memory.
+    /// one inside another value, among parameters passed through memory, or in
+    /// the result a promise settles to, which the host writes to memory.
     #[must_use]
     pub fn crosses_extern_handle_in_slot(&self, func: &CmFunctionInfo) -> bool {
         let params = || func.params.iter().map(|(_, _, ty)| ty);
         let in_slot = |ty: &Type| self.extern_ref(ty).is_none() && self.mentions_extern_handle(ty);
+        let settled = func.return_type.as_ref().filter(|_| func.is_async);
         params().chain(&func.return_type).any(in_slot)
-            || (self.is_extern_import(func) && self.params_in_buffer(params(), func.is_async))
+            || settled.is_some_and(|ty| self.mentions_extern_handle(ty))
+            || (self.is_extern_import(func) && self.params_in_buffer(params(), false))
     }
 
-    /// Whether `func` is a web import no lowering is built for yet, so a call
-    /// of it is refused: an `async` one.
+    /// Whether a call of `func` answers a subtask: an `async` import the
+    /// component lowers.
     #[must_use]
-    pub fn is_unbuilt_extern_import(&self, func: &CmFunctionInfo) -> bool {
-        self.is_extern_import(func) && func.is_async
+    pub fn answers_subtask(&self, func: &CmFunctionInfo) -> bool {
+        func.is_async && !self.is_extern_import(func)
+    }
+
+    /// Whether a call of `func` answers a promise of the host's: an `async`
+    /// web import. The host has read every argument by the time it returns
+    /// one, so the arguments cross as a sync call's do.
+    #[must_use]
+    pub fn answers_promise(&self, func: &CmFunctionInfo) -> bool {
+        func.is_async && self.is_extern_import(func)
     }
 
     /// The core values `ty` crosses as, whole: one for an `externref`, the
@@ -3502,11 +3513,9 @@ impl CmInterfaceRegistry {
         };
         // Each type with its newtypes (`Mark`, `Duration`, `Instant`, an extern
         // handle) resolved to their bases.
-        !self.is_unbuilt_extern_import(func)
-            && func
-                .params
-                .iter()
-                .all(|(_, _, ty)| known.param_supported(&self.resolve_type(ty)))
+        func.params
+            .iter()
+            .all(|(_, _, ty)| known.param_supported(&self.resolve_type(ty)))
             && func
                 .return_type
                 .as_ref()

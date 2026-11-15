@@ -346,6 +346,16 @@ pub fn handle_eq(a: TirExpr, b: TirExpr) -> TirExpr {
     )
 }
 
+/// Whether `a` and `b`, each an extern handle or an `Option` of one, are one
+/// object or both none.
+pub fn handle_identical(a: TirExpr, b: TirExpr) -> TirExpr {
+    internal_call(
+        CompilerItem::HandleIdentical.attr_name(),
+        vec![a, b],
+        TypeTable::BOOL,
+    )
+}
+
 /// Whether `class`, an `i32`, lies in `classes`: one unsigned comparison of
 /// its distance from the lowest.
 pub fn class_in(class: TirExpr, classes: HandleClasses) -> TirExpr {

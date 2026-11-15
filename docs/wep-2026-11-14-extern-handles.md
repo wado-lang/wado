@@ -303,9 +303,13 @@ let response = call.wait()?;       // blocks until the promise settles
 An `AsyncCall` then holds one of two things: the Component Model subtask it has
 always held, or an extern handle to a JavaScript promise.
 
-- `wait` on a promise blocks the current task until it settles. It is a web
-  import the glue wraps in `WebAssembly.Suspending`, so the Wasm stack is
-  suspended and the page keeps running.
+- The import returns the promise as one `externref`, whatever `T` is. The host
+  has read every argument by then, so they cross as a synchronous call's do.
+- `wait` on a promise blocks the current task until it settles. It calls the
+  import `promise-wait(promise, buffer)`, which the glue wraps in
+  `WebAssembly.Suspending`, so the Wasm stack is suspended and the page keeps
+  running. The host writes the result at `buffer` in the canonical ABI's
+  layout, and `wait` lifts it from there as it lifts a subtask's.
 - A rejection is an `Err`, not a trap. A failed `fetch` or a refused permission
   is an ordinary outcome, unlike the DOM exceptions of a synchronous call.
   `Rejection` is an extern handle to the reason, answering `name()` and
@@ -410,7 +414,8 @@ glue cannot be run without them.
   jco-transpiled component, where jco's own task bookkeeping surrounds the
   export that waits.
 - An `AsyncCall` over a promise is no member of a `WaitableSet`, which waits on
-  what the Component Model reports. Calls started together run together, and
+  what the Component Model reports, and inserting one traps. Calls started
+  together run together, and
   waiting on each in turn takes as long as the slowest. What is missing is the
   first of several to settle: a race of two `fetch`es, or a `fetch` against a
   `wasi:clocks` timer.
@@ -425,7 +430,10 @@ glue cannot be run without them.
   measured against the range test it replaces.
 - A `match` reads the class once for each type-pattern arm, not once for the
   `match`.
-- An `async` web import is rejected where it is called.
+- A reference to an extern handle is a cell holding it, so a `&self` method on
+  one allocates wherever the call is not inlined. The cost was not measured.
+- A `&mut` to a place holding a handle asks `same` of the host before storing
+  back, once for each call that takes one.
 - The glue generator writes no shim for a member whose parameters are passed
   through memory, and stops on one. The slice has none.
 - A list's element in the bindings is a scalar, a string or a handle. A

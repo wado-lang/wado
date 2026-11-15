@@ -832,6 +832,14 @@ internal fn extern_handle_host_class<R>(handle: R) -> i32;
 #[side_effect(trap)]
 internal fn extern_handle_host_same<R>(a: R, b: R) -> bool;
 
+/// Suspends until `promise`, which an `async` web import answered, settles.
+/// The host then writes the import's result at `buffer`. Whatever the page
+/// runs meanwhile, callbacks of this program included, has run by the time it
+/// returns.
+#[storage(none)]
+#[side_effect(opaque, suspend)]
+internal fn extern_promise_wait<R>(promise: R, buffer: i32);
+
 /// Calls stdout's write_via_stream indirectly (ambient, no effect required).
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stdout::write_via_stream() through the effect system.

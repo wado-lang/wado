@@ -689,11 +689,16 @@ impl<'a> WirContext<'a> {
             heap_type: WirAbstractHeapType::Extern,
             nullable: false,
         };
-        let type_id = self.register_func_type(
-            format!("functype//wasi/{name}"),
-            vec![object; query.arity()],
-            vec![WirType::I32],
-        );
+        let mut params = vec![object; query.objects()];
+        if query.takes_address() {
+            params.push(WirType::I32);
+        }
+        let results = if query.answers() {
+            vec![WirType::I32]
+        } else {
+            Vec::new()
+        };
+        let type_id = self.register_func_type(format!("functype//wasi/{name}"), params, results);
         let wir_name = WirName {
             fq: key.into_string(),
         };

@@ -181,8 +181,8 @@ fn cm_import_core_func_type(
 }
 
 /// The core type of a web import: the canonical ABI's flattening, except that
-/// an extern handle or an `Option` of one is one `externref`
-/// (WEP: Extern Handles).
+/// an extern handle or an `Option` of one is one `externref`, and an `async`
+/// one answers its promise in place of a result (WEP: Extern Handles).
 fn extern_import_core_func_type(
     func: &CmFunctionInfo,
     registry: &CmInterfaceRegistry,
@@ -203,7 +203,7 @@ fn extern_import_core_func_type(
         }
     };
     let mut params = Vec::new();
-    if registry.params_in_buffer(func.params.iter().map(|(_, _, ty)| ty), func.is_async) {
+    if registry.params_in_buffer(func.params.iter().map(|(_, _, ty)| ty), false) {
         params.push(WirType::I32);
     } else {
         for (_, _, ty) in &func.params {
@@ -211,7 +211,12 @@ fn extern_import_core_func_type(
         }
     }
     let mut results = Vec::new();
-    if let Some(ret) = &func.return_type {
+    if func.is_async {
+        results.push(WirType::AbstractRef {
+            heap_type: WirAbstractHeapType::Extern,
+            nullable: false,
+        });
+    } else if let Some(ret) = &func.return_type {
         if cm_return_needs_outptr(ret, registry) {
             params.push(WirType::I32);
         } else {

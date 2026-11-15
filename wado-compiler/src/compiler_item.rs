@@ -737,6 +737,8 @@ pub enum CompilerItem {
     HandleClass,
     /// `core:rt::handle_eq`.
     HandleEq,
+    /// `core:rt::handle_identical`.
+    HandleIdentical,
     /// `core:rt::extern_slot_put`.
     ExternSlotPut,
     /// `core:rt::extern_slot_get`.
@@ -1050,6 +1052,7 @@ impl CompilerItem {
         Self::CoverageReport,
         Self::HandleClass,
         Self::HandleEq,
+        Self::HandleIdentical,
         Self::ExternSlotPut,
         Self::ExternSlotGet,
         Self::ExternSlotTake,
@@ -1282,6 +1285,7 @@ impl CompilerItem {
             Self::CoverageReport => "coverage_report",
             Self::HandleClass => "handle_class",
             Self::HandleEq => "handle_eq",
+            Self::HandleIdentical => "handle_identical",
             Self::ExternSlotPut => "extern_slot_put",
             Self::ExternSlotGet => "extern_slot_get",
             Self::ExternSlotTake => "extern_slot_take",
@@ -1401,6 +1405,7 @@ impl CompilerItem {
             | Self::CoverageReport
             | Self::HandleClass
             | Self::HandleEq
+            | Self::HandleIdentical
             | Self::ExternSlotPut
             | Self::ExternSlotGet
             | Self::ExternSlotTake
@@ -1707,6 +1712,7 @@ impl CompilerItem {
                 // `lower`
                 Self::AssertFailed
                 | Self::FormatterWriteLiteral
+                | Self::HandleIdentical
                 | Self::I128FromF64
                 | Self::I128FromI64
                 | Self::I128FromPair
@@ -1768,6 +1774,7 @@ impl CompilerItem {
             | Self::CoverageReport
             | Self::HandleClass
             | Self::HandleEq
+            | Self::HandleIdentical
             | Self::ExternSlotPut
             | Self::ExternSlotGet
             | Self::ExternSlotTake

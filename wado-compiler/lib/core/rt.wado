@@ -25,6 +25,7 @@ use {
     StreamWritable,
     ReadyEvent,
     CopyBuffer,
+    ExternObject,
     ReadInto,
     StartedRead,
     StartedWrite,
@@ -301,12 +302,6 @@ internal fn cm_lower_array_u8(arr: List<u8>) -> i64 {
     return cm_lower_list_u8(arr.internal_raw_data_ref(), 0, len);
 }
 
-/// Any extern handle: every one is the same Wasm value, whatever resource
-/// declares it. A closure crosses to a web import as one.
-#[compiler_item("extern_object")]
-#[cm("wado:extern/object", linearity = "unrestricted", repr = "externref")]
-internal resource ExternObject;
-
 /// The class an extern handle carries.
 #[compiler_item("handle_class")]
 internal fn handle_class(handle: ExternObject) -> i32 {
@@ -326,6 +321,16 @@ internal fn handle_eq(a: ExternObject, b: ExternObject) -> bool {
         return false;
     }
     return builtin::extern_handle_host_same(a, b);
+}
+
+/// Whether two reads of a place holding an extern handle found one object, or
+/// both found none: what a `&mut` to the place asks before storing back.
+#[compiler_item("handle_identical")]
+internal fn handle_identical(a: Option<ExternObject>, b: Option<ExternObject>) -> bool {
+    if let Some(a) = a && let Some(b) = b {
+        return handle_eq(a, b);
+    }
+    return a matches { None } && b matches { None };
 }
 
 /// The extern handles that are in linear memory right now, each at the index

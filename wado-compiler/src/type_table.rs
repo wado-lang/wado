@@ -697,6 +697,15 @@ impl TypeTable {
             .is_some_and(|def| self.is_unrestricted_resource(def))
     }
 
+    /// Whether a value of `ty` is an `externref`: an extern handle, or an
+    /// `Option` of one, whose `None` is the null.
+    #[must_use]
+    pub fn is_externref(&self, ty: TypeId) -> bool {
+        let head = self.representation_head(ty);
+        let handle = self.as_option(head).unwrap_or(head);
+        self.is_extern_handle(self.representation_head(handle))
+    }
+
     /// Record `child extends parent`, already validated by the caller.
     pub fn set_resource_parent(&mut self, child: DefId, parent: DefId) {
         assert_ne!(child, parent, "a resource cannot extend itself");
@@ -998,6 +1007,9 @@ impl TypeTable {
             | ResolvedType::Function { .. } => true,
             // A reference to nothing holds nothing, so it stays stackless.
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => !self.is_stackless(ty),
+            // An extern handle is an `externref`, which holds no place to
+            // write. An affine resource is its own box.
+            ResolvedType::Resource { .. } => self.is_extern_handle(self.representation_head(ty)),
             _ => false,
         }
     }
@@ -3120,12 +3132,13 @@ impl TypeTable {
 
     /// The WIR struct the cell `cell` lowers to, named by its payload's
     /// representation: `&X` and `&mut X` share one, and so do the cells of two
-    /// function types.
+    /// function types, or of two extern handles.
     #[must_use]
     pub fn cell_struct_name(&self, cell: TypeId) -> String {
         let payload = self.representation_head(self.cell_payload(cell).expect("a cell reference"));
         let spelled = match self.get(payload) {
             ResolvedType::Function { .. } => name::CELL_FN_PAYLOAD.to_string(),
+            ResolvedType::Resource { .. } => name::CELL_EXTERN_PAYLOAD.to_string(),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 match self.cell_payload(payload) {
                     Some(_) => self.cell_struct_name(payload),

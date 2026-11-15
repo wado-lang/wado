@@ -16,10 +16,9 @@ use crate::tir::{
     TirLocal, TirModule, TirStmt, TirStmtKind, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
-use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use crate::synthesis::common::{builtin_call, cast, option_none, synth_span};
+use crate::synthesis::common::{builtin_call, cast, deref_expr, option_none, synth_span};
 
 use super::callback_export::Callbacks;
 use super::import_adapter::is_gc_passthrough_param;
@@ -257,6 +256,19 @@ fn record_applied_return(
     }
 }
 
+/// `arg` read through each reference to an extern handle it is. An adapter
+/// takes the handle, and a reference to one is a cell holding it.
+fn extern_handle_by_value(mut arg: TirExpr, type_table: &TypeTable) -> TirExpr {
+    if !type_table.is_extern_handle(type_table.peel_refs(arg.type_id)) {
+        return arg;
+    }
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = type_table.get(arg.type_id) {
+        let span = arg.span;
+        arg = deref_expr(arg, *inner, span);
+    }
+    arg
+}
+
 /// Retype one adapter param and its local from a call-site arg, except a flat
 /// one, whose arg is cast instead.
 fn fixup_adapter_param_from_call_site(
@@ -327,6 +339,13 @@ impl CallRewriteWalker<'_> {
             .get_function(&key)
             .expect("an adapter exists only for a registered CM function");
         let mut args = take_call_args(expr);
+        for arg in &mut args {
+            let taken = std::mem::replace(
+                &mut arg.expr,
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
+            );
+            arg.expr = extern_handle_by_value(taken, &self.type_table.borrow());
+        }
         let receiver = matches!(kind, CmCallKind::Method).then(|| args.remove(0));
         let param_offset = usize::from(receiver.is_some());
         self.externalize_callbacks(
@@ -548,37 +567,6 @@ pub(super) fn collect_effect_calls_in_block(
         call_sites,
     }
     .visit_block(block);
-}
-
-/// Every call in `block` of a web import no lowering is built for yet, as the
-/// import's registry key and where the call is.
-pub(super) fn unbuilt_extern_import_calls(
-    block: &TirBlock,
-    call_sites: &CmCallSites,
-) -> Vec<(String, Span)> {
-    struct Calls<'a> {
-        call_sites: &'a CmCallSites<'a>,
-        found: Vec<(String, Span)>,
-    }
-    impl TirRefVisitor for Calls<'_> {
-        fn visit_expr(&mut self, expr: &TirExpr) {
-            let registry = self.call_sites.registry;
-            if let Some((key, _)) = self.call_sites.key_of(expr)
-                && registry
-                    .get_function(&key)
-                    .is_some_and(|func| registry.is_unbuilt_extern_import(func))
-            {
-                self.found.push((key, expr.span));
-            }
-            self.walk_expr(expr);
-        }
-    }
-    let mut calls = Calls {
-        call_sites,
-        found: Vec::new(),
-    };
-    calls.visit_block(block);
-    calls.found
 }
 
 /// Records the registry key of every CM import call, for

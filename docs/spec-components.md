@@ -466,7 +466,9 @@ An import whose signature names an extern handle is a web import. The handle may
 
 A host that serves no web imports still runs the component. There, a call of one that no handler answers traps.
 
-> Not yet implemented: an `async` web import is rejected where it is called. [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md) lists the work.
+An `async` web import returns an [`AsyncCall<T>`](#async-imports) as any async import does. The host answers the call with a promise, and `wait` suspends until it settles. `cancel`, and dropping the call, stop the waiting and nothing else: the work behind a promise goes on. Such a call cannot join a `WaitableSet`, and inserting one traps.
+
+An extern handle is a scalar where a reference is concerned. A `&Node` is a reference to a place holding the handle, as a `&i32` is to a place holding a number, and a `&mut` to a field or element holding one is the same error.
 
 ### Resource Ownership
 

@@ -1109,6 +1109,13 @@ impl Waitable for Subtask {
     }
 }
 
+/// Any extern handle: every one is the same Wasm value, whatever resource
+/// declares it. A closure crosses to a web import as one, and an `async` web
+/// import answers its promise as one.
+#[compiler_item("extern_object")]
+#[cm("wado:extern/object", linearity = "unrestricted", repr = "externref")]
+internal resource ExternObject;
+
 /// A handle to an in-flight CM async import call, parameterised by the
 /// result type `T`. Returned by the synthesised adapter for a WIT
 /// `async func` import.
@@ -1117,6 +1124,10 @@ impl Waitable for Subtask {
 /// which the host writes the async result. `wait` blocks until the call
 /// returns and takes the lifted result; `cancel` aborts the in-flight call.
 /// Either one consumes the call, and dropping a call cancels it.
+///
+/// An `async` web import answers a promise of the host's in place of a
+/// subtask. `wait` suspends until it settles; `cancel` and a drop stop the
+/// waiting and nothing else, since a promise cannot be cancelled.
 ///
 /// The subtask begins running the moment the adapter returns, so writes to
 /// stream parameters (e.g. a request body) made after the adapter call and
@@ -1147,6 +1158,9 @@ pub affine struct AsyncCall<affine T> {
     /// memory. A field, so it drops after the subtask resolves: only then has
     /// the callee read every argument.
     args: Option<ArgBuffer>,
+    /// The promise an `async` web import answered, until `wait` has had the
+    /// host write its result into the buffer. None for every other call.
+    promise: Option<ExternObject>,
 }
 
 impl<affine T> AsyncCall<T> {
@@ -1157,6 +1171,13 @@ impl<affine T> AsyncCall<T> {
             let mut set = WaitableSet::<Subtask>::new();
             set.insert(subtask);
             drop_resolved(set.wait().member);
+        }
+        if let Some(promise) = call.promise.take() {
+            let buffer = match &call.buffer {
+                Some(buffer) => buffer.ptr,
+                None => 0,
+            };
+            builtin::extern_promise_wait(promise, buffer);
         }
         // The buffer drops, freed, once the lift has read it.
         return match call.buffer.take() {
@@ -1190,7 +1211,8 @@ impl<affine T> Drop for AsyncCall<T> {
             returned = state == CallState::Returned;
             drop_resolved(subtask);
         }
-        if returned && let Some(buffer) = self.buffer {
+        // A promise nobody waited on has written no result.
+        if returned && self.promise matches { None } && let Some(buffer) = self.buffer {
             let _ = (self.lift)(buffer.ptr);
         }
     }
@@ -1198,6 +1220,9 @@ impl<affine T> Drop for AsyncCall<T> {
 
 impl<affine T> Waitable for AsyncCall<T> {
     fn wait_on(&self) -> WaitOn {
+        if self.promise matches { Some(_) } {
+            panic("a set cannot wait on a call a promise settles");
+        }
         return match &self.subtask {
             Some(subtask) => subtask.wait_on(),
             None => WaitOn::Settled(ReadyEvent::Call(CallState::Returned)),

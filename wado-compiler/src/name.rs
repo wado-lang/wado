@@ -737,6 +737,9 @@ pub enum ExternHostQuery {
     ClassOf,
     /// `same(a, b) -> i32`: whether two objects are one.
     Same,
+    /// `promise-wait(promise, buffer)`: suspends until the promise an `async`
+    /// web import answered settles, then has the result written at `buffer`.
+    PromiseWait,
 }
 
 impl ExternHostQuery {
@@ -744,13 +747,31 @@ impl ExternHostQuery {
         cm_import_alias(match self {
             Self::ClassOf => "class-of",
             Self::Same => "same",
+            Self::PromiseWait => "promise-wait",
         })
     }
 
-    pub fn arity(self) -> usize {
+    /// How many objects it takes, ahead of any address.
+    pub fn objects(self) -> usize {
         match self {
-            Self::ClassOf => 1,
+            Self::ClassOf | Self::PromiseWait => 1,
             Self::Same => 2,
+        }
+    }
+
+    /// Whether it takes an address in linear memory after its objects.
+    pub fn takes_address(self) -> bool {
+        match self {
+            Self::ClassOf | Self::Same => false,
+            Self::PromiseWait => true,
+        }
+    }
+
+    /// Whether it answers an `i32`, rather than nothing.
+    pub fn answers(self) -> bool {
+        match self {
+            Self::ClassOf | Self::Same => true,
+            Self::PromiseWait => false,
         }
     }
 }
@@ -924,6 +945,10 @@ pub const CELL_FIELD: &str = "value";
 /// How a cell's name spells a function payload: every function value lowers
 /// to one representation, so its cells are one struct.
 pub const CELL_FN_PAYLOAD: &str = "fn";
+
+/// How a cell's name spells an extern handle payload: every one is an
+/// `externref`, so a reference to a resource is one to each it extends.
+pub const CELL_EXTERN_PAYLOAD: &str = "extern";
 
 /// The WIR struct a cell holding the payload spelled `payload` lowers to.
 #[must_use]

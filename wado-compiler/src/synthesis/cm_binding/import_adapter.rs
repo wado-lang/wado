@@ -313,6 +313,18 @@ fn arg_buffer(type_table: &RefCell<TypeTable>, record: Option<(TirExpr, TirExpr)
     option_some(buffer, option_type, tt.compiler_items())
 }
 
+/// The `Option<ExternObject>` an `AsyncCall` holds: the promise an `async`
+/// web import answered, or None.
+fn optional_promise(type_table: &RefCell<TypeTable>, promise: Option<TirExpr>) -> TirExpr {
+    let mut tt = type_table.borrow_mut();
+    let extern_object = tt.make_extern_object();
+    let option_type = tt.make_option(extern_object);
+    match promise {
+        Some(promise) => option_some(promise, option_type, tt.compiler_items()),
+        None => option_none(option_type, tt.compiler_items()),
+    }
+}
+
 /// Build the `AsyncCall<T>` struct literal returned by async import paths.
 /// Field order and indices mirror the stdlib `AsyncCall` declaration.
 fn make_async_call_literal(
@@ -321,6 +333,7 @@ fn make_async_call_literal(
     buffer: TirExpr,
     lift: TirExpr,
     args: TirExpr,
+    promise: TirExpr,
 ) -> TirExpr {
     struct_literal(
         async_call_type,
@@ -330,8 +343,18 @@ fn make_async_call_literal(
             ("buffer", buffer),
             ("lift", lift),
             ("args", args),
+            ("promise", promise),
         ],
     )
+}
+
+/// What the raw call of an `async` import answers, for its `AsyncCall` to hold.
+#[derive(Clone, Copy)]
+enum Pending {
+    /// A packed `(subtask_handle << 4) | status`.
+    Subtask,
+    /// A promise of the host's, as an `externref`.
+    Promise,
 }
 
 fn synthesize_async_wrap_function(
@@ -397,7 +420,15 @@ fn synthesize_async_wrap_function(
     };
     let buffer = result_buffer(ctx.type_table, outptr_expr, outptr_size, outptr_align);
     let no_args = arg_buffer(ctx.type_table, None);
-    let completed = make_async_call_literal(subtask_type, no_subtask, buffer, lift_fn_ref, no_args);
+    let no_promise = optional_promise(ctx.type_table, None);
+    let completed = make_async_call_literal(
+        subtask_type,
+        no_subtask,
+        buffer,
+        lift_fn_ref,
+        no_args,
+        no_promise,
+    );
     body_stmts.push(return_stmt(Some(completed)));
 
     make_binding_function(
@@ -501,16 +532,17 @@ pub(super) fn synthesize_adapter(
     };
 
     let plans = builder.plan_params();
-    builder.params_in_buffer = cm_interface_registry
-        .params_in_buffer(plans.iter().map(|plan| plan.ty), func_info.is_async);
+    let answers_subtask = cm_interface_registry.answers_subtask(func_info);
+    let answers_promise = cm_interface_registry.answers_promise(func_info);
+    builder.params_in_buffer =
+        cm_interface_registry.params_in_buffer(plans.iter().map(|plan| plan.ty), answers_subtask);
     let flat_ranges = builder.emit_param_lowering(&plans);
 
-    let async_args = func_info
-        .is_async
-        .then(|| builder.prepare_async_args(&plans, &flat_ranges));
-    // A sync callee has read every argument by the time it returns, so the
-    // buffers lowering them, the params buffer included, are freed then.
-    let sync_frees = if func_info.is_async {
+    let async_args = answers_subtask.then(|| builder.prepare_async_args(&plans, &flat_ranges));
+    // A callee answering a value or a promise has read every argument by the
+    // time it returns, so the buffers lowering them, the params buffer
+    // included, are freed then.
+    let sync_frees = if answers_subtask {
         Vec::new()
     } else if builder.params_in_buffer {
         let buf = builder.emit_indirect_params_buffer(&plans, None);
@@ -536,10 +568,13 @@ pub(super) fn synthesize_adapter(
     let extern_ref_return = func_info
         .return_type
         .as_ref()
-        .filter(|ty| cm_interface_registry.extern_ref(ty).is_some())
+        .filter(|ty| !func_info.is_async && cm_interface_registry.extern_ref(ty).is_some())
         .map(|ty| builder.cm_type_id(ty));
-    let raw_call_return_type =
-        extern_ref_return.unwrap_or_else(|| wasi_return_type_id(func_info, cm_interface_registry));
+    let raw_call_return_type = if answers_promise {
+        type_table.borrow_mut().make_extern_object()
+    } else {
+        extern_ref_return.unwrap_or_else(|| wasi_return_type_id(func_info, cm_interface_registry))
+    };
     let mut raw_call = cm_raw_call(
         func_info,
         std::mem::take(&mut builder.flat_args),
@@ -550,7 +585,12 @@ pub(super) fn synthesize_adapter(
     }
 
     let adapter_return_type = if let Some((async_outptr, args)) = async_args {
-        builder.emit_async_result(raw_call, async_outptr, args)
+        builder.emit_async_result(raw_call, async_outptr, args, Pending::Subtask)
+    } else if answers_promise {
+        // The host writes the result only once `wait` hands it this buffer.
+        let outptr = builder.alloc_async_outptr();
+        let no_args = arg_buffer(type_table, None);
+        builder.emit_async_result(raw_call, outptr, no_args, Pending::Promise)
     } else if let Some(outptr) = sync_outptr {
         builder.emit_outptr_result(raw_call, outptr)
     } else if let Some(handle_type) = extern_ref_return {
@@ -1446,23 +1486,28 @@ impl<'a> AdapterBuilder<'a> {
 
     /// Async result strategy. The WASI P3 lowered function returns a packed
     /// `(subtask_handle << 4) | status`, its result reaching the outptr buffer
-    /// only at `Status::Returned`. The adapter neither waits nor lifts: it
-    /// packages the subtask, the result buffer, the lift function and the
-    /// argument buffer `args` into an `AsyncCall<T>`, leaving `wait()` to do both.
+    /// only at `Status::Returned`; a web import returns a promise, whose result
+    /// reaches the buffer when `wait()` asks the host for it. The adapter
+    /// neither waits nor lifts: it packages what the call answered, the result
+    /// buffer, the lift function and the argument buffer `args` into an
+    /// `AsyncCall<T>`, leaving `wait()` to do both.
     fn emit_async_result(
         &mut self,
         raw_call: TirExpr,
         async_outptr: Option<OutptrBuffer>,
         args: TirExpr,
+        pending: Pending,
     ) -> TypeId {
         let func_info = self.func_info;
-        let subtask_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
+        let answered_type = raw_call.type_id;
+        let answered_local = alloc_local(&mut self.next_local, &mut self.locals, answered_type);
         self.body_stmts.push(let_stmt(
-            "$subtask_packed",
-            subtask_local,
-            TypeTable::I32,
+            "$answered",
+            answered_local,
+            answered_type,
             raw_call,
         ));
+        let answered = local_ref(answered_local, "$answered", answered_type);
 
         let buffer = match async_outptr {
             Some(outptr) => result_buffer(
@@ -1506,15 +1551,34 @@ impl<'a> AdapterBuilder<'a> {
         );
         let lift_fn_ref = self.func_ref(lift_fn_name, lift_fn_type);
 
-        let subtask = lift_subtask(
-            self.lower_ctx.type_table,
-            local_ref(subtask_local, "$subtask_packed", TypeTable::I32),
-            &mut self.next_local,
-            &mut self.locals,
-            &mut self.body_stmts,
+        let type_table = self.lower_ctx.type_table;
+        let (subtask, promise) = match pending {
+            Pending::Subtask => (
+                lift_subtask(
+                    type_table,
+                    answered,
+                    &mut self.next_local,
+                    &mut self.locals,
+                    &mut self.body_stmts,
+                ),
+                optional_promise(type_table, None),
+            ),
+            Pending::Promise => {
+                let no_subtask = option_none(
+                    optional_subtask_type(type_table),
+                    type_table.borrow().compiler_items(),
+                );
+                (no_subtask, optional_promise(type_table, Some(answered)))
+            }
+        };
+        let subtask_struct = make_async_call_literal(
+            subtask_type,
+            subtask,
+            buffer,
+            lift_fn_ref.clone(),
+            args,
+            promise,
         );
-        let subtask_struct =
-            make_async_call_literal(subtask_type, subtask, buffer, lift_fn_ref.clone(), args);
         self.body_stmts.push(return_stmt(Some(subtask_struct)));
         self.auxiliary.push(lift_fn);
 
