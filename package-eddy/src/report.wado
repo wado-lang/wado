@@ -165,11 +165,13 @@ fn numbered(diff: &String, files: &List<String>) -> String {
         } else if let Some(hunk) = l.strip_prefix("@@ ") {
             n = new_side(hunk.to_string())[0];
             out.push_str(`${l}\n`);
-        } else if l.starts_with("-") {
-            out.push_str(`       ${l}\n`);
-        } else {
+        } else if l.starts_with("+") || l.starts_with(" ") {
             out.push_str(`${n:>6} ${l}\n`);
             n += 1;
+        } else {
+            // A line the old side alone has, or git's note that a side ends
+            // without a newline.
+            out.push_str(`       ${l}\n`);
         }
     }
     return out;
@@ -297,6 +299,25 @@ diff --git a/src/b.rs b/src/b.rs
 @@ -40 +43 @@
        -old
     43 +new
+";
+}
+
+test "git's marker of a missing final newline is not a line of the file" {
+    let diff = "diff --git a/f b/f
+--- a/f
++++ b/f
+@@ -1 +1,2 @@
+-a
+\\ No newline at end of file
++a
++b
+";
+    assert numbered(&diff, &["f"]) == "+++ b/f
+@@ -1 +1,2 @@
+       -a
+       \\ No newline at end of file
+     1 +a
+     2 +b
 ";
 }
 
