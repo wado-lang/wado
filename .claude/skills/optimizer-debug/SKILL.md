@@ -30,7 +30,7 @@ under your `-Ox` choice.
 ### What does pass X produce?
 
 ```sh
-WADO_DUMP_PASS_AFTER=wir/sroa_multi_value_returns \
+WADO_DUMP_PASS_AFTER=wir/flatten_variant_slots \
   cargo run --bin wado --quiet -- compile -O1 file.wado -o scratchpad/out.wasm 2>scratchpad/after.log
 ```
 
@@ -41,7 +41,7 @@ after the named pass, framed by `=== WIR after <name> ===` /
 ### What does pass X consume?
 
 ```sh
-WADO_DUMP_PASS_BEFORE=wir/sroa_multi_value_returns \
+WADO_DUMP_PASS_BEFORE=wir/flatten_variant_slots \
   cargo run --bin wado --quiet -- compile -O1 file.wado -o scratchpad/out.wasm 2>scratchpad/before.log
 ```
 

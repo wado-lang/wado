@@ -1707,31 +1707,26 @@ fn descent_blocked(instr: &WirInstr, reach: TeeReach) -> bool {
     }
 }
 
-/// Relax a read's `result_ty` from non-null to nullable for the operands that
+/// Relax `LocalGet.result_ty` from non-null to nullable for the operands that
 /// accept a nullable reference. `finalize_locals` narrows a nullable local's
-/// read, and codegen a nullable global or array slot's, only where `result_ty`
-/// is non-null, so relaxing it here suppresses the redundant `ref.as_non_null`.
+/// read only where `result_ty` is non-null, so relaxing it here suppresses the
+/// redundant `ref.as_non_null`.
 fn try_relax_gc_operands(instr: &mut WirInstr, locals: &WirLocals) -> bool {
     let mut changed = false;
     for_each_nullable_ref_operand(instr, locals, |operand| {
-        changed |= relax_ref_read(operand);
+        changed |= relax_ref_local_get(operand);
     });
     changed
 }
 
-fn relax_ref_read(instr: &mut WirInstr) -> bool {
-    match instr {
-        WirInstr::LocalGet { result_ty, .. }
-        | WirInstr::GlobalGet { result_ty, .. }
-        | WirInstr::ArrayGet { result_ty, .. }
-            if result_ty.is_nonnull_ref() =>
-        {
-            result_ty.set_nullable();
-            true
-        }
-        WirInstr::Seq(items) => items.last_mut().is_some_and(relax_ref_read),
-        _ => false,
+fn relax_ref_local_get(instr: &mut WirInstr) -> bool {
+    if let WirInstr::LocalGet { result_ty, .. } = instr
+        && result_ty.is_nonnull_ref()
+    {
+        result_ty.set_nullable();
+        return true;
     }
+    false
 }
 
 #[cfg(test)]
@@ -1772,28 +1767,22 @@ mod tests {
     }
 
     #[test]
-    fn an_element_read_stored_to_a_nullable_local_is_not_narrowed() {
+    fn an_element_read_stored_to_a_nullable_local_keeps_its_unset_trap() {
         let locals: WirLocals = [("c".to_string(), ref_ty(2, true))].into_iter().collect();
         let mut instr = WirInstr::LocalSet {
             name: "c".to_string(),
-            value: Box::new(WirInstr::Seq(vec![
-                WirInstr::Nop,
-                WirInstr::ArrayGet {
-                    type_id: tid(1),
-                    array: Box::new(local_get("a", ref_ty(1, false))),
-                    index: Box::new(WirInstr::I32Const(0)),
-                    result_ty: ref_ty(2, false),
-                },
-            ])),
+            value: Box::new(WirInstr::ArrayGet {
+                type_id: tid(1),
+                array: Box::new(local_get("a", ref_ty(1, false))),
+                index: Box::new(WirInstr::I32Const(0)),
+                result_ty: ref_ty(2, false),
+            }),
         };
-        assert!(try_relax_gc_operands(&mut instr, &locals));
+        assert!(!try_relax_gc_operands(&mut instr, &locals));
         let WirInstr::LocalSet { value, .. } = &instr else {
             unreachable!();
         };
-        let WirInstr::Seq(items) = value.as_ref() else {
-            unreachable!();
-        };
-        assert_matches!(&items[1], WirInstr::ArrayGet { result_ty, .. } if !result_ty.is_nonnull_ref());
+        assert_matches!(value.as_ref(), WirInstr::ArrayGet { result_ty, .. } if result_ty.is_nonnull_ref());
     }
 
     fn fold_short_fill(instr: &mut WirInstr) -> bool {

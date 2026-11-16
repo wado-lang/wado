@@ -242,7 +242,7 @@ paid on a benchmark `fts` never touched.
   lone gets, and measures worse the wider it gets (`dead-ends.md`).
   **`array.set` shares the length too**: wasmtime reads the length read-only
   and in an alias region of its own, so an element store does not clobber it
-  and adjacent sets share one load, as gets do.
+  and adjacent sets to one array share one load, as gets do.
 - **SROA is priced by the aggregate's width, not by the allocation it removes.**
   Splitting a 40-slot tuple into locals deletes one `struct.new` per struct and
   costs 6.5% on cbor-twitter: past the register file, forty `ref` locals live
