@@ -50,15 +50,7 @@ use {
 use { ask_json, Usage } from "../src/anthropic.wado";
 use { cost_summary } from "../src/cost.wado";
 use { review, Submission } from "../src/review.wado";
-use {
-    hold_tree,
-    Tree,
-    add_build_submodules,
-    home_runner,
-    with_mise_tools,
-    reset_snapshot,
-    index,
-} from "../src/snapshot.wado";
+use { hold_tree, Tree, home_runner, with_mise_tools, reset_snapshot, index } from "../src/snapshot.wado";
 use { Runner, Workspace } from "../src/tools.wado";
 use { load, SymbolIndex } from "../src/symbols.wado";
 
@@ -199,11 +191,9 @@ ${fix_diff}
 /// The tree as merge `sha` left it, indexed when `symbols` is set and ready to
 /// build when `run` is.
 fn workspace(tree: &Tree, sha: &String) -> Workspace with (Process, Preopens, Environment) {
-    let root = tree.check_out(sha);
-    // Before indexing, so the index sees the tree Run builds.
-    if RUN {
-        add_build_submodules(&root);
-    }
+    // With its submodules before indexing, so the index sees the tree Run
+    // builds.
+    let root = tree.check_out(sha, RUN);
     let symbols: Option<SymbolIndex> = if SYMBOLS { Some(load(&index(&root, &WADO)).unwrap()) } else { null };
     let runner: Option<Runner> = if RUN { Some(with_mise_tools(home_runner(), &root)) } else { null };
     return Workspace { root, symbols, runner };

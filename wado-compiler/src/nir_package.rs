@@ -130,11 +130,10 @@ pub struct NirPackage {
     /// Which `$value_copy$` helper copies each type — the one join, so a
     /// consumer holding a `TypeId` asks here rather than re-deriving the key.
     pub value_copy_helpers: ValueCopyHelpers<FuncId>,
-    /// Functions `optimize/sroa_param` minted, each with the function it was
-    /// minted from. A clone may gain callers in a later round, so its current
-    /// call sites are not its whole contract. Identity, not a name test — see
-    /// the declaration-identity WEP.
-    pub sroa_param_clones: IndexMap<FuncId, FuncId>,
+    /// Functions `optimize/sroa_param` minted. A clone may gain callers in a
+    /// later round, so its current call sites are not its whole contract.
+    /// Identity, not a name test — see the declaration-identity WEP.
+    pub sroa_param_clones: IndexSet<FuncId>,
     /// How each function `sroa_param` minted, `dae` or `drve` reshaped, or
     /// `param_spec` cloned from one of those stands against the root it
     /// derives from. Its name is rendered from this alone, so two routes to one

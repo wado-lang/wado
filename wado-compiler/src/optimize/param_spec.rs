@@ -55,6 +55,12 @@ pub(super) const MAX_TOTAL_SPECIALIZATIONS: usize = 4096;
 /// costs more in duplicated code than its folded branches can return.
 const MAX_CLONE_EXPRS: usize = 2000;
 
+/// Most values one slot of a function on a call cycle is cloned on. A flag or
+/// a small mode the recursion passes on stays under it; a counter, which
+/// takes a new value at every level, stops at it rather than at the
+/// optimizer's iteration cap.
+const MAX_RECURSIVE_VALUES: usize = 4;
+
 /// A constant known for a parameter or field. Portable across functions,
 /// unlike a pool-local `ValueId`, and hashable so it can key the clone cache.
 /// `Int` / `Float` carry their type so a width mismatch is rejected.
@@ -300,10 +306,9 @@ pub(super) struct ParamSpecState {
     clones: IndexMap<SpecKey, FuncId>,
     /// Each clone's identity, which a clone of it extends.
     specs: IndexMap<FuncId, SpecKey>,
-    /// The roots of the callers each clone was minted under, down from the
-    /// first. A call to one of them recurses, and a constant that changes on
-    /// each level, such as a depth, would mint a clone per level without end.
-    lineage: IndexMap<FuncId, IndexSet<FuncId>>,
+    /// The values each slot of a function on a call cycle is bound to among
+    /// its clones, by root, parameter name and slot.
+    recursive_values: IndexMap<(FuncId, String, Slot), IndexSet<FieldConst>>,
     /// Clones minted per original callee, which numbers the next one's name.
     per_callee: IndexMap<FuncId, usize>,
     /// What each clone knows about its own parameters. Keyed by *name*, since
@@ -332,7 +337,7 @@ impl ParamSpecState {
             cap_hit: None,
             clones: IndexMap::default(),
             specs: IndexMap::default(),
-            lineage: IndexMap::default(),
+            recursive_values: IndexMap::default(),
             per_callee: IndexMap::default(),
             param_consts: IndexMap::default(),
             callees: BodyMemo::default(),
@@ -377,21 +382,29 @@ impl ParamSpecState {
     pub(super) fn cached_clones(&self, project: &NirPackage) -> Vec<FuncId> {
         self.clones
             .values()
-            .chain(project.sroa_param_clones.keys())
+            .chain(project.sroa_param_clones.iter())
             .copied()
             .collect()
     }
 
-    /// The lineage of a clone minted at a call in `caller`: the caller's own,
-    /// and the caller's root. A function `sroa_param` minted stands for the
-    /// one it was minted from, which keeps the lineage.
-    fn lineage_through(&self, project: &NirPackage, mut caller: FuncId) -> IndexSet<FuncId> {
-        while let Some(&source) = project.sroa_param_clones.get(&caller) {
-            caller = source;
+    /// Whether a clone keyed `key` of a function on a call cycle would bind a
+    /// slot to a value past the [`MAX_RECURSIVE_VALUES`] its root's clones
+    /// already bind it to.
+    fn exceeds_recursive_values(&self, key: &SpecKey) -> bool {
+        key.bindings.iter().any(|(name, slot, value)| {
+            self.recursive_values
+                .get(&(key.root, name.clone(), *slot))
+                .is_some_and(|seen| seen.len() >= MAX_RECURSIVE_VALUES && !seen.contains(value))
+        })
+    }
+
+    fn record_recursive_values(&mut self, key: &SpecKey) {
+        for (name, slot, value) in &key.bindings {
+            self.recursive_values
+                .entry((key.root, name.clone(), *slot))
+                .or_default()
+                .insert(value.clone());
         }
-        let mut lineage = self.lineage.get(&caller).cloned().unwrap_or_default();
-        lineage.insert(self.specs.get(&caller).map_or(caller, |key| key.root));
-        lineage
     }
 
     /// Whether `func` is itself a clone this pass minted.
@@ -1283,6 +1296,10 @@ struct Site {
     diverges: bool,
     /// See [`binds_hot_field`]. Read only on a cold site.
     binds_hot_field: bool,
+    /// The callee is on a call cycle. A constant its recursion passes on may
+    /// change at each level, such as a depth, and would mint a clone per level
+    /// without end; [`MAX_RECURSIVE_VALUES`] bounds them.
+    recursive: bool,
 }
 
 /// Whether `site`'s clone replaces a field of an argument passed by reference
@@ -1433,6 +1450,7 @@ fn select_sites(
             cold: false,
             diverges: false,
             binds_hot_field: false,
+            recursive: signature.on_cycle,
         });
     }
     sites
@@ -1705,7 +1723,7 @@ fn propagate_scalar_constants(
         if !is_dae_sroa_eligible(&func, false)
             || func.compiler_item.is_some()
             || state.is_clone(id)
-            || project.sroa_param_clones.contains_key(&id)
+            || project.sroa_param_clones.contains(&id)
         {
             continue;
         }
@@ -1829,11 +1847,10 @@ fn plan_clones<'s>(
             continue;
         }
         let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
-        let lineage = state.lineage_through(project, FuncId::new(*caller));
         if site.diverges
             || (site.cold && !site.binds_hot_field)
             || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
-            || lineage.contains(&key.root)
+            || site.recursive && state.exceeds_recursive_values(&key)
         {
             continue;
         }
@@ -1856,9 +1873,11 @@ fn plan_clones<'s>(
         // call to the callee, so this one takes its key. Left with the key, it
         // sends every later call through a recursion to a fresh clone, whose
         // body calls the callee again, round after round.
+        if site.recursive {
+            state.record_recursive_values(&key);
+        }
         state.clones.insert(key.clone(), id);
         state.specs.insert(id, key);
-        state.lineage.insert(id, lineage);
         minted_from.insert(id, site.callee);
         state.per_callee.insert(site.callee, ordinal + 1);
         retarget.push((*caller, site.call, id));

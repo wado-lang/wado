@@ -45,7 +45,7 @@ use { comment } from "./comment.wado";
 use { cost_summary } from "./cost.wado";
 use { report } from "./report.wado";
 use { review, Submission, Finding, Reviewed } from "./review.wado";
-use { hold_tree, add_build_submodules, home_runner, with_mise_tools } from "./snapshot.wado";
+use { hold_tree, home_runner, with_mise_tools } from "./snapshot.wado";
 use { Runner, Workspace } from "./tools.wado";
 
 #[param(from_env = "CLAUDE_MODEL")]
@@ -139,13 +139,8 @@ ${commits.trim()}`;
         Ok(tree) => tree,
         Err(e) => fail(e),
     };
-    let root = tree.check_out(&head);
-    let runner: Option<Runner> = if options.no_run {
-        null;
-    } else {
-        add_build_submodules(&root);
-        Some(with_mise_tools(home_runner(), &root));
-    };
+    let root = tree.check_out(&head, !options.no_run);
+    let runner: Option<Runner> = if options.no_run { null } else { Some(with_mise_tools(home_runner(), &root)) };
     let w = Workspace { root, runner };
     let change = Submission { heading, diff };
     let mut result = if options.report_again {

@@ -1159,7 +1159,7 @@ fn mint_scalarized_clones(
         }
 
         project.func_index.insert(func_key, id);
-        project.sroa_param_clones.insert(id, *key);
+        project.sroa_param_clones.insert(id);
         project.reshapes.insert(id, reshape);
         copy_function_strings(project, &origin, (clone.module_source.clone(), name));
         clones.insert(*key, id);

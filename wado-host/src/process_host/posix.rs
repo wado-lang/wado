@@ -215,15 +215,24 @@ fn start(
             None => Arc::new(File::open(scratch.home()).map_err(error_code)?),
         };
         let path = resolve(program, &cwd).map_err(error_code)?;
+        let host_reads: Vec<_> = grants
+            .read
+            .iter()
+            .chain(user_config().process_read())
+            .collect();
         let mut policy = Policy::new(Network::Granted);
         for grant in &grants.dirs {
             policy.grant_dir(grant.path.clone(), Arc::clone(&grant.dir));
         }
+        for path in &host_reads {
+            policy.grant_path((*path).clone(), Reach::ReadExecute);
+        }
         if let Some(asked) = asked {
             policy = narrowed(&policy, asked, &cwd)?;
-        }
-        for path in grants.read.iter().chain(user_config().process_read()) {
-            policy.grant_path(path.clone(), Reach::ReadExecute);
+            // Narrowing takes the guest's directories away, never the host's.
+            for path in &host_reads {
+                policy.grant_path((*path).clone(), Reach::ReadExecute);
+            }
         }
         policy.grant_path(scratch.0.path(), Reach::ReadWrite);
         if inherits {
