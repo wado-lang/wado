@@ -426,6 +426,26 @@ A `#[cm(...)]` resource may declare what may be done with its handle: `linearity
 
 An affine resource is move-only and carries a drop obligation (see [Affine Types](./spec-affine.md)). An unrestricted one owns nothing, so it is an ordinary copyable value. Assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
 
+A resource names an object rather than holding a value. A copy of an unrestricted one, or a reference to either kind, names the same object, and an operation may change that object through `&self`. So `&R` to a resource promises nothing about the object, and no `mut` is needed to change it.
+
+Every resource type implements `Resource`, a sealed marker the compiler states. An affine resource implements `AffineResource` too and an extern handle `ExternHandle`, and a bound on either implies `Resource`.
+
+<!-- {"fixture":"resource_marker_bound.wado"} -->
+
+```wado
+fn is_one<affine R: Resource>(_r: &R) -> bool {
+    return true;
+}
+
+fn through_extern<R: ExternHandle>(r: &R) -> bool {
+    return is_one(r);
+}
+
+fn through_affine<affine R: AffineResource>(r: &R) -> bool {
+    return is_one(r);
+}
+```
+
 An affine resource crosses the Component Model boundary as an `own` / `borrow` handle. A resource declared `repr = "externref"` is an extern handle, which [Extern Handles](#extern-handles) describes. `as` upcasts an extern handle to a resource it extends. No other cast accepts one, so an affine resource and an extern handle never convert into each other, and neither converts to a number.
 
 An extern resource is not a Component Model `resource`. Its operations are plain functions that take the handle as an ordinary parameter, so a `#[cm(...)]` name written in the `[constructor]T`, `[method]T.m` or `[static]T.m` form is an error on one. `classes = "..."` (see [Resource Inheritance](#resource-inheritance)) is accepted only beside `repr = "externref"`.
@@ -436,10 +456,10 @@ An extern handle is one Wasm `externref`. It is either an object of the host, or
 
 Every extern handle type implements `ExternHandle`, a marker the compiler states, and through it `Backing`:
 
-- `R::backed_by(&mut value)` makes a handle of type `R` that `value` stands behind. The handle keeps the reference, not a copy, and the reference is `&mut` since `backing` hands one back. Its class is `R`'s own.
-- `handle.backing::<T>()` is the value behind the handle, as `Option<&mut T>`. It is `None` for an object of the host, and for a handle a value of another type backs.
+- `R::backed_by(value)` makes a new handle of type `R` holding `value`. The value is passed as any argument is, so the handle's is its own: no variable names it, and only the handle reaches it. Its class is `R`'s own.
+- `handle.backing::<T>()` is the value the handle holds, in place, as `Option<&mut T>`. It is `None` for an object of the host, and for a handle holding a value of another type. The reference is `&mut` whatever the handle is held in, since a resource is the object it names.
 
-The value's type is one a reference reaches in place, which the bound `T: RefMut` states: a struct, a tuple, a list or a string. A scalar, a variant, a closure or an extern handle backs no handle.
+The value's type is one a reference reaches in place, which the bound `T: RefMut` states: a struct, a tuple, a list or a string. A scalar, a variant, a closure, a reference or an extern handle backs no handle.
 
 A backed handle is how a guest answers an import itself, as a handler in a test does.
 
@@ -452,15 +472,18 @@ struct Tag {
 }
 
 test {
-    let mut tag = Tag { name: "div", uses: 0 };
-    let node: Node = Element::backed_by(&mut tag);   // an upcast keeps the backing
+    let tag = Tag { name: "div", uses: 0 };
+    let node: Node = Element::backed_by(tag);    // an upcast keeps the backing
     let Some(back) = node.backing::<Tag>() else {
         panic("a Tag backs the handle");
     };
-    back.uses += 1;
-    assert tag.uses == 1;                        // the handle holds `tag` itself
+    back.uses += 1;                              // `&mut`, through a handle no `mut` names
+    assert node.backing::<Tag>() matches { Some(t) && t.uses == 1 };
+    assert tag.uses == 0;                        // the handle holds its own value
     assert node.backing::<String>() matches { None };
-    assert node == Element::backed_by(&mut tag);     // one value, one handle
+    let copy = node;
+    assert copy == node;                         // a copy is the same handle
+    assert node != Element::backed_by(tag);      // each call makes another
 }
 ```
 
@@ -511,7 +534,7 @@ fn use_it(w: Widget) {
 }
 
 test {
-    let w = Widget::backed_by(&mut "button");
+    let w = Widget::backed_by("button");
     let t: Target = w;
     assert t == w && t matches { _: Widget };
 }
@@ -567,7 +590,7 @@ A type pattern narrowing to `T` tests whether the handle's class lies in `T`'s r
 
 #### Traits on Handles
 
-- `Eq`: every extern resource is `Eq`, so a type holding one derives `Eq` too. `==` and `!=` compare two handles when one type extends the other. Two handles are equal when they are one object of the host, or one value of the guest backs both. A host object never equals a backed handle.
+- `Eq`: every extern resource is `Eq`, so a type holding one derives `Eq` too. `==` and `!=` compare two handles when one type extends the other. Two handles are equal when they are one object of the host, or one `backed_by` call made both. A host object never equals a backed handle.
 - `Ord`: none. Handles have no order.
 - `Inspect`: `${x:?}` renders the dynamic type the handle's class names, as [Inspect Output](./spec-literals.md#inspect-output) states.
 - `Serialize` and `Deserialize`: a resource, and a struct or variant that holds one, cannot derive either. A handle means something only inside its running instance. A hand-written impl may serialize what it reads from the host object.
