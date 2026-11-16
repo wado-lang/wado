@@ -1,0 +1,131 @@
+//! What token usage costs in US dollars, at the prices Anthropic lists for its
+//! own API: <https://platform.claude.com/docs/en/about-claude/pricing>.
+
+use { Usage } from "./anthropic.wado";
+
+/// US dollars per million tokens.
+struct Price {
+    input: f64,
+    output: f64,
+    cache_read: f64,
+}
+
+/// A cache write costs this many times the input price. It is the price of a
+/// five-minute entry, the only kind a request here asks for.
+global CACHE_WRITE: f64 = 1.25;
+
+/// What `model` charges a request, one with a long prompt where `long_prompt`,
+/// or `null` for a model this table does not list.
+fn price(model: &String, long_prompt: bool) -> Option<Price> {
+    return match *model {
+        "claude-fable-5-2" | "claude-mythos-5-2" => Some(Price { input: 8.0, output: 40.0, cache_read: 0.2 }),
+        "claude-fable-5-1" | "claude-mythos-5-1" => Some(Price { input: 10.0, output: 50.0, cache_read: 0.25 }),
+        "claude-fable-5" | "claude-mythos-5" => Some(Price { input: 10.0, output: 50.0, cache_read: 1.0 }),
+        "claude-opus-5-5" => Some(Price { input: 4.0, output: 20.0, cache_read: 0.2 }),
+        "claude-opus-5" | "claude-opus-4-8" | "claude-opus-4-7" | "claude-opus-4-6" => Some(
+            Price { input: 5.0, output: 25.0, cache_read: 0.5 },
+        ),
+        "claude-sonnet-5-5" => Some(Price { input: 2.0, output: 10.0, cache_read: 0.1 }),
+        "claude-sonnet-5" => Some(Price { input: 2.0, output: 10.0, cache_read: 0.2 }),
+        "claude-sonnet-4-6" => Some(Price { input: 3.0, output: 15.0, cache_read: 0.3 }),
+        "claude-haiku-5-5" => Some(if long_prompt {
+            Price { input: 0.5, output: 2.5, cache_read: 0.05 };
+        } else {
+            Price { input: 0.1, output: 0.5, cache_read: 0.01 };
+        }),
+        "claude-haiku-4-5" => Some(Price { input: 1.0, output: 5.0, cache_read: 0.1 }),
+        _ => null,
+    };
+}
+
+/// What `usage` of `model` costs, or `null` for a model with no listed price.
+pub fn cost_usd(model: &String, usage: &Usage) -> Option<f64> {
+    let Some(short_price) = price(model, false) else {
+        return null;
+    };
+    let long = usage.long_prompts.unwrap_or(Usage {});
+    let short = Usage {
+        input_tokens: usage.input_tokens - long.input_tokens,
+        output_tokens: usage.output_tokens - long.output_tokens,
+        cache_creation_input_tokens: usage.cache_creation_input_tokens - long.cache_creation_input_tokens,
+        cache_read_input_tokens: usage.cache_read_input_tokens - long.cache_read_input_tokens,
+    };
+    return Some(at(&short_price, &short) + at(&price(model, true).unwrap(), &long));
+}
+
+fn at(p: &Price, u: &Usage) -> f64 {
+    let dollars_for_a_million = u.input_tokens as f64 * p.input + u.output_tokens as f64 * p.output + u.cache_creation_input_tokens as f64 * p.input * CACHE_WRITE + u.cache_read_input_tokens as f64 * p.cache_read;
+    return dollars_for_a_million / 1_000_000.0;
+}
+
+/// One line saying what `spent`, each model beside what it took, cost: the
+/// total, then each model's share. A model with no listed price is named as
+/// unpriced, and the total is then a lower bound.
+pub fn cost_summary(spent: &List<[String, Usage]>) -> String {
+    let mut by_model: List<[String, Usage]> = [];
+    for let [model, usage] of spent {
+        match by_model.into_iter().position(|entry: [String, Usage]| entry.0 == *model) {
+            Some(i) => {
+                let mut sum = by_model[i].1;
+                sum.add(usage);
+                by_model[i] = [*model, sum];
+            },
+            None => by_model.push([*model, *usage]),
+        }
+    }
+    let [mut total, mut all_priced] = [0.0, true];
+    let mut shares: List<String> = [];
+    for let [model, usage] of &by_model {
+        match cost_usd(model, usage) {
+            Some(cost) => {
+                total += cost;
+                shares.push(`${*model} $${cost:.4}`);
+            },
+            None => {
+                all_priced = false;
+                shares.push(`${*model} unpriced`);
+            },
+        }
+    }
+    let bound = if all_priced { "" } else { "over " };
+    return `cost: ${bound}$${total:.4} (${shares.join(", ")})`;
+}
+
+test "a usage costs each kind of token at its own price" {
+    let usage = Usage {
+        input_tokens: 1_000_000,
+        output_tokens: 100_000,
+        cache_creation_input_tokens: 200_000,
+        cache_read_input_tokens: 10_000_000,
+    };
+    // 4 + 2 + 1 + 2
+    assert cost_usd(&"claude-opus-5-5", &usage) == Some(9.0);
+    assert cost_usd(&"claude-next", &usage) == null;
+}
+
+test "a long prompt is priced apart where the model prices it so" {
+    let long = Usage { input_tokens: 200_000, output_tokens: 10_000 };
+    let sum = Usage { input_tokens: 300_000, output_tokens: 30_000, long_prompts: Some(long) };
+    // Short: 0.1 * 0.1 + 0.02 * 0.5. Long: 0.2 * 0.5 + 0.01 * 2.5.
+    let haiku = cost_usd(&"claude-haiku-5-5", &sum).unwrap();
+    assert f64::abs(haiku - 0.145) < 1e-9;
+    let opus = cost_usd(&"claude-opus-5-5", &sum).unwrap();
+    assert f64::abs(opus - 1.8) < 1e-9;
+}
+
+test "a summary gives the total and each model's share" {
+    let reviewer = Usage { input_tokens: 100_000, output_tokens: 10_000 };
+    let reporter = Usage { input_tokens: 10_000, output_tokens: 2_000 };
+    assert cost_summary(&[
+        ["claude-opus-5-5", reviewer],
+        ["claude-haiku-5-5", reporter],
+    ]) == "cost: $0.6020 (claude-opus-5-5 $0.6000, claude-haiku-5-5 $0.0020)";
+    assert cost_summary(&[
+        ["claude-opus-5-5", reviewer],
+        ["claude-opus-5-5", reviewer],
+    ]) == "cost: $1.2000 (claude-opus-5-5 $1.2000)";
+    assert cost_summary(&[
+        ["claude-opus-5-5", reviewer],
+        ["claude-next", reporter],
+    ]) == "cost: over $0.6000 (claude-opus-5-5 $0.6000, claude-next unpriced)";
+}

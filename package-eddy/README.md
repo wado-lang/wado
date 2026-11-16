@@ -57,7 +57,21 @@ findings.
 Each run is also added to
 `reviews/<head>.json`, the record of every review of that commit, which is
 committed with the branch: outcomes are what Eddy learns from, and an outcome
-needs the finding it answers. In a Claude Code session the `eddy` skill runs
+needs the finding it answers.
+
+A run ends by printing what it cost to stderr, the total and each model's
+share, in US dollars:
+
+```text
+cost: $0.6020 (claude-opus-5-5 $0.6000, claude-haiku-5-5 $0.0020)
+```
+
+The record holds the tokens each model took, not the dollars: `src/cost.wado`
+prices them at Anthropic's list prices when the line is printed, so a price
+that changes is corrected in one table. A model the table does not list is
+named as unpriced, and the total is then a lower bound.
+
+In a Claude Code session the `eddy` skill runs
 the review and hands the findings to `code-review-response`.
 
 `src/main.wado` states the options.

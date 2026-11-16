@@ -31,22 +31,59 @@ pub struct ContentBlock {
 
 struct MessagesResponse {
     content: List<ContentBlock>,
+    usage: Usage,
 }
 
+/// The prompt size past which some models price a whole request higher, in
+/// tokens.
+pub global LONG_PROMPT: i32 = 100_000;
+
+/// The tokens one request took, as the API reports them, or the sum over
+/// several.
 pub struct Usage {
     pub input_tokens: i32 = 0,
     pub output_tokens: i32 = 0,
     pub cache_creation_input_tokens: i32 = 0,
     pub cache_read_input_tokens: i32 = 0,
+    /// The part of a sum that requests with a prompt past `LONG_PROMPT` took.
+    /// A sum alone cannot be priced without it: the price is per request.
+    pub long_prompts: Option<Usage> = null,
 }
 
 impl Usage {
+    /// Adds `other`, itself a sum.
     pub fn add(&mut self, other: &Usage) {
         self.input_tokens += other.input_tokens;
         self.output_tokens += other.output_tokens;
         self.cache_creation_input_tokens += other.cache_creation_input_tokens;
         self.cache_read_input_tokens += other.cache_read_input_tokens;
+        if let Some(theirs) = &other.long_prompts {
+            let mut long = self.long_prompts.unwrap_or(Usage {});
+            long.add(theirs);
+            self.long_prompts = Some(long);
+        }
     }
+
+    /// Adds `one`, the usage of one request.
+    pub fn add_request(&mut self, one: &Usage) {
+        assert one.long_prompts matches { None }, "the API reports one request's usage";
+        let prompt = one.input_tokens + one.cache_creation_input_tokens + one.cache_read_input_tokens;
+        self.add(&Usage { ..*one, long_prompts: if prompt > LONG_PROMPT { Some(*one) } else { null } });
+    }
+}
+
+test "a sum keeps apart what its long prompts took" {
+    let mut sum = Usage {};
+    sum.add_request(&Usage { input_tokens: 10, output_tokens: 1 });
+    sum.add_request(&Usage { input_tokens: 5, cache_read_input_tokens: LONG_PROMPT, output_tokens: 2 });
+    assert sum.input_tokens == 15 && sum.output_tokens == 3 && sum.cache_read_input_tokens == LONG_PROMPT;
+    let long = sum.long_prompts.unwrap();
+    assert long.input_tokens == 5 && long.output_tokens == 2 && long.long_prompts matches { None };
+
+    let mut both = Usage { input_tokens: 1 };
+    both.add(&sum);
+    both.add(&sum);
+    assert both.input_tokens == 31 && both.long_prompts.unwrap().output_tokens == 4;
 }
 
 /// A tool the model may call, as the API declares one.
@@ -111,13 +148,14 @@ pub fn message<T: Serialize>(value: &T) -> Value {
 }
 
 /// The text of `model`'s reply to `user` under `system`, or the error the API
-/// returned.
+/// returned. What the reply took is added to `spent`.
 pub fn ask(
     api_key: String,
     model: String,
     system: String,
     user: String,
     max_tokens: i32,
+    spent: &mut Usage,
 ) -> Result<String, String> with Client {
     let request = MessagesRequest {
         model,
@@ -128,18 +166,21 @@ pub fn ask(
         ],
     };
     let parsed = post::<MessagesResponse>(api_key, to_bytes(&request).unwrap())?;
+    spent.add_request(&parsed.usage);
     return Ok(text_of(&parsed.content));
 }
 
-/// `model`'s reply to `user`, read as the one JSON object it holds.
+/// `model`'s reply to `user`, read as the one JSON object it holds. What the
+/// reply took is added to `spent`.
 pub fn ask_json<T: Deserialize>(
     api_key: &String,
     model: String,
     system: String,
     user: String,
     max_tokens: i32,
+    spent: &mut Usage,
 ) -> Result<T, String> with Client {
-    let text = ask(*api_key, model, system, user, max_tokens)?;
+    let text = ask(*api_key, model, system, user, max_tokens, spent)?;
     return json_object::<T>(&text);
 }
 

@@ -67,7 +67,7 @@ pub fn run_agent(
                 return AgentRun { answer: Err(e), turns, calls, usage };
             },
         };
-        usage.add(&turn.usage);
+        usage.add_request(&turn.usage);
         if turn.stop_reason != "tool_use" {
             let answer: Result<String, String> = if turn.stop_reason == "end_turn" {
                 Ok(turn.text());

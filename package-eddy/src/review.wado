@@ -106,9 +106,13 @@ pub fn review(
 ) -> Reviewed with (Client, Preopens, Process) {
     // Thinking spends from the same budget as the answer.
     let Some(w) = ws else {
-        return match ask_json::<Answer>(api_key, model, REVIEW, change.task(), 32_000) {
-            Ok(a) => Reviewed { findings: a.findings },
-            Err(e) => Reviewed { error: Some(e) },
+        let mut usage = Usage {};
+        return match ask_json::<Answer>(api_key, model, REVIEW, change.task(), 32_000, &mut usage) {
+            Ok(a) => Reviewed { findings: a.findings, usage: Some(usage) },
+            Err(e) => Reviewed {
+                error: Some(e),
+                usage: Some(usage),
+            },
         };
     };
     let agent = run_agent(api_key, model, instructions(w), change.task(), w, max_turns, 32_000);

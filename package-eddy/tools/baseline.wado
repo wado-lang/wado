@@ -46,7 +46,8 @@ use {
     Judged,
     Run,
 } from "./eval.wado";
-use { ask_json } from "../src/anthropic.wado";
+use { ask_json, Usage } from "../src/anthropic.wado";
+use { cost_summary } from "../src/cost.wado";
 use { review, Submission } from "../src/review.wado";
 use {
     snapshot,
@@ -143,6 +144,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
         }
         out.entries.push(entry);
     }
+    let [mut reviewing, mut grading] = [Usage {}, Usage {}];
     for let i of 0..<out.entries.len() {
         if out.entries[i].runs.len() >= RUNS || ONLY != 0 && out.entries[i].fix != ONLY {
             continue;
@@ -167,7 +169,9 @@ ${fix_diff}
             if RUN && let Some(w) = &ws {
                 reset_snapshot(&w.root, &culprit.sha);
             }
-            out.entries[i].runs.push(review_once(&api_key, &review_prompt, &known, &ws));
+            let run = review_once(&api_key, &review_prompt, &known, &ws, &mut grading);
+            reviewing.add(&run.usage.unwrap_or(Usage {}));
+            out.entries[i].runs.push(run);
             // Written after every run, so a run that dies keeps what it paid for.
             fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
             eprintln(`#${fix} run ${out.entries[i].runs.len()}`);
@@ -178,6 +182,11 @@ ${fix_diff}
     }
     fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
     report(&out);
+    // Of the runs made now; a run an earlier invocation left is not paid again.
+    eprintln(cost_summary(&[
+        [CLAUDE_MODEL, reviewing],
+        [GRADER, grading],
+    ]));
 }
 
 /// The tree as merge `sha` left it, indexed when `symbols` is set and ready to
@@ -213,12 +222,13 @@ fn judged_defect(judged: &Judged, fix: i32) -> String {
 }
 
 /// One review of the culprit, graded against the known defect. A failed
-/// review keeps what it spent.
+/// review keeps what it spent. What the grader took is added to `grading`.
 fn review_once(
     api_key: &String,
     review_prompt: &Submission,
     known: &String,
     ws: &Option<Workspace>,
+    grading: &mut Usage,
 ) -> Run with (Client, Preopens, Process) {
     let r = review(api_key, CLAUDE_MODEL, review_prompt, ws, MAX_TURNS);
     let mut reviewed = Run { findings: r.findings, turns: r.turns, calls: r.calls, usage: r.usage, error: r.error };
@@ -230,7 +240,7 @@ fn review_once(
 <findings>
 ${to_string(&reviewed.findings).unwrap()}
 </findings>`;
-    match ask_json::<Grade>(api_key, GRADER, GRADE, grade_prompt, 16_000) {
+    match ask_json::<Grade>(api_key, GRADER, GRADE, grade_prompt, 16_000, grading) {
         Ok(g) && g.hit && !(0 <= g.finding < reviewed.findings.len()) => reviewed.error = Some(
             `the grader's hit names finding ${g.finding} of ${reviewed.findings.len()}`,
         ),

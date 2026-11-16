@@ -18,7 +18,8 @@ use { Client } from "wasi:http";
 use { to_bytes_pretty, from_string } from "core:json";
 use { TreeMap } from "core:collections";
 use { changed_paths, source_diff, merge_title, Census, FixResult, Judged, Pair, Verdict } from "./eval.wado";
-use { ask_json, json_object } from "../src/anthropic.wado";
+use { ask_json, json_object, Usage } from "../src/anthropic.wado";
+use { cost_summary } from "../src/cost.wado";
 
 #[param(from_env = "CLAUDE_MODEL")]
 global CLAUDE_MODEL: String = "claude-opus-5-5";
@@ -68,6 +69,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
     let judged = earlier_verdicts(&out_path);
 
     let mut out = Judged { model: CLAUDE_MODEL, min_share, pairs: [] };
+    let mut spent = Usage {};
     for let r of &census.results {
         if r.old_lines == 0 || r.blamed[0].pr == 0 {
             continue;
@@ -100,7 +102,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
             continue;
         }
         // Thinking spends from the same budget as the answer.
-        match ask_json::<Verdict>(&api_key, CLAUDE_MODEL, SYSTEM, user, 16_000) {
+        match ask_json::<Verdict>(&api_key, CLAUDE_MODEL, SYSTEM, user, 16_000, &mut spent) {
             Ok(v) => pair.verdict = Some(v),
             Err(e) => pair.error = Some(e),
         }
@@ -110,6 +112,9 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
         eprintln(`${out.pairs.len()} #${r.pr}`);
     }
     fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
+    eprintln(cost_summary(&[
+        [CLAUDE_MODEL, spent],
+    ]));
 }
 
 /// The verdicts an earlier run of this model left at `path`, by pair. A rerun

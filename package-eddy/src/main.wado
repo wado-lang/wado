@@ -39,7 +39,9 @@ use { Process } from "core:process";
 use { Deserialize } from "core:serde";
 use { Client } from "wasi:http";
 use { git, try_git, paths_between, diff_between } from "./git.wado";
+use { Usage } from "./anthropic.wado";
 use { comment } from "./comment.wado";
+use { cost_summary } from "./cost.wado";
 use { report } from "./report.wado";
 use { review, Submission, Finding, Reviewed } from "./review.wado";
 use { snapshot, add_build_submodules, home_runner, with_mise_tools, drop_snapshot } from "./snapshot.wado";
@@ -80,6 +82,8 @@ struct Attempt {
     run: bool,
     max_turns: i32,
     result: Reviewed,
+    /// What the reporter took. Absent in a record written before it was kept.
+    report_usage: Option<Usage> = null,
     report_error: Option<String> = null,
 }
 
@@ -144,9 +148,10 @@ ${commits.trim()}`;
         review(&api_key, CLAUDE_MODEL, &change, &Some(w), options.max_turns);
     };
     // A report that fails leaves the findings as the reviewer worded them.
+    let mut report_usage = Usage {};
     let report_error: Option<String> = match &result.error {
         Some(_) => null,
-        None => match report(&api_key, options.reporter, &change, &w, &head, &mut result) {
+        None => match report(&api_key, options.reporter, &change, &w, &head, &mut result, &mut report_usage) {
             Ok(_) => null,
             Err(e) => Some(e),
         },
@@ -162,11 +167,18 @@ ${commits.trim()}`;
         run: !options.no_run,
         max_turns: options.max_turns,
         result,
+        report_usage: Some(report_usage),
         report_error,
     });
     fs::create_dir_all(&options.reviews).unwrap();
     fs::write(&path, &to_bytes_pretty(&record).unwrap()).unwrap();
     eprintln(`recorded in ${path}: ${result.turns} turns, ${result.calls.len()} tool calls`);
+    // Computed here rather than recorded: a price changes, and the tokens a
+    // review took do not.
+    eprintln(cost_summary(&[
+        [CLAUDE_MODEL, result.usage.unwrap_or(Usage {})],
+        [options.reporter, report_usage],
+    ]));
     // After the record: a cleanup that fails must not take the review with it.
     drop_snapshot(&root);
 
@@ -185,6 +197,8 @@ ${commits.trim()}`;
 /// other things.
 fn reviewed_again(w: &Workspace, earlier: &Reviewed) -> Reviewed with (Preopens, Process) {
     let mut again = *earlier;
+    // The earlier attempt holds what the review took; this one took nothing.
+    again.usage = null;
     for let f of &mut again.findings {
         f.line = 0;
         f.repro = null;
