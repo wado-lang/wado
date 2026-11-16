@@ -211,27 +211,10 @@ pub fn scope(body: fn mut() with (Track, Dom)) -> fn mut() with Dom with Dom {
     };
 }
 
-struct Untracked {
-}
-
-impl Track for Untracked {
-    fn read(&mut self, dep: Dep) {
-        resume ();
-    }
-
-    fn own(&mut self, dispose: fn mut() with Dom) {
-        resume ();
-    }
-}
-
-/// Runs `body` with its reads untracked and what it creates owned by nothing,
-/// as an event listener runs.
+/// Runs `body` with its reads untracked and what it creates never disposed
+/// of, as an event listener runs.
 pub fn untracked(body: fn mut() with (Track, Dom)) with Dom {
-    let mut body = body;
-    let mut nothing = Untracked {};
-    with Track => &mut nothing do {
-        body();
-    };
+    let _never_disposed = scope(body);
 }
 
 /// Reruns every effect a write marked, each once, until none is marked.
