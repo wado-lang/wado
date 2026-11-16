@@ -216,7 +216,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let w = cases::windowed_input();
     println(`windowed ${apart(&mut gpu, &cases::windowed(&mut gpu, &gpu.upload(&w)), &cases::windowed(cpu, &w))}`);
 
-    quantized_in::<f32>(&mut gpu, "");
+    let [held_a, held_ids, want_quantized] = quantized_in::<f32>(&mut gpu, "");
     for let [words, device] of [
         ["", &mut gpu],
         [" in f32 words", &mut plain],
@@ -608,10 +608,11 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
 
 /// `cases::quantizing` over `E`, which runs in its kernels on the device, each
 /// against `Cpu`'s, printed as `quantized product${name}` and the gather's.
+/// Returns its input and indices on the device, and `Cpu`'s results.
 fn quantized_in<E: Float>(
     gpu: &mut WebGpuBackend,
     name: String,
-) with (Stdout, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+) -> [Placed<E, [cases::A, cases::B]>, Placed<i64, [cases::A]>, [Tensor<E, [cases::A, cases::C]>, Tensor<E, [cases::A, cases::B]>]] with (Stdout, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let cpu = &mut Cpu {};
     let q = cases::quantized_case();
     let a: Tensor<E, [cases::A, cases::B]> = cpu.convert(&q.a);
@@ -646,6 +647,7 @@ fn quantized_in<E: Float>(
     assert gpu.read_backs() == read, "a packed weight stays on the device";
     println(`quantized product${name} ${apart(gpu, &got.0, &want.0)}`);
     println(`quantized gather${name} ${apart(gpu, &got.1, &want.1)}`);
+    return [held_a, held_ids, want];
 }
 
 /// Passes enough that every launch is idle.
