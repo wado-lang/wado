@@ -33,6 +33,26 @@ const halves = (count) => Array.from({ length: count }, (_, i) => (((i * 7) % 13
 const cases = [];
 const add = (name, spec) => cases.push({ name, out: FLOAT, inits: {}, opset: 13, ...spec });
 
+// The case `c`, whose one node writes `Y`, over halves: each of `floats` cast
+// to f16 before the node, and its f16 result cast back. A node of halves
+// computes in f32 and rounds its result once. onnxruntime drops that rounding
+// where a Cast back to f32 follows, so it runs the graph that ends at the f16
+// output.
+const overHalves = (c, floats) => {
+  const casts = floats.map((n) => node('Cast', [n], `H${n}`, { to: FLOAT16 }));
+  const [only] = c.nodes;
+  const writing = (output) => ({
+    ...only,
+    inputs: only.inputs.map((n) => (floats.includes(n) ? `H${n}` : n)),
+    outputs: only.outputs.map((o) => (o === 'Y' ? output : o)),
+  });
+  return {
+    ...c,
+    nodes: [...casts, writing('S'), node('Cast', ['S'], 'Y', { to: FLOAT })],
+    oracle: { nodes: [...casts, writing('Y')], out: FLOAT16 },
+  };
+};
+
 const pair = (a, b) => ({ A: float(a), B: float(b) });
 const binary = (op, a, b) => ({ inputs: pair(a, b), nodes: [node(op, ['A', 'B'], 'Y')] });
 add('AddSame', binary('Add', [2, 3], [2, 3]));
@@ -107,22 +127,14 @@ add('GemmTransposedScaled', {
   inputs: { A: float([3, 2]), B: float([4, 3]), C: float([1, 4]) },
   nodes: [node('Gemm', ['A', 'B', 'C'], 'Y', { alpha: f32(0.5), beta: f32(2), transA: 1, transB: 1 })],
 });
-// A Gemm of halves computes in f32 and rounds once, so neither a product past
-// a half's range nor an alpha no half holds is rounded on the way. onnxruntime
-// runs the graph that ends at the f16 output, as for the mixed normalization.
+// Neither a product past a half's range nor an alpha no half holds is rounded
+// on the way.
 const halfGemm = (a, b, c, attrs) => {
-  const operands = ['HA', 'HB', ...(c ? ['HC'] : [])];
-  const nodes = (output) => [
-    node('Cast', ['A'], 'HA', { to: FLOAT16 }),
-    node('Cast', ['B'], 'HB', { to: FLOAT16 }),
-    ...(c ? [node('Cast', ['C'], 'HC', { to: FLOAT16 })] : []),
-    node('Gemm', operands, output, attrs),
-  ];
-  return {
+  const operands = ['A', 'B', ...(c ? ['C'] : [])];
+  return overHalves({
     inputs: { A: float([1, 1], [a]), B: float([1, 1], [b]), ...(c ? { C: float([1, 1], [c]) } : {}) },
-    nodes: [...nodes('H'), node('Cast', ['H'], 'Y', { to: FLOAT })],
-    oracle: { nodes: nodes('Y'), out: FLOAT16 },
-  };
+    nodes: [node('Gemm', operands, 'Y', attrs)],
+  }, operands);
 };
 add('GemmHalfScaled', halfGemm(100, 100, null, { alpha: f32(1e-8) }));
 add('GemmHalfScaledBack', halfGemm(256, 256, null, { alpha: f32(0.5) }));
@@ -207,18 +219,11 @@ add('ConvGrouped', {
   inputs: { A: float([1, 4, 3, 3]), W: float([2, 2, 2, 2]) },
   nodes: [node('Conv', ['A', 'W'], 'Y', { group: 2 })],
 });
-// A Conv of halves adds its bias in f32 to a result past a half's range.
-const halfConv = (output) => [
-  node('Cast', ['A'], 'HA', { to: FLOAT16 }),
-  node('Cast', ['W'], 'HW', { to: FLOAT16 }),
-  node('Cast', ['B'], 'HB', { to: FLOAT16 }),
-  node('Conv', ['HA', 'HW', 'HB'], output),
-];
-add('ConvHalfBiased', {
+// The bias is added to a result past a half's range.
+add('ConvHalfBiased', overHalves({
   inputs: { A: float([1, 1, 1, 2], [256, 1]), W: float([1, 1, 1, 1], [256]), B: float([1], [-32768]) },
-  nodes: [...halfConv('H'), node('Cast', ['H'], 'Y', { to: FLOAT })],
-  oracle: { nodes: halfConv('Y'), out: FLOAT16 },
-});
+  nodes: [node('Conv', ['A', 'W', 'B'], 'Y')],
+}, ['A', 'W', 'B']));
 add('ConvDepthwise', {
   inputs: { A: float([1, 3, 4, 4]), W: float([3, 1, 3, 3]), B: float([3]) },
   nodes: [node('Conv', ['A', 'W', 'B'], 'Y', { group: 3, pads: [1, 1, 1, 1] })],
@@ -374,22 +379,13 @@ add('CastLikeComputed', {
 });
 // Where `erf` is 0, 1 or -1 to the last bit of either width.
 add('GeluFloat16', { ...inHalf([0, 8, -8, 16, -16, 32], [node('Gelu', ['H'], 'S')]), opset: 20 });
-// A Gelu of halves computes in f32: where `erf` or `tanh` nears -1, one
-// rounded to a half makes the result 0, and a cube past a half's range makes
-// the tanh form's an infinity. onnxruntime runs the graph that ends at the f16
-// output, as for the mixed normalization.
-const halfGelu = (approximate) => {
-  const nodes = (output) => [
-    node('Cast', ['A'], 'H', { to: FLOAT16 }),
-    node('Gelu', ['H'], output, { approximate }),
-  ];
-  return {
-    inputs: { A: float([2, 3], [-4, -3.5, -5, 3, 48, -48]) },
-    nodes: [...nodes('S'), node('Cast', ['S'], 'Y', { to: FLOAT })],
-    opset: 20,
-    oracle: { nodes: nodes('Y'), out: FLOAT16 },
-  };
-};
+// Where `erf` or `tanh` nears -1, one rounded to a half makes the result 0,
+// and a cube past a half's range makes the tanh form's an infinity.
+const halfGelu = (approximate) => overHalves({
+  inputs: { A: float([2, 3], [-4, -3.5, -5, 3, 48, -48]) },
+  nodes: [node('Gelu', ['A'], 'Y', { approximate })],
+  opset: 20,
+}, ['A']);
 add('GeluHalfErf', halfGelu('none'));
 add('GeluHalfTanh', halfGelu('tanh'));
 add('CastFromInt64', {
@@ -436,32 +432,17 @@ add('SimplifiedLayerNormalization', {
   nodes: [node('SimplifiedLayerNormalization', ['A', 'S'], 'Y', { epsilon: f32(1e-5), axis: -1 })],
   opset: 17,
 });
-// Halves whose squares overflow f16: the default `stash_type` computes in f32.
-add('SimplifiedLayerNormalizationHalf', {
+// Squares past a half's range, normalized with each of `floats` a half.
+const halfNorm = (floats) => overHalves({
   inputs: { A: float([2, 3], [300, -400, 500, 1, 2, 3]) },
   inits: { C: float([3], [1, -0.5, 2]) },
-  nodes: [
-    node('Cast', ['A'], 'H', { to: FLOAT16 }),
-    node('Cast', ['C'], 'K', { to: FLOAT16 }),
-    node('SimplifiedLayerNormalization', ['H', 'K'], 'N', { epsilon: f32(1e-5), axis: -1 }),
-    node('Cast', ['N'], 'Y', { to: FLOAT }),
-  ],
+  nodes: [node('SimplifiedLayerNormalization', ['A', 'C'], 'Y', { epsilon: f32(1e-5), axis: -1 })],
   opset: 17,
-});
+}, floats);
+// The default `stash_type` computes in f32.
+add('SimplifiedLayerNormalizationHalf', halfNorm(['A', 'C']));
 // The output takes the scale's element type, which may differ from the input's.
-// onnxruntime drops the rounding to f16 when a Cast back to f32 follows, so it
-// runs the graph that ends at the f16 output.
-const mixedNorm = (output) => [
-  node('Cast', ['C'], 'K', { to: FLOAT16 }),
-  node('SimplifiedLayerNormalization', ['A', 'K'], output, { epsilon: f32(1e-5), axis: -1 }),
-];
-add('SimplifiedLayerNormalizationMixed', {
-  inputs: { A: float([2, 3], [300, -400, 500, 1, 2, 3]) },
-  inits: { C: float([3], [1, -0.5, 2]) },
-  nodes: [...mixedNorm('N'), node('Cast', ['N'], 'Y', { to: FLOAT })],
-  opset: 17,
-  oracle: { nodes: mixedNorm('Y'), out: FLOAT16 },
-});
+add('SimplifiedLayerNormalizationMixed', halfNorm(['C']));
 add('GeluTanh', {
   inputs: { A: float([2, 3]) },
   nodes: [node('Gelu', ['A'], 'Y', { approximate: 'tanh' })],
@@ -530,23 +511,6 @@ add('GqaPast', gqa({ s: 1, past: 3, heads: 4, kv: 2, dim: 16 }));
 add('GqaPastPrompt', gqa({ s: 2, past: 3, heads: 2, kv: 2, dim: 16 }));
 add('GqaRotary', gqa({ s: 3, past: 2, heads: 2, kv: 1, dim: 16, rotary: true, attrs: { do_rotary: 1 } }));
 add('GqaRotaryPresentKey', gqa({ s: 2, past: 1, heads: 2, kv: 1, dim: 16, rotary: true, attrs: { do_rotary: 1 }, output: 1 }));
-// The case `c` over halves: each of `floats` cast to f16 before its one node,
-// which computes in f32 and rounds once. onnxruntime runs the graph that ends
-// at the f16 output, as for the mixed normalization.
-const overHalves = (c, floats) => {
-  const casts = floats.map((n) => node('Cast', [n], `H${n}`, { to: FLOAT16 }));
-  const [only] = c.nodes;
-  const writing = (output) => ({
-    ...only,
-    inputs: only.inputs.map((n) => (floats.includes(n) ? `H${n}` : n)),
-    outputs: only.outputs.map((o) => (o === 'Y' ? output : o)),
-  });
-  return {
-    ...c,
-    nodes: [...casts, writing('S'), node('Cast', ['S'], 'Y', { to: FLOAT })],
-    oracle: { nodes: [...casts, writing('Y')], out: FLOAT16 },
-  };
-};
 const rotaryKey = gqa({ s: 2, past: 1, heads: 2, kv: 1, dim: 16, rotary: true, attrs: { do_rotary: 1 }, output: 1 });
 add('GqaHalfRotaryPresentKey', overHalves(rotaryKey, ['Q', 'K', 'V', 'PK', 'PV', 'C', 'N']));
 add('GqaPresentValue', gqa({ s: 2, past: 2, heads: 2, kv: 1, dim: 16, output: 2 }));
