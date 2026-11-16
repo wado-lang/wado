@@ -387,39 +387,7 @@ impl Rule for ClosureDevirtRule {
         };
         let type_id = engine.body.exprs[functor].type_id;
         let span = engine.body.exprs[functor].span;
-<<<<<<< HEAD
-        let local = engine.alloc_minted_local("functor", type_id, false);
-        let name = engine.local_name(local);
-        let bind = engine.alloc_stmt(
-            StmtKind::Let {
-                name: name.clone(),
-                local_index: local,
-                is_mut: false,
-                type_id,
-                value: Some(Operand::Expr(functor)),
-                skip_value_copy: true,
-            },
-            span,
-        );
-        let read = engine.alloc_expr(ExprKind::Local { index: local, name }, type_id, span);
-||||||| 8e2870e78
-        let local = engine.alloc_minted_local("functor", type_id, false);
-        let name = engine.local_name(local);
-        let bind = engine.alloc_stmt(
-            StmtKind::Let {
-                name: name.clone(),
-                local_index: local,
-                is_mut: false,
-                type_id,
-                value: Operand::Expr(functor),
-                skip_value_copy: true,
-            },
-            span,
-        );
-        let read = engine.alloc_expr(ExprKind::Local { index: local, name }, type_id, span);
-=======
         let (bind, read) = engine.bind_minted("functor", Operand::Expr(functor), type_id, span);
->>>>>>> origin/main
         let ExprKind::ClosureToCanonical {
             functor_id,
             target_fn_type,

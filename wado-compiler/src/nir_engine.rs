@@ -896,7 +896,7 @@ impl<'a> Engine<'a> {
                 local_index,
                 is_mut: false,
                 type_id,
-                value,
+                value: Some(value),
                 skip_value_copy: true,
             },
             span,
