@@ -2992,7 +2992,8 @@ impl WebGpuBackend {
 
     /// `Graph::quantized_product` of `operands`, the input as `[M, K]`, the
     /// packed weight, its scales and any zero points, as a `[M, N]` result:
-    /// one workgroup per column and `QUANTIZED_ROWS` rows, rounded to any
+    /// one workgroup per `QUANTIZED_COLUMNS` columns and at most
+    /// `QUANTIZED_ROWS` rows, rounded to any
     /// `half` and held as `new_tensor` holds it. `None` where they do not bind.
     internal fn quantized_product_kernel(
         &mut self,
@@ -3008,14 +3009,19 @@ impl WebGpuBackend {
             return null;
         }
         let out = self.new_tensor([m, n], half matches { Some(F16) });
-        let groups = n * m.div_ceil(QUANTIZED_ROWS);
+        // An empty input dispatches no workgroup, whatever its rows.
+        let rows = i32::clamp(m, 1, QUANTIZED_ROWS);
+        let groups = n.div_ceil(QUANTIZED_COLUMNS) * m.div_ceil(rows);
         let [gx, gy] = spread(groups);
         let zero_points = operands.len() > 3;
+        let weight = &operands[1];
+        let blob = packed[2];
+        let aligned = blob % 4 == 0 && weight.offset % 4 == 0 && weight.strides == [packed[1] * blob, blob, 1];
         self.dispatch_bound(
             operands,
             fresh(&out),
-            [groups as u32, gx as u32, m as u32, k as u32, n as u32, packed[1] as u32, packed[2] as u32],
-            |bindings| ShaderKey::QuantizedProduct([bindings, bits, block, zero_points, half]),
+            [groups as u32, gx as u32, m as u32, k as u32, n as u32, packed[1] as u32, blob as u32],
+            |bindings| ShaderKey::QuantizedProduct([bindings, bits, block, zero_points, half, rows, aligned]),
             [gx, gy, 1],
         );
         return Option::Some(out);
@@ -3616,7 +3622,7 @@ variant ShaderKey {
     /// [`arg_max_shader`]'s arguments.
     ArgMax([List<i32>, i32, ArgMaxStage]),
     /// [`quantized_product_shader`]'s arguments.
-    QuantizedProduct([List<i32>, i32, i32, bool, Option<HalfFloat>]),
+    QuantizedProduct([List<i32>, i32, i32, bool, Option<HalfFloat>, i32, bool]),
     /// [`quantized_gather_shader`]'s arguments.
     QuantizedGather([List<i32>, i32, i32, bool, Option<HalfFloat>]),
 }
@@ -3675,12 +3681,14 @@ impl Shader {
             ),
             AttendJoin(bindings) => attend_join_shader(bindings, words),
             ArgMax([bindings, rank, stage]) => arg_max_shader(bindings, *rank, *stage, words),
-            QuantizedProduct([bindings, bits, block, zero_points, half]) => quantized_product_shader(
+            QuantizedProduct([bindings, bits, block, zero_points, half, rows, aligned]) => quantized_product_shader(
                 bindings,
                 *bits,
                 *block,
                 *zero_points,
                 *half,
+                *rows,
+                *aligned,
                 words,
             ),
             QuantizedGather([bindings, bits, block, zero_points, half]) => quantized_gather_shader(
@@ -4229,9 +4237,17 @@ ${coords_wgsl("i", 2, 0, rank, "c", "    ")}    put(u32(${index_wgsl(to, 0, rank
 `;
 }
 
-/// The rows of the input one workgroup of a quantized product sums against its
-/// column, each in a lane's register.
+/// The most rows of the input one workgroup of a quantized product sums
+/// against its columns, each in a lane's register.
 global QUANTIZED_ROWS: i32 = 8;
+
+/// The columns one workgroup of a quantized product sums, each over
+/// `QUANTIZED_LANES / QUANTIZED_COLUMNS` lanes, which write a row each.
+global QUANTIZED_COLUMNS: i32 = 8;
+
+/// The lanes of a quantized product's workgroup. Fewer than `LANES`, so a
+/// product of few columns still spreads over every core.
+global QUANTIZED_LANES: i32 = 64;
 
 /// The WGSL rounding `value` to the nearest `half`, or `value` where there is
 /// none.
@@ -4274,48 +4290,62 @@ fn zero(n: u32, b: u32) -> f32 {
 `;
 }
 
-/// The WGSL of `Graph::quantized_product`, one workgroup per column `n` of
-/// the output and `QUANTIZED_ROWS` of its rows: each lane takes every
-/// `LANES`th byte of the column's packed weight, dequantizes its values and
-/// adds each times the rows' inputs, and the workgroup sums the lanes. A
-/// `half` rounds each weight to it, as the decomposition stores one, and the
-/// sum once. Parameters: the workgroups, the workgroups per row of the grid,
-/// `M`, `K`, `N`, the blocks, the bytes of a block, then the views of the
-/// input `[M, K]`, the packed weight, the scales and any zero points.
+/// The WGSL of `Graph::quantized_product`, one workgroup per
+/// `QUANTIZED_COLUMNS` columns of the output and `rows` of its rows: each of
+/// the `QUANTIZED_LANES / QUANTIZED_COLUMNS` lanes of a column takes every such byte of
+/// the column's packed weight, dequantizes its values and adds each times the
+/// rows' inputs, and the column's lanes sum. A `half` rounds each weight to
+/// it, as the decomposition stores one, and the sum once. Parameters: the
+/// workgroups, the workgroups per row of the grid, `M`, `K`, `N`, the blocks,
+/// the bytes of a block, then the views of the input `[M, K]`, the packed
+/// weight, the scales and any zero points.
 fn quantized_product_shader(
     bindings: &List<i32>,
     bits: i32,
     block: i32,
     zero_points: bool,
     half: Option<HalfFloat>,
+    rows: i32,
+    aligned: bool,
     words: &List<Words>,
 ) -> String {
-    let rows = QUANTIZED_ROWS;
+    let lanes = QUANTIZED_LANES / QUANTIZED_COLUMNS;
+    assert lanes >= QUANTIZED_ROWS, "a column's lanes write its rows";
     let input = view_load_wgsl(bindings[0], 7, &(["m0 + r", "k"] as List<String>));
-    let byte = view_load_wgsl(bindings[1], 10, &(["n", "b", "j % p[6]"] as List<String>));
+    // An aligned weight's column starts a word, which holds four bytes of one
+    // block: a lane reads it whole. A weight copied to bind holds a byte a word.
+    let [unit, read] = if aligned && words[bindings[1]] matches { Bytes } {
+        [4, `o${bindings[1]}[(p[10] + n * p[11]) / 4u + t]`];
+    } else {
+        [1, `u32(${view_load_wgsl(bindings[1], 10, &(["n", "b", "j % p[6]"] as List<String>))})`];
+    };
     let scale = view_load_wgsl(bindings[2], 14, &(["n", "b"] as List<String>));
     let zp = if zero_points { bindings[3] } else { 0 };
     return `${buffers_wgsl(words)}
 ${dequantizing_wgsl(bits, block, zero_points, zp, 17)}
-var<workgroup> sums: array<f32, ${rows * LANES}>;
+var<workgroup> sums: array<f32, ${rows * QUANTIZED_LANES}>;
 
-@compute @workgroup_size(${LANES})
+@compute @workgroup_size(${QUANTIZED_LANES})
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
     let flat = group.x + group.y * p[1];
     if flat >= p[0] {
         return;
     }
-    let n = flat % p[4];
-    let m0 = flat / p[4] * ${rows}u;
+    let column_groups = (p[4] + ${QUANTIZED_COLUMNS - 1}u) / ${QUANTIZED_COLUMNS}u;
+    let n = flat % column_groups * ${QUANTIZED_COLUMNS}u + lid / ${lanes}u;
+    let lane = lid % ${lanes}u;
+    let m0 = flat / column_groups * ${rows}u;
     let rows = min(${rows}u, p[2] - m0);
     var acc: array<f32, ${rows}>;
-    for (var j = lid; j < p[5] * p[6]; j += ${LANES}u) {
+    let reads = p[5] * p[6] / ${unit}u;
+    for (var t = select(reads, lane, n < p[4]); t < reads; t += ${lanes}u) {
+        let j = t * ${unit}u;
         let b = j / p[6];
-        let packed = u32(${byte});
+        let packed = ${read};
         let scale = ${scale};
         let center = zero(n, b);
         let k0 = b * BLOCK + j % p[6] * PER;
-        for (var v = 0u; v < PER && k0 + v < p[3]; v++) {
+        for (var v = 0u; v < ${unit}u * PER && k0 + v < p[3]; v++) {
             let k = k0 + v;
             let w = ${rounded_wgsl(half, "(f32((packed >> (v * BITS)) & MASK) - center) * scale")};
             for (var r = 0u; r < rows; r++) {
@@ -4324,19 +4354,19 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
         }
     }
     for (var r = 0u; r < ${rows}u; r++) {
-        sums[r * ${LANES}u + lid] = acc[r];
+        sums[r * ${QUANTIZED_LANES}u + lid] = acc[r];
     }
     workgroupBarrier();
-    for (var half = ${LANES / 2}u; half > 0u; half >>= 1u) {
-        if lid < half {
+    for (var half = ${lanes / 2}u; half > 0u; half >>= 1u) {
+        if lane < half {
             for (var r = 0u; r < ${rows}u; r++) {
-                sums[r * ${LANES}u + lid] += sums[r * ${LANES}u + lid + half];
+                sums[r * ${QUANTIZED_LANES}u + lid] += sums[r * ${QUANTIZED_LANES}u + lid + half];
             }
         }
         workgroupBarrier();
     }
-    if lid < rows {
-        put((m0 + lid) * p[4] + n, ${rounded_wgsl(half, `sums[lid * ${LANES}u]`)});
+    if lane < rows && n < p[4] {
+        put((m0 + lane) * p[4] + n, ${rounded_wgsl(half, `sums[lane * ${QUANTIZED_LANES}u + lid - lane]`)});
     }
 }
 ${ELEMENTWISE_OPERATORS}`;
