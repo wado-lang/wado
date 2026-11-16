@@ -8,7 +8,7 @@ use { Runner, Workspace } from "./tools.wado";
 test "Write and Run are offered only with a runner" {
     let ws = Workspace { root: "src" };
     assert ws.call(&"Write", &tool_input(`{"file_path": "x.txt", "content": ""}`)).unwrap_err() == "no tool named Write";
-    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "" };
+    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "" };
     let names = Workspace { root: "src", runner: Some(runner) }.tools().into_iter().map(|t| t.name).collect();
     assert names.contains_str("Write") && names.contains_str("Run");
 }
@@ -23,7 +23,7 @@ test "Write creates the file and its directories inside the root" {
     let root = "build/tools-test";
     fs::remove_dir_all(root).unwrap();
     fs::create_dir_all(root).unwrap();
-    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "" };
+    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "" };
     let ws = Workspace { root, runner: Some(runner) };
     assert ws.call(&"Write", &tool_input(`{"file_path": "/a/b.txt", "content": "hi\\n"}`)).unwrap() == "Wrote /a/b.txt";
     assert fs::read_to_string("build/tools-test/a/b.txt").unwrap() == "hi\n";
@@ -79,6 +79,23 @@ test "an input out of range is an error the model can retry" {
     assert ws.call(&"Grep", &tool_input(`{"pattern": "Workspace", "offset": -5}`)).is_err();
     assert ws.call(&"Grep", &tool_input(`{"pattern": "Workspace", "head_limit": -1}`)).is_err();
     assert ws.call(&"Read", &tool_input(`{"file_path": "tools.wado", "limit": 0}`)).is_err();
+}
+
+test "Run runs its runner's programs and no other" {
+    let runner = Runner {
+        target_dir: "build/target",
+        cargo_home: "",
+        rustup_home: "",
+        mise_data_dir: "",
+        programs: ["cargo", "mise", "node"],
+    };
+    let ws = Workspace { root: "src", runner: Some(runner) };
+    assert ws.call(&"Run", &tool_input(`{"program": "sh", "args": ["-c", "true"]}`)).unwrap_err().contains(
+        "one of: cargo, mise, node",
+    );
+    assert ws.run_command(&["sh", "-c", "true"], 1).is_err() && ws.run_command(&[], 1).is_err();
+    let run = ws.tools().into_iter().filter(|t| t.name == "Run").collect()[0];
+    assert `${run.input_schema:?}`.contains("node") && run.description.contains("task runner");
 }
 
 test "a limit past the end reads the rest" {

@@ -1,0 +1,421 @@
+//! What a report needs of a finding beyond the reviewer's words: the line it
+//! is at, and the test that reproduces it. A second model draws both from what
+//! the reviewer did, so the reviewer's own instructions hold nothing about how
+//! a finding is reported. The code then cuts the test out of the reviewer's
+//! tree and tries it alone, so neither model's word is taken for a
+//! reproduction.
+
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { to_string } from "core:json";
+use { Process } from "core:process";
+use { from_value } from "core:value";
+use { Client } from "wasi:http";
+use { Call } from "./agent.wado";
+use { ask_json, json_object } from "./anthropic.wado";
+use { git, try_git } from "./git.wado";
+use { Repro, Reviewed, Submission } from "./review.wado";
+use { reset_snapshot, tree_git } from "./snapshot.wado";
+use { Ran, RunInput, Runner, Workspace, WriteInput, RUN_TIMEOUT } from "./tools.wado";
+
+global REPORT: String = #"You prepare the findings of a code review for reporting. You do not judge, reword or drop a finding.
+You are given the FINDINGS a reviewer reported on a pull request, the CALLS it made while reviewing (each file it wrote, and each command it ran with the end of its output, in order), and the DIFF of the files the findings name, with the number of each line as the pull request leaves it.
+For each finding, in order, answer two things.
+line: the number of the one line in the DIFF where the defect the finding describes is. 0 if the DIFF does not show that line.
+repro: the test that reproduced the finding, or null if no run among the CALLS failed showing this finding. In it, paths is every file among the written ones that the run needs; run is the command of that failing run, copied exactly; expect is a short text copied exactly from that run's output, on one line, that a passing run would not print, such as the assertion's message.
+Answer with one JSON object and nothing else, one entry per finding in the same order:
+{"findings": [{"line": <number>, "repro": {"paths": ["<path>"], "run": ["<word>"], "expect": "<text>"}}]}"#;
+
+/// The most of a written file, of a run's output from its end, and of the
+/// numbered diff that the reporter is shown, in bytes.
+global WRITTEN_SHOWN: i32 = 20_000;
+global OUTPUT_SHOWN: i32 = 8_000;
+global DIFF_SHOWN: i32 = 400_000;
+
+/// What the reporter answers of one finding.
+struct Placed {
+    line: i32 = 0,
+    repro: Option<Claim> = null,
+}
+
+/// What is said to reproduce a finding: the files, by path, rather than their
+/// content, which is read from the tree the reviewer left.
+struct Claim {
+    paths: List<String>,
+    run: List<String>,
+    expect: String,
+}
+
+struct Answer {
+    findings: List<Placed>,
+}
+
+struct Told {
+    file: String,
+    summary: String,
+    detail: String,
+}
+
+/// Gives each finding of `reviewed`, a review of `change` in the tree at `w`
+/// checked out at `commit`, its line and its reproduction, as `model` draws
+/// them from what the reviewer did. A reproduction is then tried alone, where
+/// `w` can run one.
+pub fn report(
+    api_key: &String,
+    model: String,
+    change: &Submission,
+    w: &Workspace,
+    commit: &String,
+    reviewed: &mut Reviewed,
+) -> Result<(), String> with (Client, Preopens, Process) {
+    if reviewed.findings.is_empty() {
+        return Ok(());
+    }
+    let placed = ask_json::<Answer>(api_key, model, REPORT, request(change, reviewed), 16_000)?.findings;
+    if placed.len() != reviewed.findings.len() {
+        return Err(`the reporter answered ${placed.len()} findings of ${reviewed.findings.len()}`);
+    }
+    // Every patch is cut before the first reset takes the reviewer's files.
+    for let [i, p] of placed.into_iter().enumerate() {
+        let finding = &mut reviewed.findings[i];
+        finding.line = if shows(&change.diff, &finding.file, p.line) { p.line } else { 0 };
+        if let Some(claim) = p.repro && w.runner matches { Some(_) } {
+            finding.repro = Some(untried(w, commit, claim));
+        }
+    }
+    for let finding of &mut reviewed.findings {
+        if let Some(repro) = &mut finding.repro && !repro.patch.is_empty() {
+            reset_snapshot(&w.root, commit);
+            match run_alone(w, repro) {
+                Ok(ran) => {
+                    repro.verified = reproduced(&ran, &repro.expect);
+                    repro.output = ran.report;
+                },
+                Err(e) => repro.output = e,
+            }
+        }
+    }
+    return Ok(());
+}
+
+/// `claim` as a reproduction yet to be tried: its files cut from the tree at
+/// `w` as a patch against `commit`. One that cannot be tried, for naming no
+/// command or no file that differs, has no patch and says why in `output`.
+fn untried(w: &Workspace, commit: &String, claim: Claim) -> Repro with Process {
+    let cut: Result<String, String> = if claim.run.is_empty() {
+        Err("the reproduction names no command");
+    } else {
+        patch_of(w, commit, &claim.paths);
+    };
+    let [patch, output] = match cut {
+        Ok(patch) => [patch, ""],
+        Err(e) => ["", e],
+    };
+    return Repro { patch, run: claim.run, expect: claim.expect, verified: false, output };
+}
+
+/// What the reporter reads: the findings in the reviewer's words, what the
+/// reviewer wrote and ran, and the diff of the files the findings name.
+fn request(change: &Submission, reviewed: &Reviewed) -> String {
+    let mut told: List<Told> = [];
+    let mut files: List<String> = [];
+    for let f of &reviewed.findings {
+        told.push(Told { file: f.file, summary: f.summary, detail: f.detail });
+        files.push(f.file);
+    }
+    let shown = numbered(&change.diff, &files);
+    return `<findings>
+${to_string(&told).unwrap()}
+</findings>
+
+<calls>
+${calls_shown(&reviewed.calls)}</calls>
+
+<diff>
+${if shown.len() <= DIFF_SHOWN { shown } else { "(too large to show: answer 0 for every line)\n" }}</diff>`;
+}
+
+/// The files the reviewer wrote and the runs it made, in order. A call that
+/// was refused did nothing.
+fn calls_shown(calls: &List<Call>) -> String {
+    let mut out = "";
+    for let c of calls {
+        if c.is_error {
+            continue;
+        }
+        if c.name == "Write" {
+            let wrote = from_value::<WriteInput>(&c.input).unwrap();
+            let cut = wrote.content.substr_bytes(0, wrote.content.floor_char_boundary(WRITTEN_SHOWN));
+            out.push_str(`<wrote path="${wrote.file_path}">\n${cut}\n</wrote>\n`);
+        } else if c.name == "Run" {
+            let command = from_value::<RunInput>(&c.input).unwrap().command();
+            let output = c.output.unwrap_or("");
+            let from = output.ceil_char_boundary(i32::max(0, output.len() - OUTPUT_SHOWN));
+            out.push_str(
+                `<ran command='${to_string(&command).unwrap()}'>\n${output.substr_bytes(from, output.len())}\n</ran>\n`,
+            );
+        }
+    }
+    return out;
+}
+
+/// The parts of `diff` for `files`, each line of the new side led by its
+/// number in the file. A reader cannot count lines from a hunk header
+/// reliably, and a model less so.
+fn numbered(diff: &String, files: &List<String>) -> String {
+    let [mut out, mut wanted, mut n] = ["", false, 0];
+    for let l of diff.lines() {
+        if l.starts_with("diff --git ") {
+            wanted = false;
+        } else if let Some(path) = l.strip_prefix("+++ b/") {
+            wanted = files.contains_str(path);
+            if wanted {
+                out.push_str(`${l}\n`);
+            }
+        } else if !wanted {
+            continue;
+        } else if let Some(hunk) = l.strip_prefix("@@ ") {
+            n = new_side(hunk.to_string())[0];
+            out.push_str(`${l}\n`);
+        } else if l.starts_with("+") || l.starts_with(" ") {
+            out.push_str(`${n:>6} ${l}\n`);
+            n += 1;
+        } else {
+            // A line the old side alone has, or git's note that a side ends
+            // without a newline.
+            out.push_str(`       ${l}\n`);
+        }
+    }
+    return out;
+}
+
+/// Whether `diff` shows `line` of `file` as the change leaves it, as a line
+/// it adds or one of a hunk's context.
+fn shows(diff: &String, file: &String, line: i32) -> bool {
+    let mut in_file = false;
+    for let l of diff.lines() {
+        if let Some(path) = l.strip_prefix("+++ ") {
+            in_file = path == `b/${*file}`;
+        } else if in_file && let Some(hunk) = l.strip_prefix("@@ ") {
+            let [start, count] = new_side(hunk.to_string());
+            if start <= line && line < start + count {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// The first line and the line count of the new side of a hunk header's
+/// ranges, `-a,b +c,d @@ …`. A count left out is 1.
+fn new_side(ranges: String) -> [i32, i32] {
+    let new = ranges.split(" ").collect()[1];
+    let numbers: List<String> = new.trim_prefix("+").split(",").map(|n| n.to_string()).collect();
+    let count = if numbers.len() > 1 { i32::from_str(&numbers[1]).unwrap() } else { 1 };
+    return [i32::from_str(&numbers[0]).unwrap(), count];
+}
+
+/// What the tree at `w` changed in `paths` since `commit`, new files included.
+fn patch_of(w: &Workspace, commit: &String, paths: &List<String>) -> Result<String, String> with Process {
+    let mut inside: List<String> = [];
+    for let p of paths {
+        match w.resolve(p)?.strip_prefix(`${w.root}/`) {
+            Some(relative) => inside.push(relative.to_string()),
+            None => {
+                return Err(`${*p} names the whole tree, not a file of the reproduction`);
+            },
+        }
+    }
+    if inside.is_empty() {
+        return Err("the reproduction names no file");
+    }
+    // `git diff` shows an untracked file only once the index knows of it, and
+    // an ignored one only when forced in.
+    let mut add = ["-C", w.root, "add", "--force", "--intent-to-add", "--"] as List<String>;
+    add.extend(&inside);
+    if try_git(add) matches { None } {
+        return Err("a file of the reproduction is not in the tree");
+    }
+    let mut diff = ["diff", "--binary", *commit, "--"] as List<String>;
+    diff.extend(&inside);
+    let patch = tree_git(&w.root, diff);
+    if patch.is_empty() {
+        return Err("the files of the reproduction do not differ from the reviewed commit");
+    }
+    return Ok(patch);
+}
+
+/// `repro`'s run in the tree at `w`, a clean checkout, with its patch applied.
+fn run_alone(w: &Workspace, repro: &Repro) -> Result<Ran, String> with (Preopens, Process) {
+    apply(w, &repro.patch)?;
+    return w.run_command(&repro.run, RUN_TIMEOUT);
+}
+
+fn apply(w: &Workspace, patch: &String) -> Result<(), String> with (Preopens, Process) {
+    // Beside the tree, where no tool lists it.
+    let name = `${fs::file_name(&w.root).unwrap()}.patch`;
+    let path = `${w.root}.patch`;
+    fs::write(&path, patch).map_err(|e| `${e}`)?;
+    let applied = try_git(["-C", w.root, "apply", `../${name}`]);
+    fs::remove_file(&path).map_err(|e| `${e}`)?;
+    return match applied {
+        Some(_) => Ok(()),
+        None => Err("the patch does not apply to the reviewed commit"),
+    };
+}
+
+/// Whether `ran` shows the defect: a failure that prints `expect`. The test
+/// asserts the right behaviour, so its failure is the defect, and the text
+/// tells that failure from a test that did not compile, which `cargo` ends
+/// the same way.
+fn reproduced(ran: &Ran, expect: &String) -> bool {
+    return !ran.succeeded && !expect.is_empty() && ran.report.contains(expect);
+}
+
+test "a finding is reproduced only by a run that fails and prints what was expected" {
+    let failed = Ran { succeeded: false, report: "exit code 101\nassertion `left == right` failed" };
+    assert reproduced(&failed, &"left == right");
+    assert !reproduced(&failed, &"another message");
+    assert !reproduced(&failed, &"");
+    assert !reproduced(&Ran { succeeded: true, report: "left == right" }, &"left == right");
+}
+
+test "the reporter reads a diff's new lines numbered, and a line it places must be one of them" {
+    let diff = "diff --git a/src/a.rs b/src/a.rs
+--- a/src/a.rs
++++ b/src/a.rs
+@@ -10,3 +12,4 @@ fn f() {
+ context
+-gone
++added
+@@ -40 +43 @@
+-old
++new
+diff --git a/src/b.rs b/src/b.rs
+--- a/src/b.rs
++++ b/src/b.rs
+@@ -1,2 +1,2 @@
+ kept
+";
+    assert shows(&diff, &"src/a.rs", 12) && shows(&diff, &"src/a.rs", 15) && shows(&diff, &"src/a.rs", 43);
+    assert !shows(&diff, &"src/a.rs", 11) && !shows(&diff, &"src/a.rs", 16) && !shows(&diff, &"src/a.rs", 0);
+    assert shows(&diff, &"src/b.rs", 2) && !shows(&diff, &"src/b.rs", 12);
+    assert !shows(&diff, &"src/c.rs", 1);
+
+    assert numbered(&diff, &["src/c.rs"]) == "";
+    assert numbered(&diff, &["src/a.rs"]) == "+++ b/src/a.rs
+@@ -10,3 +12,4 @@ fn f() {
+    12  context
+       -gone
+    13 +added
+@@ -40 +43 @@
+       -old
+    43 +new
+";
+}
+
+test "git's marker of a missing final newline is not a line of the file" {
+    let diff = "diff --git a/f b/f
+--- a/f
++++ b/f
+@@ -1 +1,2 @@
+-a
+\\ No newline at end of file
++a
++b
+";
+    assert numbered(&diff, &["f"]) == "+++ b/f
+@@ -1 +1,2 @@
+       -a
+       \\ No newline at end of file
+     1 +a
+     2 +b
+";
+}
+
+test "the reporter reads what the reviewer wrote and ran, not what was refused" {
+    let calls: List<Call> = [
+        Call { name: "Grep", input: json_object(&`{"pattern": "x"}`).unwrap(), is_error: false },
+        Call {
+            name: "Write",
+            input: json_object(&`{"file_path": "tests/t.rs", "content": "fn t() {}"}`).unwrap(),
+            is_error: false,
+        },
+        Call { name: "Run", input: json_object(&`{"args": ["test", "a b"]}`).unwrap(), is_error: true },
+        Call {
+            name: "Run",
+            input: json_object(&`{"args": ["test", "--test", "t"], "timeout": 60}`).unwrap(),
+            is_error: false,
+            output: Some("exit code 101"),
+        },
+    ];
+    assert calls_shown(&calls) == #"<wrote path="tests/t.rs">
+fn t() {}
+</wrote>
+<ran command='["cargo","test","--test","t"]'>
+exit code 101
+</ran>
+"#;
+}
+
+test "the reporter may leave a finding without a reproduction" {
+    let answer = json_object::<Answer>(
+        &`{"findings": [
+            {"line": 0, "repro": null},
+            {"line": 12, "repro": {"paths": ["tests/b.rs"], "run": ["test", "--test", "b"], "expect": "boom"}}
+        ]}`,
+    ).unwrap();
+    assert answer.findings[0].repro matches { None };
+    assert answer.findings[1].line == 12;
+    assert answer.findings[1].repro matches { Some(r) && r.paths == ["tests/b.rs"] && r.expect == "boom" };
+}
+
+test "a reproduction's files leave the tree as a patch that applies to a clean one" {
+    let root = "build/repro-test";
+    fs::remove_dir_all(root).unwrap();
+    fs::create_dir_all(root).unwrap();
+    fs::write(`${root}/Cargo.toml`, &"[workspace]\n").unwrap();
+    fs::write(`${root}/kept.txt`, &"old\n").unwrap();
+    git(["-C", root, "init", "--quiet"]);
+    git(["-C", root, "add", "--all"]);
+    git(["-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet", "--message", "base"]);
+    let commit = git(["-C", root, "rev-parse", "HEAD"]).trim().to_string();
+    let w = Workspace { root, runner: Some(Runner {
+        target_dir: "build/target",
+        cargo_home: "",
+        rustup_home: "",
+        mise_data_dir: "",
+    }) };
+
+    fs::create_dir_all(`${root}/tests`).unwrap();
+    fs::write(`${root}/tests/new.rs`, &"#[test] fn t() {}\n").unwrap();
+    fs::write(`${root}/kept.txt`, &"new\n").unwrap();
+    fs::write(`${root}/unnamed.txt`, &"another finding's\n").unwrap();
+    git(["init", "--quiet", `${root}/nested`]);
+    fs::write(`${root}/nested/fixture.txt`, &"a run's\n").unwrap();
+    let patch = patch_of(&w, &commit, &["tests/new.rs", "/kept.txt"]).unwrap();
+    assert patch_of(&w, &commit, &["tests/absent.rs"]).is_err();
+    assert patch_of(&w, &commit, &["Cargo.toml"]).is_err();
+    assert patch_of(&w, &commit, &["../outside.rs"]).is_err();
+    assert patch_of(&w, &commit, &[]).is_err();
+    let commandless = untried(&w, &commit, Claim {
+        paths: ["tests/new.rs"],
+        run: [],
+        expect: "e",
+    });
+    assert commandless.patch == "" && commandless.output.contains("no command");
+    let whole = untried(&w, &commit, Claim {
+        paths: ["tests/new.rs"],
+        run: ["cargo", "test"],
+        expect: "e",
+    });
+    assert whole.patch.contains("tests/new.rs") && whole.output == "" && !whole.verified;
+
+    reset_snapshot(&w.root, &commit);
+    assert !fs::exists(`${root}/tests/new.rs`) && !fs::exists(`${root}/nested`);
+    apply(&w, &patch).unwrap();
+    assert fs::read_to_string(`${root}/tests/new.rs`).unwrap() == "#[test] fn t() {}\n";
+    assert fs::read_to_string(`${root}/kept.txt`).unwrap() == "new\n";
+    assert !fs::exists(`${root}/unnamed.txt`);
+    assert apply(&w, &patch).is_err();
+}

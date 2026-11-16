@@ -14,7 +14,8 @@ use { Preopens } from "core:fs";
 use { Process } from "core:process";
 use { TreeMap } from "core:collections";
 use { to_bytes_pretty } from "core:json";
-use { git, try_git, generated, merged_prs, Merge, Blamed, FixResult, Census } from "./eval.wado";
+use { merged_prs, Merge, Blamed, FixResult, Census } from "./eval.wado";
+use { git, try_git, generated, nul_separated } from "../src/git.wado";
 
 struct Change {
     status: char,
@@ -65,14 +66,19 @@ fn commit_prs(merges: &List<Merge>) -> TreeMap<String, i32> with Process {
 }
 
 fn changes(base: &String, head: &String) -> List<Change> with Process {
+    return changes_in(&nul_separated(&git(["diff", "--name-status", "-M", "-z", *base, *head])));
+}
+
+/// The changes `fields` list, `diff --name-status -z`'s status and path in
+/// turn, a rename or a copy with a second path.
+fn changes_in(fields: &List<String>) -> List<Change> {
     let mut out: List<Change> = [];
-    for let line of git(["diff", "--name-status", "-M", *base, *head]).lines() {
-        let f: List<String> = line.split("\t").map(|s| s.to_string()).collect();
-        out.push(Change {
-            status: f[0].chars().next().unwrap(),
-            old_path: f[1],
-            new_path: f[f.len() - 1],
-        });
+    let mut i = 0;
+    while i < fields.len() {
+        let status = fields[i].chars().next().unwrap();
+        let paths = if status == 'R' || status == 'C' { 2 } else { 1 };
+        out.push(Change { status, old_path: fields[i + 1], new_path: fields[i + paths] });
+        i += 1 + paths;
     }
     return out;
 }
@@ -172,6 +178,7 @@ fn census(m: &Merge, commit_pr: &TreeMap<String, i32>, pr_sha: &TreeMap<i32, Str
                 b.n += 1;
                 blamed[pr] = b;
             } else if let Some(path) = line.strip_prefix("filename ") {
+                assert !path.starts_with("\""), "blame quotes a path that holds a quote or a control character, and no path here does";
                 let mut b = blamed.get(pr).unwrap();
                 if !b.paths.contains_str(path) {
                     b.paths.push(path.to_string());
@@ -215,6 +222,13 @@ export fn run() with (Stderr, Environment, Preopens, Process) {
     let out = Census { prs: merges.len(), results };
     fs::write(&arguments[0], &to_bytes_pretty(&out).unwrap()).unwrap();
     eprintln("done");
+}
+
+test "a rename lists both paths, and a path is kept as it is" {
+    let found = changes_in(&["M", "a \"b\".rs", "R087", "old.rs", "new.rs", "D", "gone.rs"]);
+    assert found.len() == 3 && found[0].new_path == "a \"b\".rs" && found[0].status == 'M';
+    assert found[1].status == 'R' && found[1].old_path == "old.rs" && found[1].new_path == "new.rs";
+    assert found[2].old_path == "gone.rs" && found[2].new_path == "gone.rs";
 }
 
 test "a fix title" {
