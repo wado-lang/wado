@@ -29,6 +29,10 @@ fn body(f: &Finding, commit: &String, id: &String, with_steps: bool) -> String {
     let short = commit.substr_bytes(0, i32::min(commit.len(), 9));
     let status = match &f.repro {
         Some(r) && r.verified => `reproduced on \`${short}\``,
+        Some(r) && r.patch.is_empty() => `not reproduced: the reviewer's test could not be tried alone, since ${shortened(
+            &r.output,
+            SUMMARY_LIMIT,
+        )}`,
         Some(_) => "not reproduced: the reviewer's test did not fail this way when tried alone",
         None => "not reproduced",
     };
@@ -53,6 +57,7 @@ fn steps(r: &Repro, commit: &String) -> String {
     while r.patch.lines().any(|l| l == end) {
         end.push_str("_");
     }
+    assert !r.run.is_empty(), "a reproduction with a patch names its command";
     let command = r.run.into_iter().map(|word| shell_word(&word)).collect().join(" ");
     let script = `git checkout ${*commit} &&
 git apply <<'${end}' &&
@@ -151,9 +156,27 @@ test "a comment says which findings were not reproduced" {
     let mut f = Finding { file: "a", summary: "S", detail: "D" };
     assert comment(&f, &"0123456789", &"i").starts_with("**S** — not reproduced\n");
     assert !comment(&f, &"0123456789", &"i").contains("<details>");
-    f.repro = Some(Repro { patch: "p\n", run: [], expect: "e", verified: false, output: "ok\n" });
+    f.repro = Some(Repro {
+        patch: "p\n",
+        run: ["cargo", "test"],
+        expect: "e",
+        verified: false,
+        output: "ok\n",
+    });
     let text = comment(&f, &"0123456789", &"i");
     assert text.contains("did not fail this way") && text.contains("It was to fail with ` e `. Tried alone, it gave:");
+    f.repro = Some(Repro {
+        patch: "",
+        run: [],
+        expect: "e",
+        verified: false,
+        output: "the reproduction names no command",
+    });
+    let untried = comment(&f, &"0123456789", &"i");
+    assert untried.starts_with(
+        "**S** — not reproduced: the reviewer's test could not be tried alone, since the reproduction names no command\n",
+    );
+    assert !untried.contains("<details>");
 }
 
 test "what a patch holds cannot close the block around it" {
@@ -182,7 +205,13 @@ test "a reproduction too large for a comment is named, not cut" {
         file: "a",
         summary: "S",
         detail: "D",
-        repro: Some(Repro { patch: "+x\n".repeat(30_000), run: [], expect: "e", verified: true, output: "e" }),
+        repro: Some(Repro {
+            patch: "+x\n".repeat(30_000),
+            run: ["cargo", "test"],
+            expect: "e",
+            verified: true,
+            output: "e",
+        }),
     };
     let text = comment(&f, &"0123456789", &"i");
     assert text.len() < BODY_LIMIT && text.contains("too large for a comment") && !text.contains("git apply");

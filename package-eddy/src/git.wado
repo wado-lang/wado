@@ -19,8 +19,10 @@ pub fn git(args: List<String>) -> String with Process {
 }
 
 fn run_git(args: List<String>) -> Result<String, ProcessError> with Process {
-    // Unquoted, a non-ASCII path reads back as the name `git` takes.
-    let mut full = ["-c", "core.quotePath=false"] as List<String>;
+    // Unquoted, a non-ASCII path reads back as the name `git` takes. A path
+    // handed to `git` is a file's name, never a pattern: one that starts with
+    // `:(` would otherwise select other files.
+    let mut full = ["--literal-pathspecs", "-c", "core.quotePath=false"] as List<String>;
     full.extend(&args);
     return Command::new("git").args(full).capture_limit(i32::MAX).read().map(|out| String::from_utf8_lossy(out));
 }

@@ -80,11 +80,7 @@ pub fn report(
         let finding = &mut reviewed.findings[i];
         finding.line = if shows(&change.diff, &finding.file, p.line) { p.line } else { 0 };
         if let Some(claim) = p.repro && w.runner matches { Some(_) } {
-            let [patch, output] = match patch_of(w, commit, &claim.paths) {
-                Ok(patch) => [patch, ""],
-                Err(e) => ["", e],
-            };
-            finding.repro = Some(Repro { patch, run: claim.run, expect: claim.expect, verified: false, output });
+            finding.repro = Some(untried(w, commit, claim));
         }
     }
     for let finding of &mut reviewed.findings {
@@ -100,6 +96,22 @@ pub fn report(
         }
     }
     return Ok(());
+}
+
+/// `claim` as a reproduction yet to be tried: its files cut from the tree at
+/// `w` as a patch against `commit`. One that cannot be tried, for naming no
+/// command or no file that differs, has no patch and says why in `output`.
+fn untried(w: &Workspace, commit: &String, claim: Claim) -> Repro with Process {
+    let cut: Result<String, String> = if claim.run.is_empty() {
+        Err("the reproduction names no command");
+    } else {
+        patch_of(w, commit, &claim.paths);
+    };
+    let [patch, output] = match cut {
+        Ok(patch) => [patch, ""],
+        Err(e) => ["", e],
+    };
+    return Repro { patch, run: claim.run, expect: claim.expect, verified: false, output };
 }
 
 /// What the reporter reads: the findings in the reviewer's words, what the
@@ -386,6 +398,18 @@ test "a reproduction's files leave the tree as a patch that applies to a clean o
     assert patch_of(&w, &commit, &["Cargo.toml"]).is_err();
     assert patch_of(&w, &commit, &["../outside.rs"]).is_err();
     assert patch_of(&w, &commit, &[]).is_err();
+    let commandless = untried(&w, &commit, Claim {
+        paths: ["tests/new.rs"],
+        run: [],
+        expect: "e",
+    });
+    assert commandless.patch == "" && commandless.output.contains("no command");
+    let whole = untried(&w, &commit, Claim {
+        paths: ["tests/new.rs"],
+        run: ["cargo", "test"],
+        expect: "e",
+    });
+    assert whole.patch.contains("tests/new.rs") && whole.output == "" && !whole.verified;
 
     reset_snapshot(&w.root, &commit);
     assert !fs::exists(`${root}/tests/new.rs`) && !fs::exists(`${root}/nested`);

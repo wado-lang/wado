@@ -178,6 +178,7 @@ fn census(m: &Merge, commit_pr: &TreeMap<String, i32>, pr_sha: &TreeMap<i32, Str
                 b.n += 1;
                 blamed[pr] = b;
             } else if let Some(path) = line.strip_prefix("filename ") {
+                assert !path.starts_with("\""), "blame quotes a path that holds a quote or a control character, and no path here does";
                 let mut b = blamed.get(pr).unwrap();
                 if !b.paths.contains_str(path) {
                     b.paths.push(path.to_string());
