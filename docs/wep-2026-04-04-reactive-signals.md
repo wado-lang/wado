@@ -101,17 +101,10 @@ dialect
 ([WEP: Markup Dialect](./wep-2026-08-29-markup-dialect.md)), a generator, and
 not to the language.
 
-## Roadmap
-
-1. Measure a read, a write, and an effect's rerun with `core:fuel`. Done when
-   the numbers are in a table in this WEP beside the command that produced
-   them.
-2. Decide from those numbers whether dispatching an effect operation on every
-   read, and installing a handler on every rerun, cost enough to optimize. Done
-   when the decision is recorded here.
-
 ## Known gaps
 
+- A tracked read dispatches an effect operation, and each run of a computation
+  installs a handler. What either costs is not measured.
 - A leading `<` in expression position is still reserved for markup. This WEP
   reserved it for JSX and no longer uses it, and
   [Overload Resolution](./wep-2026-07-31-overload-resolution.md) rules out
