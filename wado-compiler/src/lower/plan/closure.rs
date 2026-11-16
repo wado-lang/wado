@@ -726,25 +726,25 @@ impl ClosureLowerer {
                 assigned: &mut assigned,
             }
             .visit_block(&body_block);
-            let declared: IndexSet<u32> = body_locals.iter().map(|(idx, _)| *idx).collect();
+            let mut declared: IndexMap<u32, TypeId> = IndexMap::default();
+            for &(idx, type_id) in &body_locals {
+                let first = *declared.entry(idx).or_insert(type_id);
+                assert!(
+                    first == type_id,
+                    "a closure body declares each local with one type: local {idx} is {:?} and {:?}",
+                    type_table.get(first),
+                    type_table.get(type_id),
+                );
+            }
             body_locals.extend(
                 assigned
                     .into_iter()
-                    .filter(|(idx, _)| !declared.contains(idx)),
+                    .filter(|(idx, _)| !declared.contains_key(idx)),
             );
 
             // Body locals use synthetic placeholders here; `wir_build`
             // recovers source names from `TirFunction::locals[idx].name`.
             body_locals.sort_by_key(|(idx, _)| *idx);
-            for pair in body_locals.windows(2) {
-                assert!(
-                    pair[0].0 != pair[1].0 || pair[0].1 == pair[1].1,
-                    "a closure body declares each local with one type: local {} is {:?} and {:?}",
-                    pair[0].0,
-                    type_table.get(pair[0].1),
-                    type_table.get(pair[1].1),
-                );
-            }
             for (idx, type_id) in &body_locals {
                 if *idx >= param_count {
                     // Pad sparse indices so the slot the body uses lands at the
