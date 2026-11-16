@@ -1407,9 +1407,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Record the dispatch decision so reify can emit the same TIR without
-        // re-running trait lookup or mangling. Only a trait-qualified caller
-        // reads the signature facts back, so an ordinary call skips the clones.
-        let signature = (method_found && required_trait.is_some()).then(|| MethodSignatureFacts {
+        // re-running trait lookup or mangling. Only a qualified caller, which
+        // files the call under its own site, reads the signature facts back,
+        // so an ordinary call skips the clones.
+        let signature = (method_found && defaults_site.is_some()).then(|| MethodSignatureFacts {
             param_is_mut: param_is_mut.clone(),
             param_names: param_names.clone(),
             param_defaults: param_defaults.clone(),
@@ -1676,15 +1677,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
             ctx,
         );
-        if let Some(sig) = &outcome.signature {
-            self.check_trait_qualified_receiver_mode(
-                &qualifier_display,
-                method_name,
-                sig.self_kind,
-                receiver_type,
-                receiver_ast.span(),
-            );
-        }
         if let (Some(dispatched), Some(sig)) = (outcome.dispatch, outcome.signature) {
             // `self` as the method declares it, which a reference's own impl
             // (`impl IntoIterator for &List<T>`) takes one layer deeper.
@@ -1692,6 +1684,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &dispatched.func,
                 receiver_type,
                 &self.tysys.type_table.borrow(),
+            );
+            // The mode is spelled against `Self`, which such an impl's own
+            // reference is part of: `Tr::m(r)` passes `r: &P` by value to an
+            // `impl Tr for &P`'s `fn m(self)`.
+            let spelled_self = (0..self_layers).fold(receiver_type, |ty, _| {
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .ref_pointee(ty)
+                    .unwrap_or(ty)
+            });
+            self.check_trait_qualified_receiver_mode(
+                &qualifier_display,
+                method_name,
+                sig.self_kind,
+                spelled_self,
+                receiver_ast.span(),
             );
             let self_type = adjusted_receiver_type(
                 receiver_type,
