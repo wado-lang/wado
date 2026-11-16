@@ -22,7 +22,11 @@ struct Tag {
 }
 
 test "a slot holds its handle until it is freed, and a freed slot is the next one filled" {
-    let [a, b, c] = [ExternObject::backed_by(Tag {}), ExternObject::backed_by(Tag {}), ExternObject::backed_by(Tag {})];
+    let [a, b, c] = [
+        ExternObject::backed_by(Tag {}),
+        ExternObject::backed_by(Tag {}),
+        ExternObject::backed_by(Tag {}),
+    ];
     let first = extern_slot_put(a);
     let second = extern_slot_put(b);
     assert first != second;
