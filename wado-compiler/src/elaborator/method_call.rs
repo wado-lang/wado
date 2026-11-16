@@ -663,7 +663,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // link: a block written at one instantiation keeps its arguments
                 // (issue #2644).
                 if let Some(trait_def) = trait_name.as_ref().and_then(FqTraitName::canonical)
-                    && let Some(link) = self.tysys.impl_link(base_type_id, trait_def)
+                    && let Some(link) = match info.impl_block {
+                        Some(block) => self.tysys.block_link(base_type_id, trait_def, block),
+                        None => self.tysys.impl_link(base_type_id, trait_def),
+                    }
                     && link != base_type_id
                     && info.owner == MethodOwner::Receiver
                 {

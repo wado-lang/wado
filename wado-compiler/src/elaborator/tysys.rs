@@ -15,7 +15,7 @@ use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
+use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches_where};
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeParamId, range_item};
 use crate::type_table::TypeTable;
 
@@ -553,11 +553,27 @@ impl TypeSystem {
     /// of `trait_`. A link owns what it writes where it reaches the link, and
     /// the `Eq` a `cmp` it writes alone gives it.
     pub(crate) fn impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
+        self.link_where(type_id, trait_, |_| true)
+    }
+
+    /// [`Self::impl_link`] for the one impl block a call selected: a nearer
+    /// link may implement the same trait at other arguments.
+    pub(crate) fn block_link(&self, type_id: TypeId, trait_: DefId, block: DefId) -> Option<TypeId> {
+        self.link_where(type_id, trait_, |b| b == block)
+    }
+
+    fn link_where(
+        &self,
+        type_id: TypeId,
+        trait_: DefId,
+        admits: impl Fn(DefId) -> bool,
+    ) -> Option<TypeId> {
         let tt = self.type_table.borrow();
         let solver = self.solver();
         links(&tt, type_id).find(|&tid| {
-            written_impl_reaches(&self.trait_env, trait_, tid, &tt)
-                || eq_from_written_cmp(&self.trait_env, &solver, trait_, tid, &tt).is_some()
+            written_impl_reaches_where(&self.trait_env, trait_, tid, &tt, &admits)
+                || eq_from_written_cmp(&self.trait_env, &solver, trait_, tid, &tt)
+                    .is_some_and(|paired| admits(paired.block))
         })
     }
 
