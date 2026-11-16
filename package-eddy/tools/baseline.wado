@@ -36,26 +36,28 @@ use { TreeMap } from "core:collections";
 use {
     changed_paths,
     source_diff,
-    ask_json,
-    json_object,
     merge_title,
-    snapshot,
-    add_build_submodules,
-    home_runner,
-    reset_snapshot,
-    drop_snapshot,
-    index,
     Baseline,
     Census,
     Checked,
     Entry,
-    Finding,
     FixResult,
     Grade,
     Judged,
     Run,
 } from "./eval.wado";
-use { run_agent } from "../src/agent.wado";
+use { ask_json, Usage } from "../src/anthropic.wado";
+use { cost_summary } from "../src/cost.wado";
+use { review, Submission } from "../src/review.wado";
+use {
+    snapshot,
+    add_build_submodules,
+    home_runner,
+    with_mise_tools,
+    reset_snapshot,
+    drop_snapshot,
+    index,
+} from "../src/snapshot.wado";
 use { Runner, Workspace } from "../src/tools.wado";
 use { load, SymbolIndex } from "../src/symbols.wado";
 
@@ -91,30 +93,11 @@ global WADO: String = "target/debug/wado";
 #[param(name = "max_turns")]
 global MAX_TURNS: i32 = 40;
 
-global REVIEW: String = "You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
-Report the defects the change introduces: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.
-Answer with one JSON object and nothing else:
-{\"findings\": [{\"file\": \"<path>\", \"summary\": \"<one sentence>\", \"detail\": \"<why it is wrong, and when it goes wrong>\"}]}
-Report at most 10 findings, the most severe first. An empty list is a valid answer.";
-
-global READING: String = "You can read the repository as it stood once this pull request merged, with the tools Read, Grep and Glob. Before you report, read what the diff alone does not show: the callers of what changed, the definitions it relies on, the rest of a file. Your final reply is the JSON object.";
-
-global SYMBOL_READING: String = "FindSymbol and FindReferences answer from the compiler's index of the Rust and Wado code: use them to find a definition and the uses of a function, type or field, and Grep for other text.";
-
-global RUNNING: String = "You can also run the code: Write a test or a small program into the tree, and build and run it with Run, which runs cargo.
-Before you report a finding, reproduce it: write a test that shows the wrong behaviour, and run it. A finding you are already sure of from reading is still one to reproduce, since reading can be wrong either way. A suspicion a run refutes is one to drop.
-A defect that depends on timing, such as a race with another process, is reproduced by making the interleaving happen in the test, for example by deleting a file between the two steps the race separates, never by running it again in the hope of hitting it.
-Give each finding at most three runs. One that does not reproduce by then is reported only if the code makes it certain, saying in its detail that it was not reproduced and why.";
-
 global GRADE: String = "You grade a code review against one known defect.
 The KNOWN DEFECT is what a later pull request had to fix in the reviewed change. The FINDINGS are what the reviewer reported on the change.
 A finding is a hit when it points at the same root cause: the same code and the same wrong behaviour, even if worded differently or only partly explained. A finding about something else in the same area is not a hit.
 Answer with one JSON object and nothing else:
 {\"hit\": bool, \"finding\": <the index of the hit, or -1>, \"reason\": \"<one sentence>\"}";
-
-struct Review {
-    findings: List<Finding>,
-}
 
 export fn run() with (Stderr, Environment, Preopens, Process, Client) {
     let arguments = args();
@@ -161,6 +144,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
         }
         out.entries.push(entry);
     }
+    let [mut reviewing, mut grading] = [Usage {}, Usage {}];
     for let i of 0..<out.entries.len() {
         if out.entries[i].runs.len() >= RUNS || ONLY != 0 && out.entries[i].fix != ONLY {
             continue;
@@ -169,11 +153,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
         let r = fix_result(&census, fix);
         let culprit = &r.blamed[0];
         let review_prompt = match source_diff(&culprit.sha, &changed_paths(&culprit.sha), "culprit", LIMIT) {
-            Ok(diff) => `PULL REQUEST #${culprit.pr}: ${merge_title(&culprit.sha)}
-
-<diff>
-${diff}
-</diff>`,
+            Ok(diff) => Submission { heading: `PULL REQUEST #${culprit.pr}: ${merge_title(&culprit.sha)}`, diff },
             Err(e) => panic(`#${fix}: ${e}`),
         };
         let fix_diff = source_diff(&r.sha, &changed_paths(&r.sha), "fix", LIMIT).unwrap();
@@ -189,7 +169,9 @@ ${fix_diff}
             if RUN && let Some(w) = &ws {
                 reset_snapshot(&w.root, &culprit.sha);
             }
-            out.entries[i].runs.push(review_once(&api_key, &review_prompt, &known, &ws));
+            let run = review_once(&api_key, &review_prompt, &known, &ws, &mut grading);
+            reviewing.add(&run.usage.unwrap_or(Usage {}));
+            out.entries[i].runs.push(run);
             // Written after every run, so a run that dies keeps what it paid for.
             fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
             eprintln(`#${fix} run ${out.entries[i].runs.len()}`);
@@ -200,6 +182,11 @@ ${fix_diff}
     }
     fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
     report(&out);
+    // Of the runs made now; a run an earlier invocation left is not paid again.
+    eprintln(cost_summary(&[
+        [CLAUDE_MODEL, reviewing],
+        [GRADER, grading],
+    ]));
 }
 
 /// The tree as merge `sha` left it, indexed when `symbols` is set and ready to
@@ -211,7 +198,7 @@ fn workspace(sha: &String) -> Workspace with (Process, Preopens, Environment) {
         add_build_submodules(&root);
     }
     let symbols: Option<SymbolIndex> = if SYMBOLS { Some(load(&index(&root, &WADO)).unwrap()) } else { null };
-    let runner: Option<Runner> = if RUN { Some(home_runner()) } else { null };
+    let runner: Option<Runner> = if RUN { Some(with_mise_tools(home_runner(), &root)) } else { null };
     return Workspace { root, symbols, runner };
 }
 
@@ -234,14 +221,17 @@ fn judged_defect(judged: &Judged, fix: i32) -> String {
     panic(`#${fix} has no verdict to name its defect`);
 }
 
-/// One review of the culprit, graded against the known defect.
+/// One review of the culprit, graded against the known defect. A failed
+/// review keeps what it spent. What the grader took is added to `grading`.
 fn review_once(
     api_key: &String,
-    review_prompt: &String,
+    review_prompt: &Submission,
     known: &String,
     ws: &Option<Workspace>,
+    grading: &mut Usage,
 ) -> Run with (Client, Preopens, Process) {
-    let mut reviewed = review(api_key, review_prompt, ws);
+    let r = review(api_key, CLAUDE_MODEL, review_prompt, ws, MAX_TURNS);
+    let mut reviewed = Run { findings: r.findings, turns: r.turns, calls: r.calls, usage: r.usage, error: r.error };
     if reviewed.error matches { Some(_) } {
         return reviewed;
     }
@@ -250,42 +240,13 @@ fn review_once(
 <findings>
 ${to_string(&reviewed.findings).unwrap()}
 </findings>`;
-    match ask_json::<Grade>(api_key, GRADER, GRADE, grade_prompt, 16_000) {
+    match ask_json::<Grade>(api_key, GRADER, GRADE, grade_prompt, 16_000, grading) {
         Ok(g) && g.hit && !(0 <= g.finding < reviewed.findings.len()) => reviewed.error = Some(
             `the grader's hit names finding ${g.finding} of ${reviewed.findings.len()}`,
         ),
 
 
         Ok(g) => reviewed.grade = Some(g),
-        Err(e) => reviewed.error = Some(e),
-    }
-    return reviewed;
-}
-
-/// The findings of one review, in one call, or by an agent reading `ws`. A
-/// failed agent run keeps what it spent.
-fn review(api_key: &String, review_prompt: &String, ws: &Option<Workspace>) -> Run with (Client, Preopens, Process) {
-    // Thinking spends from the same budget as the answer.
-    let Some(w) = ws else {
-        return match ask_json::<Review>(api_key, CLAUDE_MODEL, REVIEW, *review_prompt, 32_000) {
-            Ok(r) => Run { findings: r.findings },
-            Err(e) => Run { error: Some(e) },
-        };
-    };
-    let mut reading = READING;
-    if SYMBOLS {
-        reading.push_str(`\n${SYMBOL_READING}`);
-    }
-    if RUN {
-        reading.push_str(`\n${RUNNING}`);
-    }
-    let agent = run_agent(api_key, CLAUDE_MODEL, `${REVIEW}\n${reading}`, *review_prompt, w, MAX_TURNS, 32_000);
-    let mut reviewed = Run { turns: agent.turns, calls: agent.calls, usage: Some(agent.usage) };
-    match agent.answer {
-        Ok(answer) => match json_object::<Review>(&answer) {
-            Ok(r) => reviewed.findings = r.findings,
-            Err(e) => reviewed.error = Some(e),
-        },
         Err(e) => reviewed.error = Some(e),
     }
     return reviewed;

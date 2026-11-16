@@ -51,8 +51,9 @@ each token after it run through one set of weights, and the model keeps the
 attention cache between calls. The build downloads it once into Wado's cache.
 Its weights are in the file, so `embed: false` leaves them there: the build
 reads past them, and `Params::load` reads them from the same file at run time.
-A program reaches no file the build read, so `fetch.sh` downloads the model as
-`model.onnx`, which Git ignores.
+A program reaches no file the build read, so `fetch.sh` downloads the model
+beside it under the name the build gives it, `decoder_model_merged.onnx`, which
+Git ignores. `FileSource` reads it there a weight at a time.
 
 `wado test` leaves out the files naming the model, since building one downloads
 it. `tokenizer_test.wado` needs no download and runs. `generate_test.wado`

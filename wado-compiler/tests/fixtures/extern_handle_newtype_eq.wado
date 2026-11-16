@@ -14,12 +14,12 @@ fn same(a: Marked, b: Marked) -> bool {
 }
 
 test "a newtype over a handle is equal as the handle is" {
-    let mut a = Tag { name: "a" };
-    let mut b = Tag { name: "b" };
-    let first = Node::backed_by(&mut a) as Marked;
-    assert same(first, Node::backed_by(&mut a) as Marked);
-    assert !same(first, Node::backed_by(&mut b) as Marked);
-    assert first != Node::backed_by(&mut b) as Marked;
+    let a = Node::backed_by(Tag { name: "a" });
+    let b = Node::backed_by(Tag { name: "b" });
+    let first = a as Marked;
+    assert same(first, a as Marked);
+    assert !same(first, b as Marked);
+    assert first != b as Marked;
 }
 
 __DATA__

@@ -1,7 +1,235 @@
-//! Eddy's CLI — a `wasi:cli/command` program.
+//! Eddy's CLI: reviews what a branch changes, prints the findings as JSON, and
+//! adds the review to the record of its head commit.
+//!
+//! The reviewer reads the diff from the merge base of `--base` (`origin/main`)
+//! to `--head` (`HEAD`), and a checkout of the head under `scratchpad/`,
+//! through Read, Grep and Glob. It also writes tests into that checkout and
+//! runs them through Write and Run: with `cargo`, and where `mise` is set up,
+//! with it and each tool it installed for the project. That needs
+//! `--process-read` on the `cargo` and `rustup` homes, and for `mise` on its
+//! binary and its data directory; `--no-run` reviews by reading alone.
+//!
+//! A second model, `--reporter` (`claude-haiku-5-5`), then reads what the
+//! reviewer did and gives each finding its line and the test that reproduced
+//! it, which is tried again alone before the finding carries it.
+//! `--report-again` reports the last recorded review of the head once more,
+//! with no new review, to try another reporter on the same findings.
+//!
+//! The record is
+//! `<--reviews>/<head>.json`, one entry per review. Each finding is also
+//! written under `<--out>/<head>/` (`scratchpad/eddy`): `<n>.md`, the body of
+//! a pull request comment that reproduces it from one pasted block, and
+//! `<n>.patch` for `git apply`.
+//!
+//! Run it from the repository root, every commit to review made. The reviewer
+//! is a build input: `CLAUDE_MODEL` in the environment, or
+//! `-D CLAUDE_MODEL=...`.
+//!
+//! ```sh
+//! CLAUDE_API_KEY=... wado run --process-read ~/.cargo --process-read ~/.rustup \
+//!     package-eddy/src/main.wado
+//! ```
 
-use { println, Stdout } from "core:cli";
+use { from_env } from "core:args";
+use { env, eprintln, println, exit_error, Environment, Exit, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { to_bytes_pretty, from_string } from "core:json";
+use { Process } from "core:process";
+use { Deserialize } from "core:serde";
+use { Client } from "wasi:http";
+use { git, try_git, paths_between, diff_between } from "./git.wado";
+use { Usage } from "./anthropic.wado";
+use { comment } from "./comment.wado";
+use { cost_summary } from "./cost.wado";
+use { report } from "./report.wado";
+use { review, Submission, Finding, Reviewed } from "./review.wado";
+use { snapshot, add_build_submodules, home_runner, with_mise_tools, drop_snapshot } from "./snapshot.wado";
+use { Runner, Workspace } from "./tools.wado";
 
-export fn run() with Stdout {
-    println("eddy: a code review bot (not implemented yet)");
+#[param(from_env = "CLAUDE_MODEL")]
+global CLAUDE_MODEL: String = "claude-opus-5-5";
+
+#[param(name = "diff_limit")]
+global LIMIT: i32 = 2_000_000;
+
+global USAGE: String = "usage: eddy [--base <rev>] [--head <rev>] [--no-run] [--reporter <model>] [--report-again] [--max-turns <n>] [--reviews <dir>] [--out <dir>]";
+
+struct Options {
+    base: String = "origin/main",
+    head: String = "HEAD",
+    no_run: bool = false,
+    reporter: String = "claude-haiku-5-5",
+    report_again: bool = false,
+    max_turns: i32 = 40,
+    reviews: String = "package-eddy/reviews",
+    out: String = "scratchpad/eddy",
+}
+impl Deserialize for Options;
+
+/// Every review of one head commit.
+struct Record {
+    head: String,
+    reviews: List<Attempt>,
+}
+
+struct Attempt {
+    /// The merge base the diff was taken from, which moves with `--base`.
+    base: String,
+    reviewer: String,
+    /// Empty in a record written before a second model reported.
+    reporter: String = "",
+    run: bool,
+    max_turns: i32,
+    result: Reviewed,
+    /// What the reporter took. Absent in a record written before it was kept.
+    report_usage: Option<Usage> = null,
+    report_error: Option<String> = null,
+}
+
+struct Report {
+    findings: List<Finding>,
+}
+
+export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Client) {
+    let options = match from_env::<Options>() {
+        Ok(options) => options,
+        Err(e) => fail(`${e}\n${USAGE}`),
+    };
+    if options.max_turns < 1 {
+        fail(`--max-turns must be at least 1\n${USAGE}`);
+    }
+    let Some(api_key) = env("CLAUDE_API_KEY") else {
+        fail("CLAUDE_API_KEY is not set");
+    };
+    let Some(head) = try_git(["rev-parse", "--verify", `${options.head}^{commit}`]) else {
+        fail(
+            `git finds no commit ${options.head} here. Run from the root of the main checkout: a linked worktree keeps its git directory where a child of wado run cannot reach`,
+        );
+    };
+    let head = head.trim().to_string();
+    let base = git(["merge-base", options.base, head]).trim().to_string();
+    // Before the review, so one that cannot be recorded is not paid for.
+    let path = fs::join(&options.reviews, `${head}.json`);
+    let mut record = match fs::read_to_string(&path) {
+        Ok(text) => match from_string::<Record, String>(text) {
+            Ok(record) => record,
+            Err(e) => fail(`${path} is not a record of reviews: ${e:?}`),
+        },
+        Err(e) && e.kind matches { NotFound } => Record { head, reviews: [] },
+        Err(e) => fail(`${e}`),
+    };
+    let diff = match diff_between(&base, &head, &paths_between(&base, &head), "branch", LIMIT) {
+        Ok(diff) => diff,
+        Err(e) => fail(e),
+    };
+    // Nothing else says what the change means to do before it has a pull
+    // request to describe it.
+    let commits = git(["log", "--reverse", "--no-merges", "--format=%B", `${base}..${head}`]);
+    let heading = `PULL REQUEST, not opened yet. Its commit messages, oldest first:
+
+${commits.trim()}`;
+
+    let root = snapshot(&head);
+    let runner: Option<Runner> = if options.no_run {
+        null;
+    } else {
+        add_build_submodules(&root);
+        Some(with_mise_tools(home_runner(), &root));
+    };
+    let w = Workspace { root, runner };
+    let change = Submission { heading, diff };
+    let mut result = if options.report_again {
+        let Some(earlier) = record.reviews.last() else {
+            fail(`--report-again reports a recorded review, and ${path} holds none`);
+        };
+        reviewed_again(&w, &earlier.result);
+    } else {
+        review(&api_key, CLAUDE_MODEL, &change, &Some(w), options.max_turns);
+    };
+    // A report that fails leaves the findings as the reviewer worded them.
+    let mut report_usage = Usage {};
+    let report_error: Option<String> = match &result.error {
+        Some(_) => null,
+        None => match report(&api_key, options.reporter, &change, &w, &head, &mut result, &mut report_usage) {
+            Ok(_) => null,
+            Err(e) => Some(e),
+        },
+    };
+    if let Some(e) = &report_error {
+        eprintln(`eddy: the findings are not placed or reproduced: ${*e}`);
+    }
+
+    record.reviews.push(Attempt {
+        base,
+        reviewer: CLAUDE_MODEL,
+        reporter: options.reporter,
+        run: !options.no_run,
+        max_turns: options.max_turns,
+        result,
+        report_usage: Some(report_usage),
+        report_error,
+    });
+    fs::create_dir_all(&options.reviews).unwrap();
+    fs::write(&path, &to_bytes_pretty(&record).unwrap()).unwrap();
+    eprintln(`recorded in ${path}: ${result.turns} turns, ${result.calls.len()} tool calls`);
+    // Computed here rather than recorded: a price changes, and the tokens a
+    // review took do not.
+    eprintln(cost_summary(&[
+        [CLAUDE_MODEL, result.usage.unwrap_or(Usage {})],
+        [options.reporter, report_usage],
+    ]));
+    // After the record: a cleanup that fails must not take the review with it.
+    drop_snapshot(&root);
+
+    if let Some(e) = &result.error {
+        fail(*e);
+    }
+    let dir = fs::join(&options.out, &head);
+    write_findings(&dir, &head, &result.findings);
+    eprintln(`each finding's comment, and the patch that reproduces it, in ${dir}`);
+    println(String::from_utf8_lossy(to_bytes_pretty(&Report { findings: result.findings }).unwrap()));
+}
+
+/// `earlier`, a recorded review, as its reviewer left it: the findings in its
+/// words, and in the fresh tree at `w` the files it wrote. Reporting it again
+/// tries another reporter on one review, where a second review would find
+/// other things.
+fn reviewed_again(w: &Workspace, earlier: &Reviewed) -> Reviewed with (Preopens, Process) {
+    let mut again = *earlier;
+    // The earlier attempt holds what the review took; this one took nothing.
+    again.usage = null;
+    for let f of &mut again.findings {
+        f.line = 0;
+        f.repro = null;
+    }
+    if w.runner matches { Some(_) } {
+        for let c of &again.calls {
+            if c.name == "Write" && !c.is_error {
+                w.call(&c.name, &c.input).unwrap();
+            }
+        }
+    }
+    return again;
+}
+
+/// Writes finding `n`, from 1, of a review of `head` into `dir` as `<n>.md`,
+/// the pull request comment for it, and `<n>.patch` where it has one, for
+/// `git apply`. An earlier review's files there are removed first.
+fn write_findings(dir: &String, head: &String, findings: &List<Finding>) with Preopens {
+    fs::remove_dir_all(dir).unwrap();
+    fs::create_dir_all(dir).unwrap();
+    let short = head.substr_bytes(0, 9);
+    for let [i, f] of findings.into_iter().enumerate() {
+        let n = i + 1;
+        fs::write(fs::join(dir, `${n}.md`), &comment(f, head, &`${short}-${n}`)).unwrap();
+        if let Some(r) = &f.repro && !r.patch.is_empty() {
+            fs::write(fs::join(dir, `${n}.patch`), &r.patch).unwrap();
+        }
+    }
+}
+
+fn fail(message: String) -> ! with (Stderr, Exit) {
+    eprintln(`eddy: ${message}`);
+    exit_error();
 }

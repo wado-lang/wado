@@ -21,7 +21,7 @@ struct Echo {}
 impl Target for Echo {
     fn listen(&mut self, this: &Target, listener: fn mut(Event)) {
         let mut l = listener;
-        l(Event::backed_by(self));
+        l(Event::backed_by("event"));
         resume ();
     }
 
@@ -34,7 +34,7 @@ impl Target for Echo {
 
 export fn run() {
     let mut echo = Echo {};
-    let target = Target::backed_by(&mut echo);
+    let target = Target::backed_by("target");
     let mut events = 0;
     let mut ticks = 0;
     with Target => &mut echo do {

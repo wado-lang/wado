@@ -78,17 +78,15 @@ Such a program is distributed as its repository.
 
 ### Loam reads each weight where it is
 
-An option names the asset, and the generated `Params::open(backend)` reads
-each weight's range with `read_at`. The caller writes neither a path nor the
-bytes:
+`Params::load` already reads each weight's range from a
+[`WeightSource`](./design.md#weight-sources), by the file name the build gave
+it. An option names the asset of each file, and the generated
+`Params::open(backend)` hands `load` a source over them that reads with
+`read_at`. The caller writes neither a path nor the bytes:
 
 ```wado
 let weights = gemma::Params::open(&mut backend)?;
 ```
-
-Reading by range holds the weights once. `Params::load` given the whole file
-holds the file and the weights at once. `load` stays for bytes the program
-already has, such as `#include_bytes` in a test.
 
 ## Alternatives set aside
 

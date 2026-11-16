@@ -1,7 +1,7 @@
 //! Gemma 3 (270M, instruction-tuned) as a library: its tokenizer, and the model
 //! that picks the next tokens, keeping the attention cache between calls.
 
-use { CheckpointBytes, Graph, LoadError, Sampling, Tensor } from "lib:loam";
+use { Graph, LoadError, Sampling, Tensor, WeightSource } from "lib:loam";
 /// Gemma's SentencePiece-spelled BPE, which puts `<bos>` first.
 pub use {
     Tokenizer,
@@ -39,11 +39,11 @@ pub struct Model<affine Bk: Graph> {
 }
 
 impl<affine Bk: Graph> Model<Bk> {
-    /// Loads the weights onto `backend` from `data`, the bytes of the
+    /// Loads the weights onto `backend` from `source`, which serves the
     /// `model.onnx_data` beside the `model.onnx` the build read.
-    pub fn load<affine Ck: CheckpointBytes>(backend: Bk, data: &Ck) -> Result<Model<Bk>, LoadError> with _ {
+    pub fn load<affine Src: WeightSource>(backend: Bk, source: &Src) -> Result<Model<Bk>, LoadError> with _ {
         let mut on = backend;
-        let model = gemma::Model::new(gemma::Params::load(&mut on, data)?);
+        let model = gemma::Model::new(gemma::Params::load(&mut on, source)?);
         let cache = gemma::Cache::empty(&mut on);
         return Ok(Model { backend: on, model, seen: [], cache });
     }

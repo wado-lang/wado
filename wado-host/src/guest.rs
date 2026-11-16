@@ -9,7 +9,9 @@ use std::sync::{Arc, LazyLock};
 
 use anyhow::Result;
 use wasmtime::component::{Linker, ResourceTable};
-use wasmtime::{AsContext, Config, Engine, OptLevel, ProfilingStrategy, Store};
+use wasmtime::{
+    AsContext, Config, Engine, OptLevel, ProfilingStrategy, Store, StoreLimits, StoreLimitsBuilder,
+};
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder};
@@ -135,6 +137,8 @@ pub struct GuestState {
     process: ProcessCtx,
     /// The fuel [`new_store`] filled the store with, where its engine meters.
     fuel_start: Option<u64>,
+    /// How far [`new_store`] lets each memory grow.
+    limits: StoreLimits,
 }
 
 impl GuestState {
@@ -261,6 +265,7 @@ impl GuestState {
             tls: build_wasi_tls_ctx(),
             process: ProcessCtx::new(preopens.spawning.clone(), guest_stdio),
             fuel_start: None,
+            limits: StoreLimits::default(),
         }
     }
 
@@ -390,12 +395,20 @@ macro_rules! guest_views {
     };
 }
 
+/// The bytes of a Wasm page, the unit a memory, the GC heap among them, grows by.
+const WASM_PAGE_SIZE: u64 = 64 << 10;
+
 /// [`default_config`] under the runtime knobs and profiling mode a run chose.
 #[must_use]
 pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: &RuntimeKnobs) -> Config {
     let mut config = default_config(opt_level);
     config.collector(knobs.collector);
-    config.gc_heap_initial_size(knobs.gc_heap_initial_size);
+    // A heap starting past the limit would fail before the guest ran. wasmtime
+    // rounds the start up to a whole Wasm page, so a limit off a page rounds
+    // it down first.
+    config.gc_heap_initial_size(knobs.max_memory.map_or(knobs.gc_heap_initial_size, |max| {
+        knobs.gc_heap_initial_size.min(max & !(WASM_PAGE_SIZE - 1))
+    }));
     if let Some(bytes) = knobs.function_alignment {
         // SAFETY: a minimum alignment changes where code lands, never what it
         // computes, so no setting of it can miscompile.
@@ -426,11 +439,18 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: &Runtime
     config
 }
 
-/// A store over `state`. On a metering engine it holds fuel it can never
-/// exhaust, so `--report-fuel` observes the guest without stopping it.
+/// A store over `state`, each of whose memories grows to `max_memory` bytes
+/// at most. On a metering engine it holds fuel it can never exhaust, so
+/// `--report-fuel` observes the guest without stopping it.
 #[must_use]
-pub fn new_store<T: Guest>(engine: &Engine, state: T) -> Store<T> {
+pub fn new_store<T: Guest>(engine: &Engine, state: T, max_memory: Option<u64>) -> Store<T> {
     let mut store = guest_store(engine, state);
+    if let Some(bytes) = max_memory {
+        store.data_mut().guest_mut().limits = StoreLimitsBuilder::new()
+            .memory_size(usize::try_from(bytes).expect("a host's usize holds a u64"))
+            .build();
+        store.limiter(|state| &mut state.guest_mut().limits);
+    }
     if engine.get_consume_fuel() {
         store.set_fuel(u64::MAX).expect("the engine meters fuel");
         store.data_mut().guest_mut().fuel_start = Some(u64::MAX);

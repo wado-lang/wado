@@ -48,14 +48,7 @@ The embedding is a `float16` table a `Gather` reads, so the model has no
 `GatherBlockQuantized`. The inputs and outputs are `int64` and `float16`, and
 the two `Cast`s give `int32`.
 
-1. [ ] Loading a tensor at a time. `load` reads the checkpoint from a source
-   that yields one tensor's bytes at a time, rather than from the whole file
-   the guest holds. A range names one of several data files. A tensor reaches
-   the device in its stored type, where today each passes through the guest as
-   a list of f32. Finished when a checkpoint larger than the guest's memory,
-   spread over several data files, loads onto `WebGpuBackend` and
-   `PjrtBackend`, and `Cpu` loads one it can hold through the same source.
-2. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
+1. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
    which onnx-community's `q4` exports use. gpt-oss-20b has the first alone. A
    weight stays packed on the device, read by the quantized product composite
    or by a quantized gather (see [Loam on TPU and WebGPU](./devices.md)). No
@@ -65,7 +58,7 @@ the two `Cast`s give `int32`.
    no type of its own, which the block formats under Known gaps wait for.
    Finished when Gemma 3 (270M)'s `q4` export picks the tokens onnxruntime
    picks from it on every device.
-3. [ ] The rest of gpt-oss-20b's operators: onnxruntime's `QMoE` and
+2. [ ] The rest of gpt-oss-20b's operators: onnxruntime's `QMoE` and
    `SkipSimplifiedLayerNormalization`, and a `GroupQueryAttention` with
    attention sinks. Stage 0 gives every node a shape per output, as it does
    `Split`'s, which the normalization's four outputs need. A `QMoE` decomposes
@@ -74,7 +67,7 @@ the two `Cast`s give `int32`.
    the experts the token routes to. Finished when `operators_test.wado` holds
    each to onnxruntime on every device, and `PjrtBackend::analyzing` reports
    the temporaries of both forms for a prompt and for a step.
-4. [ ] Experts held on demand. An expert is one slice along the first axis of
+3. [ ] Experts held on demand. An expert is one slice along the first axis of
    each `QMoE` input the operator's definition indexes by expert, so no model
    is named. A device holds as many experts as a budget the caller sets: all
    of them on a TPU chip, fewer on a GPU of 8 GB and on `Cpu`. The rest stay
@@ -85,7 +78,7 @@ the two `Cast`s give `int32`.
    them. So the host waits once a layer, which The MVP Is Tier 1 Only says a
    `QMoE` spares it. Finished when `operators_test.wado` holds a `QMoE` to
    onnxruntime with a budget of half its experts on every device.
-5. [ ] gpt-oss-20b, a mixture of experts. Finished when
+4. [ ] gpt-oss-20b, a mixture of experts. Finished when
    `example/gpt-oss-20b/` continues a prompt with the tokens onnxruntime picks
    from onnx-community's `q4f16` export on `Cpu`, under `wado run-webgpu` on a
    device with 8 GB, and under `wado run-pjrt`, with no line that names a
@@ -300,10 +293,9 @@ the mask and the input ids at the boundary.
 
 An initializer the textual format gives a `["location": ...]` list stops the
 build, naming the tensor. The protobuf form's `external_data` is read in place
-instead, as `design.md` describes, from one file. A model spreading its weights
-over several data files stops the build naming two of them, and so does a
-constant kept in one, since the build reads a constant and Kiln hands the
-generator the model alone.
+instead, as `design.md` describes. A constant kept in a data file stops the
+build, since the build reads a constant and Kiln hands the generator the model
+alone.
 
 ### Element types and precision
 
@@ -370,6 +362,10 @@ query, key and value, stays a product of its own. Over more than one row, a
 part of a concatenation is strided by the whole product's row, so a `reshape`
 merging its rows with an axis after them copies it, as Gemma 3's query and key
 normalization over heads does on a prompt.
+
+The weights of one `Joined` or `Paired` product are held on the host together
+while the device's copy of them is laid out, since a half fits them only where
+it holds every one's values. A load stays a tensor at a time elsewhere.
 
 A buffer crosses the component boundary as a `list<u8>`, which the guest
 converts from or to f32 one element at a time, so crossing costs more than the

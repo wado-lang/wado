@@ -3,7 +3,7 @@
 //! offset, read there in place against the logits onnxruntime computes.
 
 use { Cpu, Tensor } from "lib:loam";
-use { assert_close, ints_of, tensor_of } from "./oracle.wado";
+use { assert_close, ints_of, one_file, tensor_of } from "./oracle.wado";
 use { BatchSize, Model, Params, SequenceLength, compute } from "../tests/models/tiny-gpt2/external/model.onnx"
     with {
         type: "onnx",
@@ -21,7 +21,7 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     let [mask, mask_extents] = ints_of(attention_mask);
     let [want, want_extents] = tensor_of(logits);
 
-    let data = #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data");
+    let data = one_file("model.onnx_data", #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data"));
     let mut model = Model::new(Params::load(&mut Cpu {}, &data).unwrap());
     let got = compute(
         &mut Cpu {},
@@ -50,9 +50,9 @@ test "and for seven" {
     );
 }
 
-test "a file shorter than the build found the weights in names the tensor it cuts off" {
+test "a data file shorter than the weights the graph places in it stops the load before any is read" {
     let data = #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data");
     let cut = data[0..<data.len() - 1].to_list() as ByteList;
-    let e = Params::load(&mut Cpu {}, &cut).unwrap_err();
-    assert `${e}`.ends_with(`: the payload ends at byte ${data.len()}, past the ${data.len() - 1} given`);
+    let e = Params::load(&mut Cpu {}, &one_file("model.onnx_data", cut)).unwrap_err();
+    assert `${e}` == `model.onnx_data is ${data.len() - 1} bytes, and the graph places weights up to ${data.len()}`;
 }

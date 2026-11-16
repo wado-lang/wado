@@ -6,15 +6,7 @@ use { HashMap, HashSet } from "core:collections";
 use { Deserialize } from "core:serde";
 use fs from "core:fs";
 use { Graph, ValueInfo, element_of, push_element, static_extents } from "./graph.wado";
-use {
-    Checkpoint,
-    Expected,
-    HeaderEntry,
-    LoadError,
-    METADATA_KEY,
-    read_checkpoint,
-    shard_not_given,
-} from "./runtime/checkpoint.wado";
+use { Checkpoint, Expected, HeaderEntry, LoadError, METADATA_KEY, header_of } from "./runtime/checkpoint.wado";
 use { element_count } from "./runtime/tensor.wado";
 use { Shape } from "./shape.wado";
 
@@ -88,7 +80,7 @@ pub fn check_shards(
         if !paths.try_insert(name, shard.path) {
             return Result::Err(ShardRefusal { path: shard.path, reason: "another shard has this file name" });
         }
-        headers[name] = read_checkpoint(&shard.header).map_err(|e| ShardRefusal { path: shard.path, reason: `${e}` })?;
+        headers[name] = header_of(shard.header).map_err(|e| ShardRefusal { path: shard.path, reason: `${e}` })?;
     }
     for let vi of &graph.initializers {
         if vi.data matches { Some(_) } {
@@ -96,7 +88,12 @@ pub fn check_shards(
         }
         let shard = placed[vi.name];
         let Some(header) = headers.get_ref_str(&shard) else {
-            return Result::Err(ShardRefusal { path: *index_path, reason: `${shard_not_given(&vi.name, &shard)}` });
+            return Result::Err(
+                ShardRefusal {
+                    path: *index_path,
+                    reason: `${vi.name}: the index places it in ${shard}, which is not given`,
+                },
+            );
         };
         header.range(&expected(vi, &shapes.get(vi.name).unwrap())).map_err(
             |e| ShardRefusal { path: paths[shard], reason: `${e}` },

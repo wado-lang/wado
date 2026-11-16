@@ -6,8 +6,9 @@ use { eprintln, println, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { from_string } from "core:json";
-use { LinearArray } from "core:linear";
 use { MonotonicClock } from "wasi:clocks";
+use { FileSource, Graph } from "lib:loam";
+use { Model } from "./model.wado";
 
 /// How many tokens a call picks on a device: a read back each, then one for all.
 global EACH_CALL: List<i32> = [1, 32];
@@ -26,10 +27,13 @@ struct Oracle {
     generate: List<Generated>,
 }
 
-/// The bytes of `model.onnx_data`, or `None` where it is missing.
-pub fn read_checkpoint() -> Option<LinearArray<u8>> with (Stderr, Preopens) {
-    return match fs::read_linear("build/model.onnx_data") {
-        Ok(bytes) => Option::Some(bytes),
+/// Where `fetch.sh` downloads `model.onnx_data`, which the weights are read from.
+pub global WEIGHTS: FileSource = FileSource { dir: "build" };
+
+/// Gemma with its weights loaded onto `backend`, or `None` where they cannot be read.
+pub fn loaded<affine Bk: Graph>(backend: Bk) -> Option<Model<Bk>> with (_, Stderr, Preopens) {
+    return match Model::load(backend, &WEIGHTS) {
+        Ok(model) => Option::Some(model),
         Err(e) => {
             eprintln(`${e}; run fetch.sh first`);
             null;

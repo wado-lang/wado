@@ -1,4 +1,4 @@
-use { Document, Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node } from "./dom.wado";
+use { Document, Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node, Window } from "./dom.wado";
 use { SurfaceDom } from "./surface_dom.wado";
 
 test "a fresh document has a body" {
@@ -540,5 +540,87 @@ test "an element reference reads the ids its attribute lists" {
         field.set_aria_described_by_elements(Option::Some([first]));
         field.set_attribute("aria-describedby", "b");
         assert field.aria_described_by_elements() == Option::Some([second]);
+    };
+}
+
+#[expect_trap]
+test "a node of another document is refused" {
+    let mut first = SurfaceDom::new();
+    let mut second = SurfaceDom::new();
+    let mut stray: Option<Element> = null;
+    with &mut first do {
+        stray = Option::Some(Dom::document().create_element("div"));
+    };
+    with &mut second do {
+        Dom::document().body().unwrap().append_child(stray.unwrap());
+    };
+}
+
+#[expect_trap]
+test "a document of another SurfaceDom is refused" {
+    let mut first = SurfaceDom::new();
+    let mut second = SurfaceDom::new();
+    let mut stray: Option<Document> = null;
+    with &mut first do {
+        stray = Option::Some(Dom::document());
+    };
+    with &mut second do {
+        stray.unwrap().set_title("stray");
+    };
+}
+
+#[expect_trap]
+test "a window of another SurfaceDom is refused" {
+    let mut first = SurfaceDom::new();
+    let mut second = SurfaceDom::new();
+    let mut stray: Option<Window> = null;
+    with &mut first do {
+        stray = Option::Some(Dom::window());
+    };
+    with &mut second do {
+        stray.unwrap().document();
+    };
+}
+
+test "a removed subtree stays a tree, and its listeners stay with it" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = doc.body().unwrap();
+        let list = doc.create_element("ul");
+        let item = doc.create_element("li");
+        list.append_child(item);
+        body.append_child(list);
+        let mut paths: List<List<EventTarget>> = [];
+        item.add_event_listener("ping", |event| paths.push(event.composed_path()), null);
+        body.remove_child(list);
+
+        assert list.parent_node() == null;
+        assert item.parent_element() == Option::Some(list as Element);
+        assert !body.has_child_nodes();
+        item.dispatch_event(Event::new("ping"));
+        // Off the document, the path stops at the subtree's root.
+        assert paths == [
+            [item as EventTarget, list as EventTarget],
+        ];
+    };
+}
+
+// What a node the program dropped costs is what the collector copies of it:
+// kept alive, each of these would be copied at every collection after it.
+#[timeout_ms(10000)]
+test "a node the program dropped is collected" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = doc.body().unwrap();
+        for let i of 0..<300000 {
+            let div = doc.create_element("div");
+            div.set_attribute("id", `n${i}`);
+            body.append_child(div);
+            div.set_text_content(Option::Some("x"));
+            body.remove_child(div);
+        }
+        assert !body.has_child_nodes();
     };
 }

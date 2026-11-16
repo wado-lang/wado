@@ -800,6 +800,7 @@ async fn worker_loop(
     recycle_requests: u64,
     timeout_secs: u64,
     profiler: Option<GuestProfilerHandle>,
+    max_memory: Option<u64>,
 ) {
     // Grace over the client-facing timeout and the 1s tick granularity, so
     // the first-byte 504 precedes the epoch trap. Under `--profile guest`
@@ -817,7 +818,7 @@ async fn worker_loop(
         // `global` initializers, e.g. a router built at startup) runs
         // here — once per generation, not once per request.
         let state = WasiState::new_no_inherit_env_with_preopens(&preopens, &argv);
-        let mut store = runtime::new_store(&engine, state);
+        let mut store = runtime::new_store(&engine, state, max_memory);
         store.set_hostcall_fuel(HOSTCALL_FUEL);
         // Arm the epoch deadline. The dispatch loop refreshes it every
         // turn (see below), so a healthy worker never trips it; a guest
@@ -1065,6 +1066,7 @@ async fn run_http_server(
             recycle_requests,
             timeout.as_secs().max(1),
             profiler_handle.clone(),
+            runtime_knobs.max_memory,
         ));
     }
     let dispatch = Arc::new(Dispatch {

@@ -1,0 +1,28 @@
+# A chain of products whose weights, 80 MiB in all, are more than a guest
+# under `--max-memory 32m` holds. `write.wado` writes them, each a
+# permutation, so a weight read from another's range moves `y` elsewhere.
+<ir_version: 8, opset_import: [ "" : 17 ]>
+chain (float[1, 1024] x) => (float[1, 1024] y)
+<float[1024, 1024] w0, float[1024, 1024] w1, float[1024, 1024] w2, float[1024, 1024] w3, float[1024, 1024] w4, float[1024, 1024] w5, float[1024, 1024] w6, float[1024, 1024] w7, float[1024, 1024] w8, float[1024, 1024] w9, float[1024, 1024] w10, float[1024, 1024] w11, float[1024, 1024] w12, float[1024, 1024] w13, float[1024, 1024] w14, float[1024, 1024] w15, float[1024, 1024] w16, float[1024, 1024] w17, float[1024, 1024] w18, float[1024, 1024] w19>
+{
+    h0 = MatMul(x, w0)
+    h1 = MatMul(h0, w1)
+    h2 = MatMul(h1, w2)
+    h3 = MatMul(h2, w3)
+    h4 = MatMul(h3, w4)
+    h5 = MatMul(h4, w5)
+    h6 = MatMul(h5, w6)
+    h7 = MatMul(h6, w7)
+    h8 = MatMul(h7, w8)
+    h9 = MatMul(h8, w9)
+    h10 = MatMul(h9, w10)
+    h11 = MatMul(h10, w11)
+    h12 = MatMul(h11, w12)
+    h13 = MatMul(h12, w13)
+    h14 = MatMul(h13, w14)
+    h15 = MatMul(h14, w15)
+    h16 = MatMul(h15, w16)
+    h17 = MatMul(h16, w17)
+    h18 = MatMul(h17, w18)
+    y = MatMul(h18, w19)
+}

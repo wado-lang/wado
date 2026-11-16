@@ -5,7 +5,7 @@
 //! computes. Each step reproduces the logits onnxruntime computes for it.
 
 use { Cpu, Tensor, capacity_of } from "lib:loam";
-use { assert_close, ints_of, tensor_of } from "./oracle.wado";
+use { assert_close, ints_of, one_file, tensor_of } from "./oracle.wado";
 use prompt from "../tests/models/tiny-gpt2/model.onnxtext"
     with {
         type: "onnxtext",
@@ -69,7 +69,10 @@ fn prefill(
     input_ids: ByteList,
 ) -> [Tensor<f32, [prompt::BatchSize, prompt::SequenceLength, prompt::Logits2]>, step::Cache<Cpu>] {
     let [ids, extents] = ints_of(input_ids);
-    let weights = prompt::Params::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
+    let weights = prompt::Params::load(
+        &mut Cpu {},
+        &one_file("model.safetensors", #include_bytes("../tests/models/tiny-gpt2/model.safetensors")),
+    ).unwrap();
     let o = prompt::compute(
         &mut Cpu {},
         &Tensor::<i64, [prompt::BatchSize, prompt::SequenceLength]> { data: ids, extents },

@@ -1,7 +1,7 @@
 //! GPT-2 (124M) as a library: its tokenizer, and the model that picks the next
 //! token greedily, keeping the attention cache between calls.
 
-use { CheckpointBytes, Graph, LoadError, Tensor } from "lib:loam";
+use { Graph, LoadError, Tensor, WeightSource } from "lib:loam";
 /// GPT-2's byte-level BPE, with `<|endoftext|>` as its one special token.
 pub use { Tokenizer } from "./tokenizer.json"
     with {
@@ -40,11 +40,11 @@ pub struct Model<affine Bk: Graph> {
 }
 
 impl<affine Bk: Graph> Model<Bk> {
-    /// Loads the weights onto `backend` from `model`, the bytes of the
+    /// Loads the weights onto `backend` from `source`, which serves the
     /// `decoder_model_merged.onnx` the build read.
-    pub fn load<affine Ck: CheckpointBytes>(backend: Bk, model: &Ck) -> Result<Model<Bk>, LoadError> with _ {
+    pub fn load<affine Src: WeightSource>(backend: Bk, source: &Src) -> Result<Model<Bk>, LoadError> with _ {
         let mut on = backend;
-        let held = gpt2::Model::new(gpt2::Params::load(&mut on, model)?);
+        let held = gpt2::Model::new(gpt2::Params::load(&mut on, source)?);
         let cache = gpt2::Cache::empty(&mut on);
         return Ok(Model { backend: on, model: held, seen: [], cache });
     }

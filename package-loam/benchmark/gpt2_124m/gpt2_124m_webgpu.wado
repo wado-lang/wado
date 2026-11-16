@@ -4,7 +4,6 @@
 //!     wado run-webgpu --dir ../example/gpt2-124m gpt2_124m/gpt2_124m_webgpu.wado
 
 use { eprintln, Stderr, Stdout } from "core:cli";
-use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { MonotonicClock } from "wasi:clocks";
 use {
@@ -25,19 +24,15 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { WebGpuBackend } from "lib:loam";
+use { FileSource, WebGpuBackend } from "lib:loam";
 use { Model } from "../../example/gpt2-124m/model.wado";
 use { timed } from "./generate.wado";
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
-    let Ok(checkpoint) = fs::read_linear("model.onnx") else {
-        eprintln("model.onnx is missing; run package-loam/example/gpt2-124m/fetch.sh");
-        return;
-    };
     let Some(gpu) = WebGpuBackend::new() else {
         eprintln("no WebGPU adapter");
         return;
     };
-    let mut model = Model::load(gpu, &checkpoint).unwrap();
+    let mut model = Model::load(gpu, &FileSource { dir: "." }).unwrap();
     timed("GPT-2 (124M), Loam WebGPU", &mut model);
 }

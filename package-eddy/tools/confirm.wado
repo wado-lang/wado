@@ -17,7 +17,10 @@ use { Preopens } from "core:fs";
 use { Client } from "wasi:http";
 use { to_bytes_pretty, to_string, from_string } from "core:json";
 use { TreeSet } from "core:collections";
-use { ask_json, Baseline, Finding, Run } from "./eval.wado";
+use { Baseline, Run } from "./eval.wado";
+use { ask_json, Usage } from "../src/anthropic.wado";
+use { cost_summary } from "../src/cost.wado";
+use { Finding } from "../src/review.wado";
 
 #[param(name = "grader")]
 global GRADER: String = "claude-opus-5-5";
@@ -62,6 +65,7 @@ export fn run() with (Stderr, Environment, Preopens, Client) {
     let reviews = from_string::<Baseline, String>(fs::read_to_string(&arguments[0]).unwrap()).unwrap();
     let out_path = arguments[1];
     let mut out = Confirmed { grader: GRADER, runs: [] };
+    let mut spent = Usage {};
     for let e of &reviews.entries {
         for let [i, r] of e.runs.into_iter().enumerate() {
             let runs = run_outputs(&r);
@@ -74,7 +78,7 @@ export fn run() with (Stderr, Environment, Preopens, Client) {
             };
             let mut confirmed = ConfirmedRun { fix: e.fix, run: i, findings: r.findings, hit };
             let prompt = `<findings>\n${to_string(&r.findings).unwrap()}\n</findings>\n${runs}`;
-            match ask_json::<Confirmations>(&api_key, GRADER, CONFIRM, prompt, 16_000) {
+            match ask_json::<Confirmations>(&api_key, GRADER, CONFIRM, prompt, 16_000, &mut spent) {
                 Ok(c) && !judges_each_once(&c.findings, r.findings.len()) => confirmed.error = Some(
                     "the grader did not judge each finding exactly once",
                 ),
@@ -89,6 +93,9 @@ export fn run() with (Stderr, Environment, Preopens, Client) {
         }
     }
     report(&out);
+    eprintln(cost_summary(&[
+        [GRADER, spent],
+    ]));
 }
 
 fn judges_each_once(judged: &List<Confirmation>, count: i32) -> bool {

@@ -5,11 +5,9 @@
 //! `webgpu_slots.wado` run it on a device.
 
 use { eprintln, println, Stderr, Stdout } from "core:cli";
-use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { LinearArray } from "core:linear";
 use { MonotonicClock } from "wasi:clocks";
-use { Graph, Sampling, Tensor } from "lib:loam";
+use { FileSource, Graph, Sampling, Tensor } from "lib:loam";
 use { Tokenizer } from "./tokenizer.json"
     with {
         type: "hf-tokenizer",
@@ -44,16 +42,6 @@ global STEPS: i32 = 31;
 global CAPACITY: i32 = 64;
 
 global SLOTS: List<i32> = [1, 2, 4, 8];
-
-pub fn read_checkpoint() -> Option<LinearArray<u8>> with (Stderr, Preopens) {
-    return match fs::read_linear("model.onnx") {
-        Ok(bytes) => Option::Some(bytes),
-        Err(e) => {
-            eprintln(`${e}; run package-loam/example/gpt2-124m/fetch.sh`);
-            null;
-        },
-    };
-}
 
 fn ids(tokens: List<i64>) -> Tensor<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
     return Tensor {
@@ -134,9 +122,16 @@ fn side_by_side<affine Bk: Graph>(
 
 /// Prints the tokens a second each number of `SLOTS` decodes, the second of two
 /// runs, whose programs the first compiled.
-pub fn measured<affine Bk: Graph>(backend: Bk, checkpoint: &LinearArray<u8>) with (Stdout, MonotonicClock, _) {
+pub fn measured<affine Bk: Graph>(backend: Bk) with (Stdout, Stderr, Preopens, MonotonicClock, _) {
     let mut g = backend;
-    let mut model = gpt2::Model::new(gpt2::Params::load(&mut g, checkpoint).unwrap());
+    let params = match gpt2::Params::load(&mut g, &FileSource { dir: "." }) {
+        Ok(params) => params,
+        Err(e) => {
+            eprintln(`${e}; run package-loam/example/gpt2-124m/fetch.sh`);
+            return;
+        },
+    };
+    let mut model = gpt2::Model::new(params);
     let mut alone_tokens: List<List<i64>> = [];
     for let i of 0..<PROMPTS.len() {
         alone_tokens.push(alone(&mut g, &mut model, prompt(i)));

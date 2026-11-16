@@ -88,6 +88,15 @@ The whole content of `path` in linear memory: what [`read`] returns, with
 no byte lifted into the GC heap. A file of `f32`s becomes a
 `LinearArray<f32>` by `cast`, with no element copied.
 
+### `pub fn read_linear_range<S: AsStrSlice>(path: S, start: u64, len: i32) -> Result<LinearArray<u8>, FsError> with Preopens`
+
+- `contract len >= 0`
+
+The `len` bytes of the regular file at `path` from byte `start` on, in
+linear memory as [`read_linear`] reads a whole file. Reading a weight of a
+model's data file this way holds nothing else of the file. A file that
+ends before the last of them is `PastEnd`.
+
 ### `pub fn read_to_string<S: AsStrSlice>(path: S) -> Result<String, FsError> with Preopens`
 
 The whole content of `path` as text, or `NotUtf8` if it is not UTF-8.
@@ -287,6 +296,10 @@ The path names nothing.
 #### `NotUtf8(Utf8Error)`
 
 The bytes read are not UTF-8 (`read_to_string` only).
+
+#### `PastEnd`
+
+The file ends before the bytes asked for (`read_linear_range` only).
 
 #### `Io(ErrorCode)`
 

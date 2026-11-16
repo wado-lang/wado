@@ -11,6 +11,10 @@ test("a /code-review run asks for the response skill", () => {
   assert.match(followUpContext(prompt("/code-review --fix high")) ?? "", /code-review-response/);
 });
 
+test("an /eddy run asks for it too", () => {
+  assert.match(followUpContext(prompt("/eddy run")) ?? "", /code-review-response/);
+});
+
 test("anything else is left alone", () => {
   for (const payload of [prompt("/code-review-response"), prompt("review the diff"), {}, null]) {
     assert.equal(followUpContext(payload), null);

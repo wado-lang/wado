@@ -1,6 +1,6 @@
 use { HashMap, HashSet, TreeMap } from "core:collections";
 use { Decode, EmitError, NameCollision, Placement, UnmappedDtype, emit, rows_judged } from "./emit.wado";
-use { Attr, Dim, Elements, Graph, InPlace, Known, Node, Rank, ValueInfo } from "./graph.wado";
+use { Attr, Dim, Elements, Graph, InPlace, Known, Node, Rank, ValueInfo, WeightRange } from "./graph.wado";
 use { module_idents } from "./idents.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
@@ -9,9 +9,12 @@ use { keep_last } from "./specialize.wado";
 /// The package spec the generated module imports the runtime from.
 global RUNTIME: String = "lib:loam";
 
+/// The checkpoint `generate` reads the weights a graph lacks from.
+global CHECKPOINT: Placement = Placement::File("model.safetensors");
+
 fn generate(source: String) -> Result<String, EmitError> {
     let graph = read(&source).unwrap();
-    return emit(&graph, &infer(&graph).unwrap(), &RUNTIME);
+    return emit(&graph, &infer(&graph).unwrap(), &RUNTIME, CHECKPOINT);
 }
 
 /// `build`, and what the module declares between it and `compute`, out of the
@@ -331,9 +334,7 @@ bias (float[N, 2] X) => (float[N, 2] Y)
     assert out.contains(
         "impl<affine Bk: Graph> Params<Bk> {\n    /// The weights the graph carries.\n    pub fn embedded(backend: &mut Bk) -> Params<Bk> with _ {",
     );
-    assert out.contains(
-        "0 => hosted(Tensor::<f32, [X1]> { data: List::<f32>::from_le_bytes(embedded_data(0)), extents: [2] }),",
-    );
+    assert out.contains("0 => HostWeight::of_bytes::<f32>([2], &embedded_data(0)),");
     // 1.0 is 0x3f800000 and -2.5 is 0xc0200000, little-endian.
     assert out.split("0 => b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\",").count() == 2;
 }
@@ -343,11 +344,11 @@ test "weights the graph lacks are read from a checkpoint by Params::load" {
 
     assert !out.contains("fn embedded");
     assert out.contains(
-        "pub fn load<affine Ck: CheckpointBytes>(backend: &mut Bk, checkpoint: &Ck) -> Result<Params<Bk>, LoadError> with _ {",
+        "pub fn load<affine Src: WeightSource>(backend: &mut Bk, source: &Src) -> Result<Params<Bk>, LoadError> with _ {",
     );
-    assert out.contains("let header = read_checkpoint(checkpoint)?;");
+    assert out.contains("let header = read_headers(source, [\"model.safetensors\"])?;");
     assert out.contains(
-        "0 => hosted(Tensor::<f32, [X1, W11]> { data: header.payload::<f32, Ck>(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"X1\", \"W11\"], extents: [4, 3], elements: 12, width: 4 })?, extents: [4, 3] }),",
+        "0 => header.payload::<f32, Src>(source, \"model.safetensors\", &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"X1\", \"W11\"], extents: [4, 3], elements: 12, width: 4 })?,",
     );
 }
 
@@ -359,37 +360,46 @@ test "a sharded checkpoint's weights are read each from the shard the index plac
     }
     let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::Shards(placed)).unwrap();
 
-    assert out.contains("use { HashMap } from \"core:collections\";\n");
     assert out.contains(
-        "pub fn load(backend: &mut Bk, shards: &HashMap<String, ByteList>) -> Result<Params<Bk>, LoadError> with _ {",
+        "let header = read_headers(source, [\"m-00001-of-00002.safetensors\", \"m-00002-of-00002.safetensors\"])?;",
     );
-    assert out.contains("let header = read_shards(shards)?;");
     assert out.contains(
-        "2 => hosted(Tensor::<f32, [W11, Y1]> { data: header.payload::<f32>(shards, \"m-00002-of-00002.safetensors\", &Expected { tensor: \"W2\",",
+        "2 => header.payload::<f32, Src>(source, \"m-00002-of-00002.safetensors\", &Expected { tensor: \"W2\",",
     );
 }
 
-test "weights left in place are read where the build found them" {
+test "weights left in place are read where the build found them, in each file" {
     let graph = read(&MLP).unwrap();
-    let mut ranges = TreeMap::<String, [i32, i32]>::new();
-    ranges["W1"] = [0, 48];
-    ranges["B1"] = [48, 60];
-    ranges["W2"] = [60, 84];
-    ranges["B2"] = [84, 92];
-    let in_place = InPlace { file: "model.onnx_data", ranges };
-    let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::InPlace(in_place)).unwrap();
+    let mut ranges = TreeMap::<String, WeightRange>::new();
+    ranges["W1"] = WeightRange { file: "a.bin", start: 0, end: 48 };
+    ranges["B1"] = WeightRange { file: "a.bin", start: 48, end: 60 };
+    ranges["W2"] = WeightRange { file: "b.bin", start: 0, end: 24 };
+    ranges["B2"] = WeightRange { file: "b.bin", start: 24, end: 32 };
+    let mut lens = TreeMap::<String, i32>::new();
+    lens["a.bin"] = 60;
+    lens["b.bin"] = 32;
+    let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::InPlace(InPlace { ranges, lens })).unwrap();
 
     assert out.contains(
-        "    /// The weights, those the graph does not carry read from model.onnx_data where the build found them.\n    pub fn load<affine Ck: CheckpointBytes>(backend: &mut Bk, checkpoint: &Ck) -> Result<Params<Bk>, LoadError> with _ {\n",
+        "    /// The weights, those the graph does not carry read from a.bin, b.bin where the build found them.\n    pub fn load<affine Src: WeightSource>(backend: &mut Bk, source: &Src) -> Result<Params<Bk>, LoadError> with _ {\n        expect_len(source, \"a.bin\", 60)?;\n        expect_len(source, \"b.bin\", 32)?;\n",
     );
-    assert out.contains(
-        "2 => hosted(Tensor::<f32, [W11, Y1]> { data: payload_at::<f32, Ck>(checkpoint, \"W2\", 60, 84)?, extents: [3, 2] }),",
-    );
-    assert !out.contains("core:collections");
+    assert out.contains("2 => payload_at::<f32, Src>(source, \"b.bin\", \"W2\", [3, 2], 0, 24)?,");
 }
 
-test "a single file's module imports no map" {
-    assert !generate(MLP).unwrap().contains("core:collections");
+test "a file the build never read is checked to hold its weights before any loads" {
+    let graph = read(&MLP).unwrap();
+    let mut ranges = TreeMap::<String, WeightRange>::new();
+    ranges["W1"] = WeightRange { file: "a.bin", start: 0, end: 48 };
+    ranges["B1"] = WeightRange { file: "a.bin", start: 48, end: 60 };
+    ranges["W2"] = WeightRange { file: "b.bin", start: 8, end: 32 };
+    ranges["B2"] = WeightRange { file: "b.bin", start: 0, end: 8 };
+    let mut lens = TreeMap::<String, i32>::new();
+    lens["a.bin"] = 60;
+    let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::InPlace(InPlace { ranges, lens })).unwrap();
+
+    assert out.contains(
+        "        expect_len(source, \"a.bin\", 60)?;\n        expect_holds(source, \"b.bin\", 32)?;\n",
+    );
 }
 
 test "a graph carrying some weights embeds those and loads the rest" {
@@ -404,7 +414,7 @@ bias (float[N, 2] X) => (float[N, 2] Y)
     let out = generate(source).unwrap();
 
     assert out.contains("tensor: \"W\", dtype: \"F32\", axes: [\"X1\", \"Y1\"], extents: [2, 2], elements: 4, width: 4");
-    assert out.contains("data: List::<f32>::from_le_bytes(embedded_data(1)), extents: [2] }");
+    assert out.contains("HostWeight::of_bytes::<f32>([2], &embedded_data(1))");
     assert out.contains("1 => b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\",");
 }
 
@@ -491,8 +501,8 @@ test "folded tensors of one source keep their own elements, a Cast between them"
     }`;
     let out = generate(source).unwrap();
 
-    assert out.contains("Result::Ok(hosted(Tensor::<i64, [Y0]> { data: [0, 1, 2]");
-    assert out.contains("Result::Ok(hosted(Tensor::<f32, [Y0]> { data: [0 as f32, 1 as f32, 2 as f32]");
+    assert out.contains("Result::Ok(HostWeight::of(&Tensor::<i64, [Y0]> { data: [0, 1, 2]");
+    assert out.contains("Result::Ok(HostWeight::of(&Tensor::<f32, [Y0]> { data: [0 as f32, 1 as f32, 2 as f32]");
 }
 
 test "a length the run would compute past i64 for some input stops the build" {
@@ -732,7 +742,7 @@ g (float[1, 4] M, float[1, 4] X) => (float[1, 4] Y)
 `;
     let out = generate(source).unwrap();
 
-    assert out.contains("Result::Ok(hosted(Tensor::<f32, []> { data: [-1 as f32], extents: [] })),");
+    assert out.contains("Result::Ok(HostWeight::of(&Tensor::<f32, []> { data: [-1 as f32], extents: [] })),");
     assert out.contains(
         "let Y = backend.select::<f32, [M0, M1]>(&C, &backend.broadcast_in_dim::<f32, [], [M0, M1]>(&weights.S, [1, 4], []), X);",
     );
@@ -905,16 +915,16 @@ test "every error emit reports is an Error" {
 
 test "a tensor named as the generated module names something is renamed" {
     let source = `
-g (float[N, 2] weights, float[N, 2] hosted) => (float[N, 2] Tensor)
+g (float[N, 2] weights, float[N, 2] fitted) => (float[N, 2] Tensor)
 <>
 {
-    Tensor = Add(weights, hosted)
+    Tensor = Add(weights, fitted)
 }
 `;
     let out = generate(source).unwrap();
 
-    assert out.contains("backend: &mut Bk, weights_: &Tensor<f32, [N, Weights1]>, hosted_: ");
-    assert out.contains("let Tensor_ = backend.binary::<f32, [N, Weights1]>(Binary::Add, weights_, hosted_);");
+    assert out.contains("backend: &mut Bk, weights_: &Tensor<f32, [N, Weights1]>, fitted_: ");
+    assert out.contains("let Tensor_ = backend.binary::<f32, [N, Weights1]>(Binary::Add, weights_, fitted_);");
     assert out.contains("    return Tensor_;\n");
 }
 
@@ -958,7 +968,7 @@ g (float[N, 2] HashMap) => (float[N, 2] Y)
     assert out.contains("(Binary::Maximum, HashMap, ");
 }
 
-test "a sharded checkpoint that supplies no weight imports no map" {
+test "a sharded checkpoint that supplies no weight leaves the weights embedded" {
     let source = `
 g (float[N, 2] X) => (float[N, 2] Y)
 <float[2] B = {1.0, 2.0}>
@@ -969,8 +979,17 @@ g (float[N, 2] X) => (float[N, 2] Y)
     let graph = read(&source).unwrap();
     let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::Shards(HashMap::new())).unwrap();
 
-    assert !out.contains("core:collections");
     assert out.contains("pub fn embedded(");
+    assert !out.contains("fn load");
+}
+
+test "weights placed nowhere are the caller's to build, with no load" {
+    let graph = read(&MLP).unwrap();
+    let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::Unplaced).unwrap();
+
+    assert out.contains("pub struct Weights");
+    assert !out.contains("fn load");
+    assert !out.contains("fn embedded");
 }
 
 test "a renamed tensor steps past a tensor already named as the renaming would" {
@@ -1105,7 +1124,7 @@ test "a half precision boundary states its own element type" {
 test "a half precision graph computes in its own element type" {
     let out = generate(mlp("float16")).unwrap();
 
-    assert out.contains("0 => hosted(self.W1),");
+    assert out.contains("0 => HostWeight::of(&self.W1),");
     assert out.contains("let X = backend.upload(&resized(X, [to_extent(capacity_N), 4]));");
     assert out.contains(
         "let H = backend.dot_general::<f16, [N, X1], [X1, W11], [N, W11]>(X, &weights.W1, &DotDims { lhs_batch: [], rhs_batch: [], lhs_contracting: [1], rhs_contracting: [0] });",
@@ -1186,7 +1205,7 @@ fn node(op: String, output: String, inputs: List<String>) -> Node {
 }
 
 fn emit_graph(graph: &Graph) -> Result<String, EmitError> {
-    return emit(graph, &infer(graph).unwrap(), &RUNTIME);
+    return emit(graph, &infer(graph).unwrap(), &RUNTIME, CHECKPOINT);
 }
 
 fn matrix_rank() -> Rank {
@@ -1523,7 +1542,7 @@ test "an embedding lookup is a gather of rows, and a folded index tensor is a li
     assert out.contains(
         "let E = backend.gather::<f32, [W0, Y2], [I0, I1], [I0, I1, Y2]>(&weights.W, &from_end_indices::<Bk, [I0, I1]>(backend, I, &scalar::<Bk, i64>(backend, 16)), &GatherDims { offset_dims: [2], collapsed_slice_dims: [0], start_index_map: [0], index_vector_dim: 2, slice_sizes: [1, 8] });",
     );
-    assert out.contains("Result::Ok(hosted(Tensor::<i64, [I0, I1]> { data: [0, 1, 2, 3], extents: [1, 4] })),");
+    assert out.contains("Result::Ok(HostWeight::of(&Tensor::<i64, [I0, I1]> { data: [0, 1, 2, 3], extents: [1, 4] })),");
     assert out.contains(
         "let F = backend.gather::<f32, [P0, Y2], [I0, I1], [I0, I1, Y2]>(&weights.P, &from_end_indices::<Bk, [I0, I1]>(backend, &weights.Q, ",
     );
@@ -1611,7 +1630,7 @@ test "a scale the graph computes from a shape folds to a literal" {
         Y = Div(X, R)
     }`;
     let out = generate(source).unwrap();
-    assert out.contains("Result::Ok(hosted(Tensor::<f32, []> { data: [2 as f32], extents: [] })),");
+    assert out.contains("Result::Ok(HostWeight::of(&Tensor::<f32, []> { data: [2 as f32], extents: [] })),");
     assert out.contains(
         "let Y = backend.binary::<f32, [X0, X1]>(Binary::Divide, X, &backend.broadcast_in_dim::<f32, [], [X0, X1]>(&weights.R, [2, 4], []));",
     );
@@ -1633,7 +1652,7 @@ test "a Cast of a length only the run knows converts it on the backend" {
 
 test "a constant is held where the weights are, and broadcast where an operator reads it" {
     let out = folded_add(0.5).unwrap();
-    assert out.contains("Result::Ok(hosted(Tensor::<f32, []> { data: [0.5 as f32], extents: [] })),");
+    assert out.contains("Result::Ok(HostWeight::of(&Tensor::<f32, []> { data: [0.5 as f32], extents: [] })),");
     assert out.contains(
         "let Y = backend.binary::<f32, [N, X1]>(Binary::Add, X, &backend.broadcast_in_dim::<f32, [], [N, X1]>(&weights.C, [to_extent(dim_N), 2], []));",
     );
@@ -1647,7 +1666,7 @@ test "a constant no Wado literal spells is written as the prelude's constant" {
 test "a constant with no operator to fold into is a rank-0 literal" {
     let out = emit_graph(&constant_graph(node("Relu", "Y", ["C"]), Rank::Scalar, 0.5)).unwrap();
 
-    assert out.contains("Result::Ok(hosted(Tensor::<f32, []> { data: [0.5 as f32], extents: [] })),");
+    assert out.contains("Result::Ok(HostWeight::of(&Tensor::<f32, []> { data: [0.5 as f32], extents: [] })),");
     assert out.contains("let Y = backend.binary::<f32, []>(Binary::Maximum, &weights.C, ");
     // `Params::held` holds it, from one copy of its data: a mask is as large
     // as the context it covers.
@@ -1665,14 +1684,14 @@ g (float[N, 2] X) => (float[N, 3] Y)
     let out = generate(source).unwrap();
     assert out.contains("fn least_extents() -> List<List<i32>> {");
     assert out.contains(
-        "fn held<Er>(backend: &mut Bk, load: fn(i32) -> Result<Any<Cpu>, Er> with _) -> Result<Params<Bk>, Er> with _ {",
+        "fn held<Er>(backend: &mut Bk, load: fn(i32) -> Result<HostWeight, Er> with _) -> Result<Params<Bk>, Er> with _ {",
     );
     assert out.contains(
         "let weights = backend.kept_weights(|recorder| recorded(recorder, &least_extents()), 1, 1, load)?;",
     );
     assert out.contains("return Result::Ok(restored_fields(backend, &weights, 0));");
     assert out.contains("return Params::held::<!>(backend, |at| Result::Ok(match at {");
-    assert out.contains("0 => hosted(self.W),");
+    assert out.contains("0 => HostWeight::of(&self.W),");
 }
 
 test "a one-element constant that raises the output's rank is a tensor, not a folded scalar" {
@@ -1682,7 +1701,7 @@ test "a one-element constant that raises the output's rank is a tensor, not a fo
     }`;
     let out = generate(source).unwrap();
 
-    assert out.contains("Result::Ok(hosted(Tensor::<f32, [Y0, C1]> { data: [0 as f32], extents: [1, 1] })),");
+    assert out.contains("Result::Ok(HostWeight::of(&Tensor::<f32, [Y0, C1]> { data: [0 as f32], extents: [1, 1] })),");
     assert out.contains(
         "let Y = backend.binary::<f32, [Y0, X0]>(Binary::Add, &backend.broadcast_in_dim::<f32, [X0], [Y0, X0]>(X, [1, 3], [1]), &backend.broadcast_in_dim::<f32, [Y0, C1], [Y0, X0]>(&weights.C, [1, 3], [0, 1]));",
     );
@@ -1701,7 +1720,7 @@ test "a folded scalar output is returned as its literal" {
         ],
     }).unwrap();
 
-    assert out.contains("Result::Ok(hosted(Tensor::<f32, []> { data: [0.5 as f32], extents: [] })),");
+    assert out.contains("Result::Ok(HostWeight::of(&Tensor::<f32, []> { data: [0.5 as f32], extents: [] })),");
     assert out.contains("    return weights.C;\n");
 }
 
@@ -1711,7 +1730,7 @@ test "a folded output of several elements is returned as its literal" {
     }`;
     let out = generate(source).unwrap();
 
-    assert out.contains("Result::Ok(hosted(Tensor::<i64, [Y0]> { data: [2, 3], extents: [2] })),");
+    assert out.contains("Result::Ok(HostWeight::of(&Tensor::<i64, [Y0]> { data: [2, 3], extents: [2] })),");
     assert out.contains("    return weights.Y;\n");
 }
 
@@ -1723,7 +1742,7 @@ test "a folded tensor a Cast names again under its own type is spelled once" {
         Y = Add(E, F)
     }`;
     let out = generate(source).unwrap();
-    assert out.contains("Result::Ok(hosted(Tensor::<i64, [Y0]> { data: [0, 1, 2, 3], extents: [4] })),");
+    assert out.contains("Result::Ok(HostWeight::of(&Tensor::<i64, [Y0]> { data: [0, 1, 2, 3], extents: [4] })),");
     assert !out.contains("pub C:");
     assert out.contains(
         "let F = backend.gather::<f32, [W0, Y1], [Y0], [Y0, Y1]>(&weights.W, &from_end_indices::<Bk, [Y0]>(backend, &weights.Q, ",
@@ -1792,7 +1811,7 @@ fn decoded(
     if let Some(output) = last {
         keep_last(&mut graph, &infer(&graph).unwrap(), &output, 1).unwrap();
     }
-    return emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::File, Option::Some(Decode { ids, mask, logits }));
+    return emit(&graph, &infer(&graph).unwrap(), &RUNTIME, CHECKPOINT, Option::Some(Decode { ids, mask, logits }));
 }
 
 /// `decoded` of `source`, an edit of `DECODER`, by its usual tensors.
@@ -1959,7 +1978,7 @@ test "decode refuses a graph with no cache" {
     ).unwrap();
     let decode = Decode { ids: "ids", mask: "ids", logits: "Y" };
     assert refused_for(
-        emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::File, Option::Some(decode)),
+        emit(&graph, &infer(&graph).unwrap(), &RUNTIME, CHECKPOINT, Option::Some(decode)),
         "no cache",
     );
 }
