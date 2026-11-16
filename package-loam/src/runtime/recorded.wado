@@ -10,6 +10,7 @@ use {
     DotDims,
     GatherDims,
     Graph,
+    Quantized,
     ScatterDims,
     Slots,
     Unary,
@@ -17,6 +18,8 @@ use {
     broadcast_in_dim_extents,
     conv_window,
     decomposed_attention,
+    decomposed_gather,
+    decomposed_product,
     dot_extents,
     elementwise_extents,
     gathered_extents,
@@ -45,6 +48,13 @@ pub struct AttentionNode {
     pub bounded: bool,
     pub rotary: bool,
     pub biased: bool,
+}
+
+/// What a quantized product or gather takes beside its operands: how the
+/// weight is packed, and whether its zero points follow its scales.
+pub struct QuantizedNode {
+    pub quantized: Quantized,
+    pub zero_points: bool,
 }
 
 /// One operation of a recorded graph, with the attributes `Graph`'s method
@@ -90,6 +100,12 @@ pub variant Operation {
     Attention(AttentionNode),
     /// The `k`th output of the node it reads, past the first.
     Part(i32),
+    /// `Graph::quantized_product` over its input, weight, scales and zero
+    /// points.
+    QuantizedProduct(QuantizedNode),
+    /// `Graph::quantized_gather` over its table, indices, scales and zero
+    /// points.
+    QuantizedGather(QuantizedNode),
 }
 
 /// A node: its operation, the nodes it reads, and what it holds.
@@ -526,6 +542,71 @@ impl Graph for Recorder {
             self.value(Operation::Part(2), [attended], E::kind(), present),
         ];
     }
+
+    fn quantized_product<E: Float, In, N, Blocks, Blob, Z, Out>(
+        &mut self,
+        a: &Value<E, In>,
+        packed: &Value<u8, [N, Blocks, Blob]>,
+        scales: &Value<E, [N, Blocks]>,
+        zero_points: Option<&Value<u8, [N, Z]>>,
+        quantized: &Quantized,
+    ) -> Value<E, Out> {
+        if self.decomposes {
+            return decomposed_product::<Recorder, E, In, N, Blocks, Blob, Z, Out>(
+                self,
+                a,
+                packed,
+                scales,
+                zero_points,
+                quantized,
+            );
+        }
+        let mut extents = self.extents(a.id);
+        extents[extents.len() - 1] = self.extents(packed.id)[0];
+        let [node, read] = quantized_read([a.id, packed.id, scales.id], zero_points, quantized);
+        return self.value(Operation::QuantizedProduct(node), read, E::kind(), extents);
+    }
+
+    fn quantized_gather<E: Float, R, P, I, Blocks, Z, Out>(
+        &mut self,
+        packed: &Value<u8, [R, P]>,
+        indices: &Value<i64, I>,
+        scales: &Value<E, [R, Blocks]>,
+        zero_points: Option<&Value<u8, [R, Z]>>,
+        quantized: &Quantized,
+    ) -> Value<E, Out> {
+        if self.decomposes {
+            return decomposed_gather::<Recorder, E, R, P, I, Blocks, Z, Out>(
+                self,
+                packed,
+                indices,
+                scales,
+                zero_points,
+                quantized,
+            );
+        }
+        let mut extents = self.extents(indices.id);
+        extents.push(self.extents(packed.id)[1] * (8 / quantized.bits));
+        let [node, read] = quantized_read([packed.id, indices.id, scales.id], zero_points, quantized);
+        return self.value(Operation::QuantizedGather(node), read, E::kind(), extents);
+    }
+}
+
+/// A quantized composite's attributes, and the nodes it reads: `operands`,
+/// then `zero_points` where given.
+fn quantized_read<ZeroAxes>(
+    operands: List<i32>,
+    zero_points: Option<&Value<u8, ZeroAxes>>,
+    quantized: &Quantized,
+) -> [QuantizedNode, List<i32>] {
+    let mut read = operands;
+    if let Some(z) = zero_points {
+        read.push(z.id);
+    }
+    return [
+        QuantizedNode { quantized: *quantized, zero_points: zero_points matches { Some(_) } },
+        read,
+    ];
 }
 
 /// The node `a` is the value of.
@@ -960,7 +1041,7 @@ impl<affine G: Graph> Run<G> {
         } else {
             node.kind;
         };
-        if node.op matches { Unary(_) | Reduce(_) | DotGeneral(_) | Convolution(_) | ReduceWindow(_) | ArgMax(_) | Attention(_) } {
+        if node.op matches { Unary(_) | Reduce(_) | DotGeneral(_) | Convolution(_) | ReduceWindow(_) | ArgMax(_) | Attention(_) | QuantizedProduct(_) | QuantizedGather(_) } {
             return match over {
                 F32 => self.computed_in::<f32>(g, id, node),
                 F16 => self.computed_in::<f16>(g, id, node),
@@ -1058,8 +1139,34 @@ impl<affine G: Graph> Run<G> {
                 self.parts[id] = [present_k, present_v];
                 attended;
             },
+            QuantizedProduct(q) => E::any::<G>(
+                g.quantized_product::<E, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
+                    self.of::<E>(node, 0),
+                    &self.at(g, node, 1),
+                    &self.at(g, node, 2),
+                    optional(&self.zero_points_at(g, node, q)),
+                    &q.quantized,
+                ),
+            ),
+            QuantizedGather(q) => E::any::<G>(
+                g.quantized_gather::<E, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
+                    &self.at(g, node, 0),
+                    i64s(self.operand(node, 1)),
+                    &self.at(g, node, 2),
+                    optional(&self.zero_points_at(g, node, q)),
+                    &q.quantized,
+                ),
+            ),
             _ => unreachable(),
         };
+    }
+
+    /// A quantized node's zero points, its last operand where it has them.
+    fn zero_points_at(&self, g: &G, node: &RecordedNode, q: &QuantizedNode) -> Option<G::Tensor<u8, [Untyped, Untyped]>> {
+        if !q.zero_points {
+            return null;
+        }
+        return Option::Some(self.at(g, node, 3));
     }
 
     /// The length at `node`'s operand `next` where it is `given`, which then

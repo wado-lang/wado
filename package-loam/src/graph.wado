@@ -603,9 +603,11 @@ pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, Str
     return Result::Ok(out);
 }
 
-/// onnxruntime's grouped-query attention, as its domain qualifies it: the one
-/// operator Loam lowers from outside ONNX's default domain.
+/// The operators Loam lowers from outside ONNX's default domain, onnxruntime's,
+/// as the domain qualifies each.
 pub global GROUP_QUERY_ATTENTION: String = "com.microsoft.GroupQueryAttention";
+pub global MATMUL_NBITS: String = "com.microsoft.MatMulNBits";
+pub global GATHER_BLOCK_QUANTIZED: String = "com.microsoft.GatherBlockQuantized";
 
 /// The nodes an operator defined as a function of others stands for, in the
 /// operators Loam lowers, or `None` for any other operator. Each kernel the body

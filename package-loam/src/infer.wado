@@ -29,7 +29,9 @@ use {
     Node,
     Rank,
     ValueInfo,
+    GATHER_BLOCK_QUANTIZED,
     GROUP_QUERY_ATTENTION,
+    MATMUL_NBITS,
     absent,
     data_type,
     dims_of,
@@ -857,6 +859,9 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
         }
         return Result::Ok(primitives.get(node.inputs[0]));
     }
+    if op == MATMUL_NBITS || op == GATHER_BLOCK_QUANTIZED {
+        return quantized_primitive(node, primitives);
+    }
     if op == "Concat" {
         let first = node.inputs[0];
         let element = primitives.get(first);
@@ -905,6 +910,39 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
         }
         first = Option::Some(input);
         element = Option::Some(p);
+    }
+    return Result::Ok(element);
+}
+
+/// A quantized operator's element, its scales': the packed weight and the zero
+/// points are `u8`, a gather's indices `i64`, and every other operand that
+/// float.
+fn quantized_primitive(node: &Node, primitives: &HashMap<String, String>) -> Result<Option<String>, InferError> {
+    let gathers = node.op == GATHER_BLOCK_QUANTIZED;
+    let scales = node.inputs[2];
+    let element = primitives.get(scales);
+    let packed = if gathers { 0 } else { 1 };
+    for let [index, input] of node.inputs.into_iter().enumerate() {
+        let Some(p) = primitives.get(input) else {
+            continue;
+        };
+        let [wanted, why] = if index == packed {
+            ["u8", "the weight is packed in"];
+        } else if index == 3 {
+            ["u8", "zero points are packed in"];
+        } else if gathers && index == 1 {
+            ["i64", `${node.op} indexes with`];
+        } else if let Some(e) = element {
+            [e, `${scales} is ${e}, and ${node.op} computes in`];
+        } else {
+            continue;
+        };
+        if p != wanted {
+            return Result::Err(refusal(node, `operand ${input} is ${p}, and ${why} ${wanted}`));
+        }
+    }
+    if let Some(e) = element && !is_float(&e) {
+        return Result::Err(refusal(node, `operand ${scales} is ${e}, and ${node.op} computes in a float`));
     }
     return Result::Ok(element);
 }
@@ -1175,6 +1213,12 @@ fn infer_node(
         return Result::Ok(Shape {
             axes: [new_axis(&node.outputs[0], 0, count, classes)],
         });
+    }
+    if op == MATMUL_NBITS {
+        return quantized_product(node, shapes, owed, classes);
+    }
+    if op == GATHER_BLOCK_QUANTIZED {
+        return quantized_gather(node, shapes, owed, classes);
     }
     if op == "Gather" {
         let data = operand_at(node, shapes, 0);
@@ -1658,6 +1702,175 @@ pub fn attention_options(node: &Node) -> Result<AttentionOptions, InferError> {
 }
 
 
+/// How a `MatMulNBits` or a `GatherBlockQuantized` packs its weight: values of
+/// `bits`, each run of `block` sharing a scale and a zero point.
+pub struct Quantization {
+    pub bits: i32,
+    pub block: i32,
+}
+
+/// The largest block Loam reads, whose bits a row's length in bits holds.
+global MAX_BLOCK: i64 = 1 << 24;
+
+/// A quantized operator's `bits` and `block_size`, which onnxruntime defines
+/// for 2, 4 or 8 bits in blocks of a power of two from 16.
+pub fn quantization(node: &Node) -> Result<Quantization, InferError> {
+    let bits = int_attr(node, "bits", 4)?;
+    if !(bits == 2 || bits == 4 || bits == 8) {
+        return Result::Err(attribute_error(node, "bits", `is ${bits}, and a byte packs 2, 4 or 8`));
+    }
+    // onnxruntime gathers in blocks of 128 where the node names none.
+    let block = if node.op == GATHER_BLOCK_QUANTIZED {
+        int_attr(node, "block_size", 128)?;
+    } else {
+        attr_read(node, node.required_int_attr("block_size"))?;
+    };
+    if !(16 <= block <= MAX_BLOCK) || block & block - 1 != 0 {
+        return Result::Err(attribute_error(
+            node,
+            "block_size",
+            `is ${block}, which must be a power of two from 16 to ${MAX_BLOCK}`,
+        ));
+    }
+    return Result::Ok(Quantization { bits: bits as i32, block: block as i32 });
+}
+
+/// The blocks `width` values take, and the bytes a row of each block's zero
+/// point packs into.
+fn blocks_of(width: i32, q: &Quantization) -> [i32, i32] {
+    let blocks = width.div_ceil(q.block);
+    return [blocks, (blocks * q.bits).div_ceil(8)];
+}
+
+/// A `MatMulNBits`'s output: its input with the last axis, `K` long, become
+/// the weight's `N` rows. The weight, its scales, its zero points and its bias
+/// must be laid out as `K`, `N` and the packing say.
+fn quantized_product(
+    node: &Node,
+    shapes: &HashMap<String, Shape>,
+    owed: &mut List<Condition>,
+    classes: &mut Axes,
+) -> Result<Shape, InferError> {
+    let q = quantization(node)?;
+    let mut sizes: List<i32> = [];
+    for let attr of ["K", "N"] {
+        let size = attr_read(node, node.required_int_attr(attr))?;
+        if !(1 <= size <= i32::MAX as i64) {
+            return Result::Err(attribute_error(node, attr, `is ${size}, which no axis is`));
+        }
+        sizes.push(size as i32);
+    }
+    let [k, n] = [sizes[0], sizes[1]];
+    if int_attr(node, "weight_prepacked", 0)? != 0 {
+        return Result::Err(refusal(node, "a weight laid out for one device is not supported"));
+    }
+    if node.has_operand(4) {
+        return Result::Err(refusal(node, "g_idx is deprecated, and not supported"));
+    }
+    let a = operand_at(node, shapes, 0);
+    if a.rank() == 0 {
+        builtin::cold_path();
+        return Result::Err(InferError::ScalarOperand(node.name()));
+    }
+    // A symbol could be padded past K, which no packed row holds.
+    let last = a.axes[a.rank() - 1].extent;
+    if !last matches { Static(n) && n == k } {
+        return Result::Err(refusal(node, `the input's last axis is ${last} long, and K is ${k}`));
+    }
+    let [blocks, zero_bytes] = blocks_of(k, &q);
+    laid_out(node, shapes, 1, [n, blocks, q.block * q.bits / 8])?;
+    let weight = operand_at(node, shapes, 1);
+    laid_out(node, shapes, 2, [n, blocks])?;
+    shares_axes(node, shapes, 2, &weight.axes[0..<2].to_list(), owed, classes)?;
+    if node.has_operand(3) {
+        laid_out(node, shapes, 3, [n, zero_bytes])?;
+        shares_axes(node, shapes, 3, &[weight.axes[0]], owed, classes)?;
+    }
+    if node.has_operand(5) {
+        laid_out(node, shapes, 5, [n])?;
+        shares_axes(node, shapes, 5, &[weight.axes[0]], owed, classes)?;
+    }
+    let mut axes = a.axes[0..<a.rank() - 1].to_list();
+    axes.push(weight.axes[0]);
+    return Result::Ok(Shape { axes });
+}
+
+/// Operand `index`'s leading axes made `axes`, which its packing lays it out
+/// along.
+fn shares_axes(
+    node: &Node,
+    shapes: &HashMap<String, Shape>,
+    index: i32,
+    axes: &List<Axis>,
+    owed: &mut List<Condition>,
+    classes: &mut Axes,
+) -> Result<(), InferError> {
+    let own = operand_at(node, shapes, index);
+    for let [i, axis] of axes.into_iter().enumerate() {
+        agree_at(node, &own.axes[i], axis, owed, classes)?;
+    }
+    return Result::Ok(());
+}
+
+/// A `GatherBlockQuantized`'s output: its indices' axes, then the values of
+/// the row each takes. Loam gathers a table packed in `u8` as onnxruntime
+/// defines one, along its rows and quantized along each.
+fn quantized_gather(
+    node: &Node,
+    shapes: &HashMap<String, Shape>,
+    owed: &mut List<Condition>,
+    classes: &mut Axes,
+) -> Result<Shape, InferError> {
+    let q = quantization(node)?;
+    let data = operand_at(node, shapes, 0);
+    if data.rank() != 2 {
+        return Result::Err(operand_rank(node, 0, data.rank(), 2));
+    }
+    for let [attr, fallback, along] of [
+        ["gather_axis", 0, 0],
+        ["quantize_axis", 1, 1],
+    ] as List<[String, i64, i64]> {
+        let written = int_attr(node, attr, fallback)?;
+        if from_end(written, 2) != along {
+            let what = if along == 0 { "gathered along its rows" } else { "quantized along its rows" };
+            return Result::Err(attribute_error(node, attr, `is ${written}, and a packed table is ${what}`));
+        }
+    }
+    let [Static(rows), Static(bytes)] = [data.axes[0].extent, data.axes[1].extent] else {
+        return Result::Err(refusal(node, "a packed table's extents are static"));
+    };
+    if rows == 0 {
+        return Result::Err(refusal(node, "a packed table holds a row"));
+    }
+    let width = bytes * (8 / q.bits);
+    let [blocks, zero_bytes] = blocks_of(width, &q);
+    laid_out(node, shapes, 2, [rows, blocks])?;
+    shares_axes(node, shapes, 2, &[data.axes[0]], owed, classes)?;
+    if node.has_operand(3) {
+        laid_out(node, shapes, 3, [rows, zero_bytes])?;
+        shares_axes(node, shapes, 3, &[data.axes[0]], owed, classes)?;
+    }
+    let indices = operand_at(node, shapes, 1);
+    let mut axes = indices.axes;
+    axes.push(new_axis(&node.outputs[0], indices.rank(), Extent::Static(width), classes));
+    return Result::Ok(Shape { axes });
+}
+
+/// Why operand `index` of a quantized operator is not of `extents`, which its
+/// packing makes it.
+fn laid_out(node: &Node, shapes: &HashMap<String, Shape>, index: i32, extents: List<i32>) -> Result<(), InferError> {
+    let own = operand_at(node, shapes, index).extents();
+    if own.len() == extents.len() && (0..<own.len()).all(|i| own[i].agrees(&Extent::Static(extents[i]))) {
+        return Result::Ok(());
+    }
+    let written: List<String> = own.into_iter().map(|e| `${e}`).collect();
+    let wanted: List<String> = extents.into_iter().map(|e| `${e}`).collect();
+    return Result::Err(refusal(
+        node,
+        `operand ${index} is [${written.join(", ")}], and its packing makes it [${wanted.join(", ")}]`,
+    ));
+}
+
 /// The first present cache a `GroupQueryAttention` names, whose axis holds the
 /// positions both caches hold.
 pub fn named_present(node: &Node) -> Option<String> {
@@ -2001,9 +2214,19 @@ fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, InferError>
     return attr_read(node, node.int_attr(name, fallback));
 }
 
-/// The operand axis `Gather` indexes along.
+/// The operand axis a gather indexes along: a packed table's rows, which stage
+/// 0 checked, or `Gather`'s `axis`.
 pub fn gather_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
+    if node.op == GATHER_BLOCK_QUANTIZED {
+        return Result::Ok(0);
+    }
     return axis_attr(node, 0, rank, rank - 1);
+}
+
+/// Whether `op` takes the slices its indices name along an axis of its first
+/// operand: `Gather`, or a gather of a packed table's rows.
+pub fn is_gather(op: &String) -> bool {
+    return *op == "Gather" || *op == GATHER_BLOCK_QUANTIZED;
 }
 
 /// The lane `Softmax` normalizes: `axis` alone, or where `flattened`, every
@@ -2152,6 +2375,9 @@ fn required_operands(op: &String) -> Option<i32> {
     }
     if *op == GROUP_QUERY_ATTENTION {
         return Option::Some(7);
+    }
+    if *op == MATMUL_NBITS || *op == GATHER_BLOCK_QUANTIZED {
+        return Option::Some(3);
     }
     return match op.as_str_slice() {
         "Constant" => Option::Some(0),

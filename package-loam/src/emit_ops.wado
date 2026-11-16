@@ -4,7 +4,16 @@
 use { HashMap } from "core:collections";
 use { EmitError, Operands, Symbols, axis_list, f32_literal, float_literal } from "./emit_symbols.wado";
 use { fill_of } from "./fold.wado";
-use { Elements, Node, binary_operator, case_named, settled, trailing_axes } from "./graph.wado";
+use {
+    Elements,
+    GATHER_BLOCK_QUANTIZED,
+    MATMUL_NBITS,
+    Node,
+    binary_operator,
+    case_named,
+    settled,
+    trailing_axes,
+} from "./graph.wado";
 use { BACKEND_PARAM } from "./idents.wado";
 use {
     Checked,
@@ -16,6 +25,7 @@ use {
     gemm_options,
     has_bias,
     is_reduction,
+    quantization,
     range_bounds,
     reduced_axes,
     slice_cuts,
@@ -72,6 +82,9 @@ internal fn built_call(
     }
     if op == "Gather" {
         return built_gather(node, checked, exprs, symbols);
+    }
+    if op == MATMUL_NBITS || op == GATHER_BLOCK_QUANTIZED {
+        return built_quantized(node, checked, exprs, symbols);
     }
     if op == "MaxPool" {
         return built_max_pool(node, &element, shapes, exprs, symbols);
@@ -486,6 +499,52 @@ fn built_gather(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
             &node.inputs[0],
         )}, ${wrapped}, ${dims})`,
     );
+}
+
+/// A `MatMulNBits` or a `GatherBlockQuantized` as its composite's call, and a
+/// product's bias added after it, both in f32 over halves. Without zero points the turbofish spells
+/// the scales' blocks for theirs.
+fn built_quantized(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
+    let shapes = &checked.shapes;
+    let out = shapes[node.outputs[0]];
+    let element = checked.primitives[node.outputs[0]];
+    let q = settled(quantization(node));
+    let scales = shapes[node.inputs[2]];
+    let zeros = if node.has_operand(3) { shapes[node.inputs[3]].axes[1].name } else { scales.axes[1].name };
+    let zero_points = if node.has_operand(3) { `Option::Some(${exprs.reference(&node.inputs[3])})` } else { "null" };
+    let quantized = `&Quantized { bits: ${q.bits}, block: ${q.block} }`;
+    let operands: List<String> = (0..<3).map(|i| exprs.reference(&node.inputs[i])).collect();
+    if node.op == GATHER_BLOCK_QUANTIZED {
+        let table = shapes[node.inputs[0]];
+        return Result::Ok(
+            `backend.quantized_gather::<${element}, ${table.axes[0].name}, ${table.axes[1].name}, [${axis_list(
+                &shapes[node.inputs[1]],
+            )}], ${scales.axes[1].name}, ${zeros}, [${axis_list(&out)}]>(${operands.join(", ")}, ${zero_points}, ${quantized})`,
+        );
+    }
+    let biased = node.has_operand(5);
+    let computed = Computed::new(element, biased);
+    let wide = computed.element();
+    let a = shapes[node.inputs[0]];
+    let mut call = `backend.quantized_product::<${wide}, [${axis_list(&a)}], ${axis_list(
+        &shapes[node.inputs[1]],
+    )}, ${zeros}, [${axis_list(&out)}]>(${computed.operand(operands[0], &a)}, ${operands[1]}, ${computed.operand(
+        operands[2],
+        &scales,
+    )}, ${zero_points}, ${quantized})`;
+    if biased {
+        let c = shapes[node.inputs[5]];
+        let bias = stretched_operand(
+            &wide,
+            &c,
+            &out,
+            computed.operand(exprs.reference(&node.inputs[5]), &c),
+            0,
+            symbols,
+        )?;
+        call = `backend.binary::<${wide}, [${axis_list(&out)}]>(Binary::Add, &${call}, ${bias})`;
+    }
+    return Result::Ok(computed.result(call, &out));
 }
 
 /// A `ReduceMean` or `ReduceSum` as `reduce`, which drops the reduced axes, and

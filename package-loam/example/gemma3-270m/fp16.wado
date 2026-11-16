@@ -4,11 +4,10 @@
 //! tokens onnxruntime picks, and how far the logits it picks the first from
 //! are from onnxruntime's. `README.md` says how to run it.
 
-use { eprintln, println, Stderr, Stdout } from "core:cli";
-use fs from "core:fs";
+use { eprintln, Stderr, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
-use { from_string } from "core:json";
 use { FileSource, Graph, Sampling, Tensor } from "lib:loam";
+use { deviation, recorded, reported } from "./checks.wado";
 /// The graph alone: its weights are external data in `model_fp16.onnx_data`.
 use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resolve/2dbbfdb1b59bd034eb959428c6a7da9dd7ea27f0/onnx/model_fp16.onnx"
     with {
@@ -25,29 +24,12 @@ use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resol
         },
     };
 
-/// One prompt and the tokens onnxruntime picks after it, as `generate.mjs`
-/// writes them.
-struct Generated {
-    prompt: String,
-    ids: List<i32>,
-    generated: List<i32>,
-}
-
-struct Oracle {
-    generate: List<Generated>,
-}
-
 /// Continues each prompt on `backend`: the prompt in one pass, then every token
 /// after its first in one call.
 pub fn checked<affine Bk: Graph>(backend: Bk) with (_, Stdout, Stderr, Preopens) {
-    let [Ok(text), Ok(recorded)] = [
-        fs::read_to_string("generate_fp16.json"),
-        fs::read_linear("build/logits_fp16.bin"),
-    ] else {
-        eprintln("generate_fp16.json or build/logits_fp16.bin is missing; run generate.mjs");
+    let Some([generate, expected]) = recorded("generate_fp16.json", "build/logits_fp16.bin") else {
         return;
     };
-    let expected = recorded.cast::<f32>();
     let mut on = backend;
     let params = match gemma::Params::load(&mut on, &FileSource { dir: "build" }) {
         Ok(params) => params,
@@ -58,8 +40,6 @@ pub fn checked<affine Bk: Graph>(backend: Bk) with (_, Stdout, Stderr, Preopens)
     };
     let mut model = gemma::Model::new(params);
     let greedy = Sampling {};
-    let vocabulary = gemma::Logits2::EXTENT;
-    let generate = from_string::<Oracle>(&text).unwrap().generate;
     for let p of 0..<generate.len() {
         let g = &generate[p];
         let steps = g.generated.len();
@@ -71,10 +51,6 @@ pub fn checked<affine Bk: Graph>(backend: Bk) with (_, Stdout, Stderr, Preopens)
             steps - 1,
             &mut model,
         );
-        let mut deviation: f32 = 0.0;
-        for let v of 0..<vocabulary {
-            deviation = f32::max(deviation, f32::abs(f32::from(passed.logits.data[v]) - expected[p * vocabulary + v]));
-        }
         let first = greedy.first_tokens(&passed.logits, g.ids.len() as i64)[0];
         let decoded = gemma::decode(
             &mut on,
@@ -87,13 +63,7 @@ pub fn checked<affine Bk: Graph>(backend: Bk) with (_, Stdout, Stderr, Preopens)
         );
         let mut generated: List<i32> = [first as i32];
         generated.extend(&decoded.tokens.data.into_iter().map(|id| id as i32).collect());
-        let verdict = if generated == g.generated {
-            "matches onnxruntime";
-        } else {
-            `onnxruntime picks ${g.generated:?}`;
-        };
-        println(`${g.prompt:?} -> ${generated:?}: ${verdict}`);
-        println(`  the first token's logits are within ${deviation} of onnxruntime's`);
+        reported(g, &generated, deviation(&passed.logits.data, &expected, p));
     }
 }
 

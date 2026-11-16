@@ -202,9 +202,10 @@ A composite comes first from an operator that names it: `Attention`,
 `GroupQueryAttention`, `MatMulNBits`, `QMoE`, and `DequantizeLinear` with a
 `block_size` before a `MatMul`. A graph that spells the computation in parts,
 as GPT-2 spells its attention, is matched by the generator as a subgraph, so
-`loam dump` reports it, and every backend takes the composite. The quantized
-product and the mixture of experts arrive with the roadmap items that bring
-their operators.
+`loam dump` reports it, and every backend takes the composite. `MatMulNBits`
+gives the quantized product, and onnxruntime's `GatherBlockQuantized` a
+quantized gather of a table's rows. `DequantizeLinear` before a `MatMul` and the
+mixture of experts arrive with the items that bring them.
 
 A subgraph matches only where the composite computes what it says. GPT-2 hides
 a position through a table cut to the queries' rows, so the generator reads the
