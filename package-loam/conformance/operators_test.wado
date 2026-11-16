@@ -738,6 +738,10 @@ test "MatMulNBits packs four values of 2 bits into a byte" {
     assert_agrees(#include_bytes("./operators/NBits2.onnx"), #include_str("./operators/NBits2.txt"));
 }
 
+test "MatMulNBits over halves adds its bias before rounding once" {
+    assert_agrees(#include_bytes("./operators/NBitsHalfBias.onnx"), #include_str("./operators/NBitsHalfBias.txt"));
+}
+
 test "MatMulNBits of 8 bits holds a value in each byte" {
     assert_agrees(#include_bytes("./operators/NBits8.onnx"), #include_str("./operators/NBits8.txt"));
 }

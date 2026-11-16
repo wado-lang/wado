@@ -761,7 +761,8 @@ impl Graph for WebGpuBackend {
         zero_points: Option<&Placed<u8, [R, Z]>>,
         quantized: &Quantized,
     ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if E::is_f32() {
+        // The kernel reads each index as an f32.
+        if E::is_f32() && within_index_bound(indices) {
             let mut extents = self.extents_of(indices);
             let operands = with_zero_points(self, [
                 self.device_view(packed),

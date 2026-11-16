@@ -405,14 +405,16 @@ test "a MatMulNBits weight laid out apart from what K, N and its packing say sto
     let zeros = y_axes(quantized_product("uint8[3, 2, 16] B, float[3, 2] S, uint8[3, 2] Z", "")).unwrap_err();
     assert zeros == "Y = com.microsoft.MatMulNBits: operand 3 is [3, 2], and its packing makes it [3, 1]";
     let input = y_axes(quantized_product(PACKED, "").replace("40] A", "32] A")).unwrap_err();
-    assert input == "Y = com.microsoft.MatMulNBits: the input's last axis must be K long, and it is not";
+    assert input == "Y = com.microsoft.MatMulNBits: the input's last axis is 32 long, and K is 40";
 }
 
 test "MatMulNBits packs 2, 4 or 8 bits in blocks of a power of two from 16" {
     let bits = y_axes(quantized_product(PACKED, ", bits = 3")).unwrap_err();
     assert bits == "Y = com.microsoft.MatMulNBits: attribute bits is 3, and a byte packs 2, 4 or 8";
     let block = y_axes(quantized_product(PACKED, "").replace("block_size = 32", "block_size = 24")).unwrap_err();
-    assert block == "Y = com.microsoft.MatMulNBits: attribute block_size is 24, which must be a power of two from 16";
+    assert block == "Y = com.microsoft.MatMulNBits: attribute block_size is 24, which must be a power of two from 16 to 16777216";
+    let huge = y_axes(quantized_product(PACKED, "").replace("block_size = 32", "block_size = 536870912")).unwrap_err();
+    assert huge == "Y = com.microsoft.MatMulNBits: attribute block_size is 536870912, which must be a power of two from 16 to 16777216";
 }
 
 test "MatMulNBits's g_idx stops the build naming it" {
@@ -422,11 +424,11 @@ test "MatMulNBits's g_idx stops the build naming it" {
     assert refused(source) == "Y = com.microsoft.MatMulNBits: g_idx is deprecated, and not supported";
 }
 
-test "MatMulNBits owes its input's last axis being K long" {
+test "MatMulNBits's input is K long in its last axis, which no symbol is" {
     let source = `g (float[1, T, L] A) => (float[1, T, 3] Y) <${PACKED}> {
         Y = com.microsoft.MatMulNBits<K = 40, N = 3, block_size = 32>(A, B, S, Z)
     }`;
-    assert y_axes(source).unwrap() == "A0=1,T=T,Y2=3";
+    assert refused(source) == "Y = com.microsoft.MatMulNBits: the input's last axis is L long, and K is 40";
 }
 
 test "MatMulNBits's zero points in the input's element stop the build" {
@@ -450,6 +452,13 @@ test "GatherBlockQuantized takes blocks of 128 where it names none" {
         Y = com.microsoft.GatherBlockQuantized<bits = 4>(D, I, S)
     }`;
     assert y_axes(source).unwrap() == "I0=1,T=T,Y2=256";
+}
+
+test "GatherBlockQuantized of a table without rows stops the build" {
+    let source = `g (int64[1, T] I) => (float[1, T, 16] Y) <uint8[0, 8] D, float[0, 1] S> {
+        Y = com.microsoft.GatherBlockQuantized<bits = 4, block_size = 16>(D, I, S)
+    }`;
+    assert refused(source) == "Y = com.microsoft.GatherBlockQuantized: a packed table holds a row";
 }
 
 test "GatherBlockQuantized gathers a packed table's rows only" {

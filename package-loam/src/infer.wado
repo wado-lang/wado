@@ -1709,6 +1709,9 @@ pub struct Quantization {
     pub block: i32,
 }
 
+/// The largest block Loam reads, whose bits a row's length in bits holds.
+global MAX_BLOCK: i64 = 1 << 24;
+
 /// A quantized operator's `bits` and `block_size`, which onnxruntime defines
 /// for 2, 4 or 8 bits in blocks of a power of two from 16.
 pub fn quantization(node: &Node) -> Result<Quantization, InferError> {
@@ -1722,8 +1725,12 @@ pub fn quantization(node: &Node) -> Result<Quantization, InferError> {
     } else {
         attr_read(node, node.required_int_attr("block_size"))?;
     };
-    if !(16 <= block <= 1 << 30) || block & block - 1 != 0 {
-        return Result::Err(attribute_error(node, "block_size", `is ${block}, which must be a power of two from 16`));
+    if !(16 <= block <= MAX_BLOCK) || block & block - 1 != 0 {
+        return Result::Err(attribute_error(
+            node,
+            "block_size",
+            `is ${block}, which must be a power of two from 16 to ${MAX_BLOCK}`,
+        ));
     }
     return Result::Ok(Quantization { bits: bits as i32, block: block as i32 });
 }
@@ -1765,8 +1772,11 @@ fn quantized_product(
         builtin::cold_path();
         return Result::Err(InferError::ScalarOperand(node.name()));
     }
-    let last = a.axes[a.rank() - 1].extent.poly();
-    owe_equal(node, owed, &last, &Poly::constant(k as i64), "the input's last axis must be K long")?;
+    // A symbol could be padded past K, which no packed row holds.
+    let last = a.axes[a.rank() - 1].extent;
+    if !last matches { Static(n) && n == k } {
+        return Result::Err(refusal(node, `the input's last axis is ${last} long, and K is ${k}`));
+    }
     let [blocks, zero_bytes] = blocks_of(k, &q);
     laid_out(node, shapes, 1, [n, blocks, q.block * q.bits / 8])?;
     let weight = operand_at(node, shapes, 1);
@@ -1829,6 +1839,9 @@ fn quantized_gather(
     let [Static(rows), Static(bytes)] = [data.axes[0].extent, data.axes[1].extent] else {
         return Result::Err(refusal(node, "a packed table's extents are static"));
     };
+    if rows == 0 {
+        return Result::Err(refusal(node, "a packed table holds a row"));
+    }
     let width = bytes * (8 / q.bits);
     let [blocks, zero_bytes] = blocks_of(width, &q);
     laid_out(node, shapes, 2, [rows, blocks])?;

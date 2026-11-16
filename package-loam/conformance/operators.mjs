@@ -555,6 +555,17 @@ add('NBits', nbits({ k: 40 }));
 add('NBitsBias', nbits({ k: 64, zeros: false, bias: true }));
 add('NBits2', nbits({ k: 32, bits: 2, block: 16 }));
 add('NBits8', nbits({ k: 16, bits: 8, block: 16, zeros: false }));
+// Over halves, a product past a half's range that its bias brings back.
+add('NBitsHalfBias', overHalves({
+  inputs: { A: float([1, 1, 16], Array(16).fill(4096)) },
+  inits: {
+    B: tensor(UINT8, [3, 1, 16], Array(48).fill(129)),
+    W: float([3, 1], [1, 1, 1]),
+    C: float([3], [-32768, -32768, -32768]),
+  },
+  nodes: [node('com.microsoft.MatMulNBits', ['A', 'B', 'W', '', '', 'C'], 'Y', { K: 16, N: 3, bits: 8, block_size: 16 })],
+  domains: { 'com.microsoft': 1 },
+}, ['A', 'W', 'C']));
 
 // GatherBlockQuantized of a table of 5 rows of `width` values in blocks of
 // 32, by indices counting from the end and past it.
