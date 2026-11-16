@@ -58,7 +58,7 @@ pub fn paths_between(base: &String, head: &String) -> List<String> with Process 
 /// The fields of `output`, each ended by a NUL. `git -z` prints a path as it
 /// is; without it, a path holding a quote or a control character is printed
 /// quoted, a form `git` does not take back.
-fn nul_separated(output: &String) -> List<String> {
+pub fn nul_separated(output: &String) -> List<String> {
     let mut fields: List<String> = output.split("\0").map(|field| field.to_string()).collect();
     assert fields.pop() == Some(""), "every field ends in a NUL";
     return fields;
