@@ -668,7 +668,7 @@ internal fn walked<E>(data: &List<E>, base: i32, strides: &List<i32>, extents: &
 
 /// ONNX's `ArgMax` keeping its axis: the index along `axis` of each lane's
 /// first greatest element, in the order `>` reads, so a NaN is greatest.
-pub fn arg_max<Axes>(t: &Tensor<f32, Axes>, axis: i32) -> Tensor<i64, Axes>
+pub fn arg_max<E: Float, Axes>(t: &Tensor<E, Axes>, axis: i32) -> Tensor<i64, Axes>
     contract t.extents[axis] > 0, "ArgMax needs an element along its axis"
 {
     let extent = t.extents[axis];
@@ -679,7 +679,7 @@ pub fn arg_max<Axes>(t: &Tensor<f32, Axes>, axis: i32) -> Tensor<i64, Axes>
         let base = lane / inner * extent * inner + lane % inner;
         let mut best = 0;
         for let k of 1..<extent {
-            if t.data[base + k * inner] > t.data[base + best * inner] {
+            if t.data[base + k * inner].cast_to::<f32>() > t.data[base + best * inner].cast_to::<f32>() {
                 best = k;
             }
         }
@@ -708,43 +708,6 @@ pub fn sigmoid_f32(v: f32) -> f32 {
     return e / (1.0 + e);
 }
 
-/// An element type a tensor is held in and no kernel computes in. Wado's half
-/// precision carries bits and no arithmetic, so f32 is the only side with any.
-pub trait Held with () {
-    fn to_wide(&self) -> f32;
-    fn from_wide(v: f32) -> Self;
-}
-
-impl Held for f16 {
-    fn to_wide(&self) -> f32 {
-        return f32::from(*self);
-    }
-
-    fn from_wide(v: f32) -> f16 {
-        return f16::from_f32(v);
-    }
-}
-
-impl Held for bf16 {
-    fn to_wide(&self) -> f32 {
-        return f32::from(*self);
-    }
-
-    fn from_wide(v: f32) -> bf16 {
-        return bf16::from_f32(v);
-    }
-}
-
-/// A held tensor in f32, where the kernels compute.
-pub fn widen<E: Held, Axes>(t: &Tensor<E, Axes>) -> Tensor<f32, Axes> {
-    return map(t, |v| v.to_wide());
-}
-
-/// An f32 tensor rounded to the type it is held in.
-pub fn narrow<E: Held, Axes>(t: &Tensor<f32, Axes>) -> Tensor<E, Axes> {
-    return map(t, |v| E::from_wide(v));
-}
-
 /// An element type a backend stores: one the kernels compute in. Each converts
 /// to another as ONNX's `Cast` does: a bool is 1 or 0, and anything nonzero is
 /// true.
@@ -762,17 +725,105 @@ pub trait Element with () {
         return Self::kind() matches { F32 };
     }
     /// Whether an f32 holds every value of this exactly, so a GPU can store
-    /// it as one: `f32` itself, and `bool` as 1.0 and 0.0.
+    /// it as one: a float, and `bool` as 1.0 and 0.0.
     fn exact_in_f32() -> bool {
-        return Self::is_f32();
+        return Self::is_float();
     }
+    /// Whether arithmetic on this is a float's: computed in f32 and rounded
+    /// once to this. An integer's is computed in i64 and wraps to it.
+    fn is_float() -> bool {
+        return Self::kind() matches { F32 | F16 | BF16 };
+    }
+}
+
+/// An [`Element`] a graph's float arithmetic is spelled in.
+pub trait Float: Element with () {
+}
+
+impl Float for f32 {
+}
+
+impl Float for f16 {
+}
+
+impl Float for bf16 {
 }
 
 /// Each [`Element`].
 pub enum ElementKind {
     F32,
+    F16,
+    BF16,
+    /// What a packed int4 weight is stored in.
+    U8,
     I64,
     Bool,
+}
+
+impl Element for f16 {
+    fn kind() -> ElementKind {
+        return ElementKind::F16;
+    }
+
+    fn cast_to<T: Element>(&self) -> T {
+        return T::from_f32(f32::from(*self));
+    }
+
+    fn from_f32(v: f32) -> f16 {
+        return f16::from_f32(v);
+    }
+
+    fn from_i64(v: i64) -> f16 {
+        return f16::from_f64(v as f64);
+    }
+
+    fn from_bool(v: bool) -> f16 {
+        return f16::from_f32(f32::from_bool(v));
+    }
+}
+
+impl Element for bf16 {
+    fn kind() -> ElementKind {
+        return ElementKind::BF16;
+    }
+
+    fn cast_to<T: Element>(&self) -> T {
+        return T::from_f32(f32::from(*self));
+    }
+
+    fn from_f32(v: f32) -> bf16 {
+        return bf16::from_f32(v);
+    }
+
+    fn from_i64(v: i64) -> bf16 {
+        return bf16::from_f64(v as f64);
+    }
+
+    fn from_bool(v: bool) -> bf16 {
+        return bf16::from_f32(f32::from_bool(v));
+    }
+}
+
+impl Element for u8 {
+    fn kind() -> ElementKind {
+        return ElementKind::U8;
+    }
+
+    fn cast_to<T: Element>(&self) -> T {
+        return T::from_i64(*self as i64);
+    }
+
+    fn from_f32(v: f32) -> u8 {
+        return v as u8;
+    }
+
+    fn from_i64(v: i64) -> u8 {
+        return v as u8;
+    }
+
+    fn from_bool(v: bool) -> u8 {
+        return if v { 1 } else { 0 };
+    }
 }
 
 impl Element for f32 {
@@ -886,11 +937,39 @@ pub enum RowOp {
     Max,
 }
 
+/// A float element narrower than the f32 an [`Expr`] computes in.
+pub enum HalfFloat {
+    F16,
+    BF16,
+}
+
+impl HalfFloat {
+    /// The element of `kind` where it is one.
+    pub fn of(kind: ElementKind) -> Option<HalfFloat> {
+        return match kind {
+            F16 => Option::Some(HalfFloat::F16),
+            BF16 => Option::Some(HalfFloat::BF16),
+            _ => null,
+        };
+    }
+
+    /// The nearest value of this to `v`, ties to even, as an f32.
+    pub fn rounded(&self, v: f32) -> f32 {
+        return match *self {
+            F16 => f32::from(f16::from_f32(v)),
+            BF16 => f32::from(bf16::from_f32(v)),
+        };
+    }
+}
+
 /// One step of an [`Expr`], reading the steps before it by position.
 pub variant Step {
     Operand(i32),
     Constant(f32),
     Unary([UnaryOp, i32]),
+    /// The step rounded to a half, which is where a kernel computing in f32
+    /// stores a half's result.
+    Rounded([HalfFloat, i32]),
     Binary([BinaryOp, i32, i32]),
     /// `[condition, then, else]`: the second where the first is not zero.
     Select([i32, i32, i32]),
@@ -924,6 +1003,19 @@ impl Step {
             Binary([op, a, b]) => [3, ReflectEnum::<BinaryOp>::discriminant(&op), a, b],
             Select([c, a, b]) => [4, c, a, b],
             Fold([op, a]) => [5, ReflectEnum::<RowOp>::discriminant(&op), a, 0],
+            Rounded([to, a]) => [6, ReflectEnum::<HalfFloat>::discriminant(&to), a, 0],
+        };
+    }
+
+    /// This reading step `at[a]` where it reads step `a`.
+    fn reading(&self, at: &List<i32>) -> Step {
+        return match *self {
+            Unary([o, a]) => Step::Unary([o, at[a]]),
+            Rounded([to, a]) => Step::Rounded([to, at[a]]),
+            Binary([o, a, b]) => Step::Binary([o, at[a], at[b]]),
+            Select([c, a, b]) => Step::Select([at[c], at[a], at[b]]),
+            Fold([o, a]) => Step::Fold([o, at[a]]),
+            leaf => leaf,
         };
     }
 }
@@ -976,6 +1068,21 @@ impl Expr {
         return e;
     }
 
+    /// This rounded to `to`.
+    pub fn rounded(&self, to: HalfFloat) -> Expr {
+        let mut e = *self;
+        e.ended(Step::Rounded([to, self.last()]));
+        return e;
+    }
+
+    /// This as an element of `kind` stores it: rounded where that is a half.
+    pub fn stored_as(&self, kind: ElementKind) -> Expr {
+        return match HalfFloat::of(kind) {
+            Some(to) => self.rounded(to),
+            None => *self,
+        };
+    }
+
     /// This folded along its row by `op`, read at every element of the row.
     pub fn row(&self, op: RowOp) -> Expr {
         let mut e = *self;
@@ -1007,6 +1114,7 @@ impl Expr {
                     Some(v) => Option::Some(unary_over(op, &whole([v]))[0]),
                     None => null,
                 },
+                Rounded([to, a]) => values[a].map(|v: f32| to.rounded(v)),
                 Binary([op, a, b]) => match [values[a], values[b]] {
                     [Some(x), Some(y)] => Option::Some(binary_over(op, &whole([x]), &whole([y]))[0]),
                     _ => null,
@@ -1053,15 +1161,24 @@ impl Expr {
     fn merged(&mut self, other: &Expr) -> i32 {
         let mut at: List<i32> = [];
         for let step of other.steps {
-            at.push(self.shared(match step {
-                Unary([o, a]) => Step::Unary([o, at[a]]),
-                Binary([o, a, b]) => Step::Binary([o, at[a], at[b]]),
-                Select([c, a, b]) => Step::Select([at[c], at[a], at[b]]),
-                Fold([o, a]) => Step::Fold([o, at[a]]),
-                leaf => leaf,
-            }));
+            at.push(self.shared(step.reading(&at)));
         }
         return at[at.len() - 1];
+    }
+
+    /// This with `operand(index)` computed by `by`, over this one's operands,
+    /// rather than read.
+    pub fn substituted(&self, index: i32, by: &Expr) -> Expr {
+        let mut e = Expr { steps: [] };
+        let mut at: List<i32> = [];
+        for let step of self.steps {
+            at.push(match step {
+                Operand(k) && k == index => e.merged(by),
+                other => e.shared(other.reading(&at)),
+            });
+        }
+        e.ending(at[at.len() - 1]);
+        return e;
     }
 
     /// The step at `at` as the output: computed again last where it is not
@@ -1127,6 +1244,7 @@ impl Expr {
                 Operand(k) => run_of(operands[k], start, n),
                 Constant(c) => whole([c]),
                 Unary([op, a]) => whole(unary_over(op, &values[a])),
+                Rounded([to, a]) => whole(each(&values[a], |e| to.rounded(e))),
                 Binary([op, a, b]) => whole(binary_over(op, &values[a], &values[b])),
                 Select([c, a, b]) => whole(selected(&values[c], &values[a], &values[b])),
                 Fold([op, a]) => whole([folded(op, &values[a], n)]),
@@ -1445,12 +1563,6 @@ pub affine trait Holds with _ {
     /// lives: on a device, where its kernels run.
     fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
         return self.upload(t);
-    }
-    /// `t`, held in half precision on the host, as this computes with it. How
-    /// it stores the result is its own: the type says only that what reads it
-    /// reads it as f32.
-    fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<f32, Axes> {
-        return self.keep(&widen(t));
     }
     /// `t`'s extents.
     fn extents_of<E: Element, Axes>(&self, t: &Self::Tensor<E, Axes>) -> List<i32>;

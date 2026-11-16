@@ -7,7 +7,7 @@
 use { HashMap, HashSet } from "core:collections";
 use { Binary, Comparison, Unary } from "./hlo.wado";
 use { Any, Operation, Recorded, RecordedNode, Region } from "./recorded.wado";
-use { BinaryOp, Cpu, Expr, RowOp, Step, UnaryOp, operand } from "./tensor.wado";
+use { BinaryOp, Cpu, ElementKind, Expr, HalfFloat, RowOp, Step, UnaryOp, operand } from "./tensor.wado";
 
 /// What a program runs for one region, in order, and the nodes it yields.
 pub struct Plan {
@@ -59,7 +59,8 @@ pub struct Pair {
     pub first: Kernel,
     pub second: Kernel,
     /// `second`'s epilogue over both products: `operand(0)` is `first`'s,
-    /// `operand(1)` `second`'s, and `operand(i + 2)` the `i`th of `operands`.
+    /// which this stores as `first` does before reading it, `operand(1)`
+    /// `second`'s, and `operand(i + 2)` the `i`th of `operands`.
     pub op: Expr,
     /// `second`'s operands but `first`'s product.
     pub operands: List<KernelOperand>,
@@ -152,8 +153,10 @@ pub fn splats_of(constants: &HashMap<i32, Any<Cpu>>) -> HashMap<i32, Option<f32>
     for let [id, value] of constants.entries() {
         splats[*id] = match value {
             F32(t) => splat(&t.data),
+            F16(t) => splat(&t.data.into_iter().map(|v| f32::from(v)).collect()),
+            BF16(t) => splat(&t.data.into_iter().map(|v| f32::from(v)).collect()),
             Bool(t) => splat(&t.data.into_iter().map(|b| if b { 1.0 as f32 } else { 0.0 }).collect()),
-            I64(_) => null,
+            U8(_) | I64(_) => null,
         };
     }
     return splats;
@@ -464,7 +467,12 @@ fn pair_of(first: &Kernel, second: &Kernel) -> Pair {
             operands.push(o);
         }
     }
-    return Pair { first: *first, second: *second, op: second.op.renumbered(&to), operands };
+    return Pair {
+        first: *first,
+        second: *second,
+        op: second.op.renumbered(&to).substituted(0, &first.op),
+        operands,
+    };
 }
 
 /// `launches` with each kernel computing the left matrix of the products of
@@ -584,10 +592,9 @@ fn joined_products(recorded: &Recorded, launches: List<Launch>) -> List<Launch> 
 /// The left matrix of `k`'s product, where `by_weight` finds one and `k`
 /// writes the product alone.
 fn joinable(recorded: &Recorded, k: &Kernel) -> Option<i32> {
-    if !k.operands.is_empty() || k.op != operand(0) {
-        return null;
-    }
-    return by_weight(recorded, k);
+    let lhs = by_weight(recorded, k)?;
+    let stored = operand(0).stored_as(recorded.nodes[k.product.unwrap()].kind);
+    return if k.operands.is_empty() && k.op == stored { Option::Some(lhs) } else { null };
 }
 
 /// The left matrix of `k`'s product, where its right matrix is a parameter, a
@@ -612,7 +619,7 @@ fn by_weight(recorded: &Recorded, k: &Kernel) -> Option<i32> {
 }
 
 /// Whether the products of `launch`, a kernel or a joined run, and of `k`
-/// contract alike.
+/// contract alike, and are stored in one element.
 fn same_dims(recorded: &Recorded, launch: &Launch, k: &Kernel) -> bool {
     let first = match launch {
         Kernel(f) => f,
@@ -623,7 +630,7 @@ fn same_dims(recorded: &Recorded, launch: &Launch, k: &Kernel) -> bool {
         DotGeneral(dims) => dims,
         _ => unreachable(),
     };
-    return dims_of(first) == dims_of(k);
+    return dims_of(first) == dims_of(k) && first.op == k.op;
 }
 
 fn read_by(readers: &mut HashMap<i32, List<i32>>, of: i32, by: i32) {
@@ -671,8 +678,8 @@ fn shared_group(readers: &HashMap<i32, List<i32>>, group_of: &HashMap<i32, i32>,
 /// Whether a kernel computes `node`: an elementwise step, a view, or a sum or
 /// a maximum along the last axis, over elements a device holds as f32.
 fn fusable(recorded: &Recorded, node: &RecordedNode) -> bool {
-    let held = |id: i32| !recorded.nodes[id].kind matches { I64 };
-    if node.kind matches { I64 } || !node.operands.into_iter().all(|o| held(o)) {
+    let held = |kind: ElementKind| kind matches { F32 | F16 | BF16 | Bool };
+    if !held(node.kind) || !node.operands.into_iter().all(|o| held(recorded.nodes[o].kind)) {
         return false;
     }
     return match &node.op {
@@ -703,16 +710,19 @@ fn fusable(recorded: &Recorded, node: &RecordedNode) -> bool {
 }
 
 /// Whether `node` computes nothing on a device, so it starts no kernel of its
-/// own: a view, or a conversion from a bool or to its own element.
+/// own: a view, or a conversion that keeps each value as the device holds it.
 fn moves_nothing(recorded: &Recorded, node: &RecordedNode) -> bool {
     return match &node.op {
         Reshape | BroadcastInDim(_) => true,
-        Convert => {
-            let from = recorded.nodes[node.operands[0]].kind;
-            from matches { Bool } || from == node.kind;
-        },
+        Convert => keeps_values(recorded.nodes[node.operands[0]].kind, node.kind),
         _ => false,
     };
+}
+
+/// Whether a conversion between two elements a device holds as f32 changes no
+/// value: from a bool, to its own element, or from a half to the f32 holding it.
+fn keeps_values(from: ElementKind, to: ElementKind) -> bool {
+    return from matches { Bool } || from == to || to matches { F32 };
 }
 
 /// How a node changes the group it joins.
@@ -920,32 +930,43 @@ impl Built {
         let node = &self.recorded.nodes[id];
         // The product kernel computes the product itself from its operands.
         if node.op matches { DotGeneral(_) } {
-            return self.op.shared(Step::Operand(0));
+            let product = self.op.shared(Step::Operand(0));
+            return self.stored(node.kind, product);
         }
         let x = self.step_of(node.operands[0]);
         let step = match &node.op {
             Unary(op) => {
-                return unary_at(&mut self.op, *op, x);
+                let at = unary_at(&mut self.op, *op, x);
+                return self.stored(node.kind, at);
             },
             Binary(op) => Step::Binary([
                 binary_op(*op),
                 x,
                 self.step_of(node.operands[1]),
             ]),
-            Compare(direction) => Step::Binary([
-                compared_op(*direction),
-                x,
-                self.step_of(node.operands[1]),
-            ]),
-            Select => Step::Select([
-                x,
-                self.step_of(node.operands[1]),
-                self.step_of(node.operands[2]),
-            ]),
-            Convert => if node.kind matches { Bool } && self.recorded.nodes[node.operands[0]].kind matches { F32 } {
-                Step::Binary([BinaryOp::Ne, x, self.op.shared(Step::Constant(0.0))]);
-            } else {
-                return x;
+            // A compared or a selected value is one already stored.
+            Compare(direction) => {
+                return self.op.shared(Step::Binary([
+                    compared_op(*direction),
+                    x,
+                    self.step_of(node.operands[1]),
+                ]));
+            },
+            Select => {
+                return self.op.shared(Step::Select([
+                    x,
+                    self.step_of(node.operands[1]),
+                    self.step_of(node.operands[2]),
+                ]));
+            },
+            Convert => {
+                if keeps_values(self.recorded.nodes[node.operands[0]].kind, node.kind) {
+                    return x;
+                }
+                if node.kind matches { Bool } {
+                    return self.op.shared(Step::Binary([BinaryOp::Ne, x, self.op.shared(Step::Constant(0.0))]));
+                }
+                return self.stored(node.kind, x);
             },
             Reshape | BroadcastInDim(_) => {
                 return x;
@@ -954,7 +975,16 @@ impl Built {
             Reduce(_) => Step::Fold([RowOp::Max, x]),
             _ => unreachable(),
         };
-        return self.op.shared(step);
+        let at = self.op.shared(step);
+        return self.stored(node.kind, at);
+    }
+
+    /// Where the step at `at` is as an element of `kind` stores it.
+    fn stored(&mut self, kind: ElementKind, at: i32) -> i32 {
+        return match HalfFloat::of(kind) {
+            Some(to) => self.op.shared(Step::Rounded([to, at])),
+            None => at,
+        };
     }
 
     fn read(&mut self, id: i32) -> i32 {

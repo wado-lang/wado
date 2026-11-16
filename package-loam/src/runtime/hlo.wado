@@ -6,6 +6,7 @@ use {
     Attention,
     Cpu,
     Element,
+    Float,
     Holds,
     Tensor,
     Window,
@@ -162,7 +163,7 @@ pub affine trait Graph: Holds with _ {
     /// StableHLO's `iota`: each element its index along `dimension`.
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Self::Tensor<E, Axes>;
     fn convert<A: Element, B: Element, Axes>(&mut self, x: &Self::Tensor<A, Axes>) -> Self::Tensor<B, Axes>;
-    fn unary<Axes>(&mut self, op: Unary, x: &Self::Tensor<f32, Axes>) -> Self::Tensor<f32, Axes>;
+    fn unary<E: Float, Axes>(&mut self, op: Unary, x: &Self::Tensor<E, Axes>) -> Self::Tensor<E, Axes>;
     fn binary<E: Element, Axes>(
         &mut self,
         op: Binary,
@@ -206,20 +207,21 @@ pub affine trait Graph: Holds with _ {
         dimension: i32,
     ) -> Self::Tensor<E, Out>;
     /// StableHLO's `reduce` whose body is `op`, from `init`. The result drops
-    /// the axes `dims`.
-    fn reduce<In, Out>(
+    /// the axes `dims`. It accumulates in f32 whatever `E` is, as every sum
+    /// below does: a long sum in a half loses its small terms.
+    fn reduce<E: Float, In, Out>(
         &mut self,
-        x: &Self::Tensor<f32, In>,
+        x: &Self::Tensor<E, In>,
         op: Binary,
         init: f32,
         dims: List<i32>,
-    ) -> Self::Tensor<f32, Out>;
-    fn dot_general<A, B, Out>(
+    ) -> Self::Tensor<E, Out>;
+    fn dot_general<E: Float, A, B, Out>(
         &mut self,
-        lhs: &Self::Tensor<f32, A>,
-        rhs: &Self::Tensor<f32, B>,
+        lhs: &Self::Tensor<E, A>,
+        rhs: &Self::Tensor<E, B>,
         dims: &DotDims,
-    ) -> Self::Tensor<f32, Out>;
+    ) -> Self::Tensor<E, Out>;
     /// StableHLO's `gather`, which clamps each start index into the operand.
     fn gather<E: Element, D, I, Out>(
         &mut self,
@@ -237,19 +239,19 @@ pub affine trait Graph: Holds with _ {
         updates: &Self::Tensor<E, U>,
         dims: &ScatterDims,
     ) -> Self::Tensor<E, D>;
-    fn convolution<In, K, Out>(
+    fn convolution<E: Float, In, K, Out>(
         &mut self,
-        x: &Self::Tensor<f32, In>,
-        kernel: &Self::Tensor<f32, K>,
+        x: &Self::Tensor<E, In>,
+        kernel: &Self::Tensor<E, K>,
         conv: &Convolution,
-    ) -> Self::Tensor<f32, Out>;
-    fn reduce_window<In, Out>(
+    ) -> Self::Tensor<E, Out>;
+    fn reduce_window<E: Float, In, Out>(
         &mut self,
-        x: &Self::Tensor<f32, In>,
+        x: &Self::Tensor<E, In>,
         op: Binary,
         init: f32,
         window: &WindowReduce,
-    ) -> Self::Tensor<f32, Out>;
+    ) -> Self::Tensor<E, Out>;
     /// StableHLO's `reverse` along each of `dims`.
     fn reverse<E: Element, Axes>(&mut self, x: &Self::Tensor<E, Axes>, dims: List<i32>) -> Self::Tensor<E, Axes>;
     /// StableHLO's `case` over two branches: `then` where the one element of
@@ -322,23 +324,23 @@ pub affine trait Graph: Holds with _ {
     /// Where `reach` is given, no query reads a position at or past its row's,
     /// even one `options.hidden` leaves a finite score: the positions past
     /// `reach` are padding.
-    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
+    fn group_query_attention<E: Float, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
         &mut self,
-        q: &Self::Tensor<f32, [B, S, Q]>,
-        k: &Self::Tensor<f32, [B, S, K]>,
-        v: &Self::Tensor<f32, [B, S, K]>,
-        past_k: &Self::Tensor<f32, [B, H, P, D]>,
-        past_v: &Self::Tensor<f32, [B, H, P, D]>,
+        q: &Self::Tensor<E, [B, S, Q]>,
+        k: &Self::Tensor<E, [B, S, K]>,
+        v: &Self::Tensor<E, [B, S, K]>,
+        past_k: &Self::Tensor<E, [B, H, P, D]>,
+        past_v: &Self::Tensor<E, [B, H, P, D]>,
         past_length: Option<&Self::Tensor<i64, [Slots]>>,
         reach: Option<&Self::Tensor<i64, [Slots]>>,
-        cos: Option<&Self::Tensor<f32, [Pos, Half]>>,
-        sin: Option<&Self::Tensor<f32, [Pos, Half]>>,
-        bias: Option<&Self::Tensor<f32, [BB, BH, BS, T]>>,
+        cos: Option<&Self::Tensor<E, [Pos, Half]>>,
+        sin: Option<&Self::Tensor<E, [Pos, Half]>>,
+        bias: Option<&Self::Tensor<E, [BB, BH, BS, T]>>,
         options: &Attention,
-    ) -> [Self::Tensor<f32, [B, S, Q]>, Self::Tensor<f32, [B, H, T, D]>, Self::Tensor<f32, [B, H, T, D]>]
+    ) -> [Self::Tensor<E, [B, S, Q]>, Self::Tensor<E, [B, H, T, D]>, Self::Tensor<E, [B, H, T, D]>]
         contract past_length matches { None } || options.causal, "a shared buffer's padding is masked causally"
     {
-        return decomposed_attention::<Self, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
+        return decomposed_attention::<Self, E, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
             self,
             q,
             k,
@@ -356,25 +358,25 @@ pub affine trait Graph: Holds with _ {
 
     /// ONNX's `ArgMax` keeping its axis: the index of each lane's first
     /// greatest element, a NaN greatest of all.
-    fn arg_max<Axes>(&mut self, x: &Self::Tensor<f32, Axes>, axis: i32) -> Self::Tensor<i64, Axes> with _;
+    fn arg_max<E: Float, Axes>(&mut self, x: &Self::Tensor<E, Axes>, axis: i32) -> Self::Tensor<i64, Axes> with _;
 }
 
 /// `Graph::group_query_attention`'s decomposition, which a graph that runs
 /// some cases as a kernel of its own runs for the rest.
-pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
+pub fn decomposed_attention<affine G: Graph, E: Float, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
     g: &mut G,
-    q: &G::Tensor<f32, [B, S, Q]>,
-    k: &G::Tensor<f32, [B, S, K]>,
-    v: &G::Tensor<f32, [B, S, K]>,
-    past_k: &G::Tensor<f32, [B, H, P, D]>,
-    past_v: &G::Tensor<f32, [B, H, P, D]>,
+    q: &G::Tensor<E, [B, S, Q]>,
+    k: &G::Tensor<E, [B, S, K]>,
+    v: &G::Tensor<E, [B, S, K]>,
+    past_k: &G::Tensor<E, [B, H, P, D]>,
+    past_v: &G::Tensor<E, [B, H, P, D]>,
     past_length: Option<&G::Tensor<i64, [Slots]>>,
     reach: Option<&G::Tensor<i64, [Slots]>>,
-    cos: Option<&G::Tensor<f32, [Pos, Half]>>,
-    sin: Option<&G::Tensor<f32, [Pos, Half]>>,
-    bias: Option<&G::Tensor<f32, [BB, BH, BS, T]>>,
+    cos: Option<&G::Tensor<E, [Pos, Half]>>,
+    sin: Option<&G::Tensor<E, [Pos, Half]>>,
+    bias: Option<&G::Tensor<E, [BB, BH, BS, T]>>,
     options: &Attention,
-) -> [G::Tensor<f32, [B, S, Q]>, G::Tensor<f32, [B, H, T, D]>, G::Tensor<f32, [B, H, T, D]>] with _ {
+) -> [G::Tensor<E, [B, S, Q]>, G::Tensor<E, [B, H, T, D]>, G::Tensor<E, [B, H, T, D]>] with _ {
     let [batch, s, past, d] = [
         g.extents_of(q)[0],
         g.extents_of(q)[1],
@@ -386,47 +388,55 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
         Some(l) => [*l, past],
         None => [shared(g, &scalar(g, past as i64)), past + s],
     };
-    let mut query = heads_first::<G, B, S, Q, Heads, D>(g, q, heads, d);
-    let mut key = heads_first::<G, B, S, K, H, D>(g, k, kv, d);
-    let value = heads_first::<G, B, S, K, H, D>(g, v, kv, d);
+    let mut query = heads_first::<G, E, B, S, Q, Heads, D>(g, q, heads, d);
+    let mut key = heads_first::<G, E, B, S, K, H, D>(g, k, kv, d);
+    let value = heads_first::<G, E, B, S, K, H, D>(g, v, kv, d);
     if let Some(c) = cos && let Some(n) = sin {
-        let cos_rows = positions_of::<G, Pos, Half, S>(g, c, &first, s);
-        let sin_rows = positions_of::<G, Pos, Half, S>(g, n, &first, s);
-        query = turned::<G, B, Heads, S, D, Half>(g, &query, &cos_rows, &sin_rows);
-        key = turned::<G, B, H, S, D, Half>(g, &key, &cos_rows, &sin_rows);
+        let cos_rows = positions_of::<G, E, Pos, Half, S>(g, c, &first, s);
+        let sin_rows = positions_of::<G, E, Pos, Half, S>(g, n, &first, s);
+        query = turned::<G, E, B, Heads, S, D, Half>(g, &query, &cos_rows, &sin_rows);
+        key = turned::<G, E, B, H, S, D, Half>(g, &key, &cos_rows, &sin_rows);
     }
-    let mut present = |held: &G::Tensor<f32, [B, H, P, D]>, new: &G::Tensor<f32, [B, H, S, D]>| -> G::Tensor<f32, [B, H, T, D]> {
+    let mut present = |held: &G::Tensor<E, [B, H, P, D]>, new: &G::Tensor<E, [B, H, S, D]>| -> G::Tensor<E, [B, H, T, D]> {
         if past_length matches { None } {
             return g.concatenate(held, new, 2);
         }
-        let written = written_at::<G, f32, [B, H, P, D], [B, H, S, D]>(g, held, new, 2, &first, Option::Some(0));
+        let written = written_at::<G, E, [B, H, P, D], [B, H, S, D]>(g, held, new, 2, &first, Option::Some(0));
         return g.reshape(&written, [batch, kv, total, d]);
     };
     let present_k = present(past_k, &key);
     let present_v = present(past_v, &value);
-    let keys = grouped::<G, B, H, T, D, Heads>(g, &present_k, heads);
-    let values = grouped::<G, B, H, T, D, Heads>(g, &present_v, heads);
+    let keys = grouped::<G, E, B, H, T, D, Heads>(g, &present_k, heads);
+    let values = grouped::<G, E, B, H, T, D, Heads>(g, &present_v, heads);
     let product = DotDims {
         lhs_batch: [0, 1],
         rhs_batch: [0, 1],
         lhs_contracting: [3],
         rhs_contracting: [3],
     };
-    let raw: G::Tensor<f32, [B, Heads, S, T]> = g.dot_general(&query, &keys, &product);
+    // The scores and their softmax stay in f32 until the attended values round
+    // to `E`: a half's dot product overflows before its scale shrinks it.
+    let wide_query: G::Tensor<f32, [B, Heads, S, D]> = g.convert::<E, f32, [B, Heads, S, D]>(&query);
+    let wide_keys: G::Tensor<f32, [B, Heads, T, D]> = g.convert::<E, f32, [B, Heads, T, D]>(&keys);
+    let raw: G::Tensor<f32, [B, Heads, S, T]> = g.dot_general(&wide_query, &wide_keys, &product);
     let score_extents: List<i32> = [batch, heads, s, total];
     let mut scores = g.binary(
         if options.divides { Binary::Divide } else { Binary::Multiply },
         &raw,
         &full::<G, f32, [B, Heads, S, T]>(g, options.scale, score_extents),
     );
+    let wide_bias: Option<G::Tensor<f32, [BB, BH, BS, T]>> = match bias {
+        Some(b) => Option::Some(g.convert::<E, f32, [BB, BH, BS, T]>(b)),
+        None => null,
+    };
     if options.softcap > 0.0 {
         let cap = full::<G, f32, [B, Heads, S, T]>(g, options.softcap, score_extents);
         let tanh = g.unary(Unary::Tanh, &g.binary(Binary::Divide, &scores, &cap));
         scores = g.binary(Binary::Multiply, &cap, &tanh);
     }
     let bias_first = options.hidden matches { None };
-    if let Some(b) = bias && bias_first {
-        scores = biased::<G, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
+    if let Some(b) = &wide_bias && bias_first {
+        scores = biased::<G, f32, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
     }
     if options.causal || options.window > 0 {
         let hidden = attention_mask::<G, B, Heads, S, T>(g, &first, options, &score_extents);
@@ -437,32 +447,41 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
         );
         scores = g.select(&hidden, &lowest, &scores);
     }
-    if let Some(b) = bias && !bias_first {
-        scores = biased::<G, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
+    if let Some(b) = &wide_bias && !bias_first {
+        scores = biased::<G, f32, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
     }
     if let Some(length) = reach {
-        scores = masked::<G, f32, [B, Heads, S, T]>(g, &scores, 3, length, Option::Some(0), f32::NEG_INFINITY);
+        scores = masked::<G, f32, [B, Heads, S, T]>(
+            g,
+            &scores,
+            3,
+            length,
+            Option::Some(0),
+            f32::NEG_INFINITY,
+        );
     }
-    let weights = softmax::<G, [B, Heads, S, T]>(g, &scores, 3);
+    let weights = softmax::<G, f32, [B, Heads, S, T]>(g, &scores, 3);
     let attend = DotDims {
         lhs_batch: [0, 1],
         rhs_batch: [0, 1],
         lhs_contracting: [3],
         rhs_contracting: [2],
     };
-    let attended: G::Tensor<f32, [B, Heads, S, D]> = g.dot_general(&weights, &values, &attend);
-    let back: G::Tensor<f32, [B, S, Heads, D]> = g.transpose(&attended, [0, 2, 1, 3]);
+    let wide_values: G::Tensor<f32, [B, Heads, T, D]> = g.convert::<E, f32, [B, Heads, T, D]>(&values);
+    let wide: G::Tensor<f32, [B, Heads, S, D]> = g.dot_general(&weights, &wide_values, &attend);
+    let attended: G::Tensor<E, [B, Heads, S, D]> = g.convert::<f32, E, [B, Heads, S, D]>(&wide);
+    let back: G::Tensor<E, [B, S, Heads, D]> = g.transpose(&attended, [0, 2, 1, 3]);
     return [g.reshape(&back, [batch, s, heads * d]), present_k, present_v];
 }
 
 /// `scores` plus `bias`, its extents of 1 repeated.
-fn biased<affine G: Graph, Axes, BiasAxes>(
+fn biased<affine G: Graph, E: Float, Axes, BiasAxes>(
     g: &mut G,
-    scores: &G::Tensor<f32, Axes>,
-    bias: &G::Tensor<f32, BiasAxes>,
+    scores: &G::Tensor<E, Axes>,
+    bias: &G::Tensor<E, BiasAxes>,
     extents: &List<i32>,
-) -> G::Tensor<f32, Axes> with _ {
-    let stretched: G::Tensor<f32, Axes> = g.broadcast_in_dim(bias, *extents, [0, 1, 2, 3]);
+) -> G::Tensor<E, Axes> with _ {
+    let stretched: G::Tensor<E, Axes> = g.broadcast_in_dim(bias, *extents, [0, 1, 2, 3]);
     return g.binary(Binary::Add, scores, &stretched);
 }
 
@@ -474,26 +493,26 @@ struct Group {
 }
 
 /// `[batch, sequence, heads × width]` as `[batch, heads, sequence, width]`.
-fn heads_first<affine G: Graph, B, S, X, N, D>(
+fn heads_first<affine G: Graph, E: Float, B, S, X, N, D>(
     g: &mut G,
-    x: &G::Tensor<f32, [B, S, X]>,
+    x: &G::Tensor<E, [B, S, X]>,
     heads: i32,
     width: i32,
-) -> G::Tensor<f32, [B, N, S, D]> with _ {
+) -> G::Tensor<E, [B, N, S, D]> with _ {
     let extents = g.extents_of(x);
-    let split: G::Tensor<f32, [B, S, N, D]> = g.reshape(x, [extents[0], extents[1], heads, width]);
+    let split: G::Tensor<E, [B, S, N, D]> = g.reshape(x, [extents[0], extents[1], heads, width]);
     return g.transpose(&split, [0, 2, 1, 3]);
 }
 
 /// Each of `x`'s key heads repeated for the `heads / kv` query heads it serves,
 /// in order, so query head `h` reads key head `h / (heads / kv)`.
-fn grouped<affine G: Graph, B, H, T, D, N>(
+fn grouped<affine G: Graph, E: Float, B, H, T, D, N>(
     g: &mut G,
-    x: &G::Tensor<f32, [B, H, T, D]>,
+    x: &G::Tensor<E, [B, H, T, D]>,
     heads: i32,
-) -> G::Tensor<f32, [B, N, T, D]> with _ {
+) -> G::Tensor<E, [B, N, T, D]> with _ {
     let [batch, kv, total, width] = unpacked4(&g.extents_of(x));
-    let repeated: G::Tensor<f32, [B, H, Group, T, D]> = g.broadcast_in_dim(x, [batch, kv, heads / kv, total, width], [
+    let repeated: G::Tensor<E, [B, H, Group, T, D]> = g.broadcast_in_dim(x, [batch, kv, heads / kv, total, width], [
         0, 1, 3, 4,
     ]);
     return g.reshape(&repeated, [batch, heads, total, width]);
@@ -518,8 +537,13 @@ pub fn full<affine G: Graph, E: Element, Axes>(g: &mut G, value: E, extents: Lis
 }
 
 /// ONNX's `Softmax` along `axis`: less the greatest along it, exponentiated,
-/// over the sum along it.
-pub fn softmax<affine G: Graph, Axes>(g: &mut G, x: &G::Tensor<f32, Axes>, axis: i32) -> G::Tensor<f32, Axes> with _ {
+/// over the sum along it. A half's is computed in f32 and rounded once, since
+/// the sum of a long row outgrows f16.
+pub fn softmax<affine G: Graph, E: Float, Axes>(
+    g: &mut G,
+    x: &G::Tensor<E, Axes>,
+    axis: i32,
+) -> G::Tensor<E, Axes> with _ {
     let extents = g.extents_of(x);
     let mut kept: List<i32> = [];
     for let i of 0..<extents.len() {
@@ -527,26 +551,27 @@ pub fn softmax<affine G: Graph, Axes>(g: &mut G, x: &G::Tensor<f32, Axes>, axis:
             kept.push(i);
         }
     }
-    let top: G::Tensor<f32, Rows> = g.reduce(x, Binary::Maximum, f32::NEG_INFINITY, [axis]);
-    let shifted = g.binary(Binary::Subtract, x, &g.broadcast_in_dim(&top, extents, kept));
+    let wide: G::Tensor<f32, Axes> = g.convert::<E, f32, Axes>(x);
+    let top: G::Tensor<f32, Rows> = g.reduce(&wide, Binary::Maximum, f32::NEG_INFINITY, [axis]);
+    let shifted = g.binary(Binary::Subtract, &wide, &g.broadcast_in_dim(&top, extents, kept));
     let e = g.unary(Unary::Exponential, &shifted);
     let sum: G::Tensor<f32, Rows> = g.reduce(&e, Binary::Add, 0.0, [axis]);
-    return g.binary(Binary::Divide, &e, &g.broadcast_in_dim(&sum, extents, kept));
+    return g.convert::<f32, E, Axes>(&g.binary(Binary::Divide, &e, &g.broadcast_in_dim(&sum, extents, kept)));
 }
 
 /// `Softmax` before opset 13: the axes from `axis` on normalized as one.
-pub fn softmax_flattened<affine G: Graph, Axes>(
+pub fn softmax_flattened<affine G: Graph, E: Float, Axes>(
     g: &mut G,
-    x: &G::Tensor<f32, Axes>,
+    x: &G::Tensor<E, Axes>,
     axis: i32,
-) -> G::Tensor<f32, Axes> with _ {
+) -> G::Tensor<E, Axes> with _ {
     let extents = g.extents_of(x);
     let rows = element_count(&extents[0..<axis].to_list());
-    let flat: G::Tensor<f32, [Rows, Row]> = g.reshape(
+    let flat: G::Tensor<E, [Rows, Row]> = g.reshape(
         x,
         [rows, element_count(&extents[axis..<extents.len()].to_list())],
     );
-    let normalized = softmax::<G, [Rows, Row]>(g, &flat, 1);
+    let normalized = softmax::<G, E, [Rows, Row]>(g, &flat, 1);
     return g.reshape(&normalized, extents);
 }
 
@@ -565,16 +590,18 @@ pub fn lifted<affine G: Graph, E: Element, In, Out>(
 
 /// ONNX's `ReduceMean` over `dims`, which the result drops: the sum over
 /// `count`, the elements each sums, a value the graph computes where a valid
-/// length is among them.
-pub fn reduce_mean<affine G: Graph, In, Out>(
+/// length is among them. A half's mean is computed in f32 and rounded once,
+/// since the count a half holds is rounded past 256 in bf16.
+pub fn reduce_mean<affine G: Graph, E: Float, In, Out>(
     g: &mut G,
-    x: &G::Tensor<f32, In>,
+    x: &G::Tensor<E, In>,
     dims: List<i32>,
     count: &G::Tensor<i64, []>,
-) -> G::Tensor<f32, Out> with _ {
-    let sum: G::Tensor<f32, Out> = g.reduce(x, Binary::Add, 0.0, dims);
+) -> G::Tensor<E, Out> with _ {
+    let wide: G::Tensor<f32, In> = g.convert::<E, f32, In>(x);
+    let sum: G::Tensor<f32, Out> = g.reduce(&wide, Binary::Add, 0.0, dims);
     let divisor: G::Tensor<f32, Out> = g.broadcast_in_dim(&g.convert::<i64, f32, []>(count), g.extents_of(&sum), []);
-    return g.binary(Binary::Divide, &sum, &divisor);
+    return g.convert::<f32, E, Out>(&g.binary(Binary::Divide, &sum, &divisor));
 }
 
 /// `x` with each position along `axis` at or past its row's `length` replaced
@@ -986,16 +1013,16 @@ struct Row {
 
 /// The rows of `table` at the `count` positions from each batch row's `first`
 /// on, a batch row each, or one that every batch row shares.
-fn positions_of<affine G: Graph, Pos, Half, S>(
+fn positions_of<affine G: Graph, E: Float, Pos, Half, S>(
     g: &mut G,
-    table: &G::Tensor<f32, [Pos, Half]>,
+    table: &G::Tensor<E, [Pos, Half]>,
     first: &G::Tensor<i64, [Slots]>,
     count: i32,
-) -> G::Tensor<f32, [Slots, S, Half]> with _ {
+) -> G::Tensor<E, [Slots, S, Half]> with _ {
     let rows = g.extents_of(first)[0];
     let half = g.extents_of(table)[1];
     if rows == 1 {
-        let consecutive = strided_gather::<G, f32, [Pos, Half], [S, Half]>(g, table, 0, first, null, count, 1);
+        let consecutive = strided_gather::<G, E, [Pos, Half], [S, Half]>(g, table, 0, first, null, count, 1);
         return g.reshape(&consecutive, [1, count, half]);
     }
     let plane: List<i32> = [rows, count];
@@ -1014,12 +1041,12 @@ fn positions_of<affine G: Graph, Pos, Half, S>(
 /// `x`'s rows `[a, b, rest]`, `a` and `b` as wide as a row of `cos`, turned
 /// by `(a cos − b sin, b cos + a sin)` of the row of `cos` and `sin` at each
 /// row's position, and `rest` as it is.
-fn turned<affine G: Graph, B, N, S, D, Half>(
+fn turned<affine G: Graph, E: Float, B, N, S, D, Half>(
     g: &mut G,
-    x: &G::Tensor<f32, [B, N, S, D]>,
-    cos: &G::Tensor<f32, [Slots, S, Half]>,
-    sin: &G::Tensor<f32, [Slots, S, Half]>,
-) -> G::Tensor<f32, [B, N, S, D]> with _ {
+    x: &G::Tensor<E, [B, N, S, D]>,
+    cos: &G::Tensor<E, [Slots, S, Half]>,
+    sin: &G::Tensor<E, [Slots, S, Half]>,
+) -> G::Tensor<E, [B, N, S, D]> with _ {
     let extents = g.extents_of(x);
     let half = g.extents_of(cos)[2];
     let columns = |from: i32, to: i32| -> [List<i32>, List<i32>] {
@@ -1030,18 +1057,31 @@ fn turned<affine G: Graph, B, N, S, D, Half>(
     };
     let [a_start, a_limit] = columns(0, half);
     let [b_start, b_limit] = columns(half, 2 * half);
-    let a: G::Tensor<f32, [B, N, S, Half]> = g.slice(x, a_start, a_limit, [1, 1, 1, 1]);
-    let b: G::Tensor<f32, [B, N, S, Half]> = g.slice(x, b_start, b_limit, [1, 1, 1, 1]);
-    let c: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(cos, a_limit, [0, 2, 3]);
-    let n: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(sin, a_limit, [0, 2, 3]);
-    let first = g.binary(Binary::Subtract, &g.binary(Binary::Multiply, &a, &c), &g.binary(Binary::Multiply, &b, &n));
-    let second = g.binary(Binary::Add, &g.binary(Binary::Multiply, &b, &c), &g.binary(Binary::Multiply, &a, &n));
-    let rotated: G::Tensor<f32, [B, N, S, D]> = g.concatenate(&first, &second, 3);
+    let half_of = |g: &mut G, start: List<i32>, limit: List<i32>| -> G::Tensor<f32, [B, N, S, Half]> {
+        let part: G::Tensor<E, [B, N, S, Half]> = g.slice(x, start, limit, [1, 1, 1, 1]);
+        return g.convert::<E, f32, [B, N, S, Half]>(&part);
+    };
+    let a = half_of(g, a_start, a_limit);
+    let b = half_of(g, b_start, b_limit);
+    let c: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(&g.convert::<E, f32, [Slots, S, Half]>(cos), a_limit, [
+        0, 2, 3,
+    ]);
+    let n: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(&g.convert::<E, f32, [Slots, S, Half]>(sin), a_limit, [
+        0, 2, 3,
+    ]);
+    // Each half rounds once, as one node of halves does.
+    let first = g.convert::<f32, E, [B, N, S, Half]>(
+        &g.binary(Binary::Subtract, &g.binary(Binary::Multiply, &a, &c), &g.binary(Binary::Multiply, &b, &n)),
+    );
+    let second = g.convert::<f32, E, [B, N, S, Half]>(
+        &g.binary(Binary::Add, &g.binary(Binary::Multiply, &b, &c), &g.binary(Binary::Multiply, &a, &n)),
+    );
+    let rotated: G::Tensor<E, [B, N, S, D]> = g.concatenate(&first, &second, 3);
     if 2 * half == extents[3] {
         return rotated;
     }
     let [rest_start, rest_limit] = columns(2 * half, extents[3]);
-    let rest: G::Tensor<f32, [B, N, S, D]> = g.slice(x, rest_start, rest_limit, [1, 1, 1, 1]);
+    let rest: G::Tensor<E, [B, N, S, D]> = g.slice(x, rest_start, rest_limit, [1, 1, 1, 1]);
     return g.concatenate(&rotated, &rest, 3);
 }
 
@@ -1098,22 +1138,22 @@ impl Graph for Cpu {
         return Tensor { data, extents: x.extents };
     }
 
-    fn unary<Axes>(&mut self, op: Unary, x: &Tensor<f32, Axes>) -> Tensor<f32, Axes> {
-        let mut data = List::<f32>::with_capacity(x.data.len());
+    fn unary<E: Float, Axes>(&mut self, op: Unary, x: &Tensor<E, Axes>) -> Tensor<E, Axes> {
+        let mut data = List::<E>::with_capacity(x.data.len());
         for let v of x.data {
-            data.push(unary_f32(op, v));
+            data.push(E::from_f32(unary_f32(op, v.cast_to::<f32>())));
         }
         return Tensor { data, extents: x.extents };
     }
 
-    fn arg_max<Axes>(&mut self, x: &Tensor<f32, Axes>, axis: i32) -> Tensor<i64, Axes> {
+    fn arg_max<E: Float, Axes>(&mut self, x: &Tensor<E, Axes>, axis: i32) -> Tensor<i64, Axes> {
         return arg_max(x, axis);
     }
 
     fn binary<E: Element, Axes>(&mut self, op: Binary, a: &Tensor<E, Axes>, b: &Tensor<E, Axes>) -> Tensor<E, Axes> {
         let extents = elementwise_extents([a.extents, b.extents]);
         let mut data = List::<E>::with_capacity(a.data.len());
-        if E::is_f32() {
+        if E::is_float() {
             for let i of 0..<a.data.len() {
                 data.push(E::from_f32(binary_f32(op, a.data[i].cast_to::<f32>(), b.data[i].cast_to::<f32>())));
             }
@@ -1134,7 +1174,7 @@ impl Graph for Cpu {
         let extents = elementwise_extents([a.extents, b.extents]);
         let mut data = List::<bool>::with_capacity(a.data.len());
         for let i of 0..<a.data.len() {
-            data.push(if E::is_f32() {
+            data.push(if E::is_float() {
                 compared_f32(direction, a.data[i].cast_to::<f32>(), b.data[i].cast_to::<f32>());
             } else {
                 compared_i64(direction, a.data[i].cast_to::<i64>(), b.data[i].cast_to::<i64>());
@@ -1223,26 +1263,31 @@ impl Graph for Cpu {
         return Tensor { data, extents };
     }
 
-    fn reduce<In, Out>(&mut self, x: &Tensor<f32, In>, op: Binary, init: f32, dims: List<i32>) -> Tensor<f32, Out> {
+    fn reduce<E: Float, In, Out>(&mut self, x: &Tensor<E, In>, op: Binary, init: f32, dims: List<i32>) -> Tensor<E, Out> {
         let kept = kept_axes(x.extents.len(), &dims);
         let mut perm = kept;
         perm.extend(&(0..<x.extents.len()).filter(|i| dims.contains(&i)).collect());
-        let laid: Tensor<f32, In> = self.transpose(x, perm);
+        let laid: Tensor<E, In> = self.transpose(x, perm);
         let extents = picked(&x.extents, &kept);
         let rows = element_count(&extents);
         let width = if rows == 0 { 0 } else { laid.data.len() / rows };
-        let mut data = List::<f32>::with_capacity(rows);
+        let mut data = List::<E>::with_capacity(rows);
         for let r of 0..<rows {
             let mut acc = init;
             for let j of 0..<width {
-                acc = binary_f32(op, acc, laid.data[r * width + j]);
+                acc = binary_f32(op, acc, laid.data[r * width + j].cast_to::<f32>());
             }
-            data.push(acc);
+            data.push(E::from_f32(acc));
         }
         return Tensor { data, extents };
     }
 
-    fn dot_general<A, B, Out>(&mut self, lhs: &Tensor<f32, A>, rhs: &Tensor<f32, B>, dims: &DotDims) -> Tensor<f32, Out> {
+    fn dot_general<E: Float, A, B, Out>(
+        &mut self,
+        lhs: &Tensor<E, A>,
+        rhs: &Tensor<E, B>,
+        dims: &DotDims,
+    ) -> Tensor<E, Out> {
         let extents = dot_extents(&lhs.extents, &rhs.extents, dims);
         let lhs_free = free_axes(lhs.extents.len(), &dims.lhs_batch, &dims.lhs_contracting);
         let rhs_free = free_axes(rhs.extents.len(), &dims.rhs_batch, &dims.rhs_contracting);
@@ -1360,35 +1405,38 @@ impl Graph for Cpu {
         return Tensor { data, extents: operand.extents };
     }
 
-    fn convolution<In, K, Out>(
+    fn convolution<E: Float, In, K, Out>(
         &mut self,
-        x: &Tensor<f32, In>,
-        kernel: &Tensor<f32, K>,
+        x: &Tensor<E, In>,
+        kernel: &Tensor<E, K>,
         conv: &Convolution,
-    ) -> Tensor<f32, Out> {
+    ) -> Tensor<E, Out> {
         let window = conv_window(&x.extents, &kernel.extents, conv);
         let t = conv_grouped::<Batch, Feature, Feature, Feature, [Spatial], [Spatial], [Spatial]>(
-            &Tensor { data: x.data, extents: x.extents },
-            &Tensor { data: kernel.data, extents: kernel.extents },
+            &Tensor { data: f32s_of(&x.data), extents: x.extents },
+            &Tensor { data: f32s_of(&kernel.data), extents: kernel.extents },
             conv.feature_group_count,
             &window,
             &null,
         );
-        return Tensor { data: t.data, extents: t.extents };
+        return Tensor { data: rounded(&t.data), extents: t.extents };
     }
 
-    fn reduce_window<In, Out>(
+    fn reduce_window<E: Float, In, Out>(
         &mut self,
-        x: &Tensor<f32, In>,
+        x: &Tensor<E, In>,
         op: Binary,
         init: f32,
         window: &WindowReduce,
-    ) -> Tensor<f32, Out>
+    ) -> Tensor<E, Out>
         contract op matches { Maximum } && init == f32::NEG_INFINITY, "the CPU reduces windows by their greatest alone"
     {
         let pooled = pooled_window(&x.extents, window);
-        let t = max_pool::<Batch, Feature, [Spatial], [Spatial]>(&Tensor { data: x.data, extents: x.extents }, &pooled);
-        return Tensor { data: t.data, extents: t.extents };
+        let t = max_pool::<Batch, Feature, [Spatial], [Spatial]>(
+            &Tensor { data: f32s_of(&x.data), extents: x.extents },
+            &pooled,
+        );
+        return Tensor { data: rounded(&t.data), extents: t.extents };
     }
 
     fn reverse<E: Element, Axes>(&mut self, x: &Tensor<E, Axes>, dims: List<i32>) -> Tensor<E, Axes> {
@@ -1502,13 +1550,13 @@ fn is_identity(perm: &List<i32>) -> bool {
 
 /// An operand's elements walked in another order of its axes, or none where
 /// that order is its own.
-struct Laid {
-    data: Option<List<f32>>,
+struct Laid<E: Float> {
+    data: Option<List<E>>,
 }
 
-impl Laid {
+impl<E: Float> Laid<E> {
     /// The elements in the order asked for, read from `x` where they are its own.
-    fn of<Axes>(&self, x: &Tensor<f32, Axes>) -> &List<f32> {
+    fn of<Axes>(&self, x: &Tensor<E, Axes>) -> &List<E> {
         return match &self.data {
             Some(laid) => laid,
             None => &x.data,
@@ -1517,12 +1565,30 @@ impl Laid {
 }
 
 /// `x`'s elements with its axes in `order`.
-fn laid_out<Axes>(x: &Tensor<f32, Axes>, order: &List<i32>) -> Laid {
+fn laid_out<E: Float, Axes>(x: &Tensor<E, Axes>, order: &List<i32>) -> Laid<E> {
     if is_identity(order) {
         return Laid { data: null };
     }
     let strides = picked(&row_major_strides(&x.extents), order);
     return Laid { data: Option::Some(walked(&x.data, 0, &strides, &picked(&x.extents, order))) };
+}
+
+/// A float tensor's elements widened to `f32`, which is exact for a half.
+fn f32s_of<E: Float>(data: &List<E>) -> List<f32> {
+    let mut out = List::<f32>::with_capacity(data.len());
+    for let v of *data {
+        out.push(v.cast_to::<f32>());
+    }
+    return out;
+}
+
+/// What a kernel computed in `f32`, rounded once to the type it is stored in.
+fn rounded<E: Float>(data: &List<f32>) -> List<E> {
+    let mut out = List::<E>::with_capacity(data.len());
+    for let v of *data {
+        out.push(E::from_f32(v));
+    }
+    return out;
 }
 
 /// The extents of the axes `axes`, in that order.
@@ -1680,10 +1746,10 @@ pub fn pooled_window(x: &List<i32>, window: &WindowReduce) -> Window {
 /// written once rather than once a term: GPT-2 (124M)'s token, whose weights
 /// are `[k, n]`, took 0.40 times as long so, and runs of 8 took 1.17 times
 /// as long as runs of 16.
-fn product_by_columns(a: &List<f32>, b: &List<f32>, batch: i32, m: i32, k: i32, n: i32) -> List<f32>
+fn product_by_columns<E: Float>(a: &List<E>, b: &List<E>, batch: i32, m: i32, k: i32, n: i32) -> List<E>
     contract a.len() == batch * m * k && b.len() == batch * k * n
 {
-    let mut out = List::<f32>::with_capacity(batch * m * n);
+    let mut out = List::<E>::with_capacity(batch * m * n);
     let runs = n - n % 16;
     for let s of 0..<batch {
         let b_at = s * k * n;
@@ -1697,35 +1763,35 @@ fn product_by_columns(a: &List<f32>, b: &List<f32>, batch: i32, m: i32, k: i32, 
                     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                 ];
                 for let j of 0..<k {
-                    let av = unchecked a[a_at + j];
+                    let av = (unchecked a[a_at + j]).cast_to::<f32>();
                     let at = b_at + j * n + c;
-                    s0 += av * unchecked b[at];
-                    s1 += av * unchecked b[at + 1];
-                    s2 += av * unchecked b[at + 2];
-                    s3 += av * unchecked b[at + 3];
-                    s4 += av * unchecked b[at + 4];
-                    s5 += av * unchecked b[at + 5];
-                    s6 += av * unchecked b[at + 6];
-                    s7 += av * unchecked b[at + 7];
-                    s8 += av * unchecked b[at + 8];
-                    s9 += av * unchecked b[at + 9];
-                    s10 += av * unchecked b[at + 10];
-                    s11 += av * unchecked b[at + 11];
-                    s12 += av * unchecked b[at + 12];
-                    s13 += av * unchecked b[at + 13];
-                    s14 += av * unchecked b[at + 14];
-                    s15 += av * unchecked b[at + 15];
+                    s0 += av * (unchecked b[at]).cast_to::<f32>();
+                    s1 += av * (unchecked b[at + 1]).cast_to::<f32>();
+                    s2 += av * (unchecked b[at + 2]).cast_to::<f32>();
+                    s3 += av * (unchecked b[at + 3]).cast_to::<f32>();
+                    s4 += av * (unchecked b[at + 4]).cast_to::<f32>();
+                    s5 += av * (unchecked b[at + 5]).cast_to::<f32>();
+                    s6 += av * (unchecked b[at + 6]).cast_to::<f32>();
+                    s7 += av * (unchecked b[at + 7]).cast_to::<f32>();
+                    s8 += av * (unchecked b[at + 8]).cast_to::<f32>();
+                    s9 += av * (unchecked b[at + 9]).cast_to::<f32>();
+                    s10 += av * (unchecked b[at + 10]).cast_to::<f32>();
+                    s11 += av * (unchecked b[at + 11]).cast_to::<f32>();
+                    s12 += av * (unchecked b[at + 12]).cast_to::<f32>();
+                    s13 += av * (unchecked b[at + 13]).cast_to::<f32>();
+                    s14 += av * (unchecked b[at + 14]).cast_to::<f32>();
+                    s15 += av * (unchecked b[at + 15]).cast_to::<f32>();
                 }
                 for let v of [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15] {
-                    out.push(v);
+                    out.push(E::from_f32(v));
                 }
             }
             for let c of runs..<n {
                 let mut sum: f32 = 0.0;
                 for let j of 0..<k {
-                    sum += unchecked a[a_at + j] * unchecked b[b_at + j * n + c];
+                    sum += (unchecked a[a_at + j]).cast_to::<f32>() * (unchecked b[b_at + j * n + c]).cast_to::<f32>();
                 }
-                out.push(sum);
+                out.push(E::from_f32(sum));
             }
         }
     }
@@ -1734,10 +1800,10 @@ fn product_by_columns(a: &List<f32>, b: &List<f32>, batch: i32, m: i32, k: i32, 
 
 /// `batch` products of an `[m, k]` matrix by the transpose of an `[n, k]` one,
 /// each output element a dot product of two contiguous rows.
-fn product_by_rows(a: &List<f32>, b: &List<f32>, batch: i32, m: i32, k: i32, n: i32) -> List<f32>
+fn product_by_rows<E: Float>(a: &List<E>, b: &List<E>, batch: i32, m: i32, k: i32, n: i32) -> List<E>
     contract a.len() == batch * m * k && b.len() == batch * n * k
 {
-    let mut out = List::<f32>::with_capacity(batch * m * n);
+    let mut out = List::<E>::with_capacity(batch * m * n);
     for let s of 0..<batch {
         for let r of 0..<m {
             let a_at = (s * m + r) * k;
@@ -1746,15 +1812,15 @@ fn product_by_rows(a: &List<f32>, b: &List<f32>, batch: i32, m: i32, k: i32, n: 
                 let [mut s0, mut s1, mut s2, mut s3]: [f32, f32, f32, f32] = [0.0, 0.0, 0.0, 0.0];
                 let quads = k - k % 4;
                 for let mut j = 0; j < quads; j += 4 {
-                    s0 += unchecked a[a_at + j] * unchecked b[b_at + j];
-                    s1 += unchecked a[a_at + j + 1] * unchecked b[b_at + j + 1];
-                    s2 += unchecked a[a_at + j + 2] * unchecked b[b_at + j + 2];
-                    s3 += unchecked a[a_at + j + 3] * unchecked b[b_at + j + 3];
+                    s0 += (unchecked a[a_at + j]).cast_to::<f32>() * (unchecked b[b_at + j]).cast_to::<f32>();
+                    s1 += (unchecked a[a_at + j + 1]).cast_to::<f32>() * (unchecked b[b_at + j + 1]).cast_to::<f32>();
+                    s2 += (unchecked a[a_at + j + 2]).cast_to::<f32>() * (unchecked b[b_at + j + 2]).cast_to::<f32>();
+                    s3 += (unchecked a[a_at + j + 3]).cast_to::<f32>() * (unchecked b[b_at + j + 3]).cast_to::<f32>();
                 }
                 for let j of quads..<k {
-                    s0 += unchecked a[a_at + j] * unchecked b[b_at + j];
+                    s0 += (unchecked a[a_at + j]).cast_to::<f32>() * (unchecked b[b_at + j]).cast_to::<f32>();
                 }
-                out.push(s0 + s1 + (s2 + s3));
+                out.push(E::from_f32(s0 + s1 + (s2 + s3)));
             }
         }
     }

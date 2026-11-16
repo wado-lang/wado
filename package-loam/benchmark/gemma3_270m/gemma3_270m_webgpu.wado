@@ -24,6 +24,7 @@ use {
     GpuShaderModule,
     GpuComputePipeline,
     GpuComputePassEncoder,
+    GpuSupportedFeatures,
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
@@ -31,7 +32,7 @@ use { Sampling, WebGpuBackend } from "lib:loam";
 use { Model } from "../../example/gemma3-270m/model.wado";
 use { STEPS, timed, timed_by } from "./generate.wado";
 
-export fn run() with (Environment, Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+export fn run() with (Environment, Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
     let Ok(checkpoint) = fs::read_linear("build/model.onnx_data") else {
         eprintln("build/model.onnx_data is missing; run package-loam/example/gemma3-270m/fetch.sh");
         return;

@@ -1,0 +1,21 @@
+# `gated.onnxtext` in float16, with an embedding in front. Each matrix holds
+# an element bf16 would round: 15361 is 1 + 2^-10.
+<ir_version: 8, opset_import: [ "" : 13 ]>
+gated_f16 (int64[N, S] Ids) => (float16[N, S, 2] Y)
+<float16[4, 2] T = {14338, 47616, 15616, 13312, 48129, 14336, 16384, 46080}, float16[2] W = {15872, 47104}, float16[2, 3] G = {14336, 48129, 13312, 15872, 14848, 47104}, float16[2, 3] U = {15360, 14336, 46080, 48640, 16385, 12288}, float16[3, 2] D = {15361, 47104, 13312, 16384, 48128, 14336}>
+{
+    X = Gather(T, Ids)
+    Q = Mul(X, X)
+    M = ReduceMean <axes = [-1], keepdims = 1> (Q)
+    Eps = Constant <value = float16 {17}> ()
+    V = Add(M, Eps)
+    R = Sqrt(V)
+    O = Div(X, R)
+    H = Mul(O, W)
+    A = MatMul(H, G)
+    B = MatMul(H, U)
+    C = Sigmoid(A)
+    E = Mul(A, C)
+    F = Mul(E, B)
+    Y = MatMul(F, D)
+}

@@ -25,11 +25,14 @@ use {
     reduced_extents,
     sliced_extents,
 } from "./hlo.wado";
-use { Attention, Cpu, Element, ElementKind, Holds, Tensor, element_count, optional } from "./tensor.wado";
+use { Attention, Cpu, Element, ElementKind, Float, Holds, Tensor, element_count, optional } from "./tensor.wado";
 
 /// A tensor's elements, whichever element it holds.
 pub variant Data {
     F32(List<f32>),
+    F16(List<f16>),
+    BF16(List<bf16>),
+    U8(List<u8>),
     I64(List<i64>),
     Bool(List<bool>),
 }
@@ -199,6 +202,9 @@ impl Recorder {
 internal fn data_of<E: Element>(v: &List<E>) -> Data {
     return match E::kind() {
         F32 => Data::F32(v.into_iter().map(|x| x.cast_to::<f32>()).collect()),
+        F16 => Data::F16(v.into_iter().map(|x| x.cast_to::<f16>()).collect()),
+        BF16 => Data::BF16(v.into_iter().map(|x| x.cast_to::<bf16>()).collect()),
+        U8 => Data::U8(v.into_iter().map(|x| x.cast_to::<u8>()).collect()),
         I64 => Data::I64(v.into_iter().map(|x| x.cast_to::<i64>()).collect()),
         Bool => Data::Bool(v.into_iter().map(|x| x.cast_to::<bool>()).collect()),
     };
@@ -236,8 +242,8 @@ impl Graph for Recorder {
         return self.value(Operation::Convert, [x.id], B::kind(), self.extents(x.id));
     }
 
-    fn unary<Axes>(&mut self, op: Unary, x: &Value<f32, Axes>) -> Value<f32, Axes> {
-        return self.value(Operation::Unary(op), [x.id], ElementKind::F32, self.extents(x.id));
+    fn unary<E: Float, Axes>(&mut self, op: Unary, x: &Value<E, Axes>) -> Value<E, Axes> {
+        return self.value(Operation::Unary(op), [x.id], E::kind(), self.extents(x.id));
     }
 
     fn binary<E: Element, Axes>(&mut self, op: Binary, a: &Value<E, Axes>, b: &Value<E, Axes>) -> Value<E, Axes> {
@@ -312,14 +318,19 @@ impl Graph for Recorder {
         return self.value(Operation::Concatenate(dimension), [a.id, b.id], E::kind(), extents);
     }
 
-    fn reduce<In, Out>(&mut self, x: &Value<f32, In>, op: Binary, init: f32, dims: List<i32>) -> Value<f32, Out> {
+    fn reduce<E: Float, In, Out>(&mut self, x: &Value<E, In>, op: Binary, init: f32, dims: List<i32>) -> Value<E, Out> {
         let extents = reduced_extents(&self.extents(x.id), &dims);
-        return self.value(Operation::Reduce([op, init, dims]), [x.id], ElementKind::F32, extents);
+        return self.value(Operation::Reduce([op, init, dims]), [x.id], E::kind(), extents);
     }
 
-    fn dot_general<A, B, Out>(&mut self, lhs: &Value<f32, A>, rhs: &Value<f32, B>, dims: &DotDims) -> Value<f32, Out> {
+    fn dot_general<E: Float, A, B, Out>(
+        &mut self,
+        lhs: &Value<E, A>,
+        rhs: &Value<E, B>,
+        dims: &DotDims,
+    ) -> Value<E, Out> {
         let extents = dot_extents(&self.extents(lhs.id), &self.extents(rhs.id), dims);
-        return self.value(Operation::DotGeneral(*dims), [lhs.id, rhs.id], ElementKind::F32, extents);
+        return self.value(Operation::DotGeneral(*dims), [lhs.id, rhs.id], E::kind(), extents);
     }
 
     fn gather<E: Element, D, I, Out>(
@@ -343,39 +354,39 @@ impl Graph for Recorder {
         return self.value(Operation::Scatter(*dims), [operand.id, indices.id, updates.id], E::kind(), extents);
     }
 
-    fn convolution<In, K, Out>(
+    fn convolution<E: Float, In, K, Out>(
         &mut self,
-        x: &Value<f32, In>,
-        kernel: &Value<f32, K>,
+        x: &Value<E, In>,
+        kernel: &Value<E, K>,
         conv: &Convolution,
-    ) -> Value<f32, Out> {
+    ) -> Value<E, Out> {
         let [input, weights] = [
             self.extents(x.id),
             self.extents(kernel.id),
         ];
         let mut extents: List<i32> = [input[0], weights[0]];
         extents.extend(&conv_window(&input, &weights, conv).output);
-        return self.value(Operation::Convolution(*conv), [x.id, kernel.id], ElementKind::F32, extents);
+        return self.value(Operation::Convolution(*conv), [x.id, kernel.id], E::kind(), extents);
     }
 
-    fn reduce_window<In, Out>(
+    fn reduce_window<E: Float, In, Out>(
         &mut self,
-        x: &Value<f32, In>,
+        x: &Value<E, In>,
         op: Binary,
         init: f32,
         window: &WindowReduce,
-    ) -> Value<f32, Out> {
+    ) -> Value<E, Out> {
         let input = self.extents(x.id);
         let mut extents: List<i32> = [input[0], input[1]];
         extents.extend(&pooled_window(&input, window).output);
-        return self.value(Operation::ReduceWindow([op, init, *window]), [x.id], ElementKind::F32, extents);
+        return self.value(Operation::ReduceWindow([op, init, *window]), [x.id], E::kind(), extents);
     }
 
     fn reverse<E: Element, Axes>(&mut self, x: &Value<E, Axes>, dims: List<i32>) -> Value<E, Axes> {
         return self.value(Operation::Reverse(dims), [x.id], E::kind(), self.extents(x.id));
     }
 
-    fn arg_max<Axes>(&mut self, x: &Value<f32, Axes>, axis: i32) -> Value<i64, Axes> {
+    fn arg_max<E: Float, Axes>(&mut self, x: &Value<E, Axes>, axis: i32) -> Value<i64, Axes> {
         let mut extents = self.extents(x.id);
         extents[axis] = 1;
         return self.value(Operation::ArgMax(axis), [x.id], ElementKind::I64, extents);
@@ -450,22 +461,22 @@ impl Graph for Recorder {
         return region.results.into_iter().map(|id| any_at(self.nodes[id].kind, id)).collect();
     }
 
-    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
+    fn group_query_attention<E: Float, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
         &mut self,
-        q: &Value<f32, [B, S, Q]>,
-        k: &Value<f32, [B, S, K]>,
-        v: &Value<f32, [B, S, K]>,
-        past_k: &Value<f32, [B, H, P, D]>,
-        past_v: &Value<f32, [B, H, P, D]>,
+        q: &Value<E, [B, S, Q]>,
+        k: &Value<E, [B, S, K]>,
+        v: &Value<E, [B, S, K]>,
+        past_k: &Value<E, [B, H, P, D]>,
+        past_v: &Value<E, [B, H, P, D]>,
         past_length: Option<&Value<i64, [Slots]>>,
         reach: Option<&Value<i64, [Slots]>>,
-        cos: Option<&Value<f32, [Pos, Half]>>,
-        sin: Option<&Value<f32, [Pos, Half]>>,
-        bias: Option<&Value<f32, [BB, BH, BS, T]>>,
+        cos: Option<&Value<E, [Pos, Half]>>,
+        sin: Option<&Value<E, [Pos, Half]>>,
+        bias: Option<&Value<E, [BB, BH, BS, T]>>,
         options: &Attention,
-    ) -> [Value<f32, [B, S, Q]>, Value<f32, [B, H, T, D]>, Value<f32, [B, H, T, D]>] {
+    ) -> [Value<E, [B, S, Q]>, Value<E, [B, H, T, D]>, Value<E, [B, H, T, D]>] {
         if self.decomposes {
-            let attended = decomposed_attention::<Recorder, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
+            let attended = decomposed_attention::<Recorder, E, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
                 self,
                 q,
                 k,
@@ -508,11 +519,11 @@ impl Graph for Recorder {
         if !node.shared {
             present[2] += self.extents(q.id)[1];
         }
-        let attended = self.added(Operation::Attention(node), operands, ElementKind::F32, self.extents(q.id));
+        let attended = self.added(Operation::Attention(node), operands, E::kind(), self.extents(q.id));
         return [
             Value { id: attended },
-            self.value(Operation::Part(1), [attended], ElementKind::F32, present),
-            self.value(Operation::Part(2), [attended], ElementKind::F32, present),
+            self.value(Operation::Part(1), [attended], E::kind(), present),
+            self.value(Operation::Part(2), [attended], E::kind(), present),
         ];
     }
 }
@@ -521,6 +532,9 @@ impl Graph for Recorder {
 fn node_of(a: &Any<Recorder>) -> i32 {
     return match a {
         F32(v) => v.id,
+        F16(v) => v.id,
+        BF16(v) => v.id,
+        U8(v) => v.id,
         I64(v) => v.id,
         Bool(v) => v.id,
     };
@@ -530,6 +544,9 @@ fn node_of(a: &Any<Recorder>) -> i32 {
 fn any_at(kind: ElementKind, id: i32) -> Any<Recorder> {
     return match kind {
         F32 => Any::F32(Value { id }),
+        F16 => Any::F16(Value { id }),
+        BF16 => Any::BF16(Value { id }),
+        U8 => Any::U8(Value { id }),
         I64 => Any::I64(Value { id }),
         Bool => Any::Bool(Value { id }),
     };
@@ -544,8 +561,23 @@ pub struct Untyped {
 /// program takes and returns.
 pub variant Any<affine G: Holds> {
     F32(G::Tensor<f32, Untyped>),
+    F16(G::Tensor<f16, Untyped>),
+    BF16(G::Tensor<bf16, Untyped>),
+    U8(G::Tensor<u8, Untyped>),
     I64(G::Tensor<i64, Untyped>),
     Bool(G::Tensor<bool, Untyped>),
+}
+
+/// The element `a` holds.
+pub fn kind_of<affine G: Holds>(a: &Any<G>) -> ElementKind {
+    return match a {
+        F32(_) => ElementKind::F32,
+        F16(_) => ElementKind::F16,
+        BF16(_) => ElementKind::BF16,
+        U8(_) => ElementKind::U8,
+        I64(_) => ElementKind::I64,
+        Bool(_) => ElementKind::Bool,
+    };
 }
 
 /// An element with a case of `Any`.
@@ -563,6 +595,45 @@ impl Erasable for f32 {
 
     fn of_any<affine G: Holds>(a: &Any<G>) -> &G::Tensor<f32, Untyped> {
         return f32s(a);
+    }
+}
+
+impl Erasable for f16 {
+    fn any<affine G: Holds>(t: G::Tensor<f16, Untyped>) -> Any<G> {
+        return Any::F16(t);
+    }
+
+    fn of_any<affine G: Holds>(a: &Any<G>) -> &G::Tensor<f16, Untyped> {
+        let F16(t) = a else {
+            unreachable();
+        };
+        return t;
+    }
+}
+
+impl Erasable for bf16 {
+    fn any<affine G: Holds>(t: G::Tensor<bf16, Untyped>) -> Any<G> {
+        return Any::BF16(t);
+    }
+
+    fn of_any<affine G: Holds>(a: &Any<G>) -> &G::Tensor<bf16, Untyped> {
+        let BF16(t) = a else {
+            unreachable();
+        };
+        return t;
+    }
+}
+
+impl Erasable for u8 {
+    fn any<affine G: Holds>(t: G::Tensor<u8, Untyped>) -> Any<G> {
+        return Any::U8(t);
+    }
+
+    fn of_any<affine G: Holds>(a: &Any<G>) -> &G::Tensor<u8, Untyped> {
+        let U8(t) = a else {
+            unreachable();
+        };
+        return t;
     }
 }
 
@@ -590,55 +661,44 @@ impl Erasable for bool {
 pub fn host_of<E: Element, Axes>(t: &Tensor<E, Axes>) -> Any<Cpu> {
     return match data_of(&t.data) {
         F32(data) => Any::F32(Tensor { data, extents: t.extents }),
+        F16(data) => Any::F16(Tensor { data, extents: t.extents }),
+        BF16(data) => Any::BF16(Tensor { data, extents: t.extents }),
+        U8(data) => Any::U8(Tensor { data, extents: t.extents }),
         I64(data) => Any::I64(Tensor { data, extents: t.extents }),
         Bool(data) => Any::Bool(Tensor { data, extents: t.extents }),
     };
 }
 
-/// `t`, an f32 tensor, as `Cpu` holds it among a program's arguments. It takes
-/// `t` by value so that a weight's data is not copied once more on the way.
-pub fn f32_host<Axes>(t: Tensor<f32, Axes>) -> Any<Cpu> {
-    return Any::F32(Tensor { data: t.data, extents: t.extents });
-}
-
-/// `t`, an i64 tensor, as `f32_host` takes an f32 one.
-pub fn i64_host<Axes>(t: Tensor<i64, Axes>) -> Any<Cpu> {
-    return Any::I64(Tensor { data: t.data, extents: t.extents });
-}
-
-/// `t`, a bool tensor, as `f32_host` takes an f32 one.
-pub fn bool_host<Axes>(t: Tensor<bool, Axes>) -> Any<Cpu> {
-    return Any::Bool(Tensor { data: t.data, extents: t.extents });
+/// `t` as `Cpu` holds it among a program's arguments. It takes `t` by value so
+/// that a weight's data is not copied once more on the way.
+pub fn hosted<E: Erasable, Axes>(t: Tensor<E, Axes>) -> Any<Cpu> {
+    return E::any::<Cpu>(Tensor { data: t.data, extents: t.extents });
 }
 
 /// `value`, held on the host, as `h` keeps it.
 pub fn kept_any<affine H: Holds>(h: &mut H, value: &Any<Cpu>) -> Any<H> with _ {
     return match value {
         F32(t) => Any::F32(h.keep(t)),
+        F16(t) => Any::F16(h.keep(t)),
+        BF16(t) => Any::BF16(h.keep(t)),
+        U8(t) => Any::U8(h.keep(t)),
         I64(t) => Any::I64(h.keep(t)),
         Bool(t) => Any::Bool(h.keep(t)),
     };
 }
 
-/// `a`, an f32 tensor, under the axes `Axes`.
-pub fn f32_of<affine G: Graph, Axes>(g: &G, a: &Any<G>) -> G::Tensor<f32, Axes> {
-    return g.relabeled::<f32, Untyped, Axes>(f32s(a));
-}
-
-/// `a`, an i64 tensor, under the axes `Axes`.
-pub fn i64_of<affine G: Graph, Axes>(g: &G, a: &Any<G>) -> G::Tensor<i64, Axes> {
-    return g.relabeled::<i64, Untyped, Axes>(i64s(a));
-}
-
-/// `a`, a bool tensor, under the axes `Axes`.
-pub fn bool_of<affine G: Graph, Axes>(g: &G, a: &Any<G>) -> G::Tensor<bool, Axes> {
-    return g.relabeled::<bool, Untyped, Axes>(bools(a));
+/// `a`, which must hold `E`, under the axes `Axes`.
+pub fn typed<affine G: Graph, E: Erasable, Axes>(g: &G, a: &Any<G>) -> G::Tensor<E, Axes> {
+    return g.relabeled::<E, Untyped, Axes>(E::of_any::<G>(a));
 }
 
 /// `a`'s extents.
 fn extents_of_any<affine G: Graph>(g: &G, a: &Any<G>) -> List<i32> with _ {
     return match a {
         F32(t) => g.extents_of(t),
+        F16(t) => g.extents_of(t),
+        BF16(t) => g.extents_of(t),
+        U8(t) => g.extents_of(t),
         I64(t) => g.extents_of(t),
         Bool(t) => g.extents_of(t),
     };
@@ -648,11 +708,7 @@ fn extents_of_any<affine G: Graph>(g: &G, a: &Any<G>) -> List<i32> with _ {
 pub fn assert_carries<affine G: Graph>(g: &G, held: &List<Any<G>>, returned: &List<Any<G>>) with _ {
     assert returned.len() == held.len(), "a loop's body returns each value it carries";
     for let [k, r] of returned.into_iter().enumerate() {
-        let same_element = match [r, &held[k]] {
-            [F32(_), F32(_)] | [I64(_), I64(_)] | [Bool(_), Bool(_)] => true,
-            _ => false,
-        };
-        assert same_element && extents_of_any(g, r) == extents_of_any(g, &held[k]), "a run returns what the next one takes";
+        assert kind_of(r) == kind_of(&held[k]) && extents_of_any(g, r) == extents_of_any(g, &held[k]), "a run returns what the next one takes";
     }
 }
 
@@ -882,128 +938,133 @@ impl<affine G: Graph> Run<G> {
         return &self.values[node.operands[i]];
     }
 
-    /// The `i`th operand, an f32 tensor, under the axes the composite's
-    /// signature spells.
-    fn f32_at<Axes>(&self, g: &G, node: &RecordedNode, i: i32) -> G::Tensor<f32, Axes> {
-        return g.relabeled::<f32, Untyped, Axes>(f32s(self.operand(node, i)));
+    /// The `i`th operand, of the element `E`.
+    fn of<E: Erasable>(&self, node: &RecordedNode, i: i32) -> &G::Tensor<E, Untyped> {
+        return E::of_any::<G>(self.operand(node, i));
     }
 
+    /// The `i`th operand under the axes the composite's signature spells.
+    fn at<E: Erasable, Axes>(&self, g: &G, node: &RecordedNode, i: i32) -> G::Tensor<E, Axes> {
+        return g.relabeled::<E, Untyped, Axes>(self.of::<E>(node, i));
+    }
+
+    /// The element type is settled once a node, here: by what the node
+    /// computes over, its operands' where its own differs.
     fn computed(&mut self, g: &mut G, id: i32, node: &RecordedNode) -> Any<G> with _ {
-        return match &node.op {
-            Constant(data) => match data {
+        if let Constant(data) = &node.op {
+            return match data {
                 F32(v) => Any::F32(g.upload(&Tensor::<f32, Untyped> { data: *v, extents: node.extents })),
+                F16(v) => Any::F16(g.upload(&Tensor::<f16, Untyped> { data: *v, extents: node.extents })),
+                BF16(v) => Any::BF16(g.upload(&Tensor::<bf16, Untyped> { data: *v, extents: node.extents })),
+                U8(v) => Any::U8(g.upload(&Tensor::<u8, Untyped> { data: *v, extents: node.extents })),
                 I64(v) => Any::I64(g.upload(&Tensor::<i64, Untyped> { data: *v, extents: node.extents })),
                 Bool(v) => Any::Bool(g.upload(&Tensor::<bool, Untyped> { data: *v, extents: node.extents })),
+            };
+        }
+        let over = if node.op matches { Convert | Compare(_) | ArgMax(_) } {
+            kind_of(self.operand(node, 0));
+        } else {
+            node.kind;
+        };
+        if node.op matches { Unary(_) | Reduce(_) | DotGeneral(_) | Convolution(_) | ReduceWindow(_) | ArgMax(_) | Attention(_) } {
+            return match over {
+                F32 => self.computed_in::<f32>(g, id, node),
+                F16 => self.computed_in::<f16>(g, id, node),
+                BF16 => self.computed_in::<bf16>(g, id, node),
+                U8 | I64 | Bool => unreachable(),
+            };
+        }
+        return match over {
+            F32 => self.computed_of::<f32>(g, node),
+            F16 => self.computed_of::<f16>(g, node),
+            BF16 => self.computed_of::<bf16>(g, node),
+            U8 => self.computed_of::<u8>(g, node),
+            I64 => self.computed_of::<i64>(g, node),
+            Bool => self.computed_of::<bool>(g, node),
+        };
+    }
+
+    /// A node any element computes, over `E`.
+    fn computed_of<E: Erasable>(&self, g: &mut G, node: &RecordedNode) -> Any<G> with _ {
+        return match &node.op {
+            Iota(dimension) => E::any::<G>(g.iota::<E, Untyped>(node.extents, *dimension)),
+            Convert => match node.kind {
+                F32 => Any::F32(g.convert::<E, f32, Untyped>(self.of::<E>(node, 0))),
+                F16 => Any::F16(g.convert::<E, f16, Untyped>(self.of::<E>(node, 0))),
+                BF16 => Any::BF16(g.convert::<E, bf16, Untyped>(self.of::<E>(node, 0))),
+                U8 => Any::U8(g.convert::<E, u8, Untyped>(self.of::<E>(node, 0))),
+                I64 => Any::I64(g.convert::<E, i64, Untyped>(self.of::<E>(node, 0))),
+                Bool => Any::Bool(g.convert::<E, bool, Untyped>(self.of::<E>(node, 0))),
             },
-            Iota(dimension) => match node.kind {
-                F32 => Any::F32(g.iota::<f32, Untyped>(node.extents, *dimension)),
-                I64 => Any::I64(g.iota::<i64, Untyped>(node.extents, *dimension)),
-                Bool => Any::Bool(g.iota::<bool, Untyped>(node.extents, *dimension)),
-            },
-            Convert => match self.operand(node, 0) {
-                F32(t) => converted::<G, f32>(g, t, node.kind),
-                I64(t) => converted::<G, i64>(g, t, node.kind),
-                Bool(t) => converted::<G, bool>(g, t, node.kind),
-            },
-            Unary(op) => Any::F32(g.unary::<Untyped>(*op, f32s(self.operand(node, 0)))),
-            Binary(op) => match [
-                self.operand(node, 0),
-                self.operand(node, 1),
-            ] {
-                [F32(a), F32(b)] => Any::F32(g.binary::<f32, Untyped>(*op, a, b)),
-                [I64(a), I64(b)] => Any::I64(g.binary::<i64, Untyped>(*op, a, b)),
-                _ => unreachable(),
-            },
-            Compare(direction) => match [
-                self.operand(node, 0),
-                self.operand(node, 1),
-            ] {
-                [F32(a), F32(b)] => Any::Bool(g.compare::<f32, Untyped>(*direction, a, b)),
-                [I64(a), I64(b)] => Any::Bool(g.compare::<i64, Untyped>(*direction, a, b)),
-                [Bool(a), Bool(b)] => Any::Bool(g.compare::<bool, Untyped>(*direction, a, b)),
-                _ => unreachable(),
-            },
-            Select => {
-                let Bool(pred) = self.operand(node, 0) else {
-                    unreachable();
-                };
-                match [
-                    self.operand(node, 1),
-                    self.operand(node, 2),
-                ] {
-                    [F32(a), F32(b)] => Any::F32(g.select::<f32, Untyped>(pred, a, b)),
-                    [I64(a), I64(b)] => Any::I64(g.select::<i64, Untyped>(pred, a, b)),
-                    [Bool(a), Bool(b)] => Any::Bool(g.select::<bool, Untyped>(pred, a, b)),
-                    _ => unreachable(),
-                }
-            },
-            BroadcastInDim(_) | Reshape | Transpose(_) | Slice(_) | Reverse(_) => match self.operand(node, 0) {
-                F32(t) => Any::F32(regrouped::<G, f32>(g, node, t)),
-                I64(t) => Any::I64(regrouped::<G, i64>(g, node, t)),
-                Bool(t) => Any::Bool(regrouped::<G, bool>(g, node, t)),
-            },
-            Concatenate(dimension) => match [
-                self.operand(node, 0),
-                self.operand(node, 1),
-            ] {
-                [F32(a), F32(b)] => Any::F32(g.concatenate::<f32, Untyped, Untyped, Untyped>(a, b, *dimension)),
-                [I64(a), I64(b)] => Any::I64(g.concatenate::<i64, Untyped, Untyped, Untyped>(a, b, *dimension)),
-                [Bool(a), Bool(b)] => Any::Bool(g.concatenate::<bool, Untyped, Untyped, Untyped>(a, b, *dimension)),
-                _ => unreachable(),
-            },
-            Reduce([op, init, dims]) => Any::F32(g.reduce::<Untyped, Untyped>(
-                f32s(self.operand(node, 0)),
+            Binary(op) => E::any::<G>(g.binary::<E, Untyped>(*op, self.of::<E>(node, 0), self.of::<E>(node, 1))),
+            Compare(direction) => Any::Bool(g.compare::<E, Untyped>(
+                *direction,
+                self.of::<E>(node, 0),
+                self.of::<E>(node, 1),
+            )),
+            Select => E::any::<G>(g.select::<E, Untyped>(
+                bools(self.operand(node, 0)),
+                self.of::<E>(node, 1),
+                self.of::<E>(node, 2),
+            )),
+            BroadcastInDim(_) | Reshape | Transpose(_) | Slice(_) | Reverse(_) => E::any::<G>(regrouped::<G, E>(
+                g,
+                node,
+                self.of::<E>(node, 0),
+            )),
+            Concatenate(dimension) => E::any::<G>(g.concatenate::<E, Untyped, Untyped, Untyped>(
+                self.of::<E>(node, 0),
+                self.of::<E>(node, 1),
+                *dimension,
+            )),
+            Gather(dims) => E::any::<G>(g.gather::<E, Untyped, Untyped, Untyped>(
+                self.of::<E>(node, 0),
+                i64s(self.operand(node, 1)),
+                dims,
+            )),
+            Scatter(dims) => E::any::<G>(g.scatter::<E, Untyped, Untyped, Untyped>(
+                self.of::<E>(node, 0),
+                i64s(self.operand(node, 1)),
+                self.of::<E>(node, 2),
+                dims,
+            )),
+            _ => unreachable(),
+        };
+    }
+
+    /// A node only a float computes, in `E`.
+    fn computed_in<E: Erasable + Float>(&mut self, g: &mut G, id: i32, node: &RecordedNode) -> Any<G> with _ {
+        return match &node.op {
+            Unary(op) => E::any::<G>(g.unary::<E, Untyped>(*op, self.of::<E>(node, 0))),
+            Reduce([op, init, dims]) => E::any::<G>(g.reduce::<E, Untyped, Untyped>(
+                self.of::<E>(node, 0),
                 *op,
                 *init,
                 *dims,
             )),
-            DotGeneral(dims) => Any::F32(g.dot_general::<Untyped, Untyped, Untyped>(
-                f32s(self.operand(node, 0)),
-                f32s(self.operand(node, 1)),
+            DotGeneral(dims) => E::any::<G>(g.dot_general::<E, Untyped, Untyped, Untyped>(
+                self.of::<E>(node, 0),
+                self.of::<E>(node, 1),
                 dims,
             )),
-            Gather(dims) => {
-                let I64(indices) = self.operand(node, 1) else {
-                    unreachable();
-                };
-                match self.operand(node, 0) {
-                    F32(t) => Any::F32(g.gather::<f32, Untyped, Untyped, Untyped>(t, indices, dims)),
-                    I64(t) => Any::I64(g.gather::<i64, Untyped, Untyped, Untyped>(t, indices, dims)),
-                    Bool(t) => Any::Bool(g.gather::<bool, Untyped, Untyped, Untyped>(t, indices, dims)),
-                }
-            },
-            Scatter(dims) => {
-                let I64(indices) = self.operand(node, 1) else {
-                    unreachable();
-                };
-                match [
-                    self.operand(node, 0),
-                    self.operand(node, 2),
-                ] {
-                    [F32(a), F32(u)] => Any::F32(g.scatter::<f32, Untyped, Untyped, Untyped>(a, indices, u, dims)),
-                    [I64(a), I64(u)] => Any::I64(g.scatter::<i64, Untyped, Untyped, Untyped>(a, indices, u, dims)),
-                    [Bool(a), Bool(u)] => Any::Bool(g.scatter::<bool, Untyped, Untyped, Untyped>(a, indices, u, dims)),
-                    _ => unreachable(),
-                }
-            },
-            Convolution(conv) => Any::F32(g.convolution::<Untyped, Untyped, Untyped>(
-                f32s(self.operand(node, 0)),
-                f32s(self.operand(node, 1)),
+            Convolution(conv) => E::any::<G>(g.convolution::<E, Untyped, Untyped, Untyped>(
+                self.of::<E>(node, 0),
+                self.of::<E>(node, 1),
                 conv,
             )),
-            ReduceWindow([op, init, window]) => Any::F32(g.reduce_window::<Untyped, Untyped>(
-                f32s(self.operand(node, 0)),
+            ReduceWindow([op, init, window]) => E::any::<G>(g.reduce_window::<E, Untyped, Untyped>(
+                self.of::<E>(node, 0),
                 *op,
                 *init,
                 window,
             )),
-            ArgMax(axis) => Any::I64(g.arg_max::<Untyped>(f32s(self.operand(node, 0)), *axis)),
+            ArgMax(axis) => Any::I64(g.arg_max::<E, Untyped>(self.of::<E>(node, 0), *axis)),
             Attention(attention) => {
-                let [attended, present_k, present_v] = self.attended(g, node, attention);
+                let [attended, present_k, present_v] = self.attended::<E>(g, node, attention);
                 self.parts[id] = [present_k, present_v];
                 attended;
             },
-            Parameter(_) | Part(_) | Yield | Case(_) | Repeat(_) | Carried => unreachable(),
+            _ => unreachable(),
         };
     }
 
@@ -1020,35 +1081,40 @@ impl<affine G: Graph> Run<G> {
             return null;
         }
         *next += 1;
-        return Option::Some(i64_of::<G, [Slots]>(g, self.operand(node, *next - 1)));
+        return Option::Some(typed::<G, i64, [Slots]>(g, self.operand(node, *next - 1)));
     }
 
     /// An attention node's attended queries and presents, by `g`'s
     /// `group_query_attention`.
-    fn attended(&self, g: &mut G, node: &RecordedNode, attention: &AttentionNode) -> [Any<G>, Any<G>, Any<G>] with _ {
+    fn attended<E: Erasable + Float>(
+        &self,
+        g: &mut G,
+        node: &RecordedNode,
+        attention: &AttentionNode,
+    ) -> [Any<G>, Any<G>, Any<G>] with _ {
         let mut next = 5;
         let past_length = self.length_at(g, node, attention.shared, &mut next);
         let bound = self.length_at(g, node, attention.bounded, &mut next);
-        let [cos, sin]: [Option<G::Tensor<f32, [Untyped, Untyped]>>, Option<G::Tensor<f32, [Untyped, Untyped]>>] = if attention.rotary {
+        let [cos, sin]: [Option<G::Tensor<E, [Untyped, Untyped]>>, Option<G::Tensor<E, [Untyped, Untyped]>>] = if attention.rotary {
             next += 2;
             [
-                Option::Some(self.f32_at(g, node, next - 2)),
-                Option::Some(self.f32_at(g, node, next - 1)),
+                Option::Some(self.at(g, node, next - 2)),
+                Option::Some(self.at(g, node, next - 1)),
             ];
         } else {
             [null, null];
         };
-        let bias: Option<G::Tensor<f32, [Untyped, Untyped, Untyped, Untyped]>> = if attention.biased {
-            Option::Some(self.f32_at(g, node, next));
+        let bias: Option<G::Tensor<E, [Untyped, Untyped, Untyped, Untyped]>> = if attention.biased {
+            Option::Some(self.at(g, node, next));
         } else {
             null;
         };
-        let [a, k, v] = g.group_query_attention::<Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
-            &self.f32_at(g, node, 0),
-            &self.f32_at(g, node, 1),
-            &self.f32_at(g, node, 2),
-            &self.f32_at(g, node, 3),
-            &self.f32_at(g, node, 4),
+        let [a, k, v] = g.group_query_attention::<E, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
+            &self.at(g, node, 0),
+            &self.at(g, node, 1),
+            &self.at(g, node, 2),
+            &self.at(g, node, 3),
+            &self.at(g, node, 4),
             optional(&past_length),
             optional(&bound),
             optional(&cos),
@@ -1057,9 +1123,9 @@ impl<affine G: Graph> Run<G> {
             &attention.options,
         );
         return [
-            Any::F32(g.relabeled::<f32, [Untyped, Untyped, Untyped], Untyped>(&a)),
-            Any::F32(g.relabeled::<f32, [Untyped, Untyped, Untyped, Untyped], Untyped>(&k)),
-            Any::F32(g.relabeled::<f32, [Untyped, Untyped, Untyped, Untyped], Untyped>(&v)),
+            E::any::<G>(g.relabeled::<E, [Untyped, Untyped, Untyped], Untyped>(&a)),
+            E::any::<G>(g.relabeled::<E, [Untyped, Untyped, Untyped, Untyped], Untyped>(&k)),
+            E::any::<G>(g.relabeled::<E, [Untyped, Untyped, Untyped, Untyped], Untyped>(&v)),
         ];
     }
 }
@@ -1083,15 +1149,6 @@ internal fn bools<affine G: Holds>(a: &Any<G>) -> &G::Tensor<bool, Untyped> {
         unreachable();
     };
     return t;
-}
-
-/// `t` converted to the element `to` names.
-fn converted<affine G: Graph, A: Element>(g: &mut G, t: &G::Tensor<A, Untyped>, to: ElementKind) -> Any<G> with _ {
-    return match to {
-        F32 => Any::F32(g.convert::<A, f32, Untyped>(t)),
-        I64 => Any::I64(g.convert::<A, i64, Untyped>(t)),
-        Bool => Any::Bool(g.convert::<A, bool, Untyped>(t)),
-    };
 }
 
 /// A node that moves its one operand's elements, over `t`.

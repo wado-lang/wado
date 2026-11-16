@@ -648,7 +648,7 @@ test "ArgMax of an i64 operand stops the build" {
     let source = `g (int64[2, 4] X) => (int64[2, 1] Y) {
         Y = ArgMax <axis = 1> (X)
     }`;
-    assert y_axes(source).unwrap_err() == "Y = ArgMax: operand X is i64, and ArgMax ranks f32";
+    assert y_axes(source).unwrap_err() == "Y = ArgMax: operand X is i64, and ArgMax ranks a float";
 }
 
 test "Reshape merges adjacent axes into one named by its parts" {
@@ -724,7 +724,28 @@ test "arithmetic on an int64 tensor stops the build" {
     let source = `g (int64[4] M) => (int64[4] Y) {
         Y = Add(M, M)
     }`;
-    assert y_axes(source).unwrap_err() == "Y = Add: operand M is i64, and Add computes in f32";
+    assert y_axes(source).unwrap_err() == "Y = Add: operand M is i64, and Add computes in a float";
+}
+
+test "a kernel computes in its operands' float, and Cast names another" {
+    let source = `g (float16[4] X, bfloat16[4] B) => (float16[4] Y, int64[] I, bfloat16[4] Z, float16[4] H) {
+        Y = Add(X, X)
+        I = ArgMax<keepdims = 0>(Y)
+        Z = Relu(B)
+        H = Cast<to = 10>(Z)
+    }`;
+    let checked = infer(&read(&source).unwrap()).unwrap();
+    assert checked.primitives["Y"] == "f16";
+    assert checked.primitives["I"] == "i64";
+    assert checked.primitives["Z"] == "bf16";
+    assert checked.primitives["H"] == "f16";
+}
+
+test "operands of two floats stop the build" {
+    let source = `g (float16[4] X, float[4] W) => (float16[4] Y) {
+        Y = Add(X, W)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Add: operand W is f32 and X is f16, and Add computes in one float";
 }
 
 test "Where broadcasts its three operands and takes its branches' element" {

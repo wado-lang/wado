@@ -21,6 +21,7 @@ use {
     GpuShaderModule,
     GpuComputePipeline,
     GpuComputePassEncoder,
+    GpuSupportedFeatures,
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
@@ -29,7 +30,7 @@ use { WebGpuBackend } from "lib:loam";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
 use gpt2 from "./tiny_gpt2.wado";
 
-export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
     let Some(mut gpu) = WebGpuBackend::new() else {
         println("no WebGPU adapter");
         return;

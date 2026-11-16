@@ -108,6 +108,7 @@ mise run format          # format Rust, Markdown, and Wado files
 - A CI-only timeout in a test that reads `wasi:clocks`, once it passes on the merged tree, is the runner's slowness, not the branch.
 - Run `/code-review-response` to answer any review finding, whoever the reviewer is and however it reaches you. A finding arriving as a pull request event is one, and handling it straight from the event skips every step the skill ends with.
 - Another implementation's code is never a source: its license does not reach this repository, and code written after reading it is a derivative. A rule comes from the specification; an implementation may be run as a black-box oracle. A package's `AGENTS.md` lists what it may read.
+- Write a script or a tool in Wado and run it with `wado run`. An oracle may be in another language.
 - Do not commit a binary: its diff is unreadable. Where a text form means the same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for `.onnx`).
 
 ## Instruction Files

@@ -37,6 +37,21 @@ pub fn le_bytes(data: &Data) -> ByteList {
                 push_le(&mut bytes, v.to_bits() as u64, 4);
             }
         },
+        F16(values) => {
+            for let v of values {
+                push_le(&mut bytes, v.to_bits() as u64, 2);
+            }
+        },
+        BF16(values) => {
+            for let v of values {
+                push_le(&mut bytes, v.to_bits() as u64, 2);
+            }
+        },
+        U8(values) => {
+            for let v of values {
+                bytes.push(*v);
+            }
+        },
         I64(values) => {
             for let v of values {
                 push_le(&mut bytes, *v as u64, 8);
@@ -112,6 +127,9 @@ fn node_name(id: i32) -> String {
 fn element_name(kind: ElementKind) -> String {
     return match kind {
         F32 => "f32",
+        F16 => "f16",
+        BF16 => "bf16",
+        U8 => "ui8",
         I64 => "i64",
         Bool => "i1",
     };
@@ -184,9 +202,9 @@ fn direction_name(direction: Comparison) -> String {
 
 fn comparison_type_name(kind: ElementKind) -> String {
     return match kind {
-        F32 => "FLOAT",
+        F32 | F16 | BF16 => "FLOAT",
         I64 => "SIGNED",
-        Bool => "UNSIGNED",
+        U8 | Bool => "UNSIGNED",
     };
 }
 
@@ -317,8 +335,8 @@ impl Writer {
             Constant(data) => self.constant(id, node, data),
             Iota(dimension) => self.line(id, node, "stablehlo.iota", "", ` {iota_dimension = ${*dimension} : i64}`),
             Convert => self.line(id, node, "stablehlo.convert", "", ""),
-            Unary(op) => self.line(id, node, unary_name(*op), "", ""),
-            Binary(op) => self.line(id, node, binary_name(*op), "", ""),
+            Unary(op) => self.computed(id, node, unary_name(*op)),
+            Binary(op) => self.computed(id, node, binary_name(*op)),
             Compare(direction) => {
                 let kind = self.recorded.nodes[node.operands[0]].kind;
                 self.line(id, node, "stablehlo.compare", "", comparison_attributes(direction_name(*direction), kind));
@@ -348,11 +366,19 @@ impl Writer {
             Reduce([op, init, dims]) => {
                 self.folded(id, node, "stablehlo.reduce", *op, *init, ` {dimensions = ${dense_array(dims)}}`);
             },
-            DotGeneral(dims) => self.line(id, node, "stablehlo.dot_general", "", dot_attributes(dims)),
+            DotGeneral(dims) => self.summed(id, node, "stablehlo.dot_general", "", "", "", dot_attributes(dims)),
             Gather(dims) => self.gathered(id, node, dims),
             Scatter(dims) => self.scattered(id, node, dims),
             Convolution(conv) => {
-                self.line(id, node, "stablehlo.convolution", "", convolution_attributes(conv, node.extents.len() - 2));
+                self.summed(
+                    id,
+                    node,
+                    "stablehlo.convolution",
+                    "",
+                    "",
+                    "",
+                    convolution_attributes(conv, node.extents.len() - 2),
+                );
             },
             ReduceWindow([op, init, window]) => {
                 self.folded(id, node, "stablehlo.reduce_window", *op, *init, window_attributes(window));
@@ -393,22 +419,72 @@ impl Writer {
         self.lined(id, node, "stablehlo.convert", bytes_name, raw, "", "");
     }
 
+    /// `op` over the node's operands, elementwise. A half one goes through f32.
+    /// XLA folds the widening of a bf16 result into the operation that computed
+    /// it, which then never rounds, and a graph it computes in f16 lands a few
+    /// f16 steps from one whose every operation rounds once.
+    fn computed(&mut self, id: i32, node: &RecordedNode, op: String) {
+        if node.kind matches { BF16 | F16 } {
+            self.summed(id, node, op, "", "", "", "");
+        } else {
+            self.line(id, node, op, "", "");
+        }
+    }
+
+    /// `op` over the node's operands and then `more`, whose types are
+    /// `more_types`, each opening with a comma. It accumulates in f32: a half
+    /// operand widens on the way in and the result rounds once, as a long sum in
+    /// a half loses its small terms.
+    fn summed(
+        &mut self,
+        id: i32,
+        node: &RecordedNode,
+        op: String,
+        more: String,
+        more_types: String,
+        regions: String,
+        attributes: String,
+    ) {
+        if node.kind matches { F32 } {
+            self.lined(
+                id,
+                node,
+                op,
+                `${self.operand_list(&node.operands)}${more}`,
+                `${self.types_of(&node.operands)}${more_types}`,
+                regions,
+                attributes,
+            );
+            return;
+        }
+        let n = node_name(id);
+        let mut names: List<String> = [];
+        let mut types: List<String> = [];
+        for let [k, operand] of node.operands.into_iter().enumerate() {
+            names.push(`${n}w${k}`);
+            types.push(self.widened(`${n}w${k}`, operand));
+        }
+        let wide = type_of(ElementKind::F32, &node.extents);
+        self.text.push_str(
+            `${n}s = "${op}"(${names.join(", ")}${more})${regions}${attributes} : (${types.join(", ")}${more_types}) -> ${wide}\n`,
+        );
+        self.lined(id, node, "stablehlo.convert", `${n}s`, wide, "", "");
+    }
+
+    /// Node `id` in f32 under `name`, and the type it has there.
+    fn widened(&mut self, name: String, id: i32) -> String {
+        let wide = type_of(ElementKind::F32, &self.recorded.nodes[id].extents);
+        self.text.push_str(`${name} = "stablehlo.convert"(${self.name(id)}) : (${self.type_at(id)}) -> ${wide}\n`);
+        return wide;
+    }
+
     /// `op` folding the operand with `binary`, from `init`.
     fn folded(&mut self, id: i32, node: &RecordedNode, op: String, binary: Binary, init: f32, attributes: String) {
         let scalar = "tensor<f32>";
         let n = node_name(id);
         self.scalar(`${n}i`, `0x${init.to_bits():08X}`, scalar);
         let body = ` ({\n^bb0(${n}a: ${scalar}, ${n}b: ${scalar}):\n${n}r = "${binary_name(binary)}"(${n}a, ${n}b) : (${scalar}, ${scalar}) -> ${scalar}\n"stablehlo.return"(${n}r) : (${scalar}) -> ()\n})`;
-        let operand = node.operands[0];
-        self.lined(
-            id,
-            node,
-            op,
-            `${self.name(operand)}, ${n}i`,
-            `${self.type_at(operand)}, ${scalar}`,
-            body,
-            attributes,
-        );
+        self.summed(id, node, op, `, ${n}i`, `, ${scalar}`, body, attributes);
     }
 
     /// A gather from a weight in bf16 reads it as it is and widens what it read:
@@ -447,7 +523,13 @@ impl Writer {
         let n = node_name(id);
         let operand = node.operands[0];
         let extents = &self.recorded.nodes[operand].extents;
-        let values = type_of(ElementKind::F32, extents);
+        let mut compared = self.name(operand);
+        let mut values = self.type_at(operand);
+        if !self.recorded.nodes[operand].kind matches { F32 } {
+            // Widening a half is exact, so the order is the operand's own.
+            compared = `${n}y`;
+            values = self.widened(compared, operand);
+        }
         let indices = type_of(ElementKind::I64, extents);
         let f = "tensor<f32>";
         let i = "tensor<i64>";
@@ -457,7 +539,7 @@ impl Writer {
         self.text.push_str(`${n}k = "stablehlo.iota"() {iota_dimension = ${axis} : i64} : () -> ${indices}\n`);
         self.scalar(`${n}v`, "0xFF800000", f);
         self.scalar(`${n}m`, `${i64::MAX}`, i);
-        self.text.push_str(`${n}r:2 = "stablehlo.reduce"(${self.name(operand)}, ${n}k, ${n}v, ${n}m) ({\n`);
+        self.text.push_str(`${n}r:2 = "stablehlo.reduce"(${compared}, ${n}k, ${n}v, ${n}m) ({\n`);
         self.text.push_str(`^bb0(${n}a: ${f}, ${n}c: ${i}, ${n}b: ${f}, ${n}d: ${i}):\n`);
         self.text.push_str(scalar_compared(`${n}e`, "NE", ElementKind::F32, `${n}a`, `${n}a`));
         self.text.push_str(scalar_compared(`${n}f`, "NE", ElementKind::F32, `${n}b`, `${n}b`));

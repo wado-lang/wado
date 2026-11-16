@@ -668,9 +668,16 @@ internal fn axis_list(shape: &Shape) -> String {
     return shape.names().join(", ");
 }
 
+/// `value` as an expression of `element`, a float. A half is rounded from the
+/// f32 spelling, which holds every half exactly.
+internal fn float_literal(element: &String, value: f32) -> String {
+    let spelled = f32_literal(value);
+    return if *element == "f32" { spelled } else { `${*element}::from_f32(${spelled})` };
+}
+
 /// A constant as an expression the generated source spells. Wado has no
 /// literal for a non-finite float, and a mask is written with `-inf`.
-internal fn float_literal(value: f32) -> String {
+internal fn f32_literal(value: f32) -> String {
     if value.is_nan() {
         return "f32::NAN";
     }

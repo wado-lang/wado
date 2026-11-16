@@ -18,7 +18,7 @@ use {
     strided_gather,
     written_at,
 } from "./hlo.wado";
-use { Cpu, Holds, Tensor } from "./tensor.wado";
+use { Cpu, Float, Holds, Tensor } from "./tensor.wado";
 use { Any, Recorder, Untyped } from "./recorded.wado";
 
 /// One token of the vocabulary.
@@ -114,13 +114,10 @@ impl Sampling {
 
     /// The tokens `logits` picks for the position `at`, on the host, of `[..,
     /// tokens]`: what a pass over a prompt leaves to the program after it.
-    pub fn first_tokens<Axes>(&self, logits: &Tensor<f32, Axes>, at: i64) -> List<i64> {
+    pub fn first_tokens<F: Float, Axes>(&self, logits: &Tensor<F, Axes>, at: i64) -> List<i64> {
         let mut cpu = Cpu {};
-        let extents = logits.extents;
-        let rows = extents[0];
-        let decoding = Decoding::new(&mut cpu, self, List::<bool>::filled(rows, false), 1, [at]);
-        let flat: Tensor<f32, [Slots, Tokens]> = cpu.reshape(logits, [rows, extents[extents.len() - 1]]);
-        return picked(&mut cpu, &flat, &decoding, &scalar(&mut cpu, 0 as i64)).data;
+        let decoding = Decoding::new(&mut cpu, self, List::<bool>::filled(logits.extents[0], false), 1, [at]);
+        return picked(&mut cpu, &rows_of::<Cpu, F, Axes>(&mut cpu, logits), &decoding, &scalar(&mut cpu, 0 as i64)).data;
     }
 }
 
@@ -256,18 +253,16 @@ fn carried_by<affine G: Graph>(
 
 /// The step `step` of `decoding`, over a pass's `logits`, of `[rows, .., tokens]`
 /// with one element along the rest, and the `tokens` and `finished` it carries.
-pub fn stepped<affine G: Graph, Axes>(
+pub fn stepped<affine G: Graph, F: Float, Axes>(
     g: &mut G,
-    logits: &G::Tensor<f32, Axes>,
+    logits: &G::Tensor<F, Axes>,
     decoding: &Decoding<G>,
     tokens: &G::Tensor<i64, [Slots, Picks]>,
     finished: &G::Tensor<bool, [Slots]>,
     step: &G::Tensor<i64, []>,
 ) -> Stepped<G> with _ {
-    let extents = g.extents_of(logits);
-    let rows = extents[0];
-    let flat: G::Tensor<f32, [Slots, Tokens]> = g.reshape(logits, [rows, extents[extents.len() - 1]]);
-    let mut token = picked(g, &flat, decoding, step);
+    let rows = g.extents_of(logits)[0];
+    let mut token = picked(g, &rows_of::<G, F, Axes>(g, logits), decoding, step);
     let mut ended = *finished;
     if !decoding.ends.is_empty() {
         let first: G::Tensor<i64, [Slots]> = g.broadcast_in_dim(&decoding.ends[0], [rows], []);
@@ -296,6 +291,17 @@ pub fn opened<affine G: Graph, Axes>(
     return written_at::<G, i64, Axes, [Slots, One]>(g, mask, &ones, 1, at, Option::Some(0));
 }
 
+/// A pass's `logits`, of `[rows, .., tokens]` with one element along the rest,
+/// a row each, in the f32 a sampler computes in whatever float the model does.
+fn rows_of<affine G: Graph, F: Float, Axes>(
+    g: &mut G,
+    logits: &G::Tensor<F, Axes>,
+) -> G::Tensor<f32, [Slots, Tokens]> with _ {
+    let extents = g.extents_of(logits);
+    let flat: G::Tensor<F, [Slots, Tokens]> = g.reshape(logits, [extents[0], extents[extents.len() - 1]]);
+    return g.convert(&flat);
+}
+
 /// The token each row of `logits` picks for the step `step`: its greatest
 /// logit, or the step's draw among those `decoding` keeps.
 fn picked<affine G: Graph>(
@@ -314,7 +320,7 @@ fn picked<affine G: Graph>(
     let greatest: G::Tensor<f32, [Slots]> = g.reduce(logits, Binary::Maximum, f32::NEG_INFINITY, [1]);
     let below = g.binary(Binary::Subtract, logits, &by_row(g, &greatest, &extents));
     let scaled = g.binary(Binary::Divide, &below, &g.broadcast_in_dim(&decoding.temperature, extents, []));
-    let mut probabilities = softmax::<G, [Slots, Tokens]>(g, &scaled, 1);
+    let mut probabilities = softmax::<G, f32, [Slots, Tokens]>(g, &scaled, 1);
     if decoding.sampler.filters_top_k {
         let ones = full::<G, f32, [Slots, Tokens]>(g, 1.0, extents);
         let wanted: G::Tensor<f32, [Slots]> = g.broadcast_in_dim(&decoding.top_k, rows, []);

@@ -11,155 +11,205 @@ leaves this file, and `design.md` states what it built.
 
 ## Roadmap
 
-1. [ ] TPU and WebGPU at their best speed. A pass is a graph built once per
-   shape class and compiled for each device: StableHLO through `core:pjrt` for
-   a TPU, Loam's own compiler for WebGPU. See
-   [Loam on TPU and WebGPU](./devices.md), whose plan lists the steps, a TPU
-   run and many requests at once among them. Finished when every step of that
-   plan is.
-2. [ ] Narrowed outputs. A use site can name an output that each call reads at
-   one position per row, and optionally only at some token ids. The call gives
-   the positions and the ids. The generated module then computes only those
-   values, as `outputs` already cuts the graph to what it reads (see The Graph
-   Is ONNX). Picking each row's position moves above every node that works on
-   each position alone. The ids pick entries along the head weight's
-   vocabulary axis before its product. So the head's cost grows with the
-   number of ids, not with the vocabulary, and no pass holds a logit for every
-   position and token. Finished when the Gemma 3 example ranks the next token
-   from the last position alone, and its logits at given ids lie within the
-   tolerance of onnxruntime's at those ids. The `last` option does the first
-   half: it fixes the position at the build, as the last one along an axis.
-3. [ ] Decisions. A decision asks a model one question about a state and
-   reads the probability of each answer from one pass, rather than generating
-   text. Loam's decision module takes any model that gives narrowed logits,
-   and that model's tokenizer. The caller spells the model's chat turns. A
-   question is a choice among options, given at run time. A yes-or-no question
-   is a choice of two. A score is a choice among the points of a scale, and its
-   answer also gives their expected value. Each option is labelled with a
-   letter, so a choice holds at most 26. A label's id is the token the letter
-   adds when it follows the prompt, so the chat turns decide whether that is
-   `A` or ` A`. A letter that adds more than one token, or changes the
-   prompt's own tokens, stops the call. The answer is the softmax of the
-   logits at the labels. Finished when the Gemma 3 example answers a set of
-   questions with probabilities within the tolerance of those onnxruntime's
-   logits give.
-4. [ ] A state read by many questions. The state's tokens run once. Each
-   question runs only its own tokens, against the state's cache, and leaves
-   that cache as it was. Finished when `design.md` records the time several
-   questions take against one state of 1,000 tokens as a ratio to the time
-   with the state run for each, beside the commands that measured both, and
-   each probability lies within the tolerance of the one it gets with the
-   state run for it.
-5. [ ] Questions in one pass. The questions on one state run as the rows of
-   one pass, so the device reads each weight once for all of them. A shorter
-   question is padded at its end, and its answer is read at its own last
-   token. Every row reads the state's cache, which keeps its batch of one
-   rather than being copied for each row. The graph gives the past and the new
-   tokens one batch axis, and `compute` checks that the inputs agree on it
-   (see Axis Identity Is a Type, Extents Are Values). This item changes that
-   check to admit a past of batch one beside n rows. Finished when `design.md`
-   records the time n questions take as rows of one pass as a ratio to the
-   time they take one after another, for several n and questions of different
-   lengths, and each probability lies within the tolerance of the one its
-   question gets alone.
-6. [ ] Calibrated decisions. Each kind of question, at each number of options,
-   has a temperature that divides the logits before the softmax, so that an
-   answer given 0.8 is right about 80% of the time. A temperature keeps each
-   question's ranking, so a model's bias toward a label, such as `A`, stays as
-   it was. The caller passes the temperatures, and a tool in `tools/` fits them
-   from questions with known answers. Finished when `design.md` records, on
-   questions held out of the fit, the expected calibration error before and
-   after, and for each label how often it is the answer given and how often it
-   is the right one. It names the data set and its license.
-7. [ ] A model larger than the guest's heap splits. `onnx_split` writes the
-   checkpoint a tensor at a time rather than holding the model. Finished when
-   Gemma 4 E2B's export splits and `loam dump` reports its decoder and its
-   embedding graph, each refusal naming the operator it stops at.
-8. [ ] More elementwise operators. `Equal`, `Less`, `LessOrEqual`, `Greater`,
-   `GreaterOrEqual`, `Not`, `And` and `Or`, as `Expr` steps that yield a
-   `bool`, and `Softplus` and `Reciprocal`. Finished when `operators_test.wado`
-   holds each to onnxruntime, and a mask built from a comparison joins the
-   kernel of the `Where` reading it.
-9. [ ] Nodes of several outputs. Stage 0 gives every node a shape per output,
-   as it does `Split`'s. Finished when the cases of a recurrent decoder's
-   onnxruntime operators that read a second output pass.
-10. [ ] The onnxruntime operators of a recurrent decoder: `LinearAttention`
-    with each of its update rules, `CausalConvWithState`, and
-    `SkipSimplifiedLayerNormalization`, and a `GroupQueryAttention` that
-    rotates part of each head. Finished when `operators_test.wado` holds each
-    to onnxruntime, with and without a past state.
-11. [ ] onnxruntime's `RotaryEmbedding` and `FastGelu`. Finished when
-    `operators_test.wado` holds each to onnxruntime, a rotation of part of each
-    head by `rotary_embedding_dim` and one by position ids among the cases.
-12. [ ] Loading a tensor at a time. `load` reads the checkpoint from a source
-    that yields one tensor's bytes at a time, rather than from the whole file
-    the guest holds. Finished when a checkpoint larger than the guest's memory
-    loads onto `WebGpuBackend`.
-13. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
-    which onnx-community's `q4` exports use. A weight stays packed on the
-    device, read by the quantized product composite or by a quantized gather
-    (see [Loam on TPU and WebGPU](./devices.md)).
-    Finished when Gemma 3 (270M)'s `q4` export picks the tokens onnxruntime
-    picks from it.
-14. [ ] Qwen 3.5 0.8B, a decoder whose layers are mostly recurrent. Finished
-    when `example/qwen3.5-0.8b/` continues a prompt with the tokens onnxruntime
-    picks, under `wado run-webgpu` from onnx-community's `q4` export of the
-    text model, with no line that names a layer, and its tokenizer gives the
-    ids Hugging Face's gives.
-15. [ ] A table stays where it is stored. A weight that only a `Gather` reads,
-    as an embedding is, is prepared as a table whose storage the backend
-    chooses, and a pass reads only the rows it gathers. Finished when Gemma 4
-    E2B's per-layer embedding, which has more elements than a `List` holds,
-    serves its rows with the host holding none of the rest.
-16. [ ] Gemma 4 E2B. Finished when `example/gemma4-e2b/` continues a prompt
-    with the tokens onnxruntime picks, under `wado run-webgpu` from
-    onnx-community's `q4` export, with no line that names a layer.
-17. [ ] A half graph keeps its type. Every kernel stores the element type the
-    graph gives its output, `Params` holds a half weight as a half, and
-    `WebGpuBackend` computes in f16 where the device offers `shader-f16` (see
-    Wado Stores a Half, a Device Computes In It). Finished when Gemma 3
-    (270M)'s `fp16` export picks the tokens onnxruntime picks from it on `Cpu`
-    and on `WebGpuBackend` with and without `shader-f16`, and the deviation of
-    each path's logits from onnxruntime's is recorded.
-18. [ ] onnxruntime's `QMoE`, and a `GroupQueryAttention` with attention
-    sinks. Finished when `operators_test.wado` holds each to onnxruntime.
-19. [ ] The speed at which a weight reaches the device. `wado run-webgpu` moves
-    a checkpoint's bytes from a file into a device buffer through
-    `wasi:filesystem` and `write-buffer-with-copy`, and that speed sets what a
-    weight the device does not hold costs. Finished when `design.md` records it
-    on an RTX 4060 Ti of 8 GB as a ratio to a native program uploading the same
-    bytes, with the file in the page cache and out of it, beside the commands
-    that measured both.
-20. [ ] Experts held on demand. An expert is one slice along the first axis of
-    each `QMoE` input the operator's definition indexes by expert, so no model
-    is named. The device holds as many experts as a budget the caller sets. The
-    rest stay in the checkpoint until a token routes to one, and the guest's
-    heap only passes an expert through. A table that stays where it is stored,
-    above, serves its rows the same way. An expert the device does not hold is
-    loaded, never computed by the guest. A guest runs on one thread, since
-    shared-everything threads is at phase 1, and `core:simd` loads no vector
-    from a `List`. Where the budget holds fewer than all the experts, the host
-    reads back which experts a layer routes to before it runs them. So the host
-    waits once a layer, which The MVP Is Tier 1 Only says a `QMoE` spares it.
-    Finished when `operators_test.wado` holds a `QMoE` to onnxruntime with a
-    budget of half its experts.
-21. [ ] gpt-oss-20b, a mixture of experts. Finished when `example/gpt-oss-20b/`
-    continues a prompt with the tokens onnxruntime picks from onnx-community's
-    `q4f16` export, under `wado run-webgpu` on a device with 8 GB, with no line
-    that names a layer, and `design.md` records how often a routed expert was
-    already held, with the eviction order it chose and why.
-22. [ ] Experts loaded ahead. While one layer runs, the nodes that compute the
-    next `QMoE`'s `router_probs` from its `input` are applied to this layer's
-    `input`, and the experts they pick load before a token routes to them. A
-    wrong guess costs a load, never a token. Finished when `design.md` records
-    how often gpt-oss-20b's routed experts were already held with and without
-    it, and its tokens are unchanged.
-23. [ ] The StableHLO front end. Finished when the MLP exported from JAX checks
-    and runs through the same pipeline as its ONNX form.
-24. [ ] int4. `DequantizeLinear` with a `block_size` fused into the `MatMul` it
-    feeds, which is what makes a model small enough to download. Finished when
-    an int4 checkpoint from GPTQ or AWQ produces the f16 checkpoint's output
-    within tolerance.
+The roadmap leads to gpt-oss-20b, from onnx-community's `q4f16` export: a
+graph beside seven data files, 12.6 GB together.
+
+The devices keep in step. An item is finished on `Cpu`, `WebGpuBackend` and
+`PjrtBackend` alike, the last under the CPU plugin. A run on a TPU is measured
+beside the roadmap and holds no item up.
+
+A weight stays as the checkpoint stores it. Unpacked to bf16, the model's 20
+billion weights outgrow a TPU chip of 16 GB. Packed, they are under it.
+
+What the model asks of Loam, as
+`wado run tools/onnx_inventory.wado model_q4f16.onnx` reports it. The graph
+holds no function and no branch. An operator below with nothing missing is one
+Loam lowers, though the build stops before it reaches any of them.
+
+| Operator                                       | Nodes | What Loam lacks                               |
+| ---------------------------------------------- | ----- | --------------------------------------------- |
+| `MatMulNBits`, 4 bits in blocks of 32          | 73    | The operator. No node gives zero points.      |
+| `SkipSimplifiedLayerNormalization`             | 48    | The operator, which names up to four outputs. |
+| `GroupQueryAttention`, a window of 128 or none | 24    | The attention sinks, its twelfth input.       |
+| `QMoE`, 32 experts of 4 bits, 4 to a token     | 24    | The operator.                                 |
+| `Add`, `Reshape`, `Cast`, `Constant`, `Gather` | 103   | Nothing.                                      |
+| `ReduceSum`, `Shape`, `Sub`                    | 3     | Nothing.                                      |
+| `SimplifiedLayerNormalization`                 | 1     | Nothing.                                      |
+
+| Weights                    | Tensors | Bytes          |
+| -------------------------- | ------- | -------------- |
+| `float16`                  | 317     | 2,459,526,784  |
+| `uint8`, packed int4       | 121     | 10,164,326,400 |
+| In the graph               | 289     | 54,999,168     |
+| In the largest data file   | 62      | 2,096,824,320  |
+| One layer's `gate_up_proj` | 1       | 265,420,800    |
+
+The embedding is a `float16` table a `Gather` reads, so the model has no
+`GatherBlockQuantized`. The inputs and outputs are `int64` and `float16`, and
+the two `Cast`s give `int32`.
+
+1. [ ] Loading a tensor at a time. `load` reads the checkpoint from a source
+   that yields one tensor's bytes at a time, rather than from the whole file
+   the guest holds. A range names one of several data files. A tensor reaches
+   the device in its stored type, where today each passes through the guest as
+   a list of f32. Finished when a checkpoint larger than the guest's memory,
+   spread over several data files, loads onto `WebGpuBackend` and
+   `PjrtBackend`, and `Cpu` loads one it can hold through the same source.
+2. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
+   which onnx-community's `q4` exports use. gpt-oss-20b has the first alone. A
+   weight stays packed on the device, read by the quantized product composite
+   or by a quantized gather (see [Loam on TPU and WebGPU](./devices.md)). No
+   path unpacks one when it loads, since gpt-oss-20b unpacked fits no device. A quantized weight is the
+   tensors the operator takes, the packed `u8`, the scales and the zero points,
+   and the bit width and block size are the composite's attributes. So it has
+   no type of its own, which the block formats under Known gaps wait for.
+   Finished when Gemma 3 (270M)'s `q4` export picks the tokens onnxruntime
+   picks from it on every device.
+3. [ ] The rest of gpt-oss-20b's operators: onnxruntime's `QMoE` and
+   `SkipSimplifiedLayerNormalization`, and a `GroupQueryAttention` with
+   attention sinks. Stage 0 gives every node a shape per output, as it does
+   `Split`'s, which the normalization's four outputs need. A `QMoE` decomposes
+   in two forms. Over a prompt it loops over the experts and masks each one's
+   rows, so its temporaries do not grow with the prompt. Over a step it gathers
+   the experts the token routes to. Finished when `operators_test.wado` holds
+   each to onnxruntime on every device, and `PjrtBackend::analyzing` reports
+   the temporaries of both forms for a prompt and for a step.
+4. [ ] Experts held on demand. An expert is one slice along the first axis of
+   each `QMoE` input the operator's definition indexes by expert, so no model
+   is named. A device holds as many experts as a budget the caller sets: all
+   of them on a TPU chip, fewer on a GPU of 8 GB and on `Cpu`. The rest stay
+   in the checkpoint until a token routes to one, and the guest's heap only
+   passes an expert through. An expert the device does not hold is loaded,
+   never computed in its place. Where the budget holds fewer than all the
+   experts, the host reads back which experts a layer routes to before it runs
+   them. So the host waits once a layer, which The MVP Is Tier 1 Only says a
+   `QMoE` spares it. Finished when `operators_test.wado` holds a `QMoE` to
+   onnxruntime with a budget of half its experts on every device.
+5. [ ] gpt-oss-20b, a mixture of experts. Finished when
+   `example/gpt-oss-20b/` continues a prompt with the tokens onnxruntime picks
+   from onnx-community's `q4f16` export on `Cpu`, under `wado run-webgpu` on a
+   device with 8 GB, and under `wado run-pjrt`, with no line that names a
+   layer. `design.md` records how often a routed expert was already held, with
+   the eviction order it chose and why, and what
+   `PjrtBackend::analyzing("v5e:1x1")` reports for the model.
+
+## Later
+
+Work the road to gpt-oss-20b does not pass. It is unordered.
+
+- [ ] A data file of 2 GiB or more. A range into a data file fits 32 bits,
+  which each of gpt-oss-20b's seven does. Finished when a tensor stored past
+  a data file's first 2 GiB loads on every device.
+
+- [ ] TPU and WebGPU at their best speed. A pass is a graph built once per
+  shape class and compiled for each device: StableHLO through `core:pjrt` for
+  a TPU, Loam's own compiler for WebGPU. See
+  [Loam on TPU and WebGPU](./devices.md), whose plan lists the steps, a TPU
+  run and many requests at once among them. Finished when every step of that
+  plan is.
+- [ ] Narrowed outputs. A use site can name an output that each call reads at
+  one position per row, and optionally only at some token ids. The call gives
+  the positions and the ids. The generated module then computes only those
+  values, as `outputs` already cuts the graph to what it reads (see The Graph
+  Is ONNX). Picking each row's position moves above every node that works on
+  each position alone. The ids pick entries along the head weight's
+  vocabulary axis before its product. So the head's cost grows with the
+  number of ids, not with the vocabulary, and no pass holds a logit for every
+  position and token. Finished when the Gemma 3 example ranks the next token
+  from the last position alone, and its logits at given ids lie within the
+  tolerance of onnxruntime's at those ids. The `last` option does the first
+  half: it fixes the position at the build, as the last one along an axis.
+- [ ] Decisions. A decision asks a model one question about a state and
+  reads the probability of each answer from one pass, rather than generating
+  text. Loam's decision module takes any model that gives narrowed logits,
+  and that model's tokenizer. The caller spells the model's chat turns. A
+  question is a choice among options, given at run time. A yes-or-no question
+  is a choice of two. A score is a choice among the points of a scale, and its
+  answer also gives their expected value. Each option is labelled with a
+  letter, so a choice holds at most 26. A label's id is the token the letter
+  adds when it follows the prompt, so the chat turns decide whether that is
+  `A` or ` A`. A letter that adds more than one token, or changes the
+  prompt's own tokens, stops the call. The answer is the softmax of the
+  logits at the labels. Finished when the Gemma 3 example answers a set of
+  questions with probabilities within the tolerance of those onnxruntime's
+  logits give.
+- [ ] A state read by many questions. The state's tokens run once. Each
+  question runs only its own tokens, against the state's cache, and leaves
+  that cache as it was. Finished when `design.md` records the time several
+  questions take against one state of 1,000 tokens as a ratio to the time
+  with the state run for each, beside the commands that measured both, and
+  each probability lies within the tolerance of the one it gets with the
+  state run for it.
+- [ ] Questions in one pass. The questions on one state run as the rows of
+  one pass, so the device reads each weight once for all of them. A shorter
+  question is padded at its end, and its answer is read at its own last
+  token. Every row reads the state's cache, which keeps its batch of one
+  rather than being copied for each row. The graph gives the past and the new
+  tokens one batch axis, and `compute` checks that the inputs agree on it
+  (see Axis Identity Is a Type, Extents Are Values). This item changes that
+  check to admit a past of batch one beside n rows. Finished when `design.md`
+  records the time n questions take as rows of one pass as a ratio to the
+  time they take one after another, for several n and questions of different
+  lengths, and each probability lies within the tolerance of the one its
+  question gets alone.
+- [ ] Calibrated decisions. Each kind of question, at each number of options,
+  has a temperature that divides the logits before the softmax, so that an
+  answer given 0.8 is right about 80% of the time. A temperature keeps each
+  question's ranking, so a model's bias toward a label, such as `A`, stays as
+  it was. The caller passes the temperatures, and a tool in `tools/` fits them
+  from questions with known answers. Finished when `design.md` records, on
+  questions held out of the fit, the expected calibration error before and
+  after, and for each label how often it is the answer given and how often it
+  is the right one. It names the data set and its license.
+- [ ] A model larger than the guest's heap splits. `onnx_split` writes the
+  checkpoint a tensor at a time rather than holding the model. Finished when
+  Gemma 4 E2B's export splits and `loam dump` reports its decoder and its
+  embedding graph, each refusal naming the operator it stops at.
+- [ ] More elementwise operators. `Equal`, `Less`, `LessOrEqual`, `Greater`,
+  `GreaterOrEqual`, `Not`, `And` and `Or`, as `Expr` steps that yield a
+  `bool`, and `Softplus` and `Reciprocal`. Finished when `operators_test.wado`
+  holds each to onnxruntime, and a mask built from a comparison joins the
+  kernel of the `Where` reading it.
+- [ ] The onnxruntime operators of a recurrent decoder: `LinearAttention`
+  with each of its update rules and `CausalConvWithState`, and a
+  `GroupQueryAttention` that rotates part of each head. Finished when
+  `operators_test.wado` holds each to onnxruntime, with and without a past
+  state, the cases that read a second output among them.
+- [ ] onnxruntime's `RotaryEmbedding` and `FastGelu`. Finished when
+  `operators_test.wado` holds each to onnxruntime, a rotation of part of each
+  head by `rotary_embedding_dim` and one by position ids among the cases.
+- [ ] Qwen 3.5 0.8B, a decoder whose layers are mostly recurrent. Finished
+  when `example/qwen3.5-0.8b/` continues a prompt with the tokens onnxruntime
+  picks, under `wado run-webgpu` from onnx-community's `q4` export of the
+  text model, with no line that names a layer, and its tokenizer gives the
+  ids Hugging Face's gives.
+- [ ] A table stays where it is stored. A weight that only a `Gather` reads,
+  as an embedding is, is prepared as a table whose storage the backend
+  chooses, and a pass reads only the rows it gathers. Finished when Gemma 4
+  E2B's per-layer embedding, which has more elements than a `List` holds,
+  serves its rows with the host holding none of the rest.
+- [ ] Gemma 4 E2B. Finished when `example/gemma4-e2b/` continues a prompt
+  with the tokens onnxruntime picks, under `wado run-webgpu` from
+  onnx-community's `q4` export, with no line that names a layer.
+- [ ] The speed at which a weight reaches the device. `wado run-webgpu` moves
+  a checkpoint's bytes from a file into a device buffer through
+  `wasi:filesystem` and `write-buffer-with-copy`, and that speed sets what a
+  weight the device does not hold costs. Finished when `design.md` records it
+  on an RTX 4060 Ti of 8 GB as a ratio to a native program uploading the same
+  bytes, with the file in the page cache and out of it, beside the commands
+  that measured both.
+- [ ] Experts loaded ahead. While one layer runs, the nodes that compute the
+  next `QMoE`'s `router_probs` from its `input` are applied to this layer's
+  `input`, and the experts they pick load before a token routes to them. A
+  wrong guess costs a load, never a token. Finished when `design.md` records
+  how often gpt-oss-20b's routed experts were already held with and without
+  it, and its tokens are unchanged.
+- [ ] The StableHLO front end. Finished when the MLP exported from JAX checks
+  and runs through the same pipeline as its ONNX form.
+- [ ] int4. `DequantizeLinear` with a `block_size` fused into the `MatMul` it
+  feeds, which is what makes a model small enough to download. Finished when
+  an int4 checkpoint from GPTQ or AWQ produces the f16 checkpoint's output
+  within tolerance.
 
 ## Known gaps
 
@@ -257,11 +307,16 @@ generator the model alone.
 
 ### Element types and precision
 
-Every arithmetic kernel computes in f32 and stores f32, as the WEP's signatures
-spell, but a half graph needs it to store `f16` or `bf16` as well. A
-`WebGpuBackend` view holds f32 alone, and `compute` converts a half input and
-output where it crosses the boundary. One of `int64` is held in `i64`, and one
-of `bool` in `bool`. Every other element type stops the build naming it.
+`WebGpuBackend` computes in f32 between the f16s it reads and writes
+([Half Element Types](./design.md#half-element-types)), so a device whose f16
+arithmetic is faster gains nothing from it. No Kiln option chooses arithmetic
+in f16 yet. One would, on a device that offers `shader-f16`, and a graph built
+with it would be held to a tolerance rather than to the f32 path's bits.
+
+Its attention kernel writes f32s alone, so a half graph's attention runs
+decomposed. A tensor is held in `f32`, `f16`, `bf16`, `u8`, `i64` or `bool`,
+and every other element type stops the build naming it. So does a `CastLike`
+of a value computed at run, since it converts only a tensor the build knows.
 Arithmetic in `double` and the integer types is a second instantiation of the
 same kernels. Wado has a primitive for nearly every ONNX element type, so what
 a step adds is kernels that compute in one, never the mapping.
@@ -293,8 +348,8 @@ them.
 ### WebGPU
 
 The WebGPU backend runs `convolution` and `reduce_window` on the CPU, each
-downloading its operand. So does a kernel over an element type other than f32,
-a product with more batch elements or tiles than one dispatch dimension holds,
+downloading its operand. So does a kernel over an element type other than a
+float or `bool`, a product with more batch elements or tiles than one dispatch dimension holds,
 and an elementwise kernel, a row kernel or a product whose output outgrows one
 binding. A model whose graph alternates the two crosses the boundary at every
 such node.
@@ -315,11 +370,6 @@ query, key and value, stays a product of its own. Over more than one row, a
 part of a concatenation is strided by the whole product's row, so a `reshape`
 merging its rows with an axis after them copies it, as Gemma 3's query and key
 normalization over heads does on a prompt.
-
-WGSL leaves a value past a half's range indeterminate, whether `pack2x16float`
-stores it or f16 arithmetic computes it. So a half graph that reaches one, a
-mask of negative infinity stored in a half among them, gets whatever the device
-makes of it.
 
 A buffer crosses the component boundary as a `list<u8>`, which the guest
 converts from or to f32 one element at a time, so crossing costs more than the

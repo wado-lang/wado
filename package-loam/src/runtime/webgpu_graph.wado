@@ -46,7 +46,9 @@ use {
     BinaryOp,
     Cpu,
     Element,
+    Float,
     ElementKind,
+    HalfFloat,
     Epilogue,
     Expr,
     Holds,
@@ -83,8 +85,9 @@ use {
     carried_starts,
     constants,
     kept_any,
+    kind_of,
 } from "./recorded.wado";
-use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted, reads_as, sliced } from "./webgpu.wado";
+use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, permuted, reads_as, sliced } from "./webgpu.wado";
 
 /// A pass recorded once per shape class and planned into kernels, which each
 /// call launches, and the values of the nodes that read no argument, kept on
@@ -162,7 +165,7 @@ impl Graph for WebGpuBackend {
 
     /// A weight read only as products' right matrix, or as a gather's rows, is
     /// kept as `kept_contracted` keeps one: column by column along the axis the
-    /// products contract, in bf16 where that loses nothing. The weights of a
+    /// products contract, in a half where one loses nothing. The weights of a
     /// `Joined` launch are kept so as one matrix, side by side, and those of a
     /// `Paired` one as one matrix whose columns alternate between theirs, each
     /// a view of it. Any other is kept as `keep` keeps it.
@@ -179,12 +182,13 @@ impl Graph for WebGpuBackend {
         for let [run, paired] of weight_runs(&recorded, first, count, &contracted) {
             let axis = contracted[run[0]].unwrap();
             let free = 1 - axis;
+            // One product's operands are of one element, and so are a run's.
+            let mut kind = ElementKind::F32;
             let mut parts: List<Tensor<f32, Untyped>> = [];
             for let at of run {
-                let F32(t) = load(at)? else {
-                    unreachable();
-                };
-                parts.push(t);
+                let weight = load(at)?;
+                kind = kind_of(&weight);
+                parts.push(in_f32(self, &weight).unwrap());
             }
             if paired {
                 // As `[inner, columns]`, which `interleaved` pairs.
@@ -203,7 +207,7 @@ impl Graph for WebGpuBackend {
                         extents: [d.extents[0], d.extents[1] / 2],
                         strides: [d.strides[0], 2 * d.strides[1]],
                     };
-                    kept[at] = Option::Some(Any::F32(Placed::Device(if axis == 0 {
+                    kept[at] = Option::Some(of_kind(self, kind, Placed::Device(if axis == 0 {
                         view;
                     } else {
                         permuted(&view, &([1, 0] as List<i32>));
@@ -220,7 +224,7 @@ impl Graph for WebGpuBackend {
             };
             let mut start = 0;
             for let [at, p] of run.into_iter().zip(parts.into_iter()) {
-                kept[at] = Option::Some(Any::F32(Placed::Device(sliced(&d, free, start, p.extents[free]))));
+                kept[at] = Option::Some(of_kind(self, kind, Placed::Device(sliced(&d, free, start, p.extents[free]))));
                 start += p.extents[free];
             }
         }
@@ -229,8 +233,8 @@ impl Graph for WebGpuBackend {
                 continue;
             }
             let host = load(at)?;
-            kept[at] = Option::Some(if let Some(axis) = contracted[at] && let F32(t) = &host {
-                Any::F32(self.kept_contracted(t, axis));
+            kept[at] = Option::Some(if let Some(axis) = contracted[at] {
+                of_kind(self, kind_of(&host), self.kept_contracted(&in_f32(self, &host).unwrap(), axis));
             } else {
                 kept_any(self, &host);
             });
@@ -267,24 +271,33 @@ impl Graph for WebGpuBackend {
         &mut self,
         x: &Placed<A, Axes>,
     ) -> Placed<B, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if let Device(d) = x && !(A::is_f32() && B::kind() matches { I64 }) {
+        let truncates = A::is_float() && B::kind() matches { I64 };
+        if let Device(d) = x && !truncates && B::kind() matches { F32 | F16 | BF16 | I64 | Bool } {
             // A device holds a bool, or an index a kernel ranked, as the f32 it
             // converts to.
-            if !B::kind() matches { Bool } || A::kind() matches { Bool } {
+            let held = operand(0);
+            let converted = if A::kind() == B::kind() || A::kind() matches { Bool } {
+                held;
+            } else if B::kind() matches { Bool } {
+                held.binary(BinaryOp::Ne, &constant(0.0));
+            } else {
+                held.stored_as(B::kind());
+            };
+            if converted == held {
                 return Placed::Device(*d);
             }
-            let nonzero = operand(0).binary(BinaryOp::Ne, &constant(0.0));
-            return as_element(self, self.fused_on::<Axes>(&([*d] as List<DeviceTensor>), &nonzero));
+            return as_element(self, self.fused_on::<Axes>(&([*d] as List<DeviceTensor>), &converted));
         }
         return Placed::Host(self.cpu.convert(&self.host(x)));
     }
 
-    fn unary<Axes>(
+    fn unary<E: Float, Axes>(
         &mut self,
         op: Unary,
-        x: &Placed<f32, Axes>,
-    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.fused_on(&([self.device_view(x)] as List<DeviceTensor>), &unary_of(op));
+        x: &Placed<E, Axes>,
+    ) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        let stored = unary_of(op).stored_as(E::kind());
+        return as_element(self, self.fused_on::<Axes>(&([self.device_view(x)] as List<DeviceTensor>), &stored));
     }
 
     fn binary<E: Element, Axes>(
@@ -296,14 +309,15 @@ impl Graph for WebGpuBackend {
         // On the device an `i64` is the index it holds as an f32, and those
         // four stay one: a product might not, and a quotient would not truncate.
         let index_reckoning = op matches { Add | Subtract | Minimum | Maximum } && held_as_f32(a, b);
-        if !E::is_f32() && !index_reckoning {
+        if !E::is_float() && !index_reckoning {
             return Placed::Host(self.cpu.binary(op, &self.host(a), &self.host(b)));
         }
         let operands = [
             self.device_view(a),
             self.device_view(b),
         ] as List<DeviceTensor>;
-        return as_element(self, elementwise_on::<Axes>(self, &operands, &operand(0).binary(binary_op(op), &operand(1))));
+        let stored = operand(0).binary(binary_op(op), &operand(1)).stored_as(E::kind());
+        return as_element(self, elementwise_on::<Axes>(self, &operands, &stored));
     }
 
     fn compare<E: Element, Axes>(
@@ -427,7 +441,7 @@ impl Graph for WebGpuBackend {
         let mut extents = self.extents_of(x);
         let own = extents[axis];
         extents[axis] = extent;
-        let to = contiguous(self.allocated(element_count(&extents), false), 0, extents);
+        let to = self.new_tensor(extents, E::kind() matches { F16 });
         if element_count(&self.extents_of(x)) > 0 {
             let from = self.device_view(x);
             self.copy(&from, &sliced(&to, axis, 0, own));
@@ -437,20 +451,20 @@ impl Graph for WebGpuBackend {
 
     /// The row kernel where `init` is the fold's identity, so the fold from it
     /// is the fold of the elements alone.
-    fn reduce<In, Out>(
+    fn reduce<E: Float, In, Out>(
         &mut self,
-        x: &Placed<f32, In>,
+        x: &Placed<E, In>,
         op: Binary,
         init: f32,
         dims: List<i32>,
-    ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let fold = match op {
             Add && init.to_bits() == 0 => Option::Some(operand(0).row_sum(null)),
             Maximum && init == f32::NEG_INFINITY => Option::Some(operand(0).row(RowOp::Max)),
             _ => null,
         };
         let view = self.device_view(x);
-        if let Some(e) = fold && let Some(kept) = self.reduced(&view, &dims, &e) {
+        if let Some(e) = fold && let Some(kept) = self.reduced(&view, &dims, &e.stored_as(E::kind())) {
             return Placed::Device(self.reshaped(&kept, &reduced_extents(&view.extents, &dims)));
         }
         return Placed::Host(self.cpu.reduce(&self.host(x), op, init, dims));
@@ -459,17 +473,21 @@ impl Graph for WebGpuBackend {
     /// One product of `[batch…, rows, inner]` by `[batch…, inner, columns]`,
     /// each operand's free and contracting axes merged by a view where its
     /// strides allow one, and by a copy otherwise.
-    fn dot_general<A, B, Out>(
+    fn dot_general<E: Float, A, B, Out>(
         &mut self,
-        lhs: &Placed<f32, A>,
-        rhs: &Placed<f32, B>,
+        lhs: &Placed<E, A>,
+        rhs: &Placed<E, B>,
         dims: &DotDims,
-    ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let [l, r] = [
             self.device_view(lhs),
             self.device_view(rhs),
         ];
-        return self.relabeled(&dotted(self, &l, &r, dims, &null));
+        let then = HalfFloat::of(E::kind()).map(|to: HalfFloat| Epilogue::<PlacedRead<Untyped>> {
+            operands: [],
+            op: operand(0).rounded(to),
+        });
+        return as_element(self, self.relabeled::<f32, Untyped, Out>(&dotted(self, &l, &r, dims, &then)));
     }
 
     /// The gather kernel where the gather takes whole slices along one axis,
@@ -537,7 +555,7 @@ impl Graph for WebGpuBackend {
         }
         let source = self.device_view(base);
         let update = self.device_view(updates);
-        let out = contiguous(self.allocated(element_count(&source.extents), false), 0, source.extents);
+        let out = self.new_tensor(source.extents, E::kind() matches { F16 });
         self.copy(&source, &out);
         for let [from, to] of scatter_windows(&out, &update, &index, dims) {
             self.copy(&from, &to);
@@ -545,22 +563,22 @@ impl Graph for WebGpuBackend {
         return Placed::Device(out);
     }
 
-    fn convolution<In, K, Out>(
+    fn convolution<E: Float, In, K, Out>(
         &mut self,
-        x: &Placed<f32, In>,
-        kernel: &Placed<f32, K>,
+        x: &Placed<E, In>,
+        kernel: &Placed<E, K>,
         conv: &Convolution,
-    ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         return Placed::Host(self.cpu.convolution(&self.host(x), &self.host(kernel), conv));
     }
 
-    fn reduce_window<In, Out>(
+    fn reduce_window<E: Float, In, Out>(
         &mut self,
-        x: &Placed<f32, In>,
+        x: &Placed<E, In>,
         op: Binary,
         init: f32,
         window: &WindowReduce,
-    ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         return Placed::Host(self.cpu.reduce_window(&self.host(x), op, init, window));
     }
 
@@ -577,9 +595,9 @@ impl Graph for WebGpuBackend {
         return Placed::Device(view);
     }
 
-    fn arg_max<Axes>(
+    fn arg_max<E: Float, Axes>(
         &mut self,
-        x: &Placed<f32, Axes>,
+        x: &Placed<E, Axes>,
         axis: i32,
     ) -> Placed<i64, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         return self.arg_max_kernel(x, axis);
@@ -604,23 +622,23 @@ impl Graph for WebGpuBackend {
     /// and the present is the past's buffer with the new ones written after the
     /// valid ones. Past the valid ones a causal attention reads none, so the
     /// kernels compute what the decomposition does.
-    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
+    fn group_query_attention<E: Float, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
         &mut self,
-        q: &Placed<f32, [B, S, Q]>,
-        k: &Placed<f32, [B, S, K]>,
-        v: &Placed<f32, [B, S, K]>,
-        past_k: &Placed<f32, [B, H, P, D]>,
-        past_v: &Placed<f32, [B, H, P, D]>,
+        q: &Placed<E, [B, S, Q]>,
+        k: &Placed<E, [B, S, K]>,
+        v: &Placed<E, [B, S, K]>,
+        past_k: &Placed<E, [B, H, P, D]>,
+        past_v: &Placed<E, [B, H, P, D]>,
         past_length: Option<&Placed<i64, [Slots]>>,
         reach: Option<&Placed<i64, [Slots]>>,
-        cos: Option<&Placed<f32, [Pos, Half]>>,
-        sin: Option<&Placed<f32, [Pos, Half]>>,
-        bias: Option<&Placed<f32, [BB, BH, BS, T]>>,
+        cos: Option<&Placed<E, [Pos, Half]>>,
+        sin: Option<&Placed<E, [Pos, Half]>>,
+        bias: Option<&Placed<E, [BB, BH, BS, T]>>,
         options: &Attention,
-    ) -> [Placed<f32, [B, S, Q]>, Placed<f32, [B, H, T, D]>, Placed<f32, [B, H, T, D]>] with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    ) -> [Placed<E, [B, S, Q]>, Placed<E, [B, H, T, D]>, Placed<E, [B, H, T, D]>] with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let shared = past_length matches { Some(_) };
         kernels: {
-            if shared && !options.causal {
+            if !E::is_f32() || shared && !options.causal {
                 break kernels;
             }
             let positions = self.extents_of(past_k)[2];
@@ -668,7 +686,7 @@ impl Graph for WebGpuBackend {
                 ];
             }
         }
-        return decomposed_attention::<WebGpuBackend, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
+        return decomposed_attention::<WebGpuBackend, E, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
             self,
             q,
             k,
@@ -764,7 +782,9 @@ fn weight_runs(recorded: &Recorded, first: i32, count: i32, contracted: &List<Op
 
 fn contracted_axis(recorded: &Recorded, weight: i32) -> Option<i32> {
     let extents = &recorded.nodes[weight].extents;
-    if extents.len() != 2 || !recorded.nodes[weight].kind matches { F32 } || recorded.body.results.contains(&weight) {
+    if extents.len() != 2
+        || !recorded.nodes[weight].kind matches { F32 | F16 | BF16 }
+        || recorded.body.results.contains(&weight) {
         return null;
     }
     let mut axis: Option<i32> = null;
@@ -1122,7 +1142,9 @@ fn apart(
 /// The view `value` is, where it is on the device.
 fn on_device(value: &Any<WebGpuBackend>) -> Option<&DeviceTensor> {
     return match value {
-        F32(Device(d)) | I64(Device(d)) | Bool(Device(d)) => Option::Some(d),
+        F32(Device(d)) | F16(Device(d)) | BF16(Device(d)) | U8(Device(d)) | I64(Device(d)) | Bool(Device(d)) => Option::Some(
+            d,
+        ),
         _ => null,
     };
 }
@@ -1136,6 +1158,9 @@ fn at_slot(value: &Any<WebGpuBackend>, slot: i32) -> Any<WebGpuBackend> {
 fn viewing(value: &Any<WebGpuBackend>, view: DeviceTensor) -> Any<WebGpuBackend> {
     return match value {
         F32(_) => Any::F32(Placed::Device(view)),
+        F16(_) => Any::F16(Placed::Device(view)),
+        BF16(_) => Any::BF16(Placed::Device(view)),
+        U8(_) => Any::U8(Placed::Device(view)),
         I64(_) => Any::I64(Placed::Device(view)),
         Bool(_) => Any::Bool(Placed::Device(view)),
     };
@@ -1175,11 +1200,13 @@ fn joined_replayed(
         Some(out) => Placed::<f32, Untyped>::Device(out),
         None => {
             g.tape();
+            // Every product of the run is stored as the head's is.
+            let then = Option::Some(Epilogue { operands: [], op: head.op });
             let computed = if head.prologue matches { Some(_) } {
                 let matrix = permuted(&r, &([dims.rhs_contracting[0], free] as List<i32>));
-                g.reshape::<f32, Untyped, Untyped>(&left_product(g, values, recorded, head, &matrix, &null), extents);
+                g.reshape::<f32, Untyped, Untyped>(&left_product(g, values, recorded, head, &matrix, &then), extents);
             } else {
-                dotted(g, left[0], &r, &dims, &null);
+                dotted(g, left[0], &r, &dims, &then);
             };
             g.taped(key, &views, if let Device(d) = &computed {
                 Option::Some(d);
@@ -1196,7 +1223,8 @@ fn joined_replayed(
         let mut limit = extents;
         limit[last] = start[last] + rights[out.len()].extents[free];
         let part = g.slice::<f32, Untyped, Untyped>(&product, start, limit, List::<i32>::filled(extents.len(), 1));
-        out.push(Any::F32(g.reshape::<f32, Untyped, Untyped>(&part, recorded.nodes[k.root].extents)));
+        let root = &recorded.nodes[k.root];
+        out.push(of_kind(g, root.kind, g.reshape::<f32, Untyped, Untyped>(&part, root.extents)));
         start[last] = limit[last];
     }
     return Option::Some(out);
@@ -1211,7 +1239,7 @@ fn side_by_side(parts: &List<DeviceTensor>, along: i32) -> Option<DeviceTensor> 
         extents[along] = joined.extents[along];
         let next = joined.offset + joined.extents[along] * joined.strides[along];
         if p.slot != joined.slot
-            || p.half != joined.half
+            || p.packed != joined.packed
             || extents != joined.extents
             || !reads_as(&p, next, &joined.strides) {
             return null;
@@ -1389,7 +1417,7 @@ fn right_matrix(
 fn interleaved_view(a: &DeviceTensor, b: &DeviceTensor) -> Option<DeviceTensor> {
     let step = a.strides[1];
     if a.slot != b.slot
-        || a.half != b.half
+        || a.packed != b.packed
         || a.extents != b.extents
         || step % 2 != 0
         || !reads_as(b, a.offset + step / 2, &a.strides) {
@@ -1458,8 +1486,10 @@ fn view_of(
 fn any_view(g: &mut WebGpuBackend, value: &Any<WebGpuBackend>) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
     return match value {
         F32(t) => g.device_view(t),
+        F16(t) => g.device_view(t),
+        BF16(t) => g.device_view(t),
         Bool(t) => g.device_view(t),
-        I64(_) => unreachable(),
+        U8(_) | I64(_) => unreachable(),
     };
 }
 
@@ -1467,8 +1497,21 @@ fn any_view(g: &mut WebGpuBackend, value: &Any<WebGpuBackend>) -> DeviceTensor w
 fn of_kind(g: &mut WebGpuBackend, kind: ElementKind, computed: Placed<f32, Untyped>) -> Any<WebGpuBackend> {
     return match kind {
         F32 => Any::F32(computed),
+        F16 => Any::F16(as_element(g, computed)),
+        BF16 => Any::BF16(as_element(g, computed)),
         Bool => Any::Bool(as_element(g, computed)),
-        I64 => unreachable(),
+        U8 | I64 => unreachable(),
+    };
+}
+
+/// A float weight's values as f32s, which hold a half's exactly. `None` for
+/// any other element.
+fn in_f32(g: &mut WebGpuBackend, weight: &Any<Cpu>) -> Option<Tensor<f32, Untyped>> {
+    return match weight {
+        F32(t) => Option::Some(*t),
+        F16(t) => Option::Some(g.cpu.convert(t)),
+        BF16(t) => Option::Some(g.cpu.convert(t)),
+        U8(_) | I64(_) | Bool(_) => null,
     };
 }
 

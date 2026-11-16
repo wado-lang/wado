@@ -143,7 +143,8 @@ The graph's operations take their meaning from the StableHLO specification:
 `compare`, `case`, `while`, and `convolution` and `reduce_window` for a
 convolutional network. A specification fixes what each operation means, which
 Loam's own kernel set never did. The lowering to a TPU is then one to one. The
-StableHLO front end, a roadmap item, reads into the same graph.
+StableHLO front end, an item of [TODO.md](./TODO.md#later), reads into the same
+graph.
 
 StableHLO has no error function, which GELU reads. `erf` takes its meaning from
 CHLO, the dialect XLA lowers into StableHLO, as `chlo.erf`. It is the one
@@ -683,11 +684,11 @@ model, and it does not price 94 and 93 of each program's operations
   in use climbed through Gemma 3's run
   ([measured](#gemma-3s-device-memory)). A memory plan would spare that. It
   waits for a device or a model that runs short of memory.
-- No kernel has a variant for a device's features. `WebGpuBackend` requests
-  none, so it uses neither `shader-f16` nor subgroups, and `WORKGROUP_BYTES` is
-  WebGPU's default limit rather than the device's. It waits for a device or a
-  model that a variant would serve. A half graph's `shader-f16` is the roadmap's
-  [A half graph keeps its type](./TODO.md#roadmap).
+- No kernel has a variant for subgroups, and `WORKGROUP_BYTES` is WebGPU's
+  default limit rather than the device's. It waits for a device or a model that
+  a variant would serve. `shader-f16` is the one feature `WebGpuBackend`
+  requests, for what a half graph reads and writes
+  ([Half Element Types](./design.md#half-element-types)).
 - An `If` on a value on WebGPU reads its condition back, which submits the
   commands before it and waits for the device. So a step holding one cannot
   share a submission with the steps after it, and the loop on the device reads

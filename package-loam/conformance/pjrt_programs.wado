@@ -3,11 +3,16 @@
 //! device, and `pjrt_topology.wado` compiles them for one it does not have.
 
 use { PjrtHost } from "core:pjrt";
-use { Any, Cpu, Element, Graph, Holds, Located, PjrtBackend, Slots, Tensor, Untyped } from "lib:loam";
+use { Any, Cpu, Element, Graph, Holds, Located, PjrtBackend, Recorder, Slots, Tensor, Untyped } from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
 use { decoded_tokens, requests_apart, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
 use gated from "./gated.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: { module: "lib:loam" },
+    };
+use gated_f16 from "./gated_f16.onnxtext"
     with {
         type: "onnxtext",
         generator: { module: "lib:loam" },
@@ -86,6 +91,27 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
     ], &[]);
     note("elementwise", apart(device, &computed[0], &cases::elementwise(cpu, &ex, &ey)));
 
+    let [hx, edges] = cases::halved_inputs();
+    let halves = device.compiled(|r| {
+        let rx = r.parameter::<f32, [cases::A, cases::B]>(hx.extents);
+        let redges = r.parameter::<f32, [cases::C]>(edges.extents);
+        let narrow = cases::halved::<Recorder, f16>(r, &rx, &redges);
+        let wide = cases::halved::<Recorder, bf16>(r, &rx, &redges);
+        return r.finished([narrow.0.id, narrow.1.id, narrow.2.id, wide.0.id, wide.1.id, wide.2.id]);
+    }, &[], &[]).unwrap();
+    let in_halves = device.executed(&halves, &[
+        Any::F32(untyped(device, &device.upload(&hx))),
+        Any::F32(untyped(device, &device.upload(&edges))),
+    ], &[]);
+    let want_narrow = cases::halved::<Cpu, f16>(cpu, &hx, &edges);
+    let want_wide = cases::halved::<Cpu, bf16>(cpu, &hx, &edges);
+    note("halved f16 product", apart(device, &in_halves[0], &want_narrow.0));
+    note("halved f16 summed", apart(device, &in_halves[1], &want_narrow.1));
+    note("halved f16 stored", apart(device, &in_halves[2], &want_narrow.2));
+    note("halved bf16 product", apart(device, &in_halves[3], &want_wide.0));
+    note("halved bf16 summed", apart(device, &in_halves[4], &want_wide.1));
+    note("halved bf16 stored", apart(device, &in_halves[5], &want_wide.2));
+
     let w = cases::windowed_input();
     let windowed = device.compiled(|r| {
         let rw = r.parameter::<f32, [cases::A, cases::B, cases::C]>(w.extents);
@@ -135,6 +161,18 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
         assert gated_device.programs.len() == compiled, "one program per shape class";
         let reference = gated::compute(cpu, &input, &mut gated_cpu);
         note(`compiled gated ${positions}`, deviation(&on_device.data, &reference.data));
+    }
+
+    let mut f16_device = gated_f16::Model::new(gated_f16::Params::embedded(device));
+    let mut f16_cpu = gated_f16::Model::new(gated_f16::Params::embedded(cpu));
+    for let positions of [3, 9] as List<i32> {
+        let rows = Tensor::<i64, [gated_f16::N, gated_f16::S]> {
+            data: (0..<positions).map(|i| (i * 3 % 4) as i64).collect(),
+            extents: [1, positions],
+        };
+        let on_device = cpu.convert::<f16, f32, _>(&gated_f16::compute(device, &rows, &mut f16_device));
+        let reference = cpu.convert::<f16, f32, _>(&gated_f16::compute(cpu, &rows, &mut f16_cpu));
+        note(`compiled gated f16 ${positions}`, deviation(&on_device.data, &reference.data));
     }
 
     let mut projected_device = projected::Model::new(projected::Params::embedded(device));
@@ -323,6 +361,9 @@ fn apart<E: Element, Axes>(g: &mut PjrtBackend, got: &Any<PjrtBackend>, want: &T
         F32(t) => g.download(t),
         I64(t) => cpu.convert::<i64, f32, Untyped>(&g.download(t)),
         Bool(t) => cpu.convert::<bool, f32, Untyped>(&g.download(t)),
+        F16(t) => cpu.convert::<f16, f32, Untyped>(&g.download(t)),
+        BF16(t) => cpu.convert::<bf16, f32, Untyped>(&g.download(t)),
+        U8(t) => cpu.convert::<u8, f32, Untyped>(&g.download(t)),
     };
     if read.extents != want.extents {
         return f32::NAN;

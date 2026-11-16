@@ -14,6 +14,7 @@ use {
     Symbols,
     axis_list,
     capacity_key,
+    f32_literal,
     float_literal,
     symbol_carriers,
     symbol_key,
@@ -52,6 +53,7 @@ use {
     Node,
     ValueInfo,
     element_of,
+    is_float,
     settled,
 } from "./graph.wado";
 use { IfBranch, SpelledAttention, branches, branches_of, is_alias, lowerings } from "./lowering.wado";
@@ -64,6 +66,7 @@ use {
     ROTARY_COS,
     ROTARY_SIN,
     attention_options,
+    cast_likes_resolved,
     is_elementwise,
     named_present,
     range_bounds,
@@ -102,6 +105,7 @@ pub fn emit(
     placement: Placement = Placement::File,
     decode: Option<Decode> = null,
 ) -> Result<String, EmitError> {
+    let graph = &cast_likes_resolved(graph, checked);
     let prepared = Prepared::of(graph, checked, &placement)?;
     let rows = match prepared.rows(graph, checked) {
         Ok(rows) => rows,
@@ -128,7 +132,6 @@ fn padded_symbols(graph: &Graph, checked: &Checked, carriers: &List<Carrier>) ->
 /// What `emit` writes the module from but `build`: the graph's names, and the
 /// lengths every entry reads.
 struct Prepared {
-    held: HashMap<String, String>,
     /// Only a sharded `load` names the map.
     imports_map: bool,
     axes: List<String>,
@@ -165,7 +168,7 @@ impl Prepared {
             builtin::cold_path();
             return Result::Err(EmitError::NoOutput);
         }
-        let held = boundary_elements(graph)?;
+        refuse_unmapped_dtype(graph)?;
         let imports_map = placement matches { Shards(_) } && loads_weights(graph);
         let axes = axis_names(graph, checked);
         let literals = graph_literals(graph, checked);
@@ -178,7 +181,7 @@ impl Prepared {
         let inputs: List<String> = graph.inputs.into_iter().map(|vi| vi.name).filter(|t| !crossing.cached.contains(t)).collect();
         let conditions = held_conditions(graph, checked, &inputs);
         return Result::Ok(
-            Prepared { held, imports_map, axes, literals, crossing, carriers, names, kept, grown, padded, conditions },
+            Prepared { imports_map, axes, literals, crossing, carriers, names, kept, grown, padded, conditions },
         );
     }
 
@@ -254,12 +257,12 @@ impl Prepared {
                 w.end();
             }
         }
-        emit_weights(&mut w, graph, checked, names, &self.held, &self.kept, placement);
+        emit_weights(&mut w, graph, checked, names, &self.kept, placement);
         if crossing.has_cache() {
             emit_cache(&mut w, &crossing.pairs, checked, names);
         }
         if crossing.several() {
-            emit_outputs(&mut w, &crossing.returned, crossing.has_cache(), checked, names, &self.held);
+            emit_outputs(&mut w, &crossing.returned, crossing.has_cache(), checked, names);
             emit_passed(&mut w, &crossing.returned, crossing.has_cache(), checked, names);
         }
         w.blank();
@@ -282,7 +285,6 @@ impl Prepared {
             graph,
             checked,
             names,
-            held: &self.held,
             carriers: &self.carriers,
             padded: &self.padded,
             read: &built.read,
@@ -356,23 +358,20 @@ fn cache_pairs(graph: &Graph) -> List<[String, String]> {
     return pairs;
 }
 
-/// What each boundary tensor is held in, and where an element type no kernel
-/// reaches stops the build. A node's own output is held as it is computed.
-fn boundary_elements(graph: &Graph) -> Result<HashMap<String, String>, EmitError> {
-    let mut held = HashMap::<String, String>::new();
+/// Stops the build at a boundary tensor of an element type no kernel reaches.
+fn refuse_unmapped_dtype(graph: &Graph) -> Result<(), EmitError> {
     for let declared of [&graph.inputs, &graph.initializers, &graph.outputs] {
         for let vi of *declared {
-            let Some(element) = element_of(&vi.dtype) else {
+            if element_of(&vi.dtype) matches { None } {
                 builtin::cold_path();
                 return Result::Err(EmitError::Dtype(UnmappedDtype {
                     tensor: vi.name,
                     dtype: vi.dtype,
                 }));
-            };
-            held[vi.name] = element.primitive;
+            }
         }
     }
-    return Result::Ok(held);
+    return Result::Ok(());
 }
 
 /// Every name `Names` mints an identifier for beside the axes: the inputs, the
@@ -437,7 +436,6 @@ fn emit_weights(
     graph: &Graph,
     checked: &Checked,
     names: &Names,
-    held: &HashMap<String, String>,
     kept: &List<String>,
     placement: &Placement,
 ) {
@@ -446,7 +444,7 @@ fn emit_weights(
     params.add_generic(GRAPH_BOUND);
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
-        weights.add_pub_field(ident, tensor_type(checked, held, &vi.name));
+        weights.add_pub_field(ident, tensor_type(checked, &vi.name));
         params.add_pub_field(ident, prepared_type(checked, &vi.name));
     }
     for let tensor of *kept {
@@ -466,27 +464,19 @@ fn emit_weights(
         "backend",
         `&mut ${BACKEND_PARAM}`,
     ).set_return_type(PARAMS_TYPE).add_effect("_").emit_begin(w);
-    emit_held_call(w, graph, checked, held, &hosts, false);
+    emit_held_call(w, graph, &hosts, false);
     w.end();
     w.end();
     w.blank();
     w.line("/// The graph's initializers as tensors of the graph `build` adds operations to.");
     params.emit(w);
-    emit_constructor(w, graph, checked, held, placement);
+    emit_constructor(w, graph, checked, placement);
     emit_embedded_data(w, graph);
 }
 
-/// A tensor as the backend holds it: in the primitive the graph computes in.
+/// A tensor as the backend holds it.
 fn prepared_type(checked: &Checked, tensor: &String) -> String {
-    let shape = checked.shapes.get(*tensor).unwrap();
-    return `${BACKEND_PARAM}::Tensor<${checked.primitives.get(*tensor).unwrap()}, [${axis_list(&shape)}]>`;
-}
-
-/// The call making the host input `host`, a reference, the backend's: a
-/// half-precision one is converted on the way.
-fn uploaded(checked: &Checked, held: &HashMap<String, String>, tensor: &String, host: String) -> String {
-    let verb = if converted(checked, held, tensor) { "prepare" } else { "upload" };
-    return `backend.${verb}(${host})`;
+    return `${BACKEND_PARAM}::${tensor_type(checked, tensor)}`;
 }
 
 /// Whether some initializer's data is left to a checkpoint.
@@ -503,13 +493,7 @@ fn loads_weights(graph: &Graph) -> bool {
 /// `Params::load` reading the rest from a safetensors checkpoint otherwise.
 /// Each tensor is kept as it is read, so the host copy of one weight at a time
 /// is all that lives beside the kept ones.
-fn emit_constructor(
-    w: &mut CodeWriter,
-    graph: &Graph,
-    checked: &Checked,
-    held: &HashMap<String, String>,
-    placement: &Placement,
-) {
+fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placement: &Placement) {
     let loads = loads_weights(graph);
     w.blank();
     let mut block = ImplSpec::new(PARAMS_TYPE);
@@ -556,7 +540,7 @@ fn emit_constructor(
     }
     let mut hosts = HashMap::<String, String>::new();
     for let [at, vi] of graph.initializers.into_iter().enumerate() {
-        let primitive = held.get(vi.name).unwrap();
+        let primitive = checked.primitives[vi.name];
         let shape = checked.shapes.get(vi.name).unwrap();
         let e = expected(&vi, &shape);
         let data = match vi.data {
@@ -565,7 +549,7 @@ fn emit_constructor(
         };
         hosts[vi.name] = `Tensor::<${primitive}, [${axis_list(&shape)}]> { data: ${data}, extents: ${e.extents} }`;
     }
-    emit_held_call(w, graph, checked, held, &hosts, loads);
+    emit_held_call(w, graph, &hosts, loads);
     w.end();
     w.end();
 }
@@ -573,20 +557,11 @@ fn emit_constructor(
 /// A `return` of `Params::held` over the initializers' host tensors in
 /// `hosts`, each by its place among them: the `Result` where `fallible`, as a
 /// `load` returns one, and the unwrapped struct otherwise.
-fn emit_held_call(
-    w: &mut CodeWriter,
-    graph: &Graph,
-    checked: &Checked,
-    held: &HashMap<String, String>,
-    hosts: &HashMap<String, String>,
-    fallible: bool,
-) {
+fn emit_held_call(w: &mut CodeWriter, graph: &Graph, hosts: &HashMap<String, String>, fallible: bool) {
     let error = if fallible { "LoadError" } else { "!" };
     w.begin(`return ${PARAMS}::held::<${error}>(backend, |at| Result::Ok(match at`);
     for let [at, vi] of graph.initializers.into_iter().enumerate() {
-        let host = hosts[vi.name];
-        let widened = if converted(checked, held, &vi.name) { `widen(&${host})` } else { host };
-        w.line(`${at} => ${checked.primitives[vi.name]}_host(${widened}),`);
+        w.line(`${at} => hosted(${hosts[vi.name]}),`);
     }
     w.line("_ => unreachable(),");
     w.end_with(if fallible { "));" } else { ")).unwrap();" });
@@ -691,7 +666,7 @@ fn emit_compute(
     given: Symbols,
     decoding: &Option<DecodingAxes>,
 ) -> Result<(), EmitError> {
-    let EntryContext { graph, checked, names, held, carriers, padded, kept, crossing, owed, per_row, .. } = *context;
+    let EntryContext { graph, checked, names, carriers, padded, kept, crossing, owed, per_row, .. } = *context;
     let shapes = &checked.shapes;
     let returned = crossing.returned;
     let has_cache = crossing.has_cache();
@@ -742,10 +717,7 @@ fn emit_compute(
         lines.push("};");
     };
     let mut read_back = |tensor: &String, place: String| -> Result<String, EmitError> {
-        let mut downloaded = `backend.download(&${place})`;
-        if converted(checked, held, tensor) {
-            downloaded = `narrow(&${downloaded})`;
-        }
+        let downloaded = `backend.download(&${place})`;
         let shape = shapes[*tensor];
         let cut = shape.axes.into_iter().any(|a| a.extent.poly().symbols().into_iter().any(|s| padded.contains(&s)));
         return Result::Ok(if cut { `resized(&${downloaded}, ${symbols.spell_shape(&shape)?})` } else { downloaded });
@@ -772,7 +744,7 @@ fn emit_compute(
     } else {
         bind_run("passed");
         lines.push(`return ${read_back(&returned[0], "passed")?};`);
-        tensor_type(checked, held, &returned[0]);
+        tensor_type(checked, &returned[0]);
     };
     compute.add_param("model", `&mut ${MODEL}<${BACKEND_PARAM}>`).set_return_type(returned_type).add_effect("_");
     emit_model(w);
@@ -809,7 +781,6 @@ struct EntryContext {
     graph: &Graph,
     checked: &Checked,
     names: &Names,
-    held: &HashMap<String, String>,
     carriers: &List<Carrier>,
     padded: &List<String>,
     read: &List<String>,
@@ -853,7 +824,7 @@ fn prepared_entry(
     room: &Option<Room>,
     apart: Option<Apart> = null,
 ) -> Result<Entry, EmitError> {
-    let EntryContext { graph, checked, names, held, carriers, padded, read, kept, crossing, owed, conditions, per_row } = *context;
+    let EntryContext { graph, checked, names, carriers, padded, read, kept, crossing, owed, conditions, per_row } = *context;
     let shapes = &checked.shapes;
     let has_cache = crossing.has_cache();
     // The cache holds a past at a capacity, so its length is what the graph
@@ -867,7 +838,7 @@ fn prepared_entry(
     // may hold no length the arithmetic gives.
     for let vi of &taken {
         let ident = names.get(&vi.name);
-        spec.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
+        spec.add_param(ident, `&${tensor_type(checked, &vi.name)}`);
         for let [i, axis] of shapes[vi.name].axes.into_iter().enumerate() {
             let Symbolic(length) = axis.extent else {
                 continue;
@@ -930,7 +901,7 @@ fn prepared_entry(
     for let vi of &taken {
         let ident = names.get(&vi.name);
         let padded_to = `&resized(${ident}, ${capacities.spell_shape(&shapes[vi.name])?})`;
-        lines.push(`let ${ident} = ${uploaded(checked, held, &vi.name, padded_to)};`);
+        lines.push(`let ${ident} = backend.upload(${padded_to});`);
         arguments.push(`&${ident}`);
     }
     // The cache at the capacities, both as the pass takes it and as it returns it.
@@ -1061,8 +1032,8 @@ fn decoding_axes(
             return refused(`${name} must be an i64 tensor of rows and positions`);
         }
     }
-    if !crossing.returned.contains(&decode.logits) || checked.primitives[decode.logits] != "f32" {
-        return refused(`${decode.logits} is no f32 output a pass returns`);
+    if !crossing.returned.contains(&decode.logits) || !is_float(&checked.primitives[decode.logits]) {
+        return refused(`${decode.logits} is no float output a pass returns`);
     }
     let logits = checked.shapes[decode.logits].axes;
     if logits.len() < 2 || logits.into_iter().skip(1).take(logits.len() - 2).any(|a| !a.extent matches { Static(1) }) {
@@ -1165,7 +1136,9 @@ fn emit_decode(
     lines.push("    return all;");
     lines.push(`}, || ${ERASED_WEIGHTS}) {`);
     lines.push(
-        `    Some(results) => [i64_of::<${BACKEND_PARAM}, [Slots, Picks]>(backend, &results[0]), ${cache_from_results(1)}],`,
+        `    Some(results) => [typed::<${BACKEND_PARAM}, i64, [Slots, Picks]>(backend, &results[0]), ${cache_from_results(
+            1,
+        )}],`,
     );
     lines.push(`    None => ${DECODED}(${arguments.join(", ")}),`);
     lines.push("};");
@@ -1271,7 +1244,7 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     let mut decode_args: List<String> = [];
     for let input of taken {
         let ident = names.get(&input);
-        let typed = `${ident}: &${tensor_type(checked, context.held, &input)}`;
+        let typed = `${ident}: &${tensor_type(checked, &input)}`;
         place_params.push(typed);
         compute_args.push(ident);
         if input == axes.ids {
@@ -1460,11 +1433,11 @@ fn emit_decoded(
     }
     w.line(`    let passed = build(${build_arguments.join(", ")});`);
     let logits = `passed.${names.get(&axes.logits)}`;
-    w.line(`    let tokens = i64_of::<${bk}, [Slots, Picks]>(backend, &state[${count}]);`);
-    w.line(`    let finished = bool_of::<${bk}, [Slots]>(backend, &state[${count + 1}]);`);
+    w.line(`    let tokens = typed::<${bk}, i64, [Slots, Picks]>(backend, &state[${count}]);`);
+    w.line(`    let finished = typed::<${bk}, bool, [Slots]>(backend, &state[${count + 1}]);`);
     let logits_axes = axis_list(&checked.shapes[axes.logits]);
     w.line(
-        `    let next = stepped::<${bk}, [${logits_axes}]>(backend, &${logits}, decoding, &tokens, &finished, step);`,
+        `    let next = stepped::<${bk}, ${checked.primitives[axes.logits]}, [${logits_axes}]>(backend, &${logits}, decoding, &tokens, &finished, step);`,
     );
     w.line(
         `    let at = row_binary::<${bk}>(backend, Binary::Add, &decoding.position, &shared::<${bk}>(backend, step));`,
@@ -1484,7 +1457,7 @@ fn emit_decoded(
     w.line("    return returned;");
     w.line("});");
     w.line(
-        `return [i64_of::<${bk}, [Slots, Picks]>(backend, &last[${count}]), restored_fields(backend, &last, ${first_cached})];`,
+        `return [typed::<${bk}, i64, [Slots, Picks]>(backend, &last[${count}]), restored_fields(backend, &last, ${first_cached})];`,
     );
     w.end();
     return Result::Ok(());
@@ -1678,7 +1651,7 @@ impl ProgramArgument {
 
     /// The argument as `decoded` reads it at `at` of the erased `list`.
     fn taken_from(&self, list: String, at: i32) -> String {
-        return `${self.element}_of::<${BACKEND_PARAM}, ${self.axes}>(backend, &${list}[${at}])`;
+        return `typed::<${BACKEND_PARAM}, ${self.element}, ${self.axes}>(backend, &${list}[${at}])`;
     }
 
     /// The parameter `recorded` makes of the argument, of the extents at `at`.
@@ -1690,7 +1663,7 @@ impl ProgramArgument {
 /// The program's `at`th result as `tensor`'s type.
 fn typed_result(checked: &Checked, tensor: &String, at: i32) -> String {
     let axes = axis_list(&checked.shapes[*tensor]);
-    return `${checked.primitives[*tensor]}_of::<${BACKEND_PARAM}, [${axes}]>(backend, &results[${at}])`;
+    return `typed::<${BACKEND_PARAM}, ${checked.primitives[*tensor]}, [${axes}]>(backend, &results[${at}])`;
 }
 
 /// The `Cache` the program's results hold from `first` on.
@@ -1710,6 +1683,9 @@ global ERASED_WEIGHTS: String = "erased_fields(backend, &model.weights)";
 fn any_case(primitive: &String) -> String {
     return match *primitive {
         "f32" => "F32",
+        "f16" => "F16",
+        "bf16" => "BF16",
+        "u8" => "U8",
         "i64" => "I64",
         "bool" => "Bool",
         _ => unreachable(),
@@ -2471,12 +2447,13 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
         [q.axes[0].name, past.axes[1].name];
     };
     let turbofish = [
-        q.axes[0].name, q.axes[1].name, q.axes[2].name, k.axes[2].name, past.axes[1].name, past.axes[2].name, total,
-        past.axes[3].name, pos, half, bias_batch, bias_heads, q.axes[1].name,
+        checked.primitives[node.outputs[0]], q.axes[0].name, q.axes[1].name, q.axes[2].name, k.axes[2].name,
+        past.axes[1].name, past.axes[2].name, total, past.axes[3].name, pos, half, bias_batch, bias_heads,
+        q.axes[1].name,
     ] as List<String>;
     let head = past.axes[3].static_extent();
     let scale = options.scale.unwrap_or(1.0 / f32::sqrt(head as f32));
-    let attention = `&Attention { heads: ${options.heads}, kv_heads: ${options.kv_heads}, scale: ${float_literal(scale)}, softcap: ${float_literal(
+    let attention = `&Attention { heads: ${options.heads}, kv_heads: ${options.kv_heads}, scale: ${f32_literal(scale)}, softcap: ${f32_literal(
         options.softcap,
     )}, window: ${options.window}, causal: ${options.causal} }`;
     let mut operands: List<String> = [];
@@ -2509,6 +2486,7 @@ fn spelled_attention_call(
     symbols: &mut Symbols,
 ) -> Result<List<String>, EmitError> {
     let shapes = &checked.shapes;
+    let element = checked.primitives[node.outputs[0]];
     let q = shapes[a.query];
     let present = shapes[a.present_value];
     let [batch, sequence] = [q.axes[0].name, q.axes[1].name];
@@ -2521,7 +2499,7 @@ fn spelled_attention_call(
         if from == *to {
             return exprs.reference(tensor);
         }
-        return `&backend.relabeled::<f32, [${from}], [${to}]>(${exprs.reference(tensor)})`;
+        return `&backend.relabeled::<${element}, [${from}], [${to}]>(${exprs.reference(tensor)})`;
     };
     let mut lines: List<String> = [];
     let present_value = names.get(&a.present_value);
@@ -2543,7 +2521,7 @@ fn spelled_attention_call(
                 let operand = as_axes(past, &held);
                 operands.push(
                     if padded {
-                        `&fitted::<${BACKEND_PARAM}, f32, [${held}]>(backend, ${operand}, 2, ${room})`;
+                        `&fitted::<${BACKEND_PARAM}, ${element}, [${held}]>(backend, ${operand}, 2, ${room})`;
                     } else {
                         operand;
                     },
@@ -2555,7 +2533,7 @@ fn spelled_attention_call(
         None => {
             let extents = [symbols.spell_extent(&present.axes[0].extent.poly())?, `${a.heads}`, "0", `${a.width}`] as List<String>;
             lines.push(
-                `let ${present_value} = backend.upload(&Tensor::<f32, [${held_axes(&total)}]> { data: [], extents: [${extents.join(
+                `let ${present_value} = backend.upload(&Tensor::<${element}, [${held_axes(&total)}]> { data: [], extents: [${extents.join(
                     ", ",
                 )}] });`,
             );
@@ -2582,11 +2560,13 @@ fn spelled_attention_call(
         },
     };
     operands.push(
-        `&Attention { heads: ${a.heads}, kv_heads: ${a.heads}, scale: ${float_literal(a.scale)}, divides: ${a.divides}, softcap: 0.0, window: -1, causal: true, hidden: Option::Some(${float_literal(
+        `&Attention { heads: ${a.heads}, kv_heads: ${a.heads}, scale: ${f32_literal(a.scale)}, divides: ${a.divides}, softcap: 0.0, window: -1, causal: true, hidden: Option::Some(${f32_literal(
             a.hidden,
         )}) }`,
     );
-    let mut turbofish = [batch, sequence, q.axes[2].name, key_width, heads, positions, total, width, sequence, width] as List<String>;
+    let mut turbofish = [
+        element, batch, sequence, q.axes[2].name, key_width, heads, positions, total, width, sequence, width,
+    ] as List<String>;
     turbofish.extend(&bias_axes);
     let attended = names.get(&node.outputs[0]);
     let present_key = match &a.present_key {
@@ -2609,7 +2589,7 @@ fn spelled_attention_call(
         exprs.values[tensor] = ident;
         let to = axis_list(&shapes[tensor]);
         if from != to {
-            lines.push(`let ${ident} = backend.relabeled::<f32, [${from}], [${to}]>(&${ident});`);
+            lines.push(`let ${ident} = backend.relabeled::<${element}, [${from}], [${to}]>(&${ident});`);
         }
     }
     return Result::Ok(lines);
@@ -2715,20 +2695,13 @@ fn indented(lines: List<String>) -> List<String> {
 }
 
 /// The struct `compute` returns a graph's several outputs in, one field each.
-fn emit_outputs(
-    w: &mut CodeWriter,
-    returned: &List<String>,
-    has_cache: bool,
-    checked: &Checked,
-    names: &Names,
-    held: &HashMap<String, String>,
-) {
+fn emit_outputs(w: &mut CodeWriter, returned: &List<String>, has_cache: bool, checked: &Checked, names: &Names) {
     let mut outputs = StructSpec::new(OUTPUTS, Vis::Pub);
     if has_cache {
         outputs.add_generic(HOLDS_BOUND);
     }
     for let output of *returned {
-        outputs.add_pub_field(names.get(&output), tensor_type(checked, held, &output));
+        outputs.add_pub_field(names.get(&output), tensor_type(checked, &output));
     }
     if has_cache {
         // The cache stays where the backend holds it, for the next pass.
@@ -2840,7 +2813,7 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
             }
             `[${spelled.join(", ")}]`;
         },
-        constant => constant_elements(&constant),
+        constant => constant_elements(&constant, &checked.primitives[*tensor]),
     };
     return Result::Ok(`backend.upload(&${host_literal(checked, tensor, data, extents)})`);
 }
@@ -2850,8 +2823,8 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
 /// upload on each call, as large as the context where it is a mask.
 fn kept_literal(checked: &Checked, tensor: &String) -> String {
     let extents = static_extents(&checked.shapes[*tensor]).expect("a kept literal's shape is static");
-    let data = constant_elements(&checked.known[*tensor].elements);
-    return `${checked.primitives[*tensor]}_host(${host_literal(checked, tensor, data, `${extents}`)})`;
+    let data = constant_elements(&checked.known[*tensor].elements, &checked.primitives[*tensor]);
+    return `hosted(${host_literal(checked, tensor, data, `${extents}`)})`;
 }
 
 /// The folded tensors in `literals` that no symbol enters, which `Params`
@@ -2876,12 +2849,13 @@ fn static_extents(shape: &Shape) -> Option<List<i64>> {
     return Option::Some(extents);
 }
 
-/// The elements of a folded tensor no symbol enters, as a list expression.
-fn constant_elements(elements: &Elements) -> String {
+/// The elements of a folded tensor of `element` no symbol enters, as a list
+/// expression.
+fn constant_elements(elements: &Elements, element: &String) -> String {
     return match *elements {
         Ints(v) => `${v}`,
         Floats(v) => {
-            let spelled: List<String> = v.into_iter().map(|x| float_literal(x)).collect();
+            let spelled: List<String> = v.into_iter().map(|x| float_literal(element, x)).collect();
             `[${spelled.join(", ")}]`;
         },
         // A mask is as large as the context it covers, so it is spelled as
@@ -2967,21 +2941,10 @@ fn input_checks(graph: &Graph, shapes: &HashMap<String, Shape>, names: &Names, c
     return checks;
 }
 
-/// Whether a boundary tensor is held in something other than what the
-/// operations compute it in, so it is converted on the way past.
-fn converted(checked: &Checked, held: &HashMap<String, String>, tensor: &String) -> bool {
-    return held.get(*tensor).unwrap() != checked.primitives.get(*tensor).unwrap();
-}
-
-/// A tensor's type, as the axis marker types name it. A tensor the boundary
-/// does not declare is held in what stage 0 computes it in.
-fn tensor_type(checked: &Checked, held: &HashMap<String, String>, tensor: &String) -> String {
+/// A tensor's type, as the axis marker types name it.
+fn tensor_type(checked: &Checked, tensor: &String) -> String {
     let shape = checked.shapes.get(*tensor).unwrap();
-    let element = match held.get(*tensor) {
-        Some(p) => p,
-        None => checked.primitives.get(*tensor).unwrap(),
-    };
-    return `Tensor<${element}, [${axis_list(&shape)}]>`;
+    return `Tensor<${checked.primitives[*tensor]}, [${axis_list(&shape)}]>`;
 }
 
 /// Every axis name the checked graph uses, in the order stage 0 gave each

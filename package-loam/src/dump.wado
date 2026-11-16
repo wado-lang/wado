@@ -6,9 +6,9 @@
 use { to_string } from "core:json";
 use { Serialize } from "core:serde";
 use { CodeWriter } from "lib:wadopoet";
-use { Graph, Known, Node, ValueInfo, element_of } from "./graph.wado";
+use { Graph, Known, Node, ValueInfo } from "./graph.wado";
 use { rows_judged } from "./emit.wado";
-use { Checked } from "./infer.wado";
+use { Checked, cast_likes_resolved } from "./infer.wado";
 use { Lowering, branches, lowerings } from "./lowering.wado";
 use { Judged, padding } from "./pad.wado";
 use { Shape } from "./shape.wado";
@@ -80,8 +80,6 @@ pub struct TensorReport {
     pub axes: List<[String, String]>,
     /// The extents of a folded tensor that has no axes.
     pub extents: Option<List<i32>> = null,
-    /// The primitive a boundary tensor is held in, where it differs.
-    pub held: Option<String> = null,
     /// The first `SHOWN` folded elements, and how many follow them.
     pub values: Option<List<String>> = null,
     pub more: i32 = 0,
@@ -89,6 +87,7 @@ pub struct TensorReport {
 
 /// The report for `graph`, checked as `checked`.
 pub fn report(graph: &Graph, checked: &Checked) -> Report {
+    let graph = &cast_likes_resolved(graph, checked);
     return Report {
         graph: graph.name,
         opset: graph.opset,
@@ -201,11 +200,7 @@ fn label(lowering: &Lowered) -> String {
 fn boundary(declared: &List<ValueInfo>, checked: &Checked) -> List<TensorReport> {
     let mut tensors: List<TensorReport> = [];
     for let vi of *declared {
-        let mut t = tensor(checked, &vi.name);
-        if let Some(element) = element_of(&vi.dtype) && element.primitive != element.computed {
-            t.held = Option::Some(element.primitive);
-        }
-        tensors.push(t);
+        tensors.push(tensor(checked, &vi.name));
     }
     return tensors;
 }
@@ -317,11 +312,7 @@ fn write_boundary(w: &mut CodeWriter, heading: String, declared: &List<TensorRep
     w.line(heading);
     w.indent();
     for let t of *declared {
-        let held = match &t.held {
-            Some(p) => ` (held as ${*p})`,
-            None => "",
-        };
-        w.line(`${t.name}: ${tensor_text(&t)}${held}`);
+        w.line(`${t.name}: ${tensor_text(&t)}`);
     }
     w.dedent();
 }

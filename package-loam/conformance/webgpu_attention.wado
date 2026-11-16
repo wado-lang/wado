@@ -20,6 +20,7 @@ use {
     GpuShaderModule,
     GpuComputePipeline,
     GpuComputePassEncoder,
+    GpuSupportedFeatures,
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
@@ -90,7 +91,7 @@ fn tensor<Axes>(extents: List<i32>, seed: u32) -> Tensor<f32, Axes> {
     return Tensor { data: noise(element_count(&extents), seed, 1.0), extents };
 }
 
-export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
     let Some(mut gpu) = WebGpuBackend::new() else {
         println("no WebGPU adapter");
         return;
@@ -324,7 +325,7 @@ fn step(
     let q: Tensor<f32, [Batch, Seq, Query]> = tensor([batch, seq, options.heads * d], seed);
     let k: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, seq, options.kv_heads * d], seed + 1);
     let v: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, seq, options.kv_heads * d], seed + 2);
-    let on_cpu = Cpu {}.group_query_attention::<Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One, Seq>(
+    let on_cpu = Cpu {}.group_query_attention::<f32, Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One, Seq>(
         &q,
         &k,
         &v,
@@ -353,7 +354,7 @@ fn step(
     let past_k = gpu.reshape::<f32, [Batch, KvHead, Cache, Dim], [Batch, KvHead, Cache, Dim]>(&before.on_gpu.0, extents);
     let past_v = gpu.reshape::<f32, [Batch, KvHead, Cache, Dim], [Batch, KvHead, Cache, Dim]>(&before.on_gpu.1, extents);
     let made = gpu.bind_groups();
-    let on_gpu = gpu.group_query_attention::<Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One, Seq>(
+    let on_gpu = gpu.group_query_attention::<f32, Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One, Seq>(
         &gq,
         &gk,
         &gv,
