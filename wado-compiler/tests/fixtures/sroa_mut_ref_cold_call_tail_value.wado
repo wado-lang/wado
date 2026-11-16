@@ -1,0 +1,52 @@
+// A cold call handed a split struct `&mut` may be the value its block yields:
+// here the one statement of a `for` body over an iterator whose `next` stays a
+// call, so the body lowers to a `match` arm. The fields it writes read back after it returns, and the arm
+// must still yield the call's value, not end on the last read-back as if it
+// diverged.
+use { println, Stdout } from "core:cli";
+
+struct Acc {
+    total: i32,
+    count: i32,
+}
+
+#[inline("never")]
+fn add(acc: &mut Acc, x: i32) -> bool {
+    acc.total += x;
+    acc.count += 1;
+    return x > 0;
+}
+
+struct Countdown {
+    left: i32,
+}
+
+impl Iterator for Countdown {
+    type Item = i32;
+
+    #[inline("never")]
+    fn next(&mut self) -> Option<i32> {
+        if self.left == 0 {
+            return null;
+        }
+        self.left -= 1;
+        return Some(self.left);
+    }
+}
+
+export fn run() with Stdout {
+    let mut acc = Acc { total: 0, count: 0 };
+    let countdown = Countdown { left: builtin::black_box(4) };
+    for let x of countdown {
+        builtin::cold_path();
+        add(&mut acc, x);
+    }
+    let mut other = Acc { total: 0, count: 0 };
+    let kept = add(&mut other, 1);
+    println(`${acc.total} ${acc.count} ${kept}`);
+}
+
+__DATA__
+{
+    "stdout": "6 4 true\n"
+}
