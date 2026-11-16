@@ -1,0 +1,44 @@
+// A closure holds the resources the types of its captures mention.
+
+#[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
+resource Node {}
+
+#[cm("example:demo/dom#input", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource HtmlInputElement extends Node {
+    #[cm("example:demo/dom#input-value")]
+    fn value(&self) -> String;
+}
+
+fn call(f: fn() -> String) -> String {
+    return f();
+}
+
+fn describe(n: Node) -> String {
+    return call(|| match n {                       // captures a Node, so holds it
+        input: HtmlInputElement => input.value(),  // and what it narrows to
+        _ => "",
+    });
+}
+
+test {
+    with HtmlInputElement => &Typed {} do {
+        assert describe(an_input()) == "typed";
+        assert describe(a_node()) == "";
+    }
+}
+
+struct Typed {}
+
+impl HtmlInputElement for Typed {
+    fn value(&self, this: &HtmlInputElement) -> String {
+        resume "typed"
+    }
+}
+
+fn a_node() -> Node {
+    return builtin::black_box(Node::backed_by(Typed {}));
+}
+
+fn an_input() -> Node {
+    return builtin::black_box(HtmlInputElement::backed_by(Typed {}));
+}

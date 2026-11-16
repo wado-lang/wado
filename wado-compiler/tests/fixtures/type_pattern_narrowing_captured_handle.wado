@@ -1,0 +1,171 @@
+// A closure holds the resources the types of its captures name, as a function
+// holds those its signature names. So a closure narrowing a handle it captured,
+// or capturing a narrowed one, performs nothing for it.
+
+#[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=2")]
+resource Node {}
+
+#[cm("example:demo/dom#element", linearity = "unrestricted", repr = "externref", classes = "1..=2")]
+resource Element extends Node {}
+
+#[cm("example:demo/dom#file-list", linearity = "unrestricted", repr = "externref")]
+resource FileList {
+    #[cm("example:demo/dom#file-list-length")]
+    fn length(&self) -> i32;
+}
+
+#[cm("example:demo/dom#input", linearity = "unrestricted", repr = "externref", classes = "2..=2")]
+resource HtmlInputElement extends Element {
+    #[cm("example:demo/dom#input-value")]
+    fn value(&self) -> String;
+
+    #[cm("example:demo/dom#input-files")]
+    fn files(&self) -> FileList;
+}
+
+fn call(f: fn() -> String) -> String {
+    return f();
+}
+
+fn call_through(f: fn() -> String with _) -> String with _ {
+    return f();
+}
+
+fn call_pure(f: fn() -> bool) -> bool {
+    return f();
+}
+
+fn call_with(f: fn(Node) -> i32, n: Node) -> i32 {
+    return f(n);
+}
+
+fn by_match(n: Node) -> String {
+    return call(|| match n {
+        input: HtmlInputElement => input.value(),
+        _ => "",
+    });
+}
+
+fn by_let_else(n: Node) -> String {
+    return call(|| {
+        let input: HtmlInputElement = n else {
+            return "";
+        };
+        return input.value();
+    });
+}
+
+fn nested(n: Node) -> String {
+    return call(|| call(|| {
+        let input: HtmlInputElement = n else {
+            return "";
+        };
+        return input.value();
+    }));
+}
+
+// The capture is a resource in the middle of the chain.
+fn mid_chain(n: Node) -> String {
+    let e: Element = n else {
+        return "";
+    };
+    return call(|| match e {
+        input: HtmlInputElement => input.value(),
+        _ => "",
+    });
+}
+
+// The handle is narrowed before the closure captures it.
+fn captured_narrowed(n: Node) -> String {
+    let input: HtmlInputElement = n else {
+        return "";
+    };
+    return call(|| input.value());
+}
+
+fn called_here(n: Node) -> String {
+    let read = || {
+        let input: HtmlInputElement = n else {
+            return "";
+        };
+        return input.value();
+    };
+    return read();
+}
+
+// A resource an operation of the narrowed one hands out is held with it.
+fn handed_out(n: Node) -> String {
+    return call(|| match n {
+        input: HtmlInputElement => `${input.files().length()}`,
+        _ => "",
+    });
+}
+
+fn through_effect_parameter(n: Node) -> String {
+    return call_through(|| match n {
+        input: HtmlInputElement => input.value(),
+        _ => "",
+    });
+}
+
+fn through_iterator(nodes: List<Node>) -> List<String> {
+    return nodes.into_iter().map(|n| match n {
+        input: HtmlInputElement => input.value(),
+        _ => "",
+    }).collect();
+}
+
+fn is_input(n: Node) -> bool {
+    return call_pure(|| n matches { _: HtmlInputElement });
+}
+
+// A pattern naming the resource the parameter already is narrows nothing.
+fn same_resource(n: Node) -> i32 {
+    return call_with(|m: Node| match m {
+        _same: Node => 1,
+    }, n);
+}
+
+test {
+    with HtmlInputElement => &Typed {}, FileList => &Typed {} do {
+        assert by_match(an_input()) == "typed";
+        assert by_match(a_node()) == "";
+        assert by_let_else(an_input()) == "typed";
+        assert by_let_else(a_node()) == "";
+        assert nested(an_input()) == "typed";
+        assert mid_chain(an_input()) == "typed";
+        assert captured_narrowed(an_input()) == "typed";
+        assert called_here(an_input()) == "typed";
+        assert handed_out(an_input()) == "3";
+        assert through_effect_parameter(an_input()) == "typed";
+        assert through_iterator([an_input(), a_node()]) == ["typed", ""];
+    }
+    assert is_input(an_input()) && !is_input(a_node());
+    assert same_resource(a_node()) == 1;
+}
+
+struct Typed {}
+
+impl HtmlInputElement for Typed {
+    fn value(&self, this: &HtmlInputElement) -> String {
+        resume "typed"
+    }
+
+    fn files(&self, this: &HtmlInputElement) -> FileList {
+        resume FileList::backed_by(Typed {})
+    }
+}
+
+impl FileList for Typed {
+    fn length(&self, this: &FileList) -> i32 {
+        resume 3
+    }
+}
+
+fn a_node() -> Node {
+    return builtin::black_box(Node::backed_by(Typed {}));
+}
+
+fn an_input() -> Node {
+    return builtin::black_box(HtmlInputElement::backed_by(Typed {}));
+}

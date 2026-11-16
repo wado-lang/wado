@@ -726,11 +726,20 @@ impl ClosureLowerer {
                 assigned: &mut assigned,
             }
             .visit_block(&body_block);
-            let declared: IndexSet<u32> = body_locals.iter().map(|(idx, _)| *idx).collect();
+            let mut declared: IndexMap<u32, TypeId> = IndexMap::default();
+            for &(idx, type_id) in &body_locals {
+                let first = *declared.entry(idx).or_insert(type_id);
+                assert!(
+                    first == type_id,
+                    "a closure body declares each local with one type: local {idx} is {:?} and {:?}",
+                    type_table.get(first),
+                    type_table.get(type_id),
+                );
+            }
             body_locals.extend(
                 assigned
                     .into_iter()
-                    .filter(|(idx, _)| !declared.contains(idx)),
+                    .filter(|(idx, _)| !declared.contains_key(idx)),
             );
 
             // Body locals use synthetic placeholders here; `wir_build`
@@ -1425,8 +1434,12 @@ impl TirRefVisitor for LocalCollector<'_> {
     }
 
     /// A slot a producer preallocates and assigns, a minted temporary, is
-    /// declared by that assignment and nothing else.
+    /// declared by that assignment and nothing else. A nested closure numbers
+    /// its locals from zero again, so its slots are not this body's.
     fn visit_expr(&mut self, expr: &TirExpr) {
+        if matches!(expr.kind, TirExprKind::Closure { .. }) {
+            return;
+        }
         if let TirExprKind::Assign { target, value } = &expr.kind
             && let TirExprKind::Local { index, .. } = &target.kind
         {

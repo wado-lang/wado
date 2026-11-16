@@ -1,0 +1,158 @@
+use { flush, memo, observe, on_cleanup, scope, signal } from "./signals.wado";
+use { SurfaceDom } from "wado-lang:web";
+
+test "an effect reruns once for a batch of writes" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let a = signal(1);
+        let b = signal(10);
+        let mut seen: List<i32> = [];
+        observe(|| seen.push(a.get() + b.get()));
+        assert seen == [11];
+
+        a.set(2);
+        b.set(20);
+        assert seen == [11];
+        flush();
+        assert seen == [11, 22];
+    };
+}
+
+test "a copy of a signal is the same signal" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(0);
+        let copy = count;
+        copy.set(5);
+        assert count.get() == 5;
+    };
+}
+
+test "a diamond is computed once and never seen half updated" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(1);
+        let mut computed = 0;
+        let doubled = memo(|| {
+            computed += 1;
+            return count.get() * 2;
+        });
+        let tripled = memo(|| count.get() * 3);
+        let sum = memo(|| doubled.get() + tripled.get());
+        let mut seen: List<i32> = [];
+        observe(|| seen.push(sum.get()));
+        assert seen == [5];
+        assert computed == 1;
+
+        count.set(10);
+        assert computed == 1;
+        flush();
+        assert seen == [5, 50];
+        assert computed == 2;
+    };
+}
+
+test "a dependency no longer read does not rerun the effect" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let use_first = signal(true);
+        let first = signal(1);
+        let second = signal(2);
+        let mut seen: List<i32> = [];
+        observe(|| seen.push(if use_first.get() { first.get() } else { second.get() }));
+
+        use_first.set(false);
+        flush();
+        assert seen == [1, 2];
+
+        first.set(100);
+        flush();
+        assert seen == [1, 2];
+    };
+}
+
+test "a dependency a memo no longer reads does not recompute it" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let use_first = signal(true);
+        let first = signal(1);
+        let second = signal(2);
+        let picked = memo(|| if use_first.get() { first.get() } else { second.get() });
+        let mut seen: List<i32> = [];
+        observe(|| seen.push(picked.get()));
+
+        use_first.set(false);
+        flush();
+        first.set(100);
+        flush();
+        assert seen == [1, 2];
+    };
+}
+
+test "a write an effect makes to what it read reruns it" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(1);
+        let doubled = memo(|| count.get() * 2);
+        let mut seen: List<i32> = [];
+        observe(|| {
+            seen.push(doubled.get());
+            if count.get() == 1 {
+                count.set(2);
+            }
+        });
+        flush();
+        assert seen == [2, 4];
+    };
+}
+
+test "disposing of a scope stops its effects and runs their cleanups" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(0);
+        let mut seen: List<i32> = [];
+        let mut cleaned = 0;
+        let mut dispose = scope(|| {
+            observe(|| {
+                seen.push(count.get());
+                on_cleanup(|| cleaned += 1);
+            });
+        });
+
+        count.set(1);
+        flush();
+        assert seen == [0, 1];
+        assert cleaned == 1;
+
+        dispose();
+        assert cleaned == 2;
+        count.set(2);
+        flush();
+        assert seen == [0, 1];
+    };
+}
+
+test "an effect made by an effect is disposed when its maker reruns" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let outer = signal(0);
+        let inner = signal(0);
+        let mut inner_runs = 0;
+        observe(|| {
+            outer.get();
+            observe(|| {
+                inner.get();
+                inner_runs += 1;
+            });
+        });
+        assert inner_runs == 1;
+
+        outer.set(1);
+        flush();
+        assert inner_runs == 2;
+
+        inner.set(1);
+        flush();
+        assert inner_runs == 3;
+    };
+}
