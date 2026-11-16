@@ -655,18 +655,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_info = Some(info);
             } else {
                 matched_impl_decl = trait_match.impl_struct_fq.head().def();
-                if trait_match.impl_struct_fq.head()
-                    != self.tysys.fq_receiver_head(base_type_id).head()
-                {
-                    trait_impl_struct_name = Some(trait_match.impl_struct_fq);
-                }
                 trait_name = Some(trait_match.trait_name);
                 // A newtype inherits a trait impl its base wrote, and the impl
                 // spells `Self` as that base. Name the link the impl sits on, so
                 // the signature re-types to the receiver the way an inherited
-                // inherent method's does.
+                // inherent method's does, and the call is named as a call on the
+                // link: a block written at one instantiation keeps its arguments
+                // (issue #2644).
                 if let Some(trait_def) = trait_name.as_ref().and_then(FqTraitName::canonical)
-                    && let Some(link) = self.tysys.impl_link(base_type_id, trait_def)
+                    && let Some(link) = match info.impl_block {
+                        Some(block) => self.tysys.block_link(base_type_id, trait_def, block),
+                        None => self.tysys.impl_link(base_type_id, trait_def),
+                    }
                     && link != base_type_id
                     && info.owner == MethodOwner::Receiver
                 {
@@ -675,6 +675,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         MethodOwner::InheritedFrom(link)
                     };
+                } else if trait_match.impl_struct_fq.head()
+                    != self.tysys.fq_receiver_head(base_type_id).head()
+                {
+                    trait_impl_struct_name = Some(trait_match.impl_struct_fq);
                 }
                 method_info = Some(info);
                 trait_impl_module_source = Some(trait_match.impl_module_source);
@@ -1193,9 +1197,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        // For trait methods found through the newtype chain, override with the actual impl struct.
-        // E.g., `loc.describe()` where `loc: Location`, `impl Describable for Point` →
-        // use "Point" so the call resolves to "Point^Describable::describe".
+        // A trait impl on a head the owner does not name (a `&T` impl, or one
+        // no newtype link of the receiver carries) names the call after the
+        // impl's target.
         if let Some(impl_name) = trait_impl_struct_name {
             receiver_struct_name.clone_from(&impl_name);
             base_struct_name = impl_name;

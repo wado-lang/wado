@@ -754,17 +754,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return TypeTable::ERROR;
                 };
 
-                // For newtypes, resolve base type for trait impl fallback
-                let (lookup_name, lookup_type_id) =
-                    self.tysys
-                        .trait_impl_base_lookup(&struct_name, left, trait_);
-
                 // The right operand is resolved by now, so its type selects
                 // among the receiver's `Add<Rhs>` impls (WEP 2026-07-31).
                 let rhs_class = ArgClass::Exact(right);
                 let mut admitted =
                     self.find_arithmetic_trait_impls(left, trait_, method_name, Some(&rhs_class));
-                let mut impl_name = struct_name;
+                let mut impl_name = struct_name.clone();
                 let mut impl_type_id = left;
                 if admitted.is_empty() {
                     // The impl is read on the link that wrote it, so the right
@@ -775,14 +770,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.tysys.type_table.borrow().representation_head(right)
                     });
                     let rhs_class = ArgClass::Exact(rhs_base);
-                    admitted = self.find_arithmetic_trait_impls(
-                        lookup_type_id,
-                        trait_,
-                        method_name,
-                        Some(&rhs_class),
-                    );
-                    impl_name.clone_from(&lookup_name);
-                    impl_type_id = lookup_type_id;
+                    for (lookup_name, lookup_type_id) in
+                        self.tysys
+                            .trait_impl_base_lookups(&struct_name, left, trait_)
+                    {
+                        admitted = self.find_arithmetic_trait_impls(
+                            lookup_type_id,
+                            trait_,
+                            method_name,
+                            Some(&rhs_class),
+                        );
+                        if !admitted.is_empty() {
+                            impl_name = lookup_name;
+                            impl_type_id = lookup_type_id;
+                            break;
+                        }
+                    }
                 }
                 // Unique-or-error: several admitted impls are reported here,
                 // where the span is, and dispatch falls through to the
@@ -1151,19 +1154,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(trait_) = self.tysys.compiler_trait_def(item) else {
                 return Some(TypeTable::ERROR);
             };
-            let (lookup_name, lookup_type_id) =
-                self.tysys
-                    .trait_impl_base_lookup(&struct_name, expr_type, trait_);
             let resolved = self
                 .resolve_trait_method_for_op(&struct_name, expr_type, trait_, method_name, None)
                 .or_else(|| {
-                    self.resolve_trait_method_for_op(
-                        &lookup_name,
-                        lookup_type_id,
-                        trait_,
-                        method_name,
-                        None,
-                    )
+                    self.tysys
+                        .trait_impl_base_lookups(&struct_name, expr_type, trait_)
+                        .into_iter()
+                        .find_map(|(lookup_name, lookup_type_id)| {
+                            self.resolve_trait_method_for_op(
+                                &lookup_name,
+                                lookup_type_id,
+                                trait_,
+                                method_name,
+                                None,
+                            )
+                        })
                 });
             if let Some(resolved) = resolved {
                 // Record the dispatch keyed by the unary expr's AstId
