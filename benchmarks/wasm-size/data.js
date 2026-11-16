@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794827897832,
+  "lastUpdate": 1794829998586,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78245,6 +78245,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b2ac64e0a0df031dad893ed32408a9e5d7aeaceb"
         },
         "date": 1794827897300,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24433,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434873,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0d47feb19305aaa12c3ba106347c38138649b216",
+          "message": "Merge pull request #2647 from wado-lang/docs/drop-box-underscore\n\ndocs: name the example type Box, not Box_",
+          "timestamp": "2026-11-16T20:37:12+09:00",
+          "tree_id": "2caeed22abe76f8e8cff05f4ba9cfe2e1d80917a",
+          "url": "https://github.com/wado-lang/wado/commit/0d47feb19305aaa12c3ba106347c38138649b216"
+        },
+        "date": 1794829998177,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
