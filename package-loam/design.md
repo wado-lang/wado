@@ -280,8 +280,7 @@ No device unpacks a weight when it loads.
 
 Each row is the largest deviation of the first token's logits from
 onnxruntime's, for Gemma 3 (270M)'s `q4` export, on an NVIDIA RTX 4060 Ti over
-Vulkan and on XLA's CPU plugin. Every row picks onnxruntime's tokens, by the
-lead the last table gives.
+Vulkan and on XLA's CPU plugin. Every row picks onnxruntime's tokens.
 
 | Run, in `example/gemma3-270m/`         | "Hello, my name is" | The France prompt |
 | -------------------------------------- | ------------------- | ----------------- |
