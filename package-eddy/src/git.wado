@@ -27,31 +27,53 @@ fn run_git(args: List<String>) -> Result<String, ProcessError> with Process {
 
 /// The paths `.gitattributes` marked generated or vendored at `rev`.
 pub fn generated(rev: &String, paths: &List<String>) -> List<String> with Process {
-    let mut marked: List<String> = [];
     if paths.is_empty() {
-        return marked;
+        return [];
     }
-    let mut check = ["check-attr", "--source", *rev, "linguist-generated", "linguist-vendored", "--"] as List<String>;
+    let mut check = ["check-attr", "-z", "--source", *rev, "linguist-generated", "linguist-vendored", "--"] as List<String>;
     check.extend(paths);
-    for let line of git(check).lines() {
-        if !(line.ends_with(": set") || line.ends_with(": true")) {
-            continue;
-        }
-        if let Some(at) = line.find(": linguist-") {
-            marked.push(line.slice(0, at).to_string());
+    return marked(&nul_separated(&git(check)));
+}
+
+/// The paths among `fields`, `check-attr -z`'s path, attribute and value in
+/// turn, whose attribute is set.
+fn marked(fields: &List<String>) -> List<String> {
+    assert fields.len() % 3 == 0, "check-attr -z prints a path, an attribute and a value";
+    let mut paths: List<String> = [];
+    for let i of (0..<fields.len()).step_by(3) {
+        let value = &fields[i + 2];
+        if (*value == "set" || *value == "true") && !paths.contains_str(&fields[i]) {
+            paths.push(fields[i]);
         }
     }
-    return marked;
+    return paths;
 }
 
 /// The paths that differ from `base` to `head`, both sides of a rename: a diff
 /// given only the new path shows the renamed file as wholly added.
 pub fn paths_between(base: &String, head: &String) -> List<String> with Process {
-    let mut paths: List<String> = [];
-    for let f of git(["diff", "--name-only", "--no-renames", *base, *head]).lines() {
-        paths.push(f.to_string());
-    }
-    return paths;
+    return nul_separated(&git(["diff", "--name-only", "--no-renames", "-z", *base, *head]));
+}
+
+/// The fields of `output`, each ended by a NUL. `git -z` prints a path as it
+/// is; without it, a path holding a quote or a control character is printed
+/// quoted, a form `git` does not take back.
+fn nul_separated(output: &String) -> List<String> {
+    let mut fields: List<String> = output.split("\0").map(|field| field.to_string()).collect();
+    assert fields.pop() == Some(""), "every field ends in a NUL";
+    return fields;
+}
+
+test "git's NUL-separated output keeps a path as it is" {
+    assert nul_separated(&"a \"b\".rs\0c\nd.rs\0") == ["a \"b\".rs", "c\nd.rs"];
+    assert nul_separated(&"").is_empty();
+}
+
+test "a path is generated where either attribute is set" {
+    let fields = nul_separated(
+        &"a.json\0linguist-generated\0true\0a.json\0linguist-vendored\0unspecified\0v/x.c\0linguist-generated\0unspecified\0v/x.c\0linguist-vendored\0set\0m.rs\0linguist-generated\0false\0m.rs\0linguist-vendored\0unspecified\0",
+    );
+    assert marked(&fields) == ["a.json", "v/x.c"];
 }
 
 /// What changed in `paths` from `base` to `head`, generated, vendored and

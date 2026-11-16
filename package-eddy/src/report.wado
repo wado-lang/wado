@@ -379,6 +379,8 @@ test "a reproduction's files leave the tree as a patch that applies to a clean o
     fs::write(`${root}/tests/new.rs`, &"#[test] fn t() {}\n").unwrap();
     fs::write(`${root}/kept.txt`, &"new\n").unwrap();
     fs::write(`${root}/unnamed.txt`, &"another finding's\n").unwrap();
+    git(["init", "--quiet", `${root}/nested`]);
+    fs::write(`${root}/nested/fixture.txt`, &"a run's\n").unwrap();
     let patch = patch_of(&w, &commit, &["tests/new.rs", "/kept.txt"]).unwrap();
     assert patch_of(&w, &commit, &["tests/absent.rs"]).is_err();
     assert patch_of(&w, &commit, &["Cargo.toml"]).is_err();
@@ -386,7 +388,7 @@ test "a reproduction's files leave the tree as a patch that applies to a clean o
     assert patch_of(&w, &commit, &[]).is_err();
 
     reset_snapshot(&w.root, &commit);
-    assert !fs::exists(`${root}/tests/new.rs`);
+    assert !fs::exists(`${root}/tests/new.rs`) && !fs::exists(`${root}/nested`);
     apply(&w, &patch).unwrap();
     assert fs::read_to_string(`${root}/tests/new.rs`).unwrap() == "#[test] fn t() {}\n";
     assert fs::read_to_string(`${root}/kept.txt`).unwrap() == "new\n";

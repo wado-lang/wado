@@ -7,6 +7,12 @@ use { Finding, Repro } from "./review.wado";
 /// GitHub refuses a comment past 65,536 characters; a byte is at most one.
 global BODY_LIMIT: i32 = 60_000;
 
+/// The most of a finding's summary and of its detail a comment holds, in
+/// bytes, so that a comment without its reproduction is always within
+/// `BODY_LIMIT`.
+global SUMMARY_LIMIT: i32 = 2_000;
+global DETAIL_LIMIT: i32 = 30_000;
+
 /// How many lines of a run's output a comment shows on each side of the text
 /// that was expected.
 global EXCERPT_REACH: i32 = 12;
@@ -26,7 +32,7 @@ fn body(f: &Finding, commit: &String, id: &String, with_steps: bool) -> String {
         Some(_) => "not reproduced: the reviewer's test did not fail this way when tried alone",
         None => "not reproduced",
     };
-    let mut out = `**${f.summary}** — ${status}\n\n${f.detail}\n\n`;
+    let mut out = `**${shortened(&f.summary, SUMMARY_LIMIT)}** — ${status}\n\n${shortened(&f.detail, DETAIL_LIMIT)}\n\n`;
     if let Some(r) = &f.repro && !r.patch.is_empty() {
         out.push_str(if with_steps { steps(r, commit) } else { "The reproduction is too large for a comment.\n\n" });
     }
@@ -34,15 +40,22 @@ fn body(f: &Finding, commit: &String, id: &String, with_steps: bool) -> String {
     return out;
 }
 
-/// The block that reproduces `r`, and what its run printed.
+/// `text`, or its first `limit` bytes and a mark that more followed.
+fn shortened(text: &String, limit: i32) -> String {
+    return if text.len() <= limit { *text } else { `${text.substr_bytes(0, text.floor_char_boundary(limit))}…` };
+}
+
+/// The block that reproduces `r`, and what its run printed. Each step runs
+/// only if the one before it succeeded, so a checkout or a patch that fails
+/// does not leave the test to pass or fail on another tree.
 fn steps(r: &Repro, commit: &String) -> String {
     let mut end = "EDDY";
     while r.patch.lines().any(|l| l == end) {
         end.push_str("_");
     }
     let command = r.run.into_iter().map(|word| shell_word(&word)).collect().join(" ");
-    let script = `git checkout ${*commit}
-git apply <<'${end}'
+    let script = `git checkout ${*commit} &&
+git apply <<'${end}' &&
 ${r.patch.trim_suffix("\n")}
 ${end}
 ${command}
@@ -128,7 +141,7 @@ test "a reproduced finding's comment holds one block that reproduces it" {
     let text = comment(&f, &"0123456789abcdef", &"012345678-1");
     assert text.starts_with("**S** — reproduced on `012345678`\n\nD\n\n");
     assert text.contains(
-        "```sh\ngit checkout 0123456789abcdef\ngit apply <<'EDDY'\ndiff --git a/t.rs b/t.rs\n+x\nEDDY\ncargo test --test t 'a b'\n```",
+        "```sh\ngit checkout 0123456789abcdef &&\ngit apply <<'EDDY' &&\ndiff --git a/t.rs b/t.rs\n+x\nEDDY\ncargo test --test t 'a b'\n```",
     );
     assert text.contains("Fails with ` left: 1 `:\n\n```\nexit code 101\nleft: 1\n```");
     assert text.ends_with("<!-- eddy 012345678-1 -->\n");
@@ -159,7 +172,7 @@ test "what a patch holds cannot close the block around it" {
     };
     let text = comment(&f, &"0123456789", &"i");
     assert text.contains("````sh\n")
-        && text.contains("git apply <<'EDDY_'\n")
+        && text.contains("git apply <<'EDDY_' &&\n")
         && text.contains("\nEDDY_\nmise run t\n````");
     assert text.contains("Fails with `` `e` ``:");
 }
@@ -173,6 +186,14 @@ test "a reproduction too large for a comment is named, not cut" {
     };
     let text = comment(&f, &"0123456789", &"i");
     assert text.len() < BODY_LIMIT && text.contains("too large for a comment") && !text.contains("git apply");
+
+    let wordy = Finding {
+        file: "a",
+        summary: "S".repeat(40_000),
+        detail: "é".repeat(40_000),
+    };
+    let cut = comment(&wordy, &"0123456789", &"i");
+    assert cut.len() < BODY_LIMIT && cut.ends_with("…\n\n<!-- eddy i -->\n");
 }
 
 test "an excerpt is the lines around what was expected" {

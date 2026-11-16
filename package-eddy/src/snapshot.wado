@@ -160,7 +160,9 @@ pub fn reset_snapshot(root: &String, sha: &String) with Process {
 
 fn reset_checkout(dir: &String, commit: &String) with Process {
     tree_git(dir, ["reset", "--hard", "--quiet", *commit]);
-    tree_git(dir, ["clean", "-fdx", "--quiet"]);
+    // Twice forced: once leaves an untracked directory that is a repository
+    // of its own, such as one a test made.
+    tree_git(dir, ["clean", "-ffdx", "--quiet"]);
 }
 
 pub fn drop_snapshot(root: &String) with (Process, Preopens) {
