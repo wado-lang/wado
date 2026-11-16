@@ -558,7 +558,12 @@ impl TypeSystem {
 
     /// [`Self::impl_link`] for the one impl block a call selected: a nearer
     /// link may implement the same trait at other arguments.
-    pub(crate) fn block_link(&self, type_id: TypeId, trait_: DefId, block: DefId) -> Option<TypeId> {
+    pub(crate) fn block_link(
+        &self,
+        type_id: TypeId,
+        trait_: DefId,
+        block: DefId,
+    ) -> Option<TypeId> {
         self.link_where(type_id, trait_, |b| b == block)
     }
 
@@ -570,11 +575,33 @@ impl TypeSystem {
     ) -> Option<TypeId> {
         let tt = self.type_table.borrow();
         let solver = self.solver();
-        links(&tt, type_id).find(|&tid| {
-            written_impl_reaches_where(&self.trait_env, trait_, tid, &tt, &admits)
-                || eq_from_written_cmp(&self.trait_env, &solver, trait_, tid, &tt)
-                    .is_some_and(|paired| admits(paired.block))
-        })
+        links(&tt, type_id).find(|&tid| self.link_owns(&tt, &solver, tid, trait_, &admits))
+    }
+
+    /// Every link at or below `type_id` owning an impl of `trait_`, nearest
+    /// first: a nearer link may implement it at other arguments than the
+    /// operand asks.
+    fn impl_links(&self, type_id: TypeId, trait_: DefId) -> Vec<TypeId> {
+        let tt = self.type_table.borrow();
+        let solver = self.solver();
+        links(&tt, type_id)
+            .filter(|&tid| self.link_owns(&tt, &solver, tid, trait_, |_| true))
+            .collect()
+    }
+
+    /// Whether `link` owns an impl block of `trait_` that `admits`: one it
+    /// writes, or the `Eq` a `cmp` it writes alone gives it.
+    fn link_owns(
+        &self,
+        tt: &TypeTable,
+        solver: &SolverBridge,
+        link: TypeId,
+        trait_: DefId,
+        admits: impl Fn(DefId) -> bool,
+    ) -> bool {
+        written_impl_reaches_where(&self.trait_env, trait_, link, tt, &admits)
+            || eq_from_written_cmp(&self.trait_env, solver, trait_, link, tt)
+                .is_some_and(|paired| admits(paired.block))
     }
 
     /// Whether [`Self::impl_link`]'s walk from `type_id` crosses a reference
@@ -590,17 +617,22 @@ impl TypeSystem {
     /// [`Self::impl_link`], stopping above a scalar base: a primitive's
     /// operator impl *is* the instruction, not one a newtype inherits.
     pub(crate) fn own_impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
-        self.impl_link(type_id, trait_).filter(|&link| {
-            link == type_id
-                || matches!(
-                    self.type_table.borrow().get(link),
-                    ResolvedType::Newtype { .. }
-                        | ResolvedType::Struct { .. }
-                        | ResolvedType::Resource { .. }
-                        | ResolvedType::Tuple(_)
-                        | ResolvedType::Variant { .. }
-                )
-        })
+        self.impl_link(type_id, trait_)
+            .filter(|&link| self.inherits_from(type_id, link))
+    }
+
+    /// Whether `type_id` inherits the impls `link`, one of its links, writes:
+    /// not a scalar base's, which are the instruction itself.
+    fn inherits_from(&self, type_id: TypeId, link: TypeId) -> bool {
+        link == type_id
+            || matches!(
+                self.type_table.borrow().get(link),
+                ResolvedType::Newtype { .. }
+                    | ResolvedType::Struct { .. }
+                    | ResolvedType::Resource { .. }
+                    | ResolvedType::Tuple(_)
+                    | ResolvedType::Variant { .. }
+            )
     }
 
     /// The prelude struct a `kind` range literal builds: its name, and its
@@ -630,25 +662,33 @@ impl TypeSystem {
     }
 
     /// [`Self::newtype_base_lookup`] for a trait dispatch: an impl a link below
-    /// the receiver wrote still answers for it, so stop at that link rather
-    /// than one peel down, where a longer chain carries none.
-    pub(crate) fn trait_impl_base_lookup(
+    /// the receiver wrote still answers for it, so ask each such link, nearest
+    /// first, rather than one peel down, where a longer chain carries none.
+    /// The caller takes the first whose impl admits its operands.
+    pub(crate) fn trait_impl_base_lookups(
         &self,
         name: &str,
         type_id: TypeId,
         trait_: DefId,
-    ) -> (String, TypeId) {
-        match self.own_impl_link(type_id, trait_) {
-            Some(link) if link != type_id => (self.type_table.borrow().base_type_name(link), link),
-            _ => match self.newtype_base_lookup(type_id) {
-                base if base == type_id => (name.to_string(), type_id),
-                base => (
-                    self.struct_name_for_type(base)
-                        .expect("a newtype's lookup base names a struct"),
-                    base,
-                ),
-            },
+    ) -> Vec<(String, TypeId)> {
+        let below: Vec<(String, TypeId)> = self
+            .impl_links(type_id, trait_)
+            .into_iter()
+            .take_while(|&link| self.inherits_from(type_id, link))
+            .filter(|&link| link != type_id)
+            .map(|link| (self.type_table.borrow().base_type_name(link), link))
+            .collect();
+        if !below.is_empty() {
+            return below;
         }
+        vec![match self.newtype_base_lookup(type_id) {
+            base if base == type_id => (name.to_string(), type_id),
+            base => (
+                self.struct_name_for_type(base)
+                    .expect("a newtype's lookup base names a struct"),
+                base,
+            ),
+        }]
     }
 
     /// A newtype's representation head, for a trait-impl lookup fallback, else

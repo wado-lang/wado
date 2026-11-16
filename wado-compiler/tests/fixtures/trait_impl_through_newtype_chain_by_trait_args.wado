@@ -25,6 +25,28 @@ impl Alpha<i64> for Pair_<i32, i32> {
     }
 }
 
+impl Add<i32> for Mid {
+    type Output = i32;
+    fn add(&self, rhs: &i32) -> i32 {
+        return 10;
+    }
+}
+
+impl Add<i64> for Pair_<i32, i32> {
+    type Output = i32;
+    fn add(&self, rhs: &i64) -> i32 {
+        return 20;
+    }
+}
+
+test "each operand type reaches its own link" {
+    let p: Pair_<i32, i32> = { a: 1, b: 2 };
+    assert p + (5 as i64) == 20;
+    let o: Outer = { a: 1, b: 2 };
+    assert o + 5 == 10;
+    assert o + (5 as i64) == 20;
+}
+
 test "each trait argument reaches its own link" {
     let p: Pair_<i32, i32> = { a: 1, b: 2 };
     assert Alpha::<i64>::m(&p) == 2;
