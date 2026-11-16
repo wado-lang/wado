@@ -35,7 +35,8 @@ fn checkout_at(repo: &String, tree: &String, sha: &String) -> String with (Proce
         return root;
     }
     tree_git(&root, ["checkout", "--force", "--detach", "--quiet", *sha]);
-    // Its submodules are reset where Run checks them out again.
+    // Leaves the submodules in it as they are: `add_build_submodules` checks
+    // out each one Run builds from.
     reset_checkout(&root, sha);
     return root;
 }
@@ -88,14 +89,7 @@ pub fn add_build_submodules(root: &String) with (Process, Preopens) {
         if try_git(["-C", path, "cat-file", "-e", `${sha}^{commit}`]) matches { None } {
             git(["-C", path, "fetch", "--quiet", "--depth", "1", "origin", sha]);
         }
-        let checkout = fs::join(root, &path);
-        if fs::exists(fs::join(&checkout, ".git")) {
-            tree_git(&checkout, ["checkout", "--force", "--detach", "--quiet", sha]);
-            reset_checkout(&checkout, &sha);
-        } else {
-            git(["-C", path, "worktree", "prune"]);
-            tree_git(&path, ["worktree", "add", "--force", "--detach", from_submodule(&path, root), sha]);
-        }
+        checkout_at(&path, &from_submodule(&path, root), &sha);
     }
 }
 
