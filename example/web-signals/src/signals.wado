@@ -61,7 +61,7 @@ fn new_dep() -> Dep {
 
 fn id_of(observer: &Observer) -> i32 {
     return match observer {
-        Memo(memo) => memo.id,
+        Memo(core) => core.id,
         Effect(watcher) => watcher.id,
     };
 }
@@ -93,10 +93,10 @@ fn unsubscribe_all(deps: List<Dep>, id: i32) {
 fn notify(dep: Dep) {
     for let observer of dep.readers.observers {
         match observer {
-            Memo(memo) => {
-                if memo.fresh {
-                    memo.fresh = false;
-                    notify(memo.dep);
+            Memo(core) => {
+                if core.fresh {
+                    core.fresh = false;
+                    notify(core.dep);
                 }
             },
             Effect(watcher) => {
@@ -222,24 +222,34 @@ impl<T> Memo<T> {
     }
 }
 
+/// Lets go of what the effect owns and of what it listens to.
+fn release(watcher: &mut EffectCore) with Dom {
+    dispose_all(watcher.owned);
+    watcher.owned = [];
+    unsubscribe_all(watcher.deps, watcher.id);
+    watcher.deps = [];
+}
+
 fn run(watcher: &mut EffectCore) with Dom {
     if watcher.disposed {
         return;
     }
-    dispose_all(watcher.owned);
-    unsubscribe_all(watcher.deps, watcher.id);
+    release(watcher);
     let mut computation = Computation {
         observer: Option::Some(Observer::Effect(watcher)),
         deps: [],
         owns: true,
         owned: [],
     };
-    let mut body = watcher.body;
     with Track => &mut computation do {
-        body();
+        (watcher.body)();
     };
     watcher.deps = computation.deps;
     watcher.owned = computation.owned;
+    // The body may have disposed of the effect it runs in.
+    if watcher.disposed {
+        release(watcher);
+    }
 }
 
 /// Runs `body` now, and again after a flush whenever something it read was
@@ -250,10 +260,7 @@ pub fn observe(body: fn mut() with (Track, Dom)) with (Track, Dom) {
     run(&mut watcher);
     Track::own(|| {
         watcher.disposed = true;
-        dispose_all(watcher.owned);
-        watcher.owned = [];
-        unsubscribe_all(watcher.deps, watcher.id);
-        watcher.deps = [];
+        release(&mut watcher);
     });
 }
 

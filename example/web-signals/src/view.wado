@@ -47,9 +47,8 @@ struct Row<T> {
 }
 
 fn remove_rows<T>(parent: Element, rows: List<Row<T>>) with Dom {
-    for let row of rows {
-        let mut dispose = row.dispose;
-        dispose();
+    for let mut row of rows {
+        (row.dispose)();
         parent.remove_child(row.node);
     }
 }

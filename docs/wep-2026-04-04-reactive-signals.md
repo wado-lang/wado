@@ -105,10 +105,9 @@ not to the language.
 
 - A tracked read dispatches an effect operation, and each run of a computation
   installs a handler. What either costs is not measured.
-- A leading `<` in expression position is still reserved for markup. This WEP
-  reserved it for JSX and no longer uses it, and
-  [Overload Resolution](./wep-2026-07-31-overload-resolution.md) rules out
-  `<Type as Trait>::method` on that account.
+- [Overload Resolution](./wep-2026-07-31-overload-resolution.md) reserves a
+  leading `<` in expression position for markup. This WEP wanted it for JSX and
+  no longer does, so whether the reservation stays is open.
 - The library lives in `example/web-signals`. Nothing publishes it as a
   package.
 - A memo does not compare its new value with the old one, so its dependents
@@ -123,5 +122,3 @@ not to the language.
 - A text binding owns its element's whole content, since `SurfaceDom` has no
   `Text` node.
 - No template syntax exists. A page is built by calls.
-- A field holding a function value cannot be called in place. It is copied to
-  a local first.
