@@ -319,7 +319,8 @@ impl Graph for WebGpuBackend {
     ) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         // On the device an `i64` is the index it holds as an f32, and those
         // four stay one: a product might not, and a quotient would not truncate.
-        let index_reckoning = op matches { Add | Subtract | Minimum | Maximum } && held_as_f32(a, b);
+        // A `u8` wraps, which an f32 does not.
+        let index_reckoning = !(E::kind() matches { U8 }) && op matches { Add | Subtract | Minimum | Maximum } && held_as_f32(a, b);
         if !E::is_float() && !index_reckoning {
             return Placed::Host(self.cpu.binary(op, &self.host(a), &self.host(b)));
         }
