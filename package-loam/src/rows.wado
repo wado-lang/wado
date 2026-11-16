@@ -4,7 +4,7 @@
 
 use { HashMap, HashSet } from "core:collections";
 use { Extent } from "./extent.wado";
-use { GROUP_QUERY_ATTENTION, Graph, Node, settled } from "./graph.wado";
+use { GROUP_QUERY_ATTENTION, Graph, MATMUL_NBITS, Node, settled } from "./graph.wado";
 use {
     ATTENTION_BIAS,
     Checked,
@@ -16,6 +16,7 @@ use {
     gather_axis,
     gemm_options,
     is_elementwise,
+    is_gather,
     is_reduction,
     range_bounds,
     reduced_axes,
@@ -152,7 +153,7 @@ pub fn keeps_lifted(node: &Node, checked: &Checked, read: &List<String>) -> bool
         || op == "Flatten"
         || op == "Unsqueeze"
         || op == "Squeeze"
-        || op == "Gather"
+        || is_gather(&op)
             && !read.contains(&node.inputs[0])
             && settled(gather_axis(node, checked.shapes[node.inputs[0]].rank())) == 0;
 }
@@ -367,7 +368,7 @@ impl Judge {
                     }
                 }
             }
-            if node.op == "Gather" {
+            if is_gather(&node.op) {
                 return self.gathered(node, checked);
             }
             return null;
@@ -423,8 +424,12 @@ impl Judge {
             }
             return null;
         }
-        if op == "Gather" {
+        if is_gather(&op) {
             return self.gathered(node, checked);
+        }
+        if op == MATMUL_NBITS {
+            let left = shapes[node.inputs[0]];
+            return self.masked(&left, left.rank() - 1);
         }
         if op == "Softmax" {
             let lane = settled(softmax_lane(node, out.rank(), opset));

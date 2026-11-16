@@ -2351,11 +2351,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
         // A newtype inherits its base's `Eq`, which is where the impl is.
-        let (_, receiver) = self
-            .tysys
-            .trait_impl_base_lookup(&written, scrutinee, eq_trait);
-        self.find_arithmetic_trait_impl(receiver, eq_trait, &method, Some(&ArgClass::StrLit))
-            .is_some()
+        self.tysys
+            .trait_impl_base_lookups(&written, scrutinee, eq_trait)
+            .into_iter()
+            .any(|(_, receiver)| {
+                self.find_arithmetic_trait_impl(
+                    receiver,
+                    eq_trait,
+                    &method,
+                    Some(&ArgClass::StrLit),
+                )
+                .is_some()
+            })
     }
 
     /// Report a literal pattern that names no value of `scrutinee_type`: one

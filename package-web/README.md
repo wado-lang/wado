@@ -58,8 +58,8 @@ follow the HTML standard's serialization. `example/web-ssr` prints a page with
   member, over the main module's own signature. An object crosses as itself,
   so the glue keeps no table. `mise run test-web-glue` runs it on Node against
   jsdom (`glue/dom.test.mjs`).
-- `src/surface_dom.wado` — `SurfaceDom`, written by hand. Its own nodes back
-  the handles it gives out.
+- `src/surface_dom.wado` — `SurfaceDom`, written by hand. Each node lives in
+  its handle, linked to the others by theirs.
 - `src/lib.wado` — the facade `wado-lang:web` names. A name a wider slice
   generates must be added here; a test fails until it is.
 

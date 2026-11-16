@@ -701,6 +701,8 @@ struct LoadedModule {
     coverage: Option<(Arc<CoverageRun>, Registration)>,
     /// Whether this module's tests may spawn.
     process: ProcessGrant,
+    /// `--max-memory`: how far each memory of a test may grow.
+    max_memory: Option<u64>,
     _module_permit: OwnedSemaphorePermit,
 }
 
@@ -1159,6 +1161,7 @@ fn load_module(
                     profiler,
                     coverage,
                     process: runtime_knobs.process,
+                    max_memory: runtime_knobs.max_memory,
                     _module_permit: module_permit,
                 }),
                 cache_reads,
@@ -1795,6 +1798,7 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
             Arc::clone(&clock),
         ),
         module.process.clone(),
+        module.max_memory,
     ) {
         Ok(v) => v,
         Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start, None),

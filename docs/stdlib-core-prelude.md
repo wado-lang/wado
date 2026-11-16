@@ -329,12 +329,18 @@ ones (`variant`, `fn`). A `&mut` to one of these writes through to the stored
 value. Sealed and compiler-synthesized; user impls are rejected.
 See WEP 2026-01-20.
 
-### `pub trait AffineResource with ()`
+### `pub trait Resource with ()`
+
+Marker every resource holds, and nothing else. A resource names an object
+rather than holding a value, so a `&R` to one promises nothing about the
+object. Sealed and compiler-stated; user impls are rejected.
+
+### `pub trait AffineResource: Resource with ()`
 
 Marker every affine resource holds, and nothing else. Sealed and
 compiler-stated; user impls are rejected. See WEP: Affine Types.
 
-### `pub trait ExternHandle with ()`
+### `pub trait ExternHandle: Resource with ()`
 
 Marker of an extern handle: a resource declared `repr = "externref"`.
 Sealed and compiler-stated; user impls are rejected. See WEP: Extern
@@ -346,15 +352,16 @@ What every extern handle offers: it is the host's object, or backed by a
 value of the guest. Only a `RefMut` type backs one: a reference to any
 other is a cell, which carries neither the value's identity nor its type.
 
-#### `fn backed_by<T: RefMut>(value: &mut T) -> Self`
+#### `fn backed_by<T: RefMut>(value: T) -> Self`
 
-A handle `value` stands behind. Backing one value twice gives equal
-handles. The reference is `&mut`, since `backing` hands one back.
+A new handle holding `value`, which only the handle reaches from here
+on. Each call makes a handle equal to no other.
 
 #### `fn backing<T: RefMut>(&self) -> Option<&mut T>`
 
-The value behind this handle: `None` for the host's object, and for a
-handle a value of another type backs.
+The value this handle holds, in place: `None` for the host's object,
+and for a handle holding a value of another type. It is `&mut` under
+`&self` because a resource is the object it names, not a place.
 
 ### `pub trait AnyBits with ()`
 

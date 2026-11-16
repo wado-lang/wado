@@ -3,7 +3,7 @@
 use { Graph } from "./graph.wado";
 use { Checked, infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
-use { read_checkpoint } from "./runtime/checkpoint.wado";
+use { header_of } from "./runtime/checkpoint.wado";
 use {
     CheckpointFile,
     StoredTensor,
@@ -35,8 +35,9 @@ fn checked_graph() -> [Graph, Checked] {
 
 fn check(stored: List<StoredTensor>) -> Result<(), String> {
     let [graph, checked] = checked_graph();
-    let bytes = write_safetensors(&stored);
-    return check_checkpoint(&graph, &checked.shapes, &read_checkpoint(&bytes).unwrap()).map_err(|e| `${e}`);
+    return check_checkpoint(&graph, &checked.shapes, &header_of(write_safetensors(&stored)).unwrap()).map_err(
+        |e| `${e}`,
+    );
 }
 
 fn weight(shape: List<i64>) -> StoredTensor {

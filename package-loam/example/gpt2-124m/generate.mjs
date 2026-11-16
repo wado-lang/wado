@@ -1,4 +1,4 @@
-// Writes generate.json beside model.onnx, as ../../tools/greedy.mjs says.
+// Writes generate.json beside decoder_model_merged.onnx, as ../../tools/greedy.mjs says.
 //
 //   mise run loam-oracle-deps
 //   node generate.mjs

@@ -805,7 +805,7 @@ fn ref_impl_written(trait_env: &TraitEnv, trait_: DefId, receiver: TypeId, tt: &
     })
 }
 
-fn written_impl_reaches_where(
+pub(crate) fn written_impl_reaches_where(
     trait_env: &TraitEnv,
     trait_: DefId,
     receiver: TypeId,

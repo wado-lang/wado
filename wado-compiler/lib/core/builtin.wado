@@ -780,10 +780,10 @@ internal fn resource_handle<affine R>(r: &R) -> i32;
 internal fn zero_handle<R>(r: &R);
 
 /// The extern handle of type `R` that `value` backs, carrying `R`'s own class.
-/// The handle keeps the reference itself, and may hand it to the host.
+/// The handle keeps the value itself, and may hand it to the host.
 #[storage(opaque)]
 #[side_effect(none)]
-internal fn extern_handle_backed_by<R, T>(value: &mut T) -> R;
+internal fn extern_handle_backed_by<R, T>(value: T) -> R;
 
 /// Whether a guest value backs `handle`, rather than a host object.
 #[storage(none)]

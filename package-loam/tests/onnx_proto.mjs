@@ -2,6 +2,7 @@
 // nothing past onnxruntime.
 
 export const FLOAT = 1;
+export const UINT8 = 2;
 export const INT32 = 6;
 export const INT64 = 7;
 export const BOOL = 9;

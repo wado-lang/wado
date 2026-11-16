@@ -783,34 +783,42 @@ pub trait Ref with () {
 pub trait RefMut with () {
 }
 
+/// Marker every resource holds, and nothing else. A resource names an object
+/// rather than holding a value, so a `&R` to one promises nothing about the
+/// object. Sealed and compiler-stated; user impls are rejected.
+#[compiler_item("resource")]
+pub trait Resource with () {
+}
+
 /// Marker every affine resource holds, and nothing else. Sealed and
 /// compiler-stated; user impls are rejected. See WEP: Affine Types.
 #[compiler_item("affine_resource")]
-pub trait AffineResource with () {
+pub trait AffineResource: Resource with () {
 }
 
 /// Marker of an extern handle: a resource declared `repr = "externref"`.
 /// Sealed and compiler-stated; user impls are rejected. See WEP: Extern
 /// Handles.
 #[compiler_item("extern_handle")]
-pub trait ExternHandle with () {
+pub trait ExternHandle: Resource with () {
 }
 
 /// What every extern handle offers: it is the host's object, or backed by a
 /// value of the guest. Only a `RefMut` type backs one: a reference to any
 /// other is a cell, which carries neither the value's identity nor its type.
 pub trait Backing with () {
-    /// A handle `value` stands behind. Backing one value twice gives equal
-    /// handles. The reference is `&mut`, since `backing` hands one back.
-    fn backed_by<T: RefMut>(value: &mut T) -> Self;
+    /// A new handle holding `value`, which only the handle reaches from here
+    /// on. Each call makes a handle equal to no other.
+    fn backed_by<T: RefMut>(value: T) -> Self;
 
-    /// The value behind this handle: `None` for the host's object, and for a
-    /// handle a value of another type backs.
+    /// The value this handle holds, in place: `None` for the host's object,
+    /// and for a handle holding a value of another type. It is `&mut` under
+    /// `&self` because a resource is the object it names, not a place.
     fn backing<T: RefMut>(&self) -> Option<&mut T>;
 }
 
 impl<R: ExternHandle> Backing for R {
-    fn backed_by<T: RefMut>(value: &mut T) -> R {
+    fn backed_by<T: RefMut>(value: T) -> R {
         return builtin::extern_handle_backed_by::<R, T>(value);
     }
 

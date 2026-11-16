@@ -144,20 +144,22 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
     let size: u32 = wide_size as u32;
     let k: u32 = ((size - 32) >> 4);
     let mut j: u32 = "core:builtin::select"::<u32>((k < 32), k, 32);
-    let $licm_arith_223: i32 = (size + 1) as i32;
+    let $licm_arith_226: i32 = (size + 1) as i32;
     loop {
         if !(j < 32) {
             break;
         }
         let b: u32 = "core:builtin::i32_load"((8 + (j * 4)) as i32) as u32;
-        let $cse_224: i32 = b as i32;
+        let $cse_227: i32 = b as i32;
+        let $cse_184: u32 = (b + size);
+        let $cse_228: i32 = $cse_184 as i32;
         if (b != 0) {
-            let tag: u32 = "core:builtin::i32_load"($cse_224) as u32;
+            let tag: u32 = "core:builtin::i32_load"($cse_227) as u32;
             let block_size: u32 = (tag & 4294967288);
             let next: u32 = "core:builtin::i32_load"((b + 8) as i32) as u32;
             let prev: u32 = "core:builtin::i32_load"((b + 12) as i32) as u32;
             if (prev == 0) {
-                let tag: u32 = "core:builtin::i32_load"($cse_224) as u32;
+                let tag: u32 = "core:builtin::i32_load"($cse_227) as u32;
                 let k: u32 = (((tag & 4294967288) - 32) >> 4);
                 "core:builtin::i32_store"((8 + ("core:builtin::select"::<u32>((k < 32), k, 32) * 4)) as i32, next as i32);
             } else {
@@ -168,23 +170,22 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
             }
             let remainder: u32 = (block_size - size);
             if (remainder >= 32) {
-                "core:builtin::i32_store"($cse_224, $licm_arith_223);
-                "core:builtin::i32_store"(((b + size) - 8) as i32, $licm_arith_223);
-                let rest: u32 = (b + size);
-                "core:builtin::i32_store"(rest as i32, remainder as i32);
-                "core:builtin::i32_store"(((rest + remainder) - 8) as i32, remainder as i32);
+                "core:builtin::i32_store"($cse_227, $licm_arith_226);
+                "core:builtin::i32_store"(($cse_184 - 8) as i32, $licm_arith_226);
+                "core:builtin::i32_store"($cse_228, remainder as i32);
+                "core:builtin::i32_store"((($cse_184 + remainder) - 8) as i32, remainder as i32);
                 let k: u32 = ((remainder - 32) >> 4);
                 let k: u32 = "core:builtin::select"::<u32>((k < 32), k, 32);
                 let head: u32 = "core:builtin::i32_load"((8 + (k * 4)) as i32) as u32;
-                "core:builtin::i32_store"((rest + 8) as i32, head as i32);
-                "core:builtin::i32_store"((rest + 12) as i32, 0);
+                "core:builtin::i32_store"(($cse_184 + 8) as i32, head as i32);
+                "core:builtin::i32_store"(($cse_184 + 12) as i32, 0);
                 if (head != 0) {
-                    "core:builtin::i32_store"((head + 12) as i32, rest as i32);
+                    "core:builtin::i32_store"((head + 12) as i32, $cse_228);
                 }
-                "core:builtin::i32_store"((8 + (k * 4)) as i32, rest as i32);
+                "core:builtin::i32_store"((8 + (k * 4)) as i32, $cse_228);
             } else {
                 let tag: u32 = (block_size + 1);
-                "core:builtin::i32_store"($cse_224, tag as i32);
+                "core:builtin::i32_store"($cse_227, tag as i32);
                 "core:builtin::i32_store"(((b + block_size) - 8) as i32, tag as i32);
             }
             return (b + 8) as i32;
@@ -192,18 +193,21 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         j = (j + 1);
     }
     let mut curr: u32 = "core:builtin::i32_load"(136) as u32;
-    let $licm_arith_225: i32 = (size + 1) as i32;
+    let $licm_arith_229: i32 = (size + 1) as i32;
     loop {
         if !(curr != 0) {
             break;
         }
-        let tag: u32 = "core:builtin::i32_load"(curr as i32) as u32;
+        let $cse_230: i32 = curr as i32;
+        let tag: u32 = "core:builtin::i32_load"($cse_230) as u32;
         let block_size: u32 = (tag & 4294967288);
+        let $cse_187: u32 = (curr + size);
+        let $cse_231: i32 = $cse_187 as i32;
         if (block_size >= size) {
             let next: u32 = "core:builtin::i32_load"((curr + 8) as i32) as u32;
             let prev: u32 = "core:builtin::i32_load"((curr + 12) as i32) as u32;
             if (prev == 0) {
-                let tag: u32 = "core:builtin::i32_load"(curr as i32) as u32;
+                let tag: u32 = "core:builtin::i32_load"($cse_230) as u32;
                 let k: u32 = (((tag & 4294967288) - 32) >> 4);
                 "core:builtin::i32_store"((8 + ("core:builtin::select"::<u32>((k < 32), k, 32) * 4)) as i32, next as i32);
             } else {
@@ -214,23 +218,22 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
             }
             let remainder: u32 = (block_size - size);
             if (remainder >= 32) {
-                "core:builtin::i32_store"(curr as i32, $licm_arith_225);
-                "core:builtin::i32_store"(((curr + size) - 8) as i32, $licm_arith_225);
-                let rest: u32 = (curr + size);
-                "core:builtin::i32_store"(rest as i32, remainder as i32);
-                "core:builtin::i32_store"(((rest + remainder) - 8) as i32, remainder as i32);
+                "core:builtin::i32_store"($cse_230, $licm_arith_229);
+                "core:builtin::i32_store"(($cse_187 - 8) as i32, $licm_arith_229);
+                "core:builtin::i32_store"($cse_231, remainder as i32);
+                "core:builtin::i32_store"((($cse_187 + remainder) - 8) as i32, remainder as i32);
                 let k: u32 = ((remainder - 32) >> 4);
                 let k: u32 = "core:builtin::select"::<u32>((k < 32), k, 32);
                 let head: u32 = "core:builtin::i32_load"((8 + (k * 4)) as i32) as u32;
-                "core:builtin::i32_store"((rest + 8) as i32, head as i32);
-                "core:builtin::i32_store"((rest + 12) as i32, 0);
+                "core:builtin::i32_store"(($cse_187 + 8) as i32, head as i32);
+                "core:builtin::i32_store"(($cse_187 + 12) as i32, 0);
                 if (head != 0) {
-                    "core:builtin::i32_store"((head + 12) as i32, rest as i32);
+                    "core:builtin::i32_store"((head + 12) as i32, $cse_231);
                 }
-                "core:builtin::i32_store"((8 + (k * 4)) as i32, rest as i32);
+                "core:builtin::i32_store"((8 + (k * 4)) as i32, $cse_231);
             } else {
                 let tag: u32 = (block_size + 1);
-                "core:builtin::i32_store"(curr as i32, tag as i32);
+                "core:builtin::i32_store"($cse_230, tag as i32);
                 "core:builtin::i32_store"(((curr + block_size) - 8) as i32, tag as i32);
             }
             return (curr + 8) as i32;

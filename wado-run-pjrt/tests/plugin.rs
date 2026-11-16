@@ -107,7 +107,7 @@ fn an_import_nothing_serves_traps_where_it_is_called() {
 #[ignore = "needs a plugin: run `mise run test-pjrt`"]
 fn loams_programs_compute_what_its_cpu_graph_does() {
     let printed = run("../package-loam/conformance/pjrt_graph.wado");
-    assert_eq!(printed.lines().count(), 70, "{printed}");
+    assert_eq!(printed.lines().count(), 72, "{printed}");
     for line in printed.lines() {
         let deviation: f32 = line
             .rsplit(' ')
@@ -116,6 +116,32 @@ fn loams_programs_compute_what_its_cpu_graph_does() {
             .unwrap_or_else(|| panic!("no deviation in {line:?}"));
         assert!(deviation <= LOAM_TOLERANCE, "{line}");
     }
+}
+
+/// A checkpoint larger than the guest may grow to, over two files, loads onto
+/// the device a tensor at a time.
+#[test]
+#[ignore = "needs a plugin: run `mise run test-pjrt`"]
+fn a_checkpoint_larger_than_the_guest_loads_onto_the_device() {
+    let conformance = Path::new(env!("CARGO_MANIFEST_DIR")).join("../package-loam/conformance");
+    let written = Command::new(std::env::var_os("WADO").expect("`mise run test-pjrt` sets it"))
+        .args(["run", "large/write.wado"])
+        .current_dir(&conformance)
+        .output()
+        .expect("running wado");
+    assert!(
+        written.status.success(),
+        "{}",
+        String::from_utf8_lossy(&written.stderr)
+    );
+    let mut command = Command::new(env!("CARGO_BIN_EXE_wado-run-pjrt"));
+    command
+        .args(["--max-memory", "32m"])
+        .current_dir(&conformance);
+    assert_eq!(
+        printed_by(command, "../package-loam/conformance/large/pjrt.wado"),
+        "misplaced 0\n"
+    );
 }
 
 /// A freed slot holds another tensor by the time this reads the one it held.
@@ -145,7 +171,7 @@ fn loams_programs_compile_for_a_tpu() {
         )
         .env("TPU_SKIP_MDS_QUERY", "1");
     let printed = printed_by(command, "../package-loam/conformance/pjrt_topology.wado");
-    assert_eq!(printed.lines().count(), 76, "{printed}");
+    assert_eq!(printed.lines().count(), 77, "{printed}");
     for line in printed.lines() {
         assert!(line.contains("optimal seconds"), "{line}");
     }

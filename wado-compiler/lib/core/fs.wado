@@ -84,6 +84,8 @@ pub variant FsErrorKind {
     NotFound,
     /// The bytes read are not UTF-8 (`read_to_string` only).
     NotUtf8(Utf8Error),
+    /// The file ends before the bytes asked for (`read_linear_range` only).
+    PastEnd,
     Io(ErrorCode),
 }
 
@@ -106,6 +108,7 @@ impl FsErrorKind {
             NoPreopen => "no preopened directory available",
             NotFound => "no such file or directory",
             NotUtf8(e) => `not valid UTF-8: ${e}`,
+            PastEnd => "the file ends before the bytes asked for",
             Io(code) => `${code:?}`,
         };
     }
@@ -173,9 +176,39 @@ pub fn read_linear<S: AsStrSlice>(path: S) -> Result<LinearArray<u8>, FsError> w
     return Result::Ok(array);
 }
 
+/// The `len` bytes of the regular file at `path` from byte `start` on, in
+/// linear memory as [`read_linear`] reads a whole file. Reading a weight of a
+/// model's data file this way holds nothing else of the file. A file that
+/// ends before the last of them is `PastEnd`.
+pub fn read_linear_range<S: AsStrSlice>(path: S, start: u64, len: i32) -> Result<LinearArray<u8>, FsError> with Preopens
+    contract len >= 0
+{
+    let file = open_regular(path)?;
+    let [stream, done] = file.read_via_stream(start as Filesize);
+    let array = LinearArray::<u8>::read_stream_prefix(&stream, len);
+    stream.drop();
+    finish(path, done)?;
+    if array.len() < len {
+        return Result::Err(FsError { path: path.to_string(), kind: FsErrorKind::PastEnd });
+    }
+    return Result::Ok(array);
+}
+
 /// The read stream of the regular file at `path`, the future it reports its
 /// end on, and the size the file states.
 fn open_read<S: AsStrSlice>(path: S) -> Result<[Stream<u8>, Future<Result<(), ErrorCode>>, i32], FsError> with Preopens {
+    let file = open_regular(path)?;
+    // The size is a hint: the file may change between the stat and the read.
+    let expected = match file.stat().wait() {
+        Ok(stat) => u64::min(stat.size as u64, i32::MAX as u64) as i32,
+        Err(_) => 0,
+    };
+    let [stream, done] = file.read_via_stream(0 as Filesize);
+    return Result::Ok([stream, done, expected]);
+}
+
+/// The regular file at `path`, opened to read.
+fn open_regular<S: AsStrSlice>(path: S) -> Result<Descriptor, FsError> with Preopens {
     let file = open(path, OpenFlags::none(), DescriptorFlags::Read)?;
     // No open flag says "a regular file", and `read_via_stream` traps rather
     // than failing on anything else, so the kind is checked here instead.
@@ -191,13 +224,7 @@ fn open_read<S: AsStrSlice>(path: S) -> Result<[Stream<u8>, Future<Result<(), Er
             return Result::Err(failure(path, e));
         },
     }
-    // The size is a hint: the file may change between the stat and the read.
-    let expected = match file.stat().wait() {
-        Ok(stat) => u64::min(stat.size as u64, i32::MAX as u64) as i32,
-        Err(_) => 0,
-    };
-    let [stream, done] = file.read_via_stream(0 as Filesize);
-    return Result::Ok([stream, done, expected]);
+    return Result::Ok(file);
 }
 
 /// The whole content of `path` as text, or `NotUtf8` if it is not UTF-8.

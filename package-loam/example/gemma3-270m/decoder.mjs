@@ -1,5 +1,5 @@
-// build/model.onnx and build/model_fp16.onnx as ../../tools/greedy.mjs decodes
-// them.
+// build/model.onnx, build/model_fp16.onnx and build/model_q4.onnx as
+// ../../tools/greedy.mjs decodes them.
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,3 +12,5 @@ export const decoder = {
 };
 
 export const decoderFp16 = { ...decoder, model: join(build, 'model_fp16.onnx'), half: true };
+
+export const decoderQ4 = { ...decoder, model: join(build, 'model_q4.onnx') };

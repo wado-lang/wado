@@ -441,23 +441,6 @@ pub struct Merged<Parts> {
 pub struct Paired<N> {
 }
 
-/// `b` and `c`, of one shape, interleaved along their last axis as `Paired`
-/// says.
-pub fn interleaved<E, K, N>(b: &Tensor<E, [K, N]>, c: &Tensor<E, [K, N]>) -> Tensor<E, [K, Paired<N>]>
-    contract b.extents == c.extents
-{
-    let [k, n] = [b.extents[0], b.extents[1]];
-    let mut data = List::<E>::with_capacity(2 * k * n);
-    for let i of 0..<k * n {
-        data.push(b.data[i]);
-        data.push(c.data[i]);
-    }
-    return Tensor {
-        data,
-        extents: [k, 2 * n],
-    };
-}
-
 /// The same elements under another axis list. A regrouping keeps row-major
 /// order, so no element moves.
 pub fn reshape<E, In, Out>(t: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out>
@@ -626,11 +609,6 @@ fn tap_offset(input: &List<i32>, window: &Window, at: i32, tap: i32) -> i32 {
         step *= input[i];
     }
     return offset;
-}
-
-/// A matrix transposed.
-pub fn transpose2<E, A, B>(t: &Tensor<E, [A, B]>) -> Tensor<E, [B, A]> {
-    return permute(t, [1, 0]);
 }
 
 /// The elements with input axis `perm[i]` moved to output axis `i`. The caller

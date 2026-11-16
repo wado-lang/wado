@@ -196,32 +196,47 @@ A handler such as `SurfaceDom` answers web calls in Wado, so it must make
 handles. Every extern handle type has two functions for it:
 
 ```wado
-let node: Node = HtmlInputElement::backed_by(&mut input);
+let node: Node = HtmlInputElement::backed_by(input);
 let back = node.backing::<SurfaceInput>();   // Option<&mut SurfaceInput>
 ```
 
-- `R::backed_by(&mut value)` makes a handle of type `R` that the value stands
-  behind. The reference is `&mut` because `backing` hands one back: taken as
-  `&value`, a write through the handle changed a value the compiler held to
-  be unwritten, and optimized code read the old one. The handle's class is `R`'s own, so no class number is written, and
-  the result upcasts like any `R`.
-- `handle.backing::<T>()` gives the value back. It is `None` for the host's
-  object, and for a handle backed by a value of another type.
+- `R::backed_by(value)` makes a new handle of type `R` holding the value. The
+  handle's class is `R`'s own, so no class number is written, and the result
+  upcasts like any `R`.
+- `handle.backing::<T>()` reaches the value in place. It is `None` for the
+  host's object, and for a handle holding a value of another type.
 
-A backed handle is a GC struct holding the class and a reference to the value,
-converted with `extern.convert_any`. A node of `SurfaceDom` is then collected
-like any other value, and the handler keeps no table either.
+A backed handle is a GC struct holding the class and the value, converted with
+`extern.convert_any`. A node of `SurfaceDom` is then collected like any other
+value.
 
-Calling `backed_by` on one value any number of times gives the same handle to
-the program: `==` compares the backing values, not the structs around them. A
-handler therefore has no duty to remember the handle it gave out, which it
-could only break silently.
+The handle holds the value, and nothing else names it. `backed_by` takes it as
+any argument is taken, so a variable the caller keeps is another value. Taken
+by reference instead, the handle and the variable named one place. A write
+through the handle then changed a value the compiler held to be unwritten,
+unless every caller remembered to pass `&mut`.
 
-The backing type is bound by `RefMut`: a struct, a tuple, a list or a string,
-which a reference reaches in place. A reference to any other value is a cell
-holding a copy. A cell carries neither the value's identity nor its type: the
-cells of two extern handle types are one struct, and so are those of two
-function types, so `backing::<Element>()` would answer a handle a `Node` backs.
+`backing` gives `&mut T` under `&self`, and from a handle no `mut` names. That
+is the rule every resource follows: it names an object, so `&R` promises
+nothing about the object. The marker `Resource` states which types those are.
+
+Each call of `backed_by` makes a handle equal to no other, so a handler makes
+one handle for one object, with the class of what the object is. A `Node` and
+an `HtmlInputElement` of one node are then one handle, upcast or narrowed, as
+two views of one host object are.
+
+A node of `SurfaceDom` lives in its handle, and its parent, children and
+siblings are handles too. `SurfaceDom` itself holds the document and the
+window, and no list of nodes. The tree alone keeps a node alive, so a node that
+is detached and that the program dropped is collected, as a browser's is. A
+listener is kept by the node it was added to, and goes with it.
+
+The backing type is bound by `RefMut`: a struct, a tuple, a list, a string or a
+128-bit integer, which a reference reaches in place. A reference to any other value is a cell
+holding a copy, and `backing` has only a reference to hand back. A cell carries
+neither the value's identity nor its type: the cells of two extern handle types
+are one struct, and so are those of two function types, so
+`backing::<Element>()` would answer a handle a `Node` backs.
 
 Any code may call either function. A backed handle that reaches a real host is
 no object of that host's, and the host rejects it as it would any wrong value.
@@ -274,7 +289,8 @@ order:
 
 1. Two null references are equal, and a null differs from anything else. This
    is `None == None` for an `Option<R>`, and it calls no import.
-2. Two backed handles are equal when `ref.eq` holds of their backing values.
+2. Two backed handles are equal when `ref.eq` holds of their backing values,
+   which one `backed_by` call gives to one handle.
 3. Two handles neither of which is backed are the host's objects. The guest
    calls the import `same`, which answers JavaScript's `===`.
 4. A backed handle and one that is not differ.
@@ -393,6 +409,12 @@ glue cannot be run without them.
   of the backing values
 - [x] `SurfaceDom` backs its handles with its own nodes and keeps no table, and
   `wado-from-idl` stops emitting the class globals
+- [x] A handle holds its backing value: `backed_by` takes the value, the
+  sealed marker `Resource` is stated of every resource, and each node of
+  `SurfaceDom` lives in the one handle made for it
+- [x] `SurfaceDom` links its nodes by handle and keeps no list of them, so a
+  dropped node is collected: `package-web`'s test of it creates and drops
+  nodes in a loop, and does not finish in its time where they are kept
 - [x] The boundary: a web import is a core import, the synthesized trapping
   module satisfies it, and the component validates and runs on wasmtime. An
   extern handle in an `export fn` signature is an error
@@ -451,6 +473,17 @@ glue cannot be run without them.
 - A handle has no `Hash`. A host object has no number of its own, and a backed
   handle's identity is a GC reference, which has none either.
 - A scalar, a variant, a closure and an extern handle back no handle.
+- An element a reflected element reference such as `ariaControlsElements` was
+  set to is kept alive by the element holding the reference. The HTML standard
+  holds it weakly, and neither Wado nor WasmGC has a weak reference.
+- No test observes a collection under wasmtime. `SurfaceDom`'s is inferred
+  from the time a loop of dropped nodes takes.
+- An affine value backs no handle.
+- `backing::<T>()` tells two backing types apart by their representation, which
+  a newtype shares with its base. A handle holding a `Point` answers
+  `backing::<Location>()` for `type Location = Point`, and the other way.
+- A value copy of a `SurfaceDom` holds the same handles, so the two are one
+  document.
 - A `&mut` to a place holding a handle asks `same` of the host before storing
   back, once for each call that takes one.
 - The glue generator writes no shim for a member whose parameters are passed

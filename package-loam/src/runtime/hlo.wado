@@ -15,6 +15,7 @@ use {
     conv_grouped,
     element_count,
     max_pool,
+    optional,
     permute,
     reshape,
     sigmoid_f32,
@@ -22,6 +23,7 @@ use {
     walked,
 } from "./tensor.wado";
 use { Any, Recorded, Recorder, Untyped, assert_carries, kept_any } from "./recorded.wado";
+use { HostWeight } from "./weight.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
 /// StableHLO has no error function.
@@ -105,6 +107,14 @@ pub struct WindowReduce {
     pub padding: List<i32>,
 }
 
+/// How onnxruntime's block-quantized weights hold their values: each `bits`
+/// wide, packed into bytes low bits first, each run of `block` along the packed
+/// axis sharing a scale and a zero point.
+pub struct Quantized {
+    pub bits: i32,
+    pub block: i32,
+}
+
 /// A pass built as a graph. Each method adds one operation and returns the
 /// tensor it computes. An operation whose output axes are not its operands'
 /// takes them as `Out`, which the caller spells.
@@ -144,18 +154,18 @@ pub affine trait Graph: Holds with _ {
     }
     /// The `count` weights a pass reads, `load(at)` the `at`th on the host,
     /// which the parameters `record` records take from its `first` on: each
-    /// kept as [`Holds::keep`] keeps it, or laid out for the operations the
-    /// recorded pass reads it in.
+    /// laid out from its stored bytes for the operations the recorded pass
+    /// reads it in, or decoded and kept as [`Holds::keep`] keeps it.
     fn kept_weights<Er>(
         &mut self,
         record: fn(&mut Recorder) -> Recorded with _,
         first: i32,
         count: i32,
-        load: fn(i32) -> Result<Any<Cpu>, Er> with _,
+        load: fn(i32) -> Result<HostWeight, Er> with _,
     ) -> Result<List<Any<Self>>, Er> with _ {
         let mut kept: List<Any<Self>> = [];
         for let at of 0..<count {
-            kept.push(kept_any(self, &load(at)?));
+            kept.push(kept_any(self, &load(at)?.decoded()));
         }
         return Result::Ok(kept);
     }
@@ -356,6 +366,56 @@ pub affine trait Graph: Holds with _ {
         );
     }
 
+    /// onnxruntime's `MatMulNBits`: `a` times the transpose of the `[N, K]`
+    /// matrix whose rows `packed` holds in blocks, `K` being `a`'s last extent.
+    /// Value `q` of block `b` of row `n` is `(q - zero) * scales[n, b]`, where
+    /// `zero` is the `b`th value of row `n` of `zero_points`, packed as the
+    /// weight is, or `2^(bits - 1)` without them.
+    fn quantized_product<E: Float, In, N, Blocks, Blob, Z, Out>(
+        &mut self,
+        a: &Self::Tensor<E, In>,
+        packed: &Self::Tensor<u8, [N, Blocks, Blob]>,
+        scales: &Self::Tensor<E, [N, Blocks]>,
+        zero_points: Option<&Self::Tensor<u8, [N, Z]>>,
+        quantized: &Quantized,
+    ) -> Self::Tensor<E, Out>
+        contract 8 % quantized.bits == 0, "a byte holds a whole number of values"
+    {
+        return decomposed_product::<Self, E, In, N, Blocks, Blob, Z, Out>(
+            self,
+            a,
+            packed,
+            scales,
+            zero_points,
+            quantized,
+        );
+    }
+
+    /// onnxruntime's `GatherBlockQuantized` of a table packed along its rows:
+    /// the rows `indices` name, each dequantized as `quantized_product` reads
+    /// a row, under the indices' axes. A negative index counts from the end,
+    /// and one outside the table reads a row of zeros. The table holds a row,
+    /// which stage 0 checks.
+    fn quantized_gather<E: Float, R, P, I, Blocks, Z, Out>(
+        &mut self,
+        packed: &Self::Tensor<u8, [R, P]>,
+        indices: &Self::Tensor<i64, I>,
+        scales: &Self::Tensor<E, [R, Blocks]>,
+        zero_points: Option<&Self::Tensor<u8, [R, Z]>>,
+        quantized: &Quantized,
+    ) -> Self::Tensor<E, Out>
+        contract 8 % quantized.bits == 0, "a byte holds a whole number of values"
+    {
+        return decomposed_gather::<Self, E, R, P, I, Blocks, Z, Out>(
+            self,
+            packed,
+            indices,
+            scales,
+            zero_points,
+            quantized,
+        );
+    }
+
     /// ONNX's `ArgMax` keeping its axis: the index of each lane's first
     /// greatest element, a NaN greatest of all.
     fn arg_max<E: Float, Axes>(&mut self, x: &Self::Tensor<E, Axes>, axis: i32) -> Self::Tensor<i64, Axes> with _;
@@ -520,6 +580,177 @@ fn grouped<affine G: Graph, E: Float, B, H, T, D, N>(
 
 fn unpacked4(extents: &List<i32>) -> [i32, i32, i32, i32] {
     return [extents[0], extents[1], extents[2], extents[3]];
+}
+
+/// `Graph::quantized_product`'s decomposition: the weight dequantized whole,
+/// then a `dot_general`.
+pub fn decomposed_product<affine G: Graph, E: Float, In, N, Blocks, Blob, Z, Out>(
+    g: &mut G,
+    a: &G::Tensor<E, In>,
+    packed: &G::Tensor<u8, [N, Blocks, Blob]>,
+    scales: &G::Tensor<E, [N, Blocks]>,
+    zero_points: Option<&G::Tensor<u8, [N, Z]>>,
+    quantized: &Quantized,
+) -> G::Tensor<E, Out> with _ {
+    let rank = g.extents_of(a).len();
+    let k = g.extents_of(a)[rank - 1];
+    let [n, blocks, blob] = [
+        g.extents_of(packed)[0],
+        g.extents_of(packed)[1],
+        g.extents_of(packed)[2],
+    ];
+    let rows: G::Tensor<u8, [N, Row]> = g.reshape(packed, [n, blocks * blob]);
+    let weight = dequantized::<G, E, N, Row, Blocks, Z>(g, &rows, scales, zero_points, quantized, k);
+    return g.dot_general(
+        a,
+        &weight,
+        &DotDims {
+            lhs_batch: [],
+            rhs_batch: [],
+            lhs_contracting: [rank - 1],
+            rhs_contracting: [1],
+        },
+    );
+}
+
+/// `Graph::quantized_gather`'s decomposition: the packed rows, scales and zero
+/// points gathered, and only those rows dequantized.
+pub fn decomposed_gather<affine G: Graph, E: Float, R, P, I, Blocks, Z, Out>(
+    g: &mut G,
+    packed: &G::Tensor<u8, [R, P]>,
+    indices: &G::Tensor<i64, I>,
+    scales: &G::Tensor<E, [R, Blocks]>,
+    zero_points: Option<&G::Tensor<u8, [R, Z]>>,
+    quantized: &Quantized,
+) -> G::Tensor<E, Out> with _ {
+    let [rows, bytes] = [
+        g.extents_of(packed)[0],
+        g.extents_of(packed)[1],
+    ];
+    assert rows > 0, "a packed table holds a row";
+    let mut extents = g.extents_of(indices);
+    let count = element_count(&extents);
+    let flat: G::Tensor<i64, [Rows]> = g.reshape(indices, [count]);
+    let at = from_end_indices::<G, [Rows]>(g, &flat, &scalar(g, rows as i64));
+    let picked_packed = rows_at::<G, u8, R, P>(g, packed, &at);
+    let picked_scales = rows_at::<G, E, R, Blocks>(g, scales, &at);
+    let picked_zeros: Option<G::Tensor<u8, [Rows, Z]>> = match zero_points {
+        Some(z) => Option::Some(rows_at::<G, u8, R, Z>(g, z, &at)),
+        None => null,
+    };
+    let width = bytes * (8 / quantized.bits);
+    let values = dequantized::<G, E, Rows, P, Blocks, Z>(
+        g,
+        &picked_packed,
+        &picked_scales,
+        optional(&picked_zeros),
+        quantized,
+        width,
+    );
+    // `gather` clamps an index outside the table, which reads zeros instead.
+    let above = g.compare(Comparison::Ge, &at, &full::<G, i64, [Rows]>(g, 0, [count]));
+    let below = g.compare(Comparison::Lt, &at, &full::<G, i64, [Rows]>(g, rows as i64, [count]));
+    let inside = g.select(&above, &below, &full::<G, bool, [Rows]>(g, false, [count]));
+    let plane: List<i32> = [count, width];
+    let shown = g.select(
+        &g.broadcast_in_dim::<bool, [Rows], [Rows, Row]>(&inside, plane, [0]),
+        &values,
+        &full::<G, E, [Rows, Row]>(g, E::from_f32(0.0), plane),
+    );
+    extents.push(width);
+    return g.reshape(&shown, extents);
+}
+
+/// The rows of the matrix `x` that `at` names, each in range.
+fn rows_at<affine G: Graph, E: Element, R, C>(
+    g: &mut G,
+    x: &G::Tensor<E, [R, C]>,
+    at: &G::Tensor<i64, [Rows]>,
+) -> G::Tensor<E, [Rows, C]> with _ {
+    let dims = GatherDims {
+        offset_dims: [1],
+        collapsed_slice_dims: [0],
+        start_index_map: [0],
+        index_vector_dim: 1,
+        slice_sizes: [1, g.extents_of(x)[1]],
+    };
+    return g.gather(x, at, &dims);
+}
+
+/// The rows `packed` holds in blocks along its bytes, each value less its
+/// block's zero point, times its block's scale: the first `width` of each.
+fn dequantized<affine G: Graph, E: Float, M, P, Blocks, Z>(
+    g: &mut G,
+    packed: &G::Tensor<u8, [M, P]>,
+    scales: &G::Tensor<E, [M, Blocks]>,
+    zero_points: Option<&G::Tensor<u8, [M, Z]>>,
+    quantized: &Quantized,
+    width: i32,
+) -> G::Tensor<E, [M, Row]> with _ {
+    let [m, blocks] = [
+        g.extents_of(scales)[0],
+        g.extents_of(scales)[1],
+    ];
+    let block = quantized.block;
+    let mut values = unpacked_values::<G, M, P>(g, packed, quantized.bits);
+    // A table's last block may hold fewer values than a block.
+    if g.extents_of(&values)[1] < blocks * block {
+        values = padded_with_zeros::<G, u8, [M, Row]>(g, &values, 1, blocks * block);
+    }
+    let zero: G::Tensor<E, [M, Blocks]> = match zero_points {
+        Some(z) => {
+            let unpacked = unpacked_values::<G, M, Z>(g, z, quantized.bits);
+            g.convert(&g.slice::<u8, [M, Row], [M, Blocks]>(&unpacked, [0, 0], [m, blocks], [1, 1]));
+        },
+        None => full::<G, E, [M, Blocks]>(g, E::from_i64(1 << (quantized.bits - 1) as i64), [m, blocks]),
+    };
+    let held: List<i32> = [m, blocks, block];
+    let in_blocks: G::Tensor<E, [M, Blocks, Group]> = g.convert(&g.reshape::<u8, [M, Row], [M, Blocks, Group]>(
+        &values,
+        held,
+    ));
+    let centered = g.binary(Binary::Subtract, &in_blocks, &g.broadcast_in_dim(&zero, held, [0, 1]));
+    let scaled = g.binary(Binary::Multiply, &centered, &g.broadcast_in_dim(scales, held, [0, 1]));
+    let flat: G::Tensor<E, [M, Row]> = g.reshape(&scaled, [m, blocks * block]);
+    if width == blocks * block {
+        return flat;
+    }
+    return g.slice(&flat, [0, 0], [m, width], [1, 1]);
+}
+
+/// The `bits`-wide values each row of `packed` holds, low bits first.
+fn unpacked_values<affine G: Graph, M, P>(
+    g: &mut G,
+    packed: &G::Tensor<u8, [M, P]>,
+    bits: i32,
+) -> G::Tensor<u8, [M, Row]> with _ {
+    let [m, p] = [
+        g.extents_of(packed)[0],
+        g.extents_of(packed)[1],
+    ];
+    let lanes = 8 / bits;
+    let mut rest: G::Tensor<u8, [M, Row]> = g.relabeled(packed);
+    if lanes == 1 {
+        return rest;
+    }
+    // Each lane is what is left once the lanes below it are divided away,
+    // less what the lanes above it hold.
+    let radix = full::<G, u8, [M, Row]>(g, (1 << bits) as u8, [m, p]);
+    let mut joined: Option<G::Tensor<u8, [M, Row, One]>> = null;
+    for let lane of 0..<lanes {
+        let mut value = rest;
+        if lane + 1 < lanes {
+            let above = g.binary(Binary::Divide, &rest, &radix);
+            value = g.binary(Binary::Subtract, &rest, &g.binary(Binary::Multiply, &above, &radix));
+            rest = above;
+        }
+        let column: G::Tensor<u8, [M, Row, One]> = g.reshape(&value, [m, p, 1]);
+        joined = Option::Some(match &joined {
+            Some(j) => g.concatenate(j, &column, 2),
+            None => column,
+        });
+    }
+    return g.reshape(&joined.unwrap(), [m, p * lanes]);
 }
 
 /// `value` as a scalar `g` holds.
@@ -1057,9 +1288,9 @@ fn turned<affine G: Graph, E: Float, B, N, S, D, Half>(
     };
     let [a_start, a_limit] = columns(0, half);
     let [b_start, b_limit] = columns(half, 2 * half);
-    let half_of = |g: &mut G, start: List<i32>, limit: List<i32>| -> G::Tensor<f32, [B, N, S, Half]> {
-        let part: G::Tensor<E, [B, N, S, Half]> = g.slice(x, start, limit, [1, 1, 1, 1]);
-        return g.convert::<E, f32, [B, N, S, Half]>(&part);
+    let half_of = |on: &mut G, start: List<i32>, limit: List<i32>| -> G::Tensor<f32, [B, N, S, Half]> {
+        let part: G::Tensor<E, [B, N, S, Half]> = on.slice(x, start, limit, [1, 1, 1, 1]);
+        return on.convert::<E, f32, [B, N, S, Half]>(&part);
     };
     let a = half_of(g, a_start, a_limit);
     let b = half_of(g, b_start, b_limit);
@@ -1457,6 +1688,92 @@ impl Graph for Cpu {
     ) -> T with _ {
         assert pred.data.len() == 1, "a condition is one element";
         return if pred.data[0] { then() } else { otherwise() };
+    }
+
+    /// Each row of the weight dequantized once, as the decomposition rounds it,
+    /// then summed against each row of `a` as `dot_general` sums.
+    fn quantized_product<E: Float, In, N, Blocks, Blob, Z, Out>(
+        &mut self,
+        a: &Tensor<E, In>,
+        packed: &Tensor<u8, [N, Blocks, Blob]>,
+        scales: &Tensor<E, [N, Blocks]>,
+        zero_points: Option<&Tensor<u8, [N, Z]>>,
+        quantized: &Quantized,
+    ) -> Tensor<E, Out> {
+        let mut extents = a.extents;
+        let last = extents.len() - 1;
+        let k = extents[last];
+        let n = packed.extents[0];
+        let rows = element_count(&a.extents) / k;
+        let bytes = packed.extents[1] * packed.extents[2];
+        let mut weights = List::<E>::filled(k, E::from_f32(0.0));
+        let mut out = List::<E>::filled(rows * n, E::from_f32(0.0));
+        for let c of 0..<n {
+            unpacked_row(&packed.data, bytes, scales, zero_points, quantized, c, &mut weights);
+            let column = product_by_rows(&a.data, &weights, 1, rows, k, 1);
+            for let r of 0..<rows {
+                out[r * n + c] = column[r];
+            }
+        }
+        extents[last] = n;
+        return Tensor { data: out, extents };
+    }
+
+    /// Each row `indices` name dequantized as the decomposition rounds it, or
+    /// zeros where the index, wrapped once from the end, falls outside the
+    /// table.
+    fn quantized_gather<E: Float, R, P, I, Blocks, Z, Out>(
+        &mut self,
+        packed: &Tensor<u8, [R, P]>,
+        indices: &Tensor<i64, I>,
+        scales: &Tensor<E, [R, Blocks]>,
+        zero_points: Option<&Tensor<u8, [R, Z]>>,
+        quantized: &Quantized,
+    ) -> Tensor<E, Out> {
+        let [rows, bytes] = [packed.extents[0], packed.extents[1]];
+        let width = bytes * (8 / quantized.bits);
+        let zeros = List::<E>::filled(width, E::from_f32(0.0));
+        let mut values = zeros;
+        let mut out = List::<E>::with_capacity(indices.data.len() * width);
+        for let index of indices.data {
+            let row = if index < 0 { index + rows as i64 } else { index };
+            if row < 0 || row >= rows as i64 {
+                out.extend(&zeros);
+                continue;
+            }
+            unpacked_row(&packed.data, bytes, scales, zero_points, quantized, row as i32, &mut values);
+            out.extend(&values);
+        }
+        let mut extents = indices.extents;
+        extents.push(width);
+        return Tensor { data: out, extents };
+    }
+}
+
+/// The first `into.len()` values of row `row` of a weight packed `bytes` to a
+/// row, rounded as `dequantized` rounds them.
+fn unpacked_row<E: Float, R, Blocks, Z>(
+    packed: &List<u8>,
+    bytes: i32,
+    scales: &Tensor<E, [R, Blocks]>,
+    zero_points: Option<&Tensor<u8, [R, Z]>>,
+    quantized: &Quantized,
+    row: i32,
+    into: &mut List<E>,
+) {
+    let bits = quantized.bits;
+    let per = 8 / bits;
+    let mask = (1 << bits) - 1;
+    let blocks = scales.extents[1];
+    for let i of 0..<into.len() {
+        let b = i / quantized.block;
+        let q = packed[row * bytes + i / per] as i32 >> i % per * bits & mask;
+        let zero = match zero_points {
+            Some(z) => z.data[row * z.extents[1] + b / per] as i32 >> b % per * bits & mask,
+            None => 1 << bits - 1,
+        };
+        let scale = scales.data[row * blocks + b].cast_to::<f32>();
+        into[i] = E::from_f32((q - zero) as f32 * scale);
     }
 }
 

@@ -16,7 +16,7 @@ use crate::wir::{WirFunction, WirInstr, WirName, WirType, WirTypeDef, WirTypeId}
 use super::context::{SplitParam, WirContext};
 use crate::canonical::CanonicalIntrinsic;
 use crate::name::{
-    BACKED_HANDLE_VALUE_FIELD, CELL_FIELD, MangledName, RefKind, closure_call_wrapper_name,
+    BACKED_HANDLE_VALUE_FIELD, CELL_FIELD, MangledName, closure_call_wrapper_name,
     closure_inspect_wrapper_name, multi_value_split_local,
 };
 use crate::nir_arena::{
@@ -1846,15 +1846,11 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
-    /// The struct a `&mut T` is, which is what backs a handle a `T` backs.
+    /// The struct a value of the `RefMut` type `backing` is.
     pub(super) fn backing_struct(&self, backing: TypeId) -> WirTypeId {
-        let reference = self
-            .type_table
-            .find_ref(RefKind::Mut, backing)
-            .expect("`ExternHandle::backing` names `&mut T` beside every `T` it asks for");
-        match self.wir_type(reference) {
+        match self.wir_type(backing) {
             WirType::Ref { type_id, .. } => type_id,
-            other => panic!("a reference to a backing value is a struct, got {other:?}"),
+            other => panic!("a `RefMut` value is a struct, got {other:?}"),
         }
     }
 

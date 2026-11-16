@@ -2,9 +2,8 @@
 //! time, picking the tokens onnxruntime picks. `README.md` says how to run it.
 
 use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
-use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { Cpu } from "lib:loam";
+use { Cpu, FileSource } from "lib:loam";
 use { Model, Tokenizer } from "./model.wado";
 
 global STEPS: i32 = 8;
@@ -19,17 +18,10 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
         eprintln("the prompt encodes to no token");
         return;
     }
-    let checkpoint = match fs::read_linear("model.onnx") {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            eprintln(`${e}; run fetch.sh first`);
-            return;
-        },
-    };
-    let mut model = match Model::load(Cpu {}, &checkpoint) {
+    let mut model = match Model::load(Cpu {}, &FileSource { dir: "." }) {
         Ok(model) => model,
         Err(e) => {
-            eprintln(`model.onnx: ${e}`);
+            eprintln(`${e}; run fetch.sh first`);
             return;
         },
     };

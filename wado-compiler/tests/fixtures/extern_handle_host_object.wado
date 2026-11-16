@@ -29,11 +29,10 @@ export fn run() with Dom {
     if builtin::black_box(false) {
         assert !is_element(Dom::root());
     }
-    let mut tag = Tag {};
-    let element = Element::backed_by(&mut tag);
+    let element = Element::backed_by(Tag {});
     assert is_element(builtin::black_box(element));
-    assert !is_element(builtin::black_box(Node::backed_by(&mut tag)));
-    assert same(builtin::black_box(element), Element::backed_by(&mut tag));
+    assert !is_element(builtin::black_box(Node::backed_by(Tag {})));
+    assert same(builtin::black_box(element), element);
 }
 
 __DATA__

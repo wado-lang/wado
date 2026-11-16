@@ -32,12 +32,12 @@ fn tags<..T: Tag>(xs: [..T]) -> List<i32> {
 }
 
 test "a generic bound accepts a resource" {
-    let node = builtin::black_box(Node::backed_by(&mut "node"));
+    let node = builtin::black_box(Node::backed_by("node"));
     assert tag_of(node) == 1;
 }
 
 test "a type pack mixes a resource with other types" {
-    let node = builtin::black_box(Node::backed_by(&mut "node"));
+    let node = builtin::black_box(Node::backed_by("node"));
     assert tags([node, "text", node]) == [1, 2, 1];
 }
 

@@ -26,7 +26,7 @@ pub struct MethodId(pub u32);
 /// equal here are one `(Trait, Type)` pair.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum SolverType {
-    /// A declared type at its type arguments: `Point`, `Box_<i32>`.
+    /// A declared type at its type arguments: `Point`, `Box<i32>`.
     Decl(TypeDeclId, Vec<SolverType>),
     /// One of the impl's own type parameters, by position.
     Param(u32),

@@ -81,6 +81,52 @@ axis keeps the WEP's signature.
 `compute` retains the cache before it begins. A caller that drives `build`
 itself calls `retain_fields(&mut backend, &cache)` there.
 
+## Weight Sources
+
+[WEP: Loam § The Graph Is the Schema, the Checkpoint Is Data](../docs/wep-2026-09-20-loam.md#the-graph-is-the-schema-the-checkpoint-is-data)
+gives the loader one `ByteList`. A model larger than the guest's memory cannot
+be one, so the loader reads from a source instead, a range at a time:
+
+```wado
+Params::load<affine Src: WeightSource>(backend: &mut Bk, source: &Src) -> Result<Params<Bk>, LoadError>
+```
+
+`WeightSource` reads a byte range of a file, by the name the build gave it, and
+says how long a file is. The generated module names every file it reads, so one
+model may spread its weights over several, and the loader holds one weight's
+bytes at a time. Before any weight is read, each file is checked: a
+safetensors file's header, and its length against the last byte the header
+places a tensor in; a model file's length; and an external data file's length
+against the last byte the graph places in it. So a file that is missing or too
+short stops the load before a weight reaches the device. An error names the
+file, and the tensor where one is to blame.
+
+A weight reaches the backend as a `HostWeight`: its element kind, its extents,
+and the little-endian bytes the checkpoint stores, in linear memory. Each
+backend lays its copy out from those bytes. `PjrtBackend` uploads them as they
+are, and an f32 weight as bf16 where every value's low half is zero.
+`WebGpuBackend` builds its matrix layout, packed in a half where one holds every
+value, by reading values from the bytes. `Cpu` decodes them into a tensor. A
+float or bool weight reaches a device with no GC list on the way; WebGPU decodes
+a `u8` or `i64` one and keeps it as `keep` does.
+
+`conformance/large/` shows a checkpoint larger than the guest loading. It writes
+80 MiB of weights over two shards, a chain of permutations that move each
+element where no other order of them would. Under `--max-memory 32m` the chain
+loads onto `WebGpuBackend` and `PjrtBackend` and runs with every output in
+place. `Cpu`, which holds the weights whole, loads them from the same
+`FileSource` with no limit and runs out of heap under it. The runners' tests run
+it.
+
+Two sources come with the runtime. `FileSource { dir }` reads the files of a
+directory, a range at a time. A `HashMap<String, ByteList>` holds each file
+whole, by name, for a model small enough to hold or bytes embedded with
+`#include_bytes`.
+
+A build whose graph lacks a weight's data and is given no checkpoint knows no
+file to read it from, so the module has no `load`, and the caller builds
+`Weights` itself.
+
 ## Sharded Checkpoints
 
 A large model is published as several safetensors files beside an index, in
@@ -117,17 +163,8 @@ each shard's is its header. A build refuses:
 Each tensor is then checked against its shard's header as against a single
 file's, and a disagreement names the shard.
 
-[WEP: Loam § The Graph Is the Schema, the Checkpoint Is Data](../docs/wep-2026-09-20-loam.md#the-graph-is-the-schema-the-checkpoint-is-data)
-gives the loader one `ByteList`. A sharded module's loader takes the shards
-instead, keyed by the file names the index uses:
-
-```wado
-Params::load(backend: &mut Bk, shards: &HashMap<String, ByteList>) -> Result<Params<Bk>, LoadError>
-```
-
-The generated module carries the placement, so the loader reads no index. A
-shard absent from the map is a `LoadError` naming a tensor the shard holds and
-the shard. A single file's use site and loader are unchanged.
+The generated module carries the placement, so the loader reads no index. It
+reads each shard from the source under the file name the index uses.
 
 `tools/onnx_split.wado --max-shard-bytes <n>` writes the shards and the index.
 It fills each shard in the graph's order up to `n` payload bytes, and a tensor
@@ -147,24 +184,20 @@ use { Model, Params, compute } from "./model.onnx" with {
 };
 ```
 
-The build reads no byte of the data file. It takes each weight's range from
-the graph, checked against the weight's shape, so the generated module carries
-the ranges and the loader is handed the data file:
-
-```wado
-Params::load(backend: &mut Bk, checkpoint: &Ck) -> Result<Params<Bk>, LoadError>
-```
-
-A file shorter than a range is a `LoadError` naming the tensor. A build
-refuses a weight with no length, a range past what a module can address,
-weights in two files, and a checkpoint given beside them.
-`tools/onnx_split.wado --external-data` writes a model this way.
+The build reads no byte of the data files. It takes each weight's file and
+range from the graph, checked against the weight's shape, so the generated
+module carries them, and the loader reads each weight from its file. The
+weights may be spread over several files. A file shorter than a range is a
+`LoadError` naming the tensor and the file. A build refuses a weight with no
+length, a range past what a module can address, and a checkpoint given beside
+them. `tools/onnx_split.wado --external-data` writes a model this way.
 
 A model under 2 GiB is published with its weights in the protobuf, each in a
 `raw_data` field. `embed: false` in the options leaves them there: the build
 records where each weight's `raw_data` sits, and holds no payload it does not
-read. The loader is handed the model file itself, and checks its length against
-the one the build read before reading a weight.
+read. The loader reads the model file itself, under the name the build read it
+by, and checks its length against the one the build read before reading a
+weight.
 
 ## Half Element Types
 
@@ -217,3 +250,40 @@ step of every prompt, so a deviation above can exceed a pick's lead:
 | Run, in `example/gemma3-270m/` | Smallest lead |
 | ------------------------------ | ------------- |
 | `node generate.mjs`            | 0.03125       |
+
+## Quantized Weights
+
+onnxruntime's `MatMulNBits` and `GatherBlockQuantized` read weights packed 2, 4
+or 8 bits to a value, in blocks that share a scale and a zero point. A
+quantized weight is the tensors the operator takes: the packed `u8`, the scales
+and the zero points. The bit width and the block size are attributes of two
+`Graph` composites, `quantized_product` and `quantized_gather`, so the weight
+has no type of its own.
+
+Each composite's decomposition is its meaning. `Graph` has no bitwise
+operation, so it unpacks a byte by division: the low bits first, as
+onnxruntime packs them. A block without a zero point is centered on
+`2^(bits-1)`. A gathered index past either end of the table, after one wrap
+from the end, gives a row of zeros, which onnxruntime gives as well.
+
+No device unpacks a weight when it loads.
+
+- `Cpu` dequantizes one row of the weight at a time, rounded as the
+  decomposition rounds it and summed as `dot_general` sums, so it computes the
+  decomposition's bits.
+- `WebGpuBackend` holds a `u8` tensor four bytes to a word. The product runs
+  one workgroup per output column and eight input rows, each lane unpacking
+  every 256th byte of the column. The gather runs one invocation per output
+  element.
+- `PjrtBackend` compiles the decomposition, which XLA fuses.
+
+Each row is the largest deviation of the first token's logits from
+onnxruntime's, for Gemma 3 (270M)'s `q4` export, on an NVIDIA RTX 4060 Ti over
+Vulkan and on XLA's CPU plugin. Every row picks onnxruntime's tokens, whose
+smallest lead over the next logit is 0.0165.
+
+| Run, in `example/gemma3-270m/`                           | "Hello, my name is" | The France prompt |
+| -------------------------------------------------------- | ------------------- | ----------------- |
+| `wado run --collector drc q4_cpu.wado`                   | 0.0000777           | 0.000122          |
+| `wado run-webgpu q4_webgpu.wado`                         | 0.0000758           | 0.000104          |
+| `wado run-pjrt -O2 --plugin libpjrt_cpu.so q4_pjrt.wado` | 0.0000820           | 0.000102          |

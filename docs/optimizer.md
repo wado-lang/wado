@@ -52,9 +52,8 @@ converge within the level's own count. At `-O1`, and wherever
 ## Architecture
 
 NIR has two tiers: a skeleton carrying effect order, control flow, and
-allocation, and a hash-consed graph of the pure values it reaches. CSE, GVN, and
-pure copy propagation are not passes, because the hash-consing already does
-them. A pass skips a function unchanged since it last ran. See
+allocation, and a pool of hash-consed pure values that some of its operands
+name. A pass skips a function unchanged since it last ran. See
 [WEP: NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md).
 
 The passes run on `--optimize-threads` threads, and the output does not depend
@@ -93,7 +92,7 @@ result only where the caller can still reach the argument.
 
 ### `value_pool/fold_const`
 
-The value graph folds an operation on constants as it records it, in lowering
+The value pool folds an operation on constants as it records it, in lowering
 and in every NIR pass.
 
 ### `wir_build/exhaustive_last_arm`
@@ -135,11 +134,6 @@ function inlines at its hot size.
 #### `match_to_switch_globals`
 
 [`match_to_switch`](#match_to_switch) over global initializers.
-
-#### `promote_pure_values_early`
-
-Fold pure arithmetic into the value graph, so the passes in the loop read it as
-values.
 
 ### The Fixed-Point Loop
 
@@ -343,7 +337,7 @@ Collapse a clone of a clone into one.
 
 #### `promote_fields`
 
-Fold pure field reads into the value graph, so the checks they bound read as
+Fold pure field reads into the value pool, so the checks they bound read as
 constants.
 
 #### `cond_impl_post_promote`
@@ -381,7 +375,7 @@ Pass an aggregate read only by field as one parameter per field it reads.
 
 #### `freeze_pure_arith`
 
-Fold the remaining pure arithmetic into the value graph, for WIR to emit as
+Fold the remaining pure arithmetic into the value pool, for WIR to emit as
 operands.
 
 ## WIR Passes
