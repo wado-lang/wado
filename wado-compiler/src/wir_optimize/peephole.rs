@@ -1723,7 +1723,7 @@ fn relax_ref_local_get(instr: &mut WirInstr) -> bool {
     if let WirInstr::LocalGet { result_ty, .. } = instr
         && result_ty.is_nonnull_ref()
     {
-        result_ty.set_nullable();
+        *result_ty = result_ty.clone().as_nullable();
         return true;
     }
     false

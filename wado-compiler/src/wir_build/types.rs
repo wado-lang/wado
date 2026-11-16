@@ -506,7 +506,12 @@ fn register_fn_closure(
         return;
     }
     for &part in params.iter().chain([return_type]) {
-        register_fn_closure(ctx, type_table, visited, type_table.representation_head(part));
+        register_fn_closure(
+            ctx,
+            type_table,
+            visited,
+            type_table.representation_head(part),
+        );
     }
 
     let (param_wirs, result_wirs) = ctx.canonical_signature(type_table, params, *return_type);
