@@ -187,7 +187,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(67)
 
-type "functype//cm_callback_extern_closure.wado/cm_callback_extern_closure.wado/$Closure_0::$call$dae[self#1]" = fn(ref "cm_callback_extern_closure.wado//$Closure_0", ref struct);  // TypeId(68)
+type "functype//cm_callback_extern_closure.wado/cm_callback_extern_closure.wado/$Closure_0::$call$dae[self#0,self#1]" = fn(ref struct);  // TypeId(68)
 
 type "functype//cm_callback_extern_closure.wado/cm_callback_extern_closure.wado/$Closure_1::$call$dae[self#0,self#1]" = fn(ref struct);  // TypeId(69)
 
@@ -240,7 +240,7 @@ fn "cm_callback_extern_closure.wado/run"() {
     let $local_2_14: ref null "cm_callback_extern_closure.wado//$Dispatch_cm_callback_extern_closure.wado/Target";
     let $local_3_15: ref "cm_callback_extern_closure.wado//$Dispatch_cm_callback_extern_closure.wado/Target";
     echo = struct.new "cm_callback_extern_closure.wado//Echo" {};
-    target = extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: echo });
+    target = extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("target"), used: 6 } });
     events = struct.new "core:prelude//$Cell<i32>" { value: 0 };
     ticks = struct.new "core:prelude//$Cell<i32>" { value: 0 };
     global:cm_callback_extern_closure.wado::$effect_cm_callback_extern_closure.wado/Target = struct.new "cm_callback_extern_closure.wado//$Dispatch_cm_callback_extern_closure.wado/Target" { outer: local.tee $save_cm_callback_extern_closure.wado/Target(global:cm_callback_extern_closure.wado::$effect_cm_callback_extern_closure.wado/Target), op_listen: struct.new "canonical//CanonicalClosure_2" { env: struct.new "cm_callback_extern_closure.wado//$Closure_0" { $capture_0: echo }, func: ref.func "closure/cm_callback_extern_closure.wado/$closure_wrapper_0" }, op_tick: struct.new "canonical//CanonicalClosure_2" { env: struct.new "cm_callback_extern_closure.wado//$Closure_1" { $capture_0: echo }, func: ref.func "closure/cm_callback_extern_closure.wado/$closure_wrapper_1" } };
@@ -767,11 +767,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "cm_callback_extern_closure.wado/cm_callback_extern_closure.wado/$Closure_0::$call$dae[self#1]"(self, listener) {
-    let self_2: ref "cm_callback_extern_closure.wado//Echo";
-    self_2 = self.$capture_0;
+fn "cm_callback_extern_closure.wado/cm_callback_extern_closure.wado/$Closure_0::$call$dae[self#0,self#1]"(listener) {
     let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-    call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(listener)).env, extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: self_2 }));
+    call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(listener)).env, extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("event"), used: 5 } }));
 }
 
 fn "cm_callback_extern_closure.wado/cm_callback_extern_closure.wado/$Closure_1::$call$dae[self#0,self#1]"(listener) {
@@ -818,7 +816,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
 }
 
 fn "closure/cm_callback_extern_closure.wado/$closure_wrapper_0"($env, $p0, $p1) {
-    "cm_callback_extern_closure.wado/cm_callback_extern_closure.wado/$Closure_0::$call$dae[self#1]"(ref.cast "cm_callback_extern_closure.wado//$Closure_0"($env), $p1);
+    "cm_callback_extern_closure.wado/cm_callback_extern_closure.wado/$Closure_0::$call$dae[self#0,self#1]"($p1);
 }
 
 fn "closure/cm_callback_extern_closure.wado/$closure_wrapper_1"($env, $p0, $p1) {

@@ -1,0 +1,28 @@
+// `Resource` is the marker every resource holds, affine or an extern handle,
+// and what either narrower marker implies.
+#[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=0")]
+resource Node {}
+
+fn is_one<affine R: Resource>(_r: &R) -> bool {
+    return true;
+}
+
+fn through_extern<R: ExternHandle>(r: &R) -> bool {
+    return is_one(r);
+}
+
+fn through_affine<affine R: AffineResource>(r: &R) -> bool {
+    return is_one(r);
+}
+
+test "an extern handle and an affine resource are each a resource" {
+    let node = Node::backed_by("node");
+    assert is_one(&node);
+    assert through_extern(&node);
+    let [rx, _tx] = Stream::<u8>::new();
+    assert is_one(&rx);
+    assert through_affine(&rx);
+}
+
+__DATA__
+{"test": {}}

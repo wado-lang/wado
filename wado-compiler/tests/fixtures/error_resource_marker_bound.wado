@@ -1,0 +1,27 @@
+// No type but a resource is a `Resource`, and the marker takes no impl.
+struct Tag {
+    name: String,
+}
+
+impl Resource for Tag {}
+
+fn is_one<affine R: Resource>(_r: &R) -> bool {
+    return true;
+}
+
+export fn run() {
+    let _of_struct = is_one(&Tag { name: "a" });
+    let _of_scalar = is_one(&1);
+}
+
+__DATA__
+{
+  "compile_error": "type 'i32' does not implement trait 'Resource'",
+  "compile_errors_contains": [
+    "cannot implement `Resource`: it is a sealed, compiler-synthesized trait"
+  ],
+  "compile_error_codes": [
+    "ORPHAN_RULE",
+    "TRAIT_BOUND_NOT_SATISFIED"
+  ]
+}

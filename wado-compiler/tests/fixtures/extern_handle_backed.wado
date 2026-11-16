@@ -1,5 +1,5 @@
-// A guest value backs an extern handle: `backed_by` makes the handle and
-// `backing` gives the value back, by reference.
+// A guest value backs an extern handle: `backed_by` takes the value, and
+// `backing` reaches it in place.
 #[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=2")]
 resource Node {}
 
@@ -19,20 +19,18 @@ struct Other {
     uses: i32,
 }
 
-test "backing gives the value back by reference" {
-    let mut tag = Tag { name: "div", uses: 0 };
-    let element = Element::backed_by(&mut tag);
+test "backing reaches the value the handle holds" {
+    let element = Element::backed_by(Tag { name: "div", uses: 0 });
     let Some(back) = element.backing::<Tag>() else {
         panic("a Tag backs the handle");
     };
     back.uses += 1;
-    assert tag.uses == 1;
     assert back.name == "div";
+    assert element.backing::<Tag>() matches { Some(t) && t.uses == 1 };
 }
 
 test "a value of another type is not the backing" {
-    let mut tag = Tag { name: "div", uses: 0 };
-    let element = Element::backed_by(&mut tag);
+    let element = Element::backed_by(Tag { name: "div", uses: 0 });
     assert element.backing::<Other>() matches { None };
     assert element.backing::<String>() matches { None };
 }
@@ -46,15 +44,41 @@ fn bump(node: Node) {
     back.name = "changed";
 }
 
-test "a write through the handle reaches the value and no copy of it" {
+#[inline("never")]
+fn uses_of(node: &Node) -> i32 {
+    let Some(back) = node.backing::<Tag>() else {
+        panic("a Tag backs the handle");
+    };
+    return back.uses;
+}
+
+test "the handle holds its own value, which no variable names" {
     let mut tag = Tag { name: "div", uses: 0 };
-    let node = Node::backed_by(&mut tag);
-    let copy = tag;
+    let node = Node::backed_by(tag);
     bump(node);
-    assert tag.uses == 1;
-    assert tag.name == "changed";
-    assert copy.uses == 0;
-    assert copy.name == "div";
+    assert tag.uses == 0;
+    assert tag.name == "div";
+    tag.uses = 5;
+    assert uses_of(&node) == 1;
+}
+
+test "a copy of a handle is the same handle" {
+    let node = Node::backed_by(Tag { name: "div", uses: 0 });
+    let copy = node;
+    bump(copy);
+    assert uses_of(&node) == 1;
+    assert copy == node;
+}
+
+struct Holder {
+    node: Node,
+}
+
+test "a write through a handle an immutable place holds lands" {
+    let holder = Holder { node: Node::backed_by(Tag { name: "div", uses: 0 }) };
+    let other = holder;
+    bump(holder.node);
+    assert uses_of(&other.node) == 1;
 }
 
 struct Held<T> {
@@ -62,43 +86,51 @@ struct Held<T> {
 }
 
 test "two instances of one generic struct are two types" {
-    let mut tag = Tag { name: "div", uses: 0 };
-    let mut held =Held { value: Node::backed_by(&mut tag) };
-    let node = Node::backed_by(&mut held);
+    let inner = Node::backed_by(Tag { name: "div", uses: 0 });
+    let node = Node::backed_by(Held { value: inner });
     assert node.backing::<Held<Node>>() matches { Some(_) };
     assert node.backing::<Held<Element>>() matches { None };
-    let mut pair =[Node::backed_by(&mut tag), 1];
-    let of_pair = Node::backed_by(&mut pair);
+    let of_pair = Node::backed_by([inner, 1]);
     assert of_pair.backing::<[Node, i32]>() matches { Some(_) };
     assert of_pair.backing::<[Element, i32]>() matches { None };
 }
 
+test "a list and a string back a handle" {
+    let names: List<String> = ["a", "b"];
+    let of_list = Node::backed_by(names);
+    let Some(back) = of_list.backing::<List<String>>() else {
+        panic("a list backs the handle");
+    };
+    back.push("c");
+    assert names.len() == 2;
+    assert of_list.backing::<List<String>>() matches { Some(l) && l.len() == 3 };
+    let of_string = Node::backed_by("text");
+    assert of_string.backing::<String>() matches { Some(s) && *s == "text" };
+}
+
 test "an upcast keeps the backing and the class" {
-    let mut tag = Tag { name: "p", uses: 7 };
-    let node: Node = Element::backed_by(&mut tag);
+    let node: Node = Element::backed_by(Tag { name: "p", uses: 7 });
     assert node.backing::<Tag>() matches { Some(t) && t.uses == 7 };
     assert node matches { _: Element };
     assert !(node matches { _: Text });
 }
 
-test "a handle is equal to itself and to another of the same value" {
-    let mut a = Tag { name: "a", uses: 0 };
-    let mut b = Tag { name: "a", uses: 0 };
-    let first = Element::backed_by(&mut a);
+test "a handle is equal to itself, and to no other of an equal value" {
+    let tag = Tag { name: "a", uses: 0 };
+    let first = Element::backed_by(tag);
     assert first == first;
-    assert first == Element::backed_by(&mut a);
-    assert first != Element::backed_by(&mut b);
+    assert first != Element::backed_by(tag);
     let as_node: Node = first;
-    assert as_node == Node::backed_by(&mut a);
+    assert as_node == first;
 }
 
 test "an optional handle is the handle or nothing" {
-    let mut tag = Tag { name: "a", uses: 0 };
+    let element = Element::backed_by(Tag { name: "a", uses: 0 });
     let none: Option<Element> = null;
-    let some = Option::Some(Element::backed_by(&mut tag));
+    let some = Option::Some(element);
     assert none == null;
     assert some != none;
-    assert some == Option::Some(Element::backed_by(&mut tag));
+    assert some == Option::Some(element);
 }
 
 __DATA__

@@ -155,7 +155,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" =
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<fn mut(i32)->()>::grow" = fn(ref "core:prelude/list.wado//List<fn mut(i32)->()>");  // TypeId(49)
 
-type "functype//cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_0::$call" = fn(ref "cm_callback_handler_path.wado//$Closure_0") -> ref extern;  // TypeId(50)
+type "functype//cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_0::$call$dae[self]" = fn() -> ref extern;  // TypeId(50)
 
 type "functype//cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_1::$call$dae[self#1]" = fn(ref "cm_callback_handler_path.wado//$Closure_1", ref struct);  // TypeId(51)
 
@@ -628,10 +628,8 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<fn mut(i32)->()>::grow"(s
     self.repr = new_repr;
 }
 
-fn "cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_0::$call"(self) {
-    let self_1: ref "cm_callback_handler_path.wado//Mock";
-    self_1 = self.$capture_0;
-    return extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: self_1 });
+fn "cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_0::$call$dae[self]"() {
+    return extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("target"), used: 6 } });
 }
 
 fn "cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_1::$call$dae[self#1]"(self, listener) {
@@ -649,16 +647,16 @@ fn "cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_2::$cal
     let $load_1: ref "core:prelude/list.wado//List<fn mut(i32)->()>";
     let end: i32;
     let item: ref struct;
-    let $sroa_$iter_0_repr_14: ref "Array<fn mut(i32)->()>";
-    let $sroa_$iter_0_index_15: i32;
+    let $sroa_$iter_0_repr_16: ref "Array<fn mut(i32)->()>";
+    let $sroa_$iter_0_index_17: i32;
     end = local.tee $load_1(self.$capture_0.listeners).used;
-    $sroa_$iter_0_repr_14 = $load_1.repr;
-    $sroa_$iter_0_index_15 = 0;
+    $sroa_$iter_0_repr_16 = $load_1.repr;
+    $sroa_$iter_0_index_17 = 0;
     b60: block {
         l61: loop {
-            break_if b60 $sroa_$iter_0_index_15 >= end;
-            item = builtin::array_get_value<ref struct>($sroa_$iter_0_repr_14, $sroa_$iter_0_index_15);
-            $sroa_$iter_0_index_15 = $sroa_$iter_0_index_15 + 1;
+            break_if b60 $sroa_$iter_0_index_17 >= end;
+            item = builtin::array_get_value<ref struct>($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
             let $indirect_call_1: ref "canonical//CanonicalClosure_0";
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item)).env, value);
             continue l61;
@@ -678,7 +676,7 @@ fn "cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_3::$cal
 }
 
 fn "closure/cm_callback_handler_path.wado/$closure_wrapper_0"($env) {
-    return "cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_0::$call"(ref.cast "cm_callback_handler_path.wado//$Closure_0"($env));
+    return "cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_0::$call$dae[self]"();
 }
 
 fn "closure/cm_callback_handler_path.wado/$closure_wrapper_1"($env, $p0, $p1) {

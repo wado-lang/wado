@@ -53,15 +53,15 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//extern_handle_generic.wado/$test_1_a_handle_compares_by_its_backing" = fn();  // TypeId(15)
+type "functype//extern_handle_generic.wado/$cm_export__$test_0_a_value_backs_a_handle" = fn();  // TypeId(15)
 
-type "functype//extern_handle_generic.wado/$cm_export__$test_0_a_value_backs_a_handle" = fn();  // TypeId(16)
+type "functype//extern_handle_generic.wado/$cm_export__$test_1_a_handle_compares_by_what_object_it_is" = fn();  // TypeId(16)
 
-type "functype//extern_handle_generic.wado/$cm_export__$test_1_a_handle_compares_by_its_backing" = fn();  // TypeId(17)
+type "functype//extern_handle_generic.wado/$cm_export__$test_2_inspect_names_the_resource" = fn();  // TypeId(17)
 
-type "functype//extern_handle_generic.wado/$cm_export__$test_2_inspect_names_the_resource" = fn();  // TypeId(18)
+type "functype//extern_handle_generic.wado/$test_0_a_value_backs_a_handle$cold0" = fn();  // TypeId(18)
 
-type "functype//extern_handle_generic.wado/$test_0_a_value_backs_a_handle$cold0" = fn();  // TypeId(19)
+type "functype//extern_handle_generic.wado/$test_1_a_handle_compares_by_what_object_it_is$cold0$dae[first]" = fn();  // TypeId(19)
 
 type "functype//extern_handle_generic.wado/$hole_fmt$extern_handle_generic.wado/$tmpl$ac465c615413d068$sroa[f.buf]$dae[t]" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(20)
 
@@ -126,74 +126,11 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
-global global:extern_handle_generic.wado::$const_obj_7: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 117, 102, 60, 105, 51, 50, 62), used: 8 };
-
-fn "extern_handle_generic.wado/$test_1_a_handle_compares_by_its_backing"() {
-    let a_0: ref "extern_handle_generic.wado//Bytes";
-    let b_1: ref "extern_handle_generic.wado//Bytes";
-    let first: ref extern;
-    let $v1_3: ref extern;
-    a_0 = struct.new "extern_handle_generic.wado//Bytes" { len: 1 };
-    b_1 = struct.new "extern_handle_generic.wado//Bytes" { len: 1 };
-    first = extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: a_0 });
-    $v1_3 = extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: a_0 });
-    if @unlikely($inline_handle_eq_4: block -> bool {
-        if ref.test "core:prelude//$BackedHandle"(extern.internalize(first)) {
-            if ref.test "core:prelude//$BackedHandle"(extern.internalize($v1_3)) -> i32 {
-                ref.eq(ref.cast "core:prelude//$BackedHandle"(extern.internalize(first)).value, ref.cast "core:prelude//$BackedHandle"(extern.internalize($v1_3)).value);
-            } else {
-                0;
-            }
-            break $inline_handle_eq_4;
-        }
-        if ref.test "core:prelude//$BackedHandle"(extern.internalize($v1_3)) {
-            break $inline_handle_eq_4: 0;
-        }
-        unreachable;
-    } == 0) {
-        cold_path;
-        let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<extern_handle_generic.wado/$tmpl$ac465c615413d068,[extern_handle_generic.wado/Buf<i32>,extern_handle_generic.wado/Buf<i32>]>"(struct.new "extern_handle_generic.wado//$tmpl$ac465c615413d068" { h0: first, h1: $v1_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_handle_compares_by_its_backing at extern_handle_generic.wado:28
-condition: Holder { buf: first } == Holder { buf: Buf::<i32>::backed_by(&mut a) }
-first: "), used: 183 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_handle_compares_by_its_backing at extern_handle_generic.wado:28
-condition: Holder { buf: first } == Holder { buf: Buf::<i32>::backed_by(&mut a) }
-first: "), used: 183 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-Buf::<i32>::backed_by(&mut a): "), used: 32 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-Buf::<i32>::backed_by(&mut a): "), used: 32 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
-        unreachable;
-    }
-    $v1_3 = extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: b_1 });
-    if @unlikely(($inline_handle_eq_7: block -> bool {
-        if ref.test "core:prelude//$BackedHandle"(extern.internalize(first)) {
-            if ref.test "core:prelude//$BackedHandle"(extern.internalize($v1_3)) -> i32 {
-                ref.eq(ref.cast "core:prelude//$BackedHandle"(extern.internalize(first)).value, ref.cast "core:prelude//$BackedHandle"(extern.internalize($v1_3)).value);
-            } else {
-                0;
-            }
-            break $inline_handle_eq_7;
-        }
-        if ref.test "core:prelude//$BackedHandle"(extern.internalize($v1_3)) {
-            break $inline_handle_eq_7: 0;
-        }
-        unreachable;
-    } == 0) == 0) {
-        cold_path;
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<extern_handle_generic.wado/$tmpl$ac465c615413d068,[extern_handle_generic.wado/Buf<i32>,extern_handle_generic.wado/Buf<i32>]>"(struct.new "extern_handle_generic.wado//$tmpl$ac465c615413d068" { h0: first, h1: $v1_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_handle_compares_by_its_backing at extern_handle_generic.wado:29
-condition: first != Buf::<i32>::backed_by(&mut b)
-first: "), used: 151 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_handle_compares_by_its_backing at extern_handle_generic.wado:29
-condition: first != Buf::<i32>::backed_by(&mut b)
-first: "), used: 151 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-Buf::<i32>::backed_by(&mut b): "), used: 32 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-Buf::<i32>::backed_by(&mut b): "), used: 32 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
-        unreachable;
-    }
-}
+global global:extern_handle_generic.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 117, 102, 60, 105, 51, 50, 62), used: 8 };
 
 fn "extern_handle_generic.wado/$cm_export__$test_0_a_value_backs_a_handle"() {
-    let bytes: ref "extern_handle_generic.wado//Bytes";
     let buf: ref extern;
-    bytes = struct.new "extern_handle_generic.wado//Bytes" { len: 4 };
-    buf = extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: bytes });
+    buf = extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: struct.new "extern_handle_generic.wado//Bytes" { len: 4 } });
     if @unlikely($thread_$inline_extern_handle_generic_wado_Buf_i32__core_prelude_traits_wado_Backing__backing_extern_handle_generic_wado_Bytes__sroa_self_value__3: block -> bool {
         if (if ref.test "core:prelude//$BackedHandle"(extern.internalize(buf)) -> bool {
             ref.test "extern_handle_generic.wado//Bytes"(ref.cast "core:prelude//$BackedHandle"(extern.internalize(buf)).value);
@@ -211,31 +148,84 @@ fn "extern_handle_generic.wado/$cm_export__$test_0_a_value_backs_a_handle"() {
     "wasi/task-return"(0);
 }
 
-fn "extern_handle_generic.wado/$cm_export__$test_1_a_handle_compares_by_its_backing"() {
-    "extern_handle_generic.wado/$test_1_a_handle_compares_by_its_backing"();
+fn "extern_handle_generic.wado/$cm_export__$test_1_a_handle_compares_by_what_object_it_is"() {
+    let first: ref extern;
+    let $v1: ref extern;
+    first = extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: struct.new "extern_handle_generic.wado//Bytes" { len: 1 } });
+    if @unlikely($inline_handle_eq_5: block -> bool {
+        if ref.test "core:prelude//$BackedHandle"(extern.internalize(first)) {
+            if ref.test "core:prelude//$BackedHandle"(extern.internalize(first)) -> i32 {
+                ref.eq(ref.cast "core:prelude//$BackedHandle"(extern.internalize(first)).value, ref.cast "core:prelude//$BackedHandle"(extern.internalize(first)).value);
+            } else {
+                0;
+            }
+            break $inline_handle_eq_5;
+        }
+        if ref.test "core:prelude//$BackedHandle"(extern.internalize(first)) {
+            break $inline_handle_eq_5: 0;
+        }
+        unreachable;
+    } == 0) {
+        cold_path;
+        "extern_handle_generic.wado/$test_1_a_handle_compares_by_what_object_it_is$cold0$dae[first]"();
+        unreachable;
+    }
+    $v1 = extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: struct.new "extern_handle_generic.wado//Bytes" { len: 1 } });
+    if @unlikely(($inline_handle_eq_8: block -> bool {
+        if ref.test "core:prelude//$BackedHandle"(extern.internalize(first)) {
+            if ref.test "core:prelude//$BackedHandle"(extern.internalize($v1)) -> i32 {
+                ref.eq(ref.cast "core:prelude//$BackedHandle"(extern.internalize(first)).value, ref.cast "core:prelude//$BackedHandle"(extern.internalize($v1)).value);
+            } else {
+                0;
+            }
+            break $inline_handle_eq_8;
+        }
+        if ref.test "core:prelude//$BackedHandle"(extern.internalize($v1)) {
+            break $inline_handle_eq_8: 0;
+        }
+        unreachable;
+    } == 0) == 0) {
+        cold_path;
+        let $mv_arg_1: ref "core:prelude/string.wado//String";
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<extern_handle_generic.wado/$tmpl$ac465c615413d068,[extern_handle_generic.wado/Buf<i32>,extern_handle_generic.wado/Buf<i32>]>"(struct.new "extern_handle_generic.wado//$tmpl$ac465c615413d068" { h0: first, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_handle_compares_by_what_object_it_is at extern_handle_generic.wado:26
+condition: first != Buf::<i32>::backed_by(Bytes { len: 1 })
+first: "), used: 167 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_handle_compares_by_what_object_it_is at extern_handle_generic.wado:26
+condition: first != Buf::<i32>::backed_by(Bytes { len: 1 })
+first: "), used: 167 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+Buf::<i32>::backed_by(Bytes { len: 1 }): "), used: 42 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+Buf::<i32>::backed_by(Bytes { len: 1 }): "), used: 42 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
+        unreachable;
+    }
     "wasi/task-return"(0);
 }
 
 fn "extern_handle_generic.wado/$cm_export__$test_2_inspect_names_the_resource"() {
-    let $temp_inline_extern_handle_generic_wado_Buf_i32__core_prelude_traits_wado_Backing__backed_by_extern_handle_generic_wado_Bytes__0_0: ref "extern_handle_generic.wado//Bytes";
-    drop(ref.as_non_null($temp_inline_extern_handle_generic_wado_Buf_i32__core_prelude_traits_wado_Backing__backed_by_extern_handle_generic_wado_Bytes__0_0 = struct.new "extern_handle_generic.wado//Bytes" { len: 0 }; extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: $temp_inline_extern_handle_generic_wado_Buf_i32__core_prelude_traits_wado_Backing__backed_by_extern_handle_generic_wado_Bytes__0_0 })));
+    drop(ref.as_non_null(extern.externalize(struct.new "core:prelude//$BackedHandle" { class: 0, value: struct.new "extern_handle_generic.wado//Bytes" { len: 0 } })));
     "wasi/task-return"(0);
 }
 
 fn "extern_handle_generic.wado/$test_0_a_value_backs_a_handle$cold0"() {
-    "core:rt/panic"(array.new_data<u8>("Assertion failed in $test_0_a_value_backs_a_handle at extern_handle_generic.wado:21
+    "core:rt/panic"(array.new_data<u8>("Assertion failed in $test_0_a_value_backs_a_handle at extern_handle_generic.wado:20
 condition: buf.backing::<Bytes>() matches { Some(b) && b.len == 4 }
 "), 152);
+    unreachable;
+}
+
+fn "extern_handle_generic.wado/$test_1_a_handle_compares_by_what_object_it_is$cold0$dae[first]"() {
+    "core:rt/panic"(array.new_data<u8>("Assertion failed in $test_1_a_handle_compares_by_what_object_it_is at extern_handle_generic.wado:25
+condition: Holder { buf: first } == Holder { buf: first }
+first: Buf<i32>
+"), 174);
     unreachable;
 }
 
 fn "extern_handle_generic.wado/$hole_fmt$extern_handle_generic.wado/$tmpl$ac465c615413d068$sroa[f.buf]$dae[t]"(index, f) {
     if index == 0 {
         let $mv_arg_4: ref "core:prelude/string.wado//String";
-        $mv_arg_4 = global:extern_handle_generic.wado::$const_obj_7;
+        $mv_arg_4 = global:extern_handle_generic.wado::$const_obj_5;
         "core:rt/inspect_handle$sroa[f.buf]$spec0"(f, $mv_arg_4.repr, $mv_arg_4.used);
     } else if @likely(index == 1) {
-        $mv_arg_4 = global:extern_handle_generic.wado::$const_obj_7;
+        $mv_arg_4 = global:extern_handle_generic.wado::$const_obj_5;
         "core:rt/inspect_handle$sroa[f.buf]$spec0"(f, $mv_arg_4.repr, $mv_arg_4.used);
     } else {
         unreachable;
@@ -498,5 +488,5 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
 }
 
 export fn "extern_handle_generic.wado/$cm_export__$test_0_a_value_backs_a_handle" as "$test_0_a_value_backs_a_handle"
-export fn "extern_handle_generic.wado/$cm_export__$test_1_a_handle_compares_by_its_backing" as "$test_1_a_handle_compares_by_its_backing"
+export fn "extern_handle_generic.wado/$cm_export__$test_1_a_handle_compares_by_what_object_it_is" as "$test_1_a_handle_compares_by_what_object_it_is"
 export fn "extern_handle_generic.wado/$cm_export__$test_2_inspect_names_the_resource" as "$test_2_inspect_names_the_resource"

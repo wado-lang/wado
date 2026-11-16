@@ -1,6 +1,7 @@
 // Only a value a reference reaches in place backs a handle. A reference to an
 // extern handle, a closure, a scalar or `()` is a cell, and two types' cells
-// are one struct, so the backing could not be told from another type's.
+// are one struct, so the backing could not be told from another type's. A
+// reference backs none either: the handle holds its value.
 #[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
 resource Node {}
 
@@ -17,13 +18,14 @@ fn answer() -> i32 {
 
 export fn run() {
     let mut tag = Tag { name: "a" };
-    let mut node =Node::backed_by(&mut tag);
-    let _of_handle = Node::backed_by(&mut node);
-    let _of_unit = Node::backed_by(&mut ());
-    let _of_scalar = Node::backed_by(&mut 1);
+    let node = Node::backed_by(tag);
+    let _of_handle = Node::backed_by(node);
+    let _of_unit = Node::backed_by(());
+    let _of_scalar = Node::backed_by(1);
     let _as_handle = node.backing::<Element>();
     let _as_closure = node.backing::<fn() -> i32>();
-    let _of_closure = Node::backed_by(&mut answer);
+    let _of_closure = Node::backed_by(answer);
+    let _of_reference = Node::backed_by(&mut tag);
 }
 
 __DATA__
@@ -33,7 +35,8 @@ __DATA__
     "type '()' does not implement trait 'RefMut'",
     "type 'i32' does not implement trait 'RefMut'",
     "type 'Element' does not implement trait 'RefMut'",
-    "type 'fn() -> i32' does not implement trait 'RefMut'"
+    "type 'fn() -> i32' does not implement trait 'RefMut'",
+    "type '&mut Tag' does not implement trait 'RefMut'"
   ],
   "compile_error_codes": [
     "TRAIT_BOUND_NOT_SATISFIED"
