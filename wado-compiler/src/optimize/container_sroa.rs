@@ -2393,29 +2393,9 @@ fn spill(
     {
         return op;
     }
-    let local_index = engine.alloc_minted_local("csroa_elem", type_id, false);
-    let name = engine.local_name(local_index);
-    out.push(engine.alloc_stmt(
-        StmtKind::Let {
-            name: name.clone(),
-            local_index,
-            is_mut: false,
-            type_id,
-            value: op,
-            // The temporary carries the element to its one use, as the
-            // argument it replaces did.
-            skip_value_copy: true,
-        },
-        span,
-    ));
-    Operand::Expr(engine.alloc_expr(
-        ExprKind::Local {
-            index: local_index,
-            name,
-        },
-        type_id,
-        span,
-    ))
+    let (bound, read) = engine.bind_minted("csroa_elem", op, type_id, span);
+    out.push(bound);
+    Operand::Expr(read)
 }
 
 /// The `&v_field` / `&mut v_field` receiver of a per-field call.
