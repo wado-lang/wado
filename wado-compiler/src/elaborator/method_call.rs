@@ -1194,8 +1194,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        // A trait impl on a head the owner does not name, such as a `&T` impl,
-        // names the call after the impl's target.
+        // A trait impl on a head the owner does not name (a `&T` impl, or one
+        // no newtype link of the receiver carries) names the call after the
+        // impl's target.
         if let Some(impl_name) = trait_impl_struct_name {
             receiver_struct_name.clone_from(&impl_name);
             base_struct_name = impl_name;
