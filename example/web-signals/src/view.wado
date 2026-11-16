@@ -46,6 +46,14 @@ struct Row<T> {
     dispose: fn mut() with Dom,
 }
 
+fn remove_rows<T>(parent: Element, rows: List<Row<T>>) with Dom {
+    for let row of rows {
+        let mut dispose = row.dispose;
+        dispose();
+        parent.remove_child(row.node);
+    }
+}
+
 /// Keeps `parent`'s children at one node per item, in the items' order. An
 /// item equal to one already shown keeps its node, and whatever `render` made
 /// for an item that left is disposed.
@@ -58,11 +66,7 @@ pub fn each<T: Eq>(
     let mut render = render;
     let mut rows: List<Row<T>> = [];
     on_cleanup(|| {
-        for let row of rows {
-            let mut dispose = row.dispose;
-            dispose();
-            parent.remove_child(row.node);
-        }
+        remove_rows(parent, rows);
         rows = [];
     });
     observe(|| {
@@ -86,11 +90,7 @@ pub fn each<T: Eq>(
             kept.push(Row { item, node: node.unwrap(), dispose });
             moved = true;
         }
-        for let row of rows {
-            let mut dispose = row.dispose;
-            dispose();
-            parent.remove_child(row.node);
-        }
+        remove_rows(parent, rows);
         if moved {
             // Appending a child already there moves it, so this leaves the
             // children in the new order.
