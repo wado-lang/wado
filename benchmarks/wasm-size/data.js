@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794799975161,
+  "lastUpdate": 1794806963226,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77981,6 +77981,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0e8ae23bca1a7aec0ee447dc65cc6d449eb367bd"
         },
         "date": 1794799973962,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24433,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434873,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9e2f3bbbc9e44f3515bf2de2d2df9e1f514b8ec2",
+          "message": "Merge pull request #2638 from wado-lang/ccr-ab6e1e8d-gpq450\n\nfeat(eddy): review a branch on demand, with a test that reproduces each finding",
+          "timestamp": "2026-11-16T14:13:31+09:00",
+          "tree_id": "162d97be88b34340101754fd996a1a481d33cc64",
+          "url": "https://github.com/wado-lang/wado/commit/9e2f3bbbc9e44f3515bf2de2d2df9e1f514b8ec2"
+        },
+        "date": 1794806962473,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
