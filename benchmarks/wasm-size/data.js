@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794812990964,
+  "lastUpdate": 1794814479706,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78069,6 +78069,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/15e736fbc662002c70b6e0ec4b1a27f2fa86b810"
         },
         "date": 1794812989908,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24433,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434873,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f13dbd38854c2a627666de66c8247c9650c93dca",
+          "message": "Merge pull request #2639 from wado-lang/loam/load-tensor-at-a-time\n\nfeat(loam)!: load a model larger than the guest, a tensor at a time",
+          "timestamp": "2026-11-16T16:14:05+09:00",
+          "tree_id": "110de204acf9f303d1db235ba76e789e0ee344e1",
+          "url": "https://github.com/wado-lang/wado/commit/f13dbd38854c2a627666de66c8247c9650c93dca"
+        },
+        "date": 1794814478710,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
