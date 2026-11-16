@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794789891222,
+  "lastUpdate": 1794793695332,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77893,6 +77893,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ed2c6170e50ccbe1497debb83917e697f4aa3486"
         },
         "date": 1794789889966,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7295,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24485,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434963,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9233a3e5be09f71d36a0ddca5483bbbd8664281b",
+          "message": "Merge pull request #2635 from wado-lang/loam/roadmap-gpt-oss\n\nfeat(loam): run a graph in its own element types, half graphs on every device",
+          "timestamp": "2026-11-16T10:34:43+09:00",
+          "tree_id": "c27b6adae0fe99edfcc5225cebcf7cd43999aa08",
+          "url": "https://github.com/wado-lang/wado/commit/9233a3e5be09f71d36a0ddca5483bbbd8664281b"
+        },
+        "date": 1794793694566,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
