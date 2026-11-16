@@ -2992,8 +2992,8 @@ impl WebGpuBackend {
 
     /// `Graph::quantized_product` of `operands`, the input as `[M, K]`, the
     /// packed weight, its scales and any zero points, as a `[M, N]` result:
-    /// one workgroup per column and `QUANTIZED_ROWS` rows, in the elements
-    /// `half` names or f32s. `None` where they do not bind.
+    /// one workgroup per column and `QUANTIZED_ROWS` rows, rounded to any
+    /// `half` and held as `new_tensor` holds it. `None` where they do not bind.
     internal fn quantized_product_kernel(
         &mut self,
         operands: &List<DeviceTensor>,
@@ -3023,8 +3023,8 @@ impl WebGpuBackend {
 
     /// `Graph::quantized_gather` of `operands`, the packed table, the indices
     /// flat, its scales and any zero points, as a `[I, W]` result: one
-    /// invocation per element, in the elements `half` names or f32s. `None`
-    /// where they do not bind.
+    /// invocation per element, rounded to any `half` and held as `new_tensor`
+    /// holds it. `None` where they do not bind.
     internal fn quantized_gather_kernel(
         &mut self,
         operands: &List<DeviceTensor>,

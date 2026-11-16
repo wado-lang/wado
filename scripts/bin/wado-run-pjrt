@@ -3,7 +3,13 @@
 # `--plugin` or WADO_PJRT_PLUGIN names another.
 set -euo pipefail
 here="$(dirname "$0")"
-if [ -z "${WADO_PJRT_PLUGIN:-}" ]; then
+named=${WADO_PJRT_PLUGIN:-}
+for arg in "$@"; do
+    case "${arg}" in
+        --plugin | --plugin=*) named=1 ;;
+    esac
+done
+if [ -z "${named}" ]; then
     WADO_PJRT_PLUGIN="$("${here}/../fetch-pjrt-plugin.sh")"
     export WADO_PJRT_PLUGIN
 fi

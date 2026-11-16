@@ -726,6 +726,8 @@ impl Graph for WebGpuBackend {
         zero_points: Option<&Placed<u8, [N, Z]>>,
         quantized: &Quantized,
     ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        // Held once, for the kernel and for the decomposition where it declines.
+        let a = &Placed::<E, In>::Device(self.device_view(a));
         let mut extents = self.extents_of(a);
         let last = extents.len() - 1;
         let inner = extents[last];

@@ -60,6 +60,7 @@ export async function writeGenerated({ dir, prompts, ends = [], decoder, name = 
     for (const prompt of prompts) {
       const { ids } = recorded.find((t) => t.text === prompt);
       const c = await continued(session, decoder, ids, ends);
+      if (c.generated.length < 2) throw new Error(`the reply to ${JSON.stringify(prompt)} ends at its first token`);
       lead = Math.min(lead, c.lead);
       firsts.push(c.first);
       timed.push({ prompt, ids, generated: c.generated, ms_per_token: c.ms_after_first / (c.generated.length - 1) });

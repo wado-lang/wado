@@ -34,8 +34,9 @@ runs and read backs a token takes:
 
 ## On a PJRT plugin
 
-`pjrt.wado` does the same on `PjrtBackend`, on XLA's CPU plugin unless
-`--plugin` names another:
+`pjrt.wado` does the same on `PjrtBackend`. The `wado-run-pjrt` that mise
+puts on `PATH` runs on XLA's CPU plugin unless `--plugin` names another;
+elsewhere, `--plugin "$(scripts/fetch-pjrt-plugin.sh)"` names it:
 
     cd package-loam/example/gemma3-270m
     wado run-pjrt pjrt.wado

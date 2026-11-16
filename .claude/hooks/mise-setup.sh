@@ -1,6 +1,7 @@
 #!/bin/bash
 # .claude/hooks/mise-setup.sh
-# SessionStart hook for Claude Code Web to install mise and project tools
+# SessionStart hook: installs mise and the project tools in a Claude Code Web
+# session, and activates mise in every session
 # cf. https://code.claude.com/docs/en/settings
 
 set -e
