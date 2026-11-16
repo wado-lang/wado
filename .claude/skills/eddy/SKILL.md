@@ -41,7 +41,8 @@ that patch alone to a clean checkout and saw the run fail with that text.
   failing test to fix against. Keep the test where it belongs in the tree once
   it passes.
 - With `verified` false, `output` says why: the run passed, failed another way,
-  or the patch did not stand alone. Verify the finding as any other claim.
+  the patch did not stand alone, or, where `patch` is empty, the test could not
+  be tried at all. Verify the finding as any other claim.
 - With no `repro`, no test of the reviewer's was found to reproduce it, and
   `detail` often says why.
 
