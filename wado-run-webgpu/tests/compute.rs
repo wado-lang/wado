@@ -400,6 +400,45 @@ fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
     }
 }
 
+/// A checkpoint larger than the guest may grow to, over two files, loads onto
+/// the device a tensor at a time, and `Cpu`, which holds it whole, loads it
+/// from the same source once the limit is lifted.
+#[test]
+fn a_checkpoint_larger_than_the_guest_loads_onto_the_device() {
+    let conformance = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../package-loam/conformance");
+    let written = Command::new(&*WADO)
+        .args(["run", "large/write.wado"])
+        .current_dir(&conformance)
+        .output()
+        .expect("running wado");
+    assert!(
+        written.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&written.stderr)
+    );
+    let limited = ["--max-memory", "32m"];
+    let chain = |limit: &[&str], on: &[&str]| {
+        runner()
+            .args(limit)
+            .arg("large/webgpu.wado")
+            .args(on)
+            .current_dir(&conformance)
+            .output()
+            .expect("running wado-run-webgpu")
+    };
+    let printed = |output: std::process::Output| {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "stderr: {stderr}");
+        String::from_utf8(output.stdout).expect("the program prints text")
+    };
+    assert_eq!(printed(chain(&limited, &[])), "misplaced 0\n");
+    assert_eq!(printed(chain(&[], &["cpu"])), "misplaced 0\n");
+    assert!(
+        !chain(&limited, &["cpu"]).status.success(),
+        "the checkpoint must not fit the limit"
+    );
+}
+
 #[test]
 fn an_unknown_option_is_refused_before_anything_is_compiled() {
     let output = run(&["--frobnicate", "x.wado"]);

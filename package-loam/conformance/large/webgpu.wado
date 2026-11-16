@@ -1,0 +1,40 @@
+//! `chain.wado` on a WebGPU device, or on `Cpu` given `cpu`, printing how many
+//! of its outputs are misplaced. `wado-run-webgpu`'s tests run it under a
+//! memory limit the checkpoint is larger than, from `conformance/`:
+//!
+//!     wado run-webgpu --max-memory 32m large/webgpu.wado
+
+use { args, println, Environment, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuSupportedFeatures,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { Cpu, WebGpuBackend } from "lib:loam";
+use { misplaced } from "./chain.wado";
+
+export fn run() with (Stdout, Environment, Preopens, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
+    if args().contains_str("cpu") {
+        println(`misplaced ${misplaced(&mut Cpu {})}`);
+        return;
+    }
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        println("no WebGPU adapter");
+        return;
+    };
+    println(`misplaced ${misplaced(&mut gpu)}`);
+}

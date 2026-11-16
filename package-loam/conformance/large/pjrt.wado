@@ -1,0 +1,15 @@
+//! `chain.wado` on a PJRT device, printing how many of its outputs are
+//! misplaced. `wado-run-pjrt`'s tests run it under a memory limit the
+//! checkpoint is larger than, from `conformance/`:
+//!
+//!     wado run-pjrt --max-memory 32m large/pjrt.wado
+
+use { println, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+use { PjrtHost } from "core:pjrt";
+use { PjrtBackend } from "lib:loam";
+use { misplaced } from "./chain.wado";
+
+export fn run() with (Stdout, Preopens, PjrtHost) {
+    println(`misplaced ${misplaced(&mut PjrtBackend::new())}`);
+}

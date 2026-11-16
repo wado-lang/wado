@@ -48,12 +48,12 @@ The embedding is a `float16` table a `Gather` reads, so the model has no
 `GatherBlockQuantized`. The inputs and outputs are `int64` and `float16`, and
 the two `Cast`s give `int32`.
 
-1. [ ] Loading a tensor at a time. `load` reads a
+1. [x] Loading a tensor at a time. `load` reads a
    [`WeightSource`](./design.md#weight-sources) a range at a time, and a range
    names one of several data files, and a tensor reaches the backend in its
-   stored bytes. Finished when a checkpoint larger than the guest's memory,
-   spread over several data files, loads onto `WebGpuBackend` and
-   `PjrtBackend`, and `Cpu` loads one it can hold through the same source.
+   stored bytes. `conformance/large/` holds the proof: an 80 MiB checkpoint
+   over two files loads onto `WebGpuBackend` and `PjrtBackend` under
+   `--max-memory 32m`, and onto `Cpu` with no limit, from one `FileSource`.
 2. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
    which onnx-community's `q4` exports use. gpt-oss-20b has the first alone. A
    weight stays packed on the device, read by the quantized product composite
@@ -368,6 +368,10 @@ query, key and value, stays a product of its own. Over more than one row, a
 part of a concatenation is strided by the whole product's row, so a `reshape`
 merging its rows with an axis after them copies it, as Gemma 3's query and key
 normalization over heads does on a prompt.
+
+The weights of one `Joined` or `Paired` product are held on the host together
+while the device's copy of them is laid out, since a half fits them only where
+it holds every one's values. A load stays a tensor at a time elsewhere.
 
 A buffer crosses the component boundary as a `list<u8>`, which the guest
 converts from or to f32 one element at a time, so crossing costs more than the

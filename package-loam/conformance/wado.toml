@@ -12,4 +12,6 @@ version = "0.0.0"
 "lib:loam" = { path = "..", package = "wado-lang:loam", version = "^0.0.28" }
 
 [test]
-exclude = ["build/**"]
+# `large/` reads a checkpoint its own writer puts in `build/`, which the
+# runners' tests run first.
+exclude = ["build/**", "large/**"]

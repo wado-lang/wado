@@ -1,0 +1,15 @@
+//! How `write.wado` lays the chain's checkpoint out, which `chain.wado` reads.
+//! Weight `k` moves element `i` to `(i + k + 1) % N`, so the chain moves each
+//! by `SHIFT`.
+
+/// The extent of every weight, and of the chain's input.
+pub global N: i32 = 1024;
+
+/// How many weights the chain multiplies by.
+pub global WEIGHTS: i32 = 20;
+
+/// How far the chain moves each element: the sum of each weight's move.
+pub global SHIFT: i32 = WEIGHTS * (WEIGHTS + 1) / 2;
+
+/// Where the checkpoint is written, from `conformance/`.
+pub global DIR: String = "build/large";

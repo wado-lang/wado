@@ -1,0 +1,36 @@
+//! `chain.onnxtext` loaded from the checkpoint `write.wado` writes, a tensor
+//! at a time, and run once.
+
+use { Preopens } from "core:fs";
+use { FileSource, Graph, Tensor } from "lib:loam";
+use { DIR, N, SHIFT } from "./layout.wado";
+use { Model, Params, compute } from "./chain.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: {
+            module: "lib:loam",
+            inputs: [
+                { path: "../build/large/model.safetensors.index.json", type: "safetensors-index" },
+                { path: "../build/large/model-00001-of-00002.safetensors", type: "safetensors" },
+                { path: "../build/large/model-00002-of-00002.safetensors", type: "safetensors" },
+            ],
+        },
+    };
+
+/// How many of `y`'s elements are not where the chain moves `x`'s: none, where
+/// every weight came from its own range.
+pub fn misplaced<affine Bk: Graph>(backend: &mut Bk) -> i32 with (_, Preopens) {
+    let mut model = Model::new(Params::load(backend, &FileSource { dir: DIR }).unwrap());
+    let x: List<f32> = (0..<N).map(|i| (i % 251) as f32).collect();
+    let y = compute(backend, &Tensor {
+        data: x,
+        extents: [1, N],
+    }, &mut model);
+    let mut off = 0;
+    for let j of 0..<N {
+        if y.data[j] != x[(j - SHIFT % N + N) % N] {
+            off += 1;
+        }
+    }
+    return off;
+}
