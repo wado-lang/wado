@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794814479706,
+  "lastUpdate": 1794817256525,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78113,6 +78113,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f13dbd38854c2a627666de66c8247c9650c93dca"
         },
         "date": 1794814478710,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24433,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434873,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7eabd7bdba11a62792ff0cb5edacf05623d128c2",
+          "message": "Merge pull request #2642 from wado-lang/ccr-5a053762-2x7vni\n\nfeat(web)!: a handle holds its backing value, so a node `SurfaceDom` dropped is collected",
+          "timestamp": "2026-11-16T17:05:04+09:00",
+          "tree_id": "a144688c2453da2efe3091f53480011b7972cb5c",
+          "url": "https://github.com/wado-lang/wado/commit/7eabd7bdba11a62792ff0cb5edacf05623d128c2"
+        },
+        "date": 1794817255616,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
