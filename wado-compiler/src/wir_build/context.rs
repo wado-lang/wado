@@ -122,6 +122,10 @@ pub struct WirContext<'a> {
     /// the canonical struct carries the inspect vtable
     /// slots. See `inspectable_fn_dispatch`.
     pub canonical_closure_types: IndexMap<String, (WirTypeId, WirTypeId, bool)>,
+    /// The `CanonicalClosure_K` each function type lowers to. A function type
+    /// absent here has no closure that could be called, and lowers to
+    /// `structref`.
+    pub fn_closure_types: IndexMap<TypeId, WirTypeId>,
     /// Map from closure `(module_source, functor_id)` to the per-functor
     /// canonical wrapper triple. Keyed by module source + functor ID
     /// because functor IDs are per-module, not globally unique.
@@ -332,6 +336,7 @@ impl<'a> WirContext<'a> {
                 ..WirNames::default()
             },
             canonical_closure_types: IndexMap::default(),
+            fn_closure_types: IndexMap::default(),
             closure_wrapper_funcs: IndexMap::default(),
             canonical_closure_counter: 0,
             inspectable_fn_dispatch,
@@ -749,6 +754,23 @@ impl<'a> WirContext<'a> {
         }
     }
 
+    /// The Wasm parameters and results of a function signature, as its
+    /// canonical closure key spells them. Unit params are left out: unit has no
+    /// Wasm representation.
+    pub fn canonical_signature(
+        &self,
+        type_table: &TypeTable,
+        params: &[TypeId],
+        return_type: TypeId,
+    ) -> (Vec<WirType>, Vec<WirType>) {
+        let param_wirs = params
+            .iter()
+            .map(|p| self.type_id_to_wir_type(type_table, *p))
+            .filter(|t| !matches!(t, WirType::Unit))
+            .collect();
+        (param_wirs, self.result_wir_types(type_table, return_type))
+    }
+
     /// Whether a place holding a `type_id` is nullable: it holds an affine
     /// value, which a move empties (WEP: Affine Types).
     pub fn is_affine(&self, type_table: &TypeTable, type_id: TypeId) -> bool {
@@ -870,15 +892,13 @@ impl<'a> WirContext<'a> {
                     Self::ref_to(cell)
                 }
             }
-            ResolvedType::Function { .. } => {
-                // Function-typed values are canonical closure structs at runtime.
-                // Use abstract structref so any concrete closure struct is a valid subtype.
-                // IndirectCall will RefCast to the specific canonical closure struct.
-                WirType::AbstractRef {
+            ResolvedType::Function { .. } => match self.fn_closure_types.get(&type_id) {
+                Some(closure) => Self::ref_to(closure),
+                None => WirType::AbstractRef {
                     heap_type: WirAbstractHeapType::Struct,
                     nullable: false,
-                }
-            }
+                },
+            },
             ResolvedType::Newtype { base_type, .. } => {
                 // Newtypes resolve to their base type
                 self.lookup_wir_type(type_table, *base_type)?

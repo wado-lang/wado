@@ -257,7 +257,7 @@ struct ref_equality.wado//$tmpl$84c52e16829ac8c4 {  // TypeId(23)
 }
 
 struct ref_equality.wado//$tmpl$53397d2e96a23ee1 {  // TypeId(24)
-    mut h0: ref struct,
+    mut h0: ref "canonical//CanonicalClosure_1",
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
     mut s1: ref "core:prelude/string.wado//String",
@@ -265,8 +265,8 @@ struct ref_equality.wado//$tmpl$53397d2e96a23ee1 {  // TypeId(24)
 }
 
 struct ref_equality.wado//$tmpl$1d46ca235934a62d {  // TypeId(25)
-    mut h0: ref struct,
-    mut h1: ref struct,
+    mut h0: ref "canonical//CanonicalClosure_1",
+    mut h1: ref "canonical//CanonicalClosure_1",
     mut h2: bool,
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
@@ -310,8 +310,8 @@ struct core:prelude//$Cell<core:prelude/string.wado/String> {  // TypeId(33)
     mut value: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude//$Cell<fn> {  // TypeId(34)
-    mut value: ref struct,
+struct core:prelude//$Cell<fn()->i32> {  // TypeId(34)
+    mut value: ref "canonical//CanonicalClosure_1",
 }
 
 type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> i32;  // TypeId(35)
@@ -441,13 +441,13 @@ type "functype//ref_equality.wado/$test_6_reference_to_reference$cold0" = fn(ref
 
 type "functype//ref_equality.wado/$test_8_a_reference_to_a_replace_on_assign_element_or_field_points_to_a_copy$cold1" = fn(ref "core:prelude//$Cell<i32>", i32);  // TypeId(94)
 
-type "functype//ref_equality.wado/$test_9_a_reference_to_a_closure_is_identical_only_to_its_own_place$cold0" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude//$Cell<fn>", bool);  // TypeId(95)
+type "functype//ref_equality.wado/$test_9_a_reference_to_a_closure_is_identical_only_to_its_own_place$cold0" = fn(ref "core:prelude//$Cell<fn()->i32>", ref "core:prelude//$Cell<fn()->i32>", bool);  // TypeId(95)
 
-type "functype//ref_equality.wado/$test_9_a_reference_to_a_closure_is_identical_only_to_its_own_place$cold1" = fn(ref "core:prelude//$Cell<fn>");  // TypeId(96)
+type "functype//ref_equality.wado/$test_9_a_reference_to_a_closure_is_identical_only_to_its_own_place$cold1" = fn(ref "core:prelude//$Cell<fn()->i32>");  // TypeId(96)
 
 type "functype//ref_equality.wado/$hole_fmt$ref_equality.wado/$tmpl$9bee6f58e5aaa545$sroa[t.h0]" = fn(ref null "core:prelude//$Resource", i32, ref "core:prelude/format.wado//Formatter");  // TypeId(97)
 
-type "functype//ref_equality.wado/$hole_fmt$ref_equality.wado/$tmpl$53397d2e96a23ee1$sroa[t.h0]" = fn(ref struct, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(98)
+type "functype//ref_equality.wado/$hole_fmt$ref_equality.wado/$tmpl$53397d2e96a23ee1$sroa[t.h0]" = fn(ref "canonical//CanonicalClosure_1", i32, ref "core:prelude/format.wado//Formatter");  // TypeId(98)
 
 type "functype//core:prelude/format.wado/$template_segment$core:prelude/format.wado/$tmpl$47518b5dd822a983" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(99)
 
@@ -689,7 +689,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/primitive.wado/$tmpl$c8d78b43997053ab,[core:prelude/string.wado/String,u32]>" = fn(ref "core:prelude/primitive.wado//$tmpl$c8d78b43997053ab") -> ref "core:prelude/string.wado//String";  // TypeId(218)
 
-type "functype//ref_equality.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(219)
+type "functype//ref_equality.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn()->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(219)
 
 type "functype//ref_equality.wado/ref_equality.wado/$Closure_0::$call$dae[self]" = fn() -> i32;  // TypeId(220)
 
@@ -1256,9 +1256,9 @@ fn "ref_equality.wado/$hole_fmt$ref_equality.wado/$tmpl$84c52e16829ac8c4"($mv$t$
 
 fn "ref_equality.wado/$hole_fmt$ref_equality.wado/$tmpl$1d46ca235934a62d"(t, index, f) {
     if index == 0 {
-        "ref_equality.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t.h0 }, f);
+        "ref_equality.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn()->i32>" { value: t.h0 }, f);
     } else if index == 1 {
-        "ref_equality.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t.h1 }, f);
+        "ref_equality.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn()->i32>" { value: t.h1 }, f);
     } else if @likely(index == 2) {
         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, f);
     } else {
@@ -1429,10 +1429,10 @@ fn "ref_equality.wado/$cm_export__$test_8_a_reference_to_a_replace_on_assign_ele
 }
 
 fn "ref_equality.wado/$cm_export__$test_9_a_reference_to_a_closure_is_identical_only_to_its_own_place"() {
-    let f: ref "core:prelude//$Cell<fn>";
-    let g: ref "core:prelude//$Cell<fn>";
+    let f: ref "core:prelude//$Cell<fn()->i32>";
+    let g: ref "core:prelude//$Cell<fn()->i32>";
     let $v2: bool;
-    g = struct.new "core:prelude//$Cell<fn>" { value: local.tee f(struct.new "core:prelude//$Cell<fn>" { value: struct.new "canonical//CanonicalClosure_1" { env: struct.new "ref_equality.wado//$Closure_0" {}, inspect: ref.func "closure/ref_equality.wado/$closure_inspect_wrapper_0", func: ref.func "closure/ref_equality.wado/$closure_wrapper_0" } }).value };
+    g = struct.new "core:prelude//$Cell<fn()->i32>" { value: local.tee f(struct.new "core:prelude//$Cell<fn()->i32>" { value: struct.new "canonical//CanonicalClosure_1" { env: struct.new "ref_equality.wado//$Closure_0" {}, inspect: ref.func "closure/ref_equality.wado/$closure_inspect_wrapper_0", func: ref.func "closure/ref_equality.wado/$closure_wrapper_0" } }).value };
     if @unlikely(ref.eq(f, f) == 0) {
         cold_path;
         "ref_equality.wado/$test_9_a_reference_to_a_closure_is_identical_only_to_its_own_place$cold1"(f);
@@ -1629,7 +1629,7 @@ fn "ref_equality.wado/$hole_fmt$ref_equality.wado/$tmpl$9bee6f58e5aaa545$sroa[t.
 
 fn "ref_equality.wado/$hole_fmt$ref_equality.wado/$tmpl$53397d2e96a23ee1$sroa[t.h0]"(t, index, f) {
     if @likely(index == 0) {
-        "ref_equality.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t }, f);
+        "ref_equality.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn()->i32>" { value: t }, f);
     } else {
         unreachable;
     }

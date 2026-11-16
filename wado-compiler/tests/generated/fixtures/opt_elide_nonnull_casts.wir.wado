@@ -110,7 +110,7 @@ array Array<i32> (mut i32);  // TypeId(16)
 
 array Array<opt_elide_nonnull_casts.wado/P> (mut ref "opt_elide_nonnull_casts.wado//P");  // TypeId(17)
 
-array Array<fn()->i32> (mut ref struct);  // TypeId(18)
+array Array<fn()->i32> (mut ref "canonical//CanonicalClosure_0");  // TypeId(18)
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> i32;  // TypeId(19)
 
@@ -307,7 +307,7 @@ fn "opt_elide_nonnull_casts.wado/run"() {
     let self_33: ref "core:prelude/list.wado//List<i32>";
     let self_40: ref "core:prelude/list.wado//List<opt_elide_nonnull_casts.wado/P>";
     let start_62: i32;
-    let value_65: ref struct;
+    let value_65: ref "canonical//CanonicalClosure_0";
     let $sroa_lens_repr_99: ref Array<fn()->i32>;
     let $sroa_write_back_101: ref "core:prelude/list.wado//List<fn()->i32>";
     i = black_box(1);
@@ -339,7 +339,7 @@ fn "opt_elide_nonnull_casts.wado/run"() {
         "opt_elide_nonnull_casts.wado/run$cold1$dae[banner_len]"(i);
         unreachable;
     }
-    $sroa_lens_repr_99 = array.new_fixed<ref struct>();
+    $sroa_lens_repr_99 = array.new_fixed<ref "canonical//CanonicalClosure_0">();
     i = 0;
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     b5: block {
@@ -358,7 +358,7 @@ fn "opt_elide_nonnull_casts.wado/run"() {
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(local.tee $sroa_write_back_101(struct.new "core:prelude/list.wado//List<fn()->i32>" { repr: $sroa_lens_repr_99, used: i }));
                 $sroa_lens_repr_99 = $sroa_write_back_101.repr;
             }
-            builtin::array_set<ref struct>($sroa_lens_repr_99, i, value_65);
+            builtin::array_set<ref "canonical//CanonicalClosure_0">($sroa_lens_repr_99, i, value_65);
             i = i + 1;
             if @unlikely(local.tee $v1_1(local.tee s(struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = s.repr; $v1_1 = s.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($v1_1)), 0, $array_clone_src_1, 0, $v1_1); $array_clone_dst_2, used: $v1_1 }).used + 1) > builtin::array_len(s.repr)) {
                 cold_path;
@@ -371,19 +371,21 @@ fn "opt_elide_nonnull_casts.wado/run"() {
         };
     };
     $v1_1 = block -> i32 {
-        let $indirect_call_4: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(0 >= i) {
+        let $indirect_call_4: ref null "canonical//CanonicalClosure_0";
+        if @unlikely(0 >= i) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, i, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_elide_nonnull_casts.wado:42"), used: 31 });
             unreachable;
-        }; builtin::array_get_value<ref struct>($sroa_lens_repr_99, 0))).env);
+        }
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_4.func, local.tee $indirect_call_4(builtin::array_get_value<ref "canonical//CanonicalClosure_0">($sroa_lens_repr_99, 0)).env);
     };
     i = block -> i32 {
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_0"(if @unlikely(1 >= i) {
+        if @unlikely(1 >= i) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, i, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_elide_nonnull_casts.wado:42"), used: 31 });
             unreachable;
-        }; builtin::array_get_value<ref struct>($sroa_lens_repr_99, 1))).env);
+        }
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_4.func, local.tee $indirect_call_4(builtin::array_get_value<ref "canonical//CanonicalClosure_0">($sroa_lens_repr_99, 1)).env);
     };
     if @unlikely(local.tee start_62($v1_1 + i) != 4) {
         cold_path;
@@ -1194,7 +1196,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(self) {
     let $load_0: ref Array<fn()->i32>;
     let new_repr: ref Array<fn()->i32>;
     let a: i32;
-    builtin::array_copy<ref struct>(local.tee new_repr(builtin::array_new<ref struct>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    builtin::array_copy<ref "canonical//CanonicalClosure_0">(local.tee new_repr(builtin::array_new<ref "canonical//CanonicalClosure_0">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 

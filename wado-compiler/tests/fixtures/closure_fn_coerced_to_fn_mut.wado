@@ -1,0 +1,24 @@
+// An `fn()` value reaches a `fn mut()` parameter, field and list element with
+// no cast between them, so both types lower to one closure struct.
+
+global mut hits: i32 = 0;
+
+struct Slot {
+    f: fn mut(),
+}
+
+#[inline(never)]
+fn call_mut(f: fn mut()) {
+    let mut g = f;
+    g();
+}
+
+test {
+    let p: fn() = || { hits += 1; };
+    call_mut(p);
+    let mut slot = Slot { f: p };
+    (slot.f)();
+    let mut fs: List<fn mut()> = [p];
+    (fs[0])();
+    assert hits == 3;
+}

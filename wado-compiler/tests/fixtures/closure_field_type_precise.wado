@@ -1,0 +1,30 @@
+// A function value is typed as the closure struct of its signature, so a call
+// through one held in a field, a parameter or a list casts nothing. The casts
+// left are each closure wrapper's cast of its environment.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    f: fn(i32) -> i32,
+}
+
+#[inline(never)]
+fn apply(g: fn(i32) -> i32, x: i32) -> i32 {
+    return g(x);
+}
+
+export fn run() with Stdout {
+    let k = builtin::black_box(3);
+    let h = builtin::black_box(Holder { f: |x| x + k });
+    let fs: List<fn(i32) -> i32> = builtin::black_box([|x| x * k]);
+    println(`${(h.f)(4)} ${apply(h.f, 5)} ${(fs[0])(6)}`);
+}
+
+__DATA__
+{
+    "stdout": "7 8 18\n",
+    "wat_lines": [
+        {"contains": ["(field (mut structref))"], "count": 0},
+        {"contains": ["ref.cast"], "count": 2}
+    ]
+}

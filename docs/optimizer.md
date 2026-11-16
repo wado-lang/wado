@@ -1,10 +1,11 @@
 # Wado Optimizer
 
 The optimizer rewrites NIR ([WEP: NIR](./wep-2026-05-11-nir.md)), then a smaller
-set of passes rewrites WIR before emission. This document lists what runs, one
-line per pass. The order is the one in `src/optimize.rs` and
-`src/wir_optimize.rs`, and `WADO_LIST_PASSES` prints it. Each pass's module doc
-says how it works.
+set of passes rewrites WIR before emission. This document says what each pass
+does, one section per pass, in the order `src/optimize.rs` and
+`src/wir_optimize.rs` run them. A heading is the name `WADO_LIST_PASSES` prints
+and `WADO_SKIP_PASS` takes, without its `nir/` or `wir/` prefix. How a pass
+works is its module doc's to say.
 
 ## Philosophy
 
@@ -51,213 +52,476 @@ converge within the level's own count. At `-O1`, and wherever
 ## Architecture
 
 NIR has two tiers: a skeleton carrying effect order, control flow, and
-allocation, and a hash-consed graph of the pure values it reaches. Local
-rewrites are rules on one worklist engine, and a per-function dirty set lets a
-pass skip functions unchanged since it last ran. A whole-program analysis keeps
-what each body answers alone across rounds, and re-derives it only for the
-bodies a rewrite reached. CSE, GVN, and pure copy propagation are not passes,
-because the hash-consing already does them. See
+allocation, and a hash-consed graph of the pure values it reaches. CSE, GVN, and
+pure copy propagation are not passes, because the hash-consing already does
+them. A pass skips a function unchanged since it last ran. See
 [WEP: NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md).
 
 The passes run on `--optimize-threads` threads, and the output does not depend
 on how many. See [WEP: Parallel Optimizer](./wep-2026-10-08-parallel-optimizer.md).
 
-## Pipeline
+Of the NIR passes, `-O0` runs only DCE, and of the WIR passes, what
+[WIR Passes](#wir-passes) says it keeps. Every other level runs them all.
 
-`-O0` runs only DCE, and the part of step 8 that [WIR Passes](#wir-passes) keeps
-at `-O0`. Every other level runs the whole list.
+## Lowering
 
-1. DCE.
-2. Before the loop: `dead_field`, `cold_outline`, `match_to_switch` over
-   global initializers, and the early arithmetic promotion.
-3. The fixed-point loop: `container_sroa`, `peephole`, `value_copy_demote`,
-   `sroa_param`, `sroa_variant_return`, `inline`, `peephole`,
-   `let_block_flatten`, `sroa`, `copy_prop`, `dae`, `drve`, `const_folding`,
-   `param_spec`, `licm` (with `condition_implication`). Once it
-   converges, `inline` releases the callees it held back, and the loop runs
-   again.
-4. After the loop, once: `field_scalarize`, `store_load_forward`,
-   `const_branch_prune`, `const_object_globalization`, `const_folding`,
-   `scalar_forward`, `clone_forward`.
-5. DCE.
-6. `promote_fields`, `condition_implication` (with `const_branch_prune`),
-   `loop_version_bce`.
-7. Backend rewrites: `select_lowering`, `multi_value_return`,
-   `multi_value_param`, `freeze_pure_arith`.
-8. The WIR passes.
+Lowering makes a few decisions an optimizer would otherwise make. Each is named
+like a pass, so `WADO_SKIP_PASS` can turn it off.
+
+### `lower/value_copy/move`
+
+A value-semantics local at its last use hands over its storage instead of a
+copy ([WEP: Ownership Analysis](./wep-2026-05-21-resource-ownership.md)).
+
+### `lower/value_copy/owned`
+
+A fresh value, such as a call's result or a literal, is never copied.
+
+### `lower/value_copy/share`
+
+A binding of an immutable local nothing moves shares its storage.
+
+### `lower/value_copy/confined`
+
+A by-value argument skips its copy where the callee keeps nothing of it and
+nothing writes it before the call returns.
+
+### `lower/value_copy/pass_through`
+
+A builtin that hands an argument back, such as `builtin::select`, copies its
+result only where the caller can still reach the argument.
+
+### `value_pool/fold_const`
+
+The value graph folds an operation on constants as it records it, in lowering
+and in every NIR pass.
+
+### `wir_build/exhaustive_last_arm`
+
+The last arm of an exhaustive `match` tests nothing.
+
+### `wir_build/branch_hints`
+
+A branch to a cold path gets a hint, as [Branch Hints](#branch-hints) says.
+
+### `wir_build/elide_terminator_unreachable`
+
+No `unreachable` follows an instruction that already leaves the block.
+
+### `synthesis/cm_lift_bulk`
+
+A component binding lifts a `list` of numbers out of linear memory in one copy.
 
 ## NIR Passes
 
-`peephole` is one worklist per function shared by the rules that need no fixed
-position. It runs once before `inline` and once after, and each run has rules of
-its own:
+### Before the Loop
 
-- Both runs: `aggregate_forward`, `const_branch_prune`, part of
-  `const_folding`, `elide_local`, `identity_cast`, `known_case`,
-  `string_push`, and `tuple_projection`.
-- Before `inline` only: `if_chain_to_match`, `match_to_bitset`, and
-  `match_to_switch`, so a copied body is already lowered.
-- After `inline` only: `closure_devirt`, `drop_value`, `elide_box_local`,
-  `labeled_block_fusion`, `ref_elim`, and `slot_temp_sroa`. Each cleans up a
-  shape that inlining leaves behind.
+#### DCE
 
-Allocation and aggregates:
+Remove unreachable functions, types, globals, literals, and imports. It runs
+again after the loop, and no `WADO_SKIP_PASS` name skips it.
 
-- `inline` — replace a call to a small, non-recursive function with its body.
-  `#[inline]`, `#[inline(always)]`, and `#[inline(never)]` adjust the decision,
-  and a cold call site opts out, as does every site in a function only cold
-  sites reach, unless the body is no bigger than the call. A callee that
-  reaches no safepoint (no call, no allocation) is admitted at four times the
-  threshold where the splice pays back: at its only call site, or at its only
-  site in a loop. A loop-free callee that does reach one is admitted at the
-  same price at its only call site outside a loop, since the call it replaces
-  was a safepoint already. If the compile-time engine may fold that call to its
-  value, the splice waits until the loop converges. Only sites in a function an
-  entry reaches count. A function only loops reach runs once per iteration, so
-  its body counts as a loop's. A call
-  is tried before its arguments, and a spliced body, arguments included, is
-  scanned again for calls to splice, wherever the call it replaced sat.
-- `cold_outline` — move the region a `cold_path()` marks into a function of its
-  own.
-- `sroa` — split into scalar locals a struct, tuple, or array local used only
-  for element access, or a local bound to a reference to a struct or tuple
-  literal. A local handed `&mut` to a call on a cold path splits too: the call
-  gets a literal rebuilt from the scalars, which read its fields back after it.
-  The highest-impact WasmGC pass.
-- `container_sroa` — turn a `List` of structs or tuples into one list per field.
-- `sroa_param` — pass the one field a callee reads instead of the struct, by
-  value or by reference.
-- `sroa_variant_return` — return a variant, or hold a variant local, as a
-  `[tag, slots…]` tuple ([WEP: Variant Return Scalarization](./wep-2026-08-03-variant-return-abi.md)).
-- `elide_box_local` — collapse a box bound once and read once into its value.
-- `drop_value` — keep only the effects of a labeled block whose value is
-  discarded.
-- `string_push` — specialize a constant ASCII push, and reserve a run of
-  appends at once.
-- `value_copy_demote` — make a deep list copy shallow when its elements are
-  never mutated.
-- `clone_forward` — collapse a clone of a clone into one.
+#### `dead_field`
 
-Lower's ownership analysis chooses the defensive copies before NIR exists, so no
-pass here elides them
-([WEP: Ownership Analysis](./wep-2026-05-21-resource-ownership.md)).
+Remove a struct field no code reads, from its type and from every literal,
+assignment and pattern that names it. A removed field's initializer still runs
+when it has an effect.
 
-Variants and references:
+#### `cold_outline`
 
-- `labeled_block_fusion` — remove the `Option` or `Result` an inlined helper
-  builds only for its caller to test, as `?` and `if let` do.
-- `slot_temp_sroa` — split the aggregate an inlined helper leaves where fusion
-  cannot reach, or a `match`, `if` or `switch` leaves when each arm builds it.
-- `closure_devirt` — call a closure directly when its callee is known.
-- `ref_elim` — replace a reference read only through fields, or handed whole to
-  a call, with its source.
-- `aggregate_forward` — hand a freshly built aggregate to its consumer directly.
-- `known_case` — decide a `match` over a variant whose case is known.
-- `tuple_projection` — `[a, b, c].1` → `b`.
-- `identity_cast` — drop a cast between types that share one representation,
-  and fold `*&e` to `e`.
+Move the region a `cold_path()` marks into a function of its own, so the hot
+function inlines at its hot size.
 
-Scalars and dataflow:
+#### `match_to_switch_globals`
 
-- `copy_prop` — propagate a trivial copy and drop the binding.
-- `param_spec` — specialize a callee on the constant arguments its callers
-  pass, and on the constant fields of a struct they pass by reference, a
-  reference to a struct literal included. A literal argument stays passed to a
-  callee taking a `&mut`, and a read of a field the caller holds constant
-  binds even there.
-- `dae` — drop a parameter the callee never reads.
-- `drve` — drop a return value every caller discards.
-- `store_load_forward` — forward a stored value to a later load.
-- `elide_local` — drop a binding that is never read.
-- `let_block_flatten` — hoist the statements out of a block a statement
-  evaluates first: a binding's value, a call's leading argument, a condition.
-  Then the one assignment of a local no `let` binds becomes its `let`, where
-  every mention of the local follows it in its block.
-- `scalar_forward` — fold a single-use scalar temp into its use.
-- `const_folding` — partial evaluation: constant arithmetic, compile-time calls,
-  constant globals, and constant aggregates
-  ([WEP: NIR Interpreter](./wep-2026-04-27-nir-interpreter.md)).
-- `const_branch_prune` — simplify trivial blocks, and take the constant side of
-  an `if`.
+[`match_to_switch`](#match_to_switch) over global initializers.
 
-Loops and fields:
+#### `promote_pure_values_early`
 
-- `licm` — hoist loop-invariant field reads and arithmetic out of a loop.
-- `condition_implication` — drop a bounds or range check a dominating
-  condition already decides, or the half of a range check it decides. A later
-  check on the same path, with nothing observable between, moves into an
-  earlier one: `a[i]; a[i + 1]; a[i + 2]` checks `i < len - 2` once.
-- `loop_version_bce` — split a loop into a check-free fast path and the
-  original, and turn a fill loop into `array.fill`.
-- `unsigned_range_check` — fuse a remaining `0 <= i && i < n` into one unsigned
-  compare. It runs after the passes above, which read the two halves apart.
-- `field_scalarize` — keep hot GC fields in locals across a loop.
+Fold pure arithmetic into the value graph, so the passes in the loop read it as
+values.
 
-Whole program and backend:
+### The Fixed-Point Loop
 
-- `dce` — remove unreachable functions, types, globals, literals, and imports.
-- `dead_field` — remove a struct field no code reads from its type, and from
-  every literal, assignment and pattern that names it. A copy of the struct
-  reads no field by itself. A body-less call that may read everything its
-  arguments reach, such as `builtin::black_box`, reads every field of what
-  they reach. A removed field's initializer still runs when it has an effect.
-- `promote_fields` / `freeze_pure_arith` — fold pure field reads and arithmetic
-  into the value graph.
-- `match_to_bitset` — test membership in a set of literals and ranges with one
-  bit mask.
-- `match_to_switch` — lower a dense integer or enum `match` to `br_table`.
-- `if_chain_to_match` — fuse a run of `if K == x` statements into one `match`.
-- `select_lowering` — lower an `if` whose arms are pure and cannot trap to
-  `select`.
-- `multi_value_return` — return a tuple or struct as one Wasm result per field.
-- `multi_value_param` — pass an aggregate read only by field as one parameter
-  per field. A `&S` qualifies where nothing the call runs writes an `S` it did
-  not allocate. It passes only the fields the callee reads on any path, loaded
-  at the call after every other argument. A parameter handed on whole to
-  another such parameter of the same shape qualifies with it, and takes the
-  fields both read.
-- `const_object_globalization` — share a constant aggregate as an immutable
-  global ([WEP](./wep-2026-05-31-const-object-globalization.md)).
+The loop runs these passes in this order until none reports a change. Then
+`inline` releases the callees it held back, and the loop runs again.
+
+#### `drop_unreachable`
+
+Drop the functions the previous round left unreachable, such as a callee
+inlined into every caller. Not run in the first round.
+
+#### `container_sroa`
+
+Turn a `List` of structs or tuples into one list per field.
+
+#### `peephole`
+
+The local rewrites that need no fixed position, as one session per function. It
+runs once before `inline` and once after. Each rule is named
+`nir/peephole/<rule>`.
+
+##### `if_chain_to_match`
+
+Fuse a run of `if K == x` statements into one `match`. Before `inline` only.
+
+##### `match_to_bitset`
+
+Test membership in a set of literals and ranges with one bit mask. Before
+`inline` only.
+
+##### `match_to_switch`
+
+Lower a dense integer or enum `match` to `br_table`. Before `inline` only.
+
+##### `ref_elim`
+
+Replace a reference read only through fields, or handed whole to a call, with
+its source. After `inline` only.
+
+##### `elide_box_local`
+
+Collapse a box bound once and read once into its value. After `inline` only.
+
+##### `labeled_block_fusion`
+
+Remove the `Option` or `Result` an inlined helper builds only for its caller to
+test, as `?` and `if let` do. After `inline` only.
+
+##### `slot_temp_sroa`
+
+Split the variant an inlined helper or a branching expression leaves where
+fusion cannot reach. After `inline` only.
+
+##### `drop_value`
+
+Keep only the effects of a labeled block whose value is discarded. After
+`inline` only.
+
+##### `closure_devirt`
+
+Call a closure directly when its callee is known. After `inline` only.
+
+##### `known_case`
+
+Decide a `match` over a variant whose case is known.
+
+##### `identity_cast`
+
+Drop a cast between types that share one representation.
+
+##### `identity_deref`
+
+Fold `*&e` to `e`.
+
+##### `field_through_ref`
+
+Fold `(&e).f` to `e.f`.
+
+##### `aggregate_forward`
+
+Hand a freshly built aggregate to its consumer directly.
+
+##### `elide`
+
+Drop a binding, or a store to a local, that no read sees.
+
+##### `const_fold`
+
+The half of the loop's `const_fold` that needs no knowledge of locals: constant
+arithmetic and compile-time calls.
+
+##### `branch_prune`
+
+Simplify trivial blocks, and take the constant side of an `if`.
+
+##### `tuple_projection`
+
+Fold `[a, b, c].1` to `b`.
+
+##### `const_ascii_push`
+
+Turn a push of a constant ASCII character into a byte push.
+
+##### `append_fuse`
+
+Reserve capacity once for a run of adjacent string appends.
+
+#### `value_copy_demote`
+
+Make a deep list copy shallow when its elements are never mutated.
+
+#### `sroa_param`
+
+Pass the one field a callee reads instead of the struct, by value or by
+reference.
+
+#### `sroa_variant_return`
+
+Return a variant, or hold a variant local, as a `[tag, slots…]` tuple
+([WEP: Variant Return Scalarization](./wep-2026-08-03-variant-return-abi.md)).
+
+#### `inline`
+
+Replace a call to a small, non-recursive function with its body. `#[inline]`,
+`#[inline(always)]`, and `#[inline(never)]` adjust the decision, and a call on a
+cold path is not inlined unless the body is no bigger than the call.
+`wado dump --inline-decisions <name>` shows each decision and its reason.
+
+#### `let_block_flatten`
+
+Hoist the statements out of a block a statement evaluates first: a binding's
+value, a call's leading argument, a condition. Then the one assignment of a
+local no `let` binds becomes its `let`.
+
+#### `sroa`
+
+Split into scalar locals a struct, tuple, or array local used only for element
+access, or a local bound to a reference to a struct or tuple literal. A local
+handed `&mut` to a call on a cold path splits too. This is the
+highest-impact WasmGC pass.
+
+#### `copy_prop`
+
+Propagate a trivial copy and drop the binding.
+
+#### `dae`
+
+Drop a parameter the callee never reads.
+
+#### `drve`
+
+Drop a return value every caller discards.
+
+#### `const_fold`
+
+Partial evaluation: constant arithmetic, compile-time calls, constant globals,
+and constant aggregates
+([WEP: NIR Interpreter](./wep-2026-04-27-nir-interpreter.md)).
+
+#### `param_spec`
+
+Specialize a callee on the constant arguments its callers pass, and on the
+constant fields of a struct they pass by reference.
+
+#### `licm`
+
+Hoist loop-invariant field reads and arithmetic out of a loop. It also drops a
+bounds or range check a dominating condition already decides, the in-loop half
+of [`cond_impl_post_promote`](#cond_impl_post_promote).
+
+### After the Loop
+
+These run once each, in this order. DCE runs again between `clone_forward` and
+`promote_fields`.
+
+#### `field_scalarize`
+
+Keep a hot GC field in a local across a loop.
+
+#### `store_load_forward_post_scalarize`
+
+Forward a stored value to a later load, and fold and prune what that decides.
+
+#### `const_object_globalization`
+
+Share a constant aggregate as an immutable global
+([WEP](./wep-2026-05-31-const-object-globalization.md)).
+
+#### `const_fold_post_global`
+
+Fold the reads of the globals `const_object_globalization` made, and prune the
+checks they decide.
+
+#### `scalar_forward`
+
+Fold a single-use scalar temp into its use.
+
+#### `clone_forward`
+
+Collapse a clone of a clone into one.
+
+#### `promote_fields`
+
+Fold pure field reads into the value graph, so the checks they bound read as
+constants.
+
+#### `cond_impl_post_promote`
+
+Drop a bounds or range check a dominating condition already decides, or the
+half of a range check it decides. A later check on the same path, with nothing
+observable between, moves into an earlier one: `a[i]; a[i + 1]; a[i + 2]`
+checks `i < len - 2` once.
+
+#### `loop_version_bce`
+
+Split a loop into a check-free fast path and the original, and turn a fill loop
+into `array.fill`.
+
+#### `unsigned_range_check`
+
+Fuse a remaining `0 <= i && i < n` into one unsigned compare.
+
+#### `select_lowering`
+
+Lower an `if` whose arms are pure and cannot trap to `select`.
+
+#### `split_and_condition`
+
+Split `if a && b { … }` with no `else` into `if a { if b { … } }`, so the
+branch on `a` is not tested twice.
+
+#### `multi_value_return`
+
+Return a tuple or struct as one Wasm result per field.
+
+#### `multi_value_param`
+
+Pass an aggregate read only by field as one parameter per field it reads.
+
+#### `freeze_pure_arith`
+
+Fold the remaining pure arithmetic into the value graph, for WIR to emit as
+operands.
 
 ## WIR Passes
 
 A WIR pass stays only if it changes the emitted Wasm. One that NIR or another
 WIR pass already covers is removed. At every level, nullable references are
-lowered first. `-O0` then only removes dead items and settles the locals
-(step 11).
+lowered first. `-O0` then only removes dead items and settles the locals.
 
-1. Trivial copy propagation.
-2. Box-local elimination.
-3. Constant struct-field forwarding, for constant-index bounds checks.
-4. Array rewrites: constant arrays to data segments, large literals split, and
-   the zero fill of a fresh array removed.
-5. Peephole: a repeated field load reuses the first, or the value last stored
-   to the field; a field store the next one to the same field replaces before
-   any read is dropped; instruction selection (`select`, rotates), and variant
-   result slots flattened. Then a resource whose
-   `$Resource` box no reference reaches is kept as its bare handle, across the
-   locals, parameters and results it moves through.
-6. Dead-store elimination: a store to a local that every path overwrites, or
-   leaves the function after, before reading it.
-7. Global cleanup (constant initializers, duplicate globals, dead data), then
-   `br_if` selection, the calls to a function left empty and the once-flags
-   guarding them, loop unrolling, and branch hints. A small loop that reads GC
-   arrays gains a copy running several iterations per test of its condition,
-   so wasmtime shares part of each `array.get`'s bounds check across them. The
-   original loop runs what is left.
-8. DCE and compaction.
-9. Local coalescing: a local read once is first forwarded into its read. Then
-   locals of one Wasm type that are never live at once share a slot, and so do
-   the two ends of a copy. A local's nullability is settled before it shares
-   one.
-10. Tee fusion: a `local.set` and the read right after it become a
-    `local.tee`. A local this leaves unread is removed.
-11. Local settling: a non-null local that Wasm's block-scoped rule sees read
-    before any write is declared nullable. The locals are then grouped by Wasm
-    type, the most used first.
+Two steps run between the passes below without a name of their own. DCE removes
+the functions, globals and types left unreferenced, after `infer_branch_hints`.
+The locals are settled last: a non-null local that Wasm's block-scoped rule
+sees read before any write is declared nullable, and the locals are grouped by
+Wasm type, the most used first.
 
 A `#![wasm_module(...)]` core module, such as the allocator, runs the same list
 on its own, with its passes named `wir/<module>:<pass>`.
+
+### `propagate_trivial_copies`
+
+Propagate a copy between two locals.
+
+### `elide_adjacent_box_locals`
+
+Replace a box local read once, right after it is built, with its value.
+
+### `unwrap_box_locals`
+
+Retype a box local to the value it holds.
+
+### `forward_struct_field_constants`
+
+Forward a struct field known to be constant, so a bounds check with a constant
+index folds.
+
+### `promote_constant_arrays_to_data`
+
+Build an array of constants from a data segment where that is smaller.
+
+### `split_large_array_literals`
+
+Build a large array literal by filling a fresh array.
+
+### `elide_zero_fill_of_fresh_arrays`
+
+Drop the zero fill of a fresh array that is written before it is read.
+
+### `reuse_struct_loads`
+
+A repeated field load reuses the first, or the value last stored to the field.
+
+### `elide_overwritten_stores`
+
+Drop a field store the next store to the same field replaces before any read.
+
+### `run_peephole`
+
+Instruction selection: `select`, rotates, fused sign extension, and redundant
+casts and null checks dropped.
+
+### `flatten_seq_assignments`
+
+Turn an assignment of a statement sequence into the sequence and a plain
+assignment.
+
+### `propagate_trivial_copies_post_sroa`
+
+[`propagate_trivial_copies`](#propagate_trivial_copies) over the copies the
+pass above exposes.
+
+### `flatten_variant_slots`
+
+Split a variant result slot that holds another small variant.
+
+### `unbox_handles`
+
+Keep a resource as its bare handle where no reference reaches its box.
+
+### `elide_dead_stores`
+
+Drop a store to a local that every path overwrites, or leaves the function
+after, before reading it.
+
+### `promote_const_global_inits`
+
+Give a global whose initializer became constant a Wasm constant initializer.
+
+### `cleanup_global_inits`
+
+Normalize global initializers to the form function bodies take.
+
+### `share_unit_cases`
+
+Build each payload-less case of a boxed variant once, as a global.
+
+### `dedupe_const_globals`
+
+Merge identical immutable constant globals.
+
+### `cleanup`
+
+Remove dead locals, no-ops, and dead code after a trap.
+
+### `prune_dead_data`
+
+Remove a data segment nothing reads.
+
+### `select_br_if`
+
+Turn `if c { br L }` into `br_if`.
+
+### `elide_empty_work`
+
+Remove a call to a function that does nothing, and the once-flag that guarded
+it.
+
+### `unroll_array_loops`
+
+Give a small loop that reads GC arrays a copy running several iterations per
+test of its condition. The original loop runs what is left. Not at `-Os`.
+
+### `infer_branch_hints`
+
+Hint a branch whose one side always traps as unlikely to take it.
+
+### `forward_once_read_locals`
+
+Forward a local read once into its read.
+
+### `coalesce_locals`
+
+Locals of one Wasm type that are never live at once share a slot, and so do the
+two ends of a copy.
+
+### `fuse_remaining_local_tees`
+
+Turn a `local.set` and the read right after it into a `local.tee`.
+
+### `elide_fused_write_only_locals`
+
+Remove a local the tee fusion left unread.
 
 ## Branch Hints
 
@@ -360,6 +624,10 @@ Architectural work is tracked in
   every site decides (`$hole_fmt`), or one element of a returned tuple
   (`default_slot`).
 - [ ] An array literal's length as a known constant.
+- [ ] Dropping the code pointer from a closure no call reaches indirectly.
+- [ ] Merging functions that differ only in a constant, a type index or a
+  callee, such as the `next_field<T>` of each derived `Deserialize` or the
+  clones `param_spec` makes on one constant.
 
 ## Tried and Found Ineffective
 

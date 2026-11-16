@@ -44,7 +44,7 @@ struct core:prelude/slice.wado//SliceValueIter<i32> {  // TypeId(5)
 
 struct core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool> {  // TypeId(6)
     mut inner: ref "core:prelude/slice.wado//SliceValueIter<i32>",
-    mut pred: ref struct,
+    mut pred: ref "canonical//CanonicalClosure_0",
 }
 
 struct effect_closure_in_tuple_for_of.wado//$Closure_0 {  // TypeId(7)
@@ -687,8 +687,8 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
             item_4 = builtin::array_get_value<i32>($licm_inner_6.repr, $load_1);
             $licm_inner_6.index = $load_1 + 1;
             if block -> bool {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(self.pred)).env, item_4);
+                let $indirect_call_1: ref null "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(self.pred).env, item_4);
             } {
                 return 1, item_4;
             }

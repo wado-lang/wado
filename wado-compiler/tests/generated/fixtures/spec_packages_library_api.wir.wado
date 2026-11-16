@@ -112,7 +112,7 @@ struct core:prelude/string.wado//$tmpl$b145b32c9a586330 {  // TypeId(9)
 struct spec_packages_library_api.wado//$tmpl$c94f9ed0c672c488 {  // TypeId(10)
     mut h0: ref "sub/spec_packages_geo/shapes.wado//Square",
     mut h1: i32,
-    mut h2: ref struct,
+    mut h2: ref "canonical//CanonicalClosure_0",
     mut h3: ref "core:prelude/list.wado//List<i32>",
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
@@ -147,8 +147,8 @@ array Array<i32> (mut i32);  // TypeId(17)
 
 array Array<sub/spec_packages_geo/shapes.wado/Square> (mut ref "sub/spec_packages_geo/shapes.wado//Square");  // TypeId(18)
 
-struct core:prelude//$Cell<fn> {  // TypeId(19)
-    mut value: ref struct,
+struct core:prelude//$Cell<fn(i32)->i32> {  // TypeId(19)
+    mut value: ref "canonical//CanonicalClosure_0",
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> i32;  // TypeId(20)
@@ -362,7 +362,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/primitive.wado/$tmpl$c8d78b43997053ab,[core:prelude/string.wado/String,u32]>" = fn(ref "core:prelude/primitive.wado//$tmpl$c8d78b43997053ab") -> ref "core:prelude/string.wado//String";  // TypeId(121)
 
-type "functype//spec_packages_library_api.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(122)
+type "functype//spec_packages_library_api.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(122)
 
 type "functype//spec_packages_library_api.wado/spec_packages_library_api.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(123)
 
@@ -467,7 +467,7 @@ global global:core:prelude/traits.wado::$const_obj_23: ref "core:prelude/string.
 
 fn "spec_packages_library_api.wado/$test_0"() {
     let s_0: ref "sub/spec_packages_geo/shapes.wado//Square";
-    let $v2_11: ref struct;
+    let $v2_11: ref "canonical//CanonicalClosure_0";
     let result: ref "core:prelude/list.wado//List<i32>";
     let used_43: i32;
     let $licm_repr_67: ref Array<i32>;
@@ -485,8 +485,7 @@ fn "spec_packages_library_api.wado/$test_0"() {
                     $sroa_item_side_79 = builtin::array_get_value<ref "sub/spec_packages_geo/shapes.wado//Square">(global:spec_packages_library_api.wado::$const_obj_2, $sroa_self_index_76).side;
                     $sroa_self_index_76 = $sroa_self_index_76 + 1;
                     $sroa_item_side_79 = block -> i32 {
-                        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($v2_11)).env, $sroa_item_side_79);
+                        call_ref "functype/$canonical_closure_fn_0"($v2_11.func, $v2_11.env, $sroa_item_side_79);
                     };
                     if @unlikely(local.tee used_43(result.used) >= builtin::array_len($licm_repr_67)) {
                         cold_path;
@@ -591,7 +590,7 @@ fn "spec_packages_library_api.wado/$hole_fmt$spec_packages_library_api.wado/$tmp
     } else if index == 1 {
         "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(t.h1, f);
     } else if index == 2 {
-        "spec_packages_library_api.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t.h2 }, f);
+        "spec_packages_library_api.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn(i32)->i32>" { value: t.h2 }, f);
     } else if @likely(index == 3) {
         let $mv_arg_1: ref "core:prelude/list.wado//List<i32>";
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(local.tee $mv_arg_1(t.h3).repr, $mv_arg_1.used, f);

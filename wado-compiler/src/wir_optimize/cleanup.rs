@@ -7,7 +7,7 @@
 //! standalone optimization.
 
 use crate::hashmap::IndexSet;
-use crate::wir::{WirInstr, WirPackage};
+use crate::wir::{WirInstr, WirLocals, WirPackage};
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 
 use super::util::{for_each_null_trapping_operand, is_side_effect_free, own_traps};
@@ -42,7 +42,12 @@ pub(super) fn nonnull_result_functions(module: &WirPackage) -> IndexSet<u32> {
 pub(super) fn clean_body(body: &mut Vec<WirInstr>, nonnull_calls: &IndexSet<u32>) {
     // Remove DeclareLocal for locals that are never used (no LocalGet/LocalSet/LocalTee).
     eliminate_dead_locals(body);
-    CleanupVisitor { nonnull_calls }.visit_body(body);
+    let locals = WirLocals::scan(body);
+    CleanupVisitor {
+        nonnull_calls,
+        locals: &locals,
+    }
+    .visit_body(body);
 }
 
 /// Elide the redundant `RefAsNonNull` wrappers `struct_new` adds for
@@ -55,6 +60,7 @@ pub(super) fn cleanup_global_inits(module: &mut WirPackage) {
     for global in &mut module.globals {
         CleanupVisitor {
             nonnull_calls: &nonnull_calls,
+            locals: &WirLocals::default(),
         }
         .visit_instr(&mut global.init);
     }
@@ -105,6 +111,7 @@ impl WirMutVisitor for NopUnusedDeclareLocals<'_> {
 
 struct CleanupVisitor<'a> {
     nonnull_calls: &'a IndexSet<u32>,
+    locals: &'a WirLocals,
 }
 
 impl CleanupVisitor<'_> {
@@ -134,7 +141,7 @@ impl WirMutVisitor for CleanupVisitor<'_> {
         {
             *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
         }
-        relax_null_trapping_objects(instr);
+        relax_null_trapping_objects(instr, self.locals);
     }
 }
 
@@ -145,7 +152,9 @@ impl WirMutVisitor for CleanupVisitor<'_> {
 /// those have no effect. They may still trap: a narrowing wraps a value the
 /// types already hold non-null, so its trap never fires and moving it reorders
 /// nothing. Each operand is checked once, and only after one that is narrowed.
-fn relax_null_trapping_objects(instr: &mut WirInstr) {
+/// A tee into a nullable local passes the null on, so the narrowing of its
+/// value moves the same way.
+fn relax_null_trapping_objects(instr: &mut WirInstr, locals: &WirLocals) {
     let own = own_traps(instr);
     let mut narrowed = false;
     let mut last_effect = None;
@@ -155,7 +164,7 @@ fn relax_null_trapping_objects(instr: &mut WirInstr) {
             if !is_side_effect_free(operand) {
                 last_effect = Some(position);
             }
-        } else if own.on_null().any(|p| p == position) && is_narrowed(operand) {
+        } else if own.on_null().any(|p| p == position) && is_narrowed(operand, locals) {
             narrowed = true;
         }
         position += 1;
@@ -165,15 +174,18 @@ fn relax_null_trapping_objects(instr: &mut WirInstr) {
     }
     for_each_null_trapping_operand(instr, |position, operand| {
         if last_effect.is_none_or(|e| e < position) {
-            relax_nonnull(operand);
+            relax_nonnull(operand, locals);
         }
     });
 }
 
-fn is_narrowed(object: &WirInstr) -> bool {
+fn is_narrowed(object: &WirInstr, locals: &WirLocals) -> bool {
     match object {
         WirInstr::RefAsNonNull(_) => true,
-        WirInstr::Seq(items) => items.last().is_some_and(is_narrowed),
+        WirInstr::Seq(items) => items.last().is_some_and(|v| is_narrowed(v, locals)),
+        WirInstr::LocalTee { name, value } => {
+            locals.is_nullable_ref(name) && is_narrowed(value, locals)
+        }
         WirInstr::GlobalGet { result_ty, .. } | WirInstr::ArrayGet { result_ty, .. } => {
             result_ty.is_nonnull_ref()
         }
@@ -182,16 +194,19 @@ fn is_narrowed(object: &WirInstr) -> bool {
 }
 
 /// Undo what [`is_narrowed`] finds.
-fn relax_nonnull(object: &mut WirInstr) {
+fn relax_nonnull(object: &mut WirInstr, locals: &WirLocals) {
     match object {
         WirInstr::RefAsNonNull(inner) => {
             *object = std::mem::replace(inner.as_mut(), WirInstr::Nop);
-            relax_nonnull(object);
+            relax_nonnull(object, locals);
         }
         WirInstr::Seq(items) => {
             if let Some(value) = items.last_mut() {
-                relax_nonnull(value);
+                relax_nonnull(value, locals);
             }
+        }
+        WirInstr::LocalTee { name, value } if locals.is_nullable_ref(name) => {
+            relax_nonnull(value, locals);
         }
         WirInstr::GlobalGet { result_ty, .. } | WirInstr::ArrayGet { result_ty, .. } => {
             result_ty.set_nullable();
@@ -244,6 +259,52 @@ mod tests {
         let mut body = store_into(global_read(), WirInstr::I32Const(1));
         clean_body(&mut body, &IndexSet::default());
         assert!(!stored_array(&body).is_nonnull_result(), "{body:?}");
+    }
+
+    fn tee_into(nullable: bool) -> Vec<WirInstr> {
+        let mut body = vec![WirInstr::DeclareLocal {
+            name: "t".into(),
+            ty: WirType::Ref {
+                type_id: array_ty(),
+                nullable,
+            },
+        }];
+        let tee = WirInstr::LocalTee {
+            name: "t".into(),
+            value: Box::new(global_read()),
+        };
+        body.extend(store_into(
+            tee,
+            WirInstr::LocalGet {
+                name: "t".into(),
+                result_ty: WirType::I32,
+            },
+        ));
+        body
+    }
+
+    fn teed_read(body: &[WirInstr]) -> &WirInstr {
+        let [_, WirInstr::ArraySet { array, .. }] = body else {
+            panic!("{body:?}");
+        };
+        let WirInstr::LocalTee { value, .. } = array.as_ref() else {
+            panic!("{array:?}");
+        };
+        value
+    }
+
+    #[test]
+    fn a_tee_into_a_nullable_local_passes_the_narrowing_on() {
+        let mut body = tee_into(true);
+        clean_body(&mut body, &IndexSet::default());
+        assert!(!teed_read(&body).is_nonnull_result(), "{body:?}");
+    }
+
+    #[test]
+    fn a_tee_into_a_non_null_local_keeps_the_narrowing() {
+        let mut body = tee_into(false);
+        clean_body(&mut body, &IndexSet::default());
+        assert!(teed_read(&body).is_nonnull_result(), "{body:?}");
     }
 
     fn effect() -> WirInstr {

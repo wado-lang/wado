@@ -45,16 +45,16 @@ struct core:prelude//$Cell<i32> {  // TypeId(10)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(11)
-    discriminant: i32,
-    payload_0: i32,
-}
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, ref "core:prelude//$Cell<i32>", ref "core:prelude//$Cell<i32>") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(11)
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, ref "core:prelude//$Cell<i32>", ref "core:prelude//$Cell<i32>") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(12)
-
-struct canonical//CanonicalClosure_0 {  // TypeId(13)
+struct canonical//CanonicalClosure_0 {  // TypeId(12)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
+}
+
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(13)
+    discriminant: i32,
+    payload_0: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(14)
@@ -87,7 +87,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(28)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by" = fn(ref "core:prelude/list.wado//List<i32>", ref struct);  // TypeId(29)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by" = fn(ref "core:prelude/list.wado//List<i32>", ref "canonical//CanonicalClosure_0");  // TypeId(29)
 
 type "functype//effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.wado/$Closure_0::$call$dae[self]" = fn(i32);  // TypeId(30)
 
@@ -135,7 +135,7 @@ global global:core:prelude/traits.wado::$const_obj_53: ref Array<u8> = array.new
 global global:core:prelude/traits.wado::$const_obj_54: ref Array<u8> = array.new_fixed<u8>(78, 111, 110, 101);
 
 fn "effect_param_eager_closure_methods.wado/run"() with Stdout {
-    let loud_cmp: ref struct;
+    let loud_cmp: ref "canonical//CanonicalClosure_0";
     let item_17: i32;
     let copy: ref "core:prelude/list.wado//List<i32>";
     let out_24: ref "core:prelude/string.wado//String";
@@ -613,8 +613,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
                                     a_11 = struct.new "core:prelude//$Cell<i32>" { value: builtin::array_get_value<i32>($licm_repr_16, i) };
                                     b_12 = struct.new "core:prelude//$Cell<i32>" { value: builtin::array_get_value<i32>($licm_repr_16, j) };
                                     $match_13 = block -> "core:prelude/traits.wado//enum:Ordering" {
-                                        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(cmp)).env, a_11, b_12);
+                                        call_ref "functype/$canonical_closure_fn_0"(cmp.func, cmp.env, a_11, b_12);
                                     };
                                     $licm_repr_16 = self.repr;
                                     if $match_13 == 2 {

@@ -12,12 +12,12 @@ struct affine_matrix_read_after_accepted.wado//Sink {  // TypeId(1)
 
 struct affine_matrix_read_after_accepted.wado//$Dispatch_affine_matrix_read_after_accepted.wado/Ask {  // TypeId(2)
     mut outer: ref null "affine_matrix_read_after_accepted.wado//$Dispatch_affine_matrix_read_after_accepted.wado/Ask",
-    mut op_ask: ref struct,
+    mut op_ask: ref "canonical//CanonicalClosure_0",
 }
 
 struct affine_matrix_read_after_accepted.wado//$Dispatch_affine_matrix_read_after_accepted.wado/SinkTok {  // TypeId(3)
     mut outer: ref null "affine_matrix_read_after_accepted.wado//$Dispatch_affine_matrix_read_after_accepted.wado/SinkTok",
-    mut op_put: ref struct,
+    mut op_put: ref "canonical//CanonicalClosure_1",
 }
 
 struct core:prelude/string.wado//String {  // TypeId(4)
@@ -59,23 +59,23 @@ variant core:prelude/types.wado//Option<affine_matrix_read_after_accepted.wado/T
     Some(ref null "affine_matrix_read_after_accepted.wado//Tok"),
 }
 
-struct core:prelude/types.wado//Option<affine_matrix_read_after_accepted.wado/Tok>::Some {  // TypeId(14)
-    discriminant: i32,
-    payload_0: ref null "affine_matrix_read_after_accepted.wado//Tok",
-}
+type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> i32;  // TypeId(14)
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> i32;  // TypeId(15)
-
-struct canonical//CanonicalClosure_0 {  // TypeId(16)
+struct canonical//CanonicalClosure_0 {  // TypeId(15)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct, ref null "affine_matrix_read_after_accepted.wado//Tok") -> i32;  // TypeId(17)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, ref null "affine_matrix_read_after_accepted.wado//Tok") -> i32;  // TypeId(16)
 
-struct canonical//CanonicalClosure_1 {  // TypeId(18)
+struct canonical//CanonicalClosure_1 {  // TypeId(17)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_1",
+}
+
+struct core:prelude/types.wado//Option<affine_matrix_read_after_accepted.wado/Tok>::Some {  // TypeId(18)
+    discriminant: i32,
+    payload_0: ref null "affine_matrix_read_after_accepted.wado//Tok",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(19)
@@ -1042,8 +1042,8 @@ fn "affine_matrix_read_after_accepted.wado/run"() {
                 if @likely(ref.is_null(local.tee $local_0(global:affine_matrix_read_after_accepted.wado::$effect_affine_matrix_read_after_accepted.wado/Ask)) == 0) {
                     global:affine_matrix_read_after_accepted.wado::$effect_affine_matrix_read_after_accepted.wado/Ask = local.tee $local_1_104(ref.as_non_null($local_0)).outer;
                     flag_0 = block -> i32 {
-                        let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1_104.op_ask)).env);
+                        let $indirect_call_2: ref null "canonical//CanonicalClosure_0";
+                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_1_104.op_ask).env);
                     };
                     global:affine_matrix_read_after_accepted.wado::$effect_affine_matrix_read_after_accepted.wado/Ask = $local_0;
                     break $inline__effect_dispatch__affine_matrix_read_after_accepted_wado_Ask__ask_56: flag_0;
@@ -1107,8 +1107,8 @@ fn "affine_matrix_read_after_accepted.wado/run"() {
                 if @likely(ref.is_null(local.tee $local_1_924(global:affine_matrix_read_after_accepted.wado::$effect_affine_matrix_read_after_accepted.wado/SinkTok)) == 0) {
                     global:affine_matrix_read_after_accepted.wado::$effect_affine_matrix_read_after_accepted.wado/SinkTok = local.tee $local_2_925(ref.as_non_null($local_1_924)).outer;
                     flag_0 = block -> i32 {
-                        let $indirect_call_4: ref "canonical//CanonicalClosure_1";
-                        call_ref "functype/$canonical_closure_fn_1"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_1"($local_2_925.op_put)).env, t_1);
+                        let $indirect_call_4: ref null "canonical//CanonicalClosure_1";
+                        call_ref "functype/$canonical_closure_fn_1"($indirect_call_4.func, local.tee $indirect_call_4($local_2_925.op_put).env, t_1);
                     };
                     global:affine_matrix_read_after_accepted.wado::$effect_affine_matrix_read_after_accepted.wado/SinkTok = $local_1_924;
                     break $inline__effect_dispatch__affine_matrix_read_after_accepted_wado_SinkTok__put_73: flag_0;

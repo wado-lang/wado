@@ -60,6 +60,8 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
     .collect();
 
     let type_table = &*package.type_table.borrow();
+    // Before the types that hold a function value, which name its closure.
+    register_canonical_closure_types(ctx, type_table);
     for (id, shape) in shapes {
         define_wado_type(ctx, type_table, &id, shape);
     }
@@ -72,7 +74,6 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
         let cell = struct_type(&id, vec![field], Some(ModuleSource::prelude()));
         ctx.define_type(&id, WirTypeDef::Struct(cell));
     }
-    register_canonical_closure_types(ctx, type_table);
 }
 
 /// Each concrete Wado type a value can have, with the WIR name it lowers to
@@ -461,64 +462,65 @@ fn register_backed_handle(ctx: &mut WirContext<'_>) -> WirTypeId {
     )
 }
 
-/// Register canonical closure types for all `Function` types found in type tables.
-/// Each unique function signature `fn(P1, P2, ...) -> R` gets:
+/// Register a canonical closure type for every `Function` type in the type
+/// table, the type a value of it lowers to. Each unique function signature
+/// `fn(P1, P2, ...) -> R` gets:
 /// - A canonical func type: `(ref struct, P1, P2, ...) -> R`
 /// - A canonical closure struct: `{ env: ref struct, func: ref $func_type }`
 fn register_canonical_closure_types(ctx: &mut WirContext<'_>, type_table: &TypeTable) {
-    // Every unique function signature in the shared type table, each carrying
-    // whether its `CanonicalClosure_K` takes the slim `{ env, func }` schema or
-    // the inspectable `{ env, inspect, func }` one — decided by
-    // whether a `fn(..)^Inspect` for that `(arity, return_type)` survived
-    // DCE.
-    let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>, bool)> = Vec::new();
-    let mut seen_keys: IndexSet<String> = IndexSet::default();
-
+    let mut visited = IndexSet::default();
     for type_id in type_table.iter_type_ids() {
-        if let ResolvedType::Function {
-            params,
-            return_type,
-            ..
-        } = type_table.get(type_id)
-        {
-            // A signature over a type parameter, or over a type no value has,
-            // types no closure.
-            let registered = |t| ctx.wado_types.contains_key(&t);
-            if params.iter().chain([return_type]).any(|&p| {
-                type_table.contains_type_param(p) || !buildable(type_table, p, registered)
-            }) {
-                continue;
-            }
+        register_fn_closure(ctx, type_table, &mut visited, type_id);
+    }
+}
 
-            // Unit params are erased from the canonical signature, matching
-            // the function-signature convention (unit has no Wasm
-            // representation); every canonical-key site filters identically.
-            let param_wirs: Vec<WirType> = params
-                .iter()
-                .map(|p| ctx.type_id_to_wir_type(type_table, *p))
-                .filter(|t| !matches!(t, WirType::Unit))
-                .collect();
-            let result_wirs: Vec<WirType> = if type_table.is_stackless(*return_type) {
-                vec![]
-            } else {
-                vec![ctx.type_id_to_wir_type(type_table, *return_type)]
-            };
-            let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
-            if seen_keys.insert(key) {
-                let is_inspectable = ctx
-                    .inspectable_fn_dispatch
-                    .contains(&(params.len(), *return_type));
-                fn_sigs.push((param_wirs, result_wirs, is_inspectable));
-            }
-        }
+/// Register the `CanonicalClosure_K` function type `type_id` lowers to, after
+/// those of the function types its signature names: their closure types are
+/// part of its key. A signature over a type parameter, or over a type no value
+/// has, types no closure. The first function type of a key decides whether its
+/// struct takes the inspectable `{ env, inspect, func }` schema, by whether a
+/// `fn(..)^Inspect` for its `(arity, return_type)` survived DCE.
+fn register_fn_closure(
+    ctx: &mut WirContext<'_>,
+    type_table: &TypeTable,
+    visited: &mut IndexSet<TypeId>,
+    type_id: TypeId,
+) {
+    let ResolvedType::Function {
+        params,
+        return_type,
+        ..
+    } = type_table.get(type_id)
+    else {
+        return;
+    };
+    if !visited.insert(type_id) {
+        return;
+    }
+    let registered = |t| ctx.wado_types.contains_key(&t);
+    if params
+        .iter()
+        .chain([return_type])
+        .any(|&p| type_table.contains_type_param(p) || !buildable(type_table, p, registered))
+    {
+        return;
+    }
+    for &part in params.iter().chain([return_type]) {
+        register_fn_closure(
+            ctx,
+            type_table,
+            visited,
+            type_table.representation_head(part),
+        );
     }
 
-    // Inspectable signatures share the supertype `$canonical_inspectable_base`,
-    // which is what a `fn(..)^Inspect` stub `ref.cast`s to, so no per-shape
-    // struct map is needed.
-    for (param_wirs, result_wirs, is_inspectable) in fn_sigs {
+    let (param_wirs, result_wirs) = ctx.canonical_signature(type_table, params, *return_type);
+    let is_inspectable = ctx
+        .inspectable_fn_dispatch
+        .contains(&(params.len(), *return_type));
+    let (_, closure) =
         ctx.get_or_create_canonical_closure_type(param_wirs, result_wirs, is_inspectable);
-    }
+    ctx.fn_closure_types.insert(type_id, closure);
 }
 
 /// The WIR name of variant `def` at `type_args` (none for a plain variant):

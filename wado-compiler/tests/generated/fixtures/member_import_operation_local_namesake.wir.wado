@@ -20,7 +20,7 @@ struct core:prelude/string.wado//String {  // TypeId(1)
 
 struct member_import_operation_local_namesake.wado//$Dispatch_sub/member_import_op_iface.wado/Greeting {  // TypeId(2)
     mut outer: ref null "member_import_operation_local_namesake.wado//$Dispatch_sub/member_import_op_iface.wado/Greeting",
-    mut op_hello: ref struct,
+    mut op_hello: ref "canonical//CanonicalClosure_0",
 }
 
 struct member_import_operation_local_namesake.wado//$Closure_0 {}  // TypeId(3)
@@ -116,8 +116,8 @@ fn "member_import_operation_local_namesake.wado/run"() with Stdout {
         if ref.is_null(local.tee $local_1_6(global:member_import_operation_local_namesake.wado::$effect_sub/member_import_op_iface.wado/Greeting)) == 0 {
             global:member_import_operation_local_namesake.wado::$effect_sub/member_import_op_iface.wado/Greeting = local.tee $local_2_7(ref.as_non_null($local_1_6)).outer;
             name_5 = block -> ref "core:prelude/string.wado//String" {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_2_7.op_hello)).env, name_5);
+                let $indirect_call_1: ref null "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1($local_2_7.op_hello).env, name_5);
             };
             global:member_import_operation_local_namesake.wado::$effect_sub/member_import_op_iface.wado/Greeting = $local_1_6;
             break $inline__effect_dispatch__sub_member_import_op_iface_wado_Greeting__hello_2: name_5;
@@ -138,7 +138,7 @@ fn "member_import_operation_local_namesake.wado/run"() with Stdout {
         if ref.is_null(local.tee $local_1_12(global:member_import_operation_local_namesake.wado::$effect_sub/member_import_op_iface.wado/Greeting)) == 0 {
             global:member_import_operation_local_namesake.wado::$effect_sub/member_import_op_iface.wado/Greeting = local.tee $local_2_7(ref.as_non_null($local_1_12)).outer;
             name_5 = block -> ref "core:prelude/string.wado//String" {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_2_7.op_hello)).env, name_5);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1($local_2_7.op_hello).env, name_5);
             };
             global:member_import_operation_local_namesake.wado::$effect_sub/member_import_op_iface.wado/Greeting = $local_1_12;
             break $inline__effect_dispatch__sub_member_import_op_iface_wado_Greeting__hello_5: name_5;

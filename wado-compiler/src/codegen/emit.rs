@@ -7,7 +7,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirExportDesc, WirFuncType, WirFunction, WirImportDesc,
-    WirInstr, WirPackage, WirScalarKind, WirStructType, WirType, WirTypeDef, WirVariantType,
+    WirInstr, WirPackage, WirScalarKind, WirStructType, WirType, WirTypeDef, WirTypeId,
+    WirVariantType,
 };
 
 use crate::codegen_flags::CodegenFlags;
@@ -220,6 +221,17 @@ impl<'a> WirEmitter<'a> {
         // Exception: func types referenced from struct fields (e.g., canonical closure
         // func types) must be in the rec group to avoid forward reference errors.
         let mut gc_subtypes: Vec<SubType> = Vec::new();
+        let extended: IndexSet<u32> = self
+            .wir
+            .types
+            .iter()
+            .filter_map(|typedef| {
+                let WirTypeDef::Struct(s) = typedef else {
+                    return None;
+                };
+                s.supertype.as_ref().map(WirTypeId::index)
+            })
+            .collect();
 
         for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
             let wir_idx = u32::try_from(wir_idx).unwrap();
@@ -228,7 +240,7 @@ impl<'a> WirEmitter<'a> {
                     // Variant case struct — emitted inline as part of its parent variant
                 }
                 WirTypeDef::Struct(s) => {
-                    self.build_struct_subtype(s, wir_idx, &mut gc_subtypes);
+                    self.build_struct_subtype(s, wir_idx, &extended, &mut gc_subtypes);
                 }
                 WirTypeDef::Variant(v) => {
                     self.build_variant_subtypes(v, wir_idx, &mut gc_subtypes);
@@ -377,6 +389,7 @@ impl<'a> WirEmitter<'a> {
         &mut self,
         s: &WirStructType,
         wir_idx: u32,
+        extended: &IndexSet<u32>,
         subtypes: &mut Vec<SubType>,
     ) {
         debug_assert!(self.type_index_map.contains_key(&wir_idx));
@@ -413,9 +426,10 @@ impl<'a> WirEmitter<'a> {
             })
             .collect();
 
-        // Use is_final: false so (ref (exact $T)) from struct.new is a subtype of (ref null $T)
+        // A cast to a final type is one compare in wasmtime, where a cast to
+        // any other calls out on a mismatch.
         subtypes.push(SubType {
-            is_final: false,
+            is_final: !extended.contains(&wir_idx),
             supertype_idxs,
             composite_type: CompositeType {
                 inner: CompositeInnerType::Struct(StructType {
