@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794779369141,
+  "lastUpdate": 1794789891222,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77849,6 +77849,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d6acc6b3a97133a600ad681c7bcac792cc51c074"
         },
         "date": 1794779368402,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7295,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24485,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434963,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ed2c6170e50ccbe1497debb83917e697f4aa3486",
+          "message": "Merge pull request #2636 from wado-lang/ccr-5a053762-2x7vni\n\nfeat(web): the collector reclaims web handles, which are `externref`",
+          "timestamp": "2026-11-16T09:27:00+09:00",
+          "tree_id": "4c0f442c3790fd4d1aa2b28c46c58fbb65899dc3",
+          "url": "https://github.com/wado-lang/wado/commit/ed2c6170e50ccbe1497debb83917e697f4aa3486"
+        },
+        "date": 1794789889966,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
