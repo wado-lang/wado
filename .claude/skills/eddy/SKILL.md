@@ -22,6 +22,8 @@ reviewed. It also writes tests into that checkout and runs them with `cargo`,
    reads, takes no lock, and no finding carries a `repro`.
 3. Read `scratchpad/eddy.json`. A failed review exits other than 0, and the
    line of `scratchpad/eddy.log` that starts with `eddy:` gives the reason.
+   The line that starts with `cost:` gives what the review cost, in total and
+   for each model; tell the user.
 4. Commit the record the run wrote, `package-eddy/reviews/<head>.json`. It
    holds every review of that commit, and Eddy later learns from which of its
    findings were addressed.
