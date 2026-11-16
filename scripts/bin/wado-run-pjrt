@@ -1,16 +1,9 @@
 #!/usr/bin/env bash
-# `wado run-pjrt` from the dev build, built first, on XLA's CPU plugin unless
-# `--plugin` or WADO_PJRT_PLUGIN names another.
-set -euo pipefail
+# `wado run-pjrt` from the dev build, built first. XLA's CPU plugin is the
+# default plugin where this host has one pinned; `--plugin` overrides it, as it
+# overrides any WADO_PJRT_PLUGIN.
 here="$(dirname "$0")"
-named=${WADO_PJRT_PLUGIN:-}
-for arg in "$@"; do
-    case "${arg}" in
-        --plugin | --plugin=*) named=1 ;;
-    esac
-done
-if [ -z "${named}" ]; then
-    WADO_PJRT_PLUGIN="$("${here}/../fetch-pjrt-plugin.sh")"
-    export WADO_PJRT_PLUGIN
+if [ -z "${WADO_PJRT_PLUGIN:-}" ] && plugin="$("${here}/../fetch-pjrt-plugin.sh")"; then
+    export WADO_PJRT_PLUGIN="${plugin}"
 fi
 exec "${here}/../dev-bin.sh" wado-run-pjrt "$@"

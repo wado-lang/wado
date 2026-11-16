@@ -14,8 +14,10 @@ log() {
 # A local session has mise installed already; it only needs mise.toml's
 # environment, `scripts/bin` among it, on every Bash command.
 if [ "$CLAUDE_CODE_REMOTE" != "true" ]; then
-    if [ -n "$CLAUDE_ENV_FILE" ] && command -v mise &>/dev/null; then
-        echo 'eval "$(mise activate bash)"' >> "$CLAUDE_ENV_FILE"
+    # mise's installer puts it in ~/.local/bin, which a hook's PATH may lack.
+    mise_exe=$(PATH="$PATH:$HOME/.local/bin" command -v mise || true)
+    if [ -n "$CLAUDE_ENV_FILE" ] && [ -n "$mise_exe" ]; then
+        echo "eval \"\$('$mise_exe' activate bash)\"" >> "$CLAUDE_ENV_FILE"
         log "Local session: mise activation persisted to CLAUDE_ENV_FILE"
     fi
     exit 0
