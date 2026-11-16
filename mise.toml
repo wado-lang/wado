@@ -464,9 +464,8 @@ case " $* " in
     # mise's only where it has installed a tool.
     *)
         set -- package-eddy/src/main.wado -- "$@"
-        for home in "${MISE_DATA_DIR:-$HOME/.local/share/mise}" "$(command -v mise)"; do
-            # In a shell that defines `mise` as a function, `command -v` names no file.
-            if [ -e "$home" ] && [ "${home#/}" != "$home" ]; then set -- --process-read "$home" "$@"; fi
+        for granted in "${MISE_DATA_DIR:-$HOME/.local/share/mise}" "$(command -v mise)"; do
+            if [ -e "$granted" ]; then set -- --process-read "$granted" "$@"; fi
         done
         set -- ./scripts/exclusive.sh test "$wado" run \
             --process-read "${CARGO_HOME:-$HOME/.cargo}" --process-read "${RUSTUP_HOME:-$HOME/.rustup}" "$@"

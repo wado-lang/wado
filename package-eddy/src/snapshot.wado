@@ -1,7 +1,7 @@
 //! A checkout of one commit for a reviewer to read, index, build and write
 //! into, apart from the tree the developer works in.
 
-use { env, Environment } from "core:cli";
+use { env, log_stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Command, Process } from "core:process";
@@ -81,52 +81,77 @@ pub fn home_runner() -> Runner with Environment {
     };
 }
 
-/// Prints the directories of the tools `mise` has installed for the tree at
-/// `$0` as one `PATH`, then the name of each program in them.
-global LIST_MISE_TOOLS: String = `${ENTER_TREE} && dirs=$(mise bin-paths) || exit
-echo "$dirs" | paste -sd: -
-echo "$dirs" | while IFS= read -r dir; do
-    for file in "$dir"/*; do
-        if [ -f "$file" ] && [ -x "$file" ]; then basename "$file"; fi
-    done
-done`;
+/// How long `mise` may take to list its tools, in seconds: the configuration
+/// it reads is the reviewed change's, which may make it run anything.
+global MISE_TIMEOUT: i32 = 60;
 
 /// `runner` with `mise` and the tools it has installed for the tree at `root`
-/// among its programs. Where `mise` does not run, because it is not installed
-/// or `wado run` grants a child no read of it, `runner` is left as it is.
+/// among its programs. Where `mise` does not list them, because it is not
+/// installed, `wado run` grants a child no read of it, or it refuses the
+/// tree's configuration, Run is left with `cargo` and the reason is logged.
 pub fn with_mise_tools(runner: Runner, root: &String) -> Runner with Process {
-    let listing = Command::new("sh").args(["-c", LIST_MISE_TOOLS, *root]).env(
-        "MISE_DATA_DIR",
-        runner.mise_data_dir,
-    ).output();
-    return match listing {
-        Ok(out) && out.status == Exited(0) => with_listed(runner, &String::from_utf8_lossy(out.stdout)),
-        _ => runner,
+    let dirs = match mise_bin_dirs(root, &runner.mise_data_dir) {
+        Ok(dirs) => dirs,
+        Err(e) => {
+            log_stderr(`eddy: Run has cargo alone, since mise lists no tools: ${e}`);
+            return runner;
+        },
     };
-}
-
-/// `runner` with `mise` and what `listing`, the output of `LIST_MISE_TOOLS`,
-/// names.
-fn with_listed(runner: Runner, listing: &String) -> Runner {
     let mut with_tools = runner;
+    with_tools.tool_path = dirs.join(":");
     with_tools.programs.push("mise");
-    for let [i, line] of listing.lines().enumerate() {
-        if i == 0 {
-            with_tools.tool_path = line.to_string();
-        } else if !with_tools.programs.contains_str(line) {
-            with_tools.programs.push(line.to_string());
+    for let program of programs_in(&dirs) {
+        if !with_tools.programs.contains_str(&program) {
+            with_tools.programs.push(program);
         }
     }
     return with_tools;
 }
 
-test "a runner's programs are cargo, mise and each tool mise lists once" {
-    let bare = Runner { target_dir: "", cargo_home: "", rustup_home: "", mise_data_dir: "" };
-    let tools = with_listed(bare, &"/m/node/bin:/m/npm/bin\nnode\nnpm\nnpx\nnpm\n");
-    assert tools.tool_path == "/m/node/bin:/m/npm/bin";
-    assert tools.programs == ["cargo", "mise", "node", "npm", "npx"];
-    let none = with_listed(bare, &"\n");
-    assert none.tool_path == "" && none.programs == ["cargo", "mise"];
+/// The directories of the tools `mise` has installed for the tree at `root`.
+fn mise_bin_dirs(root: &String, data_dir: &String) -> Result<List<String>, String> with Process {
+    let listing = Command::new("timeout").args([
+        "--kill-after=10", `${MISE_TIMEOUT}`, "sh", "-c", `${ENTER_TREE} && exec mise bin-paths`, *root,
+    ]).env("MISE_DATA_DIR", *data_dir).output();
+    let out = match listing {
+        Ok(out) => out,
+        Err(e) => {
+            return Err(`${e}`);
+        },
+    };
+    if out.status != Exited(0) {
+        return Err(`${out.status:?}: ${String::from_utf8_lossy(out.stderr).trim()}`);
+    }
+    return Ok(
+        String::from_utf8_lossy(out.stdout).lines().filter(|dir| !dir.is_empty()).map(|dir| dir.to_string()).collect(),
+    );
+}
+
+/// The name of each program directly in `dirs`, a link to one included.
+fn programs_in(dirs: &List<String>) -> List<String> with Process {
+    // With no directory, `find` would search the current one.
+    if dirs.is_empty() {
+        return [];
+    }
+    let mut args = ["-L"] as List<String>;
+    args.extend(dirs);
+    args.extend(&["-maxdepth", "1", "-type", "f", "-perm", "-u+x"]);
+    // A link to nothing fails the run and is not a program: what `find`
+    // printed is still the answer.
+    let found = Command::new("find").args(args).output().unwrap().stdout;
+    return String::from_utf8_lossy(found).lines().map(|path| fs::file_name(path).unwrap().to_string()).collect();
+}
+
+test "a directory's programs are the files in it that can be executed" {
+    let dir = "build/programs-test";
+    fs::remove_dir_all(dir).unwrap();
+    fs::create_dir_all(`${dir}/nested`).unwrap();
+    for let name of ["tool", "notes.txt", "nested/deep"] {
+        fs::write(`${dir}/${name}`, &"").unwrap();
+    }
+    assert Command::new("chmod").args(["+x", `${dir}/tool`, `${dir}/nested/deep`]).status().unwrap() == Exited(0);
+    assert programs_in(&[dir]) == ["tool"];
+    assert programs_in(&[]).is_empty();
 }
 
 /// The snapshot of `sha` at `root`, its submodules included, back as checked
