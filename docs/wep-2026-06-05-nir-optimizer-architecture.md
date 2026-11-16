@@ -414,13 +414,15 @@ move under none of them.
 | Arena expressions per reachable expression |         2.15 × |         2.78 × |
 | Arena statements per reachable statement   |         2.64 × |         3.51 × |
 
-`WADO_TRACE=freeze_refusals`.
+`WADO_TRACE=freeze_refusals`. These describe the program the optimizer sees,
+not its output: how much a freeze promotes, and how many local reads a
+flow-free value query could resolve.
 
-| Share of the pure kinds a freeze promotes | `sqlite_parse` | `json_twitter` |
-| ----------------------------------------- | -------------: | -------------: |
-| `promote_fields`                          |          9.9 % |         11.8 % |
-| `freeze_pure_arith`                       |          4.7 % |          7.8 % |
-| Local reads of a single-version local     |           75 % |           85 % |
+| Share                                            | `sqlite_parse` | `json_twitter` |
+| ------------------------------------------------ | -------------: | -------------: |
+| Pure kinds `promote_fields` promotes             |          9.9 % |         11.8 % |
+| Pure kinds `freeze_pure_arith` promotes          |          4.7 % |          7.8 % |
+| Local reads whose local is assigned exactly once |           75 % |           85 % |
 
 ## Known gaps
 
