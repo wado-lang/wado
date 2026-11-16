@@ -130,22 +130,21 @@ impl Command {
     /// where the child starts, and must name what the guest may read, or the
     /// spawn fails with `NotPermitted`.
     pub fn grant_read(&self, path: String) -> Command {
-        let mut grants = self.granted();
-        grants.read.push(path);
-        return Command { ..*self, grants: Option::Some(grants) };
+        return self.granted([path], []);
     }
 
     /// Let the child read, write, create and remove beneath `path`, as
     /// [`Command::grant_read`] lets it read. The guest must be able to write
     /// `path`.
     pub fn grant_write(&self, path: String) -> Command {
-        let mut grants = self.granted();
-        grants.write.push(path);
-        return Command { ..*self, grants: Option::Some(grants) };
+        return self.granted([], [path]);
     }
 
-    fn granted(&self) -> types::Grants {
-        return self.grants.unwrap_or(types::Grants { read: [], write: [] });
+    fn granted(&self, read: List<String>, write: List<String>) -> Command {
+        let mut grants = self.grants.unwrap_or(types::Grants { read: [], write: [] });
+        grants.read.extend(&read);
+        grants.write.extend(&write);
+        return Command { ..*self, grants: Option::Some(grants) };
     }
 
     pub fn arg(&self, arg: String) -> Command {
