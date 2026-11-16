@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794793695332,
+  "lastUpdate": 1794799975161,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -77957,6 +77957,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 434963,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0e8ae23bca1a7aec0ee447dc65cc6d449eb367bd",
+          "message": "Merge pull request #2637 from wado-lang/ccr-9fe26c59-gqrsz3\n\nperf(codegen): call closures with no cast, and cast to final struct types",
+          "timestamp": "2026-11-16T12:14:07+09:00",
+          "tree_id": "39e3cedf62b9801ff77f2256720b89dfe6bb918e",
+          "url": "https://github.com/wado-lang/wado/commit/0e8ae23bca1a7aec0ee447dc65cc6d449eb367bd"
+        },
+        "date": 1794799973962,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24433,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434873,
             "unit": "bytes"
           }
         ]
