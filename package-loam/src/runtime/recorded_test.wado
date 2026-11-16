@@ -2,6 +2,8 @@ use {
     A,
     AttentionCase,
     B,
+    Blob,
+    Blocks,
     Bt,
     C,
     Dt,
@@ -11,8 +13,10 @@ use {
     Pos,
     Pt,
     Qt,
+    Rows,
     St,
     Tt,
+    Zeros,
     attending,
     attention_case,
     attention_rows,
@@ -24,6 +28,8 @@ use {
     halved_inputs,
     mixed,
     mixed_inputs,
+    quantized_case,
+    quantizing,
     repeating,
     repeating_inputs,
     windowed,
@@ -264,6 +270,40 @@ test "a recorded attention composite computes the CPU's, its presents the buffer
         attention_rows([1, 2]),
     ] as List<AttentionCase> {
         recorded_attention(&case);
+    }
+}
+
+test "a recorded quantized product and gather compute the CPU's, as composites and decomposed" {
+    let case = quantized_case();
+    let cpu = &mut Cpu {};
+    let weight = [case.weight, case.scales, case.zero_points];
+    let table = [case.table, case.table_scales];
+    let want = quantizing(cpu, &case.a, &weight, &table, &case.ids);
+    for let mut r of [Recorder::new(), Recorder::decomposing()] as List<Recorder> {
+        let a = r.parameter::<f32, [A, B]>(case.a.extents);
+        let held = [
+            r.parameter::<u8, [C, Blocks, Blob]>(case.weight.extents),
+            r.parameter::<f32, [C, Blocks]>(case.scales.extents),
+            r.parameter::<u8, [C, Zeros]>(case.zero_points.extents),
+        ];
+        let rows = [
+            r.parameter::<u8, [Rows, Blob]>(case.table.extents),
+            r.parameter::<f32, [Rows, Blocks]>(case.table_scales.extents),
+        ];
+        let ids = r.parameter::<i64, [A]>(case.ids.extents);
+        let got = quantizing(&mut r, &a, &held, &rows, &ids);
+        let recorded = r.finished([got.0.id, got.1.id]);
+        assert recorded.nodes[got.1.id].extents == want.1.extents;
+        let arguments: List<Any<Cpu>> = [
+            host_of(&case.a),
+            host_of(&case.weight),
+            host_of(&case.scales),
+            host_of(&case.zero_points),
+            host_of(&case.table),
+            host_of(&case.table_scales),
+            host_of(&case.ids),
+        ];
+        assert run(cpu, &recorded, &arguments) == [host_of(&want.0), host_of(&want.1)] as List<Any<Cpu>>;
     }
 }
 

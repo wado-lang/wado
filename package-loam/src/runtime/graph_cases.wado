@@ -8,6 +8,7 @@ use {
     DotDims,
     GatherDims,
     Graph,
+    Quantized,
     ScatterDims,
     Slots,
     Unary,
@@ -365,6 +366,76 @@ pub fn attention_rows(pasts: List<i64>) -> AttentionCase {
         },
         options: Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true },
     };
+}
+
+/// `quantizing`'s arguments: a product over a weight of 40 columns in blocks of
+/// 32, so its last block is cut short, and a table of 5 rows.
+pub struct QuantizedCase {
+    pub a: Tensor<f32, [A, B]>,
+    pub weight: Tensor<u8, [C, Blocks, Blob]>,
+    pub scales: Tensor<f32, [C, Blocks]>,
+    pub zero_points: Tensor<u8, [C, Zeros]>,
+    pub table: Tensor<u8, [Rows, Blob]>,
+    pub table_scales: Tensor<f32, [Rows, Blocks]>,
+    pub ids: Tensor<i64, [A]>,
+}
+
+pub struct Blocks {
+}
+pub struct Blob {
+}
+pub struct Zeros {
+}
+pub struct Rows {
+}
+
+/// A product by a weight with zero points, and the rows of a table without
+/// them that `ids` name, one past its end.
+pub fn quantizing<affine G: Graph>(
+    g: &mut G,
+    a: &G::Tensor<f32, [A, B]>,
+    weight: &[G::Tensor<u8, [C, Blocks, Blob]>, G::Tensor<f32, [C, Blocks]>, G::Tensor<u8, [C, Zeros]>],
+    table: &[G::Tensor<u8, [Rows, Blob]>, G::Tensor<f32, [Rows, Blocks]>],
+    ids: &G::Tensor<i64, [A]>,
+) -> [G::Tensor<f32, [A, C]>, G::Tensor<f32, [A, B]>] with _ {
+    let quantized = Quantized { bits: 4, block: 32 };
+    let product = g.quantized_product::<f32, [A, B], C, Blocks, Blob, Zeros, [A, C]>(
+        a,
+        &weight.0,
+        &weight.1,
+        Option::Some(&weight.2),
+        &quantized,
+    );
+    let rows = g.quantized_gather::<f32, Rows, Blob, [A], Blocks, Zeros, [A, B]>(
+        &table.0,
+        ids,
+        &table.1,
+        null,
+        &quantized,
+    );
+    return [product, rows];
+}
+
+pub fn quantized_case() -> QuantizedCase {
+    let [n, k, blocks, rows] = [3, 40, 2, 5];
+    return QuantizedCase {
+        a: noisy([2, k], 8),
+        weight: bytes([n, blocks, 16], 1),
+        scales: noisy([n, blocks], 9),
+        zero_points: bytes([n, 1], 2),
+        table: bytes([rows, k / 2], 3),
+        table_scales: noisy([rows, blocks], 10),
+        ids: Tensor {
+            data: [5, -2],
+            extents: [2],
+        },
+    };
+}
+
+/// Bytes spread over their range, apart for each `seed`.
+fn bytes<Axes>(extents: List<i32>, seed: i32) -> Tensor<u8, Axes> {
+    let data: List<u8> = (0..<element_count(&extents)).map(|i| ((i * 37 + seed * 101) % 256) as u8).collect();
+    return Tensor { data, extents };
 }
 
 fn noisy<Axes>(extents: List<i32>, seed: u32) -> Tensor<f32, Axes> {
