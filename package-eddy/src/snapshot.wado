@@ -218,10 +218,10 @@ fn worktree_git_dir(repo: &String, root: &String) -> Option<String> with (Proces
     // git records a worktree by the absolute path of its `.git`, and only
     // `repo` can be asked for one: `root`'s is reached from where `repo` is.
     let repo_path = fs::normalize(repo).unwrap();
-    let cwd = if repo_path == "." || repo_path == "" {
-        common[2]
+    let cwd = if repo_path == "" {
+        common[2];
     } else {
-        common[2].strip_suffix(`/${repo_path}`).expect("the repository must be its own toplevel").to_string()
+        common[2].strip_suffix(`/${repo_path}`).expect("the repository must be its own toplevel").to_string();
     };
     let wanted = `${cwd}/${fs::normalize(root).unwrap()}/.git`;
     let records = fs::join(fs::join(repo, &common[0]), "worktrees");
