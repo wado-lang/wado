@@ -3,10 +3,10 @@
 A to-do list whose page is built once. After that, a write to a signal reruns
 only the bindings that read it: no virtual DOM, and no diffing of a tree.
 
-It is a proof of concept for
-[WEP: Reactive Signals](../../docs/wep-2026-04-04-reactive-signals.md), written
-in today's language. The WEP finds dependencies at compile time. This finds
-them as the code runs, which needs no language feature.
+It is the library
+[WEP: Reactive Signals](../../docs/wep-2026-04-04-reactive-signals.md)
+describes: dependencies are found as the code runs, which needs no language
+feature.
 
 ```sh
 wado run     # prints the page after a short session
