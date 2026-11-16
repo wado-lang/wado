@@ -71,6 +71,13 @@ impl<affine Bk: Graph> Q4f16Model<Bk> {
             &mut self.model,
         );
         let first = greedy.first_tokens(&passed.logits, ids.len() as i64)[0];
+        let logits: List<f32> = passed.logits.data.into_iter().map(|v| v.cast_to::<f32>()).collect();
+        if steps == 1 {
+            return [
+                [first as i32],
+                logits,
+            ];
+        }
         let decoded = gemma::decode(
             &mut self.on,
             &token_ids([first]),
@@ -82,7 +89,7 @@ impl<affine Bk: Graph> Q4f16Model<Bk> {
         );
         let mut generated: List<i32> = [first as i32];
         generated.extend(&decoded.tokens.data.into_iter().map(|id| id as i32).collect());
-        return [generated, passed.logits.data.into_iter().map(|v| v.cast_to::<f32>()).collect()];
+        return [generated, logits];
     }
 }
 
