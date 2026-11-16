@@ -381,7 +381,14 @@ pub affine trait Graph: Holds with _ {
     ) -> Self::Tensor<E, Out>
         contract 8 % quantized.bits == 0, "a byte holds a whole number of values"
     {
-        return decomposed_product::<Self, E, In, N, Blocks, Blob, Z, Out>(self, a, packed, scales, zero_points, quantized);
+        return decomposed_product::<Self, E, In, N, Blocks, Blob, Z, Out>(
+            self,
+            a,
+            packed,
+            scales,
+            zero_points,
+            quantized,
+        );
     }
 
     /// onnxruntime's `GatherBlockQuantized` of a table packed along its rows:
@@ -398,7 +405,14 @@ pub affine trait Graph: Holds with _ {
     ) -> Self::Tensor<E, Out>
         contract 8 % quantized.bits == 0, "a byte holds a whole number of values"
     {
-        return decomposed_gather::<Self, E, R, P, I, Blocks, Z, Out>(self, packed, indices, scales, zero_points, quantized);
+        return decomposed_gather::<Self, E, R, P, I, Blocks, Z, Out>(
+            self,
+            packed,
+            indices,
+            scales,
+            zero_points,
+            quantized,
+        );
     }
 
     /// ONNX's `ArgMax` keeping its axis: the index of each lane's first
@@ -608,7 +622,10 @@ pub fn decomposed_gather<affine G: Graph, E: Float, R, P, I, Blocks, Z, Out>(
     zero_points: Option<&G::Tensor<u8, [R, Z]>>,
     quantized: &Quantized,
 ) -> G::Tensor<E, Out> with _ {
-    let [rows, bytes] = [g.extents_of(packed)[0], g.extents_of(packed)[1]];
+    let [rows, bytes] = [
+        g.extents_of(packed)[0],
+        g.extents_of(packed)[1],
+    ];
     let mut extents = g.extents_of(indices);
     let count = element_count(&extents);
     let flat: G::Tensor<i64, [Rows]> = g.reshape(indices, [count]);
@@ -668,7 +685,10 @@ fn dequantized<affine G: Graph, E: Float, M, P, Blocks, Z>(
     quantized: &Quantized,
     width: i32,
 ) -> G::Tensor<E, [M, Row]> with _ {
-    let [m, blocks] = [g.extents_of(scales)[0], g.extents_of(scales)[1]];
+    let [m, blocks] = [
+        g.extents_of(scales)[0],
+        g.extents_of(scales)[1],
+    ];
     let block = quantized.block;
     let mut values = unpacked_values::<G, M, P>(g, packed, quantized.bits);
     // A table's last block may hold fewer values than a block.
@@ -683,7 +703,10 @@ fn dequantized<affine G: Graph, E: Float, M, P, Blocks, Z>(
         None => full::<G, E, [M, Blocks]>(g, E::from_i64(1 << (quantized.bits - 1) as i64), [m, blocks]),
     };
     let held: List<i32> = [m, blocks, block];
-    let in_blocks: G::Tensor<E, [M, Blocks, Group]> = g.convert(&g.reshape::<u8, [M, Row], [M, Blocks, Group]>(&values, held));
+    let in_blocks: G::Tensor<E, [M, Blocks, Group]> = g.convert(&g.reshape::<u8, [M, Row], [M, Blocks, Group]>(
+        &values,
+        held,
+    ));
     let centered = g.binary(Binary::Subtract, &in_blocks, &g.broadcast_in_dim(&zero, held, [0, 1]));
     let scaled = g.binary(Binary::Multiply, &centered, &g.broadcast_in_dim(scales, held, [0, 1]));
     let flat: G::Tensor<E, [M, Row]> = g.reshape(&scaled, [m, blocks * block]);
@@ -699,7 +722,10 @@ fn unpacked_values<affine G: Graph, M, P>(
     packed: &G::Tensor<u8, [M, P]>,
     bits: i32,
 ) -> G::Tensor<u8, [M, Row]> with _ {
-    let [m, p] = [g.extents_of(packed)[0], g.extents_of(packed)[1]];
+    let [m, p] = [
+        g.extents_of(packed)[0],
+        g.extents_of(packed)[1],
+    ];
     let lanes = 8 / bits;
     let mut rest: G::Tensor<u8, [M, Row]> = g.relabeled(packed);
     if lanes == 1 {
@@ -1739,10 +1765,10 @@ fn unpacked_row<E: Float, R, Blocks, Z>(
     let blocks = scales.extents[1];
     for let i of 0..<into.len() {
         let b = i / quantized.block;
-        let q = (packed[row * bytes + i / per] as i32 >> (i % per * bits)) & mask;
+        let q = packed[row * bytes + i / per] as i32 >> i % per * bits & mask;
         let zero = match zero_points {
-            Some(z) => (z.data[row * z.extents[1] + b / per] as i32 >> (b % per * bits)) & mask,
-            None => 1 << (bits - 1),
+            Some(z) => z.data[row * z.extents[1] + b / per] as i32 >> b % per * bits & mask,
+            None => 1 << bits - 1,
         };
         let scale = scales.data[row * blocks + b].cast_to::<f32>();
         into[i] = E::from_f32((q - zero) as f32 * scale);

@@ -141,7 +141,13 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
         Any::F32(untyped(device, &device.upload(&q.a))),
         Any::I64(untyped(device, &device.upload(&q.ids))),
     ], &packed);
-    let want_quantized = cases::quantizing(cpu, &q.a, &[q.weight, q.scales, q.zero_points], &[q.table, q.table_scales], &q.ids);
+    let want_quantized = cases::quantizing(
+        cpu,
+        &q.a,
+        &[q.weight, q.scales, q.zero_points],
+        &[q.table, q.table_scales],
+        &q.ids,
+    );
     note("quantized product", apart(device, &dequantized[0], &want_quantized.0));
     note("quantized gather", apart(device, &dequantized[1], &want_quantized.1));
 

@@ -1183,9 +1183,16 @@ impl WebGpuBackend {
 
     /// A new buffer for a tensor of bytes of `extents`, four to a word, for a
     /// `write_bytes`.
-    internal fn reserved_bytes(&mut self, extents: List<i32>, kept: bool) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
+    internal fn reserved_bytes(
+        &mut self,
+        extents: List<i32>,
+        kept: bool,
+    ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
         let slot = self.reserved(element_count(&extents).div_ceil(4), kept);
-        return DeviceTensor { ..contiguous(slot, 0, extents), packed: Option::Some(Packed::U8) };
+        return DeviceTensor {
+            ..contiguous(slot, 0, extents),
+            packed: Option::Some(Packed::U8),
+        };
     }
 
     /// Writes the bytes `byte(i)` of `t`, little-endian within each word.
@@ -1194,7 +1201,7 @@ impl WebGpuBackend {
         self.write(t.slot, 0, count.div_ceil(4), |w| {
             let mut word: u32 = 0;
             for let i of 4 * w..<i32::min(4 * w + 4, count) {
-                word |= byte(i) << ((i % 4) * 8) as u32;
+                word |= byte(i) << (i % 4 * 8) as u32;
             }
             return word;
         });
@@ -4233,7 +4240,7 @@ fn dequantizing_wgsl(bits: i32, block: i32, zero_points: bool, binding: i32, at:
     let zero = if zero_points {
         `f32((u32(${view_load_wgsl(binding, at, &(["n", "b / PER"] as List<String>))}) >> ((b % PER) * BITS)) & MASK)`;
     } else {
-        `${1 << (bits - 1)}.0`;
+        `${1 << bits - 1}.0`;
     };
     return `const BITS = ${bits}u;
 const PER = ${8 / bits}u;

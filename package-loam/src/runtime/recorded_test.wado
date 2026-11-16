@@ -279,7 +279,10 @@ test "a recorded quantized product and gather compute the CPU's, as composites a
     let weight = [case.weight, case.scales, case.zero_points];
     let table = [case.table, case.table_scales];
     let want = quantizing(cpu, &case.a, &weight, &table, &case.ids);
-    for let mut r of [Recorder::new(), Recorder::decomposing()] as List<Recorder> {
+    for let mut r of [
+        Recorder::new(),
+        Recorder::decomposing(),
+    ] as List<Recorder> {
         let a = r.parameter::<f32, [A, B]>(case.a.extents);
         let held = [
             r.parameter::<u8, [C, Blocks, Blob]>(case.weight.extents),
@@ -303,7 +306,10 @@ test "a recorded quantized product and gather compute the CPU's, as composites a
             host_of(&case.table_scales),
             host_of(&case.ids),
         ];
-        assert run(cpu, &recorded, &arguments) == [host_of(&want.0), host_of(&want.1)] as List<Any<Cpu>>;
+        assert run(cpu, &recorded, &arguments) == [
+            host_of(&want.0),
+            host_of(&want.1),
+        ] as List<Any<Cpu>>;
     }
 }
 

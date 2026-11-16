@@ -603,7 +603,10 @@ fn quantized_read<ZeroAxes>(
     if let Some(z) = zero_points {
         read.push(z.id);
     }
-    return [QuantizedNode { quantized: *quantized, zero_points: zero_points matches { Some(_) } }, read];
+    return [
+        QuantizedNode { quantized: *quantized, zero_points: zero_points matches { Some(_) } },
+        read,
+    ];
 }
 
 /// The node `a` is the value of.
@@ -1038,17 +1041,7 @@ impl<affine G: Graph> Run<G> {
         } else {
             node.kind;
         };
-        if node.op matches {
-            Unary(_)
-            | Reduce(_)
-            | DotGeneral(_)
-            | Convolution(_)
-            | ReduceWindow(_)
-            | ArgMax(_)
-            | Attention(_)
-            | QuantizedProduct(_)
-            | QuantizedGather(_)
-        } {
+        if node.op matches { Unary(_) | Reduce(_) | DotGeneral(_) | Convolution(_) | ReduceWindow(_) | ArgMax(_) | Attention(_) | QuantizedProduct(_) | QuantizedGather(_) } {
             return match over {
                 F32 => self.computed_in::<f32>(g, id, node),
                 F16 => self.computed_in::<f16>(g, id, node),
@@ -1146,31 +1139,30 @@ impl<affine G: Graph> Run<G> {
                 self.parts[id] = [present_k, present_v];
                 attended;
             },
-            QuantizedProduct(q) => E::any::<G>(g.quantized_product::<E, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
-                self.of::<E>(node, 0),
-                &self.at(g, node, 1),
-                &self.at(g, node, 2),
-                optional(&self.zero_points_at(g, node, q)),
-                &q.quantized,
-            )),
-            QuantizedGather(q) => E::any::<G>(g.quantized_gather::<E, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
-                &self.at(g, node, 0),
-                i64s(self.operand(node, 1)),
-                &self.at(g, node, 2),
-                optional(&self.zero_points_at(g, node, q)),
-                &q.quantized,
-            )),
+            QuantizedProduct(q) => E::any::<G>(
+                g.quantized_product::<E, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
+                    self.of::<E>(node, 0),
+                    &self.at(g, node, 1),
+                    &self.at(g, node, 2),
+                    optional(&self.zero_points_at(g, node, q)),
+                    &q.quantized,
+                ),
+            ),
+            QuantizedGather(q) => E::any::<G>(
+                g.quantized_gather::<E, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
+                    &self.at(g, node, 0),
+                    i64s(self.operand(node, 1)),
+                    &self.at(g, node, 2),
+                    optional(&self.zero_points_at(g, node, q)),
+                    &q.quantized,
+                ),
+            ),
             _ => unreachable(),
         };
     }
 
     /// A quantized node's zero points, its last operand where it has them.
-    fn zero_points_at(
-        &self,
-        g: &G,
-        node: &RecordedNode,
-        q: &QuantizedNode,
-    ) -> Option<G::Tensor<u8, [Untyped, Untyped]>> {
+    fn zero_points_at(&self, g: &G, node: &RecordedNode, q: &QuantizedNode) -> Option<G::Tensor<u8, [Untyped, Untyped]>> {
         if !q.zero_points {
             return null;
         }

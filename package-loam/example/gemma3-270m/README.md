@@ -70,6 +70,18 @@ without `shader-f16` does. What each prints is in
 logits into `build/logits_fp16.bin`. It also times onnxruntime's WebGPU
 provider, so it needs a WebGPU device.
 
+## The `q4` export
+
+`q4.wado` builds `onnx/model_q4.onnx`, whose products and token embedding read
+4-bit weights through onnxruntime's `MatMulNBits` and `GatherBlockQuantized`.
+Each device keeps those weights packed. It checks its tokens and logits as
+`fp16.wado` does, against `generate_q4.json` and `build/logits_q4.bin`:
+
+    node generate.mjs generate_q4.json
+    wado run --collector drc q4_cpu.wado
+    wado run-webgpu q4_webgpu.wado
+    wado run-pjrt --plugin libpjrt_cpu.so q4_pjrt.wado
+
 ## What the build reads
 
 The model is

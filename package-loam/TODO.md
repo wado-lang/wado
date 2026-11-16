@@ -28,10 +28,10 @@ Loam lowers, though the build stops before it reaches any of them.
 
 | Operator                                       | Nodes | What Loam lacks                               |
 | ---------------------------------------------- | ----- | --------------------------------------------- |
-| `MatMulNBits`, 4 bits in blocks of 32          | 73    | The operator. No node gives zero points.      |
 | `SkipSimplifiedLayerNormalization`             | 48    | The operator, which names up to four outputs. |
 | `GroupQueryAttention`, a window of 128 or none | 24    | The attention sinks, its twelfth input.       |
 | `QMoE`, 32 experts of 4 bits, 4 to a token     | 24    | The operator.                                 |
+| `MatMulNBits`, 4 bits in blocks of 32          | 73    | Nothing.                                      |
 | `Add`, `Reshape`, `Cast`, `Constant`, `Gather` | 103   | Nothing.                                      |
 | `ReduceSum`, `Shape`, `Sub`                    | 3     | Nothing.                                      |
 | `SimplifiedLayerNormalization`                 | 1     | Nothing.                                      |
@@ -48,17 +48,7 @@ The embedding is a `float16` table a `Gather` reads, so the model has no
 `GatherBlockQuantized`. The inputs and outputs are `int64` and `float16`, and
 the two `Cast`s give `int32`.
 
-1. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
-   which onnx-community's `q4` exports use. gpt-oss-20b has the first alone. A
-   weight stays packed on the device, read by the quantized product composite
-   or by a quantized gather (see [Loam on TPU and WebGPU](./devices.md)). No
-   path unpacks one when it loads, since gpt-oss-20b unpacked fits no device. A quantized weight is the
-   tensors the operator takes, the packed `u8`, the scales and the zero points,
-   and the bit width and block size are the composite's attributes. So it has
-   no type of its own, which the block formats under Known gaps wait for.
-   Finished when Gemma 3 (270M)'s `q4` export picks the tokens onnxruntime
-   picks from it on every device.
-2. [ ] The rest of gpt-oss-20b's operators: onnxruntime's `QMoE` and
+1. [ ] The rest of gpt-oss-20b's operators: onnxruntime's `QMoE` and
    `SkipSimplifiedLayerNormalization`, and a `GroupQueryAttention` with
    attention sinks. Stage 0 gives every node a shape per output, as it does
    `Split`'s, which the normalization's four outputs need. A `QMoE` decomposes
@@ -67,7 +57,7 @@ the two `Cast`s give `int32`.
    the experts the token routes to. Finished when `operators_test.wado` holds
    each to onnxruntime on every device, and `PjrtBackend::analyzing` reports
    the temporaries of both forms for a prompt and for a step.
-3. [ ] Experts held on demand. An expert is one slice along the first axis of
+2. [ ] Experts held on demand. An expert is one slice along the first axis of
    each `QMoE` input the operator's definition indexes by expert, so no model
    is named. A device holds as many experts as a budget the caller sets: all
    of them on a TPU chip, fewer on a GPU of 8 GB and on `Cpu`. The rest stay
@@ -78,7 +68,7 @@ the two `Cast`s give `int32`.
    them. So the host waits once a layer, which The MVP Is Tier 1 Only says a
    `QMoE` spares it. Finished when `operators_test.wado` holds a `QMoE` to
    onnxruntime with a budget of half its experts on every device.
-4. [ ] gpt-oss-20b, a mixture of experts. Finished when
+3. [ ] gpt-oss-20b, a mixture of experts. Finished when
    `example/gpt-oss-20b/` continues a prompt with the tokens onnxruntime picks
    from onnx-community's `q4f16` export on `Cpu`, under `wado run-webgpu` on a
    device with 8 GB, and under `wado run-pjrt`, with no line that names a
@@ -199,8 +189,9 @@ Work the road to gpt-oss-20b does not pass. It is unordered.
   it, and its tokens are unchanged.
 - [ ] The StableHLO front end. Finished when the MLP exported from JAX checks
   and runs through the same pipeline as its ONNX form.
-- [ ] int4. `DequantizeLinear` with a `block_size` fused into the `MatMul` it
-  feeds, which is what makes a model small enough to download. Finished when
+- [ ] int4 through ONNX's own operators. `DequantizeLinear` with a
+  `block_size` before the `MatMul` it feeds is a quantized product, as
+  `MatMulNBits` is. Finished when
   an int4 checkpoint from GPTQ or AWQ produces the f16 checkpoint's output
   within tolerance.
 
@@ -208,11 +199,17 @@ Work the road to gpt-oss-20b does not pass. It is unordered.
 
 ### Operators
 
-`conformance/operators_test.wado` lists the operators Loam lowers. One outside
-ONNX's default domain is among them, onnxruntime's
-`com.microsoft.GroupQueryAttention`, without position ids, interleaved rotation
-or a quantized cache. ONNX's `Attention` is not. Any other operator stops the
-build naming itself.
+`conformance/operators_test.wado` lists the operators Loam lowers. Three
+outside ONNX's default domain are among them, onnxruntime's:
+
+- `GroupQueryAttention`, without position ids, interleaved rotation or a
+  quantized cache.
+- `MatMulNBits`, without `g_idx`, a prepacked weight, or zero points in the
+  input's float.
+- `GatherBlockQuantized`, over a table of rank 2 gathered along its rows and
+  quantized along its columns.
+
+ONNX's `Attention` is not. Any other operator stops the build naming itself.
 
 A node other than `Split`, `If` and `GroupQueryAttention` produces one output.
 `TopK` and the recurrent operators name several, and stage 0 gives only those
@@ -305,8 +302,8 @@ arithmetic is faster gains nothing from it. No Kiln option chooses arithmetic
 in f16 yet. One would, on a device that offers `shader-f16`, and a graph built
 with it would be held to a tolerance rather than to the f32 path's bits.
 
-Its attention kernel writes f32s alone, so a half graph's attention runs
-decomposed. A tensor is held in `f32`, `f16`, `bf16`, `u8`, `i64` or `bool`,
+Its attention and quantized kernels write f32s alone, so a half graph's
+attention, quantized products and quantized gathers run decomposed. A tensor is held in `f32`, `f16`, `bf16`, `u8`, `i64` or `bool`,
 and every other element type stops the build naming it. So does a `CastLike`
 of a value computed at run, since it converts only a tensor the build knows.
 Arithmetic in `double` and the integer types is a second instantiation of the

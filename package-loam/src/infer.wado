@@ -1718,7 +1718,7 @@ pub fn quantization(node: &Node) -> Result<Quantization, InferError> {
         return Result::Err(attribute_error(node, "bits", `is ${bits}, and a byte packs 2, 4 or 8`));
     }
     let block = attr_read(node, node.required_int_attr("block_size"))?;
-    if !(16 <= block <= 1 << 30) || block & (block - 1) != 0 {
+    if !(16 <= block <= 1 << 30) || block & block - 1 != 0 {
         return Result::Err(attribute_error(node, "block_size", `is ${block}, which must be a power of two from 16`));
     }
     return Result::Ok(Quantization { bits: bits as i32, block: block as i32 });

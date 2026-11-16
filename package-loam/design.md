@@ -250,3 +250,40 @@ step of every prompt, so a deviation above can exceed a pick's lead:
 | Run, in `example/gemma3-270m/` | Smallest lead |
 | ------------------------------ | ------------- |
 | `node generate.mjs`            | 0.03125       |
+
+## Quantized Weights
+
+onnxruntime's `MatMulNBits` and `GatherBlockQuantized` read weights packed 2, 4
+or 8 bits to a value, in blocks that share a scale and a zero point. A
+quantized weight is the tensors the operator takes: the packed `u8`, the scales
+and the zero points. The bit width and the block size are attributes of two
+`Graph` composites, `quantized_product` and `quantized_gather`, so the weight
+has no type of its own.
+
+Each composite's decomposition is its meaning. `Graph` has no bitwise
+operation, so it unpacks a byte by division: the low bits first, as
+onnxruntime packs them. A block without a zero point is centered on
+`2^(bits-1)`. A gathered index past either end of the table, after one wrap
+from the end, gives a row of zeros, which onnxruntime gives as well.
+
+No device unpacks a weight when it loads.
+
+- `Cpu` dequantizes one row of the weight at a time, rounded as the
+  decomposition rounds it and summed as `dot_general` sums, so it computes the
+  decomposition's bits.
+- `WebGpuBackend` holds a `u8` tensor four bytes to a word. The product runs
+  one workgroup per output column and eight input rows, each lane unpacking
+  every 256th byte of the column. The gather runs one invocation per output
+  element.
+- `PjrtBackend` compiles the decomposition, which XLA fuses.
+
+Each row is the largest deviation of the first token's logits from
+onnxruntime's, for Gemma 3 (270M)'s `q4` export, on an NVIDIA RTX 4060 Ti over
+Vulkan and on XLA's CPU plugin. Every row picks onnxruntime's tokens, whose
+smallest lead over the next logit is 0.0165.
+
+| Run, in `example/gemma3-270m/`                           | "Hello, my name is" | The France prompt |
+| -------------------------------------------------------- | ------------------- | ----------------- |
+| `wado run --collector drc q4_cpu.wado`                   | 0.0000777           | 0.000122          |
+| `wado run-webgpu q4_webgpu.wado`                         | 0.0000758           | 0.000104          |
+| `wado run-pjrt -O2 --plugin libpjrt_cpu.so q4_pjrt.wado` | 0.0000820           | 0.000102          |

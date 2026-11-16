@@ -216,7 +216,13 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     println(`windowed ${apart(&mut gpu, &cases::windowed(&mut gpu, &gpu.upload(&w)), &cases::windowed(cpu, &w))}`);
 
     let q = cases::quantized_case();
-    let want_quantized = cases::quantizing(cpu, &q.a, &[q.weight, q.scales, q.zero_points], &[q.table, q.table_scales], &q.ids);
+    let want_quantized = cases::quantizing(
+        cpu,
+        &q.a,
+        &[q.weight, q.scales, q.zero_points],
+        &[q.table, q.table_scales],
+        &q.ids,
+    );
     let quantized_weight = [
         gpu.upload(&q.weight),
         gpu.upload(&q.scales),

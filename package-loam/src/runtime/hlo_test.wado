@@ -607,16 +607,28 @@ fn quantized_weight() -> [Tensor<f32, [A, B]>, Tensor<u8, [C, D, B]>, Tensor<f32
     packed[16] = 0xf0;
     packed[24] = 0x37;
     return [
-        Tensor { data: a, extents: [2, 20] },
-        Tensor { data: packed, extents: [2, 2, 8] },
-        Tensor { data: [0.5, 2.0, 0.25, -1.0], extents: [2, 2] },
+        Tensor {
+            data: a,
+            extents: [2, 20],
+        },
+        Tensor {
+            data: packed,
+            extents: [2, 2, 8],
+        },
+        Tensor {
+            data: [0.5, 2.0, 0.25, -1.0],
+            extents: [2, 2],
+        },
     ];
 }
 
 test "a quantized product reads each block less its zero point, times its scale" {
     let g = &mut Cpu {};
     let [a, packed, scales] = quantized_weight();
-    let zero_points = Tensor::<u8, [C, A]> { data: [0x38, 0x01], extents: [2, 1] };
+    let zero_points = Tensor::<u8, [C, A]> {
+        data: [0x38, 0x01],
+        extents: [2, 1],
+    };
     let y: Tensor<f32, [A, C]> = g.quantized_product(
         &a,
         &packed,
@@ -646,13 +658,22 @@ test "a quantized product unpacks two and eight bits as it does four" {
     let mut a = List::<f32>::filled(32, 0.0);
     a[5] = 1.0;
     a[16 + 7] = 1.0;
-    let one = Tensor::<f32, [C, D]> { data: [0.5], extents: [1, 1] };
+    let one = Tensor::<f32, [C, D]> {
+        data: [0.5],
+        extents: [1, 1],
+    };
     // Column 5 is the second pair of bits of byte 1, column 7 its last pair.
     let mut pairs = List::<u8>::filled(4, 0);
     pairs[1] = 0x0c;
     let twos = g.quantized_product::<f32, [A, B], C, D, B, D, [A, C]>(
-        &Tensor::<f32, [A, B]> { data: a, extents: [2, 16] },
-        &Tensor::<u8, [C, D, B]> { data: pairs, extents: [1, 1, 4] },
+        &Tensor::<f32, [A, B]> {
+            data: a,
+            extents: [2, 16],
+        },
+        &Tensor::<u8, [C, D, B]> {
+            data: pairs,
+            extents: [1, 1, 4],
+        },
         &one,
         null,
         &Quantized { bits: 2, block: 16 },
@@ -663,8 +684,14 @@ test "a quantized product unpacks two and eight bits as it does four" {
     let mut b = List::<f32>::filled(16, 0.0);
     b[3] = 1.0;
     let eights = g.quantized_product::<f32, [A, B], C, D, B, D, [A, C]>(
-        &Tensor::<f32, [A, B]> { data: b, extents: [1, 16] },
-        &Tensor::<u8, [C, D, B]> { data: bytes, extents: [1, 1, 16] },
+        &Tensor::<f32, [A, B]> {
+            data: b,
+            extents: [1, 16],
+        },
+        &Tensor::<u8, [C, D, B]> {
+            data: bytes,
+            extents: [1, 1, 16],
+        },
         &one,
         null,
         &Quantized { bits: 8, block: 16 },
@@ -678,7 +705,19 @@ fn quantized_row(even: f32, odd: f32, even_end: f32, odd_end: f32) -> List<f32> 
     let mut row: List<f32> = [];
     for let k of 0..<20 {
         let first = k < 16;
-        row.push(if k % 2 == 0 { if first { even } else { even_end } } else { if first { odd } else { odd_end } });
+        row.push(if k % 2 == 0 {
+            if first {
+                even;
+            } else {
+                even_end;
+            }
+        } else {
+            if first {
+                odd;
+            } else {
+                odd_end;
+            }
+        });
     }
     return row;
 }
@@ -689,10 +728,22 @@ test "a quantized gather dequantizes the rows it takes, and zeros for an index o
     for let b of [0x21, 0x43, 0x65] as List<u8> {
         bytes.extend(&List::<u8>::filled(10, b));
     }
-    let table = Tensor::<u8, [A, B]> { data: bytes, extents: [3, 10] };
-    let scales = Tensor::<f32, [A, C]> { data: [1.0, 10.0, 1.0, 10.0, 1.0, 10.0], extents: [3, 2] };
-    let zero_points = Tensor::<u8, [A, D]> { data: [0x00, 0x11, 0x21], extents: [3, 1] };
-    let indices = Tensor::<i64, [C, D]> { data: [2, -3, 5, 0], extents: [2, 2] };
+    let table = Tensor::<u8, [A, B]> {
+        data: bytes,
+        extents: [3, 10],
+    };
+    let scales = Tensor::<f32, [A, C]> {
+        data: [1.0, 10.0, 1.0, 10.0, 1.0, 10.0],
+        extents: [3, 2],
+    };
+    let zero_points = Tensor::<u8, [A, D]> {
+        data: [0x00, 0x11, 0x21],
+        extents: [3, 1],
+    };
+    let indices = Tensor::<i64, [C, D]> {
+        data: [2, -3, 5, 0],
+        extents: [2, 2],
+    };
     let y: Tensor<f32, [C, D, B]> = g.quantized_gather(
         &table,
         &indices,
