@@ -1384,8 +1384,12 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
             value,
             storage,
         } => {
-            let value = value.map(|value| elab_value_expr(value, cx));
+            let mut value = value.map(|value| elab_value_expr(value, cx));
             if cx.carries_affine(type_id) {
+                // A declaration writes nothing, so a slot entered again holds
+                // the value its scope already dropped: scope exit and the first
+                // assignment would drop that value once more.
+                value.get_or_insert_with(|| TirExpr::new(TirExprKind::Null, type_id, span));
                 cx.declare(Live {
                     local: local_index,
                     name: name.clone(),

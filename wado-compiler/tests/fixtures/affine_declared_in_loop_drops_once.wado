@@ -1,0 +1,28 @@
+// A `let t: T;` writes nothing, so the slot a loop enters again still held
+// the value the last iteration dropped: its first assignment and the scope's
+// exit both dropped that value once more (WEP: Affine Types).
+
+affine struct Tok {
+    id: i32,
+}
+
+global mut drops: i32 = 0;
+
+impl Drop for Tok {
+    fn drop(self) {
+        drops += 1;
+    }
+}
+
+test {
+    for let i of 0..<3 {
+        let t: Tok;
+        if i == 0 {
+            t = Tok { id: i };
+        } else {
+            t = Tok { id: i + 10 };
+        }
+        assert t.id >= 0;
+    }
+    assert drops == 3;
+}
