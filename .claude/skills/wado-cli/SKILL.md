@@ -17,25 +17,26 @@ Inside the wado repository, `wado` means `cargo run --bin wado --`.
 Usage: wado <command> [options]
 
 Commands:
-  init [options]                      Create a new wado.toml manifest
-  update [options]                    Resolve dependencies and write wado.lock
-  fetch [options]                     Download the project's registry dependencies
-  clean [options]                     Evict derived cache state (git worktrees)
-  build [options]                     Build the project's worlds from wado.toml
-  compile [options] <file.wado>       Compile a single Wado source file
-  check [options] [file.wado | dir]   Verify a source file and its Kiln generators
-  run [options] [file.wado]           Compile and run a Wado CLI program
-  serve [options] [file.wado]         Compile and serve a Wado HTTP service
-  test [options] [files or dirs...]   Run tests in Wado source files
-  format [options] <file.wado>...     Format a Wado source file
-  doc [options] <file.wado>...        Generate documentation from source files
-  dump [options] <file.wado>...       Dump compiler internal state
-  wit [options] [file.wado | dir]     Emit the WIT contract for a Wado program
-  syntax [options]                    Generate syntax definition files
-  lsp [options]                       Start the language server (LSP over stdio)
-  query <kind> [options] <file.wado>  Query language service information
-  publish [options]                   Check whether the package can be published
-  help [command]                      Show a command's help, builtin or external
+  init [options]                         Create a new wado.toml manifest
+  update [options]                       Resolve dependencies and write wado.lock
+  fetch [options]                        Download the project's registry dependencies
+  clean [options]                        Evict derived cache state (git worktrees)
+  build [options]                        Build the project's worlds from wado.toml
+  compile [options] <file.wado>          Compile a single Wado source file
+  check [options] [file.wado | dir]      Verify a source file and its Kiln generators
+  run [options] [file.wado]              Compile and run a Wado CLI program
+  serve [options] [file.wado]            Compile and serve a Wado HTTP service
+  test [options] [files or dirs...]      Run tests in Wado source files
+  format [options] <file.wado>...        Format a Wado source file
+  doc [options] <file.wado | module>...  Generate or search the API reference of modules
+  spec [options] [<name>[#section]]      Read or search the bundled language specification
+  dump [options] <file.wado>...          Dump compiler internal state
+  wit [options] [file.wado | dir]        Emit the WIT contract for a Wado program
+  syntax [options]                       Generate syntax definition files
+  lsp [options]                          Start the language server (LSP over stdio)
+  query <kind> [options] <file.wado>     Query language service information
+  publish [options]                      Check whether the package can be published
+  help [command]                         Show a command's help, builtin or external
 
 Global options:
   --help     Show this help message
@@ -46,6 +47,20 @@ Global options:
 `build` works from a `wado.toml` and writes `build/<world>.wasm`. `compile`
 takes exactly one source file; `dump`, `doc`, and `format` take several.
 `check`, `run`, `serve`, and `wit` fall back to the manifest when given no path.
+
+## Reference Lookup
+
+`wado spec` prints the specification and the cheatsheet bundled into the
+binary, so they match the compiler in use. `wado doc` prints a module's API.
+Each takes `--search <query>`, and each hit is the argument that prints it.
+
+```sh
+wado spec                          # the documents
+wado spec control-flow#let-else    # one section, by its GitHub anchor
+wado spec --search "let else"      # sections holding every term
+wado doc --search unwrap_or        # API items of every stdlib module
+wado doc --search parse ./lib.wado # API items of the named inputs only
+```
 
 ## External Commands
 

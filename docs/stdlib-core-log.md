@@ -491,3 +491,16 @@ so at `Info` both `Trace` and `Debug` are off.
 #### `Warn`
 
 #### `Error`
+
+#### `pub fn name(&self) -> String`
+
+Lowercase wire name (`"info"`) — the JSON spelling and the one
+`parse_directives` and `-D log.level=` accept.
+
+#### `pub fn label(&self) -> String`
+
+Uppercase label, as `TextSink` writes it.
+
+#### `impl LenientFromStr for Level`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Level, LenientParseError>`

@@ -90,3 +90,7 @@ The pointer is not an RFC 6901 JSON Pointer.
 The pointer names no value, and `set` cannot make one there: a step
 through a scalar, an array index past the end, or the root for
 `remove`.
+
+#### `impl Display for EditError`
+
+##### `fn fmt(&self, f: &mut Formatter)`

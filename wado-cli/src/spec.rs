@@ -1,0 +1,482 @@
+//! `wado spec`: the specification and the cheatsheet, bundled into the binary.
+//! See [WEP: The `spec` Command](../../docs/wep-2026-11-17-spec-command.md).
+
+use std::fmt::Write as _;
+
+use lexopt::Arg::Value;
+
+use crate::args::{self, CliExit};
+use crate::search::{self, Query};
+
+/// Every bundled document, by the name `wado spec` takes, in reading order.
+const DOCUMENTS: &[(&str, &str)] = &[
+    ("cheatsheet", include_str!("../../docs/cheatsheet.md")),
+    ("overview", include_str!("../../docs/spec-overview.md")),
+    ("lexical", include_str!("../../docs/spec-lexical.md")),
+    ("literals", include_str!("../../docs/spec-literals.md")),
+    (
+        "expressions",
+        include_str!("../../docs/spec-expressions.md"),
+    ),
+    ("types", include_str!("../../docs/spec-types.md")),
+    ("patterns", include_str!("../../docs/spec-patterns.md")),
+    (
+        "control-flow",
+        include_str!("../../docs/spec-control-flow.md"),
+    ),
+    ("assertions", include_str!("../../docs/spec-assertions.md")),
+    ("functions", include_str!("../../docs/spec-functions.md")),
+    ("memory", include_str!("../../docs/spec-memory.md")),
+    ("traits", include_str!("../../docs/spec-traits.md")),
+    (
+        "standard-traits",
+        include_str!("../../docs/spec-standard-traits.md"),
+    ),
+    ("affine", include_str!("../../docs/spec-affine.md")),
+    ("reflection", include_str!("../../docs/spec-reflection.md")),
+    ("effects", include_str!("../../docs/spec-effects.md")),
+    ("modules", include_str!("../../docs/spec-modules.md")),
+    ("packages", include_str!("../../docs/spec-packages.md")),
+    ("kiln", include_str!("../../docs/spec-kiln.md")),
+    ("worlds", include_str!("../../docs/spec-worlds.md")),
+    ("components", include_str!("../../docs/spec-components.md")),
+    (
+        "serialization",
+        include_str!("../../docs/spec-serialization.md"),
+    ),
+    ("attributes", include_str!("../../docs/spec-attributes.md")),
+    (
+        "diagnostics",
+        include_str!("../../docs/spec-diagnostics.md"),
+    ),
+    ("testing", include_str!("../../docs/spec-testing.md")),
+    ("pgo", include_str!("../../docs/spec-pgo.md")),
+];
+
+/// A heading and the lines it heads, up to the next heading of any level.
+struct Section<'a> {
+    level: usize,
+    title: &'a str,
+    slug: String,
+    /// Index of the heading's line.
+    start: usize,
+    /// Index one past the last line of the section and its subsections.
+    end: usize,
+    /// The lines under the heading, up to the next heading of any level.
+    body: String,
+}
+
+/// A bundled document split into its sections.
+struct Document<'a> {
+    name: &'static str,
+    text: &'a str,
+    lines: Vec<&'a str>,
+    sections: Vec<Section<'a>>,
+}
+
+impl<'a> Document<'a> {
+    fn parse(name: &'static str, text: &'a str) -> Self {
+        let lines: Vec<&str> = text.lines().collect();
+        let mut headings: Vec<(usize, usize, &str)> = Vec::new();
+        let mut fence: Option<(char, usize)> = None;
+        for (i, line) in lines.iter().enumerate() {
+            let trimmed = line.trim_start();
+            if let Some(open) = fence {
+                if fence_run(trimmed).is_some_and(|(c, n)| {
+                    c == open.0 && n >= open.1 && trimmed[n..].trim().is_empty()
+                }) {
+                    fence = None;
+                }
+                continue;
+            }
+            if let Some(run) = fence_run(trimmed) {
+                fence = Some(run);
+                continue;
+            }
+            if let Some((level, title)) = heading(line) {
+                headings.push((i, level, title));
+            }
+        }
+
+        let mut seen: Vec<String> = Vec::new();
+        let sections = headings
+            .iter()
+            .enumerate()
+            .map(|(k, &(start, level, title))| {
+                let next = headings.get(k + 1).map_or(lines.len(), |h| h.0);
+                let end = headings[k + 1..]
+                    .iter()
+                    .find(|h| h.1 <= level)
+                    .map_or(lines.len(), |h| h.0);
+                let base = slug(title);
+                let repeats = seen.iter().filter(|s| **s == base).count();
+                seen.push(base.clone());
+                Section {
+                    level,
+                    title,
+                    slug: if repeats == 0 {
+                        base
+                    } else {
+                        format!("{base}-{repeats}")
+                    },
+                    start,
+                    end,
+                    body: lines[start + 1..next].join("\n"),
+                }
+            })
+            .collect();
+        Self {
+            name,
+            text,
+            lines,
+            sections,
+        }
+    }
+
+    fn title(&self) -> &str {
+        self.sections
+            .first()
+            .filter(|s| s.level == 1)
+            .map_or(self.name, |s| s.title)
+    }
+
+    fn section(&self, slug: &str) -> Option<&Section<'a>> {
+        self.sections.iter().find(|s| s.slug == slug)
+    }
+
+    fn text_of(&self, section: &Section) -> String {
+        let mut text = self.lines[section.start..section.end].join("\n");
+        text.push('\n');
+        text
+    }
+
+    /// The argument of `wado spec` that prints `section`.
+    fn address(&self, section: &Section) -> String {
+        if section.level == 1 {
+            self.name.to_string()
+        } else {
+            format!("{}#{}", self.name, section.slug)
+        }
+    }
+}
+
+/// The fence character and the length of its run, if `line` opens or closes
+/// a fenced code block.
+fn fence_run(line: &str) -> Option<(char, usize)> {
+    let c = line.chars().next().filter(|c| *c == '`' || *c == '~')?;
+    let n = line.chars().take_while(|x| *x == c).count();
+    (n >= 3).then_some((c, n))
+}
+
+/// The level and text of an ATX heading.
+fn heading(line: &str) -> Option<(usize, &str)> {
+    let level = line.chars().take_while(|c| *c == '#').count();
+    let rest = line[level..].strip_prefix(' ')?;
+    (1..=6).contains(&level).then(|| (level, rest.trim()))
+}
+
+/// The anchor GitHub gives a heading: lowercase, punctuation dropped, spaces
+/// turned into `-`.
+fn slug(title: &str) -> String {
+    title
+        .to_lowercase()
+        .chars()
+        .filter_map(|c| match c {
+            ' ' => Some('-'),
+            c if c.is_alphanumeric() || c == '-' || c == '_' => Some(c),
+            _ => None,
+        })
+        .collect()
+}
+
+fn documents() -> Vec<Document<'static>> {
+    DOCUMENTS
+        .iter()
+        .map(|(name, text)| Document::parse(name, text))
+        .collect()
+}
+
+pub struct SpecOptions {
+    target: Option<String>,
+    search: Option<String>,
+}
+
+#[derive(Clone, Copy)]
+enum Opt {
+    Search,
+    Help,
+}
+
+impl Opt {
+    const ALL: &[Self] = &[Self::Search, Self::Help];
+
+    const fn spec(self) -> args::OptSpec {
+        match self {
+            Self::Search => args::OptSpec {
+                long: Some("search"),
+                short: Some('s'),
+                value: Some("<query>"),
+                desc: "List the sections holding every term of the query, \
+                       within <name> if one is given",
+            },
+            Self::Help => args::HELP_SPEC,
+        }
+    }
+}
+
+fn usage() -> String {
+    let mut buf = String::new();
+    writeln!(buf, "Usage: wado spec [options] [<name>[#section]]").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(
+        buf,
+        "Print the language specification or the cheatsheet bundled into this binary."
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "With no name, list the documents. A section is named by its GitHub anchor."
+    )
+    .unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Options:").unwrap();
+    write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
+    buf
+}
+
+pub fn parse_args(mut parser: lexopt::Parser) -> Result<SpecOptions, CliExit> {
+    let usage = usage();
+    let mut target = None;
+    let mut search = None;
+    while let Some(arg) = args::next_arg(&mut parser)? {
+        if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
+            match opt {
+                Opt::Search => search = Some(args::require_string(&mut parser)?),
+                Opt::Help => return Err(CliExit::help(usage)),
+            }
+        } else if let Value(val) = &arg
+            && target.is_none()
+        {
+            target = Some(val.to_string_lossy().into_owned());
+        } else {
+            return Err(args::unexpected_arg(arg, &usage));
+        }
+    }
+    Ok(SpecOptions { target, search })
+}
+
+pub fn run(opts: &SpecOptions) -> Result<(), CliExit> {
+    let docs = documents();
+    match (&opts.search, &opts.target) {
+        (Some(query), target) => {
+            let scope = match target {
+                Some(name) => vec![find_document(&docs, name)?],
+                None => docs.iter().collect(),
+            };
+            print!("{}", search_documents(&scope, query)?);
+        }
+        (None, Some(target)) => print!("{}", print_target(&docs, target)?),
+        (None, None) => print!("{}", index(&docs)),
+    }
+    Ok(())
+}
+
+fn index(docs: &[Document]) -> String {
+    let width = docs.iter().map(|d| d.name.len()).max().unwrap_or(0);
+    let mut out = String::new();
+    for doc in docs {
+        writeln!(out, "{:width$}  {}", doc.name, doc.title()).unwrap();
+    }
+    writeln!(
+        out,
+        "\n`wado spec <name>[#section]` prints one; \
+         `wado spec --search <query>` searches them all."
+    )
+    .unwrap();
+    out
+}
+
+fn find_document<'d>(docs: &'d [Document<'d>], name: &str) -> Result<&'d Document<'d>, CliExit> {
+    docs.iter().find(|d| d.name == name).ok_or_else(|| {
+        CliExit::error(format!(
+            "no document named `{name}`; `wado spec` lists them"
+        ))
+    })
+}
+
+fn print_target(docs: &[Document], target: &str) -> Result<String, CliExit> {
+    let (name, anchor) = match target.split_once('#') {
+        Some((name, anchor)) => (name, Some(anchor)),
+        None => (target, None),
+    };
+    let doc = find_document(docs, name)?;
+    let Some(anchor) = anchor else {
+        return Ok(doc.text.to_string());
+    };
+    let section = doc.section(anchor).ok_or_else(|| {
+        CliExit::error(format!(
+            "no section `{anchor}` in `{name}`; `wado spec --search` finds one"
+        ))
+    })?;
+    Ok(doc.text_of(section))
+}
+
+fn search_documents(docs: &[&Document], query: &str) -> Result<String, CliExit> {
+    let query = Query::parse(query).ok_or_else(|| CliExit::error("the query is empty"))?;
+    let mut hits = Vec::new();
+    for doc in docs {
+        for section in &doc.sections {
+            if let Some(score) = query.score(&[(section.title, 10), (&section.body, 1)]) {
+                hits.push((score, (*doc, section)));
+            }
+        }
+    }
+    let hits = search::rank(hits);
+    if hits.is_empty() {
+        return Err(CliExit::error(
+            "nothing in the specification matches; \
+             `wado doc --search` searches the standard library's API",
+        ));
+    }
+    let mut out = String::new();
+    for (doc, section) in hits.iter().take(search::SHOWN_HITS) {
+        let place = if section.level == 1 {
+            section.title.to_string()
+        } else {
+            format!("{} › {}", doc.title(), section.title)
+        };
+        writeln!(out, "{}  {place}", doc.address(section)).unwrap();
+        if let Some(line) = query.snippet(&section.body) {
+            writeln!(out, "    {line}").unwrap();
+        }
+    }
+    if let Some(rest) = search::rest_line(hits.len()) {
+        writeln!(out, "{rest}").unwrap();
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The file `name` is bundled from, relative to `docs/`.
+    fn file_name(name: &str) -> String {
+        if name == "cheatsheet" {
+            "cheatsheet.md".to_string()
+        } else {
+            format!("spec-{name}.md")
+        }
+    }
+
+    #[test]
+    fn every_spec_file_is_bundled() {
+        let docs_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../docs");
+        let mut on_disk: Vec<String> = std::fs::read_dir(docs_dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|f| f == "cheatsheet.md" || (f.starts_with("spec-") && f.ends_with(".md")))
+            .collect();
+        on_disk.sort();
+        let mut bundled: Vec<String> = DOCUMENTS.iter().map(|(n, _)| file_name(n)).collect();
+        bundled.sort();
+        assert_eq!(bundled, on_disk);
+    }
+
+    /// A link between bundled documents names a section `wado spec` finds, so
+    /// the anchors it computes are GitHub's.
+    #[test]
+    fn every_link_between_bundled_documents_resolves() {
+        let docs = documents();
+        let mut broken = Vec::new();
+        for (name, text) in DOCUMENTS {
+            for (i, link) in text.match_indices("](./") {
+                let rest = &text[i + link.len()..];
+                let target = &rest[..rest.find(')').unwrap()];
+                let Some((file, anchor)) = target.split_once('#') else {
+                    continue;
+                };
+                let Some(doc) = docs.iter().find(|d| file_name(d.name) == file) else {
+                    continue;
+                };
+                if doc.section(anchor).is_none() {
+                    broken.push(format!("{name}: {target}"));
+                }
+            }
+        }
+        assert!(
+            broken.is_empty(),
+            "unresolved links:\n{}",
+            broken.join("\n")
+        );
+    }
+
+    #[test]
+    fn slug_follows_github() {
+        assert_eq!(slug("Let Else"), "let-else");
+        assert_eq!(
+            slug("`#[param]` / `#[param(from_env = \"...\")]`"),
+            "param--paramfrom_env--"
+        );
+        assert_eq!(
+            slug("Tuple for-of (compile-time expansion)"),
+            "tuple-for-of-compile-time-expansion"
+        );
+    }
+
+    const SAMPLE: &str = "# Title\n\nIntro.\n\n## Usage\n\nUse it.\n\n```wado\n# not a heading\n```\n\n### Detail\n\nMore.\n\n## Usage\n\nAgain.\n";
+
+    #[test]
+    fn a_heading_in_a_fence_is_content() {
+        let doc = Document::parse("sample", SAMPLE);
+        let slugs: Vec<&str> = doc.sections.iter().map(|s| s.slug.as_str()).collect();
+        assert_eq!(slugs, ["title", "usage", "detail", "usage-1"]);
+    }
+
+    #[test]
+    fn a_section_holds_its_subsections() {
+        let doc = Document::parse("sample", SAMPLE);
+        let text = doc.text_of(doc.section("usage").unwrap());
+        assert!(
+            text.starts_with("## Usage\n") && text.contains("More."),
+            "{text}"
+        );
+        assert!(!text.contains("Again."), "{text}");
+    }
+
+    #[test]
+    fn search_ranks_a_heading_over_the_body() {
+        let doc = Document::parse("sample", SAMPLE);
+        let out = search_documents(&[&doc], "detail").unwrap();
+        assert!(out.starts_with("sample#detail  Title › Detail\n"), "{out}");
+    }
+
+    #[test]
+    fn search_finds_let_else_in_the_bundle() {
+        let docs = documents();
+        let all: Vec<&Document> = docs.iter().collect();
+        let out = search_documents(&all, "let else").unwrap();
+        assert!(
+            out.lines()
+                .next()
+                .unwrap()
+                .starts_with("control-flow#let-else"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn a_miss_points_at_doc_search() {
+        let doc = Document::parse("sample", SAMPLE);
+        let err = search_documents(&[&doc], "zzz").unwrap_err();
+        assert!(err.message.contains("wado doc --search"), "{}", err.message);
+    }
+
+    #[test]
+    fn an_unknown_section_is_an_error() {
+        let docs = documents();
+        assert!(print_target(&docs, "effects#nope").is_err());
+        assert!(print_target(&docs, "nope").is_err());
+        assert!(print_target(&docs, "effects").unwrap().starts_with("# "));
+    }
+}

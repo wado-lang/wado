@@ -51,17 +51,46 @@ pub struct DocModule {
     pub primitive_types: Vec<DocPrimitiveType>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct DocPrimitiveType {
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub doc: Option<String>,
+/// What the `impl` blocks on a type declare. Every kind of type carries one,
+/// so no kind can leave its methods off the page.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct DocImplMembers {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub constants: Vec<DocFunction>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub methods: Vec<DocFunction>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub trait_impls: Vec<DocTraitImpl>,
+}
+
+impl DocImplMembers {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.constants.is_empty() && self.methods.is_empty() && self.trait_impls.is_empty()
+    }
+
+    /// The constants, the inherent methods, then each trait impl's methods.
+    pub fn functions(&self) -> impl Iterator<Item = &DocFunction> {
+        self.constants
+            .iter()
+            .chain(&self.methods)
+            .chain(self.trait_impls.iter().flat_map(|ti| &ti.methods))
+    }
+
+    fn extend(&mut self, other: Self) {
+        self.constants.extend(other.constants);
+        self.methods.extend(other.methods);
+        self.trait_impls.extend(other.trait_impls);
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DocPrimitiveType {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
+    #[serde(flatten)]
+    pub impls: DocImplMembers,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -84,12 +113,8 @@ pub struct DocStruct {
     pub doc: Option<String>,
     pub fields: Vec<DocField>,
     pub has_private_fields: bool,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub constants: Vec<DocFunction>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub methods: Vec<DocFunction>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub trait_impls: Vec<DocTraitImpl>,
+    #[serde(flatten)]
+    pub impls: DocImplMembers,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -128,12 +153,8 @@ pub struct DocType {
     pub signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub constants: Vec<DocFunction>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub methods: Vec<DocFunction>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub trait_impls: Vec<DocTraitImpl>,
+    #[serde(flatten)]
+    pub impls: DocImplMembers,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -153,6 +174,8 @@ pub struct DocEnum {
     pub cases: Vec<DocEnumCase>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
+    #[serde(flatten)]
+    pub impls: DocImplMembers,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -169,6 +192,8 @@ pub struct DocVariant {
     pub cases: Vec<DocVariantCase>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
+    #[serde(flatten)]
+    pub impls: DocImplMembers,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -205,6 +230,8 @@ pub struct DocFlags {
     pub members: Vec<DocFlagsMember>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
+    #[serde(flatten)]
+    pub impls: DocImplMembers,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -335,9 +362,9 @@ fn extract_doc_filtered(
             Item::Struct(s) => structs.push(build_doc_struct(s, &impls, include_private)),
             Item::Newtype(t) => types.push(build_doc_type(t, &impls, include_private)),
             Item::Global(g) => globals.push(build_doc_global(g)),
-            Item::Enum(e) => enums.push(build_doc_enum(e)),
-            Item::Variant(v) => variants.push(build_doc_variant(v)),
-            Item::Flags(f) => flags.push(build_doc_flags(f)),
+            Item::Enum(e) => enums.push(build_doc_enum(e, &impls, include_private)),
+            Item::Variant(v) => variants.push(build_doc_variant(v, &impls, include_private)),
+            Item::Flags(f) => flags.push(build_doc_flags(f, &impls, include_private)),
             Item::Interface(e) => effects.push(build_doc_interface(e)),
             Item::Resource(r) => {
                 resources.push(build_doc_resource(r, &impls, include_private));
@@ -444,18 +471,13 @@ fn build_doc_struct(s: &StructDecl, impls: &[DocImpl], include_private: bool) ->
         })
         .collect();
 
-    let (methods, trait_impls) = collect_impl_methods_for_type(&s.name, impls, include_private);
-    let constants = collect_impl_constants_for_type(&s.name, impls, include_private);
-
     DocStruct {
         name: s.name.clone(),
         signature: unparse_struct_signature(s, !include_private),
         doc: s.doc.clone(),
         fields,
         has_private_fields,
-        constants,
-        methods,
-        trait_impls,
+        impls: collect_impl_members(&s.name, impls, include_private),
     }
 }
 
@@ -469,15 +491,12 @@ fn build_doc_type(t: &Newtype, impls: &[DocImpl], include_private: bool) -> DocT
     sig.push_str(" = ");
     sig.push_str(&render_type(&t.ty));
 
-    let (methods, trait_impls) = collect_impl_methods_for_type(&t.name, impls, include_private);
     DocType {
         name: t.name.clone(),
         base_type: render_type(&t.ty),
         signature: sig,
         doc: t.doc.clone(),
-        constants: collect_impl_constants_for_type(&t.name, impls, include_private),
-        methods,
-        trait_impls,
+        impls: collect_impl_members(&t.name, impls, include_private),
     }
 }
 
@@ -503,7 +522,7 @@ fn build_doc_global(g: &GlobalDecl) -> DocGlobal {
     }
 }
 
-fn build_doc_enum(e: &EnumDecl) -> DocEnum {
+fn build_doc_enum(e: &EnumDecl, impls: &[DocImpl], include_private: bool) -> DocEnum {
     let cases = e
         .cases
         .iter()
@@ -516,10 +535,11 @@ fn build_doc_enum(e: &EnumDecl) -> DocEnum {
         signature: unparse_enum_signature(e),
         cases,
         doc: e.doc.clone(),
+        impls: collect_impl_members(&e.name, impls, include_private),
     }
 }
 
-fn build_doc_variant(v: &VariantDecl) -> DocVariant {
+fn build_doc_variant(v: &VariantDecl, impls: &[DocImpl], include_private: bool) -> DocVariant {
     let mut sig = String::new();
     if v.visibility.is_public() {
         sig.push_str("pub ");
@@ -543,10 +563,11 @@ fn build_doc_variant(v: &VariantDecl) -> DocVariant {
         signature: sig,
         cases,
         doc: v.doc.clone(),
+        impls: collect_impl_members(&v.name, impls, include_private),
     }
 }
 
-fn build_doc_flags(f: &FlagsDecl) -> DocFlags {
+fn build_doc_flags(f: &FlagsDecl, impls: &[DocImpl], include_private: bool) -> DocFlags {
     let mut sig = String::new();
     if f.visibility.is_public() {
         sig.push_str("pub ");
@@ -567,6 +588,7 @@ fn build_doc_flags(f: &FlagsDecl) -> DocFlags {
         signature: sig,
         members,
         doc: f.doc.clone(),
+        impls: collect_impl_members(&f.name, impls, include_private),
     }
 }
 
@@ -994,9 +1016,7 @@ fn merge_reexported_items(parent: &mut DocModule, child: &DocModule, names: &Ind
 fn merge_primitive_types(target: &mut Vec<DocPrimitiveType>, source: Vec<DocPrimitiveType>) {
     for src in source {
         if let Some(existing) = target.iter_mut().find(|t| t.name == src.name) {
-            existing.constants.extend(src.constants);
-            existing.methods.extend(src.methods);
-            existing.trait_impls.extend(src.trait_impls);
+            existing.impls.extend(src.impls);
         } else {
             target.push(src);
         }
@@ -1014,6 +1034,19 @@ fn extract_item_name<'a>(sig: &'a str, keyword: &str) -> &'a str {
         .find(|c: char| !is_ident_continue(c))
         .unwrap_or(rest.len());
     &rest[..end]
+}
+
+fn collect_impl_members(
+    type_name: &str,
+    impls: &[DocImpl],
+    include_private: bool,
+) -> DocImplMembers {
+    let (methods, trait_impls) = collect_impl_methods_for_type(type_name, impls, include_private);
+    DocImplMembers {
+        constants: collect_impl_constants_for_type(type_name, impls, include_private),
+        methods,
+        trait_impls,
+    }
 }
 
 fn collect_impl_methods_for_type(
@@ -1119,27 +1152,19 @@ fn collect_primitive_types_from_module(
     let mut by_name: IndexMap<&str, DocPrimitiveType> = IndexMap::default();
 
     for prim_name in PrimitiveType::all_primitive_names() {
-        let (methods, trait_impls) =
-            collect_impl_methods_for_type(prim_name, &impls, include_private);
-
-        let constants = collect_impl_constants_for_type(prim_name, &impls, include_private);
-
-        if constants.is_empty() && methods.is_empty() && trait_impls.is_empty() {
+        let members = collect_impl_members(prim_name, &impls, include_private);
+        if members.is_empty() {
             continue;
         }
-
-        let entry = by_name
+        by_name
             .entry(prim_name)
             .or_insert_with(|| DocPrimitiveType {
                 name: prim_name.to_string(),
                 doc: None,
-                constants: Vec::new(),
-                methods: Vec::new(),
-                trait_impls: Vec::new(),
-            });
-        entry.constants.extend(constants);
-        entry.methods.extend(methods);
-        entry.trait_impls.extend(trait_impls);
+                impls: DocImplMembers::default(),
+            })
+            .impls
+            .extend(members);
     }
 
     by_name.into_values().collect()

@@ -180,3 +180,11 @@ Error type for URL parsing failures.
 #### `InvalidUtf8(Utf8Error)`
 
 The percent-decoded bytes are not UTF-8.
+
+#### `impl Display for ParseError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Eq for ParseError`
+
+##### `fn eq(&self, other: &Self) -> bool`

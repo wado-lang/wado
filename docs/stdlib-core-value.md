@@ -285,3 +285,59 @@ remaining arms are produced by binary formats such as CBOR.
 #### `Undefined`
 
 #### `Unknown(ByteList)`
+
+#### `impl From<Array<Value>> for Value`
+
+##### `fn from(elements: Array<Value>) -> Value`
+
+#### `impl From<Array<[String, Value]>> for Value`
+
+##### `fn from(entries: Array<[String, Value]>) -> Value`
+
+#### `impl From<Option<!>> for Value`
+
+##### `fn from(value: Option<!>) -> Value`
+
+#### `impl From<bool> for Value`
+
+##### `fn from(value: bool) -> Value`
+
+#### `impl From<i32> for Value`
+
+##### `fn from(value: i32) -> Value`
+
+#### `impl From<i64> for Value`
+
+##### `fn from(value: i64) -> Value`
+
+#### `impl From<u32> for Value`
+
+##### `fn from(value: u32) -> Value`
+
+#### `impl From<u64> for Value`
+
+##### `fn from(value: u64) -> Value`
+
+#### `impl From<f64> for Value`
+
+##### `fn from(value: f64) -> Value`
+
+#### `impl From<String> for Value`
+
+##### `fn from(value: String) -> Value`
+
+#### `impl Eq for Value`
+
+##### `fn eq(&self, other: &Value) -> bool`
+
+#### `impl Serialize for Value`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Inspect for Value`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl Deserialize for Value`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<Value, DeserializeError>`

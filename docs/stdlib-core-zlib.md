@@ -461,3 +461,7 @@ Error type for zlib/gzip decompression operations.
 #### `OutputExceedsMax`
 
 #### `InvalidDeflateData`
+
+#### `impl Display for ZlibError`
+
+##### `fn fmt(&self, f: &mut Formatter)`

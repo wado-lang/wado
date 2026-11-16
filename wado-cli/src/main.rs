@@ -26,6 +26,7 @@ enum Cmd {
     Test,
     Format,
     Doc,
+    Spec,
     Dump,
     Wit,
     Syntax,
@@ -49,6 +50,7 @@ impl Cmd {
         Self::Test,
         Self::Format,
         Self::Doc,
+        Self::Spec,
         Self::Dump,
         Self::Wit,
         Self::Syntax,
@@ -72,6 +74,7 @@ impl Cmd {
             Self::Test => "test",
             Self::Format => "format",
             Self::Doc => "doc",
+            Self::Spec => "spec",
             Self::Dump => "dump",
             Self::Wit => "wit",
             Self::Syntax => "syntax",
@@ -89,7 +92,9 @@ impl Cmd {
             Self::Compile => "[options] <file.wado>",
             Self::Wit => "[options] [file.wado | dir]",
             Self::Test => "[options] [files or dirs...]",
-            Self::Format | Self::Doc | Self::Dump => "[options] <file.wado>...",
+            Self::Format | Self::Dump => "[options] <file.wado>...",
+            Self::Doc => "[options] <file.wado | module>...",
+            Self::Spec => "[options] [<name>[#section]]",
             Self::Init
             | Self::Update
             | Self::Fetch
@@ -116,7 +121,8 @@ impl Cmd {
             Self::Serve => "Compile and serve a Wado HTTP service",
             Self::Test => "Run tests in Wado source files",
             Self::Format => "Format a Wado source file",
-            Self::Doc => "Generate documentation from source files",
+            Self::Doc => "Generate or search the API reference of modules",
+            Self::Spec => "Read or search the bundled language specification",
             Self::Dump => "Dump compiler internal state",
             Self::Wit => "Emit the WIT contract for a Wado program",
             Self::Syntax => "Generate syntax definition files",
@@ -383,6 +389,10 @@ async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
         Cmd::Doc => {
             let opts = wado_cli::doc::parse_args(parser)?;
             Box::pin(wado_cli::doc::run(opts)).await
+        }
+        Cmd::Spec => {
+            let opts = wado_cli::spec::parse_args(parser)?;
+            wado_cli::spec::run(&opts)
         }
         Cmd::Dump => {
             let opts = wado_cli::dump::parse_args(parser)?;
