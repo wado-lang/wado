@@ -30,7 +30,10 @@ fn performed_exprs(body: &Body) -> IndexSet<ExprId> {
     let mut performed = IndexSet::default();
     for s in reachable_stmts(body) {
         let op = match &body.stmts[s].kind {
-            StmtKind::Expr(op) | StmtKind::Let { value: Some(op), .. } => *op,
+            StmtKind::Expr(op)
+            | StmtKind::Let {
+                value: Some(op), ..
+            } => *op,
             StmtKind::Let { value: None, .. }
             | StmtKind::Return { .. }
             | StmtKind::If { .. }
@@ -380,7 +383,10 @@ pub(super) fn aggregate_safe_locals(
             } => {
                 read_value(*op, &mut value_reads);
             }
-            StmtKind::Let { value: Some(op), .. } | StmtKind::Expr(op) => {
+            StmtKind::Let {
+                value: Some(op), ..
+            }
+            | StmtKind::Expr(op) => {
                 read_value(*op, &mut value_reads);
             }
             _ => {}

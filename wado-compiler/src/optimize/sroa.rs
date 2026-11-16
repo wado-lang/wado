@@ -1272,7 +1272,10 @@ fn write_back_sites(
     let mut sites: IndexMap<StmtId, Vec<WriteBack>> = IndexMap::default();
     body.for_each_reachable_node(|node| {
         let NodeRef::Stmt(stmt) = node else { return };
-        let (StmtKind::Expr(op) | StmtKind::Let { value: Some(op), .. }) = &body.stmts[stmt].kind
+        let (StmtKind::Expr(op)
+        | StmtKind::Let {
+            value: Some(op), ..
+        }) = &body.stmts[stmt].kind
         else {
             return;
         };

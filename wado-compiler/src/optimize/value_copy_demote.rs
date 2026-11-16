@@ -378,9 +378,7 @@ fn stmt_binding(body: &Body, s: StmtId) -> Option<(ExprId, u32)> {
     match &body.stmts[s].kind {
         StmtKind::Let {
             local_index, value, ..
-        } => value
-            .and_then(Operand::as_expr)
-            .map(|e| (e, *local_index)),
+        } => value.and_then(Operand::as_expr).map(|e| (e, *local_index)),
         _ => None,
     }
 }

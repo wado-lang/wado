@@ -152,16 +152,18 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
         let StmtKind::Let { value, is_mut, .. } = &body.stmts[*s].kind else {
             return true;
         };
-        !value.and_then(Operand::as_expr).is_some_and(|e| match &body.exprs[e].kind {
-            ExprKind::Local { .. } => !is_mut,
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-                expr: referent,
-            } => referent
-                .as_expr()
-                .is_some_and(|re| is_place_expr(&body.exprs[re].kind)),
-            _ => false,
-        })
+        !value
+            .and_then(Operand::as_expr)
+            .is_some_and(|e| match &body.exprs[e].kind {
+                ExprKind::Local { .. } => !is_mut,
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                    expr: referent,
+                } => referent
+                    .as_expr()
+                    .is_some_and(|re| is_place_expr(&body.exprs[re].kind)),
+                _ => false,
+            })
     });
     no_shadow_copy.then_some((value_e, inner))
 }

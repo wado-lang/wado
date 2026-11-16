@@ -395,9 +395,7 @@ impl<'a> CostWalk<'a> {
             // so labeled-block-valued callees are not systematically undercounted.
             StmtKind::Let { value, .. }
             | StmtKind::Return { value }
-            | StmtKind::Break { value, .. } => {
-                value.map_or(0, |v| self.operand(v, seen))
-            }
+            | StmtKind::Break { value, .. } => value.map_or(0, |v| self.operand(v, seen)),
             StmtKind::If {
                 condition,
                 then_block,

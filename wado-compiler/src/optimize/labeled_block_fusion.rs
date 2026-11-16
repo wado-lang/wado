@@ -1800,9 +1800,9 @@ fn subst_temp_reads_in_stmt(engine: &mut Engine, s: StmtId, f: &TempReads) {
         StmtKind::LetDestructure { value, .. } | StmtKind::Expr(value) => {
             value.as_expr().map_or(Shape::None, Shape::Expr)
         }
-        StmtKind::Let { value, .. } | StmtKind::Return { value } => {
-            value.and_then(Operand::as_expr).map_or(Shape::None, Shape::Expr)
-        }
+        StmtKind::Let { value, .. } | StmtKind::Return { value } => value
+            .and_then(Operand::as_expr)
+            .map_or(Shape::None, Shape::Expr),
         StmtKind::If {
             condition,
             then_block,
@@ -2272,7 +2272,8 @@ struct SlotTempSroa {
     /// The name each slot is read under, for a materializing exit's projection.
     names: IndexMap<u32, String>,
     /// The declaring `let mut slot = <init>` each one needs ahead of the block:
-    /// its type's zero, or none, declaring it without a value, where it has none.
+    /// its type's zero, or `None`, a declaration without a value, where the
+    /// type has no zero.
     inits: Vec<(u32, TypeId, Option<Operand>)>,
     span: Span,
 }

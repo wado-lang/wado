@@ -799,7 +799,9 @@ impl RunScan<'_> {
                 else_block,
             } => self.branches(*condition, std::iter::once(*then_block), *else_block),
             StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => self.block(*b),
-            StmtKind::Let { value: Some(op), .. }
+            StmtKind::Let {
+                value: Some(op), ..
+            }
             | StmtKind::LetDestructure { value: op, .. }
             | StmtKind::Expr(op)
             | StmtKind::Return { value: Some(op) }
