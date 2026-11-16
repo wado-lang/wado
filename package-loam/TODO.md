@@ -50,9 +50,8 @@ the two `Cast`s give `int32`.
 
 1. [ ] Loading a tensor at a time. `load` reads a
    [`WeightSource`](./design.md#weight-sources) a range at a time, and a range
-   names one of several data files. What is left: a tensor reaches the device
-   in its stored type, where today each passes through the guest as a list of
-   its primitive. Finished when a checkpoint larger than the guest's memory,
+   names one of several data files, and a tensor reaches the backend in its
+   stored bytes. Finished when a checkpoint larger than the guest's memory,
    spread over several data files, loads onto `WebGpuBackend` and
    `PjrtBackend`, and `Cpu` loads one it can hold through the same source.
 2. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,

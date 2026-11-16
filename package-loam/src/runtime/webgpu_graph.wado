@@ -161,11 +161,12 @@ impl Graph for WebGpuBackend {
     }
 
     /// A weight read only as products' right matrix, or as a gather's rows, is
-    /// kept as `kept_contracted` keeps one: column by column along the axis the
-    /// products contract, in a half where one loses nothing. The weights of a
-    /// `Joined` launch are kept so as one matrix, side by side, and those of a
-    /// `Paired` one as one matrix whose columns alternate between theirs, each
-    /// a view of it. Any other is kept as `keep` keeps it.
+    /// kept as `kept_matrix` keeps one, read from its stored bytes along the
+    /// axis the products contract. The weights of a `Joined` launch are kept
+    /// so as one matrix, side by side, and those of a `Paired` one as one
+    /// matrix whose columns alternate between theirs, each a view of it. Any
+    /// other float or bool weight is kept in f32 words, and a `u8` or `i64`
+    /// one as `keep` keeps it.
     fn kept_weights<Er>(
         &mut self,
         record: fn(&mut Recorder) -> Recorded with _,

@@ -4,7 +4,10 @@ use { Element, Tensor } from "./tensor.wado";
 use { HostWeight } from "./weight.wado";
 
 fn round_trips<E: Element>(data: List<E>) {
-    let t = Tensor::<E, [i32]> { data, extents: [data.len()] };
+    let t = Tensor::<E, [i32]> {
+        data,
+        extents: [data.len()],
+    };
     assert HostWeight::of(&t).decoded() == host_of(&t);
 }
 
@@ -18,9 +21,15 @@ test "a weight decodes to the elements it was stored from, in each element" {
 }
 
 test "a weight is stored little-endian, a bool a byte" {
-    let t = Tensor::<f32, [i32]> { data: [1.0], extents: [1] };
+    let t = Tensor::<f32, [i32]> {
+        data: [1.0],
+        extents: [1],
+    };
     assert HostWeight::of(&t).bytes().to_list() == [0x00, 0x00, 0x80, 0x3f] as List<u8>;
-    let b = Tensor::<bool, [i32]> { data: [true, false], extents: [2] };
+    let b = Tensor::<bool, [i32]> {
+        data: [true, false],
+        extents: [2],
+    };
     assert HostWeight::of(&b).bytes().to_list() == [1, 0] as List<u8>;
 }
 

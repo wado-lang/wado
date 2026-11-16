@@ -242,7 +242,9 @@ impl PjrtBackend {
     }
 
     fn sent<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> i32 with PjrtHost {
-        return self.stored(done(PjrtHost::upload(element_type(E::kind()), buffer_extents(&t.extents), le_bytes(&data_of(&t.data)))));
+        return self.stored(done(PjrtHost::upload(element_type(E::kind()), buffer_extents(&t.extents), le_bytes(&data_of(
+            &t.data,
+        )))));
     }
 
     /// `w`, a weight of f32s: in bf16 where that loses nothing, an f32 whose
