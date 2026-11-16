@@ -48,7 +48,6 @@ use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::nir::FuncId;
 use crate::niri::is_ctfe_eligible;
-use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types};
 use crate::optimize::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
 use crate::optimize::mod_ref::SummaryCache;
 use crate::parallel::{Executor, lock};
@@ -2955,14 +2954,8 @@ fn inline_round(
         return false;
     }
 
-    // Purity inputs for the graph-preserving inline gate (the splice site below):
-    // an inlined call that mutates no caller-reachable state lets the caller's
-    // `value_of` survive the splice. Computed once over the project; the
-    // per-call `pure_calls` set is taken per body just before inlining it.
-    let inline_first_param_types = first_param_types(project);
     let inline_type_table = project.type_table.borrow();
     let type_table: &TypeTable = &inline_type_table;
-    let inline_call_immutability = CallImmutability::new(project, type_table, &exec);
     let carried = carried_calls(&inline_candidates);
     let functions = &project.functions;
     let held = &holds.held;
@@ -3036,8 +3029,6 @@ fn inline_round(
         }
         // Track which functions (by `FuncId`) were inlined into this function
         let mut inlined_funcs: Vec<FuncId> = Vec::new();
-        // Splice-point re-valuation records (Method A): one per inlined block.
-        let mut reval: Vec<InlineRevalInfo> = Vec::new();
         let local_count = func.local_count();
         let glue = func.is_cm_binding || func.is_dispatch_wrapper;
         let func = &mut *func;
@@ -3059,19 +3050,6 @@ fn inline_round(
             }),
         };
         let mut labels = InlineLabels::default();
-        // Calls in this body that mutate no caller-reachable state, taken
-        // *before* the splice (the call exprs survive as `reval.call_expr`
-        // keys). Drives the graph-preserving gate below.
-        let pure_set = {
-            let body = func.body.as_ref().unwrap();
-            call_verdicts(
-                body,
-                type_table,
-                &inline_first_param_types,
-                &inline_call_immutability,
-            )
-            .pure
-        };
         {
             let body = func.body.as_mut().unwrap();
             let root = body.root();
@@ -3093,7 +3071,6 @@ fn inline_round(
                 type_table,
                 &mut inlined_funcs,
                 &mut labels,
-                &mut reval,
                 entry,
             );
         }
@@ -3104,23 +3081,6 @@ fn inline_round(
         }
         if inlined_funcs.is_empty() {
             return (deferred, None);
-        }
-        // The splice restructures the body, staling the persisted graph's
-        // `loop_entry_values` (licm's pre-header snapshots — the only
-        // value-graph state any consumer still reads, `value_of` having
-        // been retired). Keep them only for a graph-preserving splice —
-        // every inlined call **pure** (mutates no caller-reachable state)
-        // and **loop-free** (introduces no new back-edge) — otherwise clear
-        // so licm re-derives conservatively (an absent entry is sound). The
-        // value pool and promoted operands carry every value a consumer
-        // reads across the splice.
-        let preserving = func.body.as_ref().is_some_and(|b| {
-            reval.iter().all(|i| {
-                pure_set.contains(&i.call_expr) && !arena_query::block_contains_loop(b, i.block)
-            })
-        });
-        if !preserving && let Some(vg) = func.body.as_mut().and_then(|b| b.value_graph.as_mut()) {
-            vg.loop_entry_values.clear();
         }
         // Only this caller's body changed (callee bodies are copied, not
         // modified), so the sweep marks just the caller. Its call-graph edges
@@ -3135,7 +3095,6 @@ fn inline_round(
         lock(&deferrals).push((fid, deferred));
         spliced
     });
-    drop(inline_call_immutability);
     drop(inline_type_table);
     if let Some((_, round)) = record.as_mut() {
         let mut sites = std::mem::take(&mut *lock(&site_decisions));
@@ -3354,7 +3313,6 @@ fn inline_calls_in_block(
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
     labels: &mut InlineLabels,
-    reval: &mut Vec<InlineRevalInfo>,
     mut site: Site,
 ) {
     enum Shape {
@@ -3399,7 +3357,6 @@ fn inline_calls_in_block(
                 type_table,
                 inlined_funcs,
                 labels,
-                reval,
                 site,
             ),
             Shape::If(cond, tb, eb) => {
@@ -3413,7 +3370,6 @@ fn inline_calls_in_block(
                         type_table,
                         inlined_funcs,
                         labels,
-                        reval,
                         site,
                     );
                 }
@@ -3426,7 +3382,6 @@ fn inline_calls_in_block(
                     type_table,
                     inlined_funcs,
                     labels,
-                    reval,
                     site,
                 );
                 if let Some(eb) = eb {
@@ -3439,7 +3394,6 @@ fn inline_calls_in_block(
                         type_table,
                         inlined_funcs,
                         labels,
-                        reval,
                         site,
                     );
                 }
@@ -3453,7 +3407,6 @@ fn inline_calls_in_block(
                 type_table,
                 inlined_funcs,
                 labels,
-                reval,
                 site,
             ),
             Shape::Loop(b) => {
@@ -3469,7 +3422,6 @@ fn inline_calls_in_block(
                     type_table,
                     inlined_funcs,
                     labels,
-                    reval,
                     site.entering_loop(),
                 );
                 frame.loop_calls.pop();
@@ -3583,14 +3535,6 @@ impl InlineCtx<'_> {
     }
 }
 
-/// A spliced inlined block, recorded so the post-splice graph-preserving gate
-/// can classify it (the call's purity + whether the block introduces a loop).
-pub(super) struct InlineRevalInfo {
-    pub block: BlockId,
-    /// The original `Call` expr being inlined, keyed against `pure_calls`.
-    pub call_expr: ExprId,
-}
-
 /// For an argument `&mut <temporary>`, the `let mut` binding the temporary
 /// to local `index` under `name`, which the argument then references instead. A reference
 /// to a local is one `ref_elim` folds away and a compile-time frame can write
@@ -3665,11 +3609,9 @@ fn build_inlined_labeled_block(
     func_name: &str,
     bindings: Vec<InlineBinding>,
     call_span: Span,
-    call_expr: ExprId,
     landing: Heat,
     frame: &mut CallerFrame<'_>,
     labels: &mut InlineLabels,
-    reval: &mut Vec<InlineRevalInfo>,
 ) -> ExprId {
     let label = labels.fresh(caller, func_name);
 
@@ -3777,10 +3719,6 @@ fn build_inlined_labeled_block(
         stmts: block_stmts,
         span: call_span,
     });
-    reval.push(InlineRevalInfo {
-        block: bid,
-        call_expr,
-    });
     caller.exprs.push(ExprNode {
         kind: ExprKind::LabeledBlock {
             label,
@@ -3803,7 +3741,6 @@ fn try_inline_call_expr(
     frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     labels: &mut InlineLabels,
-    reval: &mut Vec<InlineRevalInfo>,
     site: Site,
 ) -> Option<(ExprId, FuncId, Heat)> {
     let ExprKind::Call { func_id, .. } = caller.exprs[call_id].kind else {
@@ -3933,11 +3870,9 @@ fn try_inline_call_expr(
         &candidate.name,
         bindings,
         call_span,
-        call_id,
         landing,
         frame,
         labels,
-        reval,
     );
     Some((inlined, func_id, heat))
 }
@@ -4591,11 +4526,10 @@ fn inline_calls_in_expr(
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
     labels: &mut InlineLabels,
-    reval: &mut Vec<InlineRevalInfo>,
     site: Site,
 ) {
     if let Some((new_id, inlined_key, heat)) =
-        try_inline_call_expr(body, e, candidates, frame, type_table, labels, reval, site)
+        try_inline_call_expr(body, e, candidates, frame, type_table, labels, site)
     {
         // Move the inlined labeled-block node into the call slot and null out
         // the now-dead `new_id`, so the inner block is owned by exactly one node
@@ -4625,7 +4559,6 @@ fn inline_calls_in_expr(
             type_table,
             inlined_funcs,
             labels,
-            reval,
             site,
         );
         return;
@@ -4641,7 +4574,6 @@ fn inline_calls_in_expr(
             type_table,
             inlined_funcs,
             labels,
-            reval,
             site,
         );
     }
@@ -4655,7 +4587,6 @@ fn inline_calls_in_expr(
             type_table,
             inlined_funcs,
             labels,
-            reval,
             site,
         );
     }

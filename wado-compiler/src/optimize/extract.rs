@@ -30,7 +30,7 @@ use crate::nir_visitor::reachable_exprs;
 use crate::optimize::alias::{
     CallImmutability, builder_alias_sets, call_verdicts, first_param_types,
 };
-use crate::optimize::arena_query::{def_dominates, storage_root};
+use crate::optimize::arena_query::{local_available_at, storage_root};
 use crate::optimize::heap_effect::HeapEffectsCache;
 use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
@@ -177,33 +177,9 @@ fn materialise_point(e: &Engine, ids: &[ExprId]) -> Option<(StmtId, BlockId)> {
     Some((stmt, block))
 }
 
-/// Whether a `local.get i` placed at `before_stmt` reads the local's value: a
-/// parameter is entry-defined, any other local needs its `let` to dominate the
-/// point. Answers *where*, not *which version* — `multi_version_locals` settles
-/// that separately.
-fn leaf_available_at(
-    e: &Engine,
-    local: u32,
-    before_stmt: StmtId,
-    param_set: &hashmap::IndexSet<u32>,
-) -> bool {
-    if param_set.contains(&local) {
-        return true;
-    }
-    match e.local_def(local) {
-        Some(def_stmt) => def_dominates(e, def_stmt, before_stmt),
-        None => false,
-    }
-}
-
 /// Whether the receiver of the `FieldAccess` value `rep` is available at the
-/// materialisation statement — [`leaf_available_at`] on the receiver's local.
-fn receiver_available_at(
-    e: &Engine,
-    rep: ValueId,
-    before_stmt: StmtId,
-    param_set: &hashmap::IndexSet<u32>,
-) -> bool {
+/// materialisation statement — [`local_available_at`] on the receiver's local.
+fn receiver_available_at(e: &Engine, rep: ValueId, before_stmt: StmtId) -> bool {
     let ValueKind::FieldAccess { receiver, .. } = e.body.values.kind(rep) else {
         return false;
     };
@@ -215,7 +191,7 @@ fn receiver_available_at(
     let Some(i) = local else {
         return false;
     };
-    leaf_available_at(e, i, before_stmt, param_set)
+    local_available_at(e, i, before_stmt)
 }
 
 /// Stamp `type_id` onto `v` and its arithmetic children so the WIR extractor
@@ -305,10 +281,9 @@ pub(super) fn freeze_pure_arith(
                 &call_immutability,
             );
             let local_count = locals.len();
-            let param_set: hashmap::IndexSet<u32> = params.iter().map(|p| p.local_index).collect();
             // Locals a call may mutate through a `&mut` escape (`reference`'s
-            // `set_bool(&mut c, …)`). A constant read of one is point-specific and the
-            // build-once graph cannot keep it across the structural passes; an
+            // `set_bool(&mut c, …)`). A constant read of one is point-specific and
+            // does not survive the structural passes; an
             // *immutable*-`&`-escaped local (licm's `&config`) is stable and its field
             // constant freezes soundly. Keep a copy before `set_alias_sets` moves it.
             let mut_escaped_leaf = alias.mut_escaped.clone();
@@ -351,7 +326,6 @@ pub(super) fn freeze_pure_arith(
                 mut_escaped_leaf: &mut_escaped_leaf,
                 multi_version_locals: &multi_version_locals,
                 address_taken: &address_taken,
-                param_set: &param_set,
                 field_values: &field_values,
                 phase,
                 include_fields,
@@ -386,10 +360,9 @@ pub(super) fn freeze_pure_arith(
                 let is_field =
                     matches!(engine.body.values.kind(rep), ValueKind::FieldAccess { .. });
                 if is_field {
-                    changed |=
-                        apply_field_materialise(&mut engine, rep, &ids, id_ty, &param_set, &found);
+                    changed |= apply_field_materialise(&mut engine, rep, &ids, id_ty, &found);
                 } else {
-                    changed |= apply_value_freeze(&mut engine, rep, &ids, id_ty, &param_set);
+                    changed |= apply_value_freeze(&mut engine, rep, &ids, id_ty);
                 }
             }
             (changed, refusals)
@@ -498,8 +471,6 @@ struct FreezeCtx<'a> {
     multi_version_locals: &'a hashmap::IndexSet<u32>,
     /// `&x` / `&mut x` locals — excluded as `FieldAccess` receivers.
     address_taken: &'a hashmap::IndexSet<u32>,
-    /// Parameter locals — entry-defined and available at every point.
-    param_set: &'a hashmap::IndexSet<u32>,
     /// The `FieldAccess` representative of each field read, from the scratch
     /// re-walk ([`Engine::scoped_field_values`]). Empty unless `include_fields`.
     field_values: &'a hashmap::IndexMap<ExprId, ValueId>,
@@ -616,7 +587,7 @@ fn classify_candidate(
                 _ => None,
             };
             let recv_stable = recv_local.is_some_and(|i| {
-                let owned_enough = ctx.param_set.contains(&i)
+                let owned_enough = engine.is_param(i)
                     || !ctx
                         .type_table
                         .is_reference(engine.locals()[i as usize].type_id);
@@ -653,7 +624,6 @@ fn apply_field_materialise(
     rep: ValueId,
     ids: &[ExprId],
     id_ty: tir::TypeId,
-    param_set: &hashmap::IndexSet<u32>,
     found: &FieldValues,
 ) -> bool {
     if ids.len() < 2 {
@@ -667,7 +637,7 @@ fn apply_field_materialise(
     if !found.pinnable_before(rep, s) {
         return false;
     }
-    if !receiver_available_at(engine, rep, s, param_set) {
+    if !receiver_available_at(engine, rep, s) {
         return false;
     }
     let span = engine.body.exprs[ids[0]].span;
@@ -752,7 +722,6 @@ fn apply_value_freeze(
     rep: ValueId,
     ids: &[ExprId],
     id_ty: tir::TypeId,
-    param_set: &hashmap::IndexSet<u32>,
 ) -> bool {
     let mut leaves = hashmap::IndexSet::default();
     engine.body.values.collect_opaque_locals(rep, &mut leaves);
@@ -761,11 +730,7 @@ fn apply_value_freeze(
     let point = shareable.then(|| materialise_point(engine, ids)).flatten();
     let anchorable = !leaves.is_empty()
         && !engine.body.values.may_trap(rep)
-        && point.is_some_and(|(s, _)| {
-            leaves
-                .iter()
-                .all(|&l| leaf_available_at(engine, l, s, param_set))
-        });
+        && point.is_some_and(|(s, _)| leaves.iter().all(|&l| local_available_at(engine, l, s)));
     let materialize = shareable && anchorable;
     let mut changed = false;
     if materialize {
@@ -805,12 +770,12 @@ fn apply_value_freeze(
 /// representative or when folding is disabled (no type table).
 pub(super) fn extract_const(e: &mut Engine, rep: ValueId, at: ExprId) -> Option<Value> {
     if !matches!(
-        e.value_kind(rep),
+        e.body.values.kind(rep),
         ValueKind::Int(_, _) | ValueKind::Float(_, _) | ValueKind::Bool(_) | ValueKind::Char(_)
     ) {
         return None;
     }
-    let vk = e.value_kind(rep).clone();
+    let vk = e.body.values.kind(rep).clone();
     let type_id = e.body.exprs[at].type_id;
     let tt = e.type_table();
     let prim = prim_of(type_id, tt)

@@ -97,14 +97,8 @@ fn forward_one(
     engine.set_pure_builtin_callees(pure_builtin_callees);
     engine.set_ctfe_builtins(ctfe_builtins);
     if is_cm_export {
-        // `ensure_value_graph` never rebuilds, so what is seeded here is what
-        // licm and `promote_fields` inherit.
         engine.seed_params();
     }
-    // Before the first query: `scoped_const_reads` only *grows* a graph that
-    // already exists, and this session is the one that set the real alias sets,
-    // so a body reaching it without one forwarded nothing at all.
-    engine.build_value_graph_now();
     unsafe_locals.extend(engine.body_address_taken().iter().copied());
     // The complement of the unsafe set: what disqualifies a local is being
     // address-taken, not being an aggregate.

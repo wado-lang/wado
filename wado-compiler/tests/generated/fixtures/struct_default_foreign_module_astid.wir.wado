@@ -2742,13 +2742,13 @@ fn "struct_default_foreign_module_astid.wado/core:benchmark/Benchmark::run<i32>$
     let start_6: u64;
     let end: u64;
     let v: ref "core:prelude/string.wado//String";
+    let $v2: u64;
     let $v2_seen: bool;
     let $v3: u64;
     let $v3_seen: bool;
     let $v4: bool;
     let $v4_seen: bool;
     let est: u64;
-    let hi: u64;
     let $sroa_slot_49: f64;
     let $sroa_slot_50: ref null "core:prelude/string.wado//String";
     let $licm_iterations_50: i32;
@@ -2817,25 +2817,26 @@ fn "struct_default_foreign_module_astid.wado/core:benchmark/Benchmark::run<i32>$
                 };
             };
             break_if b367 local.tee start_6("struct_default_foreign_module_astid.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"() - start_6) >=u 1000000000_i64;
+            end = builtin::i64_extend_i32_s($load_3);
             $licm_iterations_50 = $load_3 >= 1;
             $v2_seen = 0;
             $v3_seen = 0;
             $v4_seen = 0;
             if @unlikely((if $licm_iterations_50 -> i32 {
-                $v4 = end = start_6; $v2_seen = 1; end <u $v3 = 1000000000_i64; $v3_seen = 1; 1000000000_i64;
+                $v4 = $v2 = start_6; $v2_seen = 1; $v2 <u $v3 = 1000000000_i64; $v3_seen = 1; 1000000000_i64;
                 $v4_seen = 1;
                 $v4;
             } else {
                 0;
             }) == 0) {
                 cold_path;
-                "core:benchmark/next_iterations$cold0$dae[elapsed_ns,target_ns]"($load_3, $licm_iterations_50, end, $v2_seen, $v3, $v3_seen, $v4, $v4_seen);
+                "core:benchmark/next_iterations$cold0$dae[elapsed_ns,target_ns]"($load_3, $licm_iterations_50, $v2, $v2_seen, $v3, $v3_seen, $v4, $v4_seen);
                 unreachable;
             }
-            est = (builtin::i64_extend_i32_s($load_3) * 1000000000_i64) /u select u64(start_6 == 0_i64, 1_i64, start_6);
-            hi = builtin::i64_extend_i32_s($load_3) * 100_i64;
-            if est >u hi {
-                est = hi;
+            est = (end * 1000000000_i64) /u select u64(start_6 == 0_i64, 1_i64, start_6);
+            end = end * 100_i64;
+            if est >u end {
+                est = end;
             }
             if est >u 1000000000_i64 {
                 est = 1000000000_i64;

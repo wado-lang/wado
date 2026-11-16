@@ -376,7 +376,7 @@ pub struct FuncWriteGuard<'a> {
     guard: RwLockWriteGuard<'a, NirFunction>,
     writes: &'a AtomicU64,
     /// [`NirFunction::version`] when the guard was taken.
-    version: (Option<[(u64, u64); 9]>, (u64, u64)),
+    version: (Option<[(u64, u64); 8]>, (u64, u64)),
     /// The function's [`Head`] before the first whole-function mutable borrow.
     head: Option<Head>,
 }
@@ -814,7 +814,7 @@ impl NirFunction {
     }
 
     /// Different after any edit to the body or the locals.
-    pub fn version(&self) -> (Option<[(u64, u64); 9]>, (u64, u64)) {
+    pub fn version(&self) -> (Option<[(u64, u64); 8]>, (u64, u64)) {
         (self.body.as_ref().map(Body::version), self.locals.version())
     }
 

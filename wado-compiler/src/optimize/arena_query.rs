@@ -538,6 +538,15 @@ pub(super) fn def_dominates(e: &Engine, def_stmt: StmtId, before_stmt: StmtId) -
     l > 0 && dp.len() == l && dp[l - 1].1 < mp[l - 1].1
 }
 
+/// Whether a read of `local` placed before `before_stmt` reads a value: a
+/// parameter is entry-defined, any other local needs its `let` to dominate the
+/// point. Answers where, not which version.
+pub(super) fn local_available_at(e: &Engine, local: u32, before_stmt: StmtId) -> bool {
+    e.is_param(local)
+        || e.local_def(local)
+            .is_some_and(|def| def_dominates(e, def, before_stmt))
+}
+
 /// Whether `stmt` never falls through to the statement after it: a `return` /
 /// `break` / `continue`, a call to a `-> !` function such as `panic`, or a
 /// `loop` whose only exits are labeled breaks to an enclosing block.

@@ -27,9 +27,6 @@ struct Census {
     /// The unpromoted half, so the printout carries the ratio.
     expr_operands: usize,
     pool_values: usize,
-    with_value_graph: usize,
-    loop_entry_snapshots: usize,
-    loop_entry_locals: usize,
     /// Reachable expressions per `classify` verdict.
     per_kind: IndexMap<(&'static str, bool), usize>,
     /// Reachable expressions [`flow_resolvable`] admits.
@@ -86,15 +83,6 @@ impl Census {
         self.blocks_allocated += body.blocks.len();
         self.pats_allocated += body.pats.len();
         self.pool_values += body.values.len();
-        if let Some(graph) = &*body.value_graph {
-            self.with_value_graph += 1;
-            self.loop_entry_snapshots += graph.loop_entry_values.len();
-            self.loop_entry_locals += graph
-                .loop_entry_values
-                .values()
-                .map(IndexMap::len)
-                .sum::<usize>();
-        }
         body.for_each_reachable_node(|node| {
             match node {
                 NodeRef::Expr(e) => {
@@ -125,7 +113,7 @@ impl Census {
             TARGET,
             "{at}: {} bodies, reachable expr/stmt/block/pat {}/{}/{}/{}, \
              bloat {:.2}x/{:.2}x/{:.2}x/{:.2}x, operands {} value + {} expr, \
-             pool {} values, {} bodies with a graph ({} loop snapshots, {} locals)",
+             pool {} values",
             self.bodies,
             self.exprs_reachable,
             self.stmts_reachable,
@@ -138,9 +126,6 @@ impl Census {
             self.value_operands,
             self.expr_operands,
             self.pool_values,
-            self.with_value_graph,
-            self.loop_entry_snapshots,
-            self.loop_entry_locals,
         );
         let pure: usize = self
             .per_kind

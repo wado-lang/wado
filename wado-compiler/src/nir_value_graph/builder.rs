@@ -274,20 +274,6 @@ struct FlowArm {
     falls_through: bool,
 }
 
-/// The result of running [`build`] over a function body. The expr→value
-/// side-table (`value_of`) is retired — values are carried by promoted operands
-/// and the value pool — so the only persisted product is `loop_entry_values`,
-/// which licm reads for hoist legality.
-#[derive(Debug, Clone)]
-pub struct ValueGraphBuild {
-    /// Per-loop pre-header snapshot of `current_value`, keyed by the loop
-    /// body's `BlockId`. Hoisting to the pre-header requires each `Local`
-    /// leaf's use-site value to equal this entry value — cross-iteration
-    /// invariance is not enough (`loop { x = 5; … x + n … }` has an
-    /// invariant use value that differs from the pre-header `x`).
-    pub loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
-}
-
 /// The per-function local sets that bound how far a heap write reaches.
 /// Empty sets claim no aliasing, sound only for a body without any.
 #[derive(Default)]
@@ -296,37 +282,6 @@ pub struct AliasSets {
     pub aliased: IndexSet<u32>,
     /// The subset of `aliased` a call may mutate.
     pub mut_escaped: IndexSet<u32>,
-}
-
-/// Build the `ValueGraph` for one function body. Each parameter in
-/// `param_locals` seeds a fresh `Opaque` up front, which is what makes them
-/// visible in the loop-entry snapshots taken before any in-loop read.
-pub fn build(
-    body: &mut Body,
-    param_locals: &[u32],
-    alias: &AliasSets,
-    calls: CallFacts<'_>,
-    type_table: &TypeTable,
-) -> ValueGraphBuild {
-    // Build into the body's own pool: take it out as the seed (so a promoted
-    // `Operand::Value` resolves through the same ids), grow it during the walk,
-    // and write it back. `body.values` is the one persistent pool — ids stay
-    // stable across builds (it only grows), the prerequisite for build-once.
-    let seed = std::mem::take(&mut *body.values);
-    let (pool, loop_entry_values) = {
-        let mut b = Builder::new(&*body, alias, type_table, seed);
-        b.pure_calls.clone_from(calls.pure);
-        b.pure_builtin_callees.clone_from(calls.pure_builtin);
-        b.receiver_immutable_calls
-            .clone_from(calls.receiver_immutable);
-        b.ctfe_builtins.clone_from(calls.ctfe_builtins);
-        b.call_writes.clone_from(calls.writes);
-        b.seed_params(param_locals);
-        b.walk_block(body.root());
-        (b.pool, b.loop_entry_values)
-    };
-    *body.values = pool;
-    ValueGraphBuild { loop_entry_values }
 }
 
 /// Scoped re-valuation of one inlined block, seeded with the call site's
@@ -592,9 +547,6 @@ struct Builder<'a> {
     /// entry and a reassignment reaches neither.
     array_lengths: IndexMap<ValueId, ValueId>,
     type_table: &'a TypeTable,
-    /// Per-loop pre-header `current_value` snapshots. See
-    /// [`ValueGraphBuild::loop_entry_values`].
-    loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
     /// The version counter as each statement began: a `FieldAccess` below a
     /// statement's mark was last written before it, so pinning the load there
     /// still sees it.
@@ -645,7 +597,6 @@ impl<'a> Builder<'a> {
             ctfe_builtins: CtfeBuiltinMap::default(),
             array_lengths: IndexMap::default(),
             type_table,
-            loop_entry_values: IndexMap::default(),
             stmt_entry_version: IndexMap::default(),
             pure_calls: IndexSet::default(),
             pure_builtin_callees: IndexSet::default(),
@@ -2113,11 +2064,7 @@ impl<'a> Builder<'a> {
     fn walk_loop(&mut self, body_block: BlockId) {
         let writes = writes_of_block(self.body, body_block, &mut self.block_writes);
         let heap_effects = collect_loop_heap_effects(self.body, &self.call_facts(), body_block);
-        // Snapshot before the reassigned-local opaques below overwrite the
-        // written locals' pre-loop values.
         self.forget_fresh_invalidations();
-        self.loop_entry_values
-            .insert(body_block, self.current_value.clone());
         // Born-as-operands: give each written local a `LoopPhi { entry, body_iter }`
         // at the loop head instead of a fresh `Opaque`. `entry` is the snapshotted
         // pre-loop value (the phi's first-iteration meaning); the body walk then
@@ -2541,8 +2488,6 @@ mod tests {
 
     // ----- Field store→load forwarding -----
 
-    // ----- Loop-entry value snapshots -----
-
     #[test]
     fn builder_records_value_types_for_extraction() {
         // `let a = <i32 lit>;` — the value carries its source type so extraction
@@ -2840,9 +2785,26 @@ mod tests {
         });
 
         let facts = TestFacts::default();
-        let types = TypeTable::new();
-        build(&mut body, &[], &AliasSets::default(), facts.facts(), &types);
-        assert_eq!(body.values.type_of(placeholder), Some(TypeTable::UNIT));
+        let pool = walked_pool(&body, &AliasSets::default(), facts.facts());
+        assert_eq!(pool.type_of(placeholder), Some(TypeTable::UNIT));
+    }
+
+    /// The pool a walk of the whole of `body` leaves.
+    fn walked_pool(body: &Body, alias: &AliasSets, calls: CallFacts<'_>) -> ValuePool {
+        let mut pool = ValuePool::clone(&body.values);
+        walk_scoped(
+            body,
+            body.root(),
+            0,
+            &[],
+            &IndexMap::default(),
+            alias,
+            &TypeTable::new(),
+            calls,
+            &mut pool,
+            None,
+        );
+        pool
     }
 
     #[test]
@@ -2851,17 +2813,14 @@ mod tests {
         let no_calls = IndexSet::default();
         let no_callees = IndexSet::default();
         let no_builtin_map = CtfeBuiltinMap::default();
-        let types = TypeTable::new();
         let escaped = |order: [u32; 2]| AliasSets {
             mut_escaped: order.into_iter().collect(),
             ..AliasSets::default()
         };
 
         let build_with = |alias: &AliasSets| {
-            let mut body = call_then_add_body();
-            build(
-                &mut body,
-                &[],
+            walked_pool(
+                &call_then_add_body(),
                 alias,
                 CallFacts {
                     pure_builtin: &no_callees,
@@ -2870,9 +2829,8 @@ mod tests {
                     ctfe_builtins: &no_builtin_map,
                     writes: &IndexMap::default(),
                 },
-                &types,
-            );
-            body.values.values.clone()
+            )
+            .values
         };
 
         assert_eq!(build_with(&escaped([0, 1])), build_with(&escaped([1, 0])));

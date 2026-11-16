@@ -1870,7 +1870,6 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize"($mv$input$repr, $mv$input$used)
     let ts: ref "sub/wir_xmodule_return_parser.wado//TokenStream";
     let best_end: i32;
     let best_kind: i32;
-    let first_char: char;
     let $temp_inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_char___1_0: ref "core:prelude/string.wado//StrCharIter";
     let result: ref "core:prelude/list.wado//List<char>";
     let cap: i32;
@@ -1878,6 +1877,8 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize"($mv$input$repr, $mv$input$used)
     let $licm_triv_starts_122: ref "core:prelude/list.wado//List<i32>";
     let $licm_triv_ends_123: ref "core:prelude/list.wado//List<i32>";
     let $licm_triv_chans_124: ref "core:prelude/list.wado//List<i32>";
+    let $cse_161: bool;
+    let $cse_162: bool;
     $temp_inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_char___1_0 = struct.new "core:prelude/string.wado//StrCharIter" { repr: $mv$input$repr, used: $mv$input$used, byte_index: 0 };
     $licm_repr_119 = local.tee result(struct.new "core:prelude/list.wado//List<char>" { repr: array.new_fixed<char>(), used: 0 }).repr;
     b216: block {
@@ -1909,19 +1910,22 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize"($mv$input$repr, $mv$input$used)
             break_if b220 $mv$input$used >= $mv$$local_3$1;
             best_end = -1;
             best_kind = 3;
-            if @unlikely($mv$input$used >=u $mv$$local_3$1) {
+            $cse_161 = $mv$input$used < $mv$$local_3$1;
+            if @unlikely(((0 <= $mv$input$used) & $cse_161) == 0) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv$input$used, $mv$$local_3$1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sub/wir_xmodule_return_parser.wado:1147"), used: 39 });
                 unreachable;
             }
-            if (((local.tee first_char(builtin::array_get_value<char>($licm_repr_119, $mv$input$used)) == 9) | (first_char == 10)) | (first_char == 13)) | (first_char == 32) {
-                if local.tee first_char("sub/wir_xmodule_return_parser.wado/try_WS"(result.repr, result.used, $mv$input$used)) > -1 {
-                    best_end = first_char;
+            $cse_161 = builtin::array_get_value<char>($licm_repr_119, $mv$input$used);
+            $cse_162 = $mv$input$used >= $mv$$local_3$1;
+            if ((($cse_161 == 9) | ($cse_161 == 10)) | ($cse_161 == 13)) | ($cse_161 == 32) {
+                if local.tee $cse_161("sub/wir_xmodule_return_parser.wado/try_WS"(result.repr, result.used, $mv$input$used)) > -1 {
+                    best_end = $cse_161;
                     best_kind = 1;
                 }
-            } else if first_char == 40 {
-                if local.tee first_char($inline_try_lit_lparen_0: block -> i32 {
-                    if (if $mv$input$used >= $mv$$local_3$1 -> i32 {
+            } else if $cse_161 == 40 {
+                if local.tee $cse_161($inline_try_lit_lparen_0: block -> i32 {
+                    if (if $cse_162 -> i32 {
                         1;
                     } else {
                         if @unlikely(0 > $mv$input$used) {
@@ -1934,12 +1938,12 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize"($mv$input$repr, $mv$input$used)
                     }
                     break $inline_try_lit_lparen_0: $mv$input$used + 1;
                 }) > -1 {
-                    best_end = first_char;
+                    best_end = $cse_161;
                     best_kind = 4;
                 }
-            } else if first_char == 41 {
-                if local.tee first_char($inline_try_lit_rparen_1: block -> i32 {
-                    if (if $mv$input$used >= $mv$$local_3$1 -> i32 {
+            } else if $cse_161 == 41 {
+                if local.tee $cse_161($inline_try_lit_rparen_1: block -> i32 {
+                    if (if $cse_162 -> i32 {
                         1;
                     } else {
                         if @unlikely(0 > $mv$input$used) {
@@ -1952,16 +1956,16 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize"($mv$input$repr, $mv$input$used)
                     }
                     break $inline_try_lit_rparen_1: $mv$input$used + 1;
                 }) > -1 {
-                    best_end = first_char;
+                    best_end = $cse_161;
                     best_kind = 5;
                 }
-            } else if (48 <=u first_char) & (first_char <=u 57) {
-                if local.tee first_char("sub/wir_xmodule_return_parser.wado/try_INT"(result.repr, result.used, $mv$input$used)) > -1 {
-                    best_end = first_char;
+            } else if (48 <=u $cse_161) & ($cse_161 <=u 57) {
+                if local.tee $cse_161("sub/wir_xmodule_return_parser.wado/try_INT"(result.repr, result.used, $mv$input$used)) > -1 {
+                    best_end = $cse_161;
                     best_kind = 0;
                 }
-            } else if local.tee first_char("sub/wir_xmodule_return_parser.wado/try_INT"(result.repr, result.used, $mv$input$used)) > -1 {
-                best_end = first_char;
+            } else if local.tee $cse_161("sub/wir_xmodule_return_parser.wado/try_INT"(result.repr, result.used, $mv$input$used)) > -1 {
+                best_end = $cse_161;
                 best_kind = 0;
             }
             if best_end <= $mv$input$used {
@@ -1970,12 +1974,12 @@ fn "sub/wir_xmodule_return_parser.wado/tokenize"($mv$input$repr, $mv$input$used)
                 $mv$input$used = $mv$input$used + 1;
             } else {
                 if best_kind == 1 {
-                    if @unlikely(local.tee first_char($load_5.used) >= builtin::array_len($load_5.repr)) {
+                    if @unlikely(local.tee $cse_161($load_5.used) >= builtin::array_len($load_5.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_5);
                     }
-                    builtin::array_set<i32>($load_5.repr, first_char, best_kind);
-                    $load_5.used = first_char + 1;
+                    builtin::array_set<i32>($load_5.repr, $cse_161, best_kind);
+                    $load_5.used = $cse_161 + 1;
                     if @unlikely(local.tee best_kind($licm_triv_starts_122.used) >= builtin::array_len($licm_triv_starts_122.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($licm_triv_starts_122);
