@@ -126,7 +126,8 @@ pub fn create_serve_engine(
 /// A store whose guest's stdout/stderr are captured into in-memory pipes instead
 /// of inherited — used by `wado test` so a test's own prints can be attributed
 /// to its result instead of racing directly onto the host's real stdout/stderr.
-/// `eval` is the test's handle on `core:eval`, which only a test links.
+/// `eval` is the test's handle on `core:eval`, which only a test links. Each
+/// memory grows to `max_memory` bytes at most.
 ///
 /// # Errors
 ///
@@ -137,6 +138,7 @@ pub fn create_test_store(
     program: &str,
     eval: EvalSession,
     process: ProcessGrant,
+    max_memory: Option<u64>,
 ) -> Result<(Store<WasiState>, MemoryOutputPipe, MemoryOutputPipe)> {
     let (guest, stdout, stderr) =
         GuestState::new_capturing_stdio(preopened_dirs, &[program.to_owned()], process)?;
@@ -144,7 +146,7 @@ pub fn create_test_store(
         eval: Some(eval),
         ..guest.into()
     };
-    Ok((new_store(engine, state), stdout, stderr))
+    Ok((new_store(engine, state, max_memory), stdout, stderr))
 }
 
 /// Create a Linker for `component`: what every guest reaches, and a trap for

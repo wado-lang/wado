@@ -501,13 +501,13 @@ pub fn parse_collector(s: &str) -> Result<Collector, String> {
     }
 }
 
-/// Parse a `--gc-heap-initial` value: a byte count, or one suffixed `k`, `m`
-/// or `g` for binary multiples.
+/// Parse a `--gc-heap-initial` or `--max-memory` value: a byte count, or one
+/// suffixed `k`, `m` or `g` for binary multiples.
 ///
 /// # Errors
 ///
 /// Returns an error message if the value is not a size.
-pub fn parse_gc_heap_size(s: &str) -> Result<u64, String> {
+pub fn parse_size(s: &str) -> Result<u64, String> {
     let lower = s.trim().to_ascii_lowercase();
     let suffixed = |shift: u32| (&lower[..lower.len() - 1], 1u64 << shift);
     let (digits, multiple) = match lower.as_bytes().last() {
@@ -518,10 +518,10 @@ pub fn parse_gc_heap_size(s: &str) -> Result<u64, String> {
     };
     let value: u64 = digits
         .parse()
-        .map_err(|_| format!("invalid GC heap size '{s}'. Use bytes, or a k / m / g suffix"))?;
+        .map_err(|_| format!("invalid size '{s}'. Use bytes, or a k / m / g suffix"))?;
     value
         .checked_mul(multiple)
-        .ok_or_else(|| format!("GC heap size '{s}' does not fit in 64 bits"))
+        .ok_or_else(|| format!("size '{s}' does not fit in 64 bits"))
 }
 
 /// Parse a `--function-alignment` value: a byte count that is a power of two.
@@ -693,6 +693,7 @@ impl CompileKnobOpt {
 pub enum RuntimeKnobOpt {
     Collector,
     GcHeapInitial,
+    MaxMemory,
     FunctionAlignment,
     ReportFuel,
     DenyProcess,
@@ -704,6 +705,7 @@ impl RuntimeKnobOpt {
     pub const ALL: &[Self] = &[
         Self::Collector,
         Self::GcHeapInitial,
+        Self::MaxMemory,
         Self::FunctionAlignment,
         Self::ReportFuel,
         Self::DenyProcess,
@@ -725,6 +727,12 @@ impl RuntimeKnobOpt {
                 short: None,
                 value: Some("<size>"),
                 desc: "GC heap a guest starts with (default: 256m)\nBytes, or a k / m / g suffix. The copying collector splits it\ninto two semi-spaces, so a program allocates through half",
+            },
+            Self::MaxMemory => OptSpec {
+                long: Some("max-memory"),
+                short: None,
+                value: Some("<size>"),
+                desc: "The most each of the guest's memories, its GC heap among them,\nmay grow to (default: no limit). Bytes, or a k / m / g suffix.\nThe GC heap starts no larger than it",
             },
             Self::FunctionAlignment => OptSpec {
                 long: Some("function-alignment"),
@@ -766,6 +774,9 @@ impl RuntimeKnobOpt {
 pub struct RuntimeKnobs {
     pub collector: Collector,
     pub gc_heap_initial_size: u64,
+    /// `--max-memory`: the bytes each memory of the guest may grow to, or no
+    /// limit where `None`.
+    pub max_memory: Option<u64>,
     /// `--function-alignment`: the bytes each compiled function starts at a
     /// multiple of, or Cranelift's own where `None`.
     pub function_alignment: Option<u32>,
@@ -782,6 +793,7 @@ impl Default for RuntimeKnobs {
         Self {
             collector: DEFAULT_COLLECTOR,
             gc_heap_initial_size: DEFAULT_GC_HEAP_INITIAL_SIZE,
+            max_memory: None,
             function_alignment: None,
             report_fuel: false,
             process: ProcessGrant::Offered {
@@ -802,7 +814,11 @@ impl RuntimeKnobs {
             }
             RuntimeKnobOpt::GcHeapInitial => {
                 self.gc_heap_initial_size =
-                    parse_gc_heap_size(&require_string(parser)?).map_err(CliExit::error)?;
+                    parse_size(&require_string(parser)?).map_err(CliExit::error)?;
+            }
+            RuntimeKnobOpt::MaxMemory => {
+                self.max_memory =
+                    Some(parse_size(&require_string(parser)?).map_err(CliExit::error)?);
             }
             RuntimeKnobOpt::FunctionAlignment => {
                 self.function_alignment = Some(
