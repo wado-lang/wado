@@ -274,16 +274,27 @@ No device unpacks a weight when it loads.
 - `WebGpuBackend` holds a `u8` tensor four bytes to a word. The product runs
   one workgroup per output column and eight input rows, each lane unpacking
   every 256th byte of the column. The gather runs one invocation per output
-  element.
+  element. In a half graph each rounds a weight to the half, as the
+  decomposition stores it, and its result once.
 - `PjrtBackend` compiles the decomposition, which XLA fuses.
 
 Each row is the largest deviation of the first token's logits from
 onnxruntime's, for Gemma 3 (270M)'s `q4` export, on an NVIDIA RTX 4060 Ti over
 Vulkan and on XLA's CPU plugin. Every row picks onnxruntime's tokens, whose
-smallest lead over the next logit is 0.0165.
+smallest lead over the next logit is 0.290.
 
 | Run, in `example/gemma3-270m/`                           | "Hello, my name is" | The France prompt |
 | -------------------------------------------------------- | ------------------- | ----------------- |
 | `wado run --collector drc q4_cpu.wado`                   | 0.0000777           | 0.000122          |
 | `wado run-webgpu q4_webgpu.wado`                         | 0.0000758           | 0.000104          |
 | `wado run-pjrt -O2 --plugin libpjrt_cpu.so q4_pjrt.wado` | 0.0000820           | 0.000102          |
+
+The `q4f16` export computes in halves, so its logits sit as far from
+onnxruntime's as the fp16 export's. Every row picks onnxruntime's tokens, whose
+smallest lead is 0.141.
+
+| Run, in `example/gemma3-270m/`            | "Hello, my name is" | The France prompt |
+| ----------------------------------------- | ------------------- | ----------------- |
+| `wado run --collector drc q4f16_cpu.wado` | 0.109               | 0.0781            |
+| `wado run-webgpu q4f16_webgpu.wado`       | 0.141               | 0.102             |
+| `wado run-pjrt -O2 q4f16_pjrt.wado`       | 0.141               | 0.0703            |

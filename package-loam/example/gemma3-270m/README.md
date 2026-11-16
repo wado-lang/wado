@@ -82,6 +82,17 @@ Each device keeps those weights packed. It checks its tokens and logits as
     wado run-webgpu q4_webgpu.wado
     wado run-pjrt --plugin libpjrt_cpu.so q4_pjrt.wado
 
+## The `q4f16` export
+
+`q4f16.wado` builds `onnx/model_q4f16.onnx`: the `q4` export's packed weights
+with half scales, and every computed float a half, as in `fp16`. It checks
+against `generate_q4f16.json` and `build/logits_q4f16.bin`:
+
+    node generate.mjs generate_q4f16.json
+    wado run --collector drc q4f16_cpu.wado
+    wado run-webgpu q4f16_webgpu.wado
+    wado run-pjrt --plugin libpjrt_cpu.so q4f16_pjrt.wado
+
 ## What the build reads
 
 The model is
@@ -110,8 +121,8 @@ a test file to run it once `fetch.sh` has.
   `build/tokenizer_config.json`. `tokenizer_test.wado` checks Loam's against
   it.
 - `generate.json` is the oracle for the model: the tokens onnxruntime picks
-  greedily after each prompt, and its time per token on the CPU and on WebGPU,
-  which must pick the same tokens. `generate.mjs` writes it, running
+  greedily after each prompt, up to the first `<eos>` or `<end_of_turn>`, and
+  its time per token on the CPU and on WebGPU, which must pick the same tokens. `generate.mjs` writes it, running
   `build/model.onnx` with `onnxruntime-node` and feeding each step the attention
   cache, as `model.wado` does. `generate_test.wado` checks Loam's tokens
   against it:

@@ -1,0 +1,12 @@
+//! Gemma 3 (270M)'s `q4f16` export on a PJRT plugin's device, checked as
+//! `q4f16.wado` says.
+
+use { Stderr, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+use { PjrtHost } from "core:pjrt";
+use { PjrtBackend } from "lib:loam";
+use { checked } from "./q4f16.wado";
+
+export fn run() with (Stdout, Stderr, Preopens, PjrtHost) {
+    checked(PjrtBackend::new());
+}

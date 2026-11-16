@@ -22,13 +22,15 @@ delete globalThis.Float16Array;
 /**
  * Writes `dir`/`name` for `decoder`, continuing each of `prompts`, and into
  * `dir`/`logits`, where given, the logits the CPU picks each prompt's first
- * token from: little-endian f32s, a prompt after another.
+ * token from: little-endian f32s, a prompt after another. A prompt's tokens
+ * stop at the first of `ends`, the tokens that end a reply: the picks after
+ * one are noise two providers part on.
  * A decoder is `{ model, layers, emptyPast, half, feeds }`: `emptyPast` is the
  * shape of a layer's cache before the first token, `half` says the cache and
  * the logits are float16, and `feeds(seen)` any input beyond the ids, the mask
  * and the cache.
  */
-export async function writeGenerated({ dir, prompts, decoder, name = 'generate.json', logits }) {
+export async function writeGenerated({ dir, prompts, ends = [], decoder, name = 'generate.json', logits }) {
   const recorded = JSON.parse(readFileSync(join(dir, 'tokenize.json'), 'utf8')).tokenize;
   const cpu = await generate('cpu');
   const webgpu = await generate('webgpu');
@@ -57,10 +59,10 @@ export async function writeGenerated({ dir, prompts, decoder, name = 'generate.j
     const firsts = [];
     for (const prompt of prompts) {
       const { ids } = recorded.find((t) => t.text === prompt);
-      const c = await continued(session, decoder, ids);
+      const c = await continued(session, decoder, ids, ends);
       lead = Math.min(lead, c.lead);
       firsts.push(c.first);
-      timed.push({ prompt, ids, generated: c.generated, ms_per_token: c.ms_after_first / (STEPS - 1) });
+      timed.push({ prompt, ids, generated: c.generated, ms_per_token: c.ms_after_first / (c.generated.length - 1) });
     }
     return { prompts: timed, lead, firsts };
   }
@@ -79,11 +81,12 @@ export async function opened({ model, layers }, provider) {
 }
 
 /**
- * The STEPS tokens greedy decoding picks after `ids` from an empty cache, the
- * smallest lead of a pick over the runner-up, the logits the first is picked
- * from, and the milliseconds the steps after the first took.
+ * The STEPS tokens greedy decoding picks after `ids` from an empty cache, or
+ * those up to the first of `ends`, the smallest lead of a pick over the
+ * runner-up, the logits the first is picked from, and the milliseconds the
+ * steps after the first took.
  */
-export async function continued(session, { layers, emptyPast, half = false, feeds = () => ({}) }, ids) {
+export async function continued(session, { layers, emptyPast, half = false, feeds = () => ({}) }, ids, ends = []) {
   const empty = half ? new ort.Tensor('float16', new Uint16Array(0), emptyPast) : new ort.Tensor('float32', new Float32Array(0), emptyPast);
   const generated = [];
   let lead = Infinity;
@@ -92,7 +95,7 @@ export async function continued(session, { layers, emptyPast, half = false, feed
   let seen = 0;
   let started;
   let first;
-  for (let s = 0; s < STEPS; s++) {
+  for (let s = 0; s < STEPS && !ends.includes(generated.at(-1)); s++) {
     const total = seen + fresh.length;
     const inputs = {
       input_ids: new ort.Tensor('int64', BigInt64Array.from(fresh, BigInt), [1, fresh.length]),
