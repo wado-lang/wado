@@ -683,8 +683,8 @@ fn dequantized<affine G: Graph, E: Float, M, P, Blocks, Z>(
         None => full::<G, E, [M, Blocks]>(g, E::from_i64(1 << (quantized.bits - 1) as i64), [m, blocks]),
     };
     let held: List<i32> = [m, blocks, block];
-    let grouped: G::Tensor<E, [M, Blocks, Group]> = g.convert(&g.reshape::<u8, [M, Row], [M, Blocks, Group]>(&values, held));
-    let centered = g.binary(Binary::Subtract, &grouped, &g.broadcast_in_dim(&zero, held, [0, 1]));
+    let in_blocks: G::Tensor<E, [M, Blocks, Group]> = g.convert(&g.reshape::<u8, [M, Row], [M, Blocks, Group]>(&values, held));
+    let centered = g.binary(Binary::Subtract, &in_blocks, &g.broadcast_in_dim(&zero, held, [0, 1]));
     let scaled = g.binary(Binary::Multiply, &centered, &g.broadcast_in_dim(scales, held, [0, 1]));
     let flat: G::Tensor<E, [M, Row]> = g.reshape(&scaled, [m, blocks * block]);
     if width == blocks * block {

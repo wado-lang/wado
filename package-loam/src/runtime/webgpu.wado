@@ -88,9 +88,28 @@ pub struct DeviceTensor {
     internal offset: i32,
     internal extents: List<i32>,
     internal strides: List<i32>,
-    /// The half the buffer holds its elements in, two to a word, the even one
-    /// in the low half. A shader reads the words as `Words` says.
-    internal packed: Option<HalfFloat>,
+    /// How the buffer packs its elements where a word holds more than one. A
+    /// shader reads the words as `Words` says.
+    internal packed: Option<Packed>,
+}
+
+/// The elements a word holds more than one of: two halves, the even one in
+/// the low half, or four bytes, the first in the lowest.
+internal enum Packed {
+    F16,
+    BF16,
+    U8,
+}
+
+impl Packed {
+    /// The half `h` two to a word.
+    fn halves(h: Option<HalfFloat>) -> Option<Packed> {
+        return match h {
+            Some(F16) => Option::Some(Packed::F16),
+            Some(BF16) => Option::Some(Packed::BF16),
+            None => null,
+        };
+    }
 }
 
 /// A tensor where the WebGPU backend holds it.
@@ -1153,8 +1172,32 @@ impl WebGpuBackend {
         t: &Tensor<E, Axes>,
         kept: bool,
     ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
+        if E::kind() matches { U8 } {
+            let bytes = self.reserved_bytes(t.extents, kept);
+            self.write_bytes(&bytes, |i| t.data[i].cast_to::<i64>() as u32);
+            return bytes;
+        }
         let slot = self.written(t.data.len(), |i| t.data[i].cast_to::<f32>().to_bits(), kept);
         return contiguous(slot, 0, t.extents);
+    }
+
+    /// A new buffer for a tensor of bytes of `extents`, four to a word, for a
+    /// `write_bytes`.
+    internal fn reserved_bytes(&mut self, extents: List<i32>, kept: bool) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
+        let slot = self.reserved(element_count(&extents).div_ceil(4), kept);
+        return DeviceTensor { ..contiguous(slot, 0, extents), packed: Option::Some(Packed::U8) };
+    }
+
+    /// Writes the bytes `byte(i)` of `t`, little-endian within each word.
+    internal fn write_bytes(&self, t: &DeviceTensor, byte: fn(i32) -> u32) with (GpuQueue, GpuBuffer) {
+        let count = element_count(&t.extents);
+        self.write(t.slot, 0, count.div_ceil(4), |w| {
+            let mut word: u32 = 0;
+            for let i of 4 * w..<i32::min(4 * w + 4, count) {
+                word |= byte(i) << ((i % 4) * 8) as u32;
+            }
+            return word;
+        });
     }
 
     /// A `[k, n]` matrix of `parts`, `at(parts, r, c)` its element at row `r`
@@ -1201,7 +1244,7 @@ impl WebGpuBackend {
             offset: 0,
             extents: [k, n],
             strides: if by_columns { [1, k] } else { [n, 1] },
-            packed,
+            packed: Packed::halves(packed),
         };
     }
 
@@ -1212,14 +1255,14 @@ impl WebGpuBackend {
         return contiguous(slot, 0, w.extents);
     }
 
-    /// `t` on the device where an f32 holds its values, and on the host
-    /// otherwise.
+    /// `t` on the device where an f32 holds its values or it is bytes, and on
+    /// the host otherwise.
     fn stored<E: Element, Axes>(
         &mut self,
         t: &Tensor<E, Axes>,
         kept: bool,
     ) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
-        if E::exact_in_f32() {
+        if E::exact_in_f32() || E::kind() matches { U8 } {
             return Placed::Device(self.placed(t, kept));
         }
         return Placed::Host(*t);
@@ -1376,12 +1419,13 @@ impl WebGpuBackend {
         return at;
     }
 
-    /// How a shader holds the elements of a binding of halves `packed`.
-    fn words(&self, packed: Option<HalfFloat>) -> Words {
+    /// How a shader holds the elements of a binding `packed` packs.
+    fn words(&self, packed: Option<Packed>) -> Words {
         return match packed {
             None => Words::F32,
             Some(BF16) => Words::PackedBF16,
             Some(F16) => if self.f16 { Words::F16 } else { Words::PackedF16 },
+            Some(U8) => Words::Bytes,
         };
     }
 
@@ -1577,7 +1621,7 @@ impl WebGpuBackend {
             let words = self.allocated(count.div_ceil(2), false);
             return DeviceTensor {
                 ..contiguous(words, 0, extents),
-                packed: Option::Some(HalfFloat::F16),
+                packed: Option::Some(Packed::F16),
             };
         }
         return contiguous(self.allocated(count, false), 0, extents);
@@ -2928,6 +2972,65 @@ impl WebGpuBackend {
         return Placed::Device(contiguous(out, 0, extents));
     }
 
+    /// `Graph::quantized_product` of `operands`, the input as `[M, K]`, the
+    /// packed weight, its scales and any zero points, as a `[M, N]` result:
+    /// one workgroup per column and `QUANTIZED_ROWS` rows. `None` where they do
+    /// not bind.
+    internal fn quantized_product_kernel(
+        &mut self,
+        operands: &List<DeviceTensor>,
+        bits: i32,
+        block: i32,
+    ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        let [m, k] = [operands[0].extents[0], operands[0].extents[1]];
+        let packed = &operands[1].extents;
+        let n = packed[0];
+        if m * n > self.max_binding || !self.binds(operands) {
+            return null;
+        }
+        let out = self.allocated(m * n, false);
+        let groups = n * m.div_ceil(QUANTIZED_ROWS);
+        let [gx, gy] = spread(groups);
+        let zero_points = operands.len() > 3;
+        self.dispatch_bound(
+            operands,
+            out,
+            m * n,
+            [groups as u32, gx as u32, m as u32, k as u32, n as u32, packed[1] as u32, packed[2] as u32],
+            |bindings| ShaderKey::QuantizedProduct([bindings, bits, block, zero_points]),
+            [gx, gy, 1],
+        );
+        return Option::Some(contiguous(out, 0, [m, n]));
+    }
+
+    /// `Graph::quantized_gather` of `operands`, the packed table, the indices
+    /// flat, its scales and any zero points, as a `[I, W]` result: one
+    /// invocation per element. `None` where they do not bind.
+    internal fn quantized_gather_kernel(
+        &mut self,
+        operands: &List<DeviceTensor>,
+        bits: i32,
+        block: i32,
+    ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        let [rows, width] = [operands[0].extents[0], operands[0].extents[1] * (8 / bits)];
+        let count = operands[1].extents[0] * width;
+        if count > self.max_binding || !self.binds(operands) {
+            return null;
+        }
+        let out = self.allocated(count, false);
+        let [x, y] = grid(count);
+        let zero_points = operands.len() > 3;
+        self.dispatch_bound(
+            operands,
+            out,
+            count,
+            [count as u32, (x * LANES) as u32, width as u32, rows as u32],
+            |bindings| ShaderKey::QuantizedGather([bindings, bits, block, zero_points]),
+            [x, y, 1],
+        );
+        return Option::Some(contiguous(out, 0, [operands[1].extents[0], width]));
+    }
+
     /// Whether a launch makes its next run's buffer at `slot` where it made
     /// this one's: one it owns, but for an attention cache, which a run
     /// appends to.
@@ -2973,14 +3076,18 @@ struct Span {
     slot: i32,
     first: i32,
     count: i32,
-    /// The half the views of the buffer hold, two to a word, as
+    /// How the views of the buffer pack their elements, as
     /// `DeviceTensor.packed` says.
-    packed: Option<HalfFloat> = null,
+    packed: Option<Packed> = null,
 }
 
 /// The elements of `t`'s buffer one word holds.
 fn elements_per_word(t: &DeviceTensor) -> i32 {
-    return if t.packed matches { Some(_) } { 2 } else { 1 };
+    return match t.packed {
+        None => 1,
+        Some(F16 | BF16) => 2,
+        Some(U8) => 4,
+    };
 }
 
 /// `t`'s offset from the start of `span`, a binding of its buffer.
@@ -3348,6 +3455,8 @@ enum Words {
     PackedBF16,
     /// Indices the host wrote, which no float read may flush.
     U32,
+    /// Four bytes to a `u32`, the first in the lowest.
+    Bytes,
 }
 
 /// The WGSL declaring a read-only buffer `o{k}` for each of `words` but the
@@ -3383,7 +3492,7 @@ fn array_wgsl(words: Words) -> String {
     return match words {
         F32 => "f32",
         F16 => "f16",
-        PackedF16 | PackedBF16 | U32 => "u32",
+        PackedF16 | PackedBF16 | U32 | Bytes => "u32",
     };
 }
 
@@ -3395,6 +3504,7 @@ fn element_wgsl(buffer: String, index: String, words: Words) -> String {
         F16 | U32 => `f32(${buffer}[${index}])`,
         PackedF16 => `unpack2x16float(${buffer}[(${index}) >> 1u])[(${index}) & 1u]`,
         PackedBF16 => `bitcast<f32>((${buffer}[(${index}) >> 1u] >> (((${index}) & 1u) * 16u)) << 16u)`,
+        Bytes => `f32((${buffer}[(${index}) >> 2u] >> (((${index}) & 3u) * 8u)) & 0xFFu)`,
     };
 }
 
@@ -3413,7 +3523,7 @@ ${indent}let v1 = v.y;
 ${indent}let v0 = bitcast<f32>(w << 16u);
 ${indent}let v1 = bitcast<f32>(w & 0xFFFF0000u);
 `,
-        F32 | U32 => panic("loam: a lane reads two elements of a word that holds one"),
+        F32 | U32 | Bytes => panic("loam: a lane reads two halves of a word that holds none"),
     };
 }
 
@@ -3489,6 +3599,10 @@ variant ShaderKey {
     AttendJoin(List<i32>),
     /// [`arg_max_shader`]'s arguments.
     ArgMax([List<i32>, i32, ArgMaxStage]),
+    /// [`quantized_product_shader`]'s arguments.
+    QuantizedProduct([List<i32>, i32, i32, bool]),
+    /// [`quantized_gather_shader`]'s arguments.
+    QuantizedGather([List<i32>, i32, i32, bool]),
 }
 
 /// A shader: what its key makes, over bindings holding `words`, the output's
@@ -3545,6 +3659,20 @@ impl Shader {
             ),
             AttendJoin(bindings) => attend_join_shader(bindings, words),
             ArgMax([bindings, rank, stage]) => arg_max_shader(bindings, *rank, *stage, words),
+            QuantizedProduct([bindings, bits, block, zero_points]) => quantized_product_shader(
+                bindings,
+                *bits,
+                *block,
+                *zero_points,
+                words,
+            ),
+            QuantizedGather([bindings, bits, block, zero_points]) => quantized_gather_shader(
+                bindings,
+                *bits,
+                *block,
+                *zero_points,
+                words,
+            ),
         };
         // An `enable` directive comes before every declaration.
         let enable = if words.contains(&Words::F16) { "enable f16;\n" } else { "" };
@@ -4083,6 +4211,151 @@ ${coords_wgsl("i", 2, 0, rank, "c", "    ")}    put(u32(${index_wgsl(to, 0, rank
 `;
 }
 
+/// The rows of the input one workgroup of a quantized product sums against its
+/// column, each in a lane's register.
+global QUANTIZED_ROWS: i32 = 8;
+
+/// The f32 element of the operand bound at `binding`, whose view's offset is at
+/// `p[at]` and whose strides follow, at `coords`.
+fn view_load_wgsl(binding: i32, at: i32, coords: &List<String>) -> String {
+    let mut index = `bitcast<i32>(p[${at}])`;
+    for let [d, c] of coords.into_iter().enumerate() {
+        index.push_str(` + i32(${c}) * bitcast<i32>(p[${at + 1 + d}])`);
+    }
+    return `load${binding}(u32(${index}))`;
+}
+
+/// The WGSL declaring a packed value's width, the values a byte holds, its
+/// mask, the block, and `zero(n, b)`: the zero point of block `b` of row `n`,
+/// from the operand bound at `binding`, whose view is at `p[at]`, or the
+/// center of the values' range where there are no `zero_points`.
+fn dequantizing_wgsl(bits: i32, block: i32, zero_points: bool, binding: i32, at: i32) -> String {
+    let zero = if zero_points {
+        `f32((u32(${view_load_wgsl(binding, at, &(["n", "b / PER"] as List<String>))}) >> ((b % PER) * BITS)) & MASK)`;
+    } else {
+        `${1 << (bits - 1)}.0`;
+    };
+    return `const BITS = ${bits}u;
+const PER = ${8 / bits}u;
+const MASK = ${(1 << bits) - 1}u;
+const BLOCK = ${block}u;
+
+fn zero(n: u32, b: u32) -> f32 {
+    return ${zero};
+}
+`;
+}
+
+/// The WGSL of `Graph::quantized_product`, one workgroup per column `n` of
+/// the output and `QUANTIZED_ROWS` of its rows: each lane takes every
+/// `LANES`th byte of the column's packed weight, dequantizes its values and
+/// adds each times the rows' inputs, and the workgroup sums the lanes.
+/// Parameters: the workgroups, the workgroups per row of the grid, `M`, `K`,
+/// `N`, the blocks, the bytes of a block, then the views of the input `[M, K]`,
+/// the packed weight, the scales and any zero points.
+fn quantized_product_shader(
+    bindings: &List<i32>,
+    bits: i32,
+    block: i32,
+    zero_points: bool,
+    words: &List<Words>,
+) -> String {
+    let rows = QUANTIZED_ROWS;
+    let input = view_load_wgsl(bindings[0], 7, &(["m0 + r", "k"] as List<String>));
+    let byte = view_load_wgsl(bindings[1], 10, &(["n", "b", "j % p[6]"] as List<String>));
+    let scale = view_load_wgsl(bindings[2], 14, &(["n", "b"] as List<String>));
+    let zp = if zero_points { bindings[3] } else { 0 };
+    return `${buffers_wgsl(words)}
+${dequantizing_wgsl(bits, block, zero_points, zp, 17)}
+var<workgroup> sums: array<f32, ${rows * LANES}>;
+
+@compute @workgroup_size(${LANES})
+fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
+    let flat = group.x + group.y * p[1];
+    if flat >= p[0] {
+        return;
+    }
+    let n = flat % p[4];
+    let m0 = flat / p[4] * ${rows}u;
+    let rows = min(${rows}u, p[2] - m0);
+    var acc: array<f32, ${rows}>;
+    for (var j = lid; j < p[5] * p[6]; j += ${LANES}u) {
+        let b = j / p[6];
+        let packed = u32(${byte});
+        let scale = ${scale};
+        let center = zero(n, b);
+        let k0 = b * BLOCK + j % p[6] * PER;
+        for (var v = 0u; v < PER && k0 + v < p[3]; v++) {
+            let k = k0 + v;
+            let w = (f32((packed >> (v * BITS)) & MASK) - center) * scale;
+            for (var r = 0u; r < rows; r++) {
+                acc[r] += ${input} * w;
+            }
+        }
+    }
+    for (var r = 0u; r < ${rows}u; r++) {
+        sums[r * ${LANES}u + lid] = acc[r];
+    }
+    workgroupBarrier();
+    for (var half = ${LANES / 2}u; half > 0u; half >>= 1u) {
+        if lid < half {
+            for (var r = 0u; r < ${rows}u; r++) {
+                sums[r * ${LANES}u + lid] += sums[r * ${LANES}u + lid + half];
+            }
+        }
+        workgroupBarrier();
+    }
+    if lid < rows {
+        put((m0 + lid) * p[4] + n, sums[lid * ${LANES}u]);
+    }
+}
+`;
+}
+
+/// The WGSL of `Graph::quantized_gather`, one invocation per element of the
+/// output: the value its row's packed bytes hold, dequantized, or zero where
+/// the index, wrapped once from the end, falls outside the table.
+/// Parameters: the elements, the invocations per row of the grid, the
+/// values of a row, the table's rows, then the views of the packed table, the
+/// indices, the scales and any zero points.
+fn quantized_gather_shader(
+    bindings: &List<i32>,
+    bits: i32,
+    block: i32,
+    zero_points: bool,
+    words: &List<Words>,
+) -> String {
+    let index = view_load_wgsl(bindings[1], 7, &(["at"] as List<String>));
+    let byte = view_load_wgsl(bindings[0], 4, &(["n", "e / PER"] as List<String>));
+    let scale = view_load_wgsl(bindings[2], 9, &(["n", "b"] as List<String>));
+    let zp = if zero_points { bindings[3] } else { 0 };
+    return `${buffers_wgsl(words)}
+${dequantizing_wgsl(bits, block, zero_points, zp, 12)}
+@compute @workgroup_size(${LANES})
+fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+    let i = id.x + id.y * p[1];
+    if i >= p[0] {
+        return;
+    }
+    let at = i / p[2];
+    let e = i % p[2];
+    let rows = i32(p[3]);
+    var row = i32(${index});
+    if row < 0 {
+        row += rows;
+    }
+    if row < 0 || row >= rows {
+        put(i, 0.0);
+        return;
+    }
+    let n = u32(row);
+    let b = e / BLOCK;
+    let packed = u32(${byte});
+    put(i, (f32((packed >> (e % PER * BITS)) & MASK) - zero(n, b)) * ${scale});
+}
+`;
+}
+
 /// The WGSL of a gather along `axis`, the indices' axes flattened to it.
 /// Parameters: the count, the invocations per row, the output's extents, the
 /// data's offset and its stride along each output axis, 0 along `axis`, its
@@ -4311,7 +4584,7 @@ ${ELEMENTWISE_OPERATORS}`;
 fn word_width(rhs: &DeviceTensor, across: bool) -> i32 {
     let r = rhs.extents.len();
     let unit = if across { r - 2 } else { r - 1 };
-    if rhs.packed matches { None } || rhs.strides[unit] != 1 || rhs.offset % 2 != 0 {
+    if !rhs.packed matches { Some(F16 | BF16) } || rhs.strides[unit] != 1 || rhs.offset % 2 != 0 {
         return 1;
     }
     for let d of 0..<r {

@@ -16,7 +16,8 @@ use {
     scalar,
     shared,
 } from "./hlo.wado";
-use { Any, Untyped, typed } from "./recorded.wado";
+use { Any, Recorded, Recorder, Untyped, typed } from "./recorded.wado";
+use { HostWeight } from "./weight.wado";
 use { Attention, Float, Tensor, element_count } from "./tensor.wado";
 use { noise } from "../../example/webgpu/compare.wado";
 
@@ -430,6 +431,37 @@ pub fn quantized_case() -> QuantizedCase {
             extents: [2],
         },
     };
+}
+
+/// `quantizing` over its input and indices, then its weights, as
+/// `quantized_weight` numbers them.
+pub fn quantized_pass(r: &mut Recorder) -> Recorded {
+    let q = quantized_case();
+    let a = r.parameter::<f32, [A, B]>(q.a.extents);
+    let ids = r.parameter::<i64, [A]>(q.ids.extents);
+    let weight = [
+        r.parameter::<u8, [C, Blocks, Blob]>(q.weight.extents),
+        r.parameter::<f32, [C, Blocks]>(q.scales.extents),
+        r.parameter::<u8, [C, Zeros]>(q.zero_points.extents),
+    ];
+    let table = [
+        r.parameter::<u8, [Rows, Blob]>(q.table.extents),
+        r.parameter::<f32, [Rows, Blocks]>(q.table_scales.extents),
+    ];
+    let got = quantizing(r, &a, &weight, &table, &ids);
+    return r.finished([got.0.id, got.1.id]);
+}
+
+/// The weight `at` of `quantized_pass`, as a model's loader hands it over.
+pub fn quantized_weight(at: i32) -> Result<HostWeight, ()> {
+    let q = quantized_case();
+    return Result::Ok(match at {
+        0 => HostWeight::of(&q.weight),
+        1 => HostWeight::of(&q.scales),
+        2 => HostWeight::of(&q.zero_points),
+        3 => HostWeight::of(&q.table),
+        _ => HostWeight::of(&q.table_scales),
+    });
 }
 
 /// Bytes spread over their range, apart for each `seed`.

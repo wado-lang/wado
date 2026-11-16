@@ -24,12 +24,15 @@ use {
     DotDims,
     GatherDims,
     Graph,
+    Quantized,
     ScatterDims,
     Slots,
     Unary,
     WindowReduce,
     broadcast_in_dim_extents,
     decomposed_attention,
+    decomposed_gather,
+    decomposed_product,
     dot_extents,
     elementwise_extents,
     free_axes,
@@ -165,8 +168,8 @@ impl Graph for WebGpuBackend {
     /// axis the products contract. The weights of a `Joined` launch are kept
     /// so as one matrix, side by side, and those of a `Paired` one as one
     /// matrix whose columns alternate between theirs, each a view of it. Any
-    /// other float or bool weight is kept in f32 words, and a `u8` or `i64`
-    /// one as `keep` keeps it.
+    /// other float or bool weight is kept in f32 words, a `u8` one four bytes
+    /// to a word, and an `i64` one as `keep` keeps it.
     fn kept_weights<Er>(
         &mut self,
         record: fn(&mut Recorder) -> Recorded with _,
@@ -237,7 +240,11 @@ impl Graph for WebGpuBackend {
                 let one: List<HostWeight> = [w];
                 let matrix = self.kept_matrix(inner, outer, &one, |ps, r, c| contracted_at(&ps[0], axis, r, c));
                 of_kind(self, kind, Placed::Device(oriented(matrix, axis)));
-            } else if w.kind matches { U8 | I64 } {
+            } else if w.kind matches { U8 } {
+                let bytes = self.reserved_bytes(w.extents, true);
+                self.write_bytes(&bytes, |i| w.bytes()[i] as u32);
+                Any::U8(Placed::Device(bytes));
+            } else if w.kind matches { I64 } {
                 kept_any(self, &w.decoded());
             } else {
                 of_kind(self, w.kind, Placed::Device(self.kept_values(&w)));
@@ -703,6 +710,79 @@ impl Graph for WebGpuBackend {
             sin,
             bias,
             options,
+        );
+    }
+
+    /// The backend's kernel over the packed weight, and the decomposition
+    /// where it cannot run it.
+    fn quantized_product<E: Float, In, N, Blocks, Blob, Z, Out>(
+        &mut self,
+        a: &Placed<E, In>,
+        packed: &Placed<u8, [N, Blocks, Blob]>,
+        scales: &Placed<E, [N, Blocks]>,
+        zero_points: Option<&Placed<u8, [N, Z]>>,
+        quantized: &Quantized,
+    ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        if E::is_f32() {
+            let mut extents = self.extents_of(a);
+            let last = extents.len() - 1;
+            let inner = extents[last];
+            let rows = element_count(&extents) / inner;
+            let mut operands = [
+                self.reshaped(&self.device_view(a), &([rows, inner] as List<i32>)),
+                self.device_view(packed),
+                self.device_view(scales),
+            ] as List<DeviceTensor>;
+            if let Some(z) = zero_points {
+                operands.push(self.device_view(z));
+            }
+            if let Some(out) = self.quantized_product_kernel(&operands, quantized.bits, quantized.block) {
+                extents[last] = out.extents[1];
+                return Placed::Device(self.reshaped(&out, &extents));
+            }
+        }
+        return decomposed_product::<WebGpuBackend, E, In, N, Blocks, Blob, Z, Out>(
+            self,
+            a,
+            packed,
+            scales,
+            zero_points,
+            quantized,
+        );
+    }
+
+    /// The backend's kernel over the packed table, and the decomposition where
+    /// it cannot run it.
+    fn quantized_gather<E: Float, R, P, I, Blocks, Z, Out>(
+        &mut self,
+        packed: &Placed<u8, [R, P]>,
+        indices: &Placed<i64, I>,
+        scales: &Placed<E, [R, Blocks]>,
+        zero_points: Option<&Placed<u8, [R, Z]>>,
+        quantized: &Quantized,
+    ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        if E::is_f32() {
+            let mut extents = self.extents_of(indices);
+            let mut operands = [
+                self.device_view(packed),
+                self.reshaped(&self.device_view(indices), &([element_count(&extents)] as List<i32>)),
+                self.device_view(scales),
+            ] as List<DeviceTensor>;
+            if let Some(z) = zero_points {
+                operands.push(self.device_view(z));
+            }
+            if let Some(out) = self.quantized_gather_kernel(&operands, quantized.bits, quantized.block) {
+                extents.push(out.extents[1]);
+                return Placed::Device(self.reshaped(&out, &extents));
+            }
+        }
+        return decomposed_gather::<WebGpuBackend, E, R, P, I, Blocks, Z, Out>(
+            self,
+            packed,
+            indices,
+            scales,
+            zero_points,
+            quantized,
         );
     }
 }

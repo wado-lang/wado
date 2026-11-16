@@ -12,7 +12,6 @@ use {
     HostWeight,
     Located,
     PjrtBackend,
-    Recorded,
     Recorder,
     Slots,
     Tensor,
@@ -136,14 +135,8 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
 
     // The packed weights a model keeps, as it keeps them.
     let q = cases::quantized_case();
-    let packed = device.kept_weights(quantized_pass, 2, 5, |at| Result::<HostWeight, ()>::Ok(match at {
-        0 => HostWeight::of(&q.weight),
-        1 => HostWeight::of(&q.scales),
-        2 => HostWeight::of(&q.zero_points),
-        3 => HostWeight::of(&q.table),
-        _ => HostWeight::of(&q.table_scales),
-    })).unwrap();
-    let quantizing = device.compiled(quantized_pass, &packed, &[]).unwrap();
+    let packed = device.kept_weights(cases::quantized_pass, 2, 5, cases::quantized_weight).unwrap();
+    let quantizing = device.compiled(cases::quantized_pass, &packed, &[]).unwrap();
     let dequantized = device.executed(&quantizing, &[
         Any::F32(untyped(device, &device.upload(&q.a))),
         Any::I64(untyped(device, &device.upload(&q.ids))),
@@ -380,24 +373,6 @@ fn rows_of<Axes>(positions: i32) -> Tensor<f32, Axes> {
         data,
         extents: [1, positions, 2],
     };
-}
-
-/// `cases::quantizing` over its input and indices, then its weights.
-fn quantized_pass(r: &mut Recorder) -> Recorded {
-    let q = cases::quantized_case();
-    let a = r.parameter::<f32, [cases::A, cases::B]>(q.a.extents);
-    let ids = r.parameter::<i64, [cases::A]>(q.ids.extents);
-    let weight = [
-        r.parameter::<u8, [cases::C, cases::Blocks, cases::Blob]>(q.weight.extents),
-        r.parameter::<f32, [cases::C, cases::Blocks]>(q.scales.extents),
-        r.parameter::<u8, [cases::C, cases::Zeros]>(q.zero_points.extents),
-    ];
-    let table = [
-        r.parameter::<u8, [cases::Rows, cases::Blob]>(q.table.extents),
-        r.parameter::<f32, [cases::Rows, cases::Blocks]>(q.table_scales.extents),
-    ];
-    let got = cases::quantizing(r, &a, &weight, &table, &ids);
-    return r.finished([got.0.id, got.1.id]);
 }
 
 fn untyped<E: Element, Axes>(g: &PjrtBackend, t: &Located<E, Axes>) -> Located<E, Untyped> {
