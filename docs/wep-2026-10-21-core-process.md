@@ -309,6 +309,22 @@ child may read more than the guest. It is defined, not open-ended:
 - Files inside a granted directory may be executed, so a binary the project just
   built can run. This adds no authority, since the child cannot leave the grants
   either way.
+- A guest may give a child less than it holds. `Command::grant_read` and
+  `Command::grant_write` name paths that replace the guest's directories; the
+  baseline, `--process-read` and the child's private `HOME` stay. A guest that
+  runs code it does not trust needs this: a code reviewer that builds a pull
+  request in a checkout of its own must keep that build out of the repository
+  and its `.git`, which the guest itself writes.
+  - It is a builder method rather than an argument of `spawn`, since `spawn`,
+    `output`, `status` and `read` all start a child, and `` cmd`…` `` returns a
+    `Command` to chain on.
+  - Read and write are separate grants: a child that builds needs the tree
+    writable and a toolchain readable.
+  - A path is relative to where the child starts, and must exist. The host
+    opens it once, checks the real path of that descriptor against what the
+    guest holds, and confines the child through the same descriptor, so a link
+    swapped in between reaches nothing. A path beyond the guest's access is
+    `not-permitted`.
 
 ### Diagnostics
 
@@ -534,6 +550,8 @@ the program accepts it.
 - [x] `core:process` in the stdlib: `Command`, `cmd`, `Child`, `output`,
   `status` and `read`, `wait_timeout` and `stop`, with its stdlib reference and
   a cheatsheet entry.
+- [x] `Command::grant_read` and `Command::grant_write`, a child narrower than
+  its guest.
 - [ ] Bounded resources. A child can run many children, use memory and CPU
   without bound, and fork without limit. Done when a child that tries any of
   these is stopped at a limit the host sets.

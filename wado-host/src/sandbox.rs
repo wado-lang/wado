@@ -111,10 +111,16 @@ impl Policy {
     /// A directory the guest was granted, through the descriptor its preopen
     /// holds.
     pub fn grant_dir(&mut self, path: impl Into<PathBuf>, dir: Arc<File>) {
+        self.grant_opened(path, dir, Access::ReadWrite);
+    }
+
+    /// A file or directory the host has opened, granted through its
+    /// descriptor, so the path is not resolved a second time.
+    pub fn grant_opened(&mut self, path: impl Into<PathBuf>, file: Arc<File>, access: Access) {
         self.rules.push(Rule {
             path: path.into(),
-            access: Access::ReadWrite,
-            dir: Some(dir),
+            access,
+            dir: Some(file),
         });
     }
 

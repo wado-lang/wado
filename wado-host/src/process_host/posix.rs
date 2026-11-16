@@ -26,7 +26,7 @@ use wasmtime_wasi::filesystem::Descriptor;
 use wasmtime_wasi::p2::OutputStream;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
-use super::types::{ExitStatus, Input, Output};
+use super::types::{self, ExitStatus, Input, Output};
 use super::{Command, ErrorCode, GuestStdio, ProcessHost, ProcessView, Spawned, Spawning};
 use crate::path_search::{find_program, is_executable};
 use crate::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio, Trace};
@@ -108,6 +108,7 @@ pub(super) fn spawn<U>(
         stdin,
         stdout,
         stderr,
+        grants,
     } = cmd;
     let started = start(
         store.get(),
@@ -117,6 +118,7 @@ pub(super) fn spawn<U>(
         &stdin,
         [stdout, stderr],
         cwd.as_ref(),
+        grants.as_ref(),
     )?;
     let Started {
         spawned,
@@ -173,6 +175,7 @@ fn start(
     stdin: &Input,
     [stdout, stderr]: [Output; 2],
     cwd: Option<&Resource<Descriptor>>,
+    asked: Option<&types::Grants>,
 ) -> wasmtime::Result<Result<Started, ErrorCode>> {
     let grants = view.ctx.grants()?;
     let cwd = match cwd {
@@ -215,6 +218,9 @@ fn start(
         let mut policy = Policy::new(Network::Granted);
         for grant in &grants.dirs {
             policy.grant_dir(grant.path.clone(), Arc::clone(&grant.dir));
+        }
+        if let Some(asked) = asked {
+            policy = narrowed(&policy, asked, &cwd)?;
         }
         for path in grants.read.iter().chain(user_config().process_read()) {
             policy.grant_path(path.clone(), Reach::ReadExecute);
@@ -270,6 +276,29 @@ fn start(
         scratch: scratch.0,
         trace: grants.trace,
     }))
+}
+
+/// The baseline and the paths `asked` names, relative to `cwd`, in place of
+/// the guest's directories. Each is opened once and granted through that
+/// descriptor, so what is checked against `guest` is what the child reaches.
+fn narrowed(guest: &Policy, asked: &types::Grants, cwd: &File) -> Result<Policy, ErrorCode> {
+    let held = guest.resolved();
+    let start = sandbox::descriptor_path(cwd).map_err(error_code)?;
+    let mut policy = Policy::new(Network::Granted);
+    for (paths, access) in [
+        (&asked.read, Reach::ReadExecute),
+        (&asked.write, Reach::ReadWrite),
+    ] {
+        for path in paths {
+            let opened = File::open(start.join(path)).map_err(error_code)?;
+            let real = sandbox::descriptor_path(&opened).map_err(error_code)?;
+            if !held.permits(&real, access) {
+                return Err(ErrorCode::NotPermitted);
+            }
+            policy.grant_opened(real, Arc::new(opened), access);
+        }
+    }
+    Ok(policy)
 }
 
 /// Whether the OS can pass these to a child: no string holds a NUL, and no
