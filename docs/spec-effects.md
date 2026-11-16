@@ -433,6 +433,8 @@ test {
 }
 ```
 
+A tuple `for-of` checks its body once for every element. A closure there holds only the resources its captures mention for each of them.
+
 Apart from a narrowing, nothing a body does adds to what its function holds.
 
 ### Ambient Functions

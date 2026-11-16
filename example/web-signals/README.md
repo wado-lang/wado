@@ -46,9 +46,8 @@ wado test    # runs the session against SurfaceDom
   rerun even when the value came out the same.
 - A memo owns nothing: a cleanup registered inside one traps, and so does
   making an effect or another memo there.
-- Disposing of a scope takes its rows out of an `each`, and leaves every other
-  node where it is.
-- Disposing of a scope stops its bindings, and leaves its listeners attached.
+- Disposing of a scope stops its bindings and takes its rows out of an `each`.
+  It leaves every other node where it is, and its listeners attached.
 - `each` puts the rows back in order by appending every one of them, since
   `SurfaceDom` does not answer `insert_before`.
 - A text binding owns its element's whole content, since the slice has no

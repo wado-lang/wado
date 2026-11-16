@@ -2980,7 +2980,9 @@ impl SemEffectWalker<'_> {
                 let closure_type = *facts.expression_types.get(&closure.id)?;
                 let captures = &facts.closure_captures.get(&closure.id)?.captures;
                 let mut handed = IndexSet::default();
-                for type_id in std::iter::once(closure_type).chain(captures.iter().map(|c| c.type_id)) {
+                for type_id in
+                    std::iter::once(closure_type).chain(captures.iter().map(|c| c.type_id))
+                {
                     scan.collect(type_id, &mut handed, &mut TypeSet::default());
                 }
                 Some(handed)
