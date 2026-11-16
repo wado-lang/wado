@@ -406,6 +406,13 @@ picked rather than to pick it.
 
 ## Known gaps
 
+- Which of the two resolutions a `Type::method(recv, …)` belongs to is decided
+  before the receiver's type is known. A receiver-taking method only a blanket
+  supplies is recognized by some trait declaring it, and a bare spelling does
+  not say whether a blanket's receiver-less declaration applies. So where any
+  trait declares the name receiver-less, `Type::method(recv)` reaches no
+  blanket's instance method and is reported as an unknown function.
+
 - A static call through an associated type is not one of the spellings the
   walk admits. With `T: Has` and `Has` declaring `type Out: Make`,
   `T::Out::make()` is rejected as `unknown function 'T::Out::make'`, in a
