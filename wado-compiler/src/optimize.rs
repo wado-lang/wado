@@ -1113,7 +1113,7 @@ fn run_optimization_passes(
     // Forward the scalarization shadow inits (`$hfs_x = obj.f`) to constants.
     // `field_scalarize` runs after the fixed-point loop, so no in-loop
     // `store_load_forward` sees its shadow reads; this once-over folds an
-    // `obj.f` whose field the ValueGraph still knows (`obj` built from a
+    // `obj.f` whose field a scoped walk still knows (`obj` built from a
     // constant literal upstream) into the literal, before globalization. Runs
     // before `const_object_globalization` so it never sees the nullable
     // `GlobalVarGet`s globalization emits.

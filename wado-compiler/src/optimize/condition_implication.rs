@@ -31,9 +31,8 @@ use crate::type_table::TypeTable;
 use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.
-/// The combined `licm` session reuses its (value-preserving) `ValueGraph`, so
-/// cond-impl needs no separate build; it runs after licm in document order, so
-/// it still sees the hoisted body.
+/// In the combined `licm` session it runs after licm in document order, so it
+/// still sees the hoisted body.
 pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     let root = engine.body.root();
     // Built once and threaded down: sound because eliminations never add
@@ -1130,7 +1129,7 @@ fn guard_roots(var: u32, bound: BoundKey) -> impl Iterator<Item = u32> {
 }
 
 /// One write an expression node may perform, in the engine's alias sets, so it
-/// and the value graph cannot disagree over what a store reaches.
+/// and a scoped walk cannot disagree over what a store reaches.
 #[derive(Clone, Copy)]
 enum Write {
     /// The slot or storage of this local.

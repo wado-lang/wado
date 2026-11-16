@@ -267,8 +267,8 @@ pub fn apply_licm(
         engine.set_pure_builtin_callees(&pure_builtin_callees);
         let licm_changed = engine.run(&[&rule]);
         // Condition implication shares licm's session: licm hoists only
-        // loop-invariant, move-safe code, so values are preserved and the
-        // ValueGraph stays valid. cond-impl runs after licm here — the same
+        // loop-invariant, move-safe code, so values are preserved.
+        // cond-impl runs after licm here — the same
         // document order as the standalone passes — so it still sees the hoisted
         // body.
         let cond_changed = eliminate_at_root(&mut engine);
@@ -393,9 +393,8 @@ fn licm_block(
     let mut changed = false;
     let mut new_stmts = Vec::new();
 
-    // Iterate a clone, not `mem::take`: `hoist_invariant_arith` rebuilds
-    // the value graph from the body root mid-walk, so ancestor blocks must
-    // stay populated.
+    // Iterate a clone, not `mem::take`: `hoist_invariant_arith` walks from
+    // the body root mid-walk, so ancestor blocks must stay populated.
     for s in engine.body.blocks[block].stmts.clone() {
         // Classify without holding the borrow across the mutable recursion.
         let loop_body = match &engine.body.stmts[s].kind {
@@ -2251,9 +2250,9 @@ fn collect_arith_local_leaves(body: &Body, e: ExprId, out: &mut Vec<(ExprId, u32
 
 /// A structural identity key for a hoistable-arith tree: kind / op / leaf-local
 /// / promoted-operand-value, with commutative operands sorted so `a + b` and
-/// `b + a` agree (matching the `ValueGraph` hash-cons). Once a tree's `Local`
+/// `b + a` agree (matching the pool's hash-cons). Once a tree's `Local`
 /// leaves are all loop-invariant, two trees with the same key denote the same
-/// value — so this replaces the `value_of` `ValueId` for the hoist dedup.
+/// value, which is what the hoist dedups on.
 ///
 /// Ops are stored as their discriminants (the enums are fieldless, so `as u8`
 /// is exact identity), which lets the key derive `Ord` for the commutative
@@ -2590,12 +2589,11 @@ fn cse_loop_body(
     types: &TypeTable,
 ) -> bool {
     let stmts = engine.body.blocks[loop_body].stmts.clone();
-    // Occurrences of each materialisable arith value, keyed by a value-graph-free
-    // **structural key**, as (top-level stmt index, expr) in first-seen order.
+    // Occurrences of each materialisable arith value, keyed by a structural
+    // key, as (top-level stmt index, expr) in first-seen order.
     // Two structurally-equal trees denote the same value exactly when their
     // leaves hold the same values at both points; the per-run split below (no
-    // leaf assigned across the span) establishes that without `value_of`,
-    // replacing the value graph's per-point flow-sensitivity. Nested loops are
+    // leaf assigned across the span) establishes that. Nested loops are
     // not descended.
     let mut occ: IndexMap<ArithKey, Vec<(usize, ExprId)>> = IndexMap::default();
     for (i, &s) in stmts.iter().enumerate() {
@@ -2652,9 +2650,8 @@ fn cse_loop_body(
         }
         // Split the occurrences (in statement order) into maximal **runs** within
         // which no non-address-taken leaf is directly assigned across the span —
-        // each run computes one value, soundly CSE'd into one temp. This replaces
-        // the value graph's per-point flow-sensitivity (`p*p` before `p += 1` is
-        // one value; after, a new one).
+        // each run computes one value, soundly CSE'd into one temp (`p*p` before
+        // `p += 1` is one value; after, a new one).
         let mut occs = occs;
         occs.sort_by_key(|(i, _)| *i);
         let mut runs: Vec<Vec<(usize, ExprId)>> = Vec::new();
@@ -2685,8 +2682,8 @@ fn cse_loop_body(
             let ty = engine.body.exprs[occs[0].1].type_id;
             let min_i = occs.iter().map(|(i, _)| *i).min().unwrap();
             // Clone an occurrence whose skeleton is in scope at the insertion point
-            // (before `min_i`): every `Local` leaf must be a loop-entry local or
-            // bound by a top-level `let` before `min_i`. The value graph already
+            // (before `min_i`): every `Local` leaf must be bound before the loop or
+            // by a top-level `let` before `min_i`. The run split already
             // proved every occurrence equal, so any in-scope occurrence computes the
             // right value; cloning a bare alias read of an inner-scope local (e.g.
             // `let $cse = a` where `a` is bound inside a nested block) would read a
@@ -2718,8 +2715,7 @@ fn cse_loop_body(
             // Redirect each occurrence to a *skeleton* `local.get $cse` (not a
             // promoted value): the temp is reassigned every iteration, so a value
             // operand `Opaque(Local($cse))` would read as loop-invariant to the
-            // arith hoist. `$cse` has no loop-entry value, so a skeleton read is
-            // correctly treated as loop-carried.
+            // arith hoist. A skeleton read is treated as loop-carried.
             let mut any = false;
             for (_, e) in &occs {
                 let lread = engine.alloc_expr(
@@ -2815,8 +2811,8 @@ fn local_assigned_in(body: &Body, node: NodeRef, idx: u32) -> bool {
 }
 
 /// Whether `e` is a pure arithmetic compound worth CSE-materialising: a
-/// `Binary` / `Unary` with a non-trap-prone op, or a cast, checked structurally
-/// (value-graph-free). The leaves need no availability check here — see
+/// `Binary` / `Unary` with a non-trap-prone op, or a cast, checked structurally.
+/// The leaves need no availability check here — see
 /// [`cse_loop_body`]'s soundness note (shared scope of ≥2 occurrences) — only
 /// the root must be a compound, not a bare leaf.
 fn is_cse_candidate_expr(body: &Body, e: ExprId) -> bool {

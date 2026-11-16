@@ -1,4 +1,4 @@
-//! Extraction: materialize pure values from the live `ValueGraph` back into the
+//! Extraction: materialize pure values from the value pool back into the
 //! skeleton arena, walking it and lowering each pure operand to its
 //! hash-consed [`ValueId`]'s concrete form. Constants are always cheaper to
 //! rematerialize than to share, so they need no cost decision.

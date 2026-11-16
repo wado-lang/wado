@@ -1,5 +1,5 @@
 //! Store-to-Load Forwarding: replace a value-position `Local` or `FieldAccess`
-//! read with the literal reaching it. The `ValueGraph` handles reaching-defs,
+//! read with the literal reaching it. A scoped walk handles reaching-defs,
 //! branch merges, and heap-write invalidation, so this rule only inspects each
 //! read's `ValueKind`. Address-taken and `stores`-aliased locals are excluded
 //! from `Local` forwarding; a field read is safe already, its store seeded for
@@ -65,10 +65,8 @@ fn forward_one(
     if func.body.is_none() {
         return false;
     }
-    // Nothing else ever queries a value in a CM export wrapper, so it reaches
-    // this pass with no `ValueGraph` and `scoped_const_reads` — which only
-    // grows one that exists — forwards nothing into it. Only wrappers: building
-    // it everywhere forwards into the hot paths too, which trades shared locals
+    // Parameters are seeded only in a CM export wrapper: seeding them
+    // everywhere forwards into the hot paths too, which trades shared locals
     // for duplicated constants and measures slower.
     let is_cm_export = func.is_cm_export;
     // `Local`-read forwarding excludes address-taken locals: the canonical set
@@ -140,9 +138,7 @@ impl Rule for StoreLoadForwardRule {
     }
 }
 
-/// Forward stored literals to later reads at the body root. Its sole caller is
-/// [`StoreLoadForwardRule::apply_block`], which runs it once on the standalone
-/// session's already-built (graph-preserving) `ValueGraph`.
+/// Forward stored literals to later reads at the body root.
 fn forward_at_root(
     engine: &mut Engine,
     unsafe_locals: &IndexSet<u32>,
@@ -150,7 +146,7 @@ fn forward_at_root(
 ) -> bool {
     // Snapshot reads before rewriting. A `FieldAccess` carries no local index,
     // so the `unsafe_locals` filter below never applies to one: a field read's
-    // safety is the value graph's, and it is by version rather than by refusing
+    // safety is the scoped walk's, and it is by version rather than by refusing
     // to seed. A `stores`-aliased receiver is the one the builder never seeds;
     // a reference-aliased receiver is seeded and versioned against the escaped
     // generation, which every impure call bumps, so a forward that survives to
@@ -177,8 +173,6 @@ fn forward_at_root(
         let Some(vid) = forwarded.get(&expr).copied() else {
             continue;
         };
-        // The constant promotes into `expr`'s parent operand slot (WEP: The Live
-        // ValueGraph).
         let Some(value) = extract_const(engine, vid, expr) else {
             continue;
         };

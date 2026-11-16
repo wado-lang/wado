@@ -297,14 +297,14 @@ impl EngineBuffers {
     }
 }
 
-/// What a value-graph walk reads where the session was told nothing. Empty is
+/// What a scoped walk reads where the session was told nothing. Empty is
 /// conservative — it leaves a call opaque — and shared, so asking costs no map.
 static NO_PURE_BUILTINS: std::sync::LazyLock<IndexSet<FuncId>> =
     std::sync::LazyLock::new(IndexSet::default);
 static NO_CTFE_BUILTINS: std::sync::LazyLock<CtfeBuiltinMap> =
     std::sync::LazyLock::new(CtfeBuiltinMap::default);
 
-/// The parameters a value-graph build seeds: all of them once a pass asked
+/// The parameters a scoped walk seeds: all of them once a pass asked
 /// ([`Engine::seed_params`]), none before.
 fn seeded(params: &[u32], seeds: bool) -> &[u32] {
     if seeds { params } else { &[] }
@@ -367,7 +367,7 @@ pub struct Engine<'a> {
     /// `condition_implication`. Set via [`Engine::set_quiet_callee_ids`].
     quiet_callee_ids: Option<&'a IndexSet<FuncId>>,
     /// [`FuncId`]s of pure builtin intrinsics (`array_get_value`, `array_len`, …),
-    /// supplied by a value-graph pass so the builder knows such a call writes no
+    /// supplied by a pass so a scoped walk knows such a call writes no
     /// heap — the call node no longer carries a `FunctionRef` to classify by.
     /// `None` (the default) is conservative: every call is a heap write. Set via
     /// [`Engine::set_pure_builtin_callees`] before the first value query.

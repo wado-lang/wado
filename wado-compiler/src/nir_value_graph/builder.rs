@@ -1,8 +1,8 @@
-//! Per-function `ValueGraph` builder: one walk of the `Body` assigning a
-//! [`ValueId`] to every pure [`ExprId`], leaving impure and allocation-bearing
-//! expressions out of `value_of`. Locals carry their RHS's value forward, and
-//! anything a branch, loop, or `break` path can disagree on goes `Opaque`.
-//! Consumed lazily by [`crate::nir_engine::Engine::value`]; see WEP 2026-06-05.
+//! The scoped walk: one flow-sensitive walk of a region of a `Body`, assigning
+//! a [`ValueId`] in a scratch pool to every pure [`ExprId`] it reaches and none
+//! to an impure or allocation-bearing one. Locals carry their RHS's value
+//! forward, and anything a branch, loop, or `break` path can disagree on goes
+//! `Opaque`. What it derives dies with the query.
 
 use std::cmp::Ordering;
 
