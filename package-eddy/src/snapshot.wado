@@ -6,7 +6,7 @@ use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Child, Command, Process } from "core:process";
 use { git, try_git } from "./git.wado";
-use { Runner, ENTER_TREE } from "./tools.wado";
+use { Runner, ENTER_TREE, running_reviewed } from "./tools.wado";
 
 /// Where every review's checkout lives. One path for all of them keeps
 /// `cargo`'s build of the last review fresh for the next: it tells the
@@ -282,11 +282,12 @@ pub fn index(root: &String, wado_path: &String) -> List<String> with (Process, E
     fs::create_dir_all(&dir).unwrap();
     // A child gets a private HOME, where rustup would find no toolchain.
     let homes = home_runner();
-    // It runs the tree's build scripts and procedural macros, so it writes
-    // nothing but the tree and the index.
-    let analyzer = Command::new("rust-analyzer").args(["scip", *root, "--output", rust, "--exclude-vendored-libraries"]).grant_write(
-        *root,
-    ).grant_write(dir).env(
+    // It runs the tree's build scripts and procedural macros.
+    let analyzer = running_reviewed(
+        Command::new("rust-analyzer").args(["scip", *root, "--output", rust, "--exclude-vendored-libraries"]),
+        root,
+        &dir,
+    ).env(
         "RUSTUP_HOME",
         homes.rustup_home,
     ).env("CARGO_HOME", homes.cargo_home);

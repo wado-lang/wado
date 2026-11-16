@@ -98,7 +98,7 @@ test "Run runs its runner's programs and no other" {
     assert `${run.input_schema:?}`.contains("node") && run.description.contains("task runner");
 }
 
-test "Run writes the tree and the target directory, and nothing else" {
+test "Run reads the checkout around the tree, and writes only the tree and the target directory" {
     let dir = "build/run-grants";
     fs::remove_dir_all(dir).unwrap();
     for let sub of ["tree", "target"] {
@@ -117,6 +117,10 @@ test "Run writes the tree and the target directory, and nothing else" {
     assert !writes("../outside");
     assert fs::exists(`${dir}/tree/in-tree`) && fs::exists(`${dir}/target/built`);
     assert !fs::exists(`${dir}/outside`);
+    // cargo reads each `.cargo/config.toml` above the tree, and stops at one
+    // it cannot read.
+    fs::write(`${dir}/above.toml`, &"").unwrap();
+    assert ws.run_command(&["sh", "-c", "cat ../above.toml"], 10).unwrap().succeeded;
 }
 
 test "a limit past the end reads the rest" {

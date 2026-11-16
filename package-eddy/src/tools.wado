@@ -54,6 +54,14 @@ pub struct Runner {
 /// directory above, and a snapshot sits inside the developer's checkout.
 pub global ENTER_TREE: String = #"cd "$0" && export MISE_TRUSTED_CONFIG_PATHS="$PWD" MISE_CEILING_PATHS="$(dirname "$PWD")""#;
 
+/// `command`, which runs the reviewed change's code, writing nothing but
+/// `tree` and `output`: the developer's checkout and its `.git` least. It
+/// reads the checkout it starts in, since cargo stops at a
+/// `.cargo/config.toml` above the tree that it cannot read.
+pub fn running_reviewed(command: Command, tree: &String, output: &String) -> Command {
+    return command.grant_read(".").grant_write(*tree).grant_write(*output);
+}
+
 /// One run of a program: whether it exited 0, and how it ended with the end of
 /// its stderr and stdout, as Run reports it.
 pub struct Ran {
@@ -374,9 +382,7 @@ impl Workspace {
             runner.target_dir, runner.tool_path,
         ] as List<String>;
         args.extend(command);
-        // What it runs is the reviewed change's, so it writes nothing but the
-        // tree and the build, the developer's checkout and its `.git` least.
-        let run = Command::new("timeout").args(args).grant_write(self.root).grant_write(runner.target_dir).env(
+        let run = running_reviewed(Command::new("timeout").args(args), &self.root, &runner.target_dir).env(
             "CARGO_HOME",
             runner.cargo_home,
         ).env(
