@@ -114,6 +114,13 @@ struct ConverseRequest {
     // The whole conversation is resent each turn; caching its prefix keeps
     // the diff at the head from being billed in full again.
     cache_control: Kind,
+    output_config: OutputConfig,
+}
+
+struct OutputConfig {
+    /// How much the model spends thinking and calling tools: `low`, `medium`,
+    /// `high`, `xhigh` or `max`.
+    effort: String,
 }
 
 /// One reply in a conversation. `content` is kept as the API wrote it: a
@@ -215,6 +222,7 @@ pub fn converse(
     use_tools: bool,
     messages: &List<Value>,
     max_tokens: i32,
+    effort: String,
 ) -> Result<Turn, String> with Client {
     let request = ConverseRequest {
         model,
@@ -224,6 +232,7 @@ pub fn converse(
         tool_choice: Kind { kind: if use_tools { "auto" } else { "none" } },
         messages: *messages,
         cache_control: Kind { kind: "ephemeral" },
+        output_config: OutputConfig { effort },
     };
     return post::<Turn>(api_key, to_bytes(&request).unwrap());
 }

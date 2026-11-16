@@ -54,7 +54,7 @@ global CLAUDE_MODEL: String = "claude-opus-5-5";
 #[param(name = "diff_limit")]
 global LIMIT: i32 = 2_000_000;
 
-global USAGE: String = "usage: eddy [--base <rev>] [--head <rev>] [--no-run] [--reporter <model>] [--report-again] [--max-turns <n>] [--reviews <dir>] [--out <dir>]";
+global USAGE: String = "usage: eddy [--base <rev>] [--head <rev>] [--no-run] [--reporter <model>] [--report-again] [--max-turns <n>] [--effort <level>] [--reviews <dir>] [--out <dir>]";
 
 struct Options {
     base: String = "origin/main",
@@ -63,6 +63,7 @@ struct Options {
     reporter: String = "claude-haiku-5-5",
     report_again: bool = false,
     max_turns: i32 = 40,
+    effort: String = "low",
     reviews: String = "package-eddy/reviews",
     out: String = "scratchpad/eddy",
 }
@@ -82,6 +83,8 @@ struct Attempt {
     reporter: String = "",
     run: bool,
     max_turns: i32,
+    /// Empty in a record written before it was sent: the API's default.
+    effort: String = "",
     result: Reviewed,
     /// What the reporter took. Absent in a record written before it was kept.
     report_usage: Option<Usage> = null,
@@ -151,7 +154,7 @@ ${commits.trim()}`;
         };
         reviewed_again(&w, &earlier.result);
     } else {
-        review(&api_key, CLAUDE_MODEL, &change, &Some(w), options.max_turns);
+        review(&api_key, CLAUDE_MODEL, &change, &Some(w), options.max_turns, options.effort);
     };
     // A report that fails leaves the findings as the reviewer worded them.
     let mut report_usage = Usage {};
@@ -172,6 +175,7 @@ ${commits.trim()}`;
         reporter: options.reporter,
         run: !options.no_run,
         max_turns: options.max_turns,
+        effort: options.effort,
         result,
         report_usage: Some(report_usage),
         report_error,

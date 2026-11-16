@@ -94,6 +94,9 @@ global WADO: String = "target/debug/wado";
 #[param(name = "max_turns")]
 global MAX_TURNS: i32 = 40;
 
+#[param(name = "effort")]
+global EFFORT: String = "low";
+
 global GRADE: String = "You grade a code review against one known defect.
 The KNOWN DEFECT is what a later pull request had to fix in the reviewed change. The FINDINGS are what the reviewer reported on the change.
 A finding is a hit when it points at the same root cause: the same code and the same wrong behaviour, even if worded differently or only partly explained. A finding about something else in the same area is not a hit.
@@ -123,6 +126,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client, MonotonicC
         symbols: SYMBOLS,
         run: RUN,
         max_turns: MAX_TURNS,
+        effort: if TOOLS { EFFORT } else { "" },
         diff_limit: LIMIT,
         entries: [],
     };
@@ -233,7 +237,7 @@ fn review_once(
     ws: &Option<Workspace>,
     grading: &mut Usage,
 ) -> Run with (Client, Preopens, Process, MonotonicClock) {
-    let r = review(api_key, CLAUDE_MODEL, review_prompt, ws, MAX_TURNS);
+    let r = review(api_key, CLAUDE_MODEL, review_prompt, ws, MAX_TURNS, EFFORT);
     let mut reviewed = Run { findings: r.findings, turns: r.turns, calls: r.calls, usage: r.usage, error: r.error };
     if reviewed.error matches { Some(_) } {
         return reviewed;
@@ -269,7 +273,7 @@ fn earlier_entries(path: &String) -> TreeMap<i32, Entry> with Preopens {
         || earlier.symbols != SYMBOLS
         || earlier.run != RUN
         || earlier.diff_limit != LIMIT
-        || TOOLS && earlier.max_turns != MAX_TURNS {
+        || TOOLS && (earlier.max_turns != MAX_TURNS || earlier.effort != EFFORT) {
         assert ONLY == 0, `only= keeps the other entries of ${*path}, so it must hold runs with these settings`;
         return by_fix;
     }

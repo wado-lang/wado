@@ -99,13 +99,14 @@ fn instructions(w: &Workspace) -> String {
 }
 
 /// `model`'s review of `change`, in one call, or by an agent that reads `ws`
-/// for up to `max_turns` turns with every tool `ws` offers.
+/// for up to `max_turns` turns at `effort` with every tool `ws` offers.
 pub fn review(
     api_key: &String,
     model: String,
     change: &Submission,
     ws: &Option<Workspace>,
     max_turns: i32,
+    effort: String,
 ) -> Reviewed with (Client, Preopens, Process, MonotonicClock) {
     // Thinking spends from the same budget as the answer.
     let Some(w) = ws else {
@@ -118,7 +119,7 @@ pub fn review(
             },
         };
     };
-    let agent = run_agent(api_key, model, instructions(w), change.task(), w, max_turns, 32_000);
+    let agent = run_agent(api_key, model, instructions(w), change.task(), w, max_turns, 32_000, effort);
     let mut reviewed = Reviewed {
         turns: agent.turns,
         calls: agent.calls,
