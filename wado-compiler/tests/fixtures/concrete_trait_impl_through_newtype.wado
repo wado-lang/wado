@@ -1,0 +1,49 @@
+// A trait impl written for one instantiation of a generic type answers a
+// newtype over that instantiation under the name it answers the type itself.
+// Issue #2644.
+
+trait Alpha with () {
+    fn m(&self) -> i32;
+}
+
+struct Pair_<A, B> {
+    a: A,
+    b: B,
+}
+
+type N = Pair_<i32, i32>;
+type M = Pair_<i64, i32>;
+type GN<T> = Pair_<T, i32>;
+
+impl Alpha for Pair_<i32, i32> {
+    fn m(&self) -> i32 {
+        return self.a + self.b;
+    }
+}
+
+impl Alpha for Pair_<i64, i32> {
+    fn m(&self) -> i32 {
+        return 10;
+    }
+}
+
+test "the type and a newtype over it share the impl" {
+    let p: Pair_<i32, i32> = { a: 1, b: 2 };
+    assert p.m() == 3;
+    let x: N = { a: 3, b: 4 };
+    assert Alpha::m(&x) == 7;
+    assert x.m() == 7;
+}
+
+test "a newtype alone reaches the impl" {
+    let y: M = { a: 1, b: 2 };
+    assert y.m() == 10;
+    assert Alpha::m(&y) == 10;
+}
+
+test "a generic newtype reaches the impl at its instantiation" {
+    let p: Pair_<i32, i32> = { a: 1, b: 2 };
+    assert p.m() == 3;
+    let g: GN<i32> = { a: 5, b: 6 };
+    assert g.m() == 11;
+}
