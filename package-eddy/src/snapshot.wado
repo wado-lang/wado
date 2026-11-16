@@ -4,7 +4,7 @@
 use { env, log_stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { Command, Process } from "core:process";
+use { Child, Command, Process } from "core:process";
 use { git, try_git } from "./git.wado";
 use { Runner, ENTER_TREE } from "./tools.wado";
 
@@ -14,13 +14,62 @@ use { Runner, ENTER_TREE } from "./tools.wado";
 /// commits share untouched.
 global TREE: String = "scratchpad/eddy-tree";
 
-/// A checkout of `sha` for a reviewer to read, and its directory. It is a
-/// worktree, so it shares the repository's objects, later commits included:
-/// only the tools' refusal to leave the tree keeps them out of reach. A
-/// symbolic link is checked out as a file holding its target, so no path
-/// resolves out of the tree through one.
-pub fn snapshot(sha: &String) -> String with (Process, Preopens) {
-    return checkout_at(&".", &TREE, sha);
+/// The checkout, held by one run of eddy until it drops.
+pub affine struct Tree {
+    /// Absent where the host has no `flock`, and the tree is unheld.
+    lock: Option<Child>,
+}
+
+/// The checkout for this run alone, or why another run holds it.
+pub fn hold_tree() -> Result<Tree, String> with Process {
+    return Ok(Tree { lock: hold(&`${TREE}.lock`)? });
+}
+
+impl Tree {
+    /// The checkout at `sha` for a reviewer to read, and its directory. It is
+    /// a worktree, so it shares the repository's objects, later commits
+    /// included: only the tools' refusal to leave the tree keeps them out of
+    /// reach. A symbolic link is checked out as a file holding its target, so
+    /// no path resolves out of the tree through one.
+    pub fn check_out(&self, sha: &String) -> String with (Process, Preopens) {
+        return checkout_at(&".", &TREE, sha);
+    }
+}
+
+/// `path` locked for this run while the child returned lives, or an error
+/// where another run holds it. The host ends the child with the guest, so a
+/// run that dies leaves no lock behind.
+fn hold(path: &String) -> Result<Option<Child>, String> with Process {
+    let started = Command::new("flock").args([
+        "--nonblock", "--conflict-exit-code", "75", *path, "sh", "-c", "echo held && exec cat",
+    ]).stdin_piped().stdout_piped().spawn();
+    let mut child = match started {
+        Ok(child) => child,
+        Err(e) && e.kind matches { Spawn(NotFound) } => {
+            log_stderr(`eddy: no flock here, so nothing keeps another run out of ${*path}`);
+            return Ok(null);
+        },
+        Err(e) => {
+            return Err(`${e}`);
+        },
+    };
+    let [_, said] = child.stdout.take().unwrap().start_read(5).finish();
+    if said.items == b"held\n" {
+        return Ok(Some(child));
+    }
+    return Err(match child.wait() {
+        Ok(Exited(75)) => `another run of eddy is using ${*path}; wait for it to end`,
+        ended => `flock ${*path}: ${ended:?}`,
+    });
+}
+
+test "a run holds the tree until it lets go" {
+    fs::create_dir_all("build").unwrap();
+    let path = "build/hold-test.lock";
+    let first = hold(&path).unwrap();
+    assert hold(&path).unwrap_err().contains("another run");
+    builtin::drop(first);
+    assert hold(&path).is_ok();
 }
 
 /// The worktree `tree`, a path under the repository `repo`, checked out at

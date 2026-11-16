@@ -50,7 +50,15 @@ use {
 use { ask_json, Usage } from "../src/anthropic.wado";
 use { cost_summary } from "../src/cost.wado";
 use { review, Submission } from "../src/review.wado";
-use { snapshot, add_build_submodules, home_runner, with_mise_tools, reset_snapshot, index } from "../src/snapshot.wado";
+use {
+    hold_tree,
+    Tree,
+    add_build_submodules,
+    home_runner,
+    with_mise_tools,
+    reset_snapshot,
+    index,
+} from "../src/snapshot.wado";
 use { Runner, Workspace } from "../src/tools.wado";
 use { load, SymbolIndex } from "../src/symbols.wado";
 
@@ -137,6 +145,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client, MonotonicC
         }
         out.entries.push(entry);
     }
+    let tree: Option<Tree> = if TOOLS { Some(hold_tree().unwrap()) } else { null };
     let [mut reviewing, mut grading] = [Usage {}, Usage {}];
     for let i of 0..<out.entries.len() {
         if out.entries[i].runs.len() >= RUNS || ONLY != 0 && out.entries[i].fix != ONLY {
@@ -157,7 +166,11 @@ ${out.entries[i].defect}
 ${fix_diff}
 </fix_diff>`;
 
-        let ws: Option<Workspace> = if TOOLS { Some(workspace(&culprit.sha)) } else { null };
+        let ws: Option<Workspace> = if let Some(t) = &tree {
+            Some(workspace(t, &culprit.sha));
+        } else {
+            null;
+        };
         while out.entries[i].runs.len() < RUNS {
             if RUN && let Some(w) = &ws {
                 reset_snapshot(&w.root, &culprit.sha);
@@ -181,8 +194,8 @@ ${fix_diff}
 
 /// The tree as merge `sha` left it, indexed when `symbols` is set and ready to
 /// build when `run` is.
-fn workspace(sha: &String) -> Workspace with (Process, Preopens, Environment) {
-    let root = snapshot(sha);
+fn workspace(tree: &Tree, sha: &String) -> Workspace with (Process, Preopens, Environment) {
+    let root = tree.check_out(sha);
     // Before indexing, so the index sees the tree Run builds.
     if RUN {
         add_build_submodules(&root);

@@ -45,7 +45,7 @@ use { comment } from "./comment.wado";
 use { cost_summary } from "./cost.wado";
 use { report } from "./report.wado";
 use { review, Submission, Finding, Reviewed } from "./review.wado";
-use { snapshot, add_build_submodules, home_runner, with_mise_tools } from "./snapshot.wado";
+use { hold_tree, add_build_submodules, home_runner, with_mise_tools } from "./snapshot.wado";
 use { Runner, Workspace } from "./tools.wado";
 
 #[param(from_env = "CLAUDE_MODEL")]
@@ -131,7 +131,12 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Clie
 
 ${commits.trim()}`;
 
-    let root = snapshot(&head);
+    // Held to the end, since the reporter reads the tree too.
+    let tree = match hold_tree() {
+        Ok(tree) => tree,
+        Err(e) => fail(e),
+    };
+    let root = tree.check_out(&head);
     let runner: Option<Runner> = if options.no_run {
         null;
     } else {
