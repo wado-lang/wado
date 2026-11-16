@@ -14,6 +14,8 @@ struct Pair_<A, B> {
 type N = Pair_<i32, i32>;
 type M = Pair_<i64, i32>;
 type GN<T> = Pair_<T, i32>;
+type N2 = N;
+type R = &Pair_<i32, i32>;
 
 impl Alpha for Pair_<i32, i32> {
     fn m(&self) -> i32 {
@@ -46,4 +48,18 @@ test "a generic newtype reaches the impl at its instantiation" {
     assert p.m() == 3;
     let g: GN<i32> = { a: 5, b: 6 };
     assert g.m() == 11;
+}
+
+test "a chained newtype reaches the impl" {
+    let p: Pair_<i32, i32> = { a: 1, b: 2 };
+    assert p.m() == 3;
+    let x: N2 = { a: 7, b: 8 };
+    assert x.m() == 15;
+}
+
+test "a newtype over a reference reaches the impl" {
+    let p: Pair_<i32, i32> = { a: 1, b: 2 };
+    assert p.m() == 3;
+    let r = &p as R;
+    assert r.m() == 3;
 }
