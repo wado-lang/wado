@@ -22,8 +22,8 @@ wado test    # runs the session against SurfaceDom
 
 ## How it works
 
-- A signal is a pair of closures over one cell, so a copy of a `Signal` is the
-  same signal.
+- A signal holds its value behind a reference, so a copy of a `Signal` is the
+  same signal, and reading or writing one calls no function value.
 - `Track` is an effect. A computation installs a handler for it while it runs,
   and `Signal::get` reports the read to that handler. Outside a computation the
   operation's default body runs, and the read is untracked.

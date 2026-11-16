@@ -56,8 +56,9 @@ closures, effect handlers, and resources.
 
 ### Model
 
-- A signal is a value that tells its readers when it is written. A copy of a
-  signal is the same signal.
+- A signal is a value that tells its readers when it is written. It holds its
+  state behind a reference, so a copy of a signal is the same signal, and
+  reading or writing one calls no function value.
 - A memo is a value computed from others. It recomputes only when one of them
   was written and someone then reads it.
 - An effect, made by `observe`, runs once and again whenever something it read
@@ -102,13 +103,10 @@ not to the language.
 
 ## Roadmap
 
-1. Hold a signal's state in a struct behind a reference, in place of a pair of
-   closures over a captured variable. Done when `get` and `set` call no
-   function value and the example's tests pass unchanged.
-2. Measure a read, a write, and an effect's rerun with `core:fuel`. Done when
+1. Measure a read, a write, and an effect's rerun with `core:fuel`. Done when
    the numbers are in a table in this WEP beside the command that produced
    them.
-3. Decide from those numbers whether dispatching an effect operation on every
+2. Decide from those numbers whether dispatching an effect operation on every
    read, and installing a handler on every rerun, cost enough to optimize. Done
    when the decision is recorded here.
 
