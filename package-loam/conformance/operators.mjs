@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as ort from 'onnxruntime-node';
 import {
-  BFLOAT16, BOOL, FLOAT, FLOAT16, INT32, INT64, f32, graphProto, modelProto, node, tensorProto, valueInfo,
+  BFLOAT16, BOOL, FLOAT, FLOAT16, INT32, INT64, UINT8, f32, graphProto, modelProto, node, tensorProto, valueInfo,
 } from '../tests/onnx_proto.mjs';
 
 const here = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
@@ -522,6 +522,61 @@ add('GqaRotaryBias', gqa({
   s: 2, past: 1, heads: 2, kv: 1, dim: 16, rotary: true, attrs: { do_rotary: 1 }, bias: [0, 0, -2, -3.4028234663852886e38, 0, 0],
 }));
 
+// Bytes spread over their range, apart for each `seed`, as packed weights.
+const bytes = (dims, seed) => tensor(
+  UINT8,
+  dims,
+  Array.from({ length: dims.reduce((a, b) => a * b, 1) }, (_, i) => (i * 37 + seed * 101) % 256),
+);
+const scales = (dims) => float(dims, Array.from({ length: dims.reduce((a, b) => a * b, 1) }, (_, i) => ((i % 5) - 2) / 4 || 0.125));
+
+// MatMulNBits of `k` columns into 3 rows, of `bits` in blocks of `block`, with
+// packed zero points where `zeros` and a bias where `bias`.
+const nbits = ({ k, bits = 4, block = 32, zeros = true, bias = false }) => {
+  const blocks = Math.ceil(k / block);
+  const inits = { B: bytes([3, blocks, (block * bits) / 8], 1), S: scales([3, blocks]) };
+  const operands = ['A', 'B', 'S'];
+  if (zeros) {
+    inits.Z = bytes([3, Math.ceil((blocks * bits) / 8)], 2);
+    operands.push('Z');
+  }
+  if (bias) {
+    inits.C = float([3], [0.5, -1, 2]);
+    operands.push(...(zeros ? [] : ['']), '', 'C');
+  }
+  return {
+    inputs: { A: float([1, 2, k]) },
+    inits,
+    nodes: [node('com.microsoft.MatMulNBits', operands, 'Y', { K: k, N: 3, bits, block_size: block })],
+    domains: { 'com.microsoft': 1 },
+  };
+};
+add('NBits', nbits({ k: 40 }));
+add('NBitsBias', nbits({ k: 64, zeros: false, bias: true }));
+add('NBits2', nbits({ k: 32, bits: 2, block: 16 }));
+add('NBits8', nbits({ k: 16, bits: 8, block: 16, zeros: false }));
+
+// GatherBlockQuantized of a table of 5 rows of `width` values in blocks of
+// 32, by indices counting from the end and past it.
+const gatherBlocks = ({ width, zeros = true, attrs = { gather_axis: 0, quantize_axis: 1 } }) => {
+  const blocks = Math.ceil(width / 32);
+  const inits = { D: bytes([5, width / 2], 3), S: scales([5, blocks]) };
+  const operands = ['D', 'I', 'S'];
+  if (zeros) {
+    inits.Z = bytes([5, Math.ceil(blocks / 2)], 4);
+    operands.push('Z');
+  }
+  return {
+    inputs: { I: int64([2, 2], [4, -1, 0, 7]) },
+    inits,
+    nodes: [node('com.microsoft.GatherBlockQuantized', operands, 'Y', { bits: 4, block_size: 32, ...attrs })],
+    domains: { 'com.microsoft': 1 },
+  };
+};
+add('GatherBlocks', gatherBlocks({ width: 40 }));
+add('GatherBlocksCentered', gatherBlocks({ width: 64, zeros: false }));
+add('GatherBlocksDefaultAxes', gatherBlocks({ width: 32, attrs: {} }));
+
 const elementName = { [FLOAT]: 'f32', [INT64]: 'i64' };
 
 // The tensor's elements as the .txt spells them: a float by its bits, so that
@@ -537,6 +592,7 @@ const list = (values) => `[${values.join(',')}]`;
 const raw = (type, values) => {
   if (type === FLOAT) return new Float32Array(values).buffer;
   if (type === INT32) return new Int32Array(values).buffer;
+  if (type === UINT8) return new Uint8Array(values).buffer;
   return new BigInt64Array(values).buffer;
 };
 

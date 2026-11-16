@@ -378,6 +378,60 @@ test "GroupQueryAttention's heads times the head are counted past i32" {
     assert e == "Y = com.microsoft.GroupQueryAttention: axis Q[2] would be 4294967304 long, which no axis is";
 }
 
+/// A `MatMulNBits` of 40 columns in blocks of 32 into 3 rows, its weight `B`,
+/// scales and zero points declared as `weight` writes them.
+fn quantized_product(weight: String, attrs: String) -> String {
+    return `g (float[1, T, 40] A) => (float[1, T, 3] Y) <${weight}> {
+        Y = com.microsoft.MatMulNBits<K = 40, N = 3, block_size = 32${attrs}>(A, B, S, Z)
+    }`;
+}
+
+global PACKED: String = "uint8[3, 2, 16] B, float[3, 2] S, uint8[3, 1] Z";
+
+test "MatMulNBits puts the weight's rows where its input's last axis was" {
+    let source = quantized_product(PACKED, "");
+    let shapes = shapes_of(source);
+    assert shapes["Y"][2] == shapes["B"][0];
+    assert y_axes(source).unwrap() == "A0=1,T=T,Y2=3";
+}
+
+test "a MatMulNBits weight laid out apart from what K, N and its packing say stops the build" {
+    let short = y_axes(quantized_product("uint8[3, 2, 8] B, float[3, 2] S, uint8[3, 1] Z", "")).unwrap_err();
+    assert short == "Y = com.microsoft.MatMulNBits: operand 1 is [3, 2, 8], and its packing makes it [3, 2, 16]";
+    let zeros = y_axes(quantized_product("uint8[3, 2, 16] B, float[3, 2] S, uint8[3, 2] Z", "")).unwrap_err();
+    assert zeros == "Y = com.microsoft.MatMulNBits: operand 3 is [3, 2], and its packing makes it [3, 1]";
+    let input = y_axes(quantized_product(PACKED, "").replace("40] A", "32] A")).unwrap_err();
+    assert input == "Y = com.microsoft.MatMulNBits: the input's last axis is 32 long, and K is 40";
+}
+
+test "MatMulNBits packs 2, 4 or 8 bits in blocks of a power of two from 16" {
+    let bits = y_axes(quantized_product(PACKED, ", bits = 3")).unwrap_err();
+    assert bits == "Y = com.microsoft.MatMulNBits: attribute bits is 3, and a byte packs 2, 4 or 8";
+    let block = y_axes(quantized_product(PACKED, "").replace("block_size = 32", "block_size = 24")).unwrap_err();
+    assert block == "Y = com.microsoft.MatMulNBits: attribute block_size is 24, which must be a power of two from 16";
+}
+
+test "MatMulNBits's zero points in the input's element stop the build" {
+    let e = refused(quantized_product("uint8[3, 2, 16] B, float[3, 2] S, float[3, 2] Z", ""));
+    assert e == "Y = com.microsoft.MatMulNBits: operand Z is f32, and zero points are packed in u8";
+}
+
+/// A `GatherBlockQuantized` of a table of 5 rows of 40 values in blocks of 32.
+fn quantized_gather(attrs: String) -> String {
+    return `g (int64[1, T] I) => (float[1, T, 40] Y) <uint8[5, 20] D, float[5, 2] S, uint8[5, 1] Z> {
+        Y = com.microsoft.GatherBlockQuantized<bits = 4, block_size = 32${attrs}>(D, I, S, Z)
+    }`;
+}
+
+test "GatherBlockQuantized puts a row's values after its indices' axes" {
+    assert y_axes(quantized_gather(", gather_axis = 0, quantize_axis = -1")).unwrap() == "I0=1,T=T,Y2=40";
+}
+
+test "GatherBlockQuantized gathers a packed table's rows only" {
+    let e = y_axes(quantized_gather(", quantize_axis = 0")).unwrap_err();
+    assert e == "Y = com.microsoft.GatherBlockQuantized: attribute quantize_axis is 0, and a packed table is quantized along its rows";
+}
+
 test "Concat sums the axis it joins, on an axis of its own" {
     let source = `g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, ?, 8] Y) {
         Y = Concat<axis = -2>(P, N)

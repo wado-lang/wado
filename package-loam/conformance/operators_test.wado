@@ -725,3 +725,37 @@ test "GroupQueryAttention adds its bias to the scores" {
 test "GroupQueryAttention rotates and adds its bias" {
     assert_agrees(#include_bytes("./operators/GqaRotaryBias.onnx"), #include_str("./operators/GqaRotaryBias.txt"));
 }
+
+test "MatMulNBits reads each block less its packed zero point, times its scale, the last block cut short" {
+    assert_agrees(#include_bytes("./operators/NBits.onnx"), #include_str("./operators/NBits.txt"));
+}
+
+test "MatMulNBits without zero points centers each value at half its range, and adds its bias" {
+    assert_agrees(#include_bytes("./operators/NBitsBias.onnx"), #include_str("./operators/NBitsBias.txt"));
+}
+
+test "MatMulNBits packs four values of 2 bits into a byte" {
+    assert_agrees(#include_bytes("./operators/NBits2.onnx"), #include_str("./operators/NBits2.txt"));
+}
+
+test "MatMulNBits of 8 bits holds a value in each byte" {
+    assert_agrees(#include_bytes("./operators/NBits8.onnx"), #include_str("./operators/NBits8.txt"));
+}
+
+test "GatherBlockQuantized dequantizes the rows it takes, an index past the table reading zeros" {
+    assert_agrees(#include_bytes("./operators/GatherBlocks.onnx"), #include_str("./operators/GatherBlocks.txt"));
+}
+
+test "GatherBlockQuantized without zero points centers each value at half its range" {
+    assert_agrees(
+        #include_bytes("./operators/GatherBlocksCentered.onnx"),
+        #include_str("./operators/GatherBlocksCentered.txt"),
+    );
+}
+
+test "GatherBlockQuantized gathers rows and quantizes along them by default" {
+    assert_agrees(
+        #include_bytes("./operators/GatherBlocksDefaultAxes.onnx"),
+        #include_str("./operators/GatherBlocksDefaultAxes.txt"),
+    );
+}

@@ -4,7 +4,7 @@
 //! devices.md § "An extent that varies is a capacity".
 
 use { HashMap } from "core:collections";
-use { GROUP_QUERY_ATTENTION, Graph, Node } from "./graph.wado";
+use { GROUP_QUERY_ATTENTION, Graph, MATMUL_NBITS, Node } from "./graph.wado";
 use {
     Checked,
     attention_options,
@@ -290,6 +290,13 @@ fn carried(
         merges[0] = a.1[0];
         if node.has_operand(2) && shapes[node.inputs[2]] matches { c && rows_under(&merges, &c, c.rank(), 2) } {
             return reads();
+        }
+        return Result::Ok(Option::Some(merges));
+    }
+    if op == MATMUL_NBITS {
+        // Its weight is a matrix, which holds no rows.
+        for let i of 0..<a_rank - 1 {
+            merges[i] = a.1[i];
         }
         return Result::Ok(Option::Some(merges));
     }
