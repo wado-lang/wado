@@ -444,6 +444,15 @@ fn through_extern<R: ExternHandle>(r: &R) -> bool {
 fn through_affine<affine R: AffineResource>(r: &R) -> bool {
     return is_one(r);
 }
+
+test "an extern handle and an affine resource are each a resource" {
+    let node = Node::backed_by("node");
+    assert is_one(&node);
+    assert through_extern(&node);
+    let [rx, _tx] = Stream::<u8>::new();
+    assert is_one(&rx);
+    assert through_affine(&rx);
+}
 ```
 
 An affine resource crosses the Component Model boundary as an `own` / `borrow` handle. A resource declared `repr = "externref"` is an extern handle, which [Extern Handles](#extern-handles) describes. `as` upcasts an extern handle to a resource it extends. No other cast accepts one, so an affine resource and an extern handle never convert into each other, and neither converts to a number.
