@@ -1,5 +1,4 @@
-// A function type holding a resource takes a function value that performs a
-// resource extending it.
+// A closure holds the resources the types of its captures mention.
 
 #[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
 resource Node {}
@@ -10,13 +9,13 @@ resource HtmlInputElement extends Node {
     fn value(&self) -> String;
 }
 
-fn call(f: fn() -> String with Node) -> String with Node {
+fn call(f: fn() -> String) -> String {
     return f();
 }
 
 fn describe(n: Node) -> String {
-    return call(|| match n {                       // performs HtmlInputElement,
-        input: HtmlInputElement => input.value(),  // which extends Node
+    return call(|| match n {                       // captures a Node, so holds it
+        input: HtmlInputElement => input.value(),  // and what it narrows to
         _ => "",
     });
 }

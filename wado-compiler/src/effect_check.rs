@@ -1899,8 +1899,6 @@ struct CalleeEffects {
     params: IndexMap<String, IndexSet<EffectRef>>,
     /// The callee's declared return type, which the call's type instantiates.
     returns: Option<TypeId>,
-    /// The callee is a function value, whose row `declared` is.
-    is_value: bool,
 }
 
 /// Every callee a call at `id` resolves to: a free function, each static
@@ -1926,7 +1924,6 @@ fn call_site_effects(
         resource: OperationDemands::default(),
         params: IndexMap::default(),
         returns: None,
-        is_value: false,
     };
     if let Expr::Ident(ident) = callee
         && let Some(def) = sem.referenced_symbol(ident.id)
@@ -1954,10 +1951,7 @@ fn call_site_effects(
             return Vec::new();
         }
         let performed: Vec<EffectRef> = rows.row(&rows_of.concat());
-        return vec![CalleeEffects {
-            is_value: true,
-            ..bare(INDIRECT_CALLEE.to_string(), performed)
-        }];
+        return vec![bare(INDIRECT_CALLEE.to_string(), performed)];
     }
     // Only a free function outside the bindings dispatches through the path: a
     // method names its receiver, and a host binding is already the import.
@@ -1983,7 +1977,6 @@ fn call_site_effects(
                 resource,
                 params: resolved.params,
                 returns: index.callee_return(&func_ref),
-                is_value: false,
             }
         })
         .collect()
@@ -2061,19 +2054,6 @@ struct SemEffectWalker<'a> {
 }
 
 impl EffectIndex<'_> {
-    /// Whether `held` holds a resource `effect` extends. A body holding one
-    /// narrows a handle of it to `effect`, so it takes a function value that
-    /// performs `effect`.
-    fn extends_held(&self, effect: &EffectRef, held: &IndexSet<EffectRef>) -> bool {
-        let EffectRef::Concrete(head) = effect else {
-            return false;
-        };
-        self.resources.contains(effect)
-            && resource_chain_effects(self.types, self.resolutions, head.def())
-                .skip(1)
-                .any(|ancestor| held.contains(&ancestor))
-    }
-
     fn kind_of(&self, effect: &EffectRef) -> EffectKind {
         if self.resources.contains(effect) {
             EffectKind::Resource
@@ -2974,9 +2954,11 @@ impl SemEffectWalker<'_> {
     }
 
     /// What a closure literal's body performs, which is its type's row. The
-    /// body holds only what a function's would, the resources its signature
-    /// names and what the body grants itself, so every other effect it needs
-    /// is one it performs, a handler it installs discharging its own.
+    /// body holds what a function's would, the resources its signature names
+    /// and what the body grants itself, and the resources the types of its
+    /// captures name: a captured handle is one it was handed, as a parameter
+    /// is. Every other effect it needs is one it performs, a handler it
+    /// installs discharging its own.
     fn closure_performs(&mut self, closure: &ast::ClosureExpr) -> Vec<EffectRef> {
         if let Some(performed) = self.closures.get(&closure.id) {
             return performed.clone();
@@ -2991,6 +2973,14 @@ impl SemEffectWalker<'_> {
         let mut signature = IndexSet::default();
         for &closure_type in &closure_types {
             scan.collect(closure_type, &mut signature, &mut TypeSet::default());
+        }
+        let captured = self.annotations.into_iter().flat_map(|annotations| {
+            annotations
+                .all(|facts| &facts.closure_captures, closure.id)
+                .flat_map(|info| &info.captures)
+        });
+        for capture in captured {
+            scan.collect(capture.type_id, &mut signature, &mut TypeSet::default());
         }
         let current = held_in_body(
             self.annotations,
@@ -3044,12 +3034,8 @@ impl SemEffectWalker<'_> {
             args,
             &self.rows,
         );
-        for mut site in sites {
+        for site in sites {
             self.solve_rows(site.returns, id, &site.params);
-            if site.is_value {
-                site.declared
-                    .retain(|effect| !self.index.extends_held(effect, &self.current));
-            }
             self.report_missing(&site.declared, &site.name, span);
             self.report_dispatched(&site.dispatched, &site.name, span);
             self.report_dispatched(&site.resource, &site.name, span);
@@ -3192,7 +3178,7 @@ impl Rows {
                     !effect.is_var(),
                     "a settled body's flows read only solved variables"
                 );
-                if admitted.contains(&effect) || index.extends_held(&effect, &admitted) {
+                if admitted.contains(&effect) {
                     continue;
                 }
                 out.push(EffectError {
