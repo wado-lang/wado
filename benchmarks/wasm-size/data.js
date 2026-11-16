@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794826450708,
+  "lastUpdate": 1794827897832,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78201,6 +78201,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c14d7e392b55c59dc4e39efc4a4bf2d32be10163"
         },
         "date": 1794826449654,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24433,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434873,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b2ac64e0a0df031dad893ed32408a9e5d7aeaceb",
+          "message": "Merge pull request #2646 from wado-lang/gfx/eloquent-edison-06cjpr\n\nfix: call a concrete trait impl through a newtype without an ICE",
+          "timestamp": "2026-11-16T20:02:19+09:00",
+          "tree_id": "6bf89f0bd85dc609cbf3df27b4d26af9f80d394f",
+          "url": "https://github.com/wado-lang/wado/commit/b2ac64e0a0df031dad893ed32408a9e5d7aeaceb"
+        },
+        "date": 1794827897300,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
