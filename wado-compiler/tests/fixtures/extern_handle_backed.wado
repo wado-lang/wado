@@ -81,6 +81,89 @@ test "a write through a handle an immutable place holds lands" {
     assert uses_of(&other.node) == 1;
 }
 
+#[inline("never")]
+fn make() -> Node {
+    return Node::backed_by(Tag { name: "div", uses: 0 });
+}
+
+#[inline("never")]
+fn wrap(tag: Tag) -> Node {
+    return Node::backed_by(tag);
+}
+
+#[inline("never")]
+fn wrap_ref(tag: &Tag) -> Node {
+    return Node::backed_by(*tag);
+}
+
+test "a constant value is not shared between handles" {
+    let a = make();
+    let b = make();
+    assert a != b;
+    bump(a);
+    assert uses_of(&a) == 1;
+    assert uses_of(&b) == 0;
+    assert make().backing::<Tag>() matches { Some(t) && t.name == "div" };
+}
+
+test "one site in a loop makes a handle each time" {
+    let mut handles: List<Node> = [];
+    for let _ of 0..<3 {
+        handles.push(Node::backed_by(Tag { name: "div", uses: 0 }));
+    }
+    bump(handles[0]);
+    assert uses_of(&handles[1]) == 0;
+    assert handles[0] != handles[1];
+}
+
+test "a string literal backing is the handle's own" {
+    let a = Node::backed_by("text");
+    let b = Node::backed_by("text");
+    a.backing::<String>().unwrap().push_str("x");
+    assert b.backing::<String>() matches { Some(s) && *s == "text" };
+    let again: String = "text";
+    assert again == "text";
+}
+
+test "a parameter passed on is the callee's handle's own" {
+    let tag = Tag { name: "p", uses: 0 };
+    bump(wrap(tag));
+    bump(wrap_ref(&tag));
+    assert tag.uses == 0;
+    assert tag.name == "p";
+}
+
+struct Shelf {
+    tag: Tag,
+}
+
+global SHARED: Tag = Tag { name: "g", uses: 0 };
+
+test "a field, an element and a global are copied in" {
+    let shelf = Shelf { tag: Tag { name: "f", uses: 0 } };
+    bump(Node::backed_by(shelf.tag));
+    assert shelf.tag.uses == 0;
+    assert shelf.tag.name == "f";
+    let tags: List<Tag> = [Tag { name: "e", uses: 0 }];
+    bump(Node::backed_by(tags[0]));
+    assert tags[0].uses == 0;
+    assert tags[0].name == "e";
+    bump(Node::backed_by(SHARED));
+    assert SHARED.uses == 0;
+    assert SHARED.name == "g";
+}
+
+test "a value read back is a copy of the handle's" {
+    let node = make();
+    let mut out = *node.backing::<Tag>().unwrap();
+    out.uses = 9;
+    out.name = "other";
+    assert uses_of(&node) == 0;
+    bump(wrap(*node.backing::<Tag>().unwrap()));
+    assert uses_of(&node) == 0;
+    assert node.backing::<Tag>() matches { Some(t) && t.name == "div" };
+}
+
 struct Held<T> {
     value: T,
 }

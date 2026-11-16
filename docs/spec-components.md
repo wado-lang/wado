@@ -468,7 +468,7 @@ Every extern handle type implements `ExternHandle`, a marker the compiler states
 - `R::backed_by(value)` makes a new handle of type `R` holding `value`. The value is passed as any argument is, so the handle's is its own: no variable names it, and only the handle reaches it. Its class is `R`'s own.
 - `handle.backing::<T>()` is the value the handle holds, in place, as `Option<&mut T>`. It is `None` for an object of the host, and for a handle holding a value of another type. The reference is `&mut` whatever the handle is held in, since a resource is the object it names.
 
-The value's type is one a reference reaches in place, which the bound `T: RefMut` states: a struct, a tuple, a list or a string. A scalar, a variant, a closure, a reference or an extern handle backs no handle.
+The value's type is one a reference reaches in place, which the bound `T: RefMut` states: a struct, a tuple, a list, a string or a 128-bit integer. A scalar, a variant, a closure, a reference or an extern handle backs no handle.
 
 A backed handle is how a guest answers an import itself, as a handler in a test does.
 

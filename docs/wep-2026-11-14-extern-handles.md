@@ -226,8 +226,8 @@ node, made with the class of what the node is, and the node lives in it. A
 `Node` and an `HtmlInputElement` of one node are then one handle, upcast or
 narrowed, as two views of one host object are.
 
-The backing type is bound by `RefMut`: a struct, a tuple, a list or a string,
-which a reference reaches in place. A reference to any other value is a cell
+The backing type is bound by `RefMut`: a struct, a tuple, a list, a string or a
+128-bit integer, which a reference reaches in place. A reference to any other value is a cell
 holding a copy, and `backing` has only a reference to hand back. A cell carries
 neither the value's identity nor its type: the cells of two extern handle types
 are one struct, and so are those of two function types, so
@@ -468,6 +468,11 @@ glue cannot be run without them.
 - `SurfaceDom` keeps the handle of every node it made, in a list, so a node
   the program dropped is not collected while the `SurfaceDom` lives.
 - An affine value backs no handle.
+- `backing::<T>()` tells two backing types apart by their representation, which
+  a newtype shares with its base. A handle holding a `Point` answers
+  `backing::<Location>()` for `type Location = Point`, and the other way.
+- A value copy of a `SurfaceDom` holds the same handles, so the two are one
+  document.
 - A `&mut` to a place holding a handle asks `same` of the host before storing
   back, once for each call that takes one.
 - The glue generator writes no shim for a member whose parameters are passed
