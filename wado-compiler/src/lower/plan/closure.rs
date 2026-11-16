@@ -736,6 +736,15 @@ impl ClosureLowerer {
             // Body locals use synthetic placeholders here; `wir_build`
             // recovers source names from `TirFunction::locals[idx].name`.
             body_locals.sort_by_key(|(idx, _)| *idx);
+            for pair in body_locals.windows(2) {
+                assert!(
+                    pair[0].0 != pair[1].0 || pair[0].1 == pair[1].1,
+                    "a closure body declares each local with one type: local {} is {:?} and {:?}",
+                    pair[0].0,
+                    type_table.get(pair[0].1),
+                    type_table.get(pair[1].1),
+                );
+            }
             for (idx, type_id) in &body_locals {
                 if *idx >= param_count {
                     // Pad sparse indices so the slot the body uses lands at the
@@ -1425,8 +1434,12 @@ impl TirRefVisitor for LocalCollector<'_> {
     }
 
     /// A slot a producer preallocates and assigns, a minted temporary, is
-    /// declared by that assignment and nothing else.
+    /// declared by that assignment and nothing else. A nested closure numbers
+    /// its locals from zero again, so its slots are not this body's.
     fn visit_expr(&mut self, expr: &TirExpr) {
+        if matches!(expr.kind, TirExprKind::Closure { .. }) {
+            return;
+        }
         if let TirExprKind::Assign { target, value } = &expr.kind
             && let TirExprKind::Local { index, .. } = &target.kind
         {

@@ -1,0 +1,44 @@
+// A closure's locals are its own: a closure nested in it numbers its locals
+// from zero again, and a slot of the inner one is not a slot of the outer.
+
+struct Pair {
+    left: i32,
+    right: String,
+}
+
+fn run(body: fn mut()) {
+    let mut body = body;
+    body();
+}
+
+fn give(handler: fn mut(i32)) {
+    let mut handler = handler;
+    handler(40);
+}
+
+test "an inner closure's parameter and local" {
+    let mut seen = 0;
+    run(|| {
+        let pair = Pair { left: 1, right: "one" };
+        give(|given: i32| {
+            let sum = given + pair.left;
+            seen = sum + pair.right.len();
+        });
+        seen += pair.left;
+    });
+    assert seen == 45;
+}
+
+test "an inner closure's second local" {
+    let mut seen = "";
+    run(|| {
+        let pair = Pair { left: 2, right: "two" };
+        run(|| {
+            let doubled = pair.left * 2;
+            let label = `${pair.right}:${doubled}`;
+            seen = label;
+        });
+        seen.push_str(pair.right);
+    });
+    assert seen == "two:4two";
+}
