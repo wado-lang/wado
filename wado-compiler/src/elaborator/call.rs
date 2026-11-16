@@ -1759,16 +1759,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some((written, _)) => receiver.written_as(written),
             None => receiver,
         });
+        let namespaced = || {
+            let (ns, rest) = effective_name.split_once("::")?;
+            let (type_name, _) = rest.split_once("::")?;
+            self.namespace_alias_source(ns, call.callee.id())?;
+            self.namespaced_receiver(ns, type_name, ident)
+        };
         if given_args.is_none()
             && callee_kind.case_owner().is_none()
-            && let Some(receiver) = &call_receiver
+            && let Some(receiver) = call_receiver.clone().or_else(namespaced)
             && let Some((prefix, method_name)) = effective_name.rsplit_once("::")
-            && self.names_instance_method(receiver, method_name)
+            && self.names_instance_method(&receiver, method_name, !call.args.is_empty())
         {
-            self.record_receiver_reference(ident, prefix);
+            if call_receiver.is_some() {
+                self.record_receiver_reference(ident, prefix);
+            }
             let type_args = self.resolve_turbofish_args(&call.type_args);
             return self.resolve_qualified_call_parts(
-                Qualifier::Type(receiver),
+                Qualifier::Type(&receiver),
                 method_name,
                 &call.args,
                 type_args,
@@ -2253,33 +2261,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(inner_pos) = suffix.find("::") {
                     let type_name = &suffix[..inner_pos];
                     let method_name = &suffix[inner_pos + 2..];
-
-                    // The importing module never names `Type` on its own, so a
-                    // bare-name search reaches no impl on it: the callee then
-                    // loses its trait segment and names a body nothing
-                    // declares, which WIR build reports as an unresolved call.
-                    #[expect(
-                        clippy::disallowed_methods,
-                        reason = "the walk answers for `ns::Type` under the import's `ns$Type` alias"
-                    )]
-                    let ns_member = self.namespace_member(prefix, type_name);
-                    let receiver_segment = ident.owner_segment();
-                    let receiver = match ns_member {
-                        Some(def) => Some(ReceiverId::of_decl(
-                            self.tysys.resolutions.defs(),
-                            def,
-                            None,
-                        )),
-                        None => receiver_segment.and_then(|seg| self.receiver_at(seg)),
-                    };
                     // The branch below reads the middle segment as a type, so a
                     // segment naming none is reported where it is written.
-                    let Some(receiver) = receiver
-                        .map(|receiver| receiver.written_as(&format!("{prefix}::{type_name}")))
-                    else {
+                    let Some(receiver) = self.namespaced_receiver(prefix, type_name, ident) else {
                         let _ = self.emit(TypeError::UnknownType {
                             name: format!("{prefix}::{type_name}"),
-                            span: receiver_segment.map_or(call.span, |seg| seg.span),
+                            span: ident.owner_segment().map_or(call.span, |seg| seg.span),
                         });
                         return TypeTable::ERROR;
                     };
@@ -5190,6 +5177,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Enforce the visibility ladder on a qualified `Type::method(...)` call.
     /// `receiver` is the key the neighbouring lookups resolved, not one
     /// re-derived from the spelling, which a splice can make mean another type.
+    /// The receiver `ns::Type` names in `ns::Type::method(…)`.
+    fn namespaced_receiver(
+        &self,
+        prefix: &str,
+        type_name: &str,
+        ident: &ast::IdentExpr,
+    ) -> Option<ReceiverId> {
+        // The importing module never names `Type` on its own, so a bare-name
+        // search reaches no impl on it: the callee then loses its trait
+        // segment and names a body nothing declares, which WIR build reports
+        // as an unresolved call.
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "the walk answers for `ns::Type` under the import's `ns$Type` alias"
+        )]
+        let ns_member = self.namespace_member(prefix, type_name);
+        let receiver = match ns_member {
+            Some(def) => Some(ReceiverId::of_decl(
+                self.tysys.resolutions.defs(),
+                def,
+                None,
+            )),
+            None => ident.owner_segment().and_then(|seg| self.receiver_at(seg)),
+        };
+        receiver.map(|receiver| receiver.written_as(&format!("{prefix}::{type_name}")))
+    }
+
     pub(super) fn check_static_call_visibility(
         &mut self,
         receiver: &ReceiverId,

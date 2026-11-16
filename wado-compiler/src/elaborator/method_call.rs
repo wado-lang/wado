@@ -33,7 +33,7 @@ use super::reflect::ReflectDispatch;
 use super::scope::{BoundsOf, ParamRef, ScopedBound};
 use super::sem::types::{CalleeParams, StaticMethodDispatch, impl_self_layers};
 use super::sig::{MethodSig, Param};
-use super::static_call::{CandidateKind, ReceiverId, Selector, StaticLookup, StaticQuery};
+use super::static_call::{ReceiverId, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
 use super::trait_query::{NewtypePeel, OnBoundTrait, SelfBinding};
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
@@ -1012,9 +1012,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let optional = param_defaults.iter().filter(|d| d.is_some()).count();
         let required = expected_param_types.len().saturating_sub(optional);
         if method_found && (args.len() < required || args.len() > expected_param_types.len()) {
+            // A qualified call writes the receiver among its arguments.
+            let receiver_written = usize::from(defaults_site.is_some());
             let _ = self.emit(TypeError::ArgumentCountMismatch {
-                expected: expected_param_types.len(),
-                found: args.len(),
+                expected: expected_param_types.len() + receiver_written,
+                found: args.len() + receiver_written,
                 span,
             });
             return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
@@ -1480,10 +1482,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `Type::method(…)` names a receiver-taking method: no
     /// receiver-less declaration answers it, and one taking a receiver is
-    /// declared along the type's newtype chain or by some trait, which a
-    /// blanket's covers. The call then selects as `recv.method(…)` does, and
-    /// that resolution reports a trait the type does not implement.
-    pub(super) fn names_instance_method(&mut self, receiver: &ReceiverId, method_name: &str) -> bool {
+    /// declared along the type's newtype chain, or, where the call passes an
+    /// argument to be the receiver, by some trait, which a blanket's covers.
+    /// The call then selects as `recv.method(…)` does, and that resolution
+    /// reports a trait the type does not implement.
+    pub(super) fn names_instance_method(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+        passes_receiver: bool,
+    ) -> bool {
         let lookup = self.resolve_static_callee(StaticQuery::of(receiver, method_name));
         if !matches!(lookup, StaticLookup::NotStatic)
             || self.declares_case_named(receiver.key(), method_name)
@@ -1495,6 +1503,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self
                 .impl_method_entries(&key, method_name)
                 .any(|entry| entry.has_self)
+                || key
+                    .decl()
+                    .is_some_and(|def| self.tysys.resource_instance_method(def, method_name).is_some())
             {
                 return true;
             }
@@ -1503,11 +1514,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None => break,
             }
         }
-        self.tysys.trait_env.trait_decl_headers.values().any(|decl| {
-            decl.methods
-                .iter()
-                .any(|m| m.name == method_name && m.has_receiver)
-        })
+        // A blanket's static answers only once the receiver's type is known,
+        // which a bare spelling leaves to the blanket resolver; a trait
+        // declaring the name receiver-less keeps the call there.
+        let declared = |has_receiver: bool| {
+            self.tysys.trait_env.trait_decl_headers.values().any(|decl| {
+                decl.methods
+                    .iter()
+                    .any(|m| m.name == method_name && m.has_receiver == has_receiver)
+            })
+        };
+        passes_receiver && declared(true) && !declared(false)
     }
 
     /// Whether `receiver_type`, behind its references, is the type `spelled`
@@ -1685,23 +1702,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type,
                 &self.tysys.type_table.borrow(),
             );
-            // The mode is spelled against `Self`, which such an impl's own
+            // The mode may be spelled against `Self`, which such an impl's own
             // reference is part of: `Tr::m(r)` passes `r: &P` by value to an
             // `impl Tr for &P`'s `fn m(self)`.
-            let spelled_self = (0..self_layers).fold(receiver_type, |ty, _| {
+            let as_self = (0..self_layers).fold(receiver_type, |ty, _| {
                 self.tysys
                     .type_table
                     .borrow()
                     .ref_pointee(ty)
                     .unwrap_or(ty)
             });
-            self.check_trait_qualified_receiver_mode(
-                &qualifier_display,
-                method_name,
-                sig.self_kind,
-                spelled_self,
-                receiver_ast.span(),
-            );
+            if !self.receiver_mode_fits(sig.self_kind, as_self) {
+                self.check_trait_qualified_receiver_mode(
+                    &qualifier_display,
+                    method_name,
+                    sig.self_kind,
+                    receiver_type,
+                    receiver_ast.span(),
+                );
+            }
             let self_type = adjusted_receiver_type(
                 receiver_type,
                 sig.self_kind,
@@ -1723,6 +1742,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         outcome.type_id
     }
 
+    /// Whether a receiver of `receiver_type` spells `self_kind`'s mode.
+    fn receiver_mode_fits(&self, self_kind: ast::SelfKind, receiver_type: TypeId) -> bool {
+        if receiver_type == TypeTable::ERROR || receiver_type == TypeTable::UNKNOWN {
+            return true;
+        }
+        let (is_ref, is_mut_ref) = match self.tysys.type_table.borrow().get(receiver_type) {
+            ResolvedType::Ref(_) => (true, false),
+            ResolvedType::MutRef(_) => (false, true),
+            _ => (false, false),
+        };
+        match self_kind {
+            ast::SelfKind::Value => !(is_ref || is_mut_ref),
+            ast::SelfKind::Ref => is_ref || is_mut_ref,
+            ast::SelfKind::MutRef => is_mut_ref,
+            ast::SelfKind::None => true,
+        }
+    }
+
     /// The receiver of a qualified call spells its own mode (WEP 2026-07-31);
     /// enforce that the spelling agrees with the method's `self` parameter.
     /// Without this, a by-value receiver against `&mut self` mutates a copy
@@ -1736,17 +1773,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type: TypeId,
         span: Span,
     ) {
-        if receiver_type == TypeTable::ERROR || receiver_type == TypeTable::UNKNOWN {
+        if self.receiver_mode_fits(self_kind, receiver_type) {
             return;
         }
-        let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
-        let is_ref = matches!(resolved, ResolvedType::Ref(_));
-        let is_mut_ref = matches!(resolved, ResolvedType::MutRef(_));
         let (expected, spelled) = match self_kind {
-            ast::SelfKind::Value if is_ref || is_mut_ref => ("self", "value"),
-            ast::SelfKind::Ref if !(is_ref || is_mut_ref) => ("&self", "&value"),
-            ast::SelfKind::MutRef if !is_mut_ref => ("&mut self", "&mut value"),
-            _ => return,
+            ast::SelfKind::Value => ("self", "value"),
+            ast::SelfKind::Ref => ("&self", "&value"),
+            ast::SelfKind::MutRef => ("&mut self", "&mut value"),
+            ast::SelfKind::None => return,
         };
         let _ = self.emit(TypeError::TraitQualifiedReceiverMode {
             trait_name: trait_name.to_string(),
@@ -2058,10 +2092,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let static_receiver = lookup_receiver.as_ref().map(ReceiverId::key);
 
         let spelled = own_key.at_type(Some(target_type_id));
-        if required_trait.is_none() && self.names_instance_method(&spelled, &static_call.method) {
+        // A default body's `Self::m(self)` names its trait, as `Tr::m(self)` does.
+        let qualifier = match required_trait {
+            Some(decl)
+                if !static_call.args.is_empty()
+                    && self.tysys.trait_declares_method(Some(decl), &static_call.method, |kind| {
+                        kind != ast::SelfKind::None
+                    }) =>
+            {
+                Some(Qualifier::Trait(self.tysys.required_trait(decl)))
+            }
+            Some(_) => None,
+            None => self
+                .names_instance_method(&spelled, &static_call.method, !static_call.args.is_empty())
+                .then_some(Qualifier::Type(&spelled)),
+        };
+        if let Some(qualifier) = qualifier {
             let method_type_args = self.resolve_turbofish_args(&static_call.type_args);
             return self.resolve_qualified_call_parts(
-                Qualifier::Type(&spelled),
+                qualifier,
                 &static_call.method,
                 &static_call.args,
                 method_type_args,
@@ -3612,9 +3661,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else {
                 continue;
             };
-            if offer.kind != CandidateKind::Static {
-                continue;
-            }
             let trait_name = || {
                 header
                     .trait_head_name()

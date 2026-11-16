@@ -189,52 +189,22 @@ pub(super) enum StaticLookup {
     NotStatic,
 }
 
-/// What one `impl` block offers for a method name: the declaration that
-/// answers, and the facts the rules and the argument survey each read off it.
+/// What one `impl` block offers for a method name: the receiver-less
+/// declaration that answers, and the facts the rules and the argument survey
+/// each read off it. A receiver-taking one is the method call's to select.
 pub(super) struct StaticOffer {
     pub(super) method_id: DefId,
-    pub(super) kind: CandidateKind,
     pub(super) origin: CandidateOrigin,
     pub(super) selector: Selector,
     /// The declaration's result, written in the block's own frame.
     pub(super) return_type: TypeId,
 }
 
-/// Which kind of declaration a candidate is. What shadows it and which
-/// argument selects it both follow from this.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum CandidateKind {
-    /// Receiver-less, so argument zero is its first parameter.
-    Static,
-    /// Receiver-taking, reached as `Type::method(&recv, …)`, so argument zero
-    /// is the receiver and argument one is its first parameter.
-    Instance,
-}
-
-impl CandidateKind {
-    fn of(self_kind: ast::SelfKind) -> Self {
-        match self_kind {
-            ast::SelfKind::None => Self::Static,
-            ast::SelfKind::Value | ast::SelfKind::Ref | ast::SelfKind::MutRef => Self::Instance,
-        }
-    }
-
-    /// The call's arguments a declaration of this kind reads against its own
-    /// parameters: past the receiver for a receiver-taking one.
-    fn own_args(self, arg_types: &[TypeId]) -> &[TypeId] {
-        match self {
-            Self::Static => arg_types,
-            Self::Instance => arg_types.get(1..).unwrap_or_default(),
-        }
-    }
-}
-
 /// Where the body a candidate names is written, in the order that outranks.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum CandidateOrigin {
     /// The receiver's own declaration — its inherent impl, a resource static,
-    /// or one along that resource's chain. It shadows every trait's of its
-    /// kind, as dot syntax resolves it.
+    /// or one along that resource's chain. It shadows every trait's.
     Own,
     /// The block writes the body.
     Written,
@@ -315,7 +285,6 @@ struct Candidate {
     /// whose call is mangled without a trait segment.
     supply: Option<TraitSupply>,
     method_id: DefId,
-    kind: CandidateKind,
     origin: CandidateOrigin,
     selector: Selector,
     /// The declaration's result, written in the frame of the block declaring
@@ -635,8 +604,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         candidates.extend(self.trait_candidates(receiver, query.method_name, declaring_args));
         candidates.extend(self.blanket_candidates(query.method_name, receiver.ty));
-        // A receiver-taking declaration is the method call's to select.
-        candidates.retain(|c| c.kind == CandidateKind::Static);
         // As a method call's, a trait's declarations answer only where the
         // trait is in scope (WEP 2026-09-01, "Scope"). A qualified spelling
         // names its trait, which is what scope asks of a call.
@@ -1296,36 +1263,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type: Option<TypeId>,
         expected_return: Option<TypeId>,
     ) -> Selection {
-        // The receiver's own declaration shadows an inherited one of the same
-        // kind: a receiver-less declaration beside an instance one is no
-        // alternative, since different argument lists reach them.
-        let own_kinds: Vec<CandidateKind> = candidates
-            .iter()
-            .filter(|c| c.origin == CandidateOrigin::Own)
-            .map(|c| c.kind)
-            .collect();
-        candidates.retain(|c| c.origin == CandidateOrigin::Own || !own_kinds.contains(&c.kind));
-        // A receiver-less declaration answers before a receiver-taking one, so
-        // `Type::method(x)` is a static's call before it is a UFCS receiver.
-        prefer(&mut candidates, |c| c.kind == CandidateKind::Static);
-        // A reserved name answers only where no method of its kind does, so
-        // this runs once the kinds are settled.
+        // The receiver's own declaration shadows an inherited one.
+        prefer(&mut candidates, |c| c.origin == CandidateOrigin::Own);
+        // A reserved name answers only where no other declaration does.
         prefer(&mut candidates, |c| {
             !self.tysys.unavailable.contains_key(&c.method_id)
         });
-        // A block naming the receiver answers before a blanket covering it
-        // through a bound, so a blanket is no alternative to report against.
-        // Before the ambiguity rule, or the trait a blanket names would be
-        // named as one.
-        prefer(&mut candidates, |c| c.origin != CandidateOrigin::Blanket);
+        // Two traits share no contract, so a block naming the receiver does not
+        // outrank another trait's blanket: only within one trait does it.
         if let Some(alternatives) = self.tysys.ambiguous_alternatives(&candidates) {
             return Selection::Ambiguous(alternatives);
         }
+        prefer(&mut candidates, |c| c.origin != CandidateOrigin::Blanket);
         // The arguments pick among the declarations, read against the parameters
-        // the impl declares rather than the trait it names. Where they start
-        // follows from the kind: a receiver-taking declaration has the receiver
-        // at argument zero, so its own parameters begin at argument one.
-        candidates.retain(|c| self.selector_admits(&c.selector, c.kind.own_args(arg_types)));
+        // the impl declares rather than the trait it names.
+        candidates.retain(|c| self.selector_admits(&c.selector, arg_types));
         if let Some(expected) = expected_return {
             self.narrow_to_expected_return(&mut candidates, expected, |c| {
                 let block = match &c.supply {
@@ -1448,7 +1400,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
         };
         let settled_by_args = |c: &Candidate| match &c.selector {
-            Selector::Params(params) => params.len() <= c.kind.own_args(arg_types).len(),
+            Selector::Params(params) => params.len() <= arg_types.len(),
             Selector::Absent => true,
             Selector::Blanket(_) => false,
         };
@@ -1475,7 +1427,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut table = self.tysys.type_table.borrow_mut();
                 let mut slots = table.impl_slots(block, declaring_args);
                 if let Selector::Params(params) = &c.selector {
-                    table.bind_each_into(params, c.kind.own_args(arg_types), &mut slots);
+                    table.bind_each_into(params, arg_types, &mut slots);
                 }
                 slots
             })
@@ -1575,7 +1527,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         trait_name,
                     }),
                     method_id: offer.method_id,
-                    kind: offer.kind,
                     origin: offer.origin,
                     selector: offer.selector,
                     return_type: offer.return_type,
@@ -1621,7 +1572,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         trait_name: blanket.trait_name,
                     }),
                     method_id,
-                    kind: CandidateKind::Static,
                     origin: CandidateOrigin::Blanket,
                     selector: Selector::Blanket(sig.value_param_types()),
                     return_type: sig.decl.return_type.unwrap_or(TypeTable::UNIT),
@@ -1715,9 +1665,11 @@ impl TypeSystem {
                 .signatures
                 .method_sig(method.def)
                 .expect("the decl pass records every impl-declared method's signature");
+            if sig.self_kind != ast::SelfKind::None {
+                return None;
+            }
             return Some(StaticOffer {
                 method_id: method.def,
-                kind: CandidateKind::of(sig.self_kind),
                 origin: CandidateOrigin::Written,
                 selector: Self::written_selector(sig),
                 return_type: sig.decl.return_type.unwrap_or(TypeTable::UNIT),
@@ -1734,7 +1686,7 @@ impl TypeSystem {
         method_name: &str,
     ) -> Option<StaticOffer> {
         let declared = self.signatures.trait_sig(trait_decl)?.method(method_name)?;
-        if !declared.is_inherited() {
+        if !declared.is_inherited() || declared.sig.self_kind != ast::SelfKind::None {
             return None;
         }
         let instantiated =
@@ -1743,7 +1695,6 @@ impl TypeSystem {
                 .instantiate_call(&self.type_table, &self.inherited_frame(impl_def), &[]);
         Some(StaticOffer {
             method_id: declared.sig.def,
-            kind: CandidateKind::of(declared.sig.self_kind),
             origin: CandidateOrigin::Inherited,
             selector: match instantiated.param_types.get(
                 declared
@@ -1762,10 +1713,12 @@ impl TypeSystem {
     /// `Absent` selector: the arguments choose among impls, and this one has none.
     fn own_candidate(&self, method_id: DefId) -> Option<Candidate> {
         let sig = self.signatures.method_sig(method_id)?;
+        if sig.self_kind != ast::SelfKind::None {
+            return None;
+        }
         Some(Candidate {
             supply: None,
             method_id,
-            kind: CandidateKind::of(sig.self_kind),
             origin: CandidateOrigin::Own,
             selector: Selector::Absent,
             return_type: sig.decl.return_type.unwrap_or(TypeTable::UNIT),
