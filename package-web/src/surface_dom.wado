@@ -246,34 +246,6 @@ fn write_attribute(node: &mut SurfaceNode, name: String, value: Option<String>) 
     }
 }
 
-// The HTML standard's attr-associated elements of a reflected element
-// reference: the elements set, or else those its attribute names by id.
-fn referenced_elements(element: Element, attribute: String) -> Option<List<Element>> {
-    let node = surface_node(element);
-    let root = root_of(element);
-    let mut found: List<Element> = [];
-    if let Some(targets) = node.referenced.get(attribute) {
-        // Only a descendant of one of the element's ancestors counts.
-        for let target of targets {
-            if root != element && target != root && root_of(target) == root {
-                found.push(target);
-            }
-        }
-        return Option::Some(found);
-    }
-    let Some(ids) = node.attributes.get(attribute) else {
-        return null;
-    };
-    for let id of split_on_ascii_whitespace(&ids) {
-        let target = first_inclusive_descendant_where(root, |n| n.content matches { Element(_) }
-            && n.attributes.get("id") == Option::Some(id));
-        if let Some(named) = element_of(target) {
-            found.push(named);
-        }
-    }
-    return Option::Some(found);
-}
-
 fn serialize_children(parent: Node, out: &mut String) {
     let holder = surface_node(parent);
     if holder.content matches { Element(name) && is_void(&name) } {
@@ -475,6 +447,34 @@ impl SurfaceDom {
             unreachable();
         };
         return name;
+    }
+
+    // The HTML standard's attr-associated elements of a reflected element
+    // reference: the elements set, or else those its attribute names by id.
+    fn referenced_elements(&self, element: Element, attribute: String) -> Option<List<Element>> {
+        let node = self.own(element);
+        let root = root_of(element);
+        let mut found: List<Element> = [];
+        if let Some(targets) = node.referenced.get(attribute) {
+            // Only a descendant of one of the element's ancestors counts.
+            for let target of targets {
+                if root != element && target != root && root_of(target) == root {
+                    found.push(target);
+                }
+            }
+            return Option::Some(found);
+        }
+        let Some(ids) = node.attributes.get(attribute) else {
+            return null;
+        };
+        for let id of split_on_ascii_whitespace(&ids) {
+            let target = first_inclusive_descendant_where(root, |n| n.content matches { Element(_) }
+                && n.attributes.get("id") == Option::Some(id));
+            if let Some(named) = element_of(target) {
+                found.push(named);
+            }
+        }
+        return Option::Some(found);
     }
 
     fn set_referenced_elements(&self, element: Element, attribute: String, elements: Option<List<Element>>) {
@@ -800,16 +800,17 @@ impl Element for SurfaceDom {
 
     // Nothing is laid out, so there is nowhere to scroll.
     fn scroll_into_view(&mut self, this: &Element, arg: Option<bool>) -> Result<(), Rejection> {
+        self.own(*this);
         resume Result::Ok(());
     }
 
     fn request_fullscreen(&mut self, this: &Element) -> Result<(), Rejection> {
+        self.own(*this);
         resume Result::Err(fullscreen_unsupported());
     }
 
     fn aria_controls_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        self.own(*this);
-        resume referenced_elements(*this, "aria-controls");
+        resume self.referenced_elements(*this, "aria-controls");
     }
 
     fn set_aria_controls_elements(&mut self, this: &Element, value: Option<List<Element>>) {
@@ -818,8 +819,7 @@ impl Element for SurfaceDom {
     }
 
     fn aria_described_by_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        self.own(*this);
-        resume referenced_elements(*this, "aria-describedby");
+        resume self.referenced_elements(*this, "aria-describedby");
     }
 
     fn set_aria_described_by_elements(&mut self, this: &Element, value: Option<List<Element>>) {
@@ -828,8 +828,7 @@ impl Element for SurfaceDom {
     }
 
     fn aria_details_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        self.own(*this);
-        resume referenced_elements(*this, "aria-details");
+        resume self.referenced_elements(*this, "aria-details");
     }
 
     fn set_aria_details_elements(&mut self, this: &Element, value: Option<List<Element>>) {
@@ -838,8 +837,7 @@ impl Element for SurfaceDom {
     }
 
     fn aria_error_message_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        self.own(*this);
-        resume referenced_elements(*this, "aria-errormessage");
+        resume self.referenced_elements(*this, "aria-errormessage");
     }
 
     fn set_aria_error_message_elements(&mut self, this: &Element, value: Option<List<Element>>) {
@@ -848,8 +846,7 @@ impl Element for SurfaceDom {
     }
 
     fn aria_flow_to_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        self.own(*this);
-        resume referenced_elements(*this, "aria-flowto");
+        resume self.referenced_elements(*this, "aria-flowto");
     }
 
     fn set_aria_flow_to_elements(&mut self, this: &Element, value: Option<List<Element>>) {
@@ -858,8 +855,7 @@ impl Element for SurfaceDom {
     }
 
     fn aria_labelled_by_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        self.own(*this);
-        resume referenced_elements(*this, "aria-labelledby");
+        resume self.referenced_elements(*this, "aria-labelledby");
     }
 
     fn set_aria_labelled_by_elements(&mut self, this: &Element, value: Option<List<Element>>) {
@@ -868,8 +864,7 @@ impl Element for SurfaceDom {
     }
 
     fn aria_owns_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        self.own(*this);
-        resume referenced_elements(*this, "aria-owns");
+        resume self.referenced_elements(*this, "aria-owns");
     }
 
     fn set_aria_owns_elements(&mut self, this: &Element, value: Option<List<Element>>) {

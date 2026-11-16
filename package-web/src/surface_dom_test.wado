@@ -565,18 +565,18 @@ test "a removed subtree stays a tree, and its listeners stay with it" {
         let item = doc.create_element("li");
         list.append_child(item);
         body.append_child(list);
-        let mut heard = 0;
-        item.add_event_listener("ping", |_| heard += 1, null);
+        let mut paths: List<List<EventTarget>> = [];
+        item.add_event_listener("ping", |event| paths.push(event.composed_path()), null);
         body.remove_child(list);
 
         assert list.parent_node() == null;
         assert item.parent_element() == Option::Some(list as Element);
         assert !body.has_child_nodes();
-        let event = Event::new("ping");
-        item.dispatch_event(event);
-        assert heard == 1;
+        item.dispatch_event(Event::new("ping"));
         // Off the document, the path stops at the subtree's root.
-        assert event.target() == Option::Some(item as EventTarget);
+        assert paths == [
+            [item as EventTarget, list as EventTarget],
+        ];
     };
 }
 
