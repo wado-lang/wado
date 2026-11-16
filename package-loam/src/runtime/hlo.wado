@@ -394,7 +394,8 @@ pub affine trait Graph: Holds with _ {
     /// onnxruntime's `GatherBlockQuantized` of a table packed along its rows:
     /// the rows `indices` name, each dequantized as `quantized_product` reads
     /// a row, under the indices' axes. A negative index counts from the end,
-    /// and one outside the table reads a row of zeros.
+    /// and one outside the table reads a row of zeros. The table holds a row,
+    /// which stage 0 checks.
     fn quantized_gather<E: Float, R, P, I, Blocks, Z, Out>(
         &mut self,
         packed: &Self::Tensor<u8, [R, P]>,
@@ -626,6 +627,7 @@ pub fn decomposed_gather<affine G: Graph, E: Float, R, P, I, Blocks, Z, Out>(
         g.extents_of(packed)[0],
         g.extents_of(packed)[1],
     ];
+    assert rows > 0, "a packed table holds a row";
     let mut extents = g.extents_of(indices);
     let count = element_count(&extents);
     let flat: G::Tensor<i64, [Rows]> = g.reshape(indices, [count]);
