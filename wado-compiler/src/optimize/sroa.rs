@@ -1457,7 +1457,7 @@ fn bind_yielded_value(engine: &mut Engine, stmt: StmtId) -> Option<(StmtId, Expr
         return None;
     }
     let span = engine.body.stmts[stmt].span;
-    Some(engine.bind_minted(&minted_what(SROA, "yielded"), value, type_id, true, span))
+    Some(engine.bind_minted(&minted_what(SROA, "yielded"), value, type_id, span))
 }
 
 /// Bind a literal rebuilt from `w`'s slots ahead of `stmt`, and point the

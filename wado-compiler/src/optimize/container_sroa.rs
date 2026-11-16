@@ -2393,9 +2393,7 @@ fn spill(
     {
         return op;
     }
-    // The temporary carries the element to its one use, as the argument it
-    // replaces did, so it skips the value copy.
-    let (bound, read) = engine.bind_minted("csroa_elem", op, type_id, true, span);
+    let (bound, read) = engine.bind_minted("csroa_elem", op, type_id, span);
     out.push(bound);
     Operand::Expr(read)
 }

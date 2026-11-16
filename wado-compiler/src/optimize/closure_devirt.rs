@@ -384,8 +384,7 @@ impl Rule for ClosureDevirtRule {
         };
         let type_id = engine.body.exprs[functor].type_id;
         let span = engine.body.exprs[functor].span;
-        let (bind, read) =
-            engine.bind_minted("functor", Operand::Expr(functor), type_id, true, span);
+        let (bind, read) = engine.bind_minted("functor", Operand::Expr(functor), type_id, span);
         let ExprKind::ClosureToCanonical {
             functor_id,
             target_fn_type,

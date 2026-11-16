@@ -879,12 +879,13 @@ impl<'a> Engine<'a> {
 
     /// Edit API: bind `value` to an immutable local minted as
     /// [`Self::alloc_minted_local`] does, returning the `let` and a read of it.
+    /// The local carries the value to the read in place of the operand it
+    /// came from, so the binding makes no value copy.
     pub fn bind_minted(
         &mut self,
         what: &str,
         value: Operand,
         type_id: TypeId,
-        skip_value_copy: bool,
         span: Span,
     ) -> (StmtId, ExprId) {
         let local_index = self.alloc_minted_local(what, type_id, false);
@@ -896,7 +897,7 @@ impl<'a> Engine<'a> {
                 is_mut: false,
                 type_id,
                 value,
-                skip_value_copy,
+                skip_value_copy: true,
             },
             span,
         );
