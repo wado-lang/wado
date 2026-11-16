@@ -392,22 +392,22 @@ pub struct Rows {
 
 /// A product by a weight with zero points, and the rows of a table without
 /// them that `ids` name, one past its end.
-pub fn quantizing<affine G: Graph>(
+pub fn quantizing<affine G: Graph, E: Float = f32>(
     g: &mut G,
-    a: &G::Tensor<f32, [A, B]>,
-    weight: &[G::Tensor<u8, [C, Blocks, Blob]>, G::Tensor<f32, [C, Blocks]>, G::Tensor<u8, [C, Zeros]>],
-    table: &[G::Tensor<u8, [Rows, Blob]>, G::Tensor<f32, [Rows, Blocks]>],
+    a: &G::Tensor<E, [A, B]>,
+    weight: &[G::Tensor<u8, [C, Blocks, Blob]>, G::Tensor<E, [C, Blocks]>, G::Tensor<u8, [C, Zeros]>],
+    table: &[G::Tensor<u8, [Rows, Blob]>, G::Tensor<E, [Rows, Blocks]>],
     ids: &G::Tensor<i64, [A]>,
-) -> [G::Tensor<f32, [A, C]>, G::Tensor<f32, [A, B]>] with _ {
+) -> [G::Tensor<E, [A, C]>, G::Tensor<E, [A, B]>] with _ {
     let quantized = Quantized { bits: 4, block: 32 };
-    let product = g.quantized_product::<f32, [A, B], C, Blocks, Blob, Zeros, [A, C]>(
+    let product = g.quantized_product::<E, [A, B], C, Blocks, Blob, Zeros, [A, C]>(
         a,
         &weight.0,
         &weight.1,
         Option::Some(&weight.2),
         &quantized,
     );
-    let rows = g.quantized_gather::<f32, Rows, Blob, [A], Blocks, Zeros, [A, B]>(
+    let rows = g.quantized_gather::<E, Rows, Blob, [A], Blocks, Zeros, [A, B]>(
         &table.0,
         ids,
         &table.1,

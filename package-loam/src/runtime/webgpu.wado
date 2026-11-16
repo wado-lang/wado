@@ -2564,23 +2564,30 @@ impl WebGpuBackend {
         if key matches { Some(_) } {
             self.tape();
         }
-        self.dispatch_bound(&append_operands, cache, 2 * n, heads_of[0], |bindings| ShaderKey::Append([
-            bindings, half > 0, batch,
-        ]), grids[0]);
+        self.dispatch_bound(
+            &append_operands,
+            Span { slot: cache, first: 0, count: 2 * n },
+            heads_of[0],
+            |bindings| ShaderKey::Append([bindings, half > 0, batch]),
+            grids[0],
+        );
 
         let [present_k, present_v] = present(cache);
         attend_operands[1] = DeviceTensor { ..present_k, extents: held };
         attend_operands[2] = DeviceTensor { ..present_v, extents: held };
         let parts = self.allocated(attended, false);
         let biased = bias matches { Some(_) };
-        self.dispatch_bound(&attend_operands, parts, attended, heads_of[1], |bindings| ShaderKey::Attend([
-            bindings, d, half > 0, biased, part, batch,
-        ]), grids[1]);
+        self.dispatch_bound(
+            &attend_operands,
+            Span { slot: parts, first: 0, count: attended },
+            heads_of[1],
+            |bindings| ShaderKey::Attend([bindings, d, half > 0, biased, part, batch]),
+            grids[1],
+        );
 
-        let out = self.allocated(rows * d, false);
+        let result = contiguous(self.allocated(rows * d, false), 0, [batch, s, heads * d]);
         let joined = [contiguous(parts, 0, [attended])] as List<DeviceTensor>;
-        self.dispatch_bound(&joined, out, rows * d, heads_of[2], |bindings| ShaderKey::AttendJoin(bindings), grids[2]);
-        let result = contiguous(out, 0, [batch, s, heads * d]);
+        self.dispatch_bound(&joined, fresh(&result), heads_of[2], |bindings| ShaderKey::AttendJoin(bindings), grids[2]);
         if let Some(replay) = key {
             let mut lengths: List<i32> = [];
             for let h of &heads_of {
@@ -2665,14 +2672,12 @@ impl WebGpuBackend {
     }
 
     /// Records the shader `shader` makes of the bindings `operands` take, as
-    /// `bindable` binds them, writing the `count` elements of the buffer at
-    /// `out`. Its parameters are `head`, then each operand's offset and
-    /// strides.
+    /// `bindable` binds them, writing `out`. Its parameters are `head`, then
+    /// each operand's offset and strides.
     fn dispatch_bound(
         &mut self,
         operands: &List<DeviceTensor>,
-        out: i32,
-        count: i32,
+        out: Span,
         head: List<u32>,
         shader: fn(List<i32>) -> ShaderKey,
         groups: [i32, i32, i32],
@@ -2685,7 +2690,7 @@ impl WebGpuBackend {
             push_view(&mut params, o.offset, &o.strides);
         }
         let mut spans = bound.spans;
-        spans.push(Span { slot: out, first: 0, count });
+        spans.push(out);
         self.dispatch(shader(bound.bindings), spans, params, groups);
     }
 
@@ -2945,6 +2950,7 @@ impl WebGpuBackend {
             return Placed::Host(arg_max(&self.host(t), axis));
         }
         let out = self.allocated(lanes, false);
+        let written = Span { slot: out, first: 0, count: lanes };
         let parts = lane.div_ceil(ARG_MAX_PART);
         let groups = lanes * parts;
         let [gx, gy] = spread(groups);
@@ -2952,14 +2958,20 @@ impl WebGpuBackend {
         push_all(&mut head, &([groups, gx, lane, parts] as List<i32>));
         push_all(&mut head, &moved.extents);
         if parts == 1 {
-            self.dispatch_bound(&operands, out, lanes, head, |bindings| ShaderKey::ArgMax([bindings, rank, Whole]), [
+            self.dispatch_bound(&operands, written, head, |bindings| ShaderKey::ArgMax([bindings, rank, Whole]), [
                 gx, gy, 1,
             ]);
         } else {
             let pairs = self.allocated(2 * groups, false);
-            self.dispatch_bound(&operands, pairs, 2 * groups, head, |bindings| ShaderKey::ArgMax(
-                [bindings, rank, Parts],
-            ), [gx, gy, 1]);
+            self.dispatch_bound(
+                &operands,
+                Span { slot: pairs, first: 0, count: 2 * groups },
+                head,
+                |bindings| ShaderKey::ArgMax(
+                    [bindings, rank, Parts],
+                ),
+                [gx, gy, 1],
+            );
             let [lx, ly] = spread(lanes);
             let combine = [contiguous(pairs, 0, [2 * groups])] as List<DeviceTensor>;
             let mut combined = head;
@@ -2967,8 +2979,7 @@ impl WebGpuBackend {
             combined[1] = lx as u32;
             self.dispatch_bound(
                 &combine,
-                out,
-                lanes,
+                written,
                 combined,
                 |bindings| ShaderKey::ArgMax([bindings, rank, Combine]),
                 [lx, ly, 1],
@@ -2981,13 +2992,14 @@ impl WebGpuBackend {
 
     /// `Graph::quantized_product` of `operands`, the input as `[M, K]`, the
     /// packed weight, its scales and any zero points, as a `[M, N]` result:
-    /// one workgroup per column and `QUANTIZED_ROWS` rows. `None` where they do
-    /// not bind.
+    /// one workgroup per column and `QUANTIZED_ROWS` rows, in the elements
+    /// `half` names or f32s. `None` where they do not bind.
     internal fn quantized_product_kernel(
         &mut self,
         operands: &List<DeviceTensor>,
         bits: i32,
         block: i32,
+        half: Option<HalfFloat>,
     ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let [m, k] = [operands[0].extents[0], operands[0].extents[1]];
         let packed = &operands[1].extents;
@@ -2995,47 +3007,47 @@ impl WebGpuBackend {
         if m * n > self.max_binding || !self.binds(operands) {
             return null;
         }
-        let out = self.allocated(m * n, false);
+        let out = self.new_tensor([m, n], half matches { Some(F16) });
         let groups = n * m.div_ceil(QUANTIZED_ROWS);
         let [gx, gy] = spread(groups);
         let zero_points = operands.len() > 3;
         self.dispatch_bound(
             operands,
-            out,
-            m * n,
+            fresh(&out),
             [groups as u32, gx as u32, m as u32, k as u32, n as u32, packed[1] as u32, packed[2] as u32],
-            |bindings| ShaderKey::QuantizedProduct([bindings, bits, block, zero_points]),
+            |bindings| ShaderKey::QuantizedProduct([bindings, bits, block, zero_points, half]),
             [gx, gy, 1],
         );
-        return Option::Some(contiguous(out, 0, [m, n]));
+        return Option::Some(out);
     }
 
     /// `Graph::quantized_gather` of `operands`, the packed table, the indices
     /// flat, its scales and any zero points, as a `[I, W]` result: one
-    /// invocation per element. `None` where they do not bind.
+    /// invocation per element, in the elements `half` names or f32s. `None`
+    /// where they do not bind.
     internal fn quantized_gather_kernel(
         &mut self,
         operands: &List<DeviceTensor>,
         bits: i32,
         block: i32,
+        half: Option<HalfFloat>,
     ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let [rows, width] = [operands[0].extents[0], operands[0].extents[1] * (8 / bits)];
         let count = operands[1].extents[0] * width;
         if count > self.max_binding || !self.binds(operands) {
             return null;
         }
-        let out = self.allocated(count, false);
+        let out = self.new_tensor([operands[1].extents[0], width], half matches { Some(F16) });
         let [x, y] = grid(count);
         let zero_points = operands.len() > 3;
         self.dispatch_bound(
             operands,
-            out,
-            count,
+            fresh(&out),
             [count as u32, (x * LANES) as u32, width as u32, rows as u32],
-            |bindings| ShaderKey::QuantizedGather([bindings, bits, block, zero_points]),
+            |bindings| ShaderKey::QuantizedGather([bindings, bits, block, zero_points, half]),
             [x, y, 1],
         );
-        return Option::Some(contiguous(out, 0, [operands[1].extents[0], width]));
+        return Option::Some(out);
     }
 
     /// Whether a launch makes its next run's buffer at `slot` where it made
@@ -3568,10 +3580,7 @@ fn steps_wgsl(op: &Expr, last: i32, indent: String) -> String {
             Unary([u, a]) => unary_wgsl(u, `s${a}`),
             Binary([o, a, b]) => binary_wgsl(o, `s${a}`, `s${b}`),
             Select([c, a, b]) => `select(s${b}, s${a}, s${c} != 0.0)`,
-            Rounded([to, a]) => match to {
-                F16 => `to_f16(s${a})`,
-                BF16 => `to_bf16(s${a})`,
-            },
+            Rounded([to, a]) => rounded_wgsl(Option::Some(to), `s${a}`),
             Fold(_) => {
                 fold += 1;
                 `folds[${fold - 1}]`;
@@ -3607,9 +3616,9 @@ variant ShaderKey {
     /// [`arg_max_shader`]'s arguments.
     ArgMax([List<i32>, i32, ArgMaxStage]),
     /// [`quantized_product_shader`]'s arguments.
-    QuantizedProduct([List<i32>, i32, i32, bool]),
+    QuantizedProduct([List<i32>, i32, i32, bool, Option<HalfFloat>]),
     /// [`quantized_gather_shader`]'s arguments.
-    QuantizedGather([List<i32>, i32, i32, bool]),
+    QuantizedGather([List<i32>, i32, i32, bool, Option<HalfFloat>]),
 }
 
 /// A shader: what its key makes, over bindings holding `words`, the output's
@@ -3666,18 +3675,20 @@ impl Shader {
             ),
             AttendJoin(bindings) => attend_join_shader(bindings, words),
             ArgMax([bindings, rank, stage]) => arg_max_shader(bindings, *rank, *stage, words),
-            QuantizedProduct([bindings, bits, block, zero_points]) => quantized_product_shader(
+            QuantizedProduct([bindings, bits, block, zero_points, half]) => quantized_product_shader(
                 bindings,
                 *bits,
                 *block,
                 *zero_points,
+                *half,
                 words,
             ),
-            QuantizedGather([bindings, bits, block, zero_points]) => quantized_gather_shader(
+            QuantizedGather([bindings, bits, block, zero_points, half]) => quantized_gather_shader(
                 bindings,
                 *bits,
                 *block,
                 *zero_points,
+                *half,
                 words,
             ),
         };
@@ -4222,6 +4233,16 @@ ${coords_wgsl("i", 2, 0, rank, "c", "    ")}    put(u32(${index_wgsl(to, 0, rank
 /// column, each in a lane's register.
 global QUANTIZED_ROWS: i32 = 8;
 
+/// The WGSL rounding `value` to the nearest `half`, or `value` where there is
+/// none.
+fn rounded_wgsl(half: Option<HalfFloat>, value: String) -> String {
+    return match half {
+        Some(F16) => `to_f16(${value})`,
+        Some(BF16) => `to_bf16(${value})`,
+        None => value,
+    };
+}
+
 /// The f32 element of the operand bound at `binding`, whose view's offset is at
 /// `p[at]` and whose strides follow, at `coords`.
 fn view_load_wgsl(binding: i32, at: i32, coords: &List<String>) -> String {
@@ -4256,15 +4277,17 @@ fn zero(n: u32, b: u32) -> f32 {
 /// The WGSL of `Graph::quantized_product`, one workgroup per column `n` of
 /// the output and `QUANTIZED_ROWS` of its rows: each lane takes every
 /// `LANES`th byte of the column's packed weight, dequantizes its values and
-/// adds each times the rows' inputs, and the workgroup sums the lanes.
-/// Parameters: the workgroups, the workgroups per row of the grid, `M`, `K`,
-/// `N`, the blocks, the bytes of a block, then the views of the input `[M, K]`,
-/// the packed weight, the scales and any zero points.
+/// adds each times the rows' inputs, and the workgroup sums the lanes. A
+/// `half` rounds each weight to it, as the decomposition stores one, and the
+/// sum once. Parameters: the workgroups, the workgroups per row of the grid,
+/// `M`, `K`, `N`, the blocks, the bytes of a block, then the views of the
+/// input `[M, K]`, the packed weight, the scales and any zero points.
 fn quantized_product_shader(
     bindings: &List<i32>,
     bits: i32,
     block: i32,
     zero_points: bool,
+    half: Option<HalfFloat>,
     words: &List<Words>,
 ) -> String {
     let rows = QUANTIZED_ROWS;
@@ -4294,7 +4317,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
         let k0 = b * BLOCK + j % p[6] * PER;
         for (var v = 0u; v < PER && k0 + v < p[3]; v++) {
             let k = k0 + v;
-            let w = (f32((packed >> (v * BITS)) & MASK) - center) * scale;
+            let w = ${rounded_wgsl(half, "(f32((packed >> (v * BITS)) & MASK) - center) * scale")};
             for (var r = 0u; r < rows; r++) {
                 acc[r] += ${input} * w;
             }
@@ -4313,23 +4336,24 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
         workgroupBarrier();
     }
     if lid < rows {
-        put((m0 + lid) * p[4] + n, sums[lid * ${LANES}u]);
+        put((m0 + lid) * p[4] + n, ${rounded_wgsl(half, `sums[lid * ${LANES}u]`)});
     }
 }
-`;
+${ELEMENTWISE_OPERATORS}`;
 }
 
 /// The WGSL of `Graph::quantized_gather`, one invocation per element of the
 /// output: the value its row's packed bytes hold, dequantized, or zero where
-/// the index, wrapped once from the end, falls outside the table.
-/// Parameters: the elements, the invocations per row of the grid, the
-/// values of a row, the table's rows, then the views of the packed table, the
-/// indices, the scales and any zero points.
+/// the index, wrapped once from the end, falls outside the table, rounded to
+/// any `half`. Parameters: the elements, the invocations per row of the grid,
+/// the values of a row, the table's rows, then the views of the packed table,
+/// the indices, the scales and any zero points.
 fn quantized_gather_shader(
     bindings: &List<i32>,
     bits: i32,
     block: i32,
     zero_points: bool,
+    half: Option<HalfFloat>,
     words: &List<Words>,
 ) -> String {
     let index = view_load_wgsl(bindings[1], 7, &(["at"] as List<String>));
@@ -4358,9 +4382,9 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let n = u32(row);
     let b = e / BLOCK;
     let packed = u32(${byte});
-    put(i, (f32((packed >> (e % PER * BITS)) & MASK) - zero(n, b)) * ${scale});
+    put(i, ${rounded_wgsl(half, `(f32((packed >> (e % PER * BITS)) & MASK) - zero(n, b)) * ${scale}`)});
 }
-`;
+${ELEMENTWISE_OPERATORS}`;
 }
 
 /// The WGSL of a gather along `axis`, the indices' axes flattened to it.
