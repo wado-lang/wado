@@ -2929,11 +2929,8 @@ impl<'a> Analyzer<'a> {
         place_moves: bool,
     ) {
         match &stmt.kind {
-            TirStmtKind::Let {
-                local_index,
-                value: None,
-                ..
-            } => self.kill_local(*local_index, live),
+            // It writes nothing, so what the slot held stays live across it.
+            TirStmtKind::Let { value: None, .. } => {}
             TirStmtKind::Let {
                 local_index,
                 value: Some(value),
