@@ -553,6 +553,9 @@ fn products_of(launch: &Launch) -> List<i32> {
 /// that matrix.
 fn rows_by_matrix(recorded: &Recorded, product: i32) -> bool {
     let node = &recorded.nodes[product];
+    // A quantized product takes no prologue: each of its many narrow
+    // workgroups would compute the left matrix again, which on Gemma 3
+    // (270M)'s output layer costs more than the dispatch it saves.
     let DotGeneral(dims) = node.op else {
         return false;
     };
