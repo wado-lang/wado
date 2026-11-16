@@ -78,6 +78,20 @@ pub enum Output {
     Piped,
 }
 
+/// The paths a child may reach in place of every directory the guest
+/// holds, each relative to where the child starts. A path must exist, or
+/// the spawn fails with `not-found`, and the guest must hold the access
+/// asked of it, or with `not-permitted`.
+#[cm("core:process/types@0.1.0#grants")]
+pub struct Grants {
+    /// Read and execute beneath each.
+    #[cm("read")]
+    pub read: List<String>,
+    /// Read, write, create, remove and execute beneath each.
+    #[cm("write")]
+    pub write: List<String>,
+}
+
 #[cm("core:process/types@0.1.0#command")]
 pub affine struct Command {
     /// A path when it holds a `/`; otherwise a name the host looks up.
@@ -95,6 +109,9 @@ pub affine struct Command {
     pub stdout: Output,
     #[cm("stderr")]
     pub stderr: Output,
+    /// `none` passes on every directory the guest holds.
+    #[cm("grants")]
+    pub grants: Option<Grants>,
 }
 
 #[cm("core:process/types@0.1.0#spawned")]

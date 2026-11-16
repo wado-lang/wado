@@ -1,0 +1,27 @@
+// Test: a recursion that passes a counter one higher at each level is not
+// specialized level by level.
+//
+// `core:json`'s pretty printer serializes `inner` with a serializer whose
+// `depth` is one more than its own. param_spec cloned `Usage`'s `serialize`
+// on depth 0, that clone's recursive call on depth 1, and so on: each clone
+// was a key no clone had before. The depth folded only a round later, so one
+// clone was minted per optimizer iteration, and the NIR loop hit its cap
+// without converging.
+
+use { println, Stdout } from "core:cli";
+use { to_bytes_pretty } from "core:json";
+
+struct Usage {
+    n: i64 = 0,
+    inner: Option<Usage> = null,
+}
+
+export fn run() with Stdout {
+    let u = Usage { n: 1, inner: Some(Usage { n: 2 }) };
+    println(String::from_utf8_lossy(to_bytes_pretty(&u).unwrap()));
+}
+
+__DATA__
+{
+    "stdout": "{\n  \"n\": 1,\n  \"inner\": {\n    \"n\": 2,\n    \"inner\": null\n  }\n}\n"
+}

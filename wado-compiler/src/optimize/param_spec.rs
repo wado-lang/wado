@@ -55,6 +55,12 @@ pub(super) const MAX_TOTAL_SPECIALIZATIONS: usize = 4096;
 /// costs more in duplicated code than its folded branches can return.
 const MAX_CLONE_EXPRS: usize = 2000;
 
+/// Most values one slot of a function on a call cycle is cloned on. A flag or
+/// a small mode the recursion passes on stays under it; a counter, which
+/// takes a new value at every level, stops at it rather than at the
+/// optimizer's iteration cap.
+const MAX_RECURSIVE_VALUES: usize = 4;
+
 /// A constant known for a parameter or field. Portable across functions,
 /// unlike a pool-local `ValueId`, and hashable so it can key the clone cache.
 /// `Int` / `Float` carry their type so a width mismatch is rejected.
@@ -300,6 +306,9 @@ pub(super) struct ParamSpecState {
     clones: IndexMap<SpecKey, FuncId>,
     /// Each clone's identity, which a clone of it extends.
     specs: IndexMap<FuncId, SpecKey>,
+    /// The values each slot of a function on a call cycle is bound to among
+    /// its clones, by root, parameter name and slot.
+    recursive_values: IndexMap<(FuncId, String, Slot), IndexSet<FieldConst>>,
     /// Clones minted per original callee, which numbers the next one's name.
     per_callee: IndexMap<FuncId, usize>,
     /// What each clone knows about its own parameters. Keyed by *name*, since
@@ -328,6 +337,7 @@ impl ParamSpecState {
             cap_hit: None,
             clones: IndexMap::default(),
             specs: IndexMap::default(),
+            recursive_values: IndexMap::default(),
             per_callee: IndexMap::default(),
             param_consts: IndexMap::default(),
             callees: BodyMemo::default(),
@@ -375,6 +385,26 @@ impl ParamSpecState {
             .chain(project.sroa_param_clones.iter())
             .copied()
             .collect()
+    }
+
+    /// Whether a clone keyed `key` of a function on a call cycle would bind a
+    /// slot to a value past the [`MAX_RECURSIVE_VALUES`] its root's clones
+    /// already bind it to.
+    fn exceeds_recursive_values(&self, key: &SpecKey) -> bool {
+        key.bindings.iter().any(|(name, slot, value)| {
+            self.recursive_values
+                .get(&(key.root, name.clone(), *slot))
+                .is_some_and(|seen| seen.len() >= MAX_RECURSIVE_VALUES && !seen.contains(value))
+        })
+    }
+
+    fn record_recursive_values(&mut self, key: &SpecKey) {
+        for (name, slot, value) in &key.bindings {
+            self.recursive_values
+                .entry((key.root, name.clone(), *slot))
+                .or_default()
+                .insert(value.clone());
+        }
     }
 
     /// Whether `func` is itself a clone this pass minted.
@@ -1266,6 +1296,10 @@ struct Site {
     diverges: bool,
     /// See [`binds_hot_field`]. Read only on a cold site.
     binds_hot_field: bool,
+    /// The callee is on a call cycle. A constant its recursion passes on may
+    /// change at each level, such as a depth, and would mint a clone per level
+    /// without end; [`MAX_RECURSIVE_VALUES`] bounds them.
+    recursive: bool,
 }
 
 /// Whether `site`'s clone replaces a field of an argument passed by reference
@@ -1416,6 +1450,7 @@ fn select_sites(
             cold: false,
             diverges: false,
             binds_hot_field: false,
+            recursive: signature.on_cycle,
         });
     }
     sites
@@ -1815,6 +1850,7 @@ fn plan_clones<'s>(
         if site.diverges
             || (site.cold && !site.binds_hot_field)
             || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
+            || site.recursive && state.exceeds_recursive_values(&key)
         {
             continue;
         }
@@ -1824,13 +1860,18 @@ fn plan_clones<'s>(
         }
         compiler_trace!(
             "param_spec",
-            "specialized {} on {} binding(s){}",
+            "specialized {} for {} on {} binding(s){} {:?}",
             project.functions[site.callee.index()].borrow().name,
+            project.functions[*caller].borrow().name,
             site.bindings.len(),
-            if site.cold { " for a cold call" } else { "" }
+            if site.cold { " for a cold call" } else { "" },
+            site.bindings
         );
         let id = FuncId::new(next_id);
         next_id += 1;
+        if site.recursive {
+            state.record_recursive_values(&key);
+        }
         // A cached clone whose signature has since moved no longer serves a
         // call to the callee, so this one takes its key. Left with the key, it
         // sends every later call through a recursion to a fresh clone, whose

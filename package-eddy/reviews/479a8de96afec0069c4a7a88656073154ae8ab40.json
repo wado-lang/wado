@@ -1,0 +1,340 @@
+{
+  "head": "479a8de96afec0069c4a7a88656073154ae8ab40",
+  "reviews": [
+    {
+      "base": "15e736fbc662002c70b6e0ec4b1a27f2fa86b810",
+      "reviewer": "claude-opus-5-5",
+      "reporter": "claude-haiku-5-5",
+      "run": true,
+      "max_turns": 40,
+      "result": {
+        "findings": [
+          {
+            "file": "package-eddy/src/snapshot.wado",
+            "summary": "Every review and baseline run now checks out into the same fixed path, `scratchpad/eddy-tree`, so a second eddy run started while one is still going checks out its own commit over the first one's tree and deletes the first one's files.",
+            "detail": "Before this change `snapshot` made a separate worktree for each commit (`scratchpad/eddy-trees/<sha>`), so two reviews of different commits never touched each other's files. Now `snapshot` calls `checkout_at(\".\", TREE, sha)`, which runs `checkout --force`, then `reset --hard`, then `clean -ffdx` on the one shared tree. The `eddy-review` mise task wraps only reviews that run code in `scripts/exclusive.sh`. A `--no-run` review and `tools/baseline.wado` take no lock, so they can run alongside another review. When they do, the later one moves the shared tree to its commit while the earlier reviewer is still reading it. The earlier reviewer then reads, greps and builds the wrong commit. Its Write'd tests are removed by `clean -ffdx`, and its reporter's repro re-run runs against the wrong commit. The SCIP index directory (`scratchpad/eddy-tree-index`) is shared the same way. I ran `checkout_at`'s git steps through node in a scratch repository, since the sandbox blocks git under `wado test`. I checked out commit A, wrote a file into the tree, then checked out B. The 'review of A' then read B's file contents, and the file it had written was gone (`f = B`, `repro.rs` exists: false).",
+            "line": 15,
+            "repro": null
+          }
+        ],
+        "turns": 14,
+        "calls": [
+          {
+            "name": "Read",
+            "input": {
+              "file_path": "package-eddy/src/snapshot.wado"
+            },
+            "is_error": true,
+            "output": null
+          },
+          {
+            "name": "Grep",
+            "input": {
+              "pattern": "snapshot\\(|index\\(|reset_snapshot|index_dir",
+              "path": "package-eddy",
+              "output_mode": "content"
+            },
+            "is_error": true,
+            "output": null
+          },
+          {
+            "name": "Glob",
+            "input": {
+              "pattern": "**/snapshot.wado"
+            },
+            "is_error": true,
+            "output": null
+          },
+          {
+            "name": "Glob",
+            "input": {
+              "pattern": "*",
+              "path": "/"
+            },
+            "is_error": true,
+            "output": null
+          },
+          {
+            "name": "Read",
+            "input": {
+              "file_path": "/package-eddy/src/snapshot.wado"
+            },
+            "is_error": true,
+            "output": null
+          },
+          {
+            "name": "Run",
+            "input": {
+              "program": "node",
+              "args": [
+                "-e",
+                "console.log(process.cwd()); console.log(require('fs').readdirSync('.'))"
+              ]
+            },
+            "is_error": false,
+            "output": "exit code 0\n<stderr>\n</stderr>\n<stdout>\n/home/user/wado/scratchpad/eddy-tree\n[\n  '.cargo',\n  '.claude',\n  '.coderabbit.yaml',\n  '.git',\n  '.gitattributes',\n  '.github',\n  '.gitignore',\n  '.gitmodules',\n  '.tagpr',\n  '.vscode',\n  'AGENTS.md',\n  'CHANGELOG.md',\n  'Cargo.lock',\n  'Cargo.toml',\n  'LICENSE',\n  'README.md',\n  'benchmark',\n  'clippy.toml',\n  'cloudflare-worker',\n  'docs',\n  'example',\n  'mise.lock',\n  'mise.toml',\n  'package-cm-catalog',\n  'package-eddy',\n  'package-gale',\n  'package-gale-highlight-html',\n  'package-gale-highlight-wado',\n  'package-grog',\n  'package-jade',\n  'package-loam',\n  'package-marl',\n  'package-re',\n  'package-wadopoet',\n  'package-web',\n  'rust-toolchain.toml',\n  'scratchpad',\n  'scripts',\n  'vendor',\n  'wado-1024.png',\n  'wado-512.png',\n  'wado-bundled-icu',\n  'wado-bundled-libm',\n  'wado-cli',\n  'wado-compiler',\n  'wado-dev-tools',\n  'wado-from-idl',\n  'wado-host',\n  'wado-lsp',\n  'wado-manifest',\n  'wado-playground',\n  'wado-run-pjrt',\n  'wado-run-webgpu',\n  'wado-vscode',\n  'wado-wasm-embed',\n  'wado-workspace.toml',\n  'wasm-size'\n]\n</stdout>"
+          },
+          {
+            "name": "Run",
+            "input": {
+              "program": "node",
+              "args": [
+                "-e",
+                "console.log(require('fs').readFileSync('package-eddy/src/snapshot.wado','utf8'))"
+              ]
+            },
+            "is_error": false,
+            "output": "exit code 0\n<stderr>\n</stderr>\n<stdout>\n//! A checkout of one commit for a reviewer to read, index, build and write\n//! into, apart from the tree the developer works in.\n\nuse { env, log_stderr, Environment } from \"core:cli\";\nuse fs from \"core:fs\";\nuse { Preopens } from \"core:fs\";\nuse { Command, Process } from \"core:process\";\nuse { git, try_git } from \"./git.wado\";\nuse { Runner, ENTER_TREE } from \"./tools.wado\";\n\n/// Where every review's checkout lives. One path for all of them keeps\n/// `cargo`'s build of the last review fresh for the next: it tells the\n/// workspace's crates apart by path, and a checkout leaves a file the two\n/// commits share untouched.\nglobal TREE: String = \"scratchpad/eddy-tree\";\n\n/// A checkout of `sha` for a reviewer to read, and its directory. It is a\n/// worktree, so it shares the repository's objects, later commits included:\n/// only the tools' refusal to leave the tree keeps them out of reach. A\n/// symbolic link is checked out as a file holding its target, so no path\n/// resolves out of the tree through one.\npub fn snapshot(sha: &String) -> String with (Process, Preopens) {\n    return checkout_at(&\".\", &TREE, sha);\n}\n\n/// The worktree `tree`, a path under the repository `repo`, checked out at\n/// `sha`, and its path. A tree an earlier review left, written to or\n/// interrupted, is reset rather than trusted.\nfn checkout_at(repo: &String, tree: &String, sha: &String) -> String with (Process, Preopens) {\n    let root = fs::join(repo, tree);\n    if !fs::exists(fs::join(&root, \".git\")) {\n        // Registered still where the directory was removed by hand.\n        tree_git(repo, [\"worktree\", \"prune\"]);\n        tree_git(repo, [\"worktree\", \"add\", \"--force\", \"--detach\", *tree, *sha]);\n        return root;\n    }\n    tree_git(&root, [\"checkout\", \"--force\", \"--detach\", \"--quiet\", *sha]);\n    // Leaves the submodules in it as they are: `add_build_submodules` checks\n    // out each one Run builds from.\n    reset_checkout(&root, sha);\n    return root;\n}\n\ntest \"a tree is checked out again in place, and what a review left is gone\" {\n    // `wado test` lets git see no repository above the package.\n    let repo = \"build/checkout-test\";\n    fs::remove_dir_all(repo).unwrap();\n    fs::create_dir_all(repo).unwrap();\n    fs::write(fs::join(repo, \"kept.rs\"), &\"kept\").unwrap();\n    fs::write(fs::join(repo, \"README.md\"), &\"read me\").unwrap();\n    let in_repo = |args: List<String>| {\n        let mut full = [\"-C\", repo, \"-c\", \"user.name=t\", \"-c\", \"user.email=t@t\"] as List<String>;\n        full.extend(&args);\n        return git(full);\n    };\n    in_repo([\"init\", \"--quiet\"]);\n    in_repo([\"add\", \".\"]);\n    in_repo([\"commit\", \"--quiet\", \"-m\", \"c\"]);\n    let head = in_repo([\"rev-parse\", \"HEAD\"]).trim().to_string();\n\n    let root = checkout_at(&repo, &\"tree\", &head);\n    let kept = fs::join(&root, \"kept.rs\");\n    let before = fs::metadata(&kept).unwrap().modified;\n    fs::write(fs::join(&root, \"README.md\"), &\"scribbled\").unwrap();\n    fs::write(fs::join(&root, \"left-behind.rs\"), &\"\").unwrap();\n\n    assert checkout_at(&repo, &\"tree\", &head) == root;\n    assert fs::metadata(&kept).unwrap().modified == before;\n    assert fs::read_to_string(fs::join(&root, \"README.md\")).unwrap() == \"read me\";\n    assert !fs::exists(fs::join(&root, \"left-behind.rs\"));\n}\n\n/// `git` run in `dir`, a checkout a reviewer reaches, with every symbolic link\n/// kept a file: a command that rewrites the tree, such as `reset --hard`,\n/// would otherwise make it a link again.\npub fn tree_git(dir: &String, args: List<String>) -> String with Process {\n    let mut full = [\"-c\", \"core.symlinks=false\", \"-C\", *dir] as List<String>;\n    full.extend(&args);\n    return git(full);\n}\n\n/// Checks out in the snapshot at `root` the submodules its `Cargo.toml` builds\n/// from, at the commits the tree records, so `cargo` builds it. Each is a\n/// worktree of the repository's own checkout of that submodule, which fetches\n/// a commit it lacks.\npub fn add_build_submodules(root: &String) with (Process, Preopens) {\n    for let [path, sha] of build_submodules(root) {\n        assert fs::exists(fs::join(path, \".git\")), `the submodule must be checked out: git submodule update --init ${path}`;\n        if try_git([\"-C\", path, \"cat-file\", \"-e\", `${sha}^{commit}`]) matches { None } {\n            git([\"-C\", path, \"fetch\", \"--quiet\", \"--depth\", \"1\", \"origin\", sha]);\n        }\n        checkout_at(&path, &from_submodule(&path, root), &sha);\n    }\n}\n\n/// The submodules `root`'s `Cargo.toml` names by path, as path and the commit\n/// HEAD records. Both are read from HEAD, so a reviewer's edit to the manifest\n/// or a commit checked out in a submodule changes nothing.\nfn build_submodules(root: &String) -> List<[String, String]> with Process {\n    let manifest = git([\"-C\", *root, \"show\", \"HEAD:Cargo.toml\"]);\n    let mut found: List<[String, String]> = [];\n    // A line is a status flag, a commit, and the path: `-<sha> vendor/x`.\n    for let line of git([\"-C\", *root, \"submodule\", \"status\"]).lines() {\n        let path = line.slice(1, line.len()).split(\" \").collect()[1].to_string();\n        // A path is matched to its end, or `vendor/wasm` would match\n        // `vendor/wasmtime/...` too.\n        if manifest.contains(`${path}/`) || manifest.contains(`${path}\"`) {\n            let recorded = git([\"-C\", *root, \"rev-parse\", `HEAD:${path}`]).trim().to_string();\n            found.push([path, recorded]);\n        }\n    }\n    return found;\n}\n\n/// `path` under `root`, as a path from the submodule checkout at `path`.\nfn from_submodule(path: &String, root: &String) -> String {\n    let up = \"../\".repeat(path.split(\"/\").count());\n    return `${up}${*root}/${*path}`;\n}\n\n/// How Run builds a snapshot: with the toolchain the user's homes hold, into\n/// one target directory every snapshot shares.\npub fn home_runner() -> Runner with Environment {\n    let home = env(\"HOME\").expect(\"rustup's default homes are under HOME\");\n    return Runner {\n        target_dir: \"scratchpad/eddy-target\",\n        cargo_home: env(\"CARGO_HOME\").unwrap_or(`${home}/.cargo`),\n        rustup_home: env(\"RUSTUP_HOME\").unwrap_or(`${home}/.rustup`),\n        mise_data_dir: env(\"MISE_DATA_DIR\").unwrap_or(`${home}/.local/share/mise`),\n    };\n}\n\n/// How long `mise` may take to list its tools, in seconds: the configuration\n/// it reads is the reviewed change's, which may make it run anything.\nglobal MISE_TIMEOUT: i32 = 60;\n\n/// `runner` with `mise` and the tools it has installed for the tree at `root`\n/// among its programs. Where `mise` does not list them, because it is not\n/// installed, `wado run` grants a child no read of it, or it refuses the\n/// tree's configuration, Run is left with `cargo` and the reason is logged.\npub fn with_mise_tools(runner: Runner, root: &String) -> Runner with Process {\n    let dirs = match mise_bin_dirs(root, &runner.mise_data_dir) {\n        Ok(dirs) => dirs,\n        Err(e) => {\n            log_stderr(`eddy: Run has cargo alone, since mise lists no tools: ${e}`);\n            return runner;\n        },\n    };\n    let mut with_tools = runner;\n    with_tools.tool_path = dirs.join(\":\");\n    with_tools.programs.push(\"mise\");\n    for let program of programs_in(&dirs) {\n        if !with_tools.programs.contains_str(&program) {\n            with_tools.programs.push(program);\n        }\n    }\n    return with_tools;\n}\n\n/// The directories of the tools `mise` has installed for the tree at `root`.\nfn mise_bin_dirs(root: &String, data_dir: &String) -> Result<List<String>, String> with Process {\n    let out = Command::new(\"timeout\").args([\n        \"--kill-after=10\", `${MISE_TIMEOUT}`, \"sh\", \"-c\", `${ENTER_TREE} && exec mise bin-paths`, *root,\n    ]).env(\"MISE_DATA_DIR\", *data_dir).output().map_err(|e| `${e}`)?;\n    if out.status != Exited(0) {\n        return Err(`${out.status:?}: ${String::from_utf8_lossy(out.stderr).trim()}`);\n    }\n    return Ok(\n        String::from_utf8_lossy(out.stdout).lines().filter(|dir| !dir.is_empty()).map(|dir| dir.to_string()).collect(),\n    );\n}\n\n/// The name of each program directly in `dirs`, a link to one included.\nfn programs_in(dirs: &List<String>) -> List<String> with Process {\n    // With no directory, `find` would search the current one.\n    if dirs.is_empty() {\n        return [];\n    }\n    let mut args = [\"-L\"] as List<String>;\n    args.extend(dirs);\n    args.extend(&[\"-maxdepth\", \"1\", \"-type\", \"f\", \"-perm\", \"-u+x\"]);\n    // A link to nothing fails the run and is not a program: what `find`\n    // printed is still the answer.\n    let found = Command::new(\"find\").args(args).output().unwrap().stdout;\n    return String::from_utf8_lossy(found).lines().map(|path| fs::file_name(path).unwrap().to_string()).collect();\n}\n\ntest \"a directory's programs are the files in it that can be executed\" {\n    let dir = \"build/programs-test\";\n    fs::remove_dir_all(dir).unwrap();\n    fs::create_dir_all(`${dir}/nested`).unwrap();\n    for let name of [\"tool\", \"notes.txt\", \"nested/deep\"] {\n        fs::write(`${dir}/${name}`, &\"\").unwrap();\n    }\n    assert Command::new(\"chmod\").args([\"+x\", `${dir}/tool`, `${dir}/nested/deep`]).status().unwrap() == Exited(0);\n    assert programs_in(&[dir]) == [\"tool\"];\n    assert programs_in(&[]).is_empty();\n}\n\n/// The snapshot of `sha` at `root`, its submodules included, back as checked\n/// out: a run may have written, committed or checked out anything in it.\npub fn reset_snapshot(root: &String, sha: &String) with Process {\n    reset_checkout(root, sha);\n    // Read once the tree is back at `sha`, so HEAD records what it checked out.\n    for let [path, recorded] of build_submodules(root) {\n        reset_checkout(&`${*root}/${path}`, &recorded);\n    }\n}\n\nfn reset_checkout(dir: &String, commit: &String) with Process {\n    tree_git(dir, [\"reset\", \"--hard\", \"--quiet\", *commit]);\n    // Twice forced: once leaves an untracked directory that is a repository\n    // of its own, such as one a test made.\n    tree_git(dir, [\"clean\", \"-ffdx\", \"--quiet\"]);\n}\n\nfn index_dir(root: &String) -> String {\n    return `${*root}-index`;\n}\n\n/// SCIP indexes of the tree at `root`, outside it so Glob never lists them:\n/// its Rust by rust-analyzer and its Wado by `wado`, the binary at\n/// `wado_path`. The Wado index reads the tree with that compiler, so a file\n/// it cannot compile indexes only what still resolves.\npub fn index(root: &String, wado_path: &String) -> List<String> with (Process, Environment, Preopens) {\n    let dir = index_dir(root);\n    let rust = `${dir}/rust.scip`;\n    let wado = `${dir}/wado.scip`;\n    fs::create_dir_all(&dir).unwrap();\n    // A child gets a private HOME, where rustup would find no toolchain.\n    let homes = home_runner();\n    let analyzer = Command::new(\"rust-analyzer\").args([\"scip\", *root, \"--output\", rust, \"--exclude-vendored-libraries\"]).env(\n        \"RUSTUP_HOME\",\n        homes.rustup_home,\n    ).env(\"CARGO_HOME\", homes.cargo_home);\n    succeed(&analyzer);\n    // The generated and fixture tests are most of the tree's Wado and use the\n    // stdlib thousands of times over, which would bury a reference a reviewer\n    // wants.\n    succeed(&Command::new(*wado_path).args([\n        \"query\", \"scip\", \"--output\", wado, \"--exclude\", \"wado-compiler/tests/**\", \"--exclude\",\n        \"package-gale/tests/generated/**\", *root,\n    ]));\n    return [rust, wado];\n}\n\nfn succeed(command: &Command) with Process {\n    let out = command.capture_limit(i32::MAX).output().unwrap();\n    assert out.status == Exited(0), `${String::from_utf8_lossy(out.stderr)}`;\n}\n\n</stdout>"
+          },
+          {
+            "name": "Run",
+            "input": {
+              "program": "node",
+              "args": [
+                "-e",
+                "const fs=require('fs');for(const f of ['package-eddy/src/main.wado','package-eddy/src/agent.wado']){console.log('=== '+f);console.log(fs.readFileSync(f,'utf8'))}; const cp=require('child_process'); console.log(cp.execSync('grep -rn \"MonotonicClock::now\\|struct Usage\\|derive\" package-eddy/src | head -40; grep -rn \"fn now\" wado-compiler/lib/wasi/clocks* 2>/dev/null | head; git log --oneline -3; cat mise.toml | grep -n eddy').toString())"
+              ]
+            },
+            "is_error": false,
+            "output": "exit code 0\n<stderr>\n</stderr>\n<stdout>\n=== package-eddy/src/main.wado\n//! Eddy's CLI: reviews what a branch changes, prints the findings as JSON, and\n//! adds the review to the record of its head commit.\n//!\n//! The reviewer reads the diff from the merge base of `--base` (`origin/main`)\n//! to `--head` (`HEAD`), and a checkout of the head under `scratchpad/`,\n//! through Read, Grep and Glob. It also writes tests into that checkout and\n//! runs them through Write and Run: with `cargo`, and where `mise` is set up,\n//! with it and each tool it installed for the project. That needs\n//! `--process-read` on the `cargo` and `rustup` homes, and for `mise` on its\n//! binary and its data directory; `--no-run` reviews by reading alone.\n//!\n//! A second model, `--reporter` (`claude-haiku-5-5`), then reads what the\n//! reviewer did and gives each finding its line and the test that reproduced\n//! it, which is tried again alone before the finding carries it.\n//! `--report-again` reports the last recorded review of the head once more,\n//! with no new review, to try another reporter on the same findings.\n//!\n//! The record is\n//! `<--reviews>/<head>.json`, one entry per review. Each finding is also\n//! written under `<--out>/<head>/` (`scratchpad/eddy`): `<n>.md`, the body of\n//! a pull request comment that reproduces it from one pasted block, and\n//! `<n>.patch` for `git apply`.\n//!\n//! Run it from the repository root, every commit to review made. The reviewer\n//! is a build input: `CLAUDE_MODEL` in the environment, or\n//! `-D CLAUDE_MODEL=...`.\n//!\n//! ```sh\n//! CLAUDE_API_KEY=... wado run --process-read ~/.cargo --process-read ~/.rustup \\\n//!     package-eddy/src/main.wado\n//! ```\n\nuse { from_env } from \"core:args\";\nuse { env, eprintln, println, exit_error, Environment, Exit, Stderr, Stdout } from \"core:cli\";\nuse fs from \"core:fs\";\nuse { Preopens } from \"core:fs\";\nuse { to_bytes_pretty, from_string } from \"core:json\";\nuse { Process } from \"core:process\";\nuse { Deserialize } from \"core:serde\";\nuse { Client } from \"wasi:http\";\nuse { MonotonicClock } from \"wasi:clocks\";\nuse { git, try_git, paths_between, diff_between } from \"./git.wado\";\nuse { Usage } from \"./anthropic.wado\";\nuse { comment } from \"./comment.wado\";\nuse { cost_summary } from \"./cost.wado\";\nuse { report } from \"./report.wado\";\nuse { review, Submission, Finding, Reviewed } from \"./review.wado\";\nuse { snapshot, add_build_submodules, home_runner, with_mise_tools } from \"./snapshot.wado\";\nuse { Runner, Workspace } from \"./tools.wado\";\n\n#[param(from_env = \"CLAUDE_MODEL\")]\nglobal CLAUDE_MODEL: String = \"claude-opus-5-5\";\n\n#[param(name = \"diff_limit\")]\nglobal LIMIT: i32 = 2_000_000;\n\nglobal USAGE: String = \"usage: eddy [--base <rev>] [--head <rev>] [--no-run] [--reporter <model>] [--report-again] [--max-turns <n>] [--reviews <dir>] [--out <dir>]\";\n\nstruct Options {\n    base: String = \"origin/main\",\n    head: String = \"HEAD\",\n    no_run: bool = false,\n    reporter: String = \"claude-haiku-5-5\",\n    report_again: bool = false,\n    max_turns: i32 = 40,\n    reviews: String = \"package-eddy/reviews\",\n    out: String = \"scratchpad/eddy\",\n}\nimpl Deserialize for Options;\n\n/// Every review of one head commit.\nstruct Record {\n    head: String,\n    reviews: List<Attempt>,\n}\n\nstruct Attempt {\n    /// The merge base the diff was taken from, which moves with `--base`.\n    base: String,\n    reviewer: String,\n    /// Empty in a record written before a second model reported.\n    reporter: String = \"\",\n    run: bool,\n    max_turns: i32,\n    result: Reviewed,\n    /// What the reporter took. Absent in a record written before it was kept.\n    report_usage: Option<Usage> = null,\n    report_error: Option<String> = null,\n}\n\nstruct Report {\n    findings: List<Finding>,\n}\n\nexport fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Client, MonotonicClock) {\n    let options = match from_env::<Options>() {\n        Ok(options) => options,\n        Err(e) => fail(`${e}\\n${USAGE}`),\n    };\n    if options.max_turns < 1 {\n        fail(`--max-turns must be at least 1\\n${USAGE}`);\n    }\n    let Some(api_key) = env(\"CLAUDE_API_KEY\") else {\n        fail(\"CLAUDE_API_KEY is not set\");\n    };\n    let Some(head) = try_git([\"rev-parse\", \"--verify\", `${options.head}^{commit}`]) else {\n        fail(\n            `git finds no commit ${options.head} here. Run from the root of the main checkout: a linked worktree keeps its git directory where a child of wado run cannot reach`,\n        );\n    };\n    let head = head.trim().to_string();\n    let base = git([\"merge-base\", options.base, head]).trim().to_string();\n    // Before the review, so one that cannot be recorded is not paid for.\n    let path = fs::join(&options.reviews, `${head}.json`);\n    let mut record = match fs::read_to_string(&path) {\n        Ok(text) => match from_string::<Record, String>(text) {\n            Ok(record) => record,\n            Err(e) => fail(`${path} is not a record of reviews: ${e:?}`),\n        },\n        Err(e) && e.kind matches { NotFound } => Record { head, reviews: [] },\n        Err(e) => fail(`${e}`),\n    };\n    let diff = match diff_between(&base, &head, &paths_between(&base, &head), \"branch\", LIMIT) {\n        Ok(diff) => diff,\n        Err(e) => fail(e),\n    };\n    // Nothing else says what the change means to do before it has a pull\n    // request to describe it.\n    let commits = git([\"log\", \"--reverse\", \"--no-merges\", \"--format=%B\", `${base}..${head}`]);\n    let heading = `PULL REQUEST, not opened yet. Its commit messages, oldest first:\n\n${commits.trim()}`;\n\n    let root = snapshot(&head);\n    let runner: Option<Runner> = if options.no_run {\n        null;\n    } else {\n        add_build_submodules(&root);\n        Some(with_mise_tools(home_runner(), &root));\n    };\n    let w = Workspace { root, runner };\n    let change = Submission { heading, diff };\n    let mut result = if options.report_again {\n        let Some(earlier) = record.reviews.last() else {\n            fail(`--report-again reports a recorded review, and ${path} holds none`);\n        };\n        reviewed_again(&w, &earlier.result);\n    } else {\n        review(&api_key, CLAUDE_MODEL, &change, &Some(w), options.max_turns);\n    };\n    // A report that fails leaves the findings as the reviewer worded them.\n    let mut report_usage = Usage {};\n    let report_error: Option<String> = match &result.error {\n        Some(_) => null,\n        None => match report(&api_key, options.reporter, &change, &w, &head, &mut result, &mut report_usage) {\n            Ok(_) => null,\n            Err(e) => Some(e),\n        },\n    };\n    if let Some(e) = &report_error {\n        eprintln(`eddy: the findings are not placed or reproduced: ${*e}`);\n    }\n\n    record.reviews.push(Attempt {\n        base,\n        reviewer: CLAUDE_MODEL,\n        reporter: options.reporter,\n        run: !options.no_run,\n        max_turns: options.max_turns,\n        result,\n        report_usage: Some(report_usage),\n        report_error,\n    });\n    fs::create_dir_all(&options.reviews).unwrap();\n    fs::write(&path, &to_bytes_pretty(&record).unwrap()).unwrap();\n    eprintln(`recorded in ${path}: ${result.turns} turns, ${result.calls.len()} tool calls`);\n    // Computed here rather than recorded: a price changes, and the tokens a\n    // review took do not.\n    eprintln(cost_summary(&[\n        [CLAUDE_MODEL, result.usage.unwrap_or(Usage {})],\n        [options.reporter, report_usage],\n    ]));\n\n    if let Some(e) = &result.error {\n        fail(*e);\n    }\n    let dir = fs::join(&options.out, &head);\n    write_findings(&dir, &head, &result.findings);\n    eprintln(`each finding's comment, and the patch that reproduces it, in ${dir}`);\n    println(String::from_utf8_lossy(to_bytes_pretty(&Report { findings: result.findings }).unwrap()));\n}\n\n/// `earlier`, a recorded review, as its reviewer left it: the findings in its\n/// words, and in the fresh tree at `w` the files it wrote. Reporting it again\n/// tries another reporter on one review, where a second review would find\n/// other things.\nfn reviewed_again(w: &Workspace, earlier: &Reviewed) -> Reviewed with (Preopens, Process) {\n    let mut again = *earlier;\n    // The earlier attempt holds what the review took; this one took nothing.\n    again.usage = null;\n    again.requests = [];\n    for let f of &mut again.findings {\n        f.line = 0;\n        f.repro = null;\n    }\n    if w.runner matches { Some(_) } {\n        for let c of &again.calls {\n            if c.name == \"Write\" && !c.is_error {\n                w.call(&c.name, &c.input).unwrap();\n            }\n        }\n    }\n    return again;\n}\n\n/// Writes finding `n`, from 1, of a review of `head` into `dir` as `<n>.md`,\n/// the pull request comment for it, and `<n>.patch` where it has one, for\n/// `git apply`. An earlier review's files there are removed first.\nfn write_findings(dir: &String, head: &String, findings: &List<Finding>) with Preopens {\n    fs::remove_dir_all(dir).unwrap();\n    fs::create_dir_all(dir).unwrap();\n    let short = head.substr_bytes(0, 9);\n    for let [i, f] of findings.into_iter().enumerate() {\n        let n = i + 1;\n        fs::write(fs::join(dir, `${n}.md`), &comment(f, head, &`${short}-${n}`)).unwrap();\n        if let Some(r) = &f.repro && !r.patch.is_empty() {\n            fs::write(fs::join(dir, `${n}.patch`), &r.patch).unwrap();\n        }\n    }\n}\n\nfn fail(message: String) -> ! with (Stderr, Exit) {\n    eprintln(`eddy: ${message}`);\n    exit_error();\n}\n\n=== package-eddy/src/agent.wado\n//! A model working a task with the repository tools until it answers.\n\nuse { Preopens } from \"core:fs\";\nuse { Process } from \"core:process\";\nuse { Client } from \"wasi:http\";\nuse { MonotonicClock } from \"wasi:clocks\";\nuse { Value } from \"core:value\";\nuse { converse, message, Message, Usage } from \"./anthropic.wado\";\nuse { Workspace } from \"./tools.wado\";\n\n/// What an agent did. A run that failed keeps what it spent before the error.\npub struct AgentRun {\n    pub answer: Result<String, String>,\n    pub turns: i32,\n    pub calls: List<Call>,\n    pub usage: Usage,\n    pub requests: List<Request>,\n}\n\n/// One request of a conversation: when it started and what it took. A cache\n/// entry lives five minutes from the last request that read it, so the gaps\n/// between starts say which requests found the conversation cached.\npub struct Request {\n    /// Seconds from the conversation's first request.\n    pub started: f64,\n    pub usage: Usage,\n}\n\n/// A tool call the model made, kept to see how it read.\npub struct Call {\n    pub name: String,\n    pub input: Value,\n    pub is_error: bool,\n    /// What the call returned, where `Workspace::observes` keeps it.\n    pub output: Option<String> = null,\n}\n\nstruct TextBlock {\n    #[wire(name = \"type\")]\n    kind: String = \"text\",\n    text: String,\n}\n\nstruct ToolResult {\n    #[wire(name = \"type\")]\n    kind: String = \"tool_result\",\n    tool_use_id: String,\n    content: String,\n    is_error: bool,\n}\n\nstruct Blocks {\n    role: String,\n    content: List<Value>,\n}\n\n/// The answer `model` gives to `task` after reading `ws` with the tools, in at\n/// most `max_turns` turns. The last turn takes no tool call.\npub fn run_agent(\n    api_key: &String,\n    model: String,\n    system: String,\n    task: String,\n    ws: &Workspace,\n    max_turns: i32,\n    max_tokens: i32,\n) -> AgentRun with (Client, Preopens, Process, MonotonicClock) {\n    assert max_turns >= 1;\n    let declared = ws.tools();\n    let mut messages = [message(&Message { role: \"user\", content: task })] as List<Value>;\n    let [mut turns, mut calls, mut usage] = [0, [] as List<Call>, Usage {}];\n    let mut requests: List<Request> = [];\n    let first = MonotonicClock::now();\n    loop {\n        turns += 1;\n        let last = turns == max_turns;\n        let started = (MonotonicClock::now() - first) as f64 / 1e9;\n        let turn = match converse(*api_key, model, system, &declared, !last, &messages, max_tokens) {\n            Ok(turn) => turn,\n            Err(e) => {\n                return AgentRun { answer: Err(e), turns, calls, usage, requests };\n            },\n        };\n        usage.add_request(&turn.usage);\n        requests.push(Request { started, usage: turn.usage });\n        if turn.stop_reason != \"tool_use\" {\n            let answer: Result<String, String> = if turn.stop_reason == \"end_turn\" {\n                Ok(turn.text());\n            } else {\n                Err(`stopped on ${turn.stop_reason}`);\n            };\n            return AgentRun { answer, turns, calls, usage, requests };\n        }\n        let mut results: List<Value> = [];\n        for let b of turn.blocks() {\n            if b.kind != \"tool_use\" {\n                continue;\n            }\n            let name = b.name.unwrap();\n            let result: Result<String, String> = match ws.call_limit(&name) {\n                Some(limit) && count_of(&calls, &name) >= limit => Err(\n                    `all ${limit} calls of ${name} are spent; answer from what you have`,\n                ),\n                _ => ws.call(&name, &b.input),\n            };\n            let [content, is_error] = match result {\n                Ok(out) => [out, false],\n                Err(e) => [e, true],\n            };\n            let output: Option<String> = if ws.observes(&name) && !is_error { Some(content) } else { null };\n            calls.push(Call { name, input: b.input, is_error, output });\n            results.push(message(&ToolResult { tool_use_id: b.id.unwrap(), content, is_error }));\n        }\n        if turns + 1 == max_turns {\n            results.push(message(\n                &TextBlock { text: \"This is your last turn: tools are no longer available. Give your answer now.\" },\n            ));\n        }\n        messages.push(message(&Blocks { role: \"assistant\", content: turn.content }));\n        messages.push(message(&Blocks { role: \"user\", content: results }));\n    }\n}\n\n/// How many of `calls` called tool `name` and got an answer: a call refused\n/// for its input did nothing, so it spends nothing.\nfn count_of(calls: &List<Call>, name: &String) -> i32 {\n    let mut n = 0;\n    for let c of calls {\n        if c.name == *name && !c.is_error {\n            n += 1;\n        }\n    }\n    return n;\n}\n\nwado-compiler/lib/wasi/clocks/system_clock.wado:49:    fn now() -> Instant;\nwado-compiler/lib/wasi/clocks/monotonic_clock.wado:29:    fn now() -> Mark;\n479a8de96af eddy: check out a build submodule the way the tree is checked out\n95fba55a2b2 eddy: reuse one checkout across reviews, and record each request\n15e736fbc66 Merge pull request #2641 from wado-lang/ccr-ab6e1e8d-gpq450\n453:[tasks.eddy-review]\n460:    *\" --no-run \"*) set -- \"$wado\" run package-eddy/src/main.wado -- \"$@\" ;;\n466:        set -- package-eddy/src/main.wado -- \"$@\"\n\n</stdout>"
+          },
+          {
+            "name": "Run",
+            "input": {
+              "program": "node",
+              "args": [
+                "-e",
+                "const cp=require('child_process'); console.log(cp.execSync('sed -n 440,480p mise.toml; grep -rn \"snapshot\\|reset_snapshot\\|scratchpad\" package-eddy/src/*.wado package-eddy/tools/*.wado | grep -v \"^package-eddy/src/snapshot.wado\"; ls scratchpad; ls ..; git -C .. worktree list').toString())"
+              ]
+            },
+            "is_error": false,
+            "output": "exit code 0\n<stderr>\n</stderr>\n<stdout>\n    *)\n        echo \"error: unknown optimization level '${level}' (expected O0, O1, O2, O3 or Os)\" >&2\n        exit 1\n        ;;\nesac\nscripts/dev-bin.sh wado test \"-${level}\" -D log.level=trace wado-compiler/lib/core/log_level_test.wado\nscripts/dev-bin.sh wado test \"-${level}\" -D log.level=warn wado-compiler/lib/core/log_warn_test.wado\n\"\"\"\n\n[tasks.test-hooks]\ndescription = \"Run the Claude Code hook tests\"\nrun = \"node --test .claude/hooks/*.test.mts\"\n\n[tasks.eddy-review]\ndescription = \"Review this branch with Eddy; arguments go to it (`--no-run` keeps it from building and running the code)\"\nrun = \"\"\"\n#!/usr/bin/env bash\nset -euo pipefail\nwado=\"$(scripts/dev-bin.sh --path wado)\"\ncase \" $* \" in\n    *\" --no-run \"*) set -- \"$wado\" run package-eddy/src/main.wado -- \"$@\" ;;\n    # The reviewer builds with cargo, which would starve a test run and be\n    # starved by it. `wado run` refuses a grant of a path that does not exist,\n    # so the homes are granted only to a review that runs cargo or mise, and\n    # mise's binary and data directory only where they exist.\n    *)\n        set -- package-eddy/src/main.wado -- \"$@\"\n        for granted in \"${MISE_DATA_DIR:-$HOME/.local/share/mise}\" \"$(command -v mise)\"; do\n            if [ -e \"$granted\" ]; then set -- --process-read \"$granted\" \"$@\"; fi\n        done\n        set -- ./scripts/exclusive.sh test \"$wado\" run \\\n            --process-read \"${CARGO_HOME:-$HOME/.cargo}\" --process-read \"${RUSTUP_HOME:-$HOME/.rustup}\" \"$@\"\n        ;;\nesac\n# A child of `wado run` may run only a system-wide program, and mise's `rg`\n# shim is ahead of `/usr/bin/rg` on PATH otherwise. Set after `wado` is built,\n# which must find the toolchain mise installs.\nPATH=\"/usr/bin:$PATH\" exec \"$@\"\n\"\"\"\n\n# The oracle tasks run the ANTLR4 jar, so Java is installed for them alone. A\n1202-inline.md\n1202-inline.patch\nbaselines.log\nbuild\nbuild.log\ncheck.log\ncomment-block.sh\ncomment-check.log\ncost-test.log\ncr1.diff\ndistill.diff\neddy\neddy-1202-haiku.json\neddy-1202-haiku.log\neddy-1202.json\neddy-1202.log\neddy-reviews\neddy-target\neddy-test.log\neddy-tree\neddy-trees\neddy.json\neddy.log\neddy2.json\neddy2.log\neddy3.json\neddy3.log\nformat.log\nhint.wado\nhooks.log\ni64\nmain-check.log\nprefetch.log\nreview-compile.log\nreview-eddy-test.log\nreview-linked.log\nreview-main.wasm\nreview-maxturns.log\nreview-mise.log\nreview-mise.out\nreview.diff\nsetup.log\ntest-wado.log\ntest.log\ntry-mise.log\ntry.log\n/home/user/wado                       479a8de96af [ccr-ab6e1e8d-gpq450]\n/home/user/wado/scratchpad/eddy-tree  479a8de96af (detached HEAD)\n\n</stdout>"
+          },
+          {
+            "name": "Run",
+            "input": {
+              "program": "node",
+              "args": [
+                "-e",
+                "const cp=require('child_process'); console.log(cp.execSync('grep -n \"reset\\|root\\|snapshot\\|git\" package-eddy/src/report.wado | head -40; grep -n \"scratchpad\" .gitignore; cat .gitmodules; grep -n vendor Cargo.toml | head').toString())"
+              ]
+            },
+            "is_error": false,
+            "output": "exit code 0\n<stderr>\n</stderr>\n<stdout>\n59:/scratchpad/*\n60:!/scratchpad/.gitkeep\n[submodule \"vendor/wasm\"]\n\tpath = vendor/wasm\n\turl = https://github.com/WebAssembly/spec.git\n\tshallow = true\n[submodule \"vendor/wasi\"]\n\tpath = vendor/wasi\n\turl = https://github.com/WebAssembly/WASI.git\n\tshallow = true\n[submodule \"vendor/wasmtime\"]\n\tpath = vendor/wasmtime\n\turl = https://github.com/bytecodealliance/wasmtime.git\n\tshallow = true\n[submodule \"vendor/wasm-tools\"]\n\tpath = vendor/wasm-tools\n\turl = https://github.com/bytecodealliance/wasm-tools.git\n\tshallow = true\n[submodule \"vendor/component-model\"]\n\tpath = vendor/component-model\n\turl = https://github.com/WebAssembly/component-model.git\n\tshallow = true\n[submodule \"vendor/antlr4\"]\n\tpath = vendor/antlr4\n\turl = https://github.com/antlr/antlr4.git\n\tshallow = true\n[submodule \"vendor/wasi-webgpu\"]\n\tpath = vendor/wasi-webgpu\n\turl = https://github.com/WebAssembly/wasi-webgpu.git\n\tshallow = true\n[submodule \"vendor/protobuf-spec\"]\n\tpath = vendor/protobuf-spec\n\turl = https://github.com/protocolbuffers/protocolbuffers.github.io.git\n\tshallow = true\n[submodule \"vendor/onnx\"]\n\tpath = vendor/onnx\n\turl = https://github.com/onnx/onnx.git\n\tshallow = true\n[submodule \"vendor/protobuf\"]\n\tpath = vendor/protobuf\n\turl = https://github.com/protocolbuffers/protobuf.git\n\tshallow = true\n[submodule \"vendor/ecma262\"]\n\tpath = vendor/ecma262\n\turl = https://github.com/tc39/ecma262.git\n\tshallow = true\n[submodule \"vendor/test262\"]\n\tpath = vendor/test262\n\turl = https://github.com/tc39/test262.git\n\tshallow = true\n[submodule \"vendor/JSON-Schema-Test-Suite\"]\n\tpath = vendor/JSON-Schema-Test-Suite\n\turl = https://github.com/json-schema-org/JSON-Schema-Test-Suite.git\n\tshallow = true\n18:exclude = [\"vendor\", \"wado-run-webgpu\"]\n\n</stdout>"
+          },
+          {
+            "name": "Run",
+            "input": {
+              "program": "node",
+              "args": [
+                "-e",
+                "const cp=require('child_process'); console.log(cp.execSync('ls vendor/wasm-tools | head -3; git submodule status | head -20; grep -n \"vendor\" Cargo.toml */Cargo.toml | head').toString())"
+              ]
+            },
+            "is_error": false,
+            "output": "exit code 0\n<stderr>\n</stderr>\n<stdout>\n-245a45abc90190c0bff04d97e6d2b541b4bb9f12 vendor/JSON-Schema-Test-Suite\n-7d5770395bb7b02eb56e7c62662cb1d7c08f42a3 vendor/antlr4\n-d1daf829e2da2293091c105121383ffbc3b3515b vendor/component-model\n-7628258064c18d831a7f74ecf3a997bd6345d0bb vendor/ecma262\n-718bf2eaa65ad7df49f1fb2dfc91e15f51a1ef92 vendor/onnx\n-2c74169b34066ceb8ddb6b882fcb3fb32d737a55 vendor/protobuf\n-c00537c22ece49df397a05586e77af033991ab85 vendor/protobuf-spec\n-c990733f8d234dd333bd8a71c0c2eb871249b0e0 vendor/test262\n-59e48bfe3fae9bf2480eb15abd8f55999eb3b395 vendor/wasi\n-6a776bada0b66d3dbf9da304a49ff2947ce4e1f8 vendor/wasi-webgpu\n-608711107b7f1edb13efd57b7d79b49477462d36 vendor/wasm\n-a86cb8e2b2e71657b0b1ddc737d110987e79dab6 vendor/wasm-tools\n-c307ec81de02852d815e9849f7c89d955c03c30d vendor/wasmtime\nCargo.toml:18:exclude = [\"vendor\", \"wado-run-webgpu\"]\n\n</stdout>"
+          },
+          {
+            "name": "Run",
+            "input": {
+              "args": [
+                "run",
+                "--release",
+                "--bin",
+                "wado",
+                "--",
+                "test",
+                "package-eddy/src/snapshot.wado"
+              ],
+              "timeout": 1800
+            },
+            "is_error": false,
+            "output": "exit code 1\n<stderr>\n   Compiling wado-wasm-embed v0.0.38 (/home/user/wado/scratchpad/eddy-tree/wado-wasm-embed)\n   Compiling wado-manifest v0.0.38 (/home/user/wado/scratchpad/eddy-tree/wado-manifest)\n   Compiling wado-compiler v0.0.38 (/home/user/wado/scratchpad/eddy-tree/wado-compiler)\n   Compiling wado-lsp v0.0.38 (/home/user/wado/scratchpad/eddy-tree/wado-lsp)\n   Compiling wado-host v0.0.38 (/home/user/wado/scratchpad/eddy-tree/wado-host)\n   Compiling wado-cli v0.0.38 (/home/user/wado/scratchpad/eddy-tree/wado-cli)\n    Finished `release` profile [optimized] target(s) in 18m 42s\n     Running `/home/user/wado/scratchpad/eddy-target/release/wado test package-eddy/src/snapshot.wado`\n</stderr>\n<stdout>\n[402ms] 0/1 files (0%) · 0 tests, 0 failed\n[5.41s] 0/1 files (0%) · 0 tests, 0 failed\n[10.41s] 0/1 files (0%) · 0 tests, 0 failed\n[15.41s] 0/1 files (0%) · 0 tests, 0 failed\n[20.41s] 0/1 files (0%) · 0 tests, 0 failed\n[25.41s] 0/1 files (0%) · 0 tests, 0 failed\n[30.41s] 0/1 files (0%) · 0 tests, 0 failed\n[35.41s] 0/1 files (0%) · 0 tests, 0 failed\n[40.41s] 0/1 files (0%) · 0 tests, 0 failed\n[45.41s] 0/1 files (0%) · 0 tests, 0 failed\n[50.42s] 0/1 files (0%) · 0 tests, 0 failed\n[55.42s] 0/1 files (0%) · 0 tests, 0 failed\n[60.43s] 0/1 files (0%) · 0 tests, 0 failed\n[65.43s] 0/1 files (0%) · 0 tests, 0 failed\nnot ok  package-eddy/src/snapshot.wado :: a directory's programs are the files in it that can be executed (29ms)\n  error while executing at wasm backtrace:\n    0:  0x1039e - package-eddy/src/snapshot.wado!core:rt/panic$cold0\n    1:   0xbf06 - package-eddy/src/snapshot.wado!core:rt/panic\n    2:   0xd9b3 - package-eddy/src/snapshot.wado!core:prelude/types.wado/core:prelude/types.wado/unwrap_failed<core:process/ProcessError>\n    3:   0x626d - package-eddy/src/snapshot.wado!wado-lang:eddy@0.0.38/src/snapshot.wado/$test_1_a_directory_s_programs_are_the_files_in_it_that_can_be_executed\n    4:   0x90c3 - package-eddy/src/snapshot.wado!wado-lang:eddy@0.0.38/src/snapshot.wado/$cm_export__$test_1_a_directory_s_programs_are_the_files_in_it_that_can_be_executed: wasm trap: wasm `unreachable` instruction executed\n  stderr:\n    called Result::unwrap() on an Err value: ProcessError { program: \"chmod\", kind: ProcessErrorKind::Spawn(ErrorCode::NotPermitted) }\nnot ok  package-eddy/src/snapshot.wado :: a tree is checked out again in place, and what a review left is gone (40ms)\n  error while executing at wasm backtrace:\n    0:  0x1039e - package-eddy/src/snapshot.wado!core:rt/panic$cold0\n    1:   0xbf06 - package-eddy/src/snapshot.wado!core:rt/panic\n    2:   0xc115 - package-eddy/src/snapshot.wado!wado-lang:eddy@0.0.38/src/git.wado/git\n    3:  0x1b32c - package-eddy/src/snapshot.wado!wado-lang:eddy@0.0.38/src/snapshot.wado/wado-lang:eddy@0.0.38/src/snapshot.wado/$Closure_2::$call$spec0$sroa[self.$capture_0]\n    4:   0x57a6 - package-eddy/src/snapshot.wado!wado-lang:eddy@0.0.38/src/snapshot.wado/$test_0_a_tree_is_checked_out_again_in_place__and_what_a_review_left_is_gone\n    5:   0x90b1 - package-eddy/src/snapshot.wado!wado-lang:eddy@0.0.38/src/snapshot.wado/$cm_export__$test_0_a_tree_is_checked_out_again_in_place__and_what_a_review_left_is_gone: wasm trap: wasm `unreachable` instruction executed\n  stderr:\n    git: the host does not let a child run it\n\ncompile: 1 ok, 0 failed  [cpu: 68.23s]\nload:    1 ok, 0 failed  [cpu: 295ms]\ntest:    0 passed, 2 failed  [cpu: 69ms]\nwall:    68.99s\n\ntest failures:\n    package-eddy/src/snapshot.wado :: a directory's programs are the files in it that can be executed\n    package-eddy/src/snapshot.wado :: a tree is checked out again in place, and what a review left is gone\n</stdout>"
+          },
+          {
+            "name": "Run",
+            "input": {
+              "program": "node",
+              "args": [
+                "-e",
+                "const cp=require('child_process');const x=c=>cp.execSync(c,{cwd:'/tmp/ctest'}).toString();require('fs').rmSync('/tmp/ctest',{recursive:true,force:true});require('fs').mkdirSync('/tmp/ctest');x('git init -q && echo A > f && git add f && git -c user.name=t -c user.email=t@t commit -qm a && echo B > f && git -c user.name=t -c user.email=t@t commit -qam b');const A=x('git rev-parse HEAD~1').trim(),B=x('git rev-parse HEAD').trim();const co=s=>{if(!require('fs').existsSync('/tmp/ctest/scratchpad/eddy-tree/.git')){x('git worktree prune && git worktree add -q --force --detach scratchpad/eddy-tree '+s)}else{x('git -C scratchpad/eddy-tree checkout -q --force --detach '+s+' && git -C scratchpad/eddy-tree reset -q --hard '+s+' && git -C scratchpad/eddy-tree clean -ffdxq')}return 'scratchpad/eddy-tree'};const r1=co(A);x('echo test > '+r1+'/repro.rs');const r2=co(B);console.log('review of A reads f =',x('cat '+r1+'/f').trim(),'; its written repro exists:',require('fs').existsSync('/tmp/ctest/'+r1+'/repro.rs'))"
+              ]
+            },
+            "is_error": false,
+            "output": "exit code 1\n<stderr>\nnode:fs:1760\n  const result = binding.mkdir(\n                         ^\n\nError: EACCES: permission denied, mkdir '/tmp/ctest'\n    at Object.mkdirSync (node:fs:1760:26)\n    at [eval]:1:168\n    at runScriptInThisContext (node:internal/vm:219:10)\n    at node:internal/process/execution:485:12\n    at [eval]-wrapper:6:24\n    at runScriptInContext (node:internal/process/execution:483:60)\n    at evalFunction (node:internal/process/execution:317:30)\n    at evalTypeScript (node:internal/process/execution:329:3)\n    at node:internal/main/eval_string:71:3 {\n  errno: -13,\n  code: 'EACCES',\n  syscall: 'mkdir',\n  path: '/tmp/ctest'\n}\n\nNode.js v26.13.0\n</stderr>\n<stdout>\n</stdout>"
+          },
+          {
+            "name": "Run",
+            "input": {
+              "program": "node",
+              "args": [
+                "-e",
+                "const D=process.cwd()+'/build/ctest';const fs=require('fs');const cp=require('child_process');const x=c=>cp.execSync(c,{cwd:D,env:{...process.env,GIT_CEILING_DIRECTORIES:process.cwd()+'/build'}}).toString();fs.rmSync(D,{recursive:true,force:true});fs.mkdirSync(D,{recursive:true});x('git init -q && echo A > f && git add f && git -c user.name=t -c user.email=t@t commit -qm a && echo B > f && git -c user.name=t -c user.email=t@t commit -qam b');const A=x('git rev-parse HEAD~1').trim(),B=x('git rev-parse HEAD').trim();const co=s=>{if(!fs.existsSync(D+'/scratchpad/eddy-tree/.git')){x('git worktree prune && git worktree add -q --force --detach scratchpad/eddy-tree '+s)}else{x('git -C scratchpad/eddy-tree checkout -q --force --detach '+s+' && git -C scratchpad/eddy-tree reset -q --hard '+s+' && git -C scratchpad/eddy-tree clean -ffdxq')}return 'scratchpad/eddy-tree'};const r1=co(A);x('echo test > '+r1+'/repro.rs');const r2=co(B);console.log('review of A reads f =',x('cat '+r1+'/f').trim(),'; its written repro exists:',fs.existsSync(D+'/'+r1+'/repro.rs'));fs.rmSync(D,{recursive:true,force:true})"
+              ]
+            },
+            "is_error": false,
+            "output": "exit code 0\n<stderr>\n</stderr>\n<stdout>\nreview of A reads f = B ; its written repro exists: false\n</stdout>"
+          }
+        ],
+        "usage": {
+          "input_tokens": 30,
+          "output_tokens": 11941,
+          "cache_creation_input_tokens": 70068,
+          "cache_read_input_tokens": 236560,
+          "long_prompts": null
+        },
+        "requests": [
+          {
+            "started": 0.000014987,
+            "usage": {
+              "input_tokens": 4,
+              "output_tokens": 202,
+              "cache_creation_input_tokens": 10016,
+              "cache_read_input_tokens": 0,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 3.352766158,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 57,
+              "cache_creation_input_tokens": 291,
+              "cache_read_input_tokens": 10016,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 4.720100936,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 70,
+              "cache_creation_input_tokens": 74,
+              "cache_read_input_tokens": 10307,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 6.00037474,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 81,
+              "cache_creation_input_tokens": 89,
+              "cache_read_input_tokens": 10381,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 7.816913257,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 102,
+              "cache_creation_input_tokens": 114,
+              "cache_read_input_tokens": 10470,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 10.386194438,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 145,
+              "cache_creation_input_tokens": 718,
+              "cache_read_input_tokens": 10584,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 13.145536566,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 2276,
+              "cache_creation_input_tokens": 4920,
+              "cache_read_input_tokens": 11302,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 36.588410064,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 3835,
+              "cache_creation_input_tokens": 8148,
+              "cache_read_input_tokens": 16222,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 76.106854819,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 1042,
+              "cache_creation_input_tokens": 5060,
+              "cache_read_input_tokens": 24370,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 86.210451267,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 385,
+              "cache_creation_input_tokens": 1920,
+              "cache_read_input_tokens": 29430,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 90.914284213,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 792,
+              "cache_creation_input_tokens": 951,
+              "cache_read_input_tokens": 31350,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 1291.10346882,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 1711,
+              "cache_creation_input_tokens": 35043,
+              "cache_read_input_tokens": 0,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 1308.25046757,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 629,
+              "cache_creation_input_tokens": 2042,
+              "cache_read_input_tokens": 35043,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 1313.8664238,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 614,
+              "cache_creation_input_tokens": 682,
+              "cache_read_input_tokens": 37085,
+              "long_prompts": null
+            }
+          }
+        ],
+        "error": null
+      },
+      "report_usage": {
+        "input_tokens": 17222,
+        "output_tokens": 452,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "long_prompts": null
+      },
+      "report_error": null
+    }
+  ]
+}

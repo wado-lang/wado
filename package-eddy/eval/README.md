@@ -98,8 +98,8 @@ symbol run also runs `rust-analyzer`, which lives under `$HOME/.cargo` and
 reads the toolchain under `$HOME/.rustup`. A rerun tops each entry up to its
 run count but does not compare the prompt, so a prompt change needs a new
 output file. The
-agent's tree is a `git worktree` under `scratchpad/`, removed once its entry
-is done.
+agent's tree is one `git worktree`, `scratchpad/eddy-tree`, checked out again
+for each entry, so `cargo`'s build of the files two entries share stays fresh.
 
 ## Findings So Far
 
