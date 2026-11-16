@@ -17,7 +17,8 @@ pub interface Track {
 }
 
 pub struct Dep {
-    subscribe: fn mut(Observer),
+    /// Whether the observer was not subscribed yet.
+    subscribe: fn mut(Observer) -> bool,
     unsubscribe: fn mut(i32),
 }
 
@@ -51,10 +52,11 @@ fn subscribers() -> Subscribers {
             subscribe: |observer: Observer| {
                 for let subscribed of observers {
                     if subscribed.id == observer.id {
-                        return;
+                        return false;
                     }
                 }
                 observers.push(observer);
+                return true;
             },
             unsubscribe: |id: i32| {
                 let mut rest: List<Observer> = [];
@@ -66,10 +68,8 @@ fn subscribers() -> Subscribers {
                 observers = rest;
             },
         },
-        // Over a copy: an observer told may unsubscribe while the rest wait.
         notify: || {
-            let told = observers;
-            for let observer of told {
+            for let observer of observers {
                 let mut invalidate = observer.invalidate;
                 invalidate();
             }
@@ -91,8 +91,9 @@ impl Track for Computation {
     fn read(&mut self, dep: Dep) {
         if let Some(observer) = self.observer {
             let mut subscribe = dep.subscribe;
-            subscribe(observer);
-            self.deps.push(dep);
+            if subscribe(observer) {
+                self.deps.push(dep);
+            }
         }
         resume ();
     }
@@ -152,12 +153,13 @@ impl<T> Signal<T> {
 }
 
 /// A value computed from others, again only when one of them changed and
-/// someone asks.
+/// someone asks. It stops listening when the computation that made it is
+/// disposed of, and listens again if it is read after that.
 pub struct Memo<T> {
     read: fn mut() -> T with Track,
 }
 
-pub fn memo<T>(compute: fn mut() -> T with Track) -> Memo<T> {
+pub fn memo<T>(compute: fn mut() -> T with Track) -> Memo<T> with Track {
     let id = next_observer_id();
     let mut compute = compute;
     let mut cached: Option<T> = null;
@@ -174,6 +176,11 @@ pub fn memo<T>(compute: fn mut() -> T with Track) -> Memo<T> {
             }
         },
     };
+    Track::own(|| {
+        fresh = false;
+        unsubscribe_all(deps, id);
+        deps = [];
+    });
     return Memo {
         read: || {
             Track::read(readers.dep);

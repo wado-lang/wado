@@ -35,7 +35,8 @@ wado test    # runs the session against SurfaceDom
   a write performs no effect, and an effect never sees half of a batch.
 - A computation subscribes to a dependency when it reads it, and drops its
   subscriptions when it runs again or is disposed of. So a dependency it no
-  longer reads wakes nothing.
+  longer reads wakes nothing. A memo is disposed of with the computation that
+  made it.
 - `on` flushes when the listener returns. Every entry into the program from the
   browser is a listener, so no microtask is needed.
 
@@ -43,7 +44,10 @@ wado test    # runs the session against SurfaceDom
 
 - A memo does not compare its new value with the old one, so its dependents
   rerun even when the value came out the same.
-- A memo owns nothing: a cleanup registered inside one traps.
+- A memo owns nothing: a cleanup registered inside one traps, and so does
+  making an effect or another memo there.
+- Disposing of a scope takes its rows out of an `each`, and leaves every other
+  node where it is.
 - Disposing of a scope stops its bindings, and leaves its listeners attached.
 - `each` puts the rows back in order by appending every one of them, since
   `SurfaceDom` does not answer `insert_before`.
