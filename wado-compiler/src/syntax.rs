@@ -168,7 +168,6 @@ keyword_registry! {
     "export" => Export : StorageModifier,
     "mut" => Mut : StorageModifier,
     "async" => Async : StorageModifier,
-    "reactive" => Reactive : StorageModifier,
     "affine" => Affine : StorageModifier,
     "use" => Use : Other,
     "from" => From : Other,
@@ -324,7 +323,7 @@ pub struct KeywordCategories {
     /// enum, variant, flags, impl, trait, type.
     pub storage_type: Vec<&'static str>,
     /// Storage-modifier keywords: visibility and qualifiers on declarations —
-    /// pub, internal, export, mut, async, extends, reactive.
+    /// pub, internal, export, mut, async, extends.
     pub storage_modifier: Vec<&'static str>,
     /// Other keywords: everything else that lexes as a keyword but isn't a
     /// control-flow, storage-type, or storage-modifier keyword.

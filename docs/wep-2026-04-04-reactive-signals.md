@@ -41,7 +41,7 @@ dependencies. It compiles templates, which is where its speed comes from.
 
 Signals are a library that finds dependencies as the code runs. The language
 gains no `reactive` keyword, no `&reactive` reference, and no static dependency
-analysis.
+analysis. `reactive` is an identifier like any other.
 
 Static analysis sees a graph only where it is closed within one function. The
 to-do list already leaves that: each item carries a signal of its own, created
@@ -114,8 +114,6 @@ not to the language.
 
 ## Known gaps
 
-- `reactive` is still a reserved word, and this decision leaves it without a
-  use.
 - A leading `<` in expression position is still reserved for markup. This WEP
   reserved it for JSX and no longer uses it, and
   [Overload Resolution](./wep-2026-07-31-overload-resolution.md) rules out
