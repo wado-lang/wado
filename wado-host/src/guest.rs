@@ -401,11 +401,9 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: &Runtime
     let mut config = default_config(opt_level);
     config.collector(knobs.collector);
     // A heap starting past the limit would fail before the guest ran.
-    config.gc_heap_initial_size(
-        knobs
-            .max_memory
-            .map_or(knobs.gc_heap_initial_size, |max| knobs.gc_heap_initial_size.min(max)),
-    );
+    config.gc_heap_initial_size(knobs.max_memory.map_or(knobs.gc_heap_initial_size, |max| {
+        knobs.gc_heap_initial_size.min(max)
+    }));
     if let Some(bytes) = knobs.function_alignment {
         // SAFETY: a minimum alignment changes where code lands, never what it
         // computes, so no setting of it can miscompile.

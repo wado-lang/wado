@@ -117,13 +117,8 @@ fn test_max_memory_bounds_each_memory() {
     let linear = write("linear.wado", &filled("a", "LinearArray", "64 << 20"));
     let gc = write("gc.wado", &filled("l", "List", "64 << 20"));
     for command in ["run", "test"] {
-        let run = |file: &std::path::Path, cap: &[&str]| {
-            wado()
-                .arg(command)
-                .args(cap)
-                .arg(file)
-                .assert()
-        };
+        let run =
+            |file: &std::path::Path, cap: &[&str]| wado().arg(command).args(cap).arg(file).assert();
         run(&within, &["--max-memory", "32m"]).success();
         for past in [&linear, &gc] {
             run(past, &[]).success();
