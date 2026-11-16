@@ -181,7 +181,14 @@ fn is_dead_store(engine: &mut Engine, store: StmtId, local: u32) -> bool {
     if engine.reads_promoted_local(local) || engine.body_address_taken().contains(&local) {
         return false;
     }
-    let def = engine.local_def(local);
+    // A `let` without a value writes nothing, so a store before it reaches a
+    // read after it.
+    let def = engine.local_def(local).filter(|&def| {
+        matches!(
+            engine.body.stmts[def].kind,
+            StmtKind::Let { value: Some(_), .. } | StmtKind::LetDestructure { .. }
+        )
+    });
     let store_chain: IndexSet<NodeRef> = ancestors(engine, NodeRef::Stmt(store)).collect();
     assert_eq!(
         store_chain.last(),

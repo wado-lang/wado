@@ -858,6 +858,9 @@ impl Body {
     /// behind in a later block, which then double-lists once a new block also
     /// claims it.
     pub fn detach_stmts(&mut self, stmts: &[StmtId]) {
+        if stmts.is_empty() {
+            return;
+        }
         let set: IndexSet<StmtId> = stmts.iter().copied().collect();
         for bid in self.blocks.keys().collect::<Vec<_>>() {
             self.blocks[bid].stmts.retain(|s| !set.contains(s));

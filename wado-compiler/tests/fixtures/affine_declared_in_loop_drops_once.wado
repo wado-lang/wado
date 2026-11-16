@@ -1,6 +1,7 @@
-// A `let t: T;` writes nothing, so the slot a loop enters again still held
-// the value the last iteration dropped: its first assignment and the scope's
-// exit both dropped that value once more (WEP: Affine Types).
+// A `let t: T;` writes nothing, so a loop entering its scope again finds the
+// slot holding what the last iteration left there, which an assignment drops.
+// The scope's drop empties the slot, and no optimizer pass may take the
+// declaration for a write that makes that store dead (WEP: Affine Types).
 
 affine struct Tok {
     id: i32,
@@ -14,7 +15,8 @@ impl Drop for Tok {
     }
 }
 
-test {
+test "assigned on both branches" {
+    drops = 0;
     for let i of 0..<3 {
         let t: Tok;
         if i == 0 {
@@ -23,6 +25,55 @@ test {
             t = Tok { id: i + 10 };
         }
         assert t.id >= 0;
+    }
+    assert drops == 3;
+}
+
+test "an iteration that leaves before assigning" {
+    drops = 0;
+    for let i of 0..<3 {
+        let t: Tok;
+        if i == 1 {
+            continue;
+        }
+        t = Tok { id: i };
+        assert t.id >= 0;
+    }
+    assert drops == 2;
+}
+
+test "reassigned" {
+    drops = 0;
+    for let i of 0..<2 {
+        let mut t: Tok;
+        t = Tok { id: i };
+        t = Tok { id: i + 5 };
+        assert t.id >= 5;
+    }
+    assert drops == 4;
+}
+
+test "captured" {
+    drops = 0;
+    for let i of 0..<3 {
+        let t: Tok;
+        t = Tok { id: i };
+        let f = || t.id;
+        assert f() == i;
+    }
+    assert drops == 3;
+}
+
+fn second(t: &[Tok, i32]) -> i32 {
+    return t.1;
+}
+
+test "a tuple referenced across turns" {
+    drops = 0;
+    for let i of 0..<3 {
+        let t: [Tok, i32];
+        t = [Tok { id: i }, i];
+        assert second(&t) == i;
     }
     assert drops == 3;
 }
