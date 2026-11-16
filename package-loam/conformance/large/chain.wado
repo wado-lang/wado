@@ -3,7 +3,7 @@
 
 use { Preopens } from "core:fs";
 use { FileSource, Graph, Tensor } from "lib:loam";
-use { DIR, N, SHIFT } from "./layout.wado";
+use { DIR, N, WEIGHTS, moved } from "./layout.wado";
 use { Model, Params, compute } from "./chain.onnxtext"
     with {
         type: "onnxtext",
@@ -21,14 +21,18 @@ use { Model, Params, compute } from "./chain.onnxtext"
 /// every weight came from its own range.
 pub fn misplaced<affine Bk: Graph>(backend: &mut Bk) -> i32 with (_, Preopens) {
     let mut model = Model::new(Params::load(backend, &FileSource { dir: DIR }).unwrap());
-    let x: List<f32> = (0..<N).map(|i| (i % 251) as f32).collect();
+    let x: List<f32> = (0..<N).map(|i| i as f32).collect();
     let y = compute(backend, &Tensor {
         data: x,
         extents: [1, N],
     }, &mut model);
     let mut off = 0;
-    for let j of 0..<N {
-        if y.data[j] != x[(j - SHIFT % N + N) % N] {
+    for let i of 0..<N {
+        let mut at = i;
+        for let k of 0..<WEIGHTS {
+            at = moved(k, at);
+        }
+        if y.data[at] != x[i] {
             off += 1;
         }
     }

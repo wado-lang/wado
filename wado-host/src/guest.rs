@@ -395,14 +395,19 @@ macro_rules! guest_views {
     };
 }
 
+/// The bytes of a Wasm page, the unit a memory, the GC heap among them, grows by.
+const WASM_PAGE_SIZE: u64 = 64 << 10;
+
 /// [`default_config`] under the runtime knobs and profiling mode a run chose.
 #[must_use]
 pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: &RuntimeKnobs) -> Config {
     let mut config = default_config(opt_level);
     config.collector(knobs.collector);
-    // A heap starting past the limit would fail before the guest ran.
+    // A heap starting past the limit would fail before the guest ran. wasmtime
+    // rounds the start up to a whole Wasm page, so a limit off a page rounds
+    // it down first.
     config.gc_heap_initial_size(knobs.max_memory.map_or(knobs.gc_heap_initial_size, |max| {
-        knobs.gc_heap_initial_size.min(max)
+        knobs.gc_heap_initial_size.min(max & !(WASM_PAGE_SIZE - 1))
     }));
     if let Some(bytes) = knobs.function_alignment {
         // SAFETY: a minimum alignment changes where code lands, never what it

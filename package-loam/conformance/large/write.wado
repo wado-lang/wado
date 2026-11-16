@@ -7,14 +7,14 @@
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { StoredTensor, write_safetensors } from "lib:loam/src/safetensors.wado";
-use { DIR, N, WEIGHTS } from "./layout.wado";
+use { DIR, N, WEIGHTS, moved } from "./layout.wado";
 
-/// Weight `k`, the permutation moving element `i` to `(i + k + 1) % N`.
+/// Weight `k`, the permutation moving element `i` to `moved(k, i)`.
 fn permutation(k: i32) -> StoredTensor {
     let mut data = List::<u8>::filled(N * N * 4, 0) as ByteList;
     for let i of 0..<N {
         // 1.0 is 0x3F800000, little-endian.
-        let at = (i * N + (i + k + 1) % N) * 4;
+        let at = (i * N + moved(k, i)) * 4;
         data[at + 2] = 0x80;
         data[at + 3] = 0x3F;
     }

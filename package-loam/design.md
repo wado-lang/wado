@@ -95,10 +95,11 @@ Params::load<affine Src: WeightSource>(backend: &mut Bk, source: &Src) -> Result
 says how long a file is. The generated module names every file it reads, so one
 model may spread its weights over several, and the loader holds one weight's
 bytes at a time. Before any weight is read, each file is checked: a
-safetensors file's header, a model file's length, and an external data file's
-length against the last byte the graph places in it. So a file that is missing
-or too short stops the load before a weight reaches the device. An error names
-the file and the tensor.
+safetensors file's header, and its length against the last byte the header
+places a tensor in; a model file's length; and an external data file's length
+against the last byte the graph places in it. So a file that is missing or too
+short stops the load before a weight reaches the device. An error names the
+file, and the tensor where one is to blame.
 
 A weight reaches the backend as a `HostWeight`: its element kind, its extents,
 and the little-endian bytes the checkpoint stores, in linear memory. Each
@@ -108,6 +109,14 @@ are, and an f32 weight as bf16 where every value's low half is zero.
 value, by reading values from the bytes. `Cpu` decodes them into a tensor. A
 float or bool weight reaches a device with no GC list on the way; WebGPU decodes
 a `u8` or `i64` one and keeps it as `keep` does.
+
+`conformance/large/` shows a checkpoint larger than the guest loading. It writes
+80 MiB of weights over two shards, a chain of permutations that move each
+element where no other order of them would. Under `--max-memory 32m` the chain
+loads onto `WebGpuBackend` and `PjrtBackend` and runs with every output in
+place. `Cpu`, which holds the weights whole, loads them from the same
+`FileSource` with no limit and runs out of heap under it. The runners' tests run
+it.
 
 Two sources come with the runtime. `FileSource { dir }` reads the files of a
 directory, a range at a time. A `HashMap<String, ByteList>` holds each file

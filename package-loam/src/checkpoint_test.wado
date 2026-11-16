@@ -170,10 +170,10 @@ test "offsets that disagree with the shape name the tensor" {
     assert `${e}` == "m: b: the checkpoint's offsets hold 8 bytes, and 3 F32 elements need 12";
 }
 
-test "a payload past the end of the file names the tensor and the file" {
+test "a file shorter than its header places the tensors stops the load before any is read" {
     let bytes = two_tensors();
-    let e = payload::<f32>(&held(prefix(bytes, bytes.len() - 1)), &b()).unwrap_err();
-    assert `${e}` == `b: m: bytes ${bytes.len() - 12} to ${bytes.len()} asked for, past the ${bytes.len() - 1} it holds`;
+    let e = read_headers(&held(prefix(bytes, bytes.len() - 1)), ["m"]).unwrap_err();
+    assert `${e}` == `m: the header places tensors up to byte ${bytes.len()}, past the ${bytes.len() - 1} given`;
 }
 
 test "a header longer than the file is refused" {

@@ -178,6 +178,18 @@ pub struct Expected {
 }
 
 impl Checkpoint {
+    /// The byte past the last the header places a tensor in. An entry whose
+    /// offsets are no range is `range`'s to refuse.
+    fn data_end(&self) -> i64 {
+        let mut end = self.data_start as i64;
+        for let [_, entry] of self.entries.entries() {
+            if entry.data_offsets.len() == 2 {
+                end = i64::max(end, self.data_start as i64 + entry.data_offsets[1]);
+            }
+        }
+        return end;
+    }
+
     /// The byte range holding `e`, once the header states it as the build compiled it.
     pub fn range(&self, e: &Expected) -> Result<[i32, i32], LoadError> {
         let fail = |reason: String| LoadError { reason: `${e.tensor}: ${reason}` };
@@ -260,11 +272,22 @@ pub struct Headers {
     headers: HashMap<String, Checkpoint>,
 }
 
-/// The header of each of `files` in `source`. A file's payloads may be absent.
+/// The header of each of `files` in `source`, each file checked to hold every
+/// byte its header places a tensor in, so a short file stops the load before
+/// any weight is read.
 pub fn read_headers<affine Src: WeightSource>(source: &Src, files: List<String>) -> Result<Headers, LoadError> with _ {
     let mut headers = HashMap::<String, Checkpoint>::new();
     for let file of files {
-        headers[file] = read_checkpoint(source, &file, |reason| LoadError { reason: `${file}: ${reason}` })?;
+        let refuse = |reason: String| LoadError { reason: `${file}: ${reason}` };
+        let checkpoint = read_checkpoint(source, &file, refuse)?;
+        let [end, len] = [
+            checkpoint.data_end(),
+            source.len(&file)?,
+        ];
+        if end > len {
+            return Result::Err(refuse(`the header places tensors up to byte ${end}, past the ${len} given`));
+        }
+        headers[file] = checkpoint;
     }
     return Result::Ok(Headers { headers });
 }

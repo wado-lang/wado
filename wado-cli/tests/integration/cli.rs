@@ -120,6 +120,8 @@ fn test_max_memory_bounds_each_memory() {
         let run =
             |file: &std::path::Path, cap: &[&str]| wado().arg(command).args(cap).arg(file).assert();
         run(&within, &["--max-memory", "32m"]).success();
+        // A limit off a Wasm page still holds a guest within it.
+        run(&within, &["--max-memory", "33554433"]).success();
         for past in [&linear, &gc] {
             run(past, &[]).success();
             run(past, &["--max-memory", "32m"]).failure();
