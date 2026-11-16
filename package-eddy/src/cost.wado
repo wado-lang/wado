@@ -1,6 +1,7 @@
 //! What token usage costs in US dollars, at the prices Anthropic lists for its
 //! own API: <https://platform.claude.com/docs/en/about-claude/pricing>.
 
+use { TreeMap } from "core:collections";
 use { Usage } from "./anthropic.wado";
 
 /// US dollars per million tokens.
@@ -62,20 +63,15 @@ fn at(p: &Price, u: &Usage) -> f64 {
 /// total, then each model's share. A model with no listed price is named as
 /// unpriced, and the total is then a lower bound.
 pub fn cost_summary(spent: &List<[String, Usage]>) -> String {
-    let mut by_model: List<[String, Usage]> = [];
+    let mut by_model = TreeMap::<String, Usage>::new();
     for let [model, usage] of spent {
-        match by_model.into_iter().position(|entry: [String, Usage]| entry.0 == *model) {
-            Some(i) => {
-                let mut sum = by_model[i].1;
-                sum.add(usage);
-                by_model[i] = [*model, sum];
-            },
-            None => by_model.push([*model, *usage]),
-        }
+        let mut sum = by_model.get(*model).unwrap_or(Usage {});
+        sum.add(usage);
+        by_model[*model] = sum;
     }
     let [mut total, mut all_priced] = [0.0, true];
     let mut shares: List<String> = [];
-    for let [model, usage] of &by_model {
+    for let [model, usage] of by_model.entries() {
         match cost_usd(model, usage) {
             Some(cost) => {
                 total += cost;
