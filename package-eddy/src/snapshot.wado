@@ -75,18 +75,20 @@ test "a run holds the tree until it lets go" {
 /// The worktree `tree`, a path under the repository `repo`, checked out at
 /// `sha`, and its path. A tree an earlier review left, written to or
 /// interrupted, is reset rather than trusted.
-fn checkout_at(repo: &String, tree: &String, sha: &String) -> String with (Process, Preopens) {
+internal fn checkout_at(repo: &String, tree: &String, sha: &String) -> String with (Process, Preopens) {
     let root = fs::normalize(fs::join(repo, tree)).unwrap();
-    if !fs::exists(fs::join(&root, ".git")) {
-        // Registered still where the directory was removed by hand.
-        tree_git(repo, ["worktree", "prune"]);
-        tree_git(repo, ["worktree", "add", "--force", "--detach", *tree, *sha]);
+    if worktree_git_dir(repo, &root) matches { None } {
+        // Registered still where the directory was removed by hand, and left
+        // where git's record of it was.
+        git(["-C", *repo, "worktree", "prune"]);
+        fs::remove_dir_all(&root).unwrap();
+        git(["-c", "core.symlinks=false", "-C", *repo, "worktree", "add", "--force", "--detach", *tree, *sha]);
         return root;
     }
-    tree_git(&root, ["checkout", "--force", "--detach", "--quiet", *sha]);
+    tree_git(repo, &root, ["checkout", "--force", "--detach", "--quiet", *sha]);
     // Leaves the submodules in it as they are: `add_build_submodules` checks
     // out each one Run builds from.
-    reset_checkout(&root, sha);
+    reset_checkout(repo, &root, sha);
     return root;
 }
 
@@ -114,19 +116,59 @@ test "a tree is checked out again in place, and what a review left is gone" {
     fs::write(fs::join(&root, "left-behind.rs"), &"").unwrap();
 
     assert checkout_at(&repo, &"tree", &head) == root;
-    assert checkout_at(&".", &root, &head) == root, "a root is normalized, so a tool's paths compare with it";
+    assert checkout_at(&repo, &"./tree", &head) == root, "a root is normalized, so a tool's paths compare with it";
     assert fs::metadata(&kept).unwrap().modified == before;
     assert fs::read_to_string(fs::join(&root, "README.md")).unwrap() == "read me";
     assert !fs::exists(fs::join(&root, "left-behind.rs"));
+
+    // A run in the tree may point its `.git` at a repository of its own,
+    // whose configuration would run anything in eddy's git.
+    let planted = "build/checkout-test-planted";
+    fs::remove_dir_all(planted).unwrap();
+    git(["init", "--quiet", planted]);
+    fs::write(fs::join(&root, ".git"), &"gitdir: ../../checkout-test-planted/.git\n").unwrap();
+    fs::write(fs::join(&root, "README.md"), &"scribbled").unwrap();
+    assert checkout_at(&repo, &"tree", &head) == root;
+    assert fs::read_to_string(fs::join(&root, "README.md")).unwrap() == "read me";
+    assert try_git(["-C", planted, "rev-parse", "--verify", "HEAD"]) matches { None };
 }
 
-/// `git` run in `dir`, a checkout a reviewer reaches, with every symbolic link
-/// kept a file: a command that rewrites the tree, such as `reset --hard`,
-/// would otherwise make it a link again.
-pub fn tree_git(dir: &String, args: List<String>) -> String with Process {
-    let mut full = ["-c", "core.symlinks=false", "-C", *dir] as List<String>;
+/// `git` run on `root`, a worktree of `repo` a reviewer writes into.
+pub fn tree_git(repo: &String, root: &String, args: List<String>) -> String with (Process, Preopens) {
+    return git(tree_args(repo, root, args));
+}
+
+/// `git`'s arguments to run `args` on `root`, a worktree of `repo`. They name
+/// the git directory `repo` keeps for it, since `root`'s own `.git` is the
+/// reviewer's to rewrite: pointed at a repository of the reviewer's, its
+/// configuration would run anything. Every symbolic link is kept a file: a
+/// command that rewrites the tree, such as `reset --hard`, would otherwise
+/// make it a link again.
+pub fn tree_args(repo: &String, root: &String, args: List<String>) -> List<String> with (Process, Preopens) {
+    let git_dir = worktree_git_dir(repo, root).expect("the tree must be a worktree of the repository");
+    let mut full = ["-c", "core.symlinks=false", "-C", *root, `--git-dir=${git_dir}`, "--work-tree=."] as List<String>;
     full.extend(&args);
-    return git(full);
+    return full;
+}
+
+/// The git directory `repo` keeps for its worktree at `root`, as an absolute
+/// path, or none where it keeps none. git names it after the worktree's
+/// directory, and another past a clash, which eddy never makes.
+fn worktree_git_dir(repo: &String, root: &String) -> Option<String> with (Process, Preopens) {
+    let name = `worktrees/${fs::file_name(root).unwrap()}`;
+    let paths = git([
+        "-C", *repo, "rev-parse", "--path-format=relative", "--git-path", name, "--path-format=absolute", "--git-path",
+        name,
+    ]).lines().map(|line| line.to_string()).collect();
+    let names = match fs::read_to_string(fs::join(fs::join(repo, &paths[0]), "gitdir")) {
+        Ok(text) => text,
+        Err(e) && e.kind matches { NotFound } => {
+            return null;
+        },
+        Err(e) => panic(`${e}`),
+    };
+    assert names.trim().ends_with(`/${*root}/.git`), `${name} of ${*repo} must be the worktree at ${*root}`;
+    return Some(paths[1]);
 }
 
 /// Checks out in the snapshot at `root` the submodules its `Cargo.toml` builds
@@ -134,7 +176,7 @@ pub fn tree_git(dir: &String, args: List<String>) -> String with Process {
 /// worktree of the repository's own checkout of that submodule, which fetches
 /// a commit it lacks.
 pub fn add_build_submodules(root: &String) with (Process, Preopens) {
-    for let [path, sha] of build_submodules(root) {
+    for let [path, sha] of build_submodules(&".", root) {
         assert fs::exists(fs::join(path, ".git")), `the submodule must be checked out: git submodule update --init ${path}`;
         if try_git(["-C", path, "cat-file", "-e", `${sha}^{commit}`]) matches { None } {
             git(["-C", path, "fetch", "--quiet", "--depth", "1", "origin", sha]);
@@ -143,20 +185,25 @@ pub fn add_build_submodules(root: &String) with (Process, Preopens) {
     }
 }
 
-/// The submodules `root`'s `Cargo.toml` names by path, as path and the commit
-/// HEAD records. Both are read from HEAD, so a reviewer's edit to the manifest
-/// or a commit checked out in a submodule changes nothing.
-fn build_submodules(root: &String) -> List<[String, String]> with Process {
-    let manifest = git(["-C", *root, "show", "HEAD:Cargo.toml"]);
+/// The submodules the `Cargo.toml` of `root`, a worktree of `repo`, names by
+/// path, as path and the commit HEAD records. Both are read from HEAD's
+/// objects alone, so neither a reviewer's edit to the manifest nor anything
+/// in a submodule's checkout changes them.
+fn build_submodules(repo: &String, root: &String) -> List<[String, String]> with (Process, Preopens) {
+    let manifest = tree_git(repo, root, ["show", "HEAD:Cargo.toml"]);
     let mut found: List<[String, String]> = [];
-    // A line is a status flag, a commit, and the path: `-<sha> vendor/x`.
-    for let line of git(["-C", *root, "submodule", "status"]).lines() {
-        let path = line.slice(1, line.len()).split(" ").collect()[1].to_string();
+    // A line is a mode, a type, an object and, after a tab, the path:
+    // `160000 commit <sha>\tvendor/x` for a submodule.
+    for let line of tree_git(repo, root, ["ls-tree", "-r", "HEAD"]).lines() {
+        if !line.starts_with("160000 ") {
+            continue;
+        }
+        let fields = line.split("\t").collect();
+        let path = fields[1].to_string();
         // A path is matched to its end, or `vendor/wasm` would match
         // `vendor/wasmtime/...` too.
         if manifest.contains(`${path}/`) || manifest.contains(`${path}"`) {
-            let recorded = git(["-C", *root, "rev-parse", `HEAD:${path}`]).trim().to_string();
-            found.push([path, recorded]);
+            found.push([path, fields[0].split(" ").collect()[2].to_string()]);
         }
     }
     return found;
@@ -250,21 +297,22 @@ test "a directory's programs are the files in it that can be executed" {
     assert programs_in(&[]).is_empty();
 }
 
-/// The snapshot of `sha` at `root`, its submodules included, back as checked
-/// out: a run may have written, committed or checked out anything in it.
-pub fn reset_snapshot(root: &String, sha: &String) with Process {
-    reset_checkout(root, sha);
+/// The snapshot of `sha` at `root`, a worktree of `repo`, its submodules
+/// included, back as checked out: a run may have written, committed or
+/// checked out anything in it.
+pub fn reset_snapshot(repo: &String, root: &String, sha: &String) with (Process, Preopens) {
+    reset_checkout(repo, root, sha);
     // Read once the tree is back at `sha`, so HEAD records what it checked out.
-    for let [path, recorded] of build_submodules(root) {
-        reset_checkout(&`${*root}/${path}`, &recorded);
+    for let [path, recorded] of build_submodules(repo, root) {
+        reset_checkout(&fs::join(repo, &path), &`${*root}/${path}`, &recorded);
     }
 }
 
-fn reset_checkout(dir: &String, commit: &String) with Process {
-    tree_git(dir, ["reset", "--hard", "--quiet", *commit]);
+fn reset_checkout(repo: &String, root: &String, commit: &String) with (Process, Preopens) {
+    tree_git(repo, root, ["reset", "--hard", "--quiet", *commit]);
     // Twice forced: once leaves an untracked directory that is a repository
     // of its own, such as one a test made.
-    tree_git(dir, ["clean", "-ffdx", "--quiet"]);
+    tree_git(repo, root, ["clean", "-ffdx", "--quiet"]);
 }
 
 fn index_dir(root: &String) -> String {

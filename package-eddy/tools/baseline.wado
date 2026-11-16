@@ -173,7 +173,7 @@ ${fix_diff}
         };
         while out.entries[i].runs.len() < RUNS {
             if RUN && let Some(w) = &ws {
-                reset_snapshot(&w.root, &culprit.sha);
+                reset_snapshot(&w.repo, &w.root, &culprit.sha);
             }
             let graded = review_once(&api_key, &review_prompt, &known, &ws, &mut grading);
             reviewing.add(&graded.usage.unwrap_or(Usage {}));
