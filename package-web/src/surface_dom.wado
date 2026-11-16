@@ -524,6 +524,7 @@ impl Dom for SurfaceDom {
 
 impl Window for SurfaceDom {
     fn document(&mut self, this: &Window) -> Document {
+        self.own(*this);
         resume self.document;
     }
 
@@ -588,15 +589,18 @@ impl Event for SurfaceDom {
 
 impl Document for SurfaceDom {
     fn create_element(&mut self, this: &Document, local_name: String, options: Option<String>) -> Element {
+        self.own(*this);
         assert is_valid_element_local_name(&local_name), "InvalidCharacterError: not a valid element name";
         resume self.new_element(local_name.to_ascii_lowercase());
     }
 
     fn document_element(&mut self, this: &Document) -> Option<Element> {
+        self.own(*this);
         resume element_of(child_named(self.document, "html"));
     }
 
     fn body(&mut self, this: &Document) -> Option<HtmlElement> {
+        self.own(*this);
         resume match self.html_child("body") {
             Some(body: HtmlElement) => Option::Some(body),
             _ => null,
@@ -604,11 +608,13 @@ impl Document for SurfaceDom {
     }
 
     fn get_element_by_id(&mut self, this: &Document, element_id: String) -> Option<Element> {
+        self.own(*this);
         resume element_of(first_inclusive_descendant_where(self.document, |n| !element_id.is_empty()
             && n.attributes.get("id") == Option::Some(element_id)));
     }
 
     fn title(&mut self, this: &Document) -> String {
+        self.own(*this);
         let mut text = "";
         if let Some(title) = self.title_element() {
             for let child of children(title) {
@@ -621,6 +627,7 @@ impl Document for SurfaceDom {
     }
 
     fn set_title(&mut self, this: &Document, value: String) {
+        self.own(*this);
         let mut title = self.title_element();
         if title == null && let Some(head) = self.html_child("head") {
             let made = self.new_element("title");
@@ -634,6 +641,7 @@ impl Document for SurfaceDom {
     }
 
     fn exit_fullscreen(&mut self, this: &Document) -> Result<(), Rejection> {
+        self.own(*this);
         resume Result::Err(fullscreen_unsupported());
     }
 
