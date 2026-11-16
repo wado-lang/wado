@@ -15,10 +15,6 @@ use {
     Window,
 } from "./dom.wado";
 
-global NO_NODE: i32 = -1;
-global DOCUMENT_INDEX: i32 = 0;
-global WINDOW_INDEX: i32 = 1;
-
 variant Content {
     Document,
     Window,
@@ -27,27 +23,36 @@ variant Content {
     Text(String),
 }
 
+struct Listener {
+    type: String,
+    capture: bool,
+    callback: fn mut(Event) with Dom,
+}
+
 // Linked as the DOM standard models the tree. A node lives in its handle, and
-// `index` is where the handle is kept.
+// the links are handles, so the tree alone keeps a node alive: one that is
+// detached and that the program dropped is collected.
 struct SurfaceNode {
-    index: i32,
     content: Content,
+    // The DOM standard's node document, `None` on the document itself.
+    document: Option<Document>,
     attributes: TreeMap<String, String>,
     // The elements a reflected element reference was set to, by its attribute.
-    referenced: TreeMap<String, List<i32>>,
+    referenced: TreeMap<String, List<Element>>,
     value: String,
-    parent: i32,
-    first_child: i32,
-    last_child: i32,
-    previous_sibling: i32,
-    next_sibling: i32,
+    listeners: List<Listener>,
+    parent: Option<Node>,
+    first_child: Option<Node>,
+    last_child: Option<Node>,
+    previous_sibling: Option<Node>,
+    next_sibling: Option<Node>,
 }
 
 struct SurfaceEvent {
     type: String,
-    target: i32,
+    target: Option<EventTarget>,
     // Empty unless the event is being dispatched.
-    path: List<i32>,
+    path: List<EventTarget>,
 }
 
 struct SurfaceRejection {
@@ -61,85 +66,246 @@ fn fullscreen_unsupported() -> Rejection {
     return Rejection::backed_by(SurfaceRejection { name: "TypeError", message: "fullscreen is not supported" });
 }
 
-fn surface_node(target: EventTarget) -> &mut SurfaceNode {
-    return target.backing::<SurfaceNode>().expect("a node of a SurfaceDom backs the handle");
-}
-
-// The handle of each node, made once with the class of what the node is.
-// `nodes[i]` is the node the handle holds.
-struct SurfaceNodes {
-    handles: List<EventTarget>,
-}
-
-impl SurfaceNodes {
-    fn len(&self) -> i32 {
-        return self.handles.len();
-    }
-}
-
-impl IndexRef<i32> for SurfaceNodes {
-    type Output = SurfaceNode;
-
-    fn index_ref(&self, index: i32) -> &SurfaceNode {
-        return surface_node(self.handles[index]);
-    }
-}
-
-impl IndexRefMut<i32> for SurfaceNodes {
-    type Output = SurfaceNode;
-
-    fn index_ref_mut(&mut self, index: i32) -> &mut SurfaceNode {
-        return surface_node(self.handles[index]);
-    }
-}
-
-fn handle_holding(node: SurfaceNode) -> EventTarget {
-    match node.content {
-        Document => {
-            return Document::backed_by(node);
-        },
-        Window => {
-            return Window::backed_by(node);
-        },
-        Element(name) && name == "input" => {
-            return HtmlInputElement::backed_by(node);
-        },
-        Element(_) => {
-            return HtmlElement::backed_by(node);
-        },
-        // The slice has neither `DocumentType` nor `Text`, so these carry `Node`'s class.
-        Doctype | Text(_) => {
-            return Node::backed_by(node);
-        },
-    }
-}
-
 fn surface_rejection(rejection: Rejection) -> &mut SurfaceRejection {
     return rejection.backing::<SurfaceRejection>().expect("a rejection of a SurfaceDom backs the handle");
 }
 
-struct Listener {
-    target: i32,
-    type: String,
-    capture: bool,
-    callback: fn mut(Event) with Dom,
+fn surface_event(event: Event) -> &mut SurfaceEvent {
+    return event.backing::<SurfaceEvent>().expect("an event of a SurfaceDom backs the handle");
+}
+
+// Every event target is a node here, the window included.
+fn surface_node(target: EventTarget) -> &mut SurfaceNode {
+    return target.backing::<SurfaceNode>().expect("a node of a SurfaceDom backs the handle");
+}
+
+fn detached(content: Content, document: Option<Document>) -> SurfaceNode {
+    return SurfaceNode {
+        content,
+        document,
+        attributes: TreeMap::new(),
+        referenced: TreeMap::new(),
+        value: "",
+        listeners: [],
+        parent: null,
+        first_child: null,
+        last_child: null,
+        previous_sibling: null,
+        next_sibling: null,
+    };
 }
 
 struct Children {
-    nodes: &SurfaceNodes,
-    at: i32,
+    at: Option<Node>,
 }
 
 impl Iterator for Children {
-    type Item = i32;
+    type Item = Node;
 
-    fn next(&mut self) -> Option<i32> {
-        if self.at == NO_NODE {
-            return null;
-        }
+    fn next(&mut self) -> Option<Node> {
         let child = self.at;
-        self.at = self.nodes[child].next_sibling;
-        return Option::Some(child);
+        if let Some(node) = child {
+            self.at = surface_node(node).next_sibling;
+        }
+        return child;
+    }
+}
+
+fn children(parent: Node) -> Children {
+    return Children { at: surface_node(parent).first_child };
+}
+
+fn child_where(parent: Node, accept: fn(&SurfaceNode) -> bool) -> Option<Node> {
+    return children(parent).find(|child| accept(surface_node(child)));
+}
+
+fn child_named(parent: Node, local_name: String) -> Option<Node> {
+    return child_where(parent, |n| n.content matches { Element(name) && name == local_name });
+}
+
+fn first_inclusive_descendant_where(node: Node, accept: fn(&SurfaceNode) -> bool) -> Option<Node> {
+    if accept(surface_node(node)) {
+        return Option::Some(node);
+    }
+    for let child of children(node) {
+        let found = first_inclusive_descendant_where(child, accept);
+        if found != null {
+            return found;
+        }
+    }
+    return null;
+}
+
+fn element_of(node: Option<Node>) -> Option<Element> {
+    return match node {
+        Some(element: Element) => Option::Some(element),
+        _ => null,
+    };
+}
+
+fn is_inclusive_ancestor(ancestor: Node, node: Node) -> bool {
+    let mut at = Option::Some(node);
+    while let Some(here) = at {
+        if here == ancestor {
+            return true;
+        }
+        at = surface_node(here).parent;
+    }
+    return false;
+}
+
+fn root_of(node: Node) -> Node {
+    let mut at = node;
+    while let Some(parent) = surface_node(at).parent {
+        at = parent;
+    }
+    return at;
+}
+
+fn detach(child: Node) {
+    let node = surface_node(child);
+    let Some(parent) = node.parent else {
+        return;
+    };
+    let previous = node.previous_sibling;
+    let next = node.next_sibling;
+    if let Some(before) = previous {
+        surface_node(before).next_sibling = next;
+    } else {
+        surface_node(parent).first_child = next;
+    }
+    if let Some(after) = next {
+        surface_node(after).previous_sibling = previous;
+    } else {
+        surface_node(parent).last_child = previous;
+    }
+    node.parent = null;
+    node.previous_sibling = null;
+    node.next_sibling = null;
+}
+
+fn append(parent: Node, child: Node) {
+    detach(child);
+    let into = surface_node(parent);
+    let node = surface_node(child);
+    let last = into.last_child;
+    if let Some(before) = last {
+        surface_node(before).next_sibling = Option::Some(child);
+    } else {
+        into.first_child = Option::Some(child);
+    }
+    node.previous_sibling = last;
+    into.last_child = Option::Some(child);
+    node.parent = Option::Some(parent);
+}
+
+fn remove_children(parent: Node) {
+    while let Some(child) = surface_node(parent).first_child {
+        detach(child);
+    }
+}
+
+fn text_of(node: Node, out: &mut String) {
+    if let Text(text) = surface_node(node).content {
+        out.push_str(&text);
+    }
+    for let child of children(node) {
+        text_of(child, out);
+    }
+}
+
+// The DOM standard's pre-insertion validity; a DOM exception traps (Web WEP, Exceptions).
+fn assert_insertable(parent: Node, node: Node) {
+    let into_document = surface_node(parent).content matches { Document };
+    assert into_document || surface_node(parent).content matches { Element(_) }, "HierarchyRequestError: only a document or an element holds children";
+    assert !is_inclusive_ancestor(node, parent), "HierarchyRequestError: a node cannot be inserted into itself or its descendant";
+    match surface_node(node).content {
+        Document | Window => panic("HierarchyRequestError: a document or a window is never a child"),
+        Doctype => {
+            assert into_document, "HierarchyRequestError: only a document holds a doctype";
+            assert child_where(parent, |n| n.content matches { Doctype }) == null, "HierarchyRequestError: a document holds one doctype";
+            assert child_where(parent, |n| n.content matches { Element(_) }) == null, "HierarchyRequestError: a doctype precedes the element";
+        },
+        Text(_) => {
+            assert !into_document, "HierarchyRequestError: a document holds no text";
+        },
+        Element(_) => {
+            assert !into_document || child_where(parent, |n| n.content matches { Element(_) }) == null, "HierarchyRequestError: a document holds one element";
+        },
+    }
+}
+
+// Writes an element's attribute, or removes it for `null`. Either forgets
+// the elements a reference was set to under that name.
+fn write_attribute(node: &mut SurfaceNode, name: String, value: Option<String>) {
+    node.referenced.remove(name);
+    if let Some(value) = value {
+        node.attributes[name] = value;
+    } else {
+        node.attributes.remove(name);
+    }
+}
+
+// The HTML standard's attr-associated elements of a reflected element
+// reference: the elements set, or else those its attribute names by id.
+fn referenced_elements(element: Element, attribute: String) -> Option<List<Element>> {
+    let node = surface_node(element);
+    let root = root_of(element);
+    let mut found: List<Element> = [];
+    if let Some(targets) = node.referenced.get(attribute) {
+        // Only a descendant of one of the element's ancestors counts.
+        for let target of targets {
+            if root != element && target != root && root_of(target) == root {
+                found.push(target);
+            }
+        }
+        return Option::Some(found);
+    }
+    let Some(ids) = node.attributes.get(attribute) else {
+        return null;
+    };
+    for let id of split_on_ascii_whitespace(&ids) {
+        let target = first_inclusive_descendant_where(root, |n| n.content matches { Element(_) }
+            && n.attributes.get("id") == Option::Some(id));
+        if let Some(named) = element_of(target) {
+            found.push(named);
+        }
+    }
+    return Option::Some(found);
+}
+
+fn serialize_children(parent: Node, out: &mut String) {
+    let holder = surface_node(parent);
+    if holder.content matches { Element(name) && is_void(&name) } {
+        return;
+    }
+    let raw_text = holder.content matches { Element(name) && is_raw_text(&name) };
+    for let child of children(parent) {
+        let node = surface_node(child);
+        match node.content {
+            Document | Window => unreachable(),
+            Doctype => out.push_str("<!DOCTYPE html>"),
+            Text(text) => {
+                if raw_text {
+                    out.push_str(&text);
+                } else {
+                    escape(&text, false, out);
+                }
+            },
+            Element(name) => {
+                out.push_str(`<${name}`);
+                for let [key, value] of node.attributes.entries() {
+                    out.push_str(` ${key}="`);
+                    escape(value, true, out);
+                    out.push('"');
+                }
+                out.push('>');
+                serialize_children(child, out);
+                if !is_void(&name) {
+                    out.push_str(`</${name}>`);
+                }
+            },
+        }
     }
 }
 
@@ -226,108 +392,74 @@ fn strip_and_collapse_ascii_whitespace(text: &String) -> String {
 /// `createHTMLDocument()` makes, and the window holding it. A copy of one is
 /// the same document, since its nodes live in the handles both hold.
 pub struct SurfaceDom {
-    nodes: SurfaceNodes,
-    listeners: List<Listener>,
+    document: Document,
+    window: Window,
 }
 
 impl SurfaceDom {
     pub fn new() -> SurfaceDom {
-        let mut dom = SurfaceDom {
-            nodes: SurfaceNodes { handles: [] },
-            listeners: [],
+        let document = Document::backed_by(detached(Content::Document, null));
+        let dom = SurfaceDom {
+            document,
+            window: Window::backed_by(detached(Content::Window, Option::Some(document))),
         };
-        dom.push(Content::Document);
-        dom.push(Content::Window);
-        dom.append(DOCUMENT_INDEX, dom.push(Content::Doctype));
-        let html = dom.create("html");
-        dom.append(DOCUMENT_INDEX, html);
-        dom.append(html, dom.create("head"));
-        dom.append(html, dom.create("body"));
+        append(document, dom.new_node(Content::Doctype));
+        let html = dom.new_element("html");
+        append(document, html);
+        append(html, dom.new_element("head"));
+        append(html, dom.new_element("body"));
         return dom;
     }
 
     /// The document as HTML, doctype included.
     pub fn to_html(&self) -> String {
         let mut html = "";
-        self.serialize_children(DOCUMENT_INDEX, &mut html);
+        serialize_children(self.document, &mut html);
         return html;
     }
 
-    fn push(&mut self, content: Content) -> i32 {
-        let index = self.nodes.len();
-        self.nodes.handles.push(handle_holding(SurfaceNode {
-            index,
-            content,
-            attributes: TreeMap::new(),
-            referenced: TreeMap::new(),
-            value: "",
-            parent: NO_NODE,
-            first_child: NO_NODE,
-            last_child: NO_NODE,
-            previous_sibling: NO_NODE,
-            next_sibling: NO_NODE,
-        }));
-        return index;
+    // The slice has neither `DocumentType` nor `Text`, so these carry `Node`'s class.
+    fn new_node(&self, content: Content) -> Node {
+        return Node::backed_by(detached(content, Option::Some(self.document)));
     }
 
-    fn create(&mut self, local_name: String) -> i32 {
-        return self.push(Content::Element(local_name));
+    fn new_element(&self, local_name: String) -> HtmlElement {
+        let node = detached(Content::Element(local_name), Option::Some(self.document));
+        if local_name == "input" {
+            return HtmlInputElement::backed_by(node);
+        }
+        return HtmlElement::backed_by(node);
     }
 
-    // Every event target is a node here, the window included.
-    fn target_handle(&self, index: i32) -> EventTarget {
-        return self.nodes.handles[index];
-    }
-
-    fn node_handle(&self, index: i32) -> Node {
-        let node: Node = self.target_handle(index) else {
-            panic("the window is no node");
-        };
+    fn own(&self, target: EventTarget) -> &mut SurfaceNode {
+        let node = surface_node(target);
+        assert target == self.document || node.document == Option::Some(self.document), "the handle is of this SurfaceDom";
         return node;
     }
 
-    fn element_handle(&self, index: i32) -> HtmlElement {
-        let element: HtmlElement = self.target_handle(index) else {
-            panic("the node is an element");
-        };
-        return element;
-    }
-
-    fn document_handle(&self) -> Document {
-        let document: Document = self.target_handle(DOCUMENT_INDEX) else {
-            unreachable();
-        };
-        return document;
-    }
-
-    fn index(&self, target: EventTarget) -> i32 {
-        let index = surface_node(target).index;
-        assert index < self.nodes.len() && self.target_handle(index) == target, "the handle is of this SurfaceDom";
-        return index;
-    }
-
-    fn surface_event(&self, event: Event) -> &mut SurfaceEvent {
-        return event.backing::<SurfaceEvent>().expect("an event of a SurfaceDom backs the handle");
-    }
-
     // The DOM standard's event path, which reaches the window from the document.
-    fn event_path(&self, target: i32) -> List<i32> {
-        let mut path: List<i32> = [];
+    fn event_path(&self, target: EventTarget) -> List<EventTarget> {
+        let mut path: List<EventTarget> = [target];
         let mut at = target;
-        while at != NO_NODE {
+        loop {
+            if at == self.document {
+                at = self.window;
+            } else if let Some(parent) = surface_node(at).parent {
+                at = parent;
+            } else {
+                return path;
+            }
             path.push(at);
-            at = if at == DOCUMENT_INDEX { WINDOW_INDEX } else { self.nodes[at].parent };
         }
-        return path;
     }
 
     // Runs with this DOM reinstalled, since a listener is a program calling back
     // into it. A listener added meanwhile waits for the next dispatch.
-    fn invoke(&mut self, target: i32, event: Event, capture: bool) {
-        let type = &self.surface_event(event).type;
+    fn invoke(&mut self, target: EventTarget, event: Event, capture: bool) {
+        let type = &surface_event(event).type;
         let mut callbacks: List<fn mut(Event) with Dom> = [];
-        for let listener of &self.listeners {
-            if listener.target == target && listener.capture == capture && listener.type == *type {
+        for let listener of &surface_node(target).listeners {
+            if listener.capture == capture && listener.type == *type {
                 callbacks.push(listener.callback);
             }
         }
@@ -338,264 +470,61 @@ impl SurfaceDom {
         }
     }
 
-    fn node(&self, index: i32) -> Option<Node> {
-        if index == NO_NODE {
-            return null;
-        }
-        return Option::Some(self.node_handle(index));
-    }
-
     fn local_name_of(&self, element: Element) -> String {
-        let Element(name) = self.nodes[self.index(element)].content else {
+        let Element(name) = self.own(element).content else {
             unreachable();
         };
         return name;
     }
 
-    fn element(&self, index: i32) -> Option<Element> {
-        if index == NO_NODE || !self.nodes[index].content matches { Element(_) } {
-            return null;
-        }
-        return Option::Some(self.element_handle(index));
-    }
-
-    fn is_inclusive_ancestor(&self, ancestor: i32, index: i32) -> bool {
-        let mut at = index;
-        while at != NO_NODE && at != ancestor {
-            at = self.nodes[at].parent;
-        }
-        return at == ancestor;
-    }
-
-    fn root_of(&self, index: i32) -> i32 {
-        let mut at = index;
-        while self.nodes[at].parent != NO_NODE {
-            at = self.nodes[at].parent;
-        }
-        return at;
-    }
-
-    // Writes an element's attribute, or removes it for `null`. Either forgets
-    // the elements a reference was set to under that name.
-    fn write_attribute(&mut self, index: i32, name: String, value: Option<String>) {
-        let node = &mut self.nodes[index];
-        node.referenced.remove(name);
-        if let Some(value) = value {
-            node.attributes[name] = value;
-        } else {
-            node.attributes.remove(name);
-        }
-    }
-
-    // The HTML standard's attr-associated elements of a reflected element
-    // reference: the elements set, or else those its attribute names by id.
-    fn referenced_elements(&self, index: i32, attribute: String) -> Option<List<Element>> {
-        let node = &self.nodes[index];
-        let root = self.root_of(index);
-        let mut found: List<Element> = [];
-        if let Some(targets) = node.referenced.get(attribute) {
-            // Only a descendant of one of the element's ancestors counts.
-            for let target of targets {
-                if root != index && target != root && self.root_of(target) == root {
-                    found.push(self.element_handle(target));
-                }
-            }
-            return Option::Some(found);
-        }
-        let Some(ids) = node.attributes.get(attribute) else {
-            return null;
-        };
-        for let id of split_on_ascii_whitespace(&ids) {
-            let target = self.first_inclusive_descendant_where(root, |n| n.content matches { Element(_) }
-                && n.attributes.get("id") == Option::Some(id));
-            if target != NO_NODE {
-                found.push(self.element_handle(target));
-            }
-        }
-        return Option::Some(found);
-    }
-
-    fn set_referenced_elements(&mut self, index: i32, attribute: String, elements: Option<List<Element>>) {
+    fn set_referenced_elements(&self, element: Element, attribute: String, elements: Option<List<Element>>) {
+        let node = self.own(element);
         let Some(elements) = elements else {
-            self.write_attribute(index, attribute, null);
+            write_attribute(node, attribute, null);
             return;
         };
-        self.write_attribute(index, attribute, Option::Some(""));
-        let mut targets: List<i32> = [];
-        for let element of elements {
-            targets.push(self.index(element));
+        for let target of elements {
+            self.own(target);
         }
-        self.nodes[index].referenced[attribute] = targets;
+        write_attribute(node, attribute, Option::Some(""));
+        node.referenced[attribute] = elements;
     }
 
-    fn children(&self, parent: i32) -> Children {
-        return Children { nodes: &self.nodes, at: self.nodes[parent].first_child };
-    }
-
-    fn child_where(&self, parent: i32, accept: fn(&SurfaceNode) -> bool) -> i32 {
-        return self.children(parent).find(|child| accept(&self.nodes[child])).unwrap_or(NO_NODE);
-    }
-
-    fn first_inclusive_descendant_where(&self, index: i32, accept: fn(&SurfaceNode) -> bool) -> i32 {
-        if accept(&self.nodes[index]) {
-            return index;
-        }
-        for let child of self.children(index) {
-            let found = self.first_inclusive_descendant_where(child, accept);
-            if found != NO_NODE {
-                return found;
-            }
-        }
-        return NO_NODE;
-    }
-
-    // The DOM standard's pre-insertion validity; a DOM exception traps (Web WEP, Exceptions).
-    fn assert_insertable(&self, parent: i32, node: i32) {
-        let into_document = self.nodes[parent].content matches { Document };
-        assert into_document || self.nodes[parent].content matches { Element(_) }, "HierarchyRequestError: only a document or an element holds children";
-        assert !self.is_inclusive_ancestor(node, parent), "HierarchyRequestError: a node cannot be inserted into itself or its descendant";
-        match self.nodes[node].content {
-            Document | Window => panic("HierarchyRequestError: a document or a window is never a child"),
-            Doctype => {
-                assert into_document, "HierarchyRequestError: only a document holds a doctype";
-                assert self.child_where(parent, |n| n.content matches { Doctype }) == NO_NODE, "HierarchyRequestError: a document holds one doctype";
-                assert self.child_where(parent, |n| n.content matches { Element(_) }) == NO_NODE, "HierarchyRequestError: a doctype precedes the element";
-            },
-            Text(_) => {
-                assert !into_document, "HierarchyRequestError: a document holds no text";
-            },
-            Element(_) => {
-                assert !into_document || self.child_where(parent, |n| n.content matches { Element(_) }) == NO_NODE, "HierarchyRequestError: a document holds one element";
-            },
-        }
-    }
-
-    fn serialize_children(&self, parent: i32, out: &mut String) {
-        if self.nodes[parent].content matches { Element(name) && is_void(&name) } {
-            return;
-        }
-        let raw_text = self.nodes[parent].content matches { Element(name) && is_raw_text(&name) };
-        for let child of self.children(parent) {
-            match self.nodes[child].content {
-                Document | Window => unreachable(),
-                Doctype => out.push_str("<!DOCTYPE html>"),
-                Text(text) => {
-                    if raw_text {
-                        out.push_str(&text);
-                    } else {
-                        escape(&text, false, out);
-                    }
-                },
-                Element(name) => {
-                    out.push_str(`<${name}`);
-                    for let [key, value] of self.nodes[child].attributes.entries() {
-                        out.push_str(` ${key}="`);
-                        escape(value, true, out);
-                        out.push('"');
-                    }
-                    out.push('>');
-                    self.serialize_children(child, out);
-                    if !is_void(&name) {
-                        out.push_str(`</${name}>`);
-                    }
-                },
-            }
-        }
-    }
-
-    fn detach(&mut self, child: i32) {
-        let parent = self.nodes[child].parent;
-        if parent == NO_NODE {
-            return;
-        }
-        let previous = self.nodes[child].previous_sibling;
-        let next = self.nodes[child].next_sibling;
-        if previous == NO_NODE {
-            self.nodes[parent].first_child = next;
-        } else {
-            self.nodes[previous].next_sibling = next;
-        }
-        if next == NO_NODE {
-            self.nodes[parent].last_child = previous;
-        } else {
-            self.nodes[next].previous_sibling = previous;
-        }
-        self.nodes[child].parent = NO_NODE;
-        self.nodes[child].previous_sibling = NO_NODE;
-        self.nodes[child].next_sibling = NO_NODE;
-    }
-
-    fn append(&mut self, parent: i32, child: i32) {
-        self.detach(child);
-        let last = self.nodes[parent].last_child;
-        if last == NO_NODE {
-            self.nodes[parent].first_child = child;
-        } else {
-            self.nodes[last].next_sibling = child;
-        }
-        self.nodes[child].previous_sibling = last;
-        self.nodes[parent].last_child = child;
-        self.nodes[child].parent = parent;
-    }
-
-    fn remove_children(&mut self, parent: i32) {
-        while self.nodes[parent].first_child != NO_NODE {
-            self.detach(self.nodes[parent].first_child);
-        }
-    }
-
-    fn text_of(&self, index: i32, out: &mut String) {
-        if let Text(text) = self.nodes[index].content {
-            out.push_str(&text);
-        }
-        for let child of self.children(index) {
-            self.text_of(child, out);
-        }
-    }
-
-    fn title_index(&self) -> i32 {
-        return self.first_inclusive_descendant_where(
-            DOCUMENT_INDEX,
+    fn title_element(&self) -> Option<Node> {
+        return first_inclusive_descendant_where(
+            self.document,
             |n| n.content matches { Element(name) && name == "title" },
         );
     }
 
-    fn replace_all_text(&mut self, index: i32, text: String) {
-        self.remove_children(index);
+    fn replace_all_text(&self, node: Node, text: String) {
+        remove_children(node);
         if !text.is_empty() {
-            self.append(index, self.push(Content::Text(text)));
+            append(node, self.new_node(Content::Text(text)));
         }
     }
 
-    fn child_named(&self, parent: i32, local_name: String) -> i32 {
-        return self.child_where(parent, |n| n.content matches { Element(name) && name == local_name });
-    }
-
-    fn html_child(&self, local_name: String) -> i32 {
-        let html = self.child_named(DOCUMENT_INDEX, "html");
-        if html == NO_NODE {
-            return NO_NODE;
-        }
-        return self.child_named(html, local_name);
+    fn html_child(&self, local_name: String) -> Option<Node> {
+        let Some(html) = child_named(self.document, "html") else {
+            return null;
+        };
+        return child_named(html, local_name);
     }
 }
 
 impl Dom for SurfaceDom {
     fn window(&mut self) -> Window {
-        let window: Window = self.target_handle(WINDOW_INDEX) else {
-            unreachable();
-        };
-        resume window;
+        resume self.window;
     }
 
     fn document(&mut self) -> Document {
-        resume self.document_handle();
+        resume self.document;
     }
 }
 
 impl Window for SurfaceDom {
     fn document(&mut self, this: &Window) -> Document {
-        resume self.document_handle();
+        resume self.document;
     }
 
     ..trap
@@ -611,8 +540,7 @@ impl EventTarget for SurfaceDom {
         callback: fn mut(Event) with Dom,
         options: Option<bool>,
     ) {
-        self.listeners.push(Listener {
-            target: self.index(*this),
+        self.own(*this).listeners.push(Listener {
             type,
             capture: options.unwrap_or(false),
             callback,
@@ -621,10 +549,11 @@ impl EventTarget for SurfaceDom {
     }
 
     fn dispatch_event(&mut self, this: &EventTarget, event: Event) -> bool {
-        let target = self.index(*this);
+        let target = *this;
+        self.own(target);
         let path = self.event_path(target);
-        let dispatched = self.surface_event(event);
-        dispatched.target = target;
+        let dispatched = surface_event(event);
+        dispatched.target = Option::Some(target);
         dispatched.path = path;
         for let mut i = path.len() - 1; i >= 0; i -= 1 {
             self.invoke(path[i], event, true);
@@ -639,28 +568,19 @@ impl EventTarget for SurfaceDom {
 
 impl Event for SurfaceDom {
     fn new(&mut self, type: String) -> Event {
-        resume Event::backed_by(SurfaceEvent { type, target: NO_NODE, path: [] });
+        resume Event::backed_by(SurfaceEvent { type, target: null, path: [] });
     }
 
     fn composed_path(&mut self, this: &Event) -> List<EventTarget> {
-        let mut path: List<EventTarget> = [];
-        for let index of self.surface_event(*this).path {
-            path.push(self.target_handle(index));
-        }
-        resume path;
+        resume surface_event(*this).path;
     }
 
     fn type(&mut self, this: &Event) -> String {
-        resume self.surface_event(*this).type;
+        resume surface_event(*this).type;
     }
 
     fn target(&mut self, this: &Event) -> Option<EventTarget> {
-        let target = self.surface_event(*this).target;
-        if target == NO_NODE {
-            resume null;
-        } else {
-            resume Option::Some(self.target_handle(target));
-        }
+        resume surface_event(*this).target;
     }
 
     ..trap
@@ -669,33 +589,30 @@ impl Event for SurfaceDom {
 impl Document for SurfaceDom {
     fn create_element(&mut self, this: &Document, local_name: String, options: Option<String>) -> Element {
         assert is_valid_element_local_name(&local_name), "InvalidCharacterError: not a valid element name";
-        resume self.element_handle(self.create(local_name.to_ascii_lowercase()));
+        resume self.new_element(local_name.to_ascii_lowercase());
     }
 
     fn document_element(&mut self, this: &Document) -> Option<Element> {
-        resume self.element(self.child_named(DOCUMENT_INDEX, "html"));
+        resume element_of(child_named(self.document, "html"));
     }
 
     fn body(&mut self, this: &Document) -> Option<HtmlElement> {
-        let body = self.html_child("body");
-        if body == NO_NODE {
-            resume null;
-        } else {
-            resume Option::Some(self.element_handle(body));
-        }
+        resume match self.html_child("body") {
+            Some(body: HtmlElement) => Option::Some(body),
+            _ => null,
+        };
     }
 
     fn get_element_by_id(&mut self, this: &Document, element_id: String) -> Option<Element> {
-        resume self.element(self.first_inclusive_descendant_where(DOCUMENT_INDEX, |n| !element_id.is_empty()
+        resume element_of(first_inclusive_descendant_where(self.document, |n| !element_id.is_empty()
             && n.attributes.get("id") == Option::Some(element_id)));
     }
 
     fn title(&mut self, this: &Document) -> String {
-        let title = self.title_index();
         let mut text = "";
-        if title != NO_NODE {
-            for let child of self.children(title) {
-                if let Text(data) = self.nodes[child].content {
+        if let Some(title) = self.title_element() {
+            for let child of children(title) {
+                if let Text(data) = surface_node(child).content {
                     text.push_str(&data);
                 }
             }
@@ -704,13 +621,13 @@ impl Document for SurfaceDom {
     }
 
     fn set_title(&mut self, this: &Document, value: String) {
-        let mut title = self.title_index();
-        let head = self.html_child("head");
-        if title == NO_NODE && head != NO_NODE {
-            title = self.create("title");
-            self.append(head, title);
+        let mut title = self.title_element();
+        if title == null && let Some(head) = self.html_child("head") {
+            let made = self.new_element("title");
+            append(head, made);
+            title = Option::Some(made);
         }
-        if title != NO_NODE {
+        if let Some(title) = title {
             self.replace_all_text(title, value);
         }
         resume ();
@@ -737,7 +654,7 @@ impl Rejection for SurfaceDom {
 
 impl Node for SurfaceDom {
     fn node_type(&mut self, this: &Node) -> u16 {
-        resume match self.nodes[self.index(*this)].content {
+        resume match self.own(*this).content {
             Element(_) => 1,
             Text(_) => 3,
             Document => 9,
@@ -747,7 +664,7 @@ impl Node for SurfaceDom {
     }
 
     fn node_name(&mut self, this: &Node) -> String {
-        resume match self.nodes[self.index(*this)].content {
+        resume match self.own(*this).content {
             Element(name) => name.to_ascii_uppercase(),
             Text(_) => "#text",
             Document => "#document",
@@ -757,75 +674,76 @@ impl Node for SurfaceDom {
     }
 
     fn parent_node(&mut self, this: &Node) -> Option<Node> {
-        resume self.node(self.nodes[self.index(*this)].parent);
+        resume self.own(*this).parent;
     }
 
     fn parent_element(&mut self, this: &Node) -> Option<Element> {
-        resume self.element(self.nodes[self.index(*this)].parent);
+        resume element_of(self.own(*this).parent);
     }
 
     fn has_child_nodes(&mut self, this: &Node) -> bool {
-        resume self.nodes[self.index(*this)].first_child != NO_NODE;
+        resume self.own(*this).first_child != null;
     }
 
     fn first_child(&mut self, this: &Node) -> Option<Node> {
-        resume self.node(self.nodes[self.index(*this)].first_child);
+        resume self.own(*this).first_child;
     }
 
     fn last_child(&mut self, this: &Node) -> Option<Node> {
-        resume self.node(self.nodes[self.index(*this)].last_child);
+        resume self.own(*this).last_child;
     }
 
     fn previous_sibling(&mut self, this: &Node) -> Option<Node> {
-        resume self.node(self.nodes[self.index(*this)].previous_sibling);
+        resume self.own(*this).previous_sibling;
     }
 
     fn next_sibling(&mut self, this: &Node) -> Option<Node> {
-        resume self.node(self.nodes[self.index(*this)].next_sibling);
+        resume self.own(*this).next_sibling;
     }
 
     fn text_content(&mut self, this: &Node) -> Option<String> {
-        let index = self.index(*this);
-        if self.nodes[index].content matches { Document | Doctype } {
+        if self.own(*this).content matches { Document | Doctype } {
             resume null;
         } else {
             let mut text = "";
-            self.text_of(index, &mut text);
+            text_of(*this, &mut text);
             resume Option::Some(text);
         }
     }
 
     fn set_text_content(&mut self, this: &Node, value: Option<String>) {
-        let index = self.index(*this);
+        let node = self.own(*this);
         let text = value.unwrap_or("");
-        match self.nodes[index].content {
+        match node.content {
             Document | Window | Doctype => {
             },
-            Text(_) => self.nodes[index].content = Content::Text(text),
-            Element(_) => self.replace_all_text(index, text),
+            Text(_) => node.content = Content::Text(text),
+            Element(_) => self.replace_all_text(*this, text),
         }
         resume ();
     }
 
     fn contains(&mut self, this: &Node, other: Option<Node>) -> bool {
+        self.own(*this);
         let Some(other) = other else {
             resume false;
         };
-        resume self.is_inclusive_ancestor(self.index(*this), self.index(other));
+        self.own(other);
+        resume is_inclusive_ancestor(*this, other);
     }
 
     fn append_child(&mut self, this: &Node, node: Node) -> Node {
-        let parent = self.index(*this);
-        let child = self.index(node);
-        self.assert_insertable(parent, child);
-        self.append(parent, child);
+        self.own(*this);
+        self.own(node);
+        assert_insertable(*this, node);
+        append(*this, node);
         resume node;
     }
 
     fn remove_child(&mut self, this: &Node, child: Node) -> Node {
-        let index = self.index(child);
-        assert self.nodes[index].parent == self.index(*this), "NotFoundError: the node to remove is a child";
-        self.detach(index);
+        self.own(*this);
+        assert self.own(child).parent == Option::Some(*this), "NotFoundError: the node to remove is a child";
+        detach(child);
         resume child;
     }
 
@@ -842,41 +760,41 @@ impl Element for SurfaceDom {
     }
 
     fn id(&mut self, this: &Element) -> String {
-        resume self.nodes[self.index(*this)].attributes.get("id").unwrap_or("");
+        resume self.own(*this).attributes.get("id").unwrap_or("");
     }
 
     fn set_id(&mut self, this: &Element, value: String) {
-        let index = self.index(*this);
-        self.nodes[index].attributes["id"] = value;
+        self.own(*this).attributes["id"] = value;
         resume ();
     }
 
     fn get_attribute(&mut self, this: &Element, qualified_name: String) -> Option<String> {
-        resume self.nodes[self.index(*this)].attributes.get(qualified_name.to_ascii_lowercase());
+        resume self.own(*this).attributes.get(qualified_name.to_ascii_lowercase());
     }
 
     fn set_attribute(&mut self, this: &Element, qualified_name: String, value: String) {
         assert is_valid_attribute_local_name(&qualified_name), "InvalidCharacterError: not a valid attribute name";
-        self.write_attribute(self.index(*this), qualified_name.to_ascii_lowercase(), Option::Some(value));
+        write_attribute(self.own(*this), qualified_name.to_ascii_lowercase(), Option::Some(value));
         resume ();
     }
 
     fn get_attribute_names(&mut self, this: &Element) -> List<String> {
-        resume self.nodes[self.index(*this)].attributes.keys().map(|name| *name).collect();
+        resume self.own(*this).attributes.keys().map(|name| *name).collect();
     }
 
     fn has_attribute(&mut self, this: &Element, qualified_name: String) -> bool {
-        resume self.nodes[self.index(*this)].attributes.contains_key(qualified_name.to_ascii_lowercase());
+        resume self.own(*this).attributes.contains_key(qualified_name.to_ascii_lowercase());
     }
 
     fn remove_attribute(&mut self, this: &Element, qualified_name: String) {
-        self.write_attribute(self.index(*this), qualified_name.to_ascii_lowercase(), null);
+        write_attribute(self.own(*this), qualified_name.to_ascii_lowercase(), null);
         resume ();
     }
 
     fn get_html(&mut self, this: &Element) -> String {
+        self.own(*this);
         let mut html = "";
-        self.serialize_children(self.index(*this), &mut html);
+        serialize_children(*this, &mut html);
         resume html;
     }
 
@@ -890,65 +808,72 @@ impl Element for SurfaceDom {
     }
 
     fn aria_controls_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        resume self.referenced_elements(self.index(*this), "aria-controls");
+        self.own(*this);
+        resume referenced_elements(*this, "aria-controls");
     }
 
     fn set_aria_controls_elements(&mut self, this: &Element, value: Option<List<Element>>) {
-        self.set_referenced_elements(self.index(*this), "aria-controls", value);
+        self.set_referenced_elements(*this, "aria-controls", value);
         resume ();
     }
 
     fn aria_described_by_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        resume self.referenced_elements(self.index(*this), "aria-describedby");
+        self.own(*this);
+        resume referenced_elements(*this, "aria-describedby");
     }
 
     fn set_aria_described_by_elements(&mut self, this: &Element, value: Option<List<Element>>) {
-        self.set_referenced_elements(self.index(*this), "aria-describedby", value);
+        self.set_referenced_elements(*this, "aria-describedby", value);
         resume ();
     }
 
     fn aria_details_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        resume self.referenced_elements(self.index(*this), "aria-details");
+        self.own(*this);
+        resume referenced_elements(*this, "aria-details");
     }
 
     fn set_aria_details_elements(&mut self, this: &Element, value: Option<List<Element>>) {
-        self.set_referenced_elements(self.index(*this), "aria-details", value);
+        self.set_referenced_elements(*this, "aria-details", value);
         resume ();
     }
 
     fn aria_error_message_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        resume self.referenced_elements(self.index(*this), "aria-errormessage");
+        self.own(*this);
+        resume referenced_elements(*this, "aria-errormessage");
     }
 
     fn set_aria_error_message_elements(&mut self, this: &Element, value: Option<List<Element>>) {
-        self.set_referenced_elements(self.index(*this), "aria-errormessage", value);
+        self.set_referenced_elements(*this, "aria-errormessage", value);
         resume ();
     }
 
     fn aria_flow_to_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        resume self.referenced_elements(self.index(*this), "aria-flowto");
+        self.own(*this);
+        resume referenced_elements(*this, "aria-flowto");
     }
 
     fn set_aria_flow_to_elements(&mut self, this: &Element, value: Option<List<Element>>) {
-        self.set_referenced_elements(self.index(*this), "aria-flowto", value);
+        self.set_referenced_elements(*this, "aria-flowto", value);
         resume ();
     }
 
     fn aria_labelled_by_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        resume self.referenced_elements(self.index(*this), "aria-labelledby");
+        self.own(*this);
+        resume referenced_elements(*this, "aria-labelledby");
     }
 
     fn set_aria_labelled_by_elements(&mut self, this: &Element, value: Option<List<Element>>) {
-        self.set_referenced_elements(self.index(*this), "aria-labelledby", value);
+        self.set_referenced_elements(*this, "aria-labelledby", value);
         resume ();
     }
 
     fn aria_owns_elements(&mut self, this: &Element) -> Option<List<Element>> {
-        resume self.referenced_elements(self.index(*this), "aria-owns");
+        self.own(*this);
+        resume referenced_elements(*this, "aria-owns");
     }
 
     fn set_aria_owns_elements(&mut self, this: &Element, value: Option<List<Element>>) {
-        self.set_referenced_elements(self.index(*this), "aria-owns", value);
+        self.set_referenced_elements(*this, "aria-owns", value);
         resume ();
     }
 
@@ -957,12 +882,11 @@ impl Element for SurfaceDom {
 
 impl HtmlInputElement for SurfaceDom {
     fn value(&mut self, this: &HtmlInputElement) -> String {
-        resume self.nodes[self.index(*this)].value;
+        resume self.own(*this).value;
     }
 
     fn set_value(&mut self, this: &HtmlInputElement, value: String) {
-        let index = self.index(*this);
-        self.nodes[index].value = value;
+        self.own(*this).value = value;
         resume ();
     }
 

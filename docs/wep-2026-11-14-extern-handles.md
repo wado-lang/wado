@@ -221,10 +221,15 @@ is the rule every resource follows: it names an object, so `&R` promises
 nothing about the object. The marker `Resource` states which types those are.
 
 Each call of `backed_by` makes a handle equal to no other, so a handler makes
-one handle for one object and keeps it. `SurfaceDom` holds the handle of each
-node, made with the class of what the node is, and the node lives in it. A
-`Node` and an `HtmlInputElement` of one node are then one handle, upcast or
-narrowed, as two views of one host object are.
+one handle for one object, with the class of what the object is. A `Node` and
+an `HtmlInputElement` of one node are then one handle, upcast or narrowed, as
+two views of one host object are.
+
+A node of `SurfaceDom` lives in its handle, and its parent, children and
+siblings are handles too. `SurfaceDom` itself holds the document and the
+window, and no list of nodes. The tree alone keeps a node alive, so a node that
+is detached and that the program dropped is collected, as a browser's is. A
+listener is kept by the node it was added to, and goes with it.
 
 The backing type is bound by `RefMut`: a struct, a tuple, a list, a string or a
 128-bit integer, which a reference reaches in place. A reference to any other value is a cell
@@ -407,6 +412,9 @@ glue cannot be run without them.
 - [x] A handle holds its backing value: `backed_by` takes the value, the
   sealed marker `Resource` is stated of every resource, and each node of
   `SurfaceDom` lives in the one handle made for it
+- [x] `SurfaceDom` links its nodes by handle and keeps no list of them, so a
+  dropped node is collected: `package-web`'s test of it creates and drops
+  nodes in a loop, and does not finish in its time where they are kept
 - [x] The boundary: a web import is a core import, the synthesized trapping
   module satisfies it, and the component validates and runs on wasmtime. An
   extern handle in an `export fn` signature is an error
@@ -465,8 +473,11 @@ glue cannot be run without them.
 - A handle has no `Hash`. A host object has no number of its own, and a backed
   handle's identity is a GC reference, which has none either.
 - A scalar, a variant, a closure and an extern handle back no handle.
-- `SurfaceDom` keeps the handle of every node it made, in a list, so a node
-  the program dropped is not collected while the `SurfaceDom` lives.
+- An element a reflected element reference such as `ariaControlsElements` was
+  set to is kept alive by the element holding the reference. The HTML standard
+  holds it weakly, and neither Wado nor WasmGC has a weak reference.
+- No test observes a collection under wasmtime. `SurfaceDom`'s is inferred
+  from the time a loop of dropped nodes takes.
 - An affine value backs no handle.
 - `backing::<T>()` tells two backing types apart by their representation, which
   a newtype shares with its base. A handle holding a `Point` answers
