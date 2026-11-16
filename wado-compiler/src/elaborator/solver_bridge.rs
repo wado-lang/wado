@@ -1883,6 +1883,7 @@ impl SolverBridge {
         }
 
         for &def in data.resource_types.keys() {
+            fact(def, CompilerItem::Resource);
             fact(
                 def,
                 if table.is_unrestricted_resource(def) {

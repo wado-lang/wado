@@ -302,6 +302,9 @@ pub enum CompilerItem {
     /// minus the replace-on-assign ones: `variant` / `fn`); its `Output: RefMut`
     /// bound gates `IndexRefMut`.
     RefMut,
+    /// `Resource` — sealed marker every resource holds, affine or an extern
+    /// handle.
+    Resource,
     /// `AffineResource` — sealed marker every affine resource holds, so
     /// `ResourceId::of` takes one and nothing else.
     AffineResource,
@@ -881,6 +884,7 @@ impl CompilerItem {
         Self::Member,
         Self::Ref,
         Self::RefMut,
+        Self::Resource,
         Self::AffineResource,
         Self::ExternHandle,
         Self::AnyBits,
@@ -1173,6 +1177,7 @@ impl CompilerItem {
             Self::Member => "member",
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
+            Self::Resource => "resource",
             Self::AffineResource => "affine_resource",
             Self::ExternHandle => "extern_handle",
             Self::AnyBits => "any_bits",
@@ -1502,6 +1507,7 @@ impl CompilerItem {
             | Self::Member
             | Self::Ref
             | Self::RefMut
+            | Self::Resource
             | Self::AffineResource
             | Self::ExternHandle
             | Self::AnyBits
@@ -1857,6 +1863,7 @@ impl CompilerItem {
             | Self::Member
             | Self::Ref
             | Self::RefMut
+            | Self::Resource
             | Self::AffineResource
             | Self::ExternHandle
             | Self::AnyBits

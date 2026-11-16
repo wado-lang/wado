@@ -12,13 +12,16 @@ struct Tag {
 }
 
 test {
-    let mut tag = Tag { name: "div", uses: 0 };
-    let node: Node = Element::backed_by(&mut tag);   // an upcast keeps the backing
+    let tag = Tag { name: "div", uses: 0 };
+    let node: Node = Element::backed_by(tag);    // an upcast keeps the backing
     let Some(back) = node.backing::<Tag>() else {
         panic("a Tag backs the handle");
     };
-    back.uses += 1;
-    assert tag.uses == 1;                        // the handle holds `tag` itself
+    back.uses += 1;                              // `&mut`, through a handle no `mut` names
+    assert node.backing::<Tag>() matches { Some(t) && t.uses == 1 };
+    assert tag.uses == 0;                        // the handle holds its own value
     assert node.backing::<String>() matches { None };
-    assert node == Element::backed_by(&mut tag);     // one value, one handle
+    let copy = node;
+    assert copy == node;                         // a copy is the same handle
+    assert node != Element::backed_by(tag);      // each call makes another
 }
