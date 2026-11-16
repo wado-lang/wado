@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794817256525,
+  "lastUpdate": 1794826450708,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78157,6 +78157,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7eabd7bdba11a62792ff0cb5edacf05623d128c2"
         },
         "date": 1794817255616,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24433,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434873,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c14d7e392b55c59dc4e39efc4a4bf2d32be10163",
+          "message": "Merge pull request #2645 from wado-lang/loam/int4-operators\n\nfeat(loam): run onnxruntime's int4 operators on every device, weights kept packed",
+          "timestamp": "2026-11-16T19:35:47+09:00",
+          "tree_id": "37d731100641196f483d49124b636321b71978bc",
+          "url": "https://github.com/wado-lang/wado/commit/c14d7e392b55c59dc4e39efc4a4bf2d32be10163"
+        },
+        "date": 1794826449654,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
