@@ -116,6 +116,8 @@ impl Deserialize for Header {
 pub struct Checkpoint {
     entries: HashMap<String, HeaderEntry>,
     data_start: i32,
+    /// The bytes of the file the header was read from.
+    len: i64,
 }
 
 
@@ -155,7 +157,7 @@ fn read_checkpoint<affine Src: WeightSource>(
             return Result::Err(refuse(`the header is not JSON: ${e}`));
         },
     };
-    return Result::Ok(Checkpoint { entries: header.entries, data_start });
+    return Result::Ok(Checkpoint { entries: header.entries, data_start, len });
 }
 
 /// The header `bytes` begins with, read as `read_headers` reads a file's: what
@@ -280,12 +282,9 @@ pub fn read_headers<affine Src: WeightSource>(source: &Src, files: List<String>)
     for let file of files {
         let refuse = |reason: String| LoadError { reason: `${file}: ${reason}` };
         let checkpoint = read_checkpoint(source, &file, refuse)?;
-        let [end, len] = [
-            checkpoint.data_end(),
-            source.len(&file)?,
-        ];
-        if end > len {
-            return Result::Err(refuse(`the header places tensors up to byte ${end}, past the ${len} given`));
+        let end = checkpoint.data_end();
+        if end > checkpoint.len {
+            return Result::Err(refuse(`the header places tensors up to byte ${end}, past the ${checkpoint.len} given`));
         }
         headers[file] = checkpoint;
     }
