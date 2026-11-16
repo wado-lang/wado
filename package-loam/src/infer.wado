@@ -577,8 +577,6 @@ fn checked_node(node: &Node, scope: &mut Checked, opset: Option<i64>) -> Result<
     if node.op == "If" {
         return branched(node, scope);
     }
-    // The elements first: an operand of the wrong one may be laid out apart too.
-    let primitive = produced_primitive(node, &scope.primitives)?;
     let produced = if node.op == "Split" {
         split(node, &scope.shapes, &scope.known, &mut scope.owed, &mut scope.axes)?;
     } else if node.op == GROUP_QUERY_ATTENTION {
@@ -586,6 +584,7 @@ fn checked_node(node: &Node, scope: &mut Checked, opset: Option<i64>) -> Result<
     } else {
         [infer_node(node, &scope.shapes, &scope.known, opset, &mut scope.owed, &mut scope.axes)?] as List<Shape>;
     };
+    let primitive = produced_primitive(node, &scope.primitives)?;
     for let [i, shape] of produced.into_iter().enumerate() {
         // An optional output left unnamed is not computed.
         if node.outputs[i] == "" {
@@ -1717,7 +1716,12 @@ pub fn quantization(node: &Node) -> Result<Quantization, InferError> {
     if !(bits == 2 || bits == 4 || bits == 8) {
         return Result::Err(attribute_error(node, "bits", `is ${bits}, and a byte packs 2, 4 or 8`));
     }
-    let block = attr_read(node, node.required_int_attr("block_size"))?;
+    // onnxruntime gathers in blocks of 128 where the node names none.
+    let block = if node.op == GATHER_BLOCK_QUANTIZED {
+        int_attr(node, "block_size", 128)?;
+    } else {
+        attr_read(node, node.required_int_attr("block_size"))?;
+    };
     if !(16 <= block <= 1 << 30) || block & block - 1 != 0 {
         return Result::Err(attribute_error(node, "block_size", `is ${block}, which must be a power of two from 16`));
     }
@@ -1761,10 +1765,8 @@ fn quantized_product(
         builtin::cold_path();
         return Result::Err(InferError::ScalarOperand(node.name()));
     }
-    let last = a.axes[a.rank() - 1].extent;
-    if !last.agrees(&Extent::Static(k)) {
-        return Result::Err(refusal(node, `the input's last axis is ${last} long, and K is ${k}`));
-    }
+    let last = a.axes[a.rank() - 1].extent.poly();
+    owe_equal(node, owed, &last, &Poly::constant(k as i64), "the input's last axis must be K long")?;
     let [blocks, zero_bytes] = blocks_of(k, &q);
     laid_out(node, shapes, 1, [n, blocks, q.block * q.bits / 8])?;
     let weight = operand_at(node, shapes, 1);
