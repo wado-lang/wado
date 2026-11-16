@@ -1057,12 +1057,25 @@ fn turned<affine G: Graph, E: Float, B, N, S, D, Half>(
     };
     let [a_start, a_limit] = columns(0, half);
     let [b_start, b_limit] = columns(half, 2 * half);
-    let a: G::Tensor<E, [B, N, S, Half]> = g.slice(x, a_start, a_limit, [1, 1, 1, 1]);
-    let b: G::Tensor<E, [B, N, S, Half]> = g.slice(x, b_start, b_limit, [1, 1, 1, 1]);
-    let c: G::Tensor<E, [B, N, S, Half]> = g.broadcast_in_dim(cos, a_limit, [0, 2, 3]);
-    let n: G::Tensor<E, [B, N, S, Half]> = g.broadcast_in_dim(sin, a_limit, [0, 2, 3]);
-    let first = g.binary(Binary::Subtract, &g.binary(Binary::Multiply, &a, &c), &g.binary(Binary::Multiply, &b, &n));
-    let second = g.binary(Binary::Add, &g.binary(Binary::Multiply, &b, &c), &g.binary(Binary::Multiply, &a, &n));
+    let half_of = |g: &mut G, start: List<i32>, limit: List<i32>| -> G::Tensor<f32, [B, N, S, Half]> {
+        let part: G::Tensor<E, [B, N, S, Half]> = g.slice(x, start, limit, [1, 1, 1, 1]);
+        return g.convert::<E, f32, [B, N, S, Half]>(&part);
+    };
+    let a = half_of(g, a_start, a_limit);
+    let b = half_of(g, b_start, b_limit);
+    let c: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(&g.convert::<E, f32, [Slots, S, Half]>(cos), a_limit, [
+        0, 2, 3,
+    ]);
+    let n: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(&g.convert::<E, f32, [Slots, S, Half]>(sin), a_limit, [
+        0, 2, 3,
+    ]);
+    // Each half rounds once, as one node of halves does.
+    let first = g.convert::<f32, E, [B, N, S, Half]>(
+        &g.binary(Binary::Subtract, &g.binary(Binary::Multiply, &a, &c), &g.binary(Binary::Multiply, &b, &n)),
+    );
+    let second = g.convert::<f32, E, [B, N, S, Half]>(
+        &g.binary(Binary::Add, &g.binary(Binary::Multiply, &b, &c), &g.binary(Binary::Multiply, &a, &n)),
+    );
     let rotated: G::Tensor<E, [B, N, S, D]> = g.concatenate(&first, &second, 3);
     if 2 * half == extents[3] {
         return rotated;

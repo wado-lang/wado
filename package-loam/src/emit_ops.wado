@@ -184,9 +184,7 @@ fn broadcast_call(
     );
 }
 
-/// `tensor` read under `out`'s axes: as it is where they are its own, and
-/// broadcast to them otherwise. An axis of 1 may share its name with the one
-/// it stretches over, so the names alone do not say they are one.
+/// `tensor` read under `out`'s axes, as `stretched_operand` reads it.
 fn stretched(
     checked: &Checked,
     exprs: &Operands,
@@ -196,11 +194,25 @@ fn stretched(
     trailing: i32,
 ) -> Result<String, EmitError> {
     let shape = checked.shapes[*tensor];
-    if same_axes(&shape, out) {
-        return Result::Ok(exprs.reference(tensor));
+    return stretched_operand(&checked.primitives[*tensor], &shape, out, exprs.reference(tensor), trailing, symbols);
+}
+
+/// `operand`, of `element` and axes `shape`, read under `out`'s axes: as it is
+/// where they are its own, and broadcast to them otherwise. An axis of 1 may
+/// share its name with the one it stretches over, so the names alone do not
+/// say they are one.
+fn stretched_operand(
+    element: &String,
+    shape: &Shape,
+    out: &Shape,
+    operand: String,
+    trailing: i32,
+    symbols: &mut Symbols,
+) -> Result<String, EmitError> {
+    if same_axes(shape, out) {
+        return Result::Ok(operand);
     }
-    let element = checked.primitives[*tensor];
-    return Result::Ok(`&${broadcast_call(&element, &shape, out, &exprs.reference(tensor), trailing, symbols)?}`);
+    return Result::Ok(`&${broadcast_call(element, shape, out, &operand, trailing, symbols)?}`);
 }
 
 /// The element a node of `element` computes in: f32 for a half whose node
@@ -347,7 +359,16 @@ fn built_gemm(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
         if !same_axes(&product, &out) {
             call = broadcast_call(&element, &product, &out, &`&${call}`, 0, symbols)?;
         }
-        let mut bias = computed.operand(stretched(checked, exprs, symbols, &node.inputs[2], &out, 0)?, &out);
+        // Widened at its own extents, before it is broadcast to the output's.
+        let c = shapes[node.inputs[2]];
+        let mut bias = stretched_operand(
+            &element,
+            &c,
+            &out,
+            computed.operand(exprs.reference(&node.inputs[2]), &c),
+            0,
+            symbols,
+        )?;
         if beta != 1.0 {
             bias = `&${scaled(&bias, &out, beta, symbols)?}`;
         }

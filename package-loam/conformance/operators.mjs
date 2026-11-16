@@ -374,6 +374,24 @@ add('CastLikeComputed', {
 });
 // Where `erf` is 0, 1 or -1 to the last bit of either width.
 add('GeluFloat16', { ...inHalf([0, 8, -8, 16, -16, 32], [node('Gelu', ['H'], 'S')]), opset: 20 });
+// A Gelu of halves computes in f32: where `erf` or `tanh` nears -1, one
+// rounded to a half makes the result 0, and a cube past a half's range makes
+// the tanh form's an infinity. onnxruntime runs the graph that ends at the f16
+// output, as for the mixed normalization.
+const halfGelu = (approximate) => {
+  const nodes = (output) => [
+    node('Cast', ['A'], 'H', { to: FLOAT16 }),
+    node('Gelu', ['H'], output, { approximate }),
+  ];
+  return {
+    inputs: { A: float([2, 3], [-4, -3.5, -5, 3, 48, -48]) },
+    nodes: [...nodes('S'), node('Cast', ['S'], 'Y', { to: FLOAT })],
+    opset: 20,
+    oracle: { nodes: nodes('Y'), out: FLOAT16 },
+  };
+};
+add('GeluHalfErf', halfGelu('none'));
+add('GeluHalfTanh', halfGelu('tanh'));
 add('CastFromInt64', {
   inputs: { A: int64([2, 3], [-3, -1, 0, 1, 2, 9007199254740993]) },
   nodes: [node('Cast', ['A'], 'Y', { to: FLOAT })],
@@ -512,6 +530,25 @@ add('GqaPast', gqa({ s: 1, past: 3, heads: 4, kv: 2, dim: 16 }));
 add('GqaPastPrompt', gqa({ s: 2, past: 3, heads: 2, kv: 2, dim: 16 }));
 add('GqaRotary', gqa({ s: 3, past: 2, heads: 2, kv: 1, dim: 16, rotary: true, attrs: { do_rotary: 1 } }));
 add('GqaRotaryPresentKey', gqa({ s: 2, past: 1, heads: 2, kv: 1, dim: 16, rotary: true, attrs: { do_rotary: 1 }, output: 1 }));
+// The case `c` over halves: each of `floats` cast to f16 before its one node,
+// which computes in f32 and rounds once. onnxruntime runs the graph that ends
+// at the f16 output, as for the mixed normalization.
+const overHalves = (c, floats) => {
+  const casts = floats.map((n) => node('Cast', [n], `H${n}`, { to: FLOAT16 }));
+  const [only] = c.nodes;
+  const writing = (output) => ({
+    ...only,
+    inputs: only.inputs.map((n) => (floats.includes(n) ? `H${n}` : n)),
+    outputs: only.outputs.map((o) => (o === 'Y' ? output : o)),
+  });
+  return {
+    ...c,
+    nodes: [...casts, writing('S'), node('Cast', ['S'], 'Y', { to: FLOAT })],
+    oracle: { nodes: [...casts, writing('Y')], out: FLOAT16 },
+  };
+};
+const rotaryKey = gqa({ s: 2, past: 1, heads: 2, kv: 1, dim: 16, rotary: true, attrs: { do_rotary: 1 }, output: 1 });
+add('GqaHalfRotaryPresentKey', overHalves(rotaryKey, ['Q', 'K', 'V', 'PK', 'PV', 'C', 'N']));
 add('GqaPresentValue', gqa({ s: 2, past: 2, heads: 2, kv: 1, dim: 16, output: 2 }));
 add('GqaWindow', gqa({ s: 5, past: 0, heads: 2, kv: 1, dim: 16, attrs: { local_window_size: 2 } }));
 add('GqaWindowPast', gqa({ s: 2, past: 4, heads: 2, kv: 1, dim: 16, attrs: { local_window_size: 3 } }));

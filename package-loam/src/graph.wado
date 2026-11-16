@@ -630,8 +630,11 @@ fn at_node(node: &Node, e: AttrError) -> String {
     return `${node.site()}: ${e}`;
 }
 
+/// Computed in f32 and rounded once, since a half would round `erf` or `tanh`
+/// near -1 to it, and the tanh form's cube past a half's range.
 fn gelu(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
-    let x = node.inputs[0];
+    let given = node.inputs[0];
+    let x = body.computed_in(given, 1);
     let inner = match node.string_attr("approximate", "none").map_err(|e| at_node(node, e))?.as_str_slice() {
         "none" => body.unary("Erf", &body.binary("Mul", &x, &body.constant(f32::sqrt(0.5)))),
         "tanh" => {
@@ -644,7 +647,8 @@ fn gelu(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
         },
     };
     let half = body.binary("Mul", &x, &body.constant(0.5));
-    body.output("Mul", [half, body.binary("Add", &inner, &body.constant(1.0))], node);
+    let product = body.binary("Mul", &half, &body.binary("Add", &inner, &body.constant(1.0)));
+    body.output("CastLike", [product, given], node);
     return Result::Ok(());
 }
 
@@ -655,15 +659,7 @@ fn rms_normalization(node: &Node, body: &mut FunctionBody) -> Result<(), String>
     let [given, scale] = [node.inputs[0], node.inputs[1]];
     let epsilon = node.float_attr("epsilon", 1e-5).map_err(|e| at_node(node, e))?;
     let stash = node.int_attr("stash_type", 1).map_err(|e| at_node(node, e))?;
-    let x = body.node("Cast", [given], [
-        Attr {
-            name: "to",
-            values: [`${stash}`],
-            is_list: false,
-        },
-    ]);
-    // The epsilon takes the stashed element too.
-    body.x = x;
+    let x = body.computed_in(given, stash);
     let square = body.binary("Mul", &x, &x);
     let mean = body.node("ReduceMean", [square], [
         Attr {
@@ -759,6 +755,19 @@ impl FunctionBody {
     }
 
     /// The body's last node, which computes the function's output.
+    /// `given` cast to the element `TensorProto.DataType` numbers `to`, which
+    /// the body's constants then take too.
+    fn computed_in(&mut self, given: String, to: i64) -> String {
+        self.x = self.node("Cast", [given], [
+            Attr {
+                name: "to",
+                values: [`${to}`],
+                is_list: false,
+            },
+        ]);
+        return self.x;
+    }
+
     fn output(&mut self, op: String, inputs: List<String>, function: &Node) {
         self.nodes.push(Node {
             op,

@@ -641,6 +641,14 @@ test "Gelu approximated by tanh" {
     assert_agrees(#include_bytes("./operators/GeluTanh.onnx"), #include_str("./operators/GeluTanh.txt"));
 }
 
+test "Gelu of halves through erf computes in f32" {
+    assert_agrees(#include_bytes("./operators/GeluHalfErf.onnx"), #include_str("./operators/GeluHalfErf.txt"));
+}
+
+test "Gelu of halves approximated by tanh computes in f32" {
+    assert_agrees(#include_bytes("./operators/GeluHalfTanh.onnx"), #include_str("./operators/GeluHalfTanh.txt"));
+}
+
 test "Gelu through erf" {
     assert_agrees(#include_bytes("./operators/GeluErf.onnx"), #include_str("./operators/GeluErf.txt"));
 }
@@ -684,6 +692,13 @@ test "GroupQueryAttention's present key holds the rotated keys after the past" {
     assert_agrees(
         #include_bytes("./operators/GqaRotaryPresentKey.onnx"),
         #include_str("./operators/GqaRotaryPresentKey.txt"),
+    );
+}
+
+test "GroupQueryAttention of halves rotates the present key in f32" {
+    assert_agrees(
+        #include_bytes("./operators/GqaHalfRotaryPresentKey.onnx"),
+        #include_str("./operators/GqaHalfRotaryPresentKey.txt"),
     );
 }
 
