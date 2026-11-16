@@ -77,15 +77,20 @@ fn build_stores_lookup(project: &NirPackage) -> StoresLookup {
     let mut lookup = StoresLookup::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if func.retains.is_empty() {
-            continue;
-        }
+        // A declaration keeping what a reference's elements hold keeps nothing
+        // a rebuilt literal lacks; one keeping the reference itself does.
+        let declared = project
+            .builtin_declarations
+            .retain_specs(&*func)
+            .filter(|retain| !retain.elements)
+            .map(|retain| retain.source);
         let stored_indices: IndexSet<usize> = func
             .params
             .iter()
             .enumerate()
             .filter(|(_, param)| func.retains.iter().any(|s| s == &param.name))
             .map(|(i, _)| i)
+            .chain(declared)
             .collect();
         if !stored_indices.is_empty()
             && let Some(id) = func.id

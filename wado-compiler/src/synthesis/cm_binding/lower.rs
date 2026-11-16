@@ -17,9 +17,9 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, cast, deref_expr,
-    expr_stmt, generic_method_call, generic_method_call_monomorphized, handle_to_f64, i32_const,
-    i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt, linear_alloc, local_ref, loop_stmt,
-    ref_expr, split_packed_ptr_len, synth_span,
+    expr_stmt, generic_method_call, generic_method_call_monomorphized, handle_in_memory, i32_const,
+    i64_const, if_stmt, internal_call, is_extern_handle, let_mut_stmt, let_stmt, linear_alloc,
+    local_ref, loop_stmt, ref_expr, split_packed_ptr_len, synth_span,
 };
 
 use super::types::{
@@ -70,6 +70,16 @@ pub fn synthesize_lower(
     locals: &mut Vec<TirLocal>,
     ctx: &LowerContext<'_>,
 ) -> Vec<TirStmt> {
+    // `ty` may be the handle or the `u32` the boundary sees it as; the value
+    // says which it is.
+    if is_extern_handle(&ctx.type_table.borrow(), value.type_id) {
+        let slot = handle_in_memory(value, &ctx.type_table.borrow());
+        return vec![expr_stmt(builtin_call(
+            "i32_store",
+            vec![addr, slot],
+            TypeTable::UNIT,
+        ))];
+    }
     let item = ctx.cm_interface_registry.type_decls().item_of(ty);
     match ty {
         Type::Named(_) if item == Some(CompilerItem::String) => {
@@ -156,7 +166,7 @@ pub fn synthesize_lower(
             // and anything unresolved keep the 4-byte default.
             _ => vec![expr_stmt(builtin_call(
                 scalar_store_op(ty, ctx.cm_interface_registry),
-                vec![addr, affine_handle(value, &ctx.type_table.borrow())],
+                vec![addr, handle_in_memory(value, &ctx.type_table.borrow())],
                 TypeTable::UNIT,
             ))],
         },
@@ -180,7 +190,7 @@ pub fn synthesize_lower(
         ),
         Type::Reference(_) | Type::MutReference(_) => vec![expr_stmt(builtin_call(
             scalar_store_op(ty, ctx.cm_interface_registry),
-            vec![addr, affine_handle(value, &ctx.type_table.borrow())],
+            vec![addr, handle_in_memory(value, &ctx.type_table.borrow())],
             TypeTable::UNIT,
         ))],
         other => panic!("unsupported type for CM memory lower: {other:?}"),
@@ -1453,14 +1463,9 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 ctx,
             );
         }
-        Type::Named(_) | Type::Reference(_) | Type::MutReference(_)
-            if ctx.cm_interface_registry.extern_handle(&resolved).is_some() =>
-        {
-            flat_args.push(handle_to_f64(value));
-        }
         // Primitive, flags, resource, or borrow handle: the value is the single flat arg.
         Type::Named(_) | Type::Reference(_) | Type::MutReference(_) => {
-            flat_args.push(affine_handle(value, &ctx.type_table.borrow()));
+            flat_args.push(handle_in_memory(value, &ctx.type_table.borrow()));
         }
         // A stream or a future is an i32 handle (single flat arg).
         Type::Generic(_) if let Some(CompilerItem::Stream | CompilerItem::Future) = item => {

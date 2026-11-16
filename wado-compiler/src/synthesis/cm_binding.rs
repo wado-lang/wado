@@ -48,7 +48,7 @@ use crate::type_table::TypeTable;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{WorldExportInfo, WorldInfo};
 
-use callback_export::{Callbacks, synthesize_callback_exports};
+use callback_export::{HostCalls, synthesize_callback_exports, synthesize_extern_slot_exports};
 use export_adapter::{
     ExportBindingEnv, ExportReturnStrategy, synthesize_export_binding, synthesize_post_return,
 };
@@ -408,14 +408,17 @@ fn named_decl_of(ty: &ResolvedType) -> Option<DefId> {
 ///
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
-pub fn generate_adapters(mut project: Package) -> Result<Package, SynthesisError> {
+pub fn generate_adapters(mut project: Package) -> Result<Package, Vec<SynthesisError>> {
     validate_imports_representable(&project)?;
-    let callbacks = generate_import_adapters(&mut project);
-    synthesize_callback_exports(&mut project, &callbacks);
+    let host_calls = generate_import_adapters(&mut project);
+    synthesize_callback_exports(&mut project, &host_calls.callbacks);
+    if host_calls.extern_slots {
+        synthesize_extern_slot_exports(&mut project);
+    }
     synthesize_export_adapters(&mut project)?;
     synthesize_guest_callback_bindings(&mut project);
     generate_test_world_bindings(&mut project);
-    let validated = reject_unresolvable_record_payloads(&project)?;
+    let validated = reject_unresolvable_record_payloads(&project).map_err(SynthesisError::from)?;
     reduce_unexpanded_task_returns(&project);
     resource_rewrite::rewrite_async_primitives(&mut project, validated);
     assert_task_returns_eliminated(&project);
@@ -436,7 +439,7 @@ fn entry_type_table(project: &Package) -> Rc<RefCell<TypeTable>> {
 /// Synthesize a binding function for each used WASI effect call and resource
 /// method call, add them to the entry module, and rewrite effect-like call
 /// sites to target them. Answers the closure types those calls pass.
-fn generate_import_adapters(project: &mut Package) -> Callbacks {
+fn generate_import_adapters(project: &mut Package) -> HostCalls {
     let entry_source = project.entry_module_source.clone();
     let registry = Arc::clone(&project.cm_interface_registry);
     let entry_type_table = entry_type_table(project);
@@ -455,9 +458,9 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
             }
         }
     }
-    let mut callbacks = Callbacks::default();
+    let mut host_calls = HostCalls::default();
     if seen_effects.is_empty() {
-        return callbacks;
+        return host_calls;
     }
 
     let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
@@ -466,6 +469,7 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
         let func_info = registry
             .get_function(key)
             .expect("the collector records only a registered CM function");
+        host_calls.extern_slots |= registry.crosses_extern_handle_in_slot(func_info);
         // An operation on `E`, effect or resource alike, requires `with E`, for
         // each `E` binding the function; a world function belongs to no
         // interface and requires nothing.
@@ -514,12 +518,12 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
                     &call_sites,
                     &entry_type_table,
                     &mut applied_returns,
-                    &mut callbacks,
+                    &mut host_calls.callbacks,
                 );
             }
         }
     }
-    callbacks
+    host_calls
 }
 
 /// Synthesize an export binding for each world export (signature-driven) and
@@ -1051,7 +1055,7 @@ fn validate_imports_representable(project: &Package) -> Result<(), SynthesisErro
             } else {
                 op.return_type
             };
-            // A closure crosses as its callback key; the elaborator checked its shape.
+            // A closure crosses as an extern handle; the elaborator checked its shape.
             let values = op
                 .params
                 .iter()

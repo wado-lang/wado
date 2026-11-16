@@ -2,7 +2,7 @@
 // callback parameter. A Wado handler answering the import receives the closure
 // itself and may call it.
 
-#[cm("example:demo/target", linearity = "unrestricted")]
+#[cm("example:demo/target", linearity = "unrestricted", repr = "externref")]
 resource Target {
     #[cm("example:demo/target#listen")]
     #[cm_params("self", "listener")]
@@ -20,7 +20,7 @@ test {
 
 // A handle no host backs: every call on it reaches `EchoTarget`.
 fn mock_target() -> Target {
-    return 0.0 as Target;
+    return Target::backed_by(&mut EchoTarget {});
 }
 
 struct EchoTarget {}

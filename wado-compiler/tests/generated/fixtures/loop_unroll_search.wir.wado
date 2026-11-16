@@ -110,9 +110,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_a
 
 type "functype//loop_unroll_search.wado/loop_unroll_search.wado/$tmpl$7e7c9f511d2112fe^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "loop_unroll_search.wado//$tmpl$7e7c9f511d2112fe") -> [ref Array<u8>, i32, i32];  // TypeId(37)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<loop_unroll_search.wado/$tmpl$7e7c9f511d2112fe,[Array<u8>,i32,i32]>" = fn(ref "loop_unroll_search.wado//$tmpl$7e7c9f511d2112fe") -> ref "core:prelude/string.wado//String";  // TypeId(38)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(38)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude/list.wado//List<i32>");  // TypeId(39)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<loop_unroll_search.wado/$tmpl$7e7c9f511d2112fe,[Array<u8>,i32,i32]>" = fn(ref "loop_unroll_search.wado//$tmpl$7e7c9f511d2112fe") -> ref "core:prelude/string.wado//String";  // TypeId(39)
 
 type "functype//core:prelude/array.wado/Array<u8>^core:prelude/traits.wado/Inspect::inspect" = fn(ref Array<u8>, ref "core:prelude/format.wado//Formatter");  // TypeId(40)
 
@@ -1398,6 +1398,14 @@ fn "loop_unroll_search.wado/loop_unroll_search.wado/$tmpl$7e7c9f511d2112fe^core:
     return "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1(t.s3).repr, $mv_arg_1.used);
 }
 
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
+    let $load_0: ref Array<i32>;
+    let new_repr: ref Array<i32>;
+    let a: i32;
+    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    self.repr = new_repr;
+}
+
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<loop_unroll_search.wado/$tmpl$7e7c9f511d2112fe,[Array<u8>,i32,i32]>"(t) {
     let $load_0: ref "core:prelude/string.wado//String";
     let $load_1: ref "core:prelude/string.wado//String";
@@ -1443,14 +1451,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<loop_unroll
     multivalue_bind [$mv_repr_1, $mv_start_2, $mv_end_3] = "loop_unroll_search.wado/loop_unroll_search.wado/$tmpl$7e7c9f511d2112fe^core:prelude/traits.wado/ReflectTemplate::tail"(t);
     "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"(struct.new "core:prelude/string.wado//StrSlice" { repr: $mv_repr_1, start: $mv_start_2, end: $mv_end_3 }, out);
     return out;
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
-    let $load_0: ref Array<i32>;
-    let new_repr: ref Array<i32>;
-    let a: i32;
-    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
 }
 
 fn "core:prelude/array.wado/Array<u8>^core:prelude/traits.wado/Inspect::inspect"(self, f) {

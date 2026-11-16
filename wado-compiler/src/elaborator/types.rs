@@ -1490,6 +1490,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An extern handle in the signature of an `export`: it is a reference
+    /// into this component's own host, and no other component can hold it.
+    ExternHandleAtExport {
+        function: String,
+        position: String,
+        span: Span,
+    },
+
     /// A closure an import takes, which the host cannot call back: one taking
     /// anything but scalars and unrestricted handles, or returning a value.
     CallbackAtCmBoundary {
@@ -3094,6 +3102,17 @@ impl TypeError {
                 Code::CmBoundaryType,
                 format!(
                     "closure type in {position} of `{function}` is not allowed: closures cannot cross the Component Model boundary"
+                ),
+                *span,
+            ),
+            TypeError::ExternHandleAtExport {
+                function,
+                position,
+                span,
+            } => (
+                Code::CmBoundaryType,
+                format!(
+                    "extern handle in {position} of `{function}` is not allowed: an extern handle does not cross a component boundary"
                 ),
                 *span,
             ),

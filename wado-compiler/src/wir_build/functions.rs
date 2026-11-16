@@ -18,11 +18,12 @@ use crate::wir_build::packed_array_is_eager;
 
 use super::context::{PendingFunctionBody, WirContext};
 use super::translate::resolve_param_names;
+use crate::ast::Type;
 use crate::component_model::{
-    CmFunctionInfo, CmInterfaceRegistry, cm_return_needs_outptr, flat_params_in_buffer,
+    CmFunctionInfo, CmInterfaceRegistry, ExternRef, cm_return_needs_outptr, flat_params_in_buffer,
     flatten_cm_param_type,
 };
-use crate::name::wir_func_type_key;
+use crate::name::{EXTERN_IMPORT_MODULE, wir_func_type_key};
 use crate::nir::FuncId;
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::reachable_exprs;
@@ -130,6 +131,9 @@ fn cm_import_core_func_type(
     func: &CmFunctionInfo,
     cm_interface_registry: &CmInterfaceRegistry,
 ) -> (Vec<WirType>, Vec<WirType>) {
+    if cm_interface_registry.is_extern_import(func) {
+        return extern_import_core_func_type(func, cm_interface_registry);
+    }
     let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
     for (_, _, ty) in &func.params {
         let resolved_ty = cm_interface_registry.resolve_type(ty);
@@ -176,6 +180,49 @@ fn cm_import_core_func_type(
     (params, results)
 }
 
+/// The core type of a web import: the canonical ABI's flattening, except that
+/// an extern handle or an `Option` of one is one `externref`, and an `async`
+/// one answers its promise in place of a result (WEP: Extern Handles).
+fn extern_import_core_func_type(
+    func: &CmFunctionInfo,
+    registry: &CmInterfaceRegistry,
+) -> (Vec<WirType>, Vec<WirType>) {
+    let extern_ref = |ty: &Type| {
+        registry.extern_ref(ty).map(|shape| match shape {
+            ExternRef::Handle => WirType::EXTERN,
+            ExternRef::Optional => WirType::EXTERN.as_nullable(),
+        })
+    };
+    let flatten = |ty: &Type, out: &mut Vec<WirType>| {
+        if let Some(reference) = extern_ref(ty) {
+            out.push(reference);
+        } else {
+            let mut flat = Vec::new();
+            flatten_cm_param_type(&registry.resolve_type(ty), &mut flat, registry);
+            out.extend(flat.into_iter().map(valtype_to_wir_type));
+        }
+    };
+    let mut params = Vec::new();
+    if registry.params_in_buffer(func.params.iter().map(|(_, _, ty)| ty), false) {
+        params.push(WirType::I32);
+    } else {
+        for (_, _, ty) in &func.params {
+            flatten(ty, &mut params);
+        }
+    }
+    let mut results = Vec::new();
+    if func.is_async {
+        results.push(WirType::EXTERN);
+    } else if let Some(ret) = &func.return_type {
+        if cm_return_needs_outptr(ret, registry) {
+            params.push(WirType::I32);
+        } else {
+            flatten(ret, &mut results);
+        }
+    }
+    (params, results)
+}
+
 /// Register WASI function imports.
 ///
 /// WASI functions are already lowered at the component level;
@@ -218,7 +265,13 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 fq: format!("wasi/{local_name}"),
             };
 
-            ctx.register_import_func("wasi".to_string(), local_name.clone(), type_id, name);
+            let module = if cm_interface_registry.is_extern_import(func) {
+                ctx.has_extern_import = true;
+                EXTERN_IMPORT_MODULE
+            } else {
+                "wasi"
+            };
+            ctx.register_import_func(module.to_string(), local_name.clone(), type_id, name);
 
             ctx.available_wasi_funcs.insert(local_name);
         }
@@ -585,6 +638,10 @@ fn register_exports(ctx: &mut WirContext<'_>) {
         if let Some(post_return) = &export.post_return_core_name {
             export_under_own_name(ctx, post_return);
         }
+    }
+
+    for name in &component_plan.host_core_exports {
+        export_under_own_name(ctx, name);
     }
 
     for callback in &component_plan.guest_callbacks {

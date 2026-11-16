@@ -929,7 +929,7 @@ impl NirPackage {
     /// program uses and the registry can lower. Declaring a supported but unused
     /// one would drag in resource types the world never imports.
     pub fn emits_cm_function(&self, func: &CmFunctionInfo) -> bool {
-        self.cm_interface_registry.is_function_supported(func)
+        self.cm_interface_registry.is_component_import(func)
             && self.used_wasi_functions.contains(&func.cm_identifier())
     }
 

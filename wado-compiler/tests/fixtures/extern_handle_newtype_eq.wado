@@ -1,0 +1,26 @@
+// A newtype over an extern handle compares as the handle does: by what object
+// it is, not as a scalar.
+#[cm("example:demo/node", linearity = "unrestricted", repr = "externref")]
+resource Node {}
+
+type Marked = Node;
+
+struct Tag {
+    name: String,
+}
+
+fn same(a: Marked, b: Marked) -> bool {
+    return a == b;
+}
+
+test "a newtype over a handle is equal as the handle is" {
+    let mut a = Tag { name: "a" };
+    let mut b = Tag { name: "b" };
+    let first = Node::backed_by(&mut a) as Marked;
+    assert same(first, Node::backed_by(&mut a) as Marked);
+    assert !same(first, Node::backed_by(&mut b) as Marked);
+    assert first != Node::backed_by(&mut b) as Marked;
+}
+
+__DATA__
+{"test": {}}

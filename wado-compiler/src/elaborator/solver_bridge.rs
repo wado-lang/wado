@@ -1883,9 +1883,14 @@ impl SolverBridge {
         }
 
         for &def in data.resource_types.keys() {
-            if !table.is_unrestricted_resource(def) {
-                fact(def, CompilerItem::AffineResource);
-            }
+            fact(
+                def,
+                if table.is_unrestricted_resource(def) {
+                    CompilerItem::ExternHandle
+                } else {
+                    CompilerItem::AffineResource
+                },
+            );
         }
     }
 

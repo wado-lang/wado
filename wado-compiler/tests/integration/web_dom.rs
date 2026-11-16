@@ -1,5 +1,5 @@
-//! The `wado-lang:web` unrestricted-resource slice `package-web` generates from its
-//! vendored `WebIDL` snapshot. See `docs/wep-2026-04-01-web.md`.
+//! The `wado-lang:web` extern handles `package-web` generates from its vendored
+//! `WebIDL` snapshot. See `docs/wep-2026-11-14-extern-handles.md`.
 
 use crate::common::{WEB_PACKAGE, compile_against_web};
 
@@ -23,22 +23,31 @@ const INHERITED: &str = "el.set_text_content(Option::Some(\"Hello, Wado!\"));";
 const UPCAST: &str =
     "let parent: Node = el;\nparent.set_text_content(Option::Some(\"Hello, Wado!\"));";
 
-/// An unrestricted resource is an opaque `f64` at the CM boundary, not a CM
-/// `resource`, so the component's imports carry no handle type.
+/// The main module's import of an operation `interface` declares.
+fn web_import(interface: &str) -> String {
+    format!("(import \"extern\" \"$wado-lang:web/{interface}")
+}
+
+/// A web import is a core import of the main module, its handle an
+/// `externref`, so the component imports nothing of the platform.
 #[test]
-fn an_unrestricted_resource_crosses_as_a_bare_f64() {
+fn a_web_import_is_a_core_import_taking_an_externref() {
     let wat = compile_to_wat(&on_an_element("Dom", "el.set_id(\"app\");"));
+    let set_id = wat
+        .lines()
+        .find(|line| line.contains(&web_import("element")))
+        .unwrap_or_else(|| panic!("the element operation should be imported: {wat}"));
     assert!(
-        wat.contains("wado-lang:web/element"),
-        "the element interface should be imported: {wat}"
+        set_id.contains("(param (ref extern)"),
+        "the receiver should cross as an `externref`: {set_id}"
     );
     assert!(
-        wat.contains("(param \"self\" f64)"),
-        "the receiver should cross as an `f64`: {wat}"
+        !wat.contains("(import \"wado-lang:web/"),
+        "the component should import nothing of the platform: {wat}"
     );
     assert!(
         !wat.contains("(resource"),
-        "an unrestricted resource declares no CM resource type: {wat}"
+        "an extern handle declares no CM resource type: {wat}"
     );
 }
 
@@ -48,7 +57,7 @@ fn an_unrestricted_resource_crosses_as_a_bare_f64() {
 fn an_inherited_method_calls_the_declaring_interface() {
     let wat = compile_to_wat(&on_an_element("Dom", INHERITED));
     assert!(
-        wat.contains("wado-lang:web/node"),
+        wat.contains(&web_import("node")),
         "the declaring interface should be imported: {wat}"
     );
 }
@@ -63,8 +72,8 @@ fn an_upcast_is_a_no_op() {
     );
 }
 
-/// An `option<extern-handle>` result lifts into the declared `Option<Element>`,
-/// not the `Option<f64>` the boundary sees.
+/// An optional handle result is the declared `Option<Element>`, whose `None`
+/// is the null reference.
 #[test]
 fn an_optional_extern_handle_result_lifts_to_the_declared_option() {
     let wat = compile_to_wat(&on_an_element(
@@ -73,14 +82,13 @@ fn an_optional_extern_handle_result_lifts_to_the_declared_option() {
          assert el.parent_node() matches { None };",
     ));
     assert!(
-        wat.contains("wado-lang:web/document") && wat.contains("wado-lang:web/node"),
+        wat.contains(&web_import("document")) && wat.contains(&web_import("node")),
         "both interfaces should be imported: {wat}"
     );
 }
 
-/// An `option<extern-handle>` parameter is the caller's `Option<Node>` on both
-/// sides of the binding, whether the argument is `null`, a `Some` literal, or a
-/// value of that type.
+/// An optional handle parameter takes the caller's `Option<Node>`, whether the
+/// argument is `null`, a `Some` literal, or a value of that type.
 #[test]
 fn an_optional_extern_handle_argument_keeps_the_declared_option() {
     let wat = compile_to_wat(&on_an_element(
@@ -91,7 +99,7 @@ fn an_optional_extern_handle_argument_keeps_the_declared_option() {
          let other: Option<Node> = Option::Some(node);\n\
          assert el.is_equal_node(other);",
     ));
-    assert!(wat.contains("wado-lang:web/node"), "{wat}");
+    assert!(wat.contains(&web_import("node")), "{wat}");
 }
 
 /// Compile `source`, holding it to its warnings as well: a program this slice

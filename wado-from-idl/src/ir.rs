@@ -1,6 +1,7 @@
 //! Intermediate representation for Wado code generation
 
 use wado_compiler::ast::HandleClasses;
+use wado_compiler::name::CALLBACK_HANDLE_WORD;
 
 /// A cross-interface type import
 #[derive(Debug, Clone)]
@@ -311,7 +312,7 @@ impl WadoType {
     /// where the host cannot call a closure back with one.
     pub fn callback_argument_word(&self) -> Option<&'static str> {
         match self {
-            Self::Named(_) => Some("handle"),
+            Self::Named(_) => Some(CALLBACK_HANDLE_WORD),
             _ => self.primitive_name(),
         }
     }

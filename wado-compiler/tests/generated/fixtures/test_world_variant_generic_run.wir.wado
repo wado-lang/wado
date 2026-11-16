@@ -148,9 +148,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/leading_sign_b
 
 type "functype//core:prelude/format.wado/$hole_fmt$core:prelude/format.wado/$tmpl$47518b5dd822a983$sroa[t.h0]" = fn(i32, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
-type "functype//sub/test_world_variant_generic_helper.wado/sub/test_world_variant_generic_helper.wado/walk_node<sub/test_world_variant_generic_helper.wado/Recorder>$sroa[node.children]" = fn(ref "sub/test_world_variant_generic_helper.wado//Recorder", ref "Array<sub/test_world_variant_generic_helper.wado/CstChild>", i32);  // TypeId(47)
+type "functype//sub/test_world_variant_generic_helper.wado/to_tree$sroa[node.children]" = fn(ref "Array<sub/test_world_variant_generic_helper.wado/CstChild>", i32) -> [ref "core:prelude/string.wado//String", ref "core:prelude/list.wado//List<sub/test_world_variant_generic_helper.wado/CstChild>"];  // TypeId(47)
 
-type "functype//sub/test_world_variant_generic_helper.wado/to_tree$sroa[node.children]" = fn(ref "Array<sub/test_world_variant_generic_helper.wado/CstChild>", i32) -> [ref "core:prelude/string.wado//String", ref "core:prelude/list.wado//List<sub/test_world_variant_generic_helper.wado/CstChild>"];  // TypeId(48)
+type "functype//sub/test_world_variant_generic_helper.wado/sub/test_world_variant_generic_helper.wado/walk_node<sub/test_world_variant_generic_helper.wado/Recorder>$sroa[node.children]" = fn(ref "sub/test_world_variant_generic_helper.wado//Recorder", ref "Array<sub/test_world_variant_generic_helper.wado/CstChild>", i32);  // TypeId(48)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(49)
 
@@ -687,31 +687,6 @@ fn "core:prelude/format.wado/$hole_fmt$core:prelude/format.wado/$tmpl$47518b5dd8
     }
 }
 
-fn "sub/test_world_variant_generic_helper.wado/sub/test_world_variant_generic_helper.wado/walk_node<sub/test_world_variant_generic_helper.wado/Recorder>$sroa[node.children]"(v, $mv$node$repr, $mv$node$used) {
-    let n: ref "sub/test_world_variant_generic_helper.wado//NodeData";
-    let ref_val: ref "sub/test_world_variant_generic_helper.wado//CstChild";
-    let $sroa_$iter_0_index_23: i32;
-    v.count = v.count + 1;
-    $sroa_$iter_0_index_23 = 0;
-    b65: block {
-        l66: loop {
-            break_if b65 $sroa_$iter_0_index_23 >= $mv$node$used;
-            ref_val = builtin::array_get_value<ref "sub/test_world_variant_generic_helper.wado//CstChild">($mv$node$repr, $sroa_$iter_0_index_23);
-            $sroa_$iter_0_index_23 = $sroa_$iter_0_index_23 + 1;
-            if ref.test "sub/test_world_variant_generic_helper.wado//CstChild::TokenChild"(ref_val) {
-                drop(ref.cast "sub/test_world_variant_generic_helper.wado//CstChild::TokenChild"(ref_val).payload_0);
-                v.count = v.count + 1;
-            } else {
-                n = ref.cast "sub/test_world_variant_generic_helper.wado//CstChild::NodeChild"(ref_val).payload_0;
-                let $mv_arg_2: ref "core:prelude/list.wado//List<sub/test_world_variant_generic_helper.wado/CstChild>";
-                $mv_arg_2 = n.children;
-                "sub/test_world_variant_generic_helper.wado/sub/test_world_variant_generic_helper.wado/walk_node<sub/test_world_variant_generic_helper.wado/Recorder>$sroa[node.children]"(v, $mv_arg_2.repr, $mv_arg_2.used);
-            }
-            continue l66;
-        };
-    };
-}
-
 fn "sub/test_world_variant_generic_helper.wado/to_tree$sroa[node.children]"($mv$node$repr, $mv$node$used) {
     let $load_1: i32;
     let $load_2: ref Array<u8>;
@@ -793,22 +768,47 @@ fn "sub/test_world_variant_generic_helper.wado/to_tree$sroa[node.children]"($mv$
     }; if @unlikely(local.tee $load_1(out_5.used + $mv$node$used) > builtin::array_len(out_5.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_5, $load_1);
-    }; is_negative_67 = out_5.used; out_5.used = $load_1; $load_2 = out_5.repr; $mv$node$used = is_negative_67 + $mv$node$used; b90: block {
-        l91: loop {
-            break_if b90 ($mv$node$used - is_negative_67) < 2;
+    }; is_negative_67 = out_5.used; out_5.used = $load_1; $load_2 = out_5.repr; $mv$node$used = is_negative_67 + $mv$node$used; b87: block {
+        l88: loop {
+            break_if b87 ($mv$node$used - is_negative_67) < 2;
             q = x /u 100_i64;
             tens = local.tee $load_1(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8($load_2, $mv$node$used - 1, (48 + $load_1) - (tens * 10));
             builtin::array_set_u8($load_2, $mv$node$used - 2, 48 + tens);
             $mv$node$used = $mv$node$used - 2;
             x = q;
-            continue l91;
+            continue l88;
         };
     }; if $mv$node$used > is_negative_67 {
         builtin::array_set_u8($load_2, is_negative_67, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }; $inline_core_prelude_string_wado_String__internal_push_view_40: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_40;
     }; out_5, global:sub/test_world_variant_generic_helper.wado::$const_obj_3;
+}
+
+fn "sub/test_world_variant_generic_helper.wado/sub/test_world_variant_generic_helper.wado/walk_node<sub/test_world_variant_generic_helper.wado/Recorder>$sroa[node.children]"(v, $mv$node$repr, $mv$node$used) {
+    let n: ref "sub/test_world_variant_generic_helper.wado//NodeData";
+    let ref_val: ref "sub/test_world_variant_generic_helper.wado//CstChild";
+    let $sroa_$iter_0_index_23: i32;
+    v.count = v.count + 1;
+    $sroa_$iter_0_index_23 = 0;
+    b90: block {
+        l91: loop {
+            break_if b90 $sroa_$iter_0_index_23 >= $mv$node$used;
+            ref_val = builtin::array_get_value<ref "sub/test_world_variant_generic_helper.wado//CstChild">($mv$node$repr, $sroa_$iter_0_index_23);
+            $sroa_$iter_0_index_23 = $sroa_$iter_0_index_23 + 1;
+            if ref.test "sub/test_world_variant_generic_helper.wado//CstChild::TokenChild"(ref_val) {
+                drop(ref.cast "sub/test_world_variant_generic_helper.wado//CstChild::TokenChild"(ref_val).payload_0);
+                v.count = v.count + 1;
+            } else {
+                n = ref.cast "sub/test_world_variant_generic_helper.wado//CstChild::NodeChild"(ref_val).payload_0;
+                let $mv_arg_2: ref "core:prelude/list.wado//List<sub/test_world_variant_generic_helper.wado/CstChild>";
+                $mv_arg_2 = n.children;
+                "sub/test_world_variant_generic_helper.wado/sub/test_world_variant_generic_helper.wado/walk_node<sub/test_world_variant_generic_helper.wado/Recorder>$sroa[node.children]"(v, $mv_arg_2.repr, $mv_arg_2.used);
+            }
+            continue l91;
+        };
+    };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {

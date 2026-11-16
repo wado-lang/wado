@@ -1,0 +1,17 @@
+// A `[method]T.m` CM name applies to the Component Model resource `T`. An
+// extern resource declares no such resource, so the binding is rejected.
+
+#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted", repr = "externref")]
+resource Subject {
+    #[cm("wasi:demo/events@0.1.0#[method]event-target.tag")]
+    #[cm_params("self")]
+    fn tag(&self) -> String;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "`Subject` is an extern handle, which declares no resource to carry operations",
+  "compile_errors_contains": ["[method]event-target.tag"]
+}

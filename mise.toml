@@ -1027,7 +1027,14 @@ run = """
 #!/usr/bin/env bash
 set -e -o pipefail
 example/web-browser/build.sh
-WEB_BROWSER_JS="$PWD/example/web-browser/build/main.js" timeout 120 node --test "package-web/glue/*.test.mjs"
+PROBE=package-web/glue/probe
+rm -rf "$PROBE/build"
+mkdir -p "$PROBE/build"
+# V8 has no wide-arithmetic, which float formatting emits.
+scripts/dev-bin.sh wado compile -f no-wide-arithmetic -o "$PROBE/build/main.wasm" "$PROBE/src/main.wado"
+node scripts/jco/transpile-released.mjs "$PROBE/build/main.wasm" "$PROBE/build"
+WEB_BROWSER_JS="$PWD/example/web-browser/build/main.js" WEB_PROBE_JS="$PWD/$PROBE/build/main.js" \
+  timeout 120 node --expose-gc --test "package-web/glue/*.test.mjs"
 """
 
 [tasks.web-browser-demo]

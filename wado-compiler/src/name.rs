@@ -669,7 +669,8 @@ pub fn cm_task_entry_func_name(name: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_task_entry__{name}")
 }
 
-/// The core function of the `wado:callback/callback` export `name`.
+/// The core export the host calls a closure back through, for the shape
+/// `name` that [`callback_export_name`] gives.
 pub fn cm_callback_func_name(name: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_callback__{name}")
 }
@@ -719,6 +720,81 @@ pub fn cm_dependency_interface(interface: &ast::CmImport, component: &str) -> as
 // (`wasi:cli/stdout@0.3.0#write-via-stream`, or a world function's label),
 // which is what identifies it: a Wado spelling such as `Stdout::write_via_stream`
 // is shared by same-named interfaces.
+
+/// The module the main module imports its web imports from: the functions
+/// whose signature holds an extern handle, which are no component imports. A
+/// trapping module the component embeds satisfies it, and a browser's loader
+/// replaces that one (WEP: Extern Handles).
+pub const EXTERN_IMPORT_MODULE: &str = "extern";
+
+/// What the guest asks the host of its own objects, which carry neither a
+/// class nor a backing value. Each is an import of `EXTERN_IMPORT_MODULE`
+/// named by `cm_import_alias`, beside the web imports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ExternHostQuery {
+    /// `class-of(object) -> i32`: the class of the nearest ancestor of the
+    /// object's interface that declares one.
+    ClassOf,
+    /// `same(a, b) -> i32`: whether two objects are one.
+    Same,
+    /// `promise-wait(promise, buffer)`: suspends until the promise an `async`
+    /// web import answered settles, then has the result written at `buffer`.
+    PromiseWait,
+}
+
+impl ExternHostQuery {
+    pub fn import_name(self) -> String {
+        cm_import_alias(match self {
+            Self::ClassOf => "class-of",
+            Self::Same => "same",
+            Self::PromiseWait => "promise-wait",
+        })
+    }
+
+    /// How many objects it takes, ahead of any address.
+    pub fn objects(self) -> usize {
+        match self {
+            Self::ClassOf | Self::PromiseWait => 1,
+            Self::Same => 2,
+        }
+    }
+
+    /// Whether it takes an address in linear memory after its objects.
+    pub fn takes_address(self) -> bool {
+        match self {
+            Self::ClassOf | Self::Same => false,
+            Self::PromiseWait => true,
+        }
+    }
+
+    /// Whether it answers an `i32`, rather than nothing.
+    pub fn answers(self) -> bool {
+        match self {
+            Self::ClassOf | Self::Same => true,
+            Self::PromiseWait => false,
+        }
+    }
+}
+
+/// How the host reaches the slots extern handles are in while they cross in
+/// linear memory. Each is a core export of the main module.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ExternSlotAccess {
+    /// `put(object) -> i32`: the slot the guest puts the object in.
+    Put,
+    /// `get(slot) -> object`: the object in a slot, which stays there.
+    Get,
+}
+
+impl ExternSlotAccess {
+    pub fn export_name(self) -> String {
+        let access = match self {
+            Self::Put => "put",
+            Self::Get => "get",
+        };
+        format!("{INTERNAL_PREFIX}cm_extern_slot_{access}")
+    }
+}
 
 /// The core function a CM import lowers to.
 pub fn cm_import_alias(cm_identifier: &str) -> String {
@@ -796,8 +872,12 @@ pub fn cm_stream_lift_func_name(element: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_stream_lift_{element}")
 }
 
-/// The `wado:callback/callback` function the host calls a closure back through,
-/// given a word per argument: its Wado primitive, or `handle` (`call-handle`).
+/// What a callback export's name calls an extern handle argument.
+pub const CALLBACK_HANDLE_WORD: &str = "handle";
+
+/// The shape of the export the host calls a closure back through, given a word
+/// per argument: its Wado primitive, or [`CALLBACK_HANDLE_WORD`]
+/// (`call-handle`).
 pub fn callback_export_name<'a>(params: impl IntoIterator<Item = &'a str>) -> String {
     std::iter::once("call")
         .chain(params)
@@ -848,6 +928,13 @@ pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
 /// cell, which the optimizer scalarizes as a value with no identity.
 pub const RESOURCE_OBJECT_STRUCT: &str = "$Resource";
 
+/// The WIR struct behind an extern handle a guest value backs: the handle's
+/// class and the value. A host object is never one, which is how the two are
+/// told apart (WEP: Extern Handles).
+pub const BACKED_HANDLE_STRUCT: &str = "$BackedHandle";
+pub const BACKED_HANDLE_CLASS_FIELD: &str = "class";
+pub const BACKED_HANDLE_VALUE_FIELD: &str = "value";
+
 /// The object of one field, `value`, that a reference to a primitive, an enum,
 /// a variant, a function or another reference points at.
 pub const CELL_STRUCT: &str = "$Cell";
@@ -855,6 +942,22 @@ pub const CELL_STRUCT: &str = "$Cell";
 /// The one field of a [`CELL_STRUCT`].
 pub const CELL_FIELD: &str = "value";
 
+<<<<<<< HEAD
+||||||| d6acc6b3a97
+/// How a cell's name spells a function payload: every function value lowers
+/// to one representation, so its cells are one struct.
+pub const CELL_FN_PAYLOAD: &str = "fn";
+
+=======
+/// How a cell's name spells a function payload: every function value lowers
+/// to one representation, so its cells are one struct.
+pub const CELL_FN_PAYLOAD: &str = "fn";
+
+/// How a cell's name spells an extern handle payload: every one is an
+/// `externref`, so a reference to a resource is one to each it extends.
+pub const CELL_EXTERN_PAYLOAD: &str = "extern";
+
+>>>>>>> origin/main
 /// The WIR struct a cell holding the payload spelled `payload` lowers to.
 #[must_use]
 pub fn cell_struct_name(payload: &str) -> String {

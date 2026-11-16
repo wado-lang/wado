@@ -40,6 +40,14 @@ plain `transpile()` — jco's own `preview3-shim` serves every import a Wado
 program makes, and the output links to it through a `node_modules` symlink the
 script writes beside the files.
 
+A component whose main module imports from `"extern"` (a `wado-lang:web`
+program) is transpiled a second time in jco's `instantiation` mode, as
+`<name>.component.js`, and `<name>.js` becomes a loader: it instantiates the
+core modules itself, puts `package-web/glue/*.js` (copied beside it as
+`web-*.js`) in place of the trapping `extern` imports, and exports what the
+plain transpile would.
+`mise run test-web-glue` runs two such programs against jsdom.
+
 The shim writes stdout from a worker that is torn down once the event loop
 empties, so lines still queued when `run()` resolves are lost, and a runner that
 calls `process.exit` on that promise loses more. Hold the loop open for a

@@ -1,0 +1,25 @@
+// A web import is a core import of the main module. The component declares
+// neither the resource nor the operation, so `Window` and `window` do not meet.
+
+#[cm("example:demo/window", linearity = "unrestricted", repr = "externref", classes = "0..=0")]
+resource Window {}
+
+#[cm("example:demo/global")]
+interface Dom {
+    #[cm("example:demo/global#window")]
+    fn window() -> Window;
+}
+
+export fn run() with Dom {
+    let _ = Dom::window();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "skip_os": true,
+  "wat_lines": [
+    { "contains": ["(import \"extern\" \"$example:demo/global#window\"", "(result (ref extern))"], "count": 1 },
+    { "contains": ["(import \"example:demo/"], "count": 0 }
+  ]
+}

@@ -341,26 +341,23 @@ fn full_scope_reconstructs_resource_methods_and_reparses() {
         .expect("resource WIT failed to re-parse");
 }
 
-/// A closure passed to an import makes the component export the callback
-/// interface the host calls it back through, which a full scope declares.
+/// An import taking a closure is a web import, and the host calls the closure
+/// back through a core export the component does not lift: the world names
+/// neither.
 #[test]
-fn a_callback_exports_the_interface_the_host_calls_it_back_through() {
-    let source = "#[cm(\"example:demo/target\", linearity = \"unrestricted\", classes = \"0..=0\")]\n\
-         resource Target {\n\
+fn a_callback_leaves_the_world_as_it_was() {
+    let source = "#[cm(\"example:demo/target\")]\n\
+         interface Target {\n\
              #[cm(\"example:demo/target#listen\")]\n\
-             #[cm_params(\"self\", \"listener\")]\n\
-             fn listen(&self, listener: fn mut(Target));\n\
+             #[cm_params(\"listener\")]\n\
+             fn listen(listener: fn mut(i32));\n\
          }\n\
          export fn run() with Target {\n\
-             let t = 0.0 as Target;\n\
-             t.listen(|_: Target| {});\n\
+             Target::listen(|_: i32| {});\n\
          }";
     let text = emit_scope(source, WitScope::Full);
-    assert!(text.contains("export wado:callback/callback;"), "\n{text}");
-    assert!(
-        text.contains("call-handle: func(key: u32, a0: f64);"),
-        "\n{text}"
-    );
+    assert!(!text.contains("callback"), "\n{text}");
+    assert!(!text.contains("example:demo/target"), "\n{text}");
     let mut resolve = wit_parser::Resolve::new();
     resolve
         .push_str("emitted.wit", &text)
@@ -371,26 +368,23 @@ fn a_callback_exports_the_interface_the_host_calls_it_back_through() {
 #[test]
 fn full_scope_reconstructs_an_import_the_program_declares() {
     let text = emit_scope(
-        "#[cm(\"wasi:demo/events@0.1.0#event-target\", linearity = \"unrestricted\")]\n\
-         resource EventTarget {\n\
+        "#[cm(\"wasi:demo/events@0.1.0\")]\n\
+         interface Events {\n\
              #[cm(\"wasi:demo/events@0.1.0#tag\")]\n\
-             #[cm_params(\"self\")]\n\
-             fn tag(&self) -> String;\n\
+             fn tag() -> String;\n\
          }\n\
-         export fn run() with EventTarget {\n\
-             let t = 1.0 as EventTarget;\n\
-             let _ = t.tag();\n\
+         export fn run() with Events {\n\
+             let _ = Events::tag();\n\
          }",
         WitScope::Full,
     );
-    assert!(text.contains("tag: func(self: f64) -> string;"), "\n{text}");
+    assert!(text.contains("tag: func() -> string;"), "\n{text}");
 }
 
-/// An unrestricted resource has no CM handle type: one interface per Wado type,
-/// every handle position the same `f64`, and nothing naming the
-/// `extends` relation. See `docs/wep-2026-04-28-resource-inheritance.md`.
+/// A web import is the main module's own import, so no scope lists it. See
+/// `docs/wep-2026-11-14-extern-handles.md`.
 #[test]
-fn full_scope_reconstructs_an_interface_per_unrestricted_wado_type() {
+fn a_web_import_is_in_no_wit() {
     let text = emit_against_web(
         &format!(
             "use {{ Dom, Node }} from \"{WEB_PACKAGE}\";\n\
@@ -403,50 +397,12 @@ fn full_scope_reconstructs_an_interface_per_unrestricted_wado_type() {
         ),
         WitScope::Full,
     );
-    assert!(text.contains("package wado-lang:web {"), "\n{text}");
-    assert!(
-        text.contains("append-child: func(self: f64, node: f64) -> f64;"),
-        "a handle is the same f64 in every position\n{text}"
-    );
-    assert!(
-        text.contains("set-id: func(self: f64, value: string);"),
-        "\n{text}"
-    );
-    assert!(
-        !text.contains("resource") && !text.contains("borrow<") && !text.contains("extends"),
-        "an unrestricted handle is neither a CM resource nor a borrow\n{text}"
-    );
+    assert!(!text.contains("wado-lang:web"), "\n{text}");
 
     let mut resolve = wit_parser::Resolve::new();
     resolve
         .push_str("dom.wit", &text)
-        .expect("wado-lang:web WIT failed to re-parse");
-}
-
-/// A handle in an exported signature is resolved from the type table, not from
-/// the CM registry, and is the same `f64` there.
-#[test]
-fn an_exported_signature_renders_a_handle_as_the_universal_one() {
-    let text = emit_against_web(
-        &format!(
-            "use {{ Element }} from \"{WEB_PACKAGE}\";\n\
-             export fn relabel(el: Element, id: String) -> Element {{ el.set_id(id); return el; }}"
-        ),
-        WitScope::Local,
-    );
-    assert!(
-        text.contains("relabel: func(el: f64, id: string) -> f64;"),
-        "\n{text}"
-    );
-    assert!(
-        !text.contains("borrow<") && !text.contains("resource"),
-        "\n{text}"
-    );
-
-    let mut resolve = wit_parser::Resolve::new();
-    resolve
-        .push_str("export.wit", &text)
-        .expect("an exported handle should re-parse");
+        .expect("the WIT failed to re-parse");
 }
 
 #[test]

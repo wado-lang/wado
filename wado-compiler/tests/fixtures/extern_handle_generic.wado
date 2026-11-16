@@ -1,0 +1,37 @@
+// An instance of a generic extern resource is an extern handle, as a
+// non-generic one is.
+#[cm("example:demo/buf", linearity = "unrestricted", repr = "externref")]
+resource Buf<T> {
+    #[cm("example:demo/buf#put")]
+    #[cm_params("self", "v")]
+    fn put(&self, v: T);
+}
+
+struct Holder {
+    buf: Buf<i32>,
+}
+
+struct Bytes {
+    len: i32,
+}
+
+test "a value backs a handle" {
+    let mut bytes =Bytes { len: 4 };
+    let buf = Buf::<i32>::backed_by(&mut bytes);
+    assert buf.backing::<Bytes>() matches { Some(b) && b.len == 4 };
+}
+
+test "a handle compares by its backing" {
+    let mut a = Bytes { len: 1 };
+    let mut b = Bytes { len: 1 };
+    let first = Buf::<i32>::backed_by(&mut a);
+    assert Holder { buf: first } == Holder { buf: Buf::<i32>::backed_by(&mut a) };
+    assert first != Buf::<i32>::backed_by(&mut b);
+}
+
+test "inspect names the resource" {
+    assert `${Buf::<i32>::backed_by(&mut Bytes { len: 0 }):?}` == "Buf<i32>";
+}
+
+__DATA__
+{"test": {}}

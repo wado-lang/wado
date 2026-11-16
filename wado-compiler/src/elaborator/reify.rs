@@ -90,8 +90,8 @@ use crate::pgo::MarkMap;
 use crate::rarity::Mark;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{
-    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, marker_stmt_mark, not_expr,
-    ord_bool_from_cmp, rt_call,
+    bare_cast, bool_lit, builtin_call, class_in, cold_path_stmt, handle_class, handle_eq,
+    marker_stmt_mark, not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
     EffectRef, ExitScope, SourceStmt, StructDef, TemplateId, TirEffectOp, TirField, TirImpl,
@@ -9460,49 +9460,21 @@ impl<'a> Reify<'a> {
             }
             other => panic!("annotate rejects a narrowing over {other:?}"),
         };
-        let (low, high) = self
+        let classes = self
             .tysys
             .type_table
             .borrow()
             .narrowing_classes(target)
-            .expect("annotate rejects a narrowing to a resource without classes")
-            .handle_bounds();
-        let handle = || {
-            handle_bits(TirExpr::new(
-                TirExprKind::Local {
-                    index: local_index,
-                    name: local_name.clone(),
-                },
-                target,
-                span,
-            ))
-        };
-        let bound = |bits: u64| {
-            TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: bits,
-                    repr: bits.to_string(),
-                },
-                TypeTable::U64,
-                span,
-            )
-        };
-        let compare = |op, left, right| {
-            TirExpr::new(
-                TirExprKind::Binary {
-                    op,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                },
-                TypeTable::BOOL,
-                span,
-            )
-        };
-        let test = compare(
-            TirBinaryOp::And,
-            compare(TirBinaryOp::LtEq, bound(low), handle()),
-            compare(TirBinaryOp::Lt, handle(), bound(high)),
+            .expect("annotate rejects a narrowing to a resource without classes");
+        let handle = TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name: local_name,
+            },
+            target,
+            span,
         );
+        let test = class_in(handle_class(handle), classes);
         TirPattern::Narrow {
             name,
             local_index,
@@ -9971,23 +9943,14 @@ fn var_ref_expr(var_ref: VarRef, name: &str, span: Span) -> TirExpr {
     }
 }
 
-/// `==` / `!=` on unrestricted resource handles: bit equality, since the host
-/// interns them.
+/// `==` / `!=` on extern handles: whether the two are one object.
 fn handle_comparison(op: ast::BinaryOp, left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
-    let op = if op == ast::BinaryOp::Eq {
-        TirBinaryOp::Eq
+    let same = handle_eq(left, right);
+    if op == ast::BinaryOp::Eq {
+        same
     } else {
-        TirBinaryOp::NotEq
-    };
-    TirExpr::new(
-        TirExprKind::Binary {
-            op,
-            left: Box::new(handle_bits(left)),
-            right: Box::new(handle_bits(right)),
-        },
-        TypeTable::BOOL,
-        span,
-    )
+        not_expr(same, span)
+    }
 }
 
 /// The sole constructor of a method call — a [`crate::tir::TirExprKind::Call`]

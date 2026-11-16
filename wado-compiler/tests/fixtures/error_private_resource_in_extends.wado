@@ -1,11 +1,11 @@
 // `extends` names the parent in the child's own head: every method the child
 // inherits is reached through a resource the caller has to be able to name.
-#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted")]
+#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted", repr = "externref")]
 resource Hidden {
     fn n(&self) -> i32;
 }
 
-#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted")]
+#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted", repr = "externref")]
 pub resource Node extends Hidden {
     fn tag(&self) -> i32;
 }

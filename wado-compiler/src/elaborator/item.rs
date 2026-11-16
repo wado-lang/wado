@@ -1479,6 +1479,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         .is_some()
     }
 
+    /// Whether `type_id` is or holds an extern handle anywhere within it.
+    fn type_contains_extern_handle(&self, type_id: TypeId) -> bool {
+        self.first_type_within(type_id, true, &|scope: &Self, t| {
+            scope.tysys.type_table.borrow().is_extern_handle(t)
+        })
+        .is_some()
+    }
+
     /// The first reference `type_id` is or holds anywhere within it, as the
     /// program names it: a `&T`, or a view (`ByteSlice`, not the `Slice<u8>` it
     /// wraps). Either points into storage it does not own, which has no
@@ -1688,7 +1696,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         };
         let tt = self.tysys.type_table.borrow();
         let crosses = |ty: TypeId| {
-            tt.is_unrestricted_handle(ty)
+            tt.is_extern_handle(ty)
                 || matches!(
                     tt.get(tt.representation_head(ty)),
                     ResolvedType::Primitive(p) if wado_primitive_name_to_cm(p.as_str()).is_some()
@@ -2682,6 +2690,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     span: param.span,
                 });
             }
+            if func.is_export && scope.type_contains_extern_handle(type_id) {
+                let _ = scope.emit(TypeError::ExternHandleAtExport {
+                    function: func.name.clone(),
+                    position: format!("parameter '{}'", param.name),
+                    span: param.span,
+                });
+            }
             // A reference or a view has no CM representation. Rejecting it here keeps the
             // static "an `export` appears in WIT" guarantee: reaching
             // `wit_emit` instead drops the component-type section wholesale.
@@ -2729,6 +2744,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         if func.is_export {
             scope.check_published(func, "return type", return_type, func.span);
+            if scope.type_contains_extern_handle(return_type) {
+                let _ = scope.emit(TypeError::ExternHandleAtExport {
+                    function: func.name.clone(),
+                    position: "return type".to_string(),
+                    span: func.span,
+                });
+            }
         }
         if crosses_cm_boundary && let Some(reference) = scope.cm_ref_within(return_type) {
             let _ = scope.emit(TypeError::RefAtCmBoundary {
@@ -2949,16 +2971,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             && kind.is_effect()
         {
             ctx.in_handler_method = true;
-            let is_resource_effect = kind == DefKind::Resource;
             let async_op = self
                 .tysys
                 .signatures
                 .resource_method_sig(handled, &func.name)
                 .filter(|op| op.is_async)
                 .map(|op| op.cm_name.is_some());
-            if let Some(cm_backed) = async_op
-                && (is_resource_effect || !cm_backed)
-            {
+            if async_op == Some(false) {
                 let _ = self.emit(TypeError::AsyncUserEffectHandlerUnsupported {
                     interface_name: self.tysys.resolutions.defs().name(handled).to_string(),
                     op_name: func.name.clone(),

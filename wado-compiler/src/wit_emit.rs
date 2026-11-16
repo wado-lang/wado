@@ -32,9 +32,7 @@ use crate::tir::{
 };
 use crate::type_table::TypeTable;
 use crate::unparse::unparse_type_into;
-use crate::world_registry::{
-    CALLBACK_INTERFACE, CallbackExport, ExportMappings, WorldRegistry, WorldSurface,
-};
+use crate::world_registry::{ExportMappings, WorldRegistry, WorldSurface};
 
 /// How much of the referenced interface graph to inline into the WIT document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -267,10 +265,6 @@ pub fn emit_wit_text_from(
             out.push('\n');
             out.push_str(&nested.to_string());
         }
-        if let Some(nested) = callback_package(&surface.callbacks) {
-            out.push('\n');
-            out.push_str(&nested.to_string());
-        }
     }
     Ok(out)
 }
@@ -412,9 +406,6 @@ impl<'a> Emitter<'a> {
         for fq in &export_fqs {
             world.named_interface_export(fq.clone());
         }
-        if !surface.callbacks.is_empty() {
-            world.named_interface_export(CALLBACK_INTERFACE);
-        }
 
         if user_funcs.is_empty() {
             // No ordinary user exports beyond world conformance.
@@ -511,7 +502,7 @@ impl<'a> Emitter<'a> {
             }
             // Interfaces referenced by this interface's function signatures.
             for info in infos.iter().filter(|i| i.path == fq) {
-                for func in &info.functions {
+                for func in component_imports(registry, &info.functions) {
                     for (_, _, ty) in &func.params {
                         collect_named_type_sources(ty, registry, &mut work);
                     }
@@ -641,7 +632,7 @@ impl<'a> Emitter<'a> {
         let mut resource_funcs: BTreeMap<String, Vec<ResourceFunc>> = BTreeMap::new();
         let mut free_funcs: Vec<StandaloneFunc> = Vec::new();
         for info in infos.iter().filter(|i| i.path == fq) {
-            for func in one_per_cm_name(&info.functions) {
+            for func in one_per_cm_name(component_imports(registry, &info.functions)) {
                 if let Some((kind, resource, member)) = parse_resource_func(&func.wasi_func_name) {
                     let rf = self.build_resource_func(func, kind, member, fq, &mut uses)?;
                     resource_funcs
@@ -798,16 +789,6 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    /// The universal handle an extern-handle-backed resource crosses as. It
-    /// names no WIT type, so `&handle` renders as the handle, not a `borrow`.
-    fn extern_handle(&self, named: &NamedType) -> Option<Type> {
-        let registry = self.cm_interface_registry?;
-        let source = registry.source_interface(named)?;
-        registry
-            .is_unrestricted_resource(&source, &named.name)
-            .then_some(Type::F64)
-    }
-
     /// Render an AST leaf: primitive, named CM type, or `&Resource` borrow.
     fn map_ast_leaf(
         &self,
@@ -817,9 +798,6 @@ impl<'a> Emitter<'a> {
     ) -> Result<Type, WitEmitError> {
         match ty {
             AstType::Named(named) => {
-                if let Some(handle) = self.extern_handle(named) {
-                    return Ok(handle);
-                }
                 if let Some(base) = self
                     .cm_interface_registry
                     .and_then(|registry| registry.type_decls().newtype_base(named))
@@ -835,9 +813,6 @@ impl<'a> Emitter<'a> {
             // transparent (already peeled by `classify_ast`).
             AstType::Reference(inner) | AstType::MutReference(inner) => {
                 if let AstType::Named(named) = inner.as_ref() {
-                    if let Some(handle) = self.extern_handle(named) {
-                        return Ok(handle);
-                    }
                     Ok(Type::borrow(self.cm_type_name(named, current_fq, uses)))
                 } else {
                     self.map_ast_type(inner, current_fq, uses)
@@ -989,9 +964,6 @@ impl<'a> Emitter<'a> {
     /// resource becomes its bare WIT name (`own<R>`); a borrowed one becomes
     /// `borrow<R>`.
     fn map_resolved_leaf(&mut self, id: TypeId) -> Result<Type, WitEmitError> {
-        if self.types.is_unrestricted_handle(id) {
-            return Ok(Type::F64);
-        }
         match self.types.get(id) {
             ResolvedType::Primitive(p) => map_primitive(*p),
             ResolvedType::Struct { .. } if self.types.is_string(id) => Ok(Type::String),
@@ -1019,9 +991,7 @@ impl<'a> Emitter<'a> {
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let inner = *inner;
-                if self.types.is_unrestricted_handle(inner) {
-                    Ok(Type::F64)
-                } else if self.is_named_resource(inner) {
+                if self.is_named_resource(inner) {
                     let def = self
                         .types
                         .nominal_def(inner)
@@ -1256,28 +1226,15 @@ fn use_target(current_fq: &str, source_fq: &str) -> String {
     }
 }
 
-/// The package declaring `callbacks`, which no registry holds; `None` without any.
-fn callback_package(callbacks: &[CallbackExport]) -> Option<wit_encoder::NestedPackage> {
-    if callbacks.is_empty() {
-        return None;
-    }
-    let parts =
-        FqParts::parse(CALLBACK_INTERFACE).expect("the callback interface is fully qualified");
-    let mut iface = Interface::new(parts.interface);
-    for callback in callbacks {
-        let mut func = StandaloneFunc::new(callback.cm_name.clone(), false);
-        let mut params = Params::empty();
-        for (name, primitive) in &callback.params {
-            let ty = primitive_by_name(primitive).expect("a callback takes primitives");
-            params.push(name.clone(), ty);
-        }
-        func.set_params(params);
-        iface.function(func);
-    }
-    let mut package =
-        wit_encoder::NestedPackage::new(PackageName::new(parts.namespace, parts.package, None));
-    package.interface(iface);
-    Some(package)
+/// The functions of an interface a component imports: a web import is the main
+/// module's, so no WIT lists it.
+fn component_imports<'a>(
+    registry: &'a CmInterfaceRegistry,
+    functions: &'a [CmFunctionInfo],
+) -> impl Iterator<Item = &'a CmFunctionInfo> {
+    functions
+        .iter()
+        .filter(|func| !registry.is_extern_import(func))
 }
 
 /// Map a Wado primitive type name to its WIT type, if it names a primitive.

@@ -5,14 +5,12 @@
 
 use crate::ast::Type;
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{CmInterfaceRegistry, cm_primitive_of, wado_primitive_name_to_cm};
+use crate::component_model::{CmInterfaceRegistry, cm_primitive_of};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{INTERNAL_PREFIX, to_cm_name};
 use crate::package::TestSelection;
 use crate::tir::TirTest;
-use crate::world_registry::{
-    CALLBACK_INTERFACE, CallbackExport, GuestCallback, WorldExportInfo, WorldInfo, WorldRegistry,
-};
+use crate::world_registry::{GuestCallback, WorldExportInfo, WorldInfo, WorldRegistry};
 use wasm_encoder::PrimitiveValType;
 
 /// Plan for the Component Model structure.
@@ -29,8 +27,9 @@ pub struct ComponentPlan {
     pub world_exports: Vec<WorldExportPlan>,
     /// Test functions to export.
     pub test_exports: Vec<TestExportPlan>,
-    /// The callbacks among [`Self::world_exports`].
-    pub callback_exports: Vec<CallbackExport>,
+    /// The entry module's functions a host of the web imports calls: core
+    /// exports under their own names, which the component does not lift.
+    pub host_core_exports: Vec<String>,
     /// Lifts a dependency's guest-effect import is wired to, rather than
     /// exports of the component.
     pub guest_callbacks: Vec<GuestCallbackPlan>,
@@ -199,7 +198,7 @@ pub fn build_component_plan(
     cm_interface_registry: &CmInterfaceRegistry,
     lib_world: Option<&WorldInfo>,
     is_lib_world: bool,
-    callback_exports: &[CallbackExport],
+    host_core_exports: &[String],
     guest_callbacks: &[GuestCallback],
 ) -> ComponentPlan {
     // Build world exports from registry.
@@ -207,7 +206,7 @@ pub fn build_component_plan(
     let world_exports = if is_test_world {
         vec![]
     } else {
-        let mut plans = build_world_export_plans(
+        build_world_export_plans(
             target_world,
             export_binding_names,
             post_return_binding_names,
@@ -215,9 +214,7 @@ pub fn build_component_plan(
             cm_interface_registry,
             lib_world,
             is_lib_world,
-        );
-        plans.extend(callback_exports.iter().map(callback_export_plan));
-        plans
+        )
     };
 
     // Build test exports (only when targeting the test world)
@@ -266,34 +263,8 @@ pub fn build_component_plan(
     ComponentPlan {
         world_exports,
         test_exports,
-        callback_exports: callback_exports.to_vec(),
+        host_core_exports: host_core_exports.to_vec(),
         guest_callbacks,
-    }
-}
-
-/// A callback export lifts synchronously and returns nothing.
-fn callback_export_plan(export: &CallbackExport) -> WorldExportPlan {
-    WorldExportPlan {
-        name: export.core_func.clone(),
-        cm_export_name: export.cm_name.clone(),
-        core_func_name: export.core_func.clone(),
-        is_async: false,
-        cm_params: export
-            .params
-            .iter()
-            .map(|(name, ty)| {
-                let primitive =
-                    wado_primitive_name_to_cm(ty).expect("a callback takes primitives only");
-                (name.clone(), CmExportType::Primitive(primitive))
-            })
-            .collect(),
-        cm_result: None,
-        param_types: Vec::new(),
-        result_type: None,
-        from_interface_fq: Some(CALLBACK_INTERFACE.to_string()),
-        sync_lift: true,
-        post_return_core_name: None,
-        is_lib: false,
     }
 }
 

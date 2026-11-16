@@ -9,7 +9,9 @@ use std::cell::RefCell;
 use crate::ast::{AstId, NamedType, Type};
 use crate::cm_abi;
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{CmInterfaceRegistry, cm_layout_with_registry};
+use crate::component_model::{
+    CmInterfaceRegistry, EXTERN_HANDLE_AT_EXPORT, cm_layout_with_registry,
+};
 use crate::hashmap::IndexMap;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::primitive::PrimitiveType;
@@ -201,6 +203,9 @@ pub fn cm_type_to_type_id(
             type_table.make_compiler_struct(CompilerItem::String)
         }
         Type::Named(_) if item == Some(CompilerItem::ByteList) => type_table.make_byte_list(),
+        Type::Named(_) if item == Some(CompilerItem::ExternObject) => {
+            type_table.make_extern_object()
+        }
         Type::Named(named) => match named.name.as_str() {
             "i8" => TypeTable::I8,
             "i16" => TypeTable::I16,
@@ -787,14 +792,11 @@ pub(super) fn cm_layout_i32(ty: &Type, registry: &CmInterfaceRegistry) -> (i32, 
 }
 
 /// The integer store for one flat value of `ty`, at the width its CM layout
-/// gives it. An unrestricted handle stores its `f64` bits as the `u64` it is.
+/// gives it.
 pub(super) fn scalar_store_op(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
 ) -> &'static str {
-    if cm_interface_registry.extern_handle(ty).is_some() {
-        return "i64_store";
-    }
     match flatten_param_type(ty, cm_interface_registry)[..] {
         [TypeTable::F64] => "f64_store",
         [TypeTable::F32] => "f32_store",
@@ -815,9 +817,6 @@ pub(super) fn handle_load_op(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
 ) -> (&'static str, TypeId) {
-    if cm_interface_registry.extern_handle(ty).is_some() {
-        return ("i64_load", TypeTable::U64);
-    }
     let [flat] = cm_interface_registry.cm_flatten(ty)[..] else {
         panic!("a handle is one flat value: {ty:?}");
     };
@@ -963,11 +962,11 @@ fn flat_types_from_type_id_inner(
             }
         }
         _ if type_table.is_resource_type(type_id) => {
-            out.push(if type_table.is_unrestricted_handle(type_id) {
-                cm_abi::CmValType::F64
-            } else {
-                cm_abi::CmValType::I32
-            });
+            assert!(
+                !type_table.is_extern_handle(type_id),
+                "{EXTERN_HANDLE_AT_EXPORT}"
+            );
+            out.push(cm_abi::CmValType::I32);
         }
         ResolvedType::Enum { .. } => out.push(cm_abi::CmValType::I32),
         ResolvedType::Tuple(elems) => {
@@ -1265,9 +1264,8 @@ pub(super) fn type_id_to_ast_type(
 /// Whether a parameter needs CM flat-ABI lifting at the export boundary — that
 /// is, whether its flat representation is anything but a single-slot passthrough
 /// of the same Wasm value type. Enum, flags and every primitive but `bool` travel
-/// as one scalar at both layers and need none; a resource (a boxed `i32` or an
-/// `f64`-carried handle), `bool`, `Unit`, and everything else must be
-/// reconstructed Wado-side.
+/// as one scalar at both layers and need none; a resource (a boxed `i32`),
+/// `bool`, `Unit`, and everything else must be reconstructed Wado-side.
 pub(super) fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
     match tt.get(type_id) {
         ResolvedType::Primitive(prim) => matches!(prim, PrimitiveType::Bool),

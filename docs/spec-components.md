@@ -123,7 +123,7 @@ included).
 <!-- {"fixture":"spec_functions_cm_callback.wado"} -->
 
 ```wado
-#[cm("example:demo/target", linearity = "unrestricted")]
+#[cm("example:demo/target", linearity = "unrestricted", repr = "externref")]
 resource Target {
     #[cm("example:demo/target#listen")]
     #[cm_params("self", "listener")]
@@ -142,18 +142,21 @@ test {
 
 - A callback's parameters are scalars and handles, and it returns nothing. Any
   other function type on a `#[cm]` declaration is a compile error.
-- The closure stays in the guest. The call registers it and passes a `u32` key
-  in its place. One closure value has one key.
-- The host calls the closure back through the `wado:callback/callback`
-  interface, which the component exports. It holds one function per argument
-  shape, named `call` followed by one word per argument: the argument's
-  primitive type, or `handle` for a handle (`call`, `call-i32`, `call-handle`).
-  Each takes the key first, is lifted synchronously, and returns nothing.
-  `wado wit` lists the interface among the world's exports.
+- The closure crosses as itself: one reference the host holds, and the
+  collector reclaims the closure once the host lets go of it. An import that
+  takes one is a core import of the main module, as an import of an
+  [extern handle](./wep-2026-11-14-extern-handles.md#a-closure-crosses-as-itself)
+  is.
+- The host calls the closure back through a core export of the main module. It
+  exports one function per argument shape, named `$cm_callback__call` followed
+  by `-` and one word per argument: the argument's primitive type, or `handle`
+  for a handle (`$cm_callback__call`, `$cm_callback__call-i32`,
+  `$cm_callback__call-handle`). Each takes the closure first and returns
+  nothing. The component lifts none of them, so `wado wit` lists none.
 - The host may call a callback during an import call, which reenters the
   component, or while `run` is suspended.
-- A callback runs as a task of its own. It may perform an effect a world import
-  backs.
+- A callback runs outside any Component Model task. It may perform an effect a
+  synchronously lowered world import backs.
 - Where a Wado handler answers the `#[cm]` interface instead of the host, the
   handler receives the closure itself and may call it.
 
@@ -419,11 +422,55 @@ an operation.
 
 A `#[cm(...)]` resource may declare what may be done with its handle: `linearity = "affine"` or `linearity = "unrestricted"`. Omitting the field reads as `"affine"`, and a resource without `#[cm(...)]` is affine.
 
+`repr = "externref"` declares how the handle is represented: one reference to a host object, which the collector reclaims. Nothing runs when such a handle dies, so it requires `linearity = "unrestricted"`. An unrestricted resource has no representation of its own, so it requires `repr = "externref"` in turn.
+
 An affine resource is move-only and carries a drop obligation (see [Affine Types](./spec-affine.md)). An unrestricted one owns nothing, so it is an ordinary copyable value. Assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
 
-The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain `f64` the host interprets (see [Handle Encoding](#handle-encoding)). `as` converts an unrestricted handle to or from `f64`, keeping every bit, or upcasts it to a resource it extends. No other cast accepts one, so an affine resource and an unrestricted one never convert into each other.
+An affine resource crosses the Component Model boundary as an `own` / `borrow` handle. A resource declared `repr = "externref"` is an extern handle, which [Extern Handles](#extern-handles) describes. `as` upcasts an extern handle to a resource it extends. No other cast accepts one, so an affine resource and an extern handle never convert into each other, and neither converts to a number.
 
-An unrestricted resource is not a Component Model `resource`. Its operations are plain CM functions that take the handle as an ordinary parameter, so a `#[cm(...)]` name written in the `[constructor]T`, `[method]T.m` or `[static]T.m` form is an error on one. `classes = "..."` (see [Resource Inheritance](#resource-inheritance)) is accepted only beside `linearity = "unrestricted"`.
+An extern resource is not a Component Model `resource`. Its operations are plain functions that take the handle as an ordinary parameter, so a `#[cm(...)]` name written in the `[constructor]T`, `[method]T.m` or `[static]T.m` form is an error on one. `classes = "..."` (see [Resource Inheritance](#resource-inheritance)) is accepted only beside `repr = "externref"`.
+
+#### Extern Handles
+
+An extern handle is one Wasm `externref`. It is either an object of the host, or backed by a value of the guest. `Option<R>` of an extern handle type `R` is the same reference, nullable.
+
+Every extern handle type implements `ExternHandle`, a marker the compiler states, and through it `Backing`:
+
+- `R::backed_by(&mut value)` makes a handle of type `R` that `value` stands behind. The handle keeps the reference, not a copy, and the reference is `&mut` since `backing` hands one back. Its class is `R`'s own.
+- `handle.backing::<T>()` is the value behind the handle, as `Option<&mut T>`. It is `None` for an object of the host, and for a handle a value of another type backs.
+
+The value's type is one a reference reaches in place, which the bound `T: RefMut` states: a struct, a tuple, a list or a string. A scalar, a variant, a closure or an extern handle backs no handle.
+
+A backed handle is how a guest answers an import itself, as a handler in a test does.
+
+<!-- {"fixture":"spec_components_backed_handle.wado"} -->
+
+```wado
+struct Tag {
+    name: String,
+    uses: i32,
+}
+
+test {
+    let mut tag = Tag { name: "div", uses: 0 };
+    let node: Node = Element::backed_by(&mut tag);   // an upcast keeps the backing
+    let Some(back) = node.backing::<Tag>() else {
+        panic("a Tag backs the handle");
+    };
+    back.uses += 1;
+    assert tag.uses == 1;                        // the handle holds `tag` itself
+    assert node.backing::<String>() matches { None };
+    assert node == Element::backed_by(&mut tag);     // one value, one handle
+}
+```
+
+An import whose signature names an extern handle is a web import. The handle may stand anywhere a value does: as a parameter or a result, in an `Option`, a list, a record or a variant. A web import is not part of the component's world, and an extern handle in the signature of an `export fn` is an error: a reference to a host object does not cross a component boundary.
+
+A host that serves no web imports still runs the component. There, a call of one that no handler answers traps.
+
+An `async` web import returns an [`AsyncCall<T>`](#async-imports) as any async import does. The host answers the call with a promise, and `wait` suspends until it settles. `cancel`, and dropping the call, stop the waiting and nothing else: the work behind a promise goes on. Such a call cannot join a `WaitableSet`, and inserting one traps.
+
+An extern handle is a scalar where a reference is concerned. A `&Node` is a reference to a place holding the handle, as a `&i32` is to a place holding a number, and a `&mut` to a field or element holding one is the same error.
 
 ### Resource Ownership
 
@@ -441,18 +488,18 @@ Rationale: [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md).
 
 ### Resource Inheritance
 
-`resource Child extends Parent` declares that a child handle is usable wherever the parent is. The clause stands between the resource's name and its body, and names one resource as the parent. Both resources must declare `linearity = "unrestricted"`, because an upcast copies the handle and an affine one may not be copied. Single inheritance only, and a cycle is an error.
+`resource Child extends Parent` declares that a child handle is usable wherever the parent is. The clause stands between the resource's name and its body, and names one resource as the parent. Both resources must declare `repr = "externref"`, because an upcast copies the handle and an affine one may not be copied. Single inheritance only, and a cycle is an error.
 
 <!-- {"fixture":"spec_components_resource_extends.wado"} -->
 
 ```wado
-#[cm("example:ui/target", linearity = "unrestricted", classes = "0..=1")]
+#[cm("example:ui/target", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
 resource Target {
     #[cm("example:ui/target#add-listener")]
     fn add_listener(&self, kind: String);
 }
 
-#[cm("example:ui/widget", linearity = "unrestricted", classes = "1..=1")]
+#[cm("example:ui/widget", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
 resource Widget extends Target {
     #[cm("example:ui/widget#label")]
     fn label(&self) -> Option<String>;
@@ -464,7 +511,7 @@ fn use_it(w: Widget) {
 }
 
 test {
-    let w = 137438953472.0 as Widget;   // class 1, object 0
+    let w = Widget::backed_by(&mut "button");
     let t: Target = w;
     assert t == w && t matches { _: Widget };
 }
@@ -505,9 +552,9 @@ A method call resolves statically. `recv.m()` gathers every `m` declared along `
 - Static methods (no `&self`) are not inherited.
 - `Self` in an inherited method names the resource that declares it, not the receiver's type.
 
-#### Handle Encoding
+#### Handle Classes
 
-An unrestricted handle is a number the host mints: an integer-valued `f64` below 2^53, equal to `class * 2^37 + index`. The class takes 16 bits and the index into the host's object table takes 37. The host hands out one handle per object, and tags each object with the class of the nearest ancestor of its runtime type that the program declares. A type the program does not name therefore reads as its nearest named ancestor.
+Every extern handle of an `extends` tree carries a class, a 16-bit number naming its runtime type. A backed handle carries the class of the resource `backed_by` was called on. An object of the host carries the class of the nearest ancestor of its runtime type that the program declares, so a type the program does not name reads as its nearest named ancestor.
 
 `classes = "lo..=hi"` on the `#[cm(...)]` numbers the classes of an `extends` tree. A resource's own class is `lo`, and the resources extending it hold the rest of the range:
 
@@ -516,11 +563,11 @@ An unrestricted handle is a number the host mints: an integer-valued `f64` below
 - A tree declares `classes` on every resource or on none.
 - A range may leave gaps, which stand for classes the program does not declare.
 
-A type pattern narrowing to `T` tests whether the handle's class lies in `T`'s range. A negative value, an infinity and a NaN lie in no range. A type pattern narrows only to a resource that declares `classes`.
+A type pattern narrowing to `T` tests whether the handle's class lies in `T`'s range. A type pattern narrows only to a resource that declares `classes`.
 
 #### Traits on Handles
 
-- `Eq`: every unrestricted resource is `Eq`, so a type holding one derives `Eq` too. `==` and `!=` compare two handles when one type extends the other. Equal handles name one object (see [Handle Encoding](#handle-encoding)). Handles compare by bits, so a NaN handle equals itself and `-0.0` differs from `0.0`.
+- `Eq`: every extern resource is `Eq`, so a type holding one derives `Eq` too. `==` and `!=` compare two handles when one type extends the other. Two handles are equal when they are one object of the host, or one value of the guest backs both. A host object never equals a backed handle.
 - `Ord`: none. Handles have no order.
 - `Inspect`: `${x:?}` renders the dynamic type the handle's class names, as [Inspect Output](./spec-literals.md#inspect-output) states.
 - `Serialize` and `Deserialize`: a resource, and a struct or variant that holds one, cannot derive either. A handle means something only inside its running instance. A hand-written impl may serialize what it reads from the host object.

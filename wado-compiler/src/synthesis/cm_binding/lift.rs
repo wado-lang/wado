@@ -17,9 +17,9 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast, expr_stmt,
-    generic_method_call, generic_static_call, handle_from_f64, i32_const, if_stmt, internal_call,
-    let_mut_stmt, let_stmt, linear_free, local_ref, loop_stmt, option_none, option_some,
-    struct_literal, synth_span,
+    generic_method_call, generic_static_call, i32_const, if_stmt, internal_call, let_mut_stmt,
+    let_stmt, linear_free, local_ref, loop_stmt, option_none, option_some, struct_literal,
+    synth_span,
 };
 
 use super::types::{
@@ -60,7 +60,7 @@ pub fn synthesize_lift(
 /// [`synthesize_lift`] into `target`, the Wado type the value is handed to: a
 /// list or map is built as that exact type, not one rebuilt from `ty` (a
 /// shared stdlib element type such as `InputFile` would resolve to a second GC
-/// `TypeId`), and an unrestricted handle is converted from its `f64`.
+/// `TypeId`).
 pub(super) fn synthesize_lift_into(
     ty: &Type,
     addr: TirExpr,
@@ -98,12 +98,19 @@ pub(super) fn synthesize_lift_into(
             locals,
             ctx,
         ),
-        _ if ctx.type_table.borrow().is_unrestricted_handle(target) => {
-            let handle = synthesize_lift(ty, addr, next_local, stmts, locals, ctx);
-            handle_from_f64(handle, target)
-        }
+        _ if ctx.type_table.borrow().is_extern_handle(target) => take_extern_slot(addr, target),
         _ => synthesize_lift(ty, addr, next_local, stmts, locals, ctx),
     }
+}
+
+/// The extern handle of type `handle` in the slot whose index is at `addr`.
+/// Taking it frees the slot (WEP: Extern Handles).
+fn take_extern_slot(addr: TirExpr, handle: TypeId) -> TirExpr {
+    internal_call(
+        CompilerItem::ExternSlotTake.attr_name(),
+        vec![builtin_call("i32_load", vec![addr], TypeTable::I32)],
+        handle,
+    )
 }
 
 /// The string whose `len` bytes sit at `ptr`, copied onto the GC heap as
@@ -300,8 +307,7 @@ fn synthesize_lift_inner(
                         }
                     }
                     if ctx.cm_interface_registry.extern_handle(ty).is_some() {
-                        let (load, loaded) = handle_load_op(ty, ctx.cm_interface_registry);
-                        return builtin_call(load, vec![addr], loaded);
+                        return lift_handle(ty, addr, ctx);
                     }
                     // The test world drops a library's exports before their
                     // types register, yet still synthesizes the bindings their
@@ -336,12 +342,15 @@ fn synthesize_lift_inner(
 /// The resource `ty` names, lifted from the handle at `addr`. The cast is what
 /// makes the handle the resource's object (WEP: Affine Types).
 fn lift_handle(ty: &Type, addr: TirExpr, ctx: &LiftContext<'_>) -> TirExpr {
-    let (load, loaded) = handle_load_op(ty, ctx.cm_interface_registry);
     let resource = cm_held_type_to_type_id(
         ty,
         &mut ctx.type_table.borrow_mut(),
         ctx.cm_interface_registry,
     );
+    if ctx.cm_interface_registry.extern_handle(ty).is_some() {
+        return take_extern_slot(addr, resource);
+    }
+    let (load, loaded) = handle_load_op(ty, ctx.cm_interface_registry);
     cast(builtin_call(load, vec![addr], loaded), resource)
 }
 

@@ -13,7 +13,7 @@ use crate::hashmap::IndexSet;
 
 use std::cell::RefCell;
 
-use crate::ast::{BinaryOp, Visibility};
+use crate::ast::{BinaryOp, HandleClasses, Visibility};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
 use crate::rarity::Mark;
@@ -328,28 +328,62 @@ pub fn ord_bool_from_cmp(
     )
 }
 
-/// An unrestricted resource handle as the `u64` bits it is in the guest.
-pub fn handle_bits(handle: TirExpr) -> TirExpr {
-    let span = handle.span;
-    TirExpr::new(
-        TirExprKind::Cast {
-            expr: Box::new(handle),
-            target_type: TypeTable::U64,
-        },
-        TypeTable::U64,
-        span,
+/// The class the extern handle `handle` carries.
+pub fn handle_class(handle: TirExpr) -> TirExpr {
+    internal_call(
+        CompilerItem::HandleClass.attr_name(),
+        vec![handle],
+        TypeTable::I32,
     )
 }
 
-/// The scalar a resource handle is, where `type_id` is a resource, a reference
-/// to one, or a newtype over either.
-pub fn handle_scalar(tt: &TypeTable, type_id: TypeId) -> Option<TypeId> {
-    tt.handle_scalar(peel_newtypes(tt, tt.peel_refs(type_id)))
+/// Whether the extern handles `a` and `b` are one object.
+pub fn handle_eq(a: TirExpr, b: TirExpr) -> TirExpr {
+    internal_call(
+        CompilerItem::HandleEq.attr_name(),
+        vec![a, b],
+        TypeTable::BOOL,
+    )
+}
+
+/// Whether `a` and `b`, each an extern handle or an `Option` of one, are one
+/// object or both none.
+pub fn handle_identical(a: TirExpr, b: TirExpr) -> TirExpr {
+    internal_call(
+        CompilerItem::HandleIdentical.attr_name(),
+        vec![a, b],
+        TypeTable::BOOL,
+    )
+}
+
+/// Whether `class`, an `i32`, lies in `classes`: one unsigned comparison of
+/// its distance from the lowest.
+pub fn class_in(class: TirExpr, classes: HandleClasses) -> TirExpr {
+    let span = class.span;
+    let width = u64::from(classes.hi - classes.lo);
+    let distance = cast(
+        binary(
+            TirBinaryOp::Sub,
+            class,
+            i32_const(i32::from(classes.lo)),
+            TypeTable::I32,
+        ),
+        TypeTable::U32,
+    );
+    let width = TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: width,
+            repr: width.to_string(),
+        },
+        TypeTable::U32,
+        span,
+    );
+    binary(TirBinaryOp::LtEq, distance, width, TypeTable::BOOL)
 }
 
 /// Whether `type_id` is an affine resource, or a reference to one.
 pub fn is_affine_resource(tt: &TypeTable, type_id: TypeId) -> bool {
-    handle_scalar(tt, type_id) == Some(TypeTable::I32)
+    tt.is_resource_object(peel_newtypes(tt, tt.peel_refs(type_id)))
 }
 
 /// The `i32` handle `value` holds where it is an affine resource, or a
@@ -363,21 +397,24 @@ pub fn affine_handle(value: TirExpr, tt: &TypeTable) -> TirExpr {
     }
 }
 
-/// The `f64` an unrestricted handle is outside the guest: its bits, reinterpreted.
-pub fn handle_to_f64(handle: TirExpr) -> TirExpr {
-    builtin_call(
-        "f64_reinterpret_i64",
-        vec![handle_bits(handle)],
-        TypeTable::F64,
-    )
+/// Whether `type_id` is an extern handle, or a reference to one.
+pub fn is_extern_handle(tt: &TypeTable, type_id: TypeId) -> bool {
+    tt.is_extern_handle(peel_newtypes(tt, tt.peel_refs(type_id)))
 }
 
-/// The unrestricted handle of type `handle_type` whose bits `value`, an `f64`, holds.
-pub fn handle_from_f64(value: TirExpr, handle_type: TypeId) -> TirExpr {
-    cast(
-        builtin_call("i64_reinterpret_f64", vec![value], TypeTable::I64),
-        handle_type,
-    )
+/// The `i32` a handle is in linear memory, or among the flat values of an
+/// aggregate: the slot an extern handle is put in (WEP: Extern Handles), and
+/// what [`affine_handle`] answers otherwise.
+pub fn handle_in_memory(value: TirExpr, tt: &TypeTable) -> TirExpr {
+    if is_extern_handle(tt, value.type_id) {
+        internal_call(
+            CompilerItem::ExternSlotPut.attr_name(),
+            vec![value],
+            TypeTable::I32,
+        )
+    } else {
+        affine_handle(value, tt)
+    }
 }
 
 /// Split a packed pointer/length `i64` — the `(ptr | len << 32)` encoding

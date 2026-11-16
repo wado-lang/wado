@@ -11,14 +11,8 @@ use {
     HtmlElement,
     HtmlInputElement,
     Node,
+    Rejection,
     Window,
-    DOCUMENT_CLASS,
-    EVENT_CLASS,
-    HANDLE_CLASS_STRIDE,
-    HTML_ELEMENT_CLASS,
-    HTML_INPUT_ELEMENT_CLASS,
-    NODE_CLASS,
-    WINDOW_CLASS,
 } from "./dom.wado";
 
 global NO_NODE: i32 = -1;
@@ -33,10 +27,14 @@ variant Content {
     Text(String),
 }
 
-// Linked as the DOM standard models the tree.
+// Linked as the DOM standard models the tree. A node backs its own handle, and
+// `index` is where the handle finds it again.
 struct SurfaceNode {
+    index: i32,
     content: Content,
     attributes: TreeMap<String, String>,
+    // The elements a reflected element reference was set to, by its attribute.
+    referenced: TreeMap<String, List<i32>>,
     value: String,
     parent: i32,
     first_child: i32,
@@ -48,6 +46,23 @@ struct SurfaceNode {
 struct SurfaceEvent {
     type: String,
     target: i32,
+    // Empty unless the event is being dispatched.
+    path: List<i32>,
+}
+
+struct SurfaceRejection {
+    name: String,
+    message: String,
+}
+
+// The Fullscreen standard rejects with a `TypeError` where fullscreen is not
+// supported, and no screen shows this document.
+fn fullscreen_unsupported() -> Rejection {
+    return Rejection::backed_by(&mut SurfaceRejection { name: "TypeError", message: "fullscreen is not supported" });
+}
+
+fn surface_rejection(rejection: Rejection) -> &mut SurfaceRejection {
+    return rejection.backing::<SurfaceRejection>().expect("a rejection of a SurfaceDom backs the handle");
 }
 
 struct Listener {
@@ -96,16 +111,6 @@ fn is_valid_attribute_local_name(name: &String) -> bool {
     return !name.is_empty() && !name.chars().any(|c| is_infra_whitespace(c) || c matches { '\0' | '/' | '=' | '>' });
 }
 
-fn class_of(content: &Content) -> f64 {
-    return match *content {
-        Document => DOCUMENT_CLASS,
-        Window => WINDOW_CLASS,
-        Element(name) => if name == "input" { HTML_INPUT_ELEMENT_CLASS } else { HTML_ELEMENT_CLASS },
-        // The slice has neither `DocumentType` nor `Text`, so these carry `Node`'s class.
-        Doctype | Text(_) => NODE_CLASS,
-    };
-}
-
 fn is_void(local_name: &String) -> bool {
     return *local_name matches { "area" | "base" | "basefont" | "bgsound" | "br" | "col" | "embed" | "frame" | "hr" | "img" | "input" | "keygen" | "link" | "meta" | "param" | "source" | "track" | "wbr" };
 }
@@ -113,6 +118,24 @@ fn is_void(local_name: &String) -> bool {
 // Scripting is disabled where no browser runs, so `noscript` is escaped.
 fn is_raw_text(local_name: &String) -> bool {
     return *local_name matches { "style" | "script" | "xmp" | "iframe" | "noembed" | "noframes" | "plaintext" };
+}
+
+// The Infra standard's "split on ASCII whitespace".
+fn split_on_ascii_whitespace(text: &String) -> List<String> {
+    let mut tokens: List<String> = [];
+    let mut token = "";
+    for let c of text.chars() {
+        if !is_infra_whitespace(c) {
+            token.push(c);
+        } else if !token.is_empty() {
+            tokens.push(token);
+            token = "";
+        }
+    }
+    if !token.is_empty() {
+        tokens.push(token);
+    }
+    return tokens;
 }
 
 // The HTML standard's "escaping a string".
@@ -150,13 +173,12 @@ fn strip_and_collapse_ascii_whitespace(text: &String) -> String {
 /// `createHTMLDocument()` makes, and the window holding it.
 pub struct SurfaceDom {
     nodes: List<SurfaceNode>,
-    events: List<SurfaceEvent>,
     listeners: List<Listener>,
 }
 
 impl SurfaceDom {
     pub fn new() -> SurfaceDom {
-        let mut dom = SurfaceDom { nodes: [], events: [], listeners: [] };
+        let mut dom = SurfaceDom { nodes: [], listeners: [] };
         dom.push(Content::Document);
         dom.push(Content::Window);
         dom.append(DOCUMENT_INDEX, dom.push(Content::Doctype));
@@ -176,8 +198,10 @@ impl SurfaceDom {
 
     fn push(&mut self, content: Content) -> i32 {
         self.nodes.push(SurfaceNode {
+            index: self.nodes.len(),
             content,
             attributes: TreeMap::new(),
+            referenced: TreeMap::new(),
             value: "",
             parent: NO_NODE,
             first_child: NO_NODE,
@@ -192,23 +216,49 @@ impl SurfaceDom {
         return self.push(Content::Element(local_name));
     }
 
-    fn handle(&self, index: i32) -> f64 {
-        return class_of(&self.nodes[index].content) * HANDLE_CLASS_STRIDE + index as f64;
+    fn element_handle(&mut self, index: i32) -> HtmlElement {
+        let node = &mut self.nodes[index];
+        if node.content matches { Element(name) && name == "input" } {
+            return HtmlInputElement::backed_by(node);
+        }
+        return HtmlElement::backed_by(node);
+    }
+
+    fn node_handle(&mut self, index: i32) -> Node {
+        let node = &mut self.nodes[index];
+        match node.content {
+            Document => {
+                return Document::backed_by(node);
+            },
+            Element(_) => {
+                return self.element_handle(index);
+            },
+            // The slice has neither `DocumentType` nor `Text`, so these carry `Node`'s class.
+            Doctype | Text(_) => {
+                return Node::backed_by(node);
+            },
+            Window => unreachable(),
+        }
     }
 
     // Every event target is a node here, the window included.
-    fn index(&self, target: EventTarget) -> i32 {
-        let handle = target as f64;
-        let index = f64::fmod(handle, HANDLE_CLASS_STRIDE) as i32;
-        assert index < self.nodes.len() && self.handle(index) == handle;
-        return index;
+    fn target_handle(&mut self, index: i32) -> EventTarget {
+        if index == WINDOW_INDEX {
+            return Window::backed_by(&mut self.nodes[index]);
+        }
+        return self.node_handle(index);
     }
 
-    fn event_index(&self, event: Event) -> i32 {
-        let handle = event as f64;
-        let index = f64::fmod(handle, HANDLE_CLASS_STRIDE) as i32;
-        assert index < self.events.len() && EVENT_CLASS * HANDLE_CLASS_STRIDE + index as f64 == handle;
-        return index;
+    fn index(&self, target: EventTarget) -> i32 {
+        let Some(node) = target.backing::<SurfaceNode>() else {
+            panic("a node of a SurfaceDom backs the handle");
+        };
+        assert node.index < self.nodes.len() && ref_eq(node, &self.nodes[node.index]), "the handle is of this SurfaceDom";
+        return node.index;
+    }
+
+    fn surface_event(&self, event: Event) -> &mut SurfaceEvent {
+        return event.backing::<SurfaceEvent>().expect("an event of a SurfaceDom backs the handle");
     }
 
     // The DOM standard's event path, which reaches the window from the document.
@@ -225,7 +275,7 @@ impl SurfaceDom {
     // Runs with this DOM reinstalled, since a listener is a program calling back
     // into it. A listener added meanwhile waits for the next dispatch.
     fn invoke(&mut self, target: i32, event: Event, capture: bool) {
-        let type = &self.events[self.event_index(event)].type;
+        let type = &self.surface_event(event).type;
         let mut callbacks: List<fn mut(Event) with Dom> = [];
         for let listener of &self.listeners {
             if listener.target == target && listener.capture == capture && listener.type == *type {
@@ -239,11 +289,11 @@ impl SurfaceDom {
         }
     }
 
-    fn node(&self, index: i32) -> Option<Node> {
+    fn node(&mut self, index: i32) -> Option<Node> {
         if index == NO_NODE {
             return null;
         }
-        return Option::Some(self.handle(index) as Node);
+        return Option::Some(self.node_handle(index));
     }
 
     fn local_name_of(&self, element: Element) -> String {
@@ -253,11 +303,11 @@ impl SurfaceDom {
         return name;
     }
 
-    fn element(&self, index: i32) -> Option<Element> {
+    fn element(&mut self, index: i32) -> Option<Element> {
         if index == NO_NODE || !self.nodes[index].content matches { Element(_) } {
             return null;
         }
-        return Option::Some(self.handle(index) as Element);
+        return Option::Some(self.element_handle(index));
     }
 
     fn is_inclusive_ancestor(&self, ancestor: i32, index: i32) -> bool {
@@ -266,6 +316,67 @@ impl SurfaceDom {
             at = self.nodes[at].parent;
         }
         return at == ancestor;
+    }
+
+    fn root_of(&self, index: i32) -> i32 {
+        let mut at = index;
+        while self.nodes[at].parent != NO_NODE {
+            at = self.nodes[at].parent;
+        }
+        return at;
+    }
+
+    // Writes an element's attribute, or removes it for `null`. Either forgets
+    // the elements a reference was set to under that name.
+    fn write_attribute(&mut self, index: i32, name: String, value: Option<String>) {
+        let node = &mut self.nodes[index];
+        node.referenced.remove(name);
+        if let Some(value) = value {
+            node.attributes[name] = value;
+        } else {
+            node.attributes.remove(name);
+        }
+    }
+
+    // The HTML standard's attr-associated elements of a reflected element
+    // reference: the elements set, or else those its attribute names by id.
+    fn referenced_elements(&mut self, index: i32, attribute: String) -> Option<List<Element>> {
+        let node = &self.nodes[index];
+        let root = self.root_of(index);
+        let mut found: List<Element> = [];
+        if let Some(targets) = node.referenced.get(attribute) {
+            // Only a descendant of one of the element's ancestors counts.
+            for let target of targets {
+                if root != index && target != root && self.root_of(target) == root {
+                    found.push(self.element_handle(target));
+                }
+            }
+            return Option::Some(found);
+        }
+        let Some(ids) = node.attributes.get(attribute) else {
+            return null;
+        };
+        for let id of split_on_ascii_whitespace(&ids) {
+            let target = self.first_inclusive_descendant_where(root, |n| n.content matches { Element(_) }
+                && n.attributes.get("id") == Option::Some(id));
+            if target != NO_NODE {
+                found.push(self.element_handle(target));
+            }
+        }
+        return Option::Some(found);
+    }
+
+    fn set_referenced_elements(&mut self, index: i32, attribute: String, elements: Option<List<Element>>) {
+        let Some(elements) = elements else {
+            self.write_attribute(index, attribute, null);
+            return;
+        };
+        self.write_attribute(index, attribute, Option::Some(""));
+        let mut targets: List<i32> = [];
+        for let element of elements {
+            targets.push(self.index(element));
+        }
+        self.nodes[index].referenced[attribute] = targets;
     }
 
     fn children(&self, parent: i32) -> Children {
@@ -422,17 +533,17 @@ impl SurfaceDom {
 
 impl Dom for SurfaceDom {
     fn window(&mut self) -> Window {
-        resume self.handle(WINDOW_INDEX) as Window;
+        resume Window::backed_by(&mut self.nodes[WINDOW_INDEX]);
     }
 
     fn document(&mut self) -> Document {
-        resume self.handle(DOCUMENT_INDEX) as Document;
+        resume Document::backed_by(&mut self.nodes[DOCUMENT_INDEX]);
     }
 }
 
 impl Window for SurfaceDom {
     fn document(&mut self, this: &Window) -> Document {
-        resume self.handle(DOCUMENT_INDEX) as Document;
+        resume Document::backed_by(&mut self.nodes[DOCUMENT_INDEX]);
     }
 
     ..trap
@@ -459,12 +570,15 @@ impl EventTarget for SurfaceDom {
 
     fn dispatch_event(&mut self, this: &EventTarget, event: Event) -> bool {
         let target = self.index(*this);
-        self.events[self.event_index(event)].target = target;
         let path = self.event_path(target);
+        let dispatched = self.surface_event(event);
+        dispatched.target = target;
+        dispatched.path = path;
         for let mut i = path.len() - 1; i >= 0; i -= 1 {
             self.invoke(path[i], event, true);
         }
         self.invoke(target, event, false);
+        dispatched.path = [];
         resume true;
     }
 
@@ -473,20 +587,27 @@ impl EventTarget for SurfaceDom {
 
 impl Event for SurfaceDom {
     fn new(&mut self, type: String) -> Event {
-        self.events.push(SurfaceEvent { type, target: NO_NODE });
-        resume (EVENT_CLASS * HANDLE_CLASS_STRIDE + (self.events.len() - 1) as f64) as Event;
+        resume Event::backed_by(&mut SurfaceEvent { type, target: NO_NODE, path: [] });
+    }
+
+    fn composed_path(&mut self, this: &Event) -> List<EventTarget> {
+        let mut path: List<EventTarget> = [];
+        for let index of self.surface_event(*this).path {
+            path.push(self.target_handle(index));
+        }
+        resume path;
     }
 
     fn type(&mut self, this: &Event) -> String {
-        resume self.events[self.event_index(*this)].type;
+        resume self.surface_event(*this).type;
     }
 
     fn target(&mut self, this: &Event) -> Option<EventTarget> {
-        let target = self.events[self.event_index(*this)].target;
+        let target = self.surface_event(*this).target;
         if target == NO_NODE {
             resume null;
         } else {
-            resume Option::Some(self.handle(target) as EventTarget);
+            resume Option::Some(self.target_handle(target));
         }
     }
 
@@ -496,7 +617,7 @@ impl Event for SurfaceDom {
 impl Document for SurfaceDom {
     fn create_element(&mut self, this: &Document, local_name: String, options: Option<String>) -> Element {
         assert is_valid_element_local_name(&local_name), "InvalidCharacterError: not a valid element name";
-        resume self.handle(self.create(local_name.to_ascii_lowercase())) as Element;
+        resume self.element_handle(self.create(local_name.to_ascii_lowercase()));
     }
 
     fn document_element(&mut self, this: &Document) -> Option<Element> {
@@ -508,7 +629,7 @@ impl Document for SurfaceDom {
         if body == NO_NODE {
             resume null;
         } else {
-            resume Option::Some(self.handle(body) as HtmlElement);
+            resume Option::Some(self.element_handle(body));
         }
     }
 
@@ -541,6 +662,22 @@ impl Document for SurfaceDom {
             self.replace_all_text(title, value);
         }
         resume ();
+    }
+
+    fn exit_fullscreen(&mut self, this: &Document) -> Result<(), Rejection> {
+        resume Result::Err(fullscreen_unsupported());
+    }
+
+    ..trap
+}
+
+impl Rejection for SurfaceDom {
+    fn name(&mut self, this: &Rejection) -> String {
+        resume surface_rejection(*this).name;
+    }
+
+    fn message(&mut self, this: &Rejection) -> String {
+        resume surface_rejection(*this).message;
     }
 
     ..trap
@@ -668,9 +805,12 @@ impl Element for SurfaceDom {
 
     fn set_attribute(&mut self, this: &Element, qualified_name: String, value: String) {
         assert is_valid_attribute_local_name(&qualified_name), "InvalidCharacterError: not a valid attribute name";
-        let index = self.index(*this);
-        self.nodes[index].attributes[qualified_name.to_ascii_lowercase()] = value;
+        self.write_attribute(self.index(*this), qualified_name.to_ascii_lowercase(), Option::Some(value));
         resume ();
+    }
+
+    fn get_attribute_names(&mut self, this: &Element) -> List<String> {
+        resume self.nodes[self.index(*this)].attributes.keys().map(|name| *name).collect();
     }
 
     fn has_attribute(&mut self, this: &Element, qualified_name: String) -> bool {
@@ -678,8 +818,7 @@ impl Element for SurfaceDom {
     }
 
     fn remove_attribute(&mut self, this: &Element, qualified_name: String) {
-        let index = self.index(*this);
-        self.nodes[index].attributes.remove(qualified_name.to_ascii_lowercase());
+        self.write_attribute(self.index(*this), qualified_name.to_ascii_lowercase(), null);
         resume ();
     }
 
@@ -687,6 +826,78 @@ impl Element for SurfaceDom {
         let mut html = "";
         self.serialize_children(self.index(*this), &mut html);
         resume html;
+    }
+
+    // Nothing is laid out, so there is nowhere to scroll.
+    fn scroll_into_view(&mut self, this: &Element, arg: Option<bool>) -> Result<(), Rejection> {
+        resume Result::Ok(());
+    }
+
+    fn request_fullscreen(&mut self, this: &Element) -> Result<(), Rejection> {
+        resume Result::Err(fullscreen_unsupported());
+    }
+
+    fn aria_controls_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-controls");
+    }
+
+    fn set_aria_controls_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-controls", value);
+        resume ();
+    }
+
+    fn aria_described_by_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-describedby");
+    }
+
+    fn set_aria_described_by_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-describedby", value);
+        resume ();
+    }
+
+    fn aria_details_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-details");
+    }
+
+    fn set_aria_details_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-details", value);
+        resume ();
+    }
+
+    fn aria_error_message_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-errormessage");
+    }
+
+    fn set_aria_error_message_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-errormessage", value);
+        resume ();
+    }
+
+    fn aria_flow_to_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-flowto");
+    }
+
+    fn set_aria_flow_to_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-flowto", value);
+        resume ();
+    }
+
+    fn aria_labelled_by_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-labelledby");
+    }
+
+    fn set_aria_labelled_by_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-labelledby", value);
+        resume ();
+    }
+
+    fn aria_owns_elements(&mut self, this: &Element) -> Option<List<Element>> {
+        resume self.referenced_elements(self.index(*this), "aria-owns");
+    }
+
+    fn set_aria_owns_elements(&mut self, this: &Element, value: Option<List<Element>>) {
+        self.set_referenced_elements(self.index(*this), "aria-owns", value);
+        resume ();
     }
 
     ..trap

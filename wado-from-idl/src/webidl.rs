@@ -14,6 +14,10 @@ use crate::naming::{to_kebab_case, to_snake_case, to_upper_camel_case, to_wado_i
 /// The interface of the functions handing out the first handle.
 const GLOBAL_INTERFACE: &str = "global";
 
+/// The resource a rejected promise's reason is, which is no `WebIDL` interface:
+/// a reason is any value.
+const REJECTION: &str = "Rejection";
+
 /// The file `snapshot.mjs` writes: the slice's definitions, in webidl2's shape.
 #[derive(Deserialize)]
 pub struct Snapshot {
@@ -208,6 +212,10 @@ pub enum JsMember {
     Global,
     /// An attribute of the `[Global]` object.
     GlobalGet(String),
+    /// The `name` of a rejection's reason, or `Error` where it has none.
+    ReasonName,
+    /// The `message` of a rejection's reason, or the reason as a string.
+    ReasonMessage,
 }
 
 /// One interface with its partials and mixins folded in. `defined` is false
@@ -351,6 +359,15 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         .map(|(name, r)| (r.name.clone(), (*name).to_string()))
         .collect();
     module.resources = resources.into_values().collect();
+    let mut methods = module.resources.iter().flat_map(|r| &r.methods);
+    let mut functions = module.interfaces.iter().flat_map(|i| &i.functions);
+    let settles = methods.any(|f| f.is_async) || functions.any(|f| f.is_async);
+    if settles {
+        if module.resources.iter().any(|r| r.name == REJECTION) {
+            bail!("the slice declares `{REJECTION}`, which names a rejected promise's reason");
+        }
+        module.resources.push(lowering.rejection(&mut js));
+    }
     Ok(WebIdlOutput {
         module,
         js,
@@ -528,6 +545,39 @@ impl Lowering<'_> {
         format!("{}/{}", self.package, to_kebab_case(name))
     }
 
+    /// The resource a rejected promise's reason is. It carries no class: a
+    /// reason is narrowed to nothing.
+    fn rejection(&self, js: &mut IndexMap<String, JsFunction>) -> WadoResource {
+        let path = self.interface_path(REJECTION);
+        let reads = |name: &str, member: JsMember| {
+            let reader = function(
+                name.to_string(),
+                format!("{path}#{name}"),
+                vec![self_param(REJECTION)],
+                Some(WadoType::String),
+            );
+            (reader, member.into())
+        };
+        let methods = split_js(
+            vec![
+                reads("name", JsMember::ReasonName),
+                reads("message", JsMember::ReasonMessage),
+            ],
+            js,
+        );
+        WadoResource {
+            name: REJECTION.to_string(),
+            doc_comment: Some(
+                "Why a promise was rejected: any value, which need not be an `Error`.".to_string(),
+            ),
+            cm_attr: path,
+            unrestricted: true,
+            classes: None,
+            extends: None,
+            methods,
+        }
+    }
+
     /// Every member of `iface` that lowers, appending to `skipped` the ones
     /// that do not and the names two overloads compete for.
     fn methods_of(
@@ -683,13 +733,25 @@ impl Lowering<'_> {
         return_type: Option<&IdlType>,
     ) -> Lowered {
         let skip = |reason: String| Err((wado_name.clone(), reason));
-        let return_type = match return_type {
+        // A `Promise<T>` result is an `async` function settling to `T` or to
+        // the reason it was rejected for.
+        let settled = return_type.and_then(promised);
+        let answered = match settled.or(return_type) {
             None => Some(WadoType::Named(to_upper_camel_case(iface))),
             Some(ty) if is_undefined(ty) => None,
             Some(ty) => match self.lower_type(ty, Flow::Out) {
                 Ok(ty) => Some(ty),
                 Err(reason) => return skip(reason),
             },
+        };
+        let is_async = settled.is_some();
+        let return_type = if is_async {
+            Some(WadoType::Result {
+                ok: answered.map(Box::new),
+                err: Some(Box::new(WadoType::Named(REJECTION.to_string()))),
+            })
+        } else {
+            answered
         };
         let mut params: Vec<WadoParam> = receiver.into_iter().collect();
         let mut variadic = false;
@@ -722,19 +784,24 @@ impl Lowering<'_> {
                 param.default = None;
             }
         }
-        Ok((
-            function(wado_name, cm_attr, params, return_type),
-            JsFunction { member, variadic },
-        ))
+        let function = WadoFunction {
+            is_async,
+            ..function(wado_name, cm_attr, params, return_type)
+        };
+        Ok((function, JsFunction { member, variadic }))
     }
 
     /// The Wado type of a `WebIDL` type, or why the slice has none. A union is
     /// the one constituent the slice can express; `undefined` in it means nullable.
     fn lower_type(&self, ty: &IdlType, flow: Flow) -> std::result::Result<WadoType, String> {
-        if !ty.generic.is_empty() {
-            return Err(format!("`{}<…>`", ty.generic));
-        }
         let (inner, nullable) = match &ty.inner {
+            IdlTypeInner::Types(arguments) if !ty.generic.is_empty() => (
+                self.lower_generic(&ty.generic, arguments, flow)?,
+                ty.nullable,
+            ),
+            IdlTypeInner::Name(_) if !ty.generic.is_empty() => {
+                unreachable!("webidl2 lists a generic's arguments")
+            }
             IdlTypeInner::Name(name) => (self.lower_name(name, flow)?, ty.nullable),
             IdlTypeInner::Types(constituents) => {
                 let mut expressible = Vec::new();
@@ -761,6 +828,25 @@ impl Lowering<'_> {
             }
         };
         Ok(optional(inner, nullable))
+    }
+
+    /// A `sequence<T>` or a `FrozenArray<T>` is a `List<T>` of what a list
+    /// carries across: a scalar, a string or a handle.
+    fn lower_generic(
+        &self,
+        generic: &str,
+        arguments: &[IdlType],
+        flow: Flow,
+    ) -> std::result::Result<WadoType, String> {
+        let ("sequence" | "FrozenArray", [element]) = (generic, arguments) else {
+            return Err(format!("`{generic}<…>`"));
+        };
+        let reason = |of: &str| format!("`{generic}` of {of}");
+        let element = self.lower_type(element, flow).map_err(|r| reason(&r))?;
+        if !glue::list_carries(&element) {
+            return Err(reason("a list, a nullable type or a callback"));
+        }
+        Ok(WadoType::List(Box::new(element)))
     }
 
     fn lower_name(&self, name: &str, flow: Flow) -> std::result::Result<WadoType, String> {
@@ -988,6 +1074,17 @@ fn float_value(token: &str) -> f64 {
 
 fn string_literal(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// The `T` of a `Promise<T>`.
+fn promised(ty: &IdlType) -> Option<&IdlType> {
+    match &ty.inner {
+        IdlTypeInner::Types(arguments) if ty.generic == "Promise" => match &arguments[..] {
+            [settled] => Some(settled),
+            _ => unreachable!("a `Promise` takes one argument"),
+        },
+        IdlTypeInner::Types(_) | IdlTypeInner::Name(_) => None,
+    }
 }
 
 fn is_undefined(ty: &IdlType) -> bool {

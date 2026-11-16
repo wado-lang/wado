@@ -2388,6 +2388,7 @@ impl<'a> WirEmitter<'a> {
                 WirAbstractHeapType::None => AbstractHeapType::None,
                 WirAbstractHeapType::NoFunc => AbstractHeapType::NoFunc,
                 WirAbstractHeapType::Extern => AbstractHeapType::Extern,
+                WirAbstractHeapType::NoExtern => AbstractHeapType::NoExtern,
             },
         }
     }

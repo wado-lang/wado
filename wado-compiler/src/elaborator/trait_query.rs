@@ -1293,7 +1293,7 @@ impl TypeSystem {
         };
         let resource = self.type_table.borrow().resource_def_in(resolved);
         if let Some(def) = resource {
-            // The host interns handles, so two are equal exactly when they name one object.
+            // Two extern handles are equal exactly when they are one object.
             return (tr == OnBoundTrait::Eq
                 && self.type_table.borrow().is_unrestricted_resource(def))
             .then_some(true);

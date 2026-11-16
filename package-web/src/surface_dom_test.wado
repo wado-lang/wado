@@ -67,7 +67,7 @@ test "a handle inspects as the type its class names" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let node: Node = Dom::document().create_element("div");
-        assert `${node:?}` == "HtmlElement { type_id: 3, object_id: 6 }";
+        assert `${node:?}` == "HtmlElement";
     };
 }
 
@@ -428,5 +428,117 @@ test "a listener sees the event and may call the DOM" {
         assert event.target() == null;
         body.dispatch_event(event);
         assert body.id() == "pinged";
+    };
+}
+
+test "a member answering a promise is a call that has settled" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let body = Dom::document().body().unwrap();
+        assert body.scroll_into_view().wait() matches { Ok(_) };
+    };
+}
+
+test "nothing is fullscreen where no screen is" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let Err(refused) = doc.body().unwrap().request_fullscreen().wait() else {
+            panic("no screen shows the element");
+        };
+        assert refused.name() == "TypeError";
+        assert refused.message() == "fullscreen is not supported";
+        let Err(nothing) = doc.exit_fullscreen().wait() else {
+            panic("no element is fullscreen");
+        };
+        assert nothing.name() == "TypeError";
+        // A call nobody waits on drops like any other.
+        let _ = doc.exit_fullscreen();
+    };
+}
+
+test "an event's path is its targets while it is dispatched" {
+    let mut dom = SurfaceDom::new();
+    let mut seen: List<i32> = [];
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = doc.body().unwrap();
+        let event = Event::new("ping");
+        assert event.composed_path().is_empty();
+        body.add_event_listener("ping", |e: Event| {
+            let path = e.composed_path();
+            seen.push(path.len());
+            assert path[0] == Dom::document().body().unwrap() as EventTarget;
+            assert path[path.len() - 1] == Dom::window() as EventTarget;
+        });
+        body.dispatch_event(event);
+        assert event.composed_path().is_empty();
+    };
+    // `<body>`, `<html>`, the document and the window.
+    assert seen == [4];
+}
+
+test "the attribute names come in the order they were set" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let div = Dom::document().create_element("div");
+        assert div.get_attribute_names().is_empty();
+        div.set_attribute("Title", "t");
+        div.set_id("d");
+        div.set_attribute("class", "c");
+        assert div.get_attribute_names() == ["title", "id", "class"];
+        div.remove_attribute("id");
+        assert div.get_attribute_names() == ["title", "class"];
+    };
+}
+
+test "an element reference names the elements set, while they share its tree" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = doc.body().unwrap();
+        let field = doc.create_element("input");
+        let label = doc.create_element("span");
+        let away = doc.create_element("span");
+        body.append_child(field);
+        body.append_child(label);
+        assert field.aria_labelled_by_elements() == null;
+
+        field.set_aria_labelled_by_elements(Option::Some([label, away]));
+        assert field.get_attribute("aria-labelledby") == Option::Some("");
+        // A detached element is in another tree.
+        assert field.aria_labelled_by_elements() == Option::Some([label]);
+        body.append_child(away);
+        assert field.aria_labelled_by_elements() == Option::Some([label, away]);
+
+        field.set_aria_labelled_by_elements(null);
+        assert !field.has_attribute("aria-labelledby");
+        assert field.aria_labelled_by_elements() == null;
+    };
+}
+
+test "an element reference reads the ids its attribute lists" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = doc.body().unwrap();
+        let field = doc.create_element("input");
+        let first = doc.create_element("span");
+        let second = doc.create_element("span");
+        first.set_id("a");
+        second.set_id("b");
+        body.append_child(field);
+        body.append_child(first);
+        body.append_child(second);
+
+        field.set_attribute("aria-describedby", " b missing\ta ");
+        assert field.aria_described_by_elements() == Option::Some([second, first]);
+        // Each reference keeps its own list.
+        assert field.aria_controls_elements() == null;
+
+        // Writing the attribute forgets the elements set before it.
+        field.set_aria_described_by_elements(Option::Some([first]));
+        field.set_attribute("aria-describedby", "b");
+        assert field.aria_described_by_elements() == Option::Some([second]);
     };
 }

@@ -1,0 +1,77 @@
+// A handler answers a resource's `async` operation with the value itself, and
+// the caller reads a call that has completed: no promise is waited on.
+
+#[cm("example:demo/node", linearity = "unrestricted", repr = "externref", classes = "0..=0")]
+resource Node {
+    #[cm("example:demo/node#load")]
+    #[cm_params("self", "name")]
+    async fn load(&self, name: String) -> AsyncCall<Result<Node, Rejection>>;
+
+    #[cm("example:demo/node#settle")]
+    #[cm_params("self")]
+    async fn settle(&self) -> AsyncCall<()>;
+}
+
+#[cm("example:demo/rejection", linearity = "unrestricted", repr = "externref")]
+resource Rejection {
+    #[cm("example:demo/rejection#message")]
+    #[cm_params("self")]
+    fn message(&self) -> String;
+}
+
+struct Tag {
+    name: String,
+}
+
+struct Reason {
+    message: String,
+}
+
+struct Page {
+    settled: i32,
+}
+
+impl Node for Page {
+    fn load(&mut self, this: &Node, name: String) -> Result<Node, Rejection> {
+        if name.is_empty() {
+            resume Result::Err(Rejection::backed_by(&mut Reason { message: "no name" }));
+        } else {
+            resume Result::Ok(Node::backed_by(&mut Tag { name }));
+        }
+    }
+
+    fn settle(&mut self, this: &Node) {
+        self.settled += 1;
+        resume ();
+    }
+}
+
+impl Rejection for Page {
+    fn message(&mut self, this: &Rejection) -> String {
+        resume this.backing::<Reason>().unwrap().message;
+    }
+}
+
+test "a handled async operation is a call that has completed" {
+    let mut page = Page { settled: 0 };
+    let root = Node::backed_by(&mut Tag { name: "root" });
+    with &mut page do {
+        let Ok(loaded) = root.load("child").wait() else {
+            panic("a named node loads");
+        };
+        assert loaded.backing::<Tag>() matches { Some(tag) && tag.name == "child" };
+
+        let Err(refused) = root.load("").wait() else {
+            panic("a node without a name does not load");
+        };
+        assert refused.message() == "no name";
+
+        root.settle().wait();
+        // A call nobody waits on has still run its handler.
+        let _ = root.settle();
+    };
+    assert page.settled == 2;
+}
+
+__DATA__
+{"test": {}}

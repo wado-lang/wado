@@ -2,18 +2,18 @@
 // resolved to, so the qualified spelling of an inherited *instance* method
 // keeps it. A receiver-less index would not: the two spellings share a name.
 
-#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted")]
+#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted", repr = "externref")]
 resource EventTarget {
     #[cm("wasi:demo/events@0.1.0#tag")]
     #[cm_params("self")]
     fn tag(&self) -> String;
 }
 
-#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted")]
+#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted", repr = "externref")]
 resource Node extends EventTarget {}
 
 export fn run() with EventTarget {
-    let n = 1.0 as Node;
+    let n = Node::backed_by(&mut "node");
     let _ = EventTarget::tag(&n);
 }
 
@@ -22,6 +22,6 @@ __DATA__
   "compile_only": true,
   "skip_os": true,
   "wat_lines": [
-    { "contains": ["(alias export $wasi:demo/events", "\"tag\""], "count": 1 }
+    { "contains": ["(import \"extern\" \"$wasi:demo/events@0.1.0#tag\"", "(param (ref extern) i32)"], "count": 1 }
   ]
 }

@@ -3,10 +3,10 @@
 // the surrounding position instead, `Node` satisfied `EventTarget` by resource
 // subtyping, the unexpanded pack deferred, and codegen got an invalid module.
 
-#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted")]
+#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted", repr = "externref")]
 resource EventTarget {}
 
-#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted")]
+#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted", repr = "externref")]
 resource Node extends EventTarget {}
 
 fn widen<..Rest>(t: [..Rest, Node]) -> [..Rest, EventTarget] {
@@ -14,7 +14,7 @@ fn widen<..Rest>(t: [..Rest, Node]) -> [..Rest, EventTarget] {
 }
 
 export fn run() with EventTarget {
-    let n = 1.0 as Node;
+    let n = Node::backed_by(&mut "node");
     let _ = widen([7, n]);
 }
 

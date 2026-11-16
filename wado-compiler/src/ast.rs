@@ -2078,11 +2078,16 @@ impl CmResourceLinearity {
     }
 }
 
-/// Whether these attributes declare `#[cm(..., linearity = "unrestricted")]`.
-pub fn declares_unrestricted(attrs: &[Attribute]) -> bool {
+/// The one representation `#[cm(..., repr = "...")]` names: a Wasm `externref`,
+/// which the collector reclaims.
+pub const EXTERNREF_REPR: &str = "externref";
+
+/// Whether these attributes declare `#[cm(..., repr = "externref")]`, which the
+/// parser admits only beside `linearity = "unrestricted"`.
+pub fn declares_extern_handle(attrs: &[Attribute]) -> bool {
     attrs
         .iter()
-        .any(|a| a.cm_resource_linearity() == Some(CmResourceLinearity::Unrestricted))
+        .any(|a| a.name == CM && a.kv_value("repr") == Some(EXTERNREF_REPR))
 }
 
 /// The class numbers `#[cm(..., classes = "lo..=hi")]` gives a resource's
@@ -2094,23 +2099,10 @@ pub struct HandleClasses {
 }
 
 impl HandleClasses {
-    /// The handles one class spans; a handle is `class * STRIDE + index`.
-    pub const STRIDE: f64 = 137_438_953_472.0;
-
     pub fn parse(value: &str) -> Option<Self> {
         let (lo, hi) = value.split_once("..=")?;
         let (lo, hi) = (lo.parse().ok()?, hi.parse().ok()?);
         (lo <= hi).then_some(Self { lo, hi })
-    }
-
-    /// The half-open interval `[low, high)` of the handle bits these classes tag.
-    /// A non-negative `f64` orders as its bits do, and no other one falls inside.
-    #[must_use]
-    pub fn handle_bounds(self) -> (u64, u64) {
-        (
-            (f64::from(self.lo) * Self::STRIDE).to_bits(),
-            ((f64::from(self.hi) + 1.0) * Self::STRIDE).to_bits(),
-        )
     }
 
     /// Whether `inner` lies past this range's own class and inside the rest.

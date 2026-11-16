@@ -14,7 +14,7 @@ use crate::ast;
 use crate::ast::{
     AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericType, InterfaceDecl, Item,
     NamedType, NamespacedGenericType, Type, UseItem, cm_function_path, cm_import_of,
-    declares_unrestricted, world_import_of,
+    declares_extern_handle, world_import_of,
 };
 use crate::attribute::CM_PARAMS;
 use crate::canonical::{CmDecl, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
@@ -639,11 +639,12 @@ fn cm_attr_cm_name(attrs: &[Attribute], wado_name: &str) -> String {
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
 
-/// The CM type an unrestricted resource crosses the boundary as. No CM value
-/// type is a reference, so a copyable handle is a number: an `f64`, which jco
-/// hands JavaScript as a plain number where a `u64` would be a `BigInt`.
-fn extern_handle_type(span: Span) -> Type {
-    Type::Named(NamedType::new(AstId::fresh(), "f64".to_string(), span))
+/// The base an extern handle registers as a newtype of: what it is in linear
+/// memory, the index of the slot it was put in. Whole, as a parameter or a
+/// result, it crosses as an `externref` instead
+/// ([`CmInterfaceRegistry::extern_ref`]).
+fn extern_handle_in_memory(span: Span) -> Type {
+    Type::Named(NamedType::new(AstId::fresh(), "u32".to_string(), span))
 }
 
 /// Extract CM parameter names from a `#[cm_params("param-a", "param-b")]` attribute.
@@ -697,12 +698,26 @@ pub struct CmFunctionInfo {
     /// The indices of `params` declared `&ListView<E>`, recorded at the
     /// `List<E>` they cross as: the adapter passes the block the view lies in.
     pub list_args: Vec<usize>,
-    /// The closures among `params`, by index and declared type. Each crosses as its `u32` key.
+    /// The closures among `params`, by index and declared type. Each crosses as
+    /// an extern handle, so a function taking one is a web import.
     pub callbacks: Vec<(usize, Type)>,
     /// Return type
     pub return_type: Option<Type>,
     /// Where a world function comes from; `None` for an interface function.
     pub world: Option<WorldFunctionSite>,
+}
+
+/// Why no export synthesis meets an extern handle.
+pub const EXTERN_HANDLE_AT_EXPORT: &str =
+    "the elaborator refuses an extern handle in the signature of an export";
+
+/// What one `externref` of a web import's signature carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExternRef {
+    /// An extern handle, never null.
+    Handle,
+    /// An `Option` of an extern handle: null is `None`.
+    Optional,
 }
 
 /// The dependency component exporting a world function, and the label the
@@ -1018,7 +1033,7 @@ pub struct CmInterfaceRegistry {
     /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
     resources: IndexMap<(String, String), String>,
 
-    /// Resources declared `linearity = "unrestricted"`, registered as `f64` newtypes.
+    /// Resources declared `repr = "externref"`: the extern handles.
     /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
     unrestricted_resources: IndexMap<(String, String), String>,
 
@@ -1846,24 +1861,130 @@ impl CmInterfaceRegistry {
         &self.type_decls
     }
 
-    /// Whether the resource `name` declared in `source` is unrestricted, and so
-    /// crosses the boundary as the universal handle rather than a CM handle.
+    /// Whether the resource `name` declared in `source` is an extern handle,
+    /// and so no CM resource.
     #[must_use]
     pub fn is_unrestricted_resource(&self, source: &str, name: &str) -> bool {
         self.unrestricted_resources
             .contains_key(&(source.to_string(), name.to_string()))
     }
 
-    /// The unrestricted resource `ty` is, or references.
+    /// The extern handle `ty` is, or references.
     #[must_use]
     pub fn extern_handle(&self, ty: &Type) -> Option<Type> {
         let handle = self.deref_extern_handle(ty);
         let Type::Named(named) = &handle else {
             return None;
         };
+        // `core:rt` declares it, and no binding module does.
+        if self.type_decls.is(named.id, CompilerItem::ExternObject) {
+            return Some(handle);
+        }
         let source = self.source_interface(named)?;
         self.is_unrestricted_resource(&source, &named.name)
             .then_some(handle)
+    }
+
+    /// How `ty` crosses as one `externref`, where it does: an extern handle, or
+    /// an `Option` of one whose `None` is the null reference.
+    #[must_use]
+    pub fn extern_ref(&self, ty: &Type) -> Option<ExternRef> {
+        if self.extern_handle(ty).is_some() {
+            return Some(ExternRef::Handle);
+        }
+        let Type::Generic(option) = ty else {
+            return None;
+        };
+        (self.type_decls.is(option.id, CompilerItem::Option)
+            && self.extern_handle(&option.args[0]).is_some())
+        .then_some(ExternRef::Optional)
+    }
+
+    /// Whether `ty` is or holds an extern handle, through the fields of a
+    /// record and the payloads of a variant too.
+    fn mentions_extern_handle(&self, ty: &Type) -> bool {
+        ty.any(&mut |ty| {
+            if self.extern_handle(ty).is_some() {
+                return true;
+            }
+            let Type::Named(named) = ty else {
+                return false;
+            };
+            let Some(source) = self.source_interface(named) else {
+                return false;
+            };
+            let fields = self
+                .get_struct_fields_by_source(&source, &named.name)
+                .into_iter()
+                .flatten()
+                .map(|(_, field)| field);
+            let payloads = self
+                .get_variant_cases_by_source(&source, &named.name)
+                .into_iter()
+                .flatten()
+                .filter_map(|case| case.payload.as_ref());
+            fields
+                .chain(payloads)
+                .any(|inner| self.mentions_extern_handle(inner))
+        })
+    }
+
+    /// Whether `func` is a web import: its signature holds an extern handle, so
+    /// it is a core import of the main module and no component import
+    /// (WEP: Extern Handles).
+    #[must_use]
+    pub fn is_extern_import(&self, func: &CmFunctionInfo) -> bool {
+        func.params
+            .iter()
+            .map(|(_, _, ty)| ty)
+            .chain(&func.return_type)
+            .any(|ty| self.mentions_extern_handle(ty))
+    }
+
+    /// Whether the component imports `func`: the registry can lower it, and it
+    /// is no web import, which the main module imports instead.
+    #[must_use]
+    pub fn is_component_import(&self, func: &CmFunctionInfo) -> bool {
+        self.is_function_supported(func) && !self.is_extern_import(func)
+    }
+
+    /// Whether a call of the web import `func` puts an extern handle in a slot:
+    /// one inside another value, among parameters passed through memory, or in
+    /// the result a promise settles to, which the host writes to memory.
+    #[must_use]
+    pub fn crosses_extern_handle_in_slot(&self, func: &CmFunctionInfo) -> bool {
+        let params = || func.params.iter().map(|(_, _, ty)| ty);
+        let in_slot = |ty: &Type| self.extern_ref(ty).is_none() && self.mentions_extern_handle(ty);
+        let settled = func.return_type.as_ref().filter(|_| func.is_async);
+        params().chain(&func.return_type).any(in_slot)
+            || settled.is_some_and(|ty| self.mentions_extern_handle(ty))
+            || (self.is_extern_import(func) && self.params_in_buffer(params(), false))
+    }
+
+    /// Whether a call of `func` answers a subtask: an `async` import the
+    /// component lowers.
+    #[must_use]
+    pub fn answers_subtask(&self, func: &CmFunctionInfo) -> bool {
+        func.is_async && !self.is_extern_import(func)
+    }
+
+    /// Whether a call of `func` answers a promise of the host's: an `async`
+    /// web import. The host has read every argument by the time it returns
+    /// one, so the arguments cross as a sync call's do.
+    #[must_use]
+    pub fn answers_promise(&self, func: &CmFunctionInfo) -> bool {
+        func.is_async && self.is_extern_import(func)
+    }
+
+    /// The core values `ty` crosses as, whole: one for an `externref`, the
+    /// canonical ABI's otherwise.
+    #[must_use]
+    pub fn flat_count(&self, ty: &Type) -> usize {
+        if self.extern_ref(ty).is_some() {
+            1
+        } else {
+            self.cm_flatten(ty).len()
+        }
     }
 
     /// The CM type of a declared parameter: an extern-handle loses its
@@ -2143,10 +2264,9 @@ impl CmInterfaceRegistry {
                 }
                 // Use the #[cm] fragment as the CM name (preserves acronym casing like DNS, TLS)
                 let cm_name = cm_attr_cm_name(&resource.attrs, &resource.name);
-                // An unrestricted resource is erased at the boundary, which sees
-                // the universal handle, a copyable `f64`, so it registers as a
+                // An extern handle is no CM resource, so it registers as a
                 // newtype and every `own`/`borrow` path passes it by.
-                if declares_unrestricted(&resource.attrs) {
+                if declares_extern_handle(&resource.attrs) {
                     self.unrestricted_resources
                         .insert((source_interface.clone(), resource.name.clone()), cm_name);
                     register_unique(
@@ -2154,7 +2274,7 @@ impl CmInterfaceRegistry {
                         "newtype",
                         source_interface,
                         resource.name.clone(),
-                        extern_handle_type(resource.span),
+                        extern_handle_in_memory(resource.span),
                     );
                     continue;
                 }
@@ -2423,9 +2543,9 @@ impl CmInterfaceRegistry {
                 wado_name_under_cm_name(&self.unrestricted_resources, &iface, receiver);
             return Err(match unrestricted {
                 Some(wado_name) => format!(
-                    "{head}, but `{wado_name}` is declared unrestricted, so it crosses the \
-                     boundary as a plain handle and declares no resource to carry \
-                     operations. Bind a plain function taking the handle as a parameter."
+                    "{head}, but `{wado_name}` is an extern handle, which declares no \
+                     resource to carry operations. Bind a plain function taking the handle \
+                     as a parameter."
                 ),
                 None => format!("{head}, which interface `{iface}` does not declare."),
             });
@@ -3339,9 +3459,8 @@ impl CmInterfaceRegistry {
         self.newtypes
             .iter()
             .filter_map(move |((source, name), ty)| {
-                // An extern-handle handle registers here to reach the `f64` every
-                // boundary path lowers it to, but it names no CM type: the WIT
-                // spells the handle inline, so no alias declares it.
+                // An extern handle registers as a newtype but names no CM
+                // type, so no alias declares it.
                 if source.starts_with(interface_prefix)
                     && !self.is_unrestricted_resource(source, name)
                 {
@@ -3396,9 +3515,8 @@ impl CmInterfaceRegistry {
             resources: self.resources.keys().map(|(_, n)| n.as_str()).collect(),
             structs: self.structs.keys().map(|(_, n)| n.as_str()).collect(),
         };
-        // Parameter types at the boundary's view (an extern handle is an `f64`),
-        // and the return type with its newtypes (`Mark`, `Duration`, `Instant`)
-        // resolved to their bases.
+        // Each type with its newtypes (`Mark`, `Duration`, `Instant`, an extern
+        // handle) resolved to their bases.
         func.params
             .iter()
             .all(|(_, _, ty)| known.param_supported(&self.resolve_type(ty)))
@@ -3457,7 +3575,7 @@ impl CmInterfaceRegistry {
         Ok(())
     }
 
-    /// `params` at their GC-level value types, closures as `u32` keys and a
+    /// `params` at their GC-level value types, a closure as the extern handle it crosses as and a
     /// `&ListView<E>` as the `List<E>` it crosses as.
     fn value_params(&self, params: Vec<(String, String, Type)>) -> ValueParams {
         let mut callbacks = Vec::new();
@@ -3479,9 +3597,11 @@ impl CmInterfaceRegistry {
                 if !matches!(ty, Type::Function(_)) {
                     return (name, cm_name, self.value_type(&ty));
                 }
-                let key = NamedType::new(AstId::fresh(), "u32".to_string(), ty.span());
+                let closure =
+                    self.type_decls
+                        .item_type(CompilerItem::ExternObject, vec![], ty.span());
                 callbacks.push((i, ty));
-                (name, cm_name, Type::Named(key))
+                (name, cm_name, closure)
             })
             .collect();
         ValueParams {
@@ -3689,7 +3809,7 @@ impl CmInterfaceRegistry {
         params: impl IntoIterator<Item = &'t Type>,
         is_async: bool,
     ) -> bool {
-        let flat_count = params.into_iter().map(|ty| self.cm_flatten(ty).len()).sum();
+        let flat_count = params.into_iter().map(|ty| self.flat_count(ty)).sum();
         flat_params_in_buffer(flat_count, is_async)
     }
 
@@ -4881,6 +5001,7 @@ impl KnownTypes<'_> {
     fn named_supported(&self, named: &NamedType) -> bool {
         let name = named.name.as_str();
         self.decls.is(named.id, CompilerItem::String)
+            || self.decls.is(named.id, CompilerItem::ExternObject)
             || wado_primitive_name_to_cm(name).is_some()
             || self.enums.contains(name)
             || self.resources.contains(name)
@@ -4973,7 +5094,7 @@ pub const EMPTY_TUPLE_AT_BOUNDARY: &str = "the empty tuple `[]` has no Component
 /// (`{ n: u64 }` -> `[i64]`) returns flat. Shared by the import-binding
 /// synthesizer and the core functype builder so the two never disagree.
 pub fn cm_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
-    registry.cm_flatten(ty).len() > MAX_FLAT_RESULTS
+    registry.flat_count(ty) > MAX_FLAT_RESULTS
 }
 
 /// The CM canonical-ABI size and alignment of a registered variant, `None` for
@@ -5159,13 +5280,13 @@ mod tests {
     }
 
     /// An extern handle is a value, so a `&Handle` argument crosses as the handle,
-    /// which the boundary sees as its `f64`.
+    /// which resolves to what it is in linear memory: the `u32` index of a slot.
     #[test]
     fn an_extern_handle_argument_is_peeled_outside_a_resource_method() {
         let registry = registry_from(
             "dom.wado",
             r#"
-            #[cm("wado-lang:web/handle", linearity = "unrestricted")]
+            #[cm("wado-lang:web/handle", linearity = "unrestricted", repr = "externref")]
             pub resource Handle {
                 #[cm("wado-lang:web/handle#sibling")]
                 #[cm_params("self", "other")]
@@ -5187,7 +5308,7 @@ mod tests {
                     Type::Named(n) if n.name == "Handle",
                     "{interface}::{method} keeps a handle behind a reference"
                 );
-                assert_matches!(registry.resolve_type(&ty), Type::Named(n) if n.name == "f64");
+                assert_matches!(registry.resolve_type(&ty), Type::Named(n) if n.name == "u32");
             }
         }
     }

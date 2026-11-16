@@ -1,0 +1,58 @@
+// A closure crosses to a web import as one `externref`, the closure itself.
+// The host calls it back through a core export of the main module, one per
+// argument shape, which the component does not lift.
+
+#[cm("example:demo/event", linearity = "unrestricted", repr = "externref")]
+resource Event {}
+
+#[cm("example:demo/target", linearity = "unrestricted", repr = "externref")]
+resource Target {
+    #[cm("example:demo/target#listen")]
+    #[cm_params("self", "listener")]
+    fn listen(&self, listener: fn mut(Event));
+
+    #[cm("example:demo/target#tick")]
+    #[cm_params("self", "listener")]
+    fn tick(&self, listener: fn mut(i32));
+}
+
+struct Echo {}
+
+impl Target for Echo {
+    fn listen(&mut self, this: &Target, listener: fn mut(Event)) {
+        let mut l = listener;
+        l(Event::backed_by(self));
+        resume ();
+    }
+
+    fn tick(&mut self, this: &Target, listener: fn mut(i32)) {
+        let mut l = listener;
+        l(7);
+        resume ();
+    }
+}
+
+export fn run() {
+    let mut echo = Echo {};
+    let target = Target::backed_by(&mut echo);
+    let mut events = 0;
+    let mut ticks = 0;
+    with Target => &mut echo do {
+        target.listen(|_| events += 1);
+        target.tick(|n| ticks += n);
+    }
+    assert events == 1;
+    assert ticks == 7;
+}
+
+__DATA__
+{
+  "skip_os": true,
+  "wat_lines": [
+    { "contains": ["(import \"extern\" \"$example:demo/target#listen\"", "(param (ref extern) (ref extern))"], "count": 1 },
+    { "contains": ["(import \"extern\" \"$example:demo/target#tick\"", "(param (ref extern) (ref extern))"], "count": 1 },
+    { "contains": ["(export \"$cm_callback__call-handle\""], "count": 1 },
+    { "contains": ["(export \"$cm_callback__call-i32\""], "count": 1 },
+    { "contains": ["wado:callback/callback"], "count": 0 }
+  ]
+}
