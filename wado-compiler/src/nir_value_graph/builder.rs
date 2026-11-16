@@ -2784,18 +2784,24 @@ mod tests {
         });
 
         let facts = TestFacts::default();
-        let pool = walked_pool(&body, &AliasSets::default(), facts.facts());
+        let pool = walked_pool(&body, &[], &AliasSets::default(), facts.facts());
         assert_eq!(pool.type_of(placeholder), Some(TypeTable::UNIT));
     }
 
-    /// The pool a walk of the whole of `body` leaves.
-    fn walked_pool(body: &Body, alias: &AliasSets, calls: CallFacts<'_>) -> ValuePool {
+    /// The pool a walk of the whole of `body` leaves, `params` seeded as its
+    /// parameters.
+    fn walked_pool(
+        body: &Body,
+        params: &[u32],
+        alias: &AliasSets,
+        calls: CallFacts<'_>,
+    ) -> ValuePool {
         let mut pool = ValuePool::clone(&body.values);
         walk_scoped(
             body,
             body.root(),
             0,
-            &[],
+            params,
             &IndexMap::default(),
             alias,
             &TypeTable::new(),
@@ -2818,8 +2824,10 @@ mod tests {
         };
 
         let build_with = |alias: &AliasSets| {
+            // Seeded, so each local holds a value for the call to invalidate.
             walked_pool(
                 &call_then_add_body(),
+                &[0, 1],
                 alias,
                 CallFacts {
                     pure_builtin: &no_callees,
