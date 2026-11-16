@@ -4,6 +4,8 @@ use fs from "core:fs";
 use { FsError, Preopens } from "core:fs";
 use { LinearArray } from "core:linear";
 use { Deserialize, DeserializeError, Deserializer, IgnoredAny, report_duplicate_field } from "core:serde";
+use { Element } from "./tensor.wado";
+use { HostWeight, stored_width } from "./weight.wado";
 
 /// Where `Params::load` reads the weights: a range of one of the files the
 /// model names, a tensor at a time, so no file need fit the guest whole. An
@@ -226,19 +228,20 @@ pub fn expect_len<affine Src: WeightSource>(source: &Src, file: String, len: i32
     return Result::Ok(());
 }
 
-/// `tensor`'s elements at bytes `start` to `end` of `file`, where the build
-/// found them. `U` is the element they encode.
-pub fn payload_at<U: FromLeBytes + AnyBits, affine Src: WeightSource>(
+/// `tensor`, the `U`s of `extents` at bytes `start` to `end` of `file`, where
+/// the build found them.
+pub fn payload_at<U: Element, affine Src: WeightSource>(
     source: &Src,
     file: String,
     tensor: String,
+    extents: List<i32>,
     start: i32,
     end: i32,
-) -> Result<List<U>, LoadError> with _
+) -> Result<HostWeight, LoadError> with _
     contract 0 <= start <= end
 {
     let bytes = source.read(&file, start, end).map_err(|e| LoadError { reason: `${tensor}: ${e}` })?;
-    return Result::Ok(bytes.to_list_of::<U>(0, end - start));
+    return Result::Ok(HostWeight::stored(U::kind(), extents, bytes));
 }
 
 /// A safetensors checkpoint in one file or in shards, each file's header read,
@@ -257,16 +260,16 @@ pub fn read_headers<affine Src: WeightSource>(source: &Src, files: List<String>)
 }
 
 impl Headers {
-    /// `e`'s elements within `file` of `source`, which these headers were read
-    /// from. `U` is what `e.dtype` names, `e.width` bytes wide.
-    pub fn payload<U: FromLeBytes + AnyBits, affine Src: WeightSource>(
+    /// `e` within `file` of `source`, which these headers were read from. `U`
+    /// is what `e.dtype` names, `e.width` bytes wide.
+    pub fn payload<U: Element, affine Src: WeightSource>(
         &self,
         source: &Src,
         file: String,
         e: &Expected,
-    ) -> Result<List<U>, LoadError> with _ {
-        assert e.width == builtin::size_of::<U>();
+    ) -> Result<HostWeight, LoadError> with _ {
+        assert e.width == stored_width(U::kind());
         let [start, end] = self.headers[file].range(e).map_err(|err| LoadError { reason: `${file}: ${err}` })?;
-        return payload_at::<U, Src>(source, file, e.tensor, start, end);
+        return payload_at::<U, Src>(source, file, e.tensor, e.extents, start, end);
     }
 }

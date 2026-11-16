@@ -7,8 +7,9 @@ use { LinearArray } from "core:linear";
 use { Analysis, Buffer, ElementType, Executable, PjrtHost } from "core:pjrt";
 use { Binary, Comparison, Convolution, DotDims, GatherDims, Graph, ScatterDims, Unary, WindowReduce } from "./hlo.wado";
 use { Cpu, Element, ElementKind, Float, Holds, Tensor, element_count } from "./tensor.wado";
-use { Any, Erasable, Recorded, Recorder, Untyped, data_of, kept_any } from "./recorded.wado";
+use { Any, Erasable, Recorded, Recorder, data_of, kept_any } from "./recorded.wado";
 use { in_place, le_bytes, module_of } from "./stablehlo.wado";
+use { HostWeight } from "./weight.wado";
 
 /// A tensor on the device: which of the backend's buffers holds it.
 pub struct DeviceBuffer {
@@ -93,6 +94,11 @@ fn element_type(kind: ElementKind) -> ElementType {
         I64 => ElementType::Int64,
         Bool => ElementType::Pred,
     };
+}
+
+/// `extents` as PJRT takes a buffer's dimensions.
+fn buffer_extents(extents: &List<i32>) -> List<i64> {
+    return extents.into_iter().map(|e| e as i64).collect();
 }
 
 /// The `E`s `bytes` holds, as `le_bytes` lays them out.
@@ -236,38 +242,56 @@ impl PjrtBackend {
     }
 
     fn sent<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> i32 with PjrtHost {
-        let extents: List<i64> = t.extents.into_iter().map(|e| e as i64).collect();
-        return self.stored(done(PjrtHost::upload(element_type(E::kind()), extents, le_bytes(&data_of(&t.data)))));
+        return self.stored(done(PjrtHost::upload(element_type(E::kind()), buffer_extents(&t.extents), le_bytes(&data_of(&t.data)))));
     }
 
-    /// `t` as a weight: in bf16 where that loses nothing, and in linear memory
-    /// on its way there, as a model's largest weights fit no GC array of bytes.
-    fn kept_weight(&mut self, t: &Tensor<f32, Untyped>) -> DeviceBuffer with PjrtHost {
-        let extents: List<i64> = t.extents.into_iter().map(|e| e as i64).collect();
-        let mut halves = LinearArray::<u16>::filled(t.data.len(), 0);
+    /// `w`, a weight of f32s: in bf16 where that loses nothing, an f32 whose
+    /// low half is zero, and as stored otherwise.
+    fn kept_weight(&mut self, w: &HostWeight) -> DeviceBuffer with PjrtHost
+        contract w.kind matches { F32 }
+    {
+        let count = w.count();
+        let mut halves = LinearArray::<u16>::filled(count, 0);
         let mut halved = true;
-        for let at of 0..<t.data.len() {
-            let half = bf16::from_f32(t.data[at]);
-            if f32::from(half).to_bits() != t.data[at].to_bits() {
+        for let at of 0..<count {
+            let bits = w.bytes().load_at::<u32>(4 * at);
+            if bits & 0xFFFF != 0 {
                 halved = false;
                 break;
             }
-            halves[at] = half.to_bits();
+            halves[at] = (bits >> 16) as u16;
         }
         if halved {
-            self.halved_bytes += t.data.len() as i64 * 2;
+            self.halved_bytes += count as i64 * 2;
         } else {
-            self.whole_bytes += t.data.len() as i64 * 4;
+            self.whole_bytes += count as i64 * 4;
         }
         if self.topology matches { Some(_) } {
-            return DeviceBuffer { slot: -1, generation: 0, extents: t.extents, halved };
+            return DeviceBuffer { slot: -1, generation: 0, extents: w.extents, halved };
         }
         let buffer = if halved {
-            done(PjrtHost::upload(ElementType::Bfloat16, extents, &halves.cast::<u8>()));
+            done(PjrtHost::upload(ElementType::Bfloat16, buffer_extents(&w.extents), &halves.cast::<u8>()));
         } else {
-            done(PjrtHost::upload(ElementType::Float32, extents, &LinearArray::<f32>::from_slice(&t.data).cast::<u8>()));
+            done(PjrtHost::upload(ElementType::Float32, buffer_extents(&w.extents), w.bytes()));
         };
-        return self.device_buffer(self.stored(buffer), t.extents, halved);
+        return self.device_buffer(self.stored(buffer), w.extents, halved);
+    }
+
+    /// `w` on the device as it is stored.
+    fn kept_stored(&mut self, w: &HostWeight) -> Any<PjrtBackend> with PjrtHost {
+        if self.topology matches { Some(_) } {
+            return kept_any(self, &w.decoded());
+        }
+        let buffer = done(PjrtHost::upload(element_type(w.kind), buffer_extents(&w.extents), w.bytes()));
+        let d = self.device_buffer(self.stored(buffer), w.extents, false);
+        return match w.kind {
+            F32 => Any::F32(Located::Device(d)),
+            F16 => Any::F16(Located::Device(d)),
+            BF16 => Any::BF16(Located::Device(d)),
+            U8 => Any::U8(Located::Device(d)),
+            I64 => Any::I64(Located::Device(d)),
+            Bool => Any::Bool(Located::Device(d)),
+        };
     }
 
     /// The slot of `value`, sent to the device for this pass if it is on the host.
@@ -414,22 +438,19 @@ impl Graph for PjrtBackend {
         record: fn(&mut Recorder) -> Recorded with _,
         first: i32,
         count: i32,
-        load: fn(i32) -> Result<Any<Cpu>, Er> with _,
+        load: fn(i32) -> Result<HostWeight, Er> with _,
     ) -> Result<List<Any<PjrtBackend>>, Er> with (_, PjrtHost) {
         let mut kept: List<Any<PjrtBackend>> = [];
         for let at of 0..<count {
-            kept.push(match load(at)? {
-                F32(t) => Any::F32(Located::Device(self.kept_weight(&t))),
-                F16(t) => {
-                    self.halved_bytes += 2 * t.data.len() as i64;
-                    kept_any(self, &Any::F16(t));
-                },
-                BF16(t) => {
-                    self.halved_bytes += 2 * t.data.len() as i64;
-                    kept_any(self, &Any::BF16(t));
-                },
-                other => kept_any(self, &other),
-            });
+            let w = load(at)?;
+            if w.kind matches { F32 } {
+                kept.push(Any::F32(Located::Device(self.kept_weight(&w))));
+                continue;
+            }
+            if w.kind matches { F16 | BF16 } {
+                self.halved_bytes += w.bytes().len() as i64;
+            }
+            kept.push(self.kept_stored(&w));
         }
         return Result::Ok(kept);
     }

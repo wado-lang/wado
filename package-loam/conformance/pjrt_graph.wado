@@ -6,7 +6,7 @@
 
 use { println, Stdout } from "core:cli";
 use { PjrtHost } from "core:pjrt";
-use { Any, Cpu, Graph, Holds, PjrtBackend, Tensor, Untyped } from "lib:loam";
+use { Graph, Holds, HostWeight, PjrtBackend, Tensor, Untyped } from "lib:loam";
 use { programs, ragged_attention } from "./pjrt_programs.wado";
 
 export fn run() with (Stdout, PjrtHost) {
@@ -23,7 +23,7 @@ export fn run() with (Stdout, PjrtHost) {
         |r| r.finished([]),
         0,
         1,
-        |_| Result::<Any<Cpu>, ()>::Ok(Any::F32(weight)),
+        |_| Result::<HostWeight, ()>::Ok(HostWeight::of(&weight)),
     ).unwrap();
     let F32(held) = &kept[0] else {
         unreachable();

@@ -458,7 +458,7 @@ fn emit_weights(
     ImplSpec::new("Weights").emit_begin(w);
     let mut hosts = HashMap::<String, String>::new();
     for let vi of &graph.initializers {
-        hosts[vi.name] = `self.${names.get(&vi.name)}`;
+        hosts[vi.name] = `HostWeight::of(&self.${names.get(&vi.name)})`;
     }
     w.line("/// These weights as tensors of the graph `backend` builds.");
     FnSpec::new("params", Vis::Pub).add_generic(GRAPH_BOUND).set_receiver("&self").add_param(
@@ -556,25 +556,24 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         let primitive = checked.primitives[vi.name];
         let shape = checked.shapes.get(vi.name).unwrap();
         let e = expected(&vi, &shape);
-        let data = match vi.data {
-            Some(_) => `List::<${primitive}>::from_le_bytes(${EMBEDDED_DATA}(${at}))`,
+        hosts[vi.name] = match vi.data {
+            Some(_) => `HostWeight::of_bytes::<${primitive}>(${e.extents}, &${EMBEDDED_DATA}(${at}))`,
             None => checkpoint_payload(&e, &primitive, placement),
         };
-        hosts[vi.name] = `Tensor::<${primitive}, [${axis_list(&shape)}]> { data: ${data}, extents: ${e.extents} }`;
     }
     emit_held_call(w, graph, &hosts, loads);
     w.end();
     w.end();
 }
 
-/// A `return` of `Params::held` over the initializers' host tensors in
+/// A `return` of `Params::held` over the initializers' `HostWeight`s in
 /// `hosts`, each by its place among them: the `Result` where `fallible`, as a
 /// `load` returns one, and the unwrapped struct otherwise.
 fn emit_held_call(w: &mut CodeWriter, graph: &Graph, hosts: &HashMap<String, String>, fallible: bool) {
     let error = if fallible { "LoadError" } else { "!" };
     w.begin(`return ${PARAMS}::held::<${error}>(backend, |at| Result::Ok(match at`);
     for let [at, vi] of graph.initializers.into_iter().enumerate() {
-        w.line(`${at} => hosted(${hosts[vi.name]}),`);
+        w.line(`${at} => ${hosts[vi.name]},`);
     }
     w.line("_ => unreachable(),");
     w.end_with(if fallible { "));" } else { ")).unwrap();" });
@@ -606,8 +605,8 @@ fn emit_embedded_data(w: &mut CodeWriter, graph: &Graph) {
     w.end();
 }
 
-/// The call reading a tensor's `primitive` elements out of the source `load`
-/// was given, checked against what the build compiled it as.
+/// The call reading a tensor's stored `primitive` elements out of the source
+/// `load` was given, checked against what the build compiled it as.
 fn checkpoint_payload(e: &Expected, primitive: &String, placement: &Placement) -> String {
     let axes: List<String> = e.axes.into_iter().map(|axis| wado`"${axis}"`).collect();
     let file = match *placement {
@@ -616,7 +615,7 @@ fn checkpoint_payload(e: &Expected, primitive: &String, placement: &Placement) -
         Shards(placed) => placed[e.tensor],
         InPlace(in_place) => {
             let range = in_place.ranges[e.tensor];
-            return wado`payload_at::<${*primitive}, ${SOURCE_PARAM}>(source, "${range.file}", "${e.tensor}", ${range.start}, ${range.end})?`;
+            return wado`payload_at::<${*primitive}, ${SOURCE_PARAM}>(source, "${range.file}", "${e.tensor}", ${e.extents}, ${range.start}, ${range.end})?`;
         },
     };
     return wado`header.payload::<${*primitive}, ${SOURCE_PARAM}>(source, "${file}", &Expected { tensor: "${e.tensor}", dtype: "${e.dtype}", axes: [${axes.join(
@@ -1551,7 +1550,7 @@ fn emit_held(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kept: &List<S
     w.line("/// them for the pass that reads them, and the folded literals.");
     FnSpec::new("held").add_generic("Er").add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(
         "load",
-        "fn(i32) -> Result<Any<Cpu>, Er> with _",
+        "fn(i32) -> Result<HostWeight, Er> with _",
     ).set_return_type(`Result<${PARAMS_TYPE}, Er>`).add_effect("_").emit_begin(w);
     let count = graph.initializers.len() + kept.len();
     if kept.is_empty() {
@@ -2838,7 +2837,7 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
 fn kept_literal(checked: &Checked, tensor: &String) -> String {
     let extents = static_extents(&checked.shapes[*tensor]).expect("a kept literal's shape is static");
     let data = constant_elements(&checked.known[*tensor].elements, &checked.primitives[*tensor]);
-    return `hosted(${host_literal(checked, tensor, data, `${extents}`)})`;
+    return `HostWeight::of(&${host_literal(checked, tensor, data, `${extents}`)})`;
 }
 
 /// The folded tensors in `literals` that no symbol enters, which `Params`

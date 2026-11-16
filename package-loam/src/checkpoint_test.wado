@@ -6,6 +6,8 @@ use fs from "core:fs";
 use { push_element } from "./graph.wado";
 use { Expected, FileSource, LoadError, declared_header_end, header_of, read_headers } from "./runtime/checkpoint.wado";
 use { StoredTensor, write_safetensors } from "./safetensors.wado";
+use { Element } from "./runtime/tensor.wado";
+use { HostWeight } from "./runtime/weight.wado";
 
 fn is_error<E: Error>() {
 }
@@ -91,9 +93,15 @@ fn held(bytes: ByteList) -> HashMap<String, ByteList> {
     return given;
 }
 
+/// The values `loaded` holds, or its error.
+fn loaded_values(loaded: Result<HostWeight, LoadError>) -> Result<List<f32>, LoadError> {
+    let host = loaded?;
+    return Result::Ok((0..<host.count()).map(|i| host.value(i)).collect());
+}
+
 /// `e`'s elements in the file `m` of `given`.
-fn payload<U: FromLeBytes + AnyBits>(given: &HashMap<String, ByteList>, e: &Expected) -> Result<List<U>, LoadError> {
-    return read_headers(given, ["m"])?.payload::<U, HashMap<String, ByteList>>(given, "m", e);
+fn payload<U: Element>(given: &HashMap<String, ByteList>, e: &Expected) -> Result<List<f32>, LoadError> {
+    return loaded_values(read_headers(given, ["m"])?.payload::<U, HashMap<String, ByteList>>(given, "m", e));
 }
 
 test "a payload comes back as the elements written under its name" {
@@ -209,8 +217,9 @@ fn two_shards() -> HashMap<String, ByteList> {
 test "each tensor comes back from the file that holds it" {
     let given = two_shards();
     let headers = read_headers(&given, [FIRST, SECOND]).unwrap();
-    assert headers.payload::<f32, HashMap<String, ByteList>>(&given, SECOND, &b()).unwrap() == [-1.0, 0.5, 0.25] as List<f32>;
-    let first = headers.payload::<f32, HashMap<String, ByteList>>(&given, FIRST, &w()).unwrap();
+    let second = loaded_values(headers.payload::<f32, HashMap<String, ByteList>>(&given, SECOND, &b())).unwrap();
+    assert second == [-1.0, 0.5, 0.25] as List<f32>;
+    let first = loaded_values(headers.payload::<f32, HashMap<String, ByteList>>(&given, FIRST, &w())).unwrap();
     assert first == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as List<f32>;
 }
 
@@ -253,8 +262,9 @@ test "files on disk read a range at a time as files held do" {
     }
     let source = FileSource { dir };
     let headers = read_headers(&source, [FIRST, SECOND]).unwrap();
-    assert headers.payload::<f32, FileSource>(&source, SECOND, &b()).unwrap() == [-1.0, 0.5, 0.25] as List<f32>;
-    assert headers.payload::<f32, FileSource>(&source, FIRST, &w()).unwrap() == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as List<f32>;
+    assert loaded_values(headers.payload::<f32, FileSource>(&source, SECOND, &b())).unwrap() == [-1.0, 0.5, 0.25] as List<f32>;
+    let first = loaded_values(headers.payload::<f32, FileSource>(&source, FIRST, &w())).unwrap();
+    assert first == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as List<f32>;
     let e = read_headers(&source, ["absent.safetensors"]).unwrap_err();
     assert `${e}` == `${dir}/absent.safetensors: no such file or directory`;
 }

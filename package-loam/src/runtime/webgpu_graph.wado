@@ -44,7 +44,6 @@ use {
 use {
     Attention,
     BinaryOp,
-    Cpu,
     Element,
     Float,
     ElementKind,
@@ -57,9 +56,7 @@ use {
     Tensor,
     constant,
     element_count,
-    interleaved,
     operand,
-    transpose2,
 } from "./tensor.wado";
 use {
     Kernel,
@@ -85,9 +82,9 @@ use {
     carried_starts,
     constants,
     kept_any,
-    kind_of,
 } from "./recorded.wado";
 use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, permuted, reads_as, sliced } from "./webgpu.wado";
+use { HostWeight } from "./weight.wado";
 
 /// A pass recorded once per shape class and planned into kernels, which each
 /// call launches, and the values of the nodes that read no argument, kept on
@@ -174,7 +171,7 @@ impl Graph for WebGpuBackend {
         record: fn(&mut Recorder) -> Recorded with _,
         first: i32,
         count: i32,
-        load: fn(i32) -> Result<Any<Cpu>, Er> with _,
+        load: fn(i32) -> Result<HostWeight, Er> with _,
     ) -> Result<List<Any<WebGpuBackend>>, Er> with _ {
         let recorded = record(&mut Recorder::new());
         let contracted = contracted_axes(&recorded, first, count);
@@ -182,24 +179,18 @@ impl Graph for WebGpuBackend {
         for let [run, paired] of weight_runs(&recorded, first, count, &contracted) {
             let axis = contracted[run[0]].unwrap();
             let free = 1 - axis;
-            // One product's operands are of one element, and so are a run's.
-            let mut kind = ElementKind::F32;
-            let mut parts: List<Tensor<f32, Untyped>> = [];
+            let mut parts: List<HostWeight> = [];
             for let at of run {
-                let weight = load(at)?;
-                kind = kind_of(&weight);
-                parts.push(in_f32(self, &weight).unwrap());
+                parts.push(load(at)?);
             }
+            // One product's operands are of one element, and so are a run's.
+            let kind = parts[0].kind;
+            let inner = parts[0].extents[axis];
             if paired {
-                // As `[inner, columns]`, which `interleaved` pairs.
-                let matrix = |t: &Tensor<f32, Untyped>| {
-                    let m = Tensor::<f32, [Untyped, Untyped]> { data: t.data, extents: t.extents };
-                    return if axis == 0 { m } else { transpose2(&m) };
-                };
-                let both = interleaved(&matrix(&parts[0]), &matrix(&parts[1]));
-                let Device(d) = self.kept_contracted(&both, 0) else {
-                    unreachable();
-                };
+                // Column `2j + p` is column `j` of part `p`, as `Paired` says.
+                let d = self.kept_matrix(inner, 2 * parts[0].extents[free], &parts, |ps, r, c| {
+                    return contracted_at(&ps[c % 2], axis, r, c / 2);
+                });
                 for let [j, at] of run.into_iter().enumerate() {
                     let view = DeviceTensor {
                         ..d,
@@ -215,28 +206,40 @@ impl Graph for WebGpuBackend {
                 }
                 continue;
             }
-            let mut joined = parts[0];
-            for let p of parts[1..<parts.len()].to_list() {
-                joined = self.cpu.concatenate::<f32, Untyped, Untyped, Untyped>(&joined, &p, free);
+            // Side by side along their free axis.
+            let mut starts: List<i32> = [];
+            let mut columns = 0;
+            for let p of &parts {
+                starts.push(columns);
+                columns += p.extents[free];
             }
-            let Device(d) = self.kept_contracted(&joined, axis) else {
-                unreachable();
-            };
-            let mut start = 0;
-            for let [at, p] of run.into_iter().zip(parts.into_iter()) {
-                kept[at] = Option::Some(of_kind(self, kind, Placed::Device(sliced(&d, free, start, p.extents[free]))));
-                start += p.extents[free];
+            let d = oriented(self.kept_matrix(inner, columns, &parts, |ps, r, c| {
+                let mut p = ps.len() - 1;
+                while starts[p] > c {
+                    p -= 1;
+                }
+                return contracted_at(&ps[p], axis, r, c - starts[p]);
+            }), axis);
+            for let [k, at] of run.into_iter().enumerate() {
+                kept[at] = Option::Some(
+                    of_kind(self, kind, Placed::Device(sliced(&d, free, starts[k], parts[k].extents[free]))),
+                );
             }
         }
         for let at of 0..<count {
             if kept[at] matches { Some(_) } {
                 continue;
             }
-            let host = load(at)?;
+            let w = load(at)?;
             kept[at] = Option::Some(if let Some(axis) = contracted[at] {
-                of_kind(self, kind_of(&host), self.kept_contracted(&in_f32(self, &host).unwrap(), axis));
+                let [kind, inner, outer] = [w.kind, w.extents[axis], w.extents[1 - axis]];
+                let one: List<HostWeight> = [w];
+                let matrix = self.kept_matrix(inner, outer, &one, |ps, r, c| contracted_at(&ps[0], axis, r, c));
+                of_kind(self, kind, Placed::Device(oriented(matrix, axis)));
+            } else if w.kind matches { U8 | I64 } {
+                kept_any(self, &w.decoded());
             } else {
-                kept_any(self, &host);
+                of_kind(self, w.kind, Placed::Device(self.kept_values(&w)));
             });
         }
         return Result::Ok(kept.into_iter().map(|k| k.unwrap()).collect());
@@ -1504,15 +1507,16 @@ fn of_kind(g: &mut WebGpuBackend, kind: ElementKind, computed: Placed<f32, Untyp
     };
 }
 
-/// A float weight's values as f32s, which hold a half's exactly. `None` for
-/// any other element.
-fn in_f32(g: &mut WebGpuBackend, weight: &Any<Cpu>) -> Option<Tensor<f32, Untyped>> {
-    return match weight {
-        F32(t) => Option::Some(*t),
-        F16(t) => Option::Some(g.cpu.convert(t)),
-        BF16(t) => Option::Some(g.cpu.convert(t)),
-        U8(_) | I64(_) | Bool(_) => null,
-    };
+/// Element `j` along the free axis of `w`'s row `i` along the axis `axis`
+/// that products contract.
+fn contracted_at(w: &HostWeight, axis: i32, i: i32, j: i32) -> f32 {
+    return w.value(if axis == 0 { i * w.extents[1] + j } else { j * w.extents[1] + i });
+}
+
+/// `d`, a matrix kept as `[inner, free]`, under the extents of the weight whose
+/// axis `axis` products contract.
+fn oriented(d: DeviceTensor, axis: i32) -> DeviceTensor {
+    return if axis == 0 { d } else { permuted(&d, &([1, 0] as List<i32>)) };
 }
 
 /// `op` over operands of one shape, as a StableHLO elementwise operation takes

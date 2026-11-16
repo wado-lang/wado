@@ -669,12 +669,6 @@ pub fn host_of<E: Element, Axes>(t: &Tensor<E, Axes>) -> Any<Cpu> {
     };
 }
 
-/// `t` as `Cpu` holds it among a program's arguments. It takes `t` by value so
-/// that a weight's data is not copied once more on the way.
-pub fn hosted<E: Erasable, Axes>(t: Tensor<E, Axes>) -> Any<Cpu> {
-    return E::any::<Cpu>(Tensor { data: t.data, extents: t.extents });
-}
-
 /// `value`, held on the host, as `h` keeps it.
 pub fn kept_any<affine H: Holds>(h: &mut H, value: &Any<Cpu>) -> Any<H> with _ {
     return match value {
