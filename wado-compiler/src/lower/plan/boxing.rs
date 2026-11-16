@@ -225,7 +225,7 @@ fn remap_locals_in_stmt(stmt: &mut TirStmt, remap: &IndexMap<u32, u32>) {
     match &mut stmt.kind {
         TirStmtKind::Expr(expr) => remap_locals_in_expr(expr, remap),
         TirStmtKind::Let { value: Some(v), .. } | TirStmtKind::Return { value: Some(v) } => {
-            remap_locals_in_expr(v, remap)
+            remap_locals_in_expr(v, remap);
         }
         TirStmtKind::Let { value: None, .. } | TirStmtKind::Return { value: None } => {}
         TirStmtKind::TaskReturn { .. } => {
