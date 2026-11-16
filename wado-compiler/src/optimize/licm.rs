@@ -261,7 +261,6 @@ pub fn apply_licm(
         );
         let mut engine = Engine::new(body, buffers, locals, params, type_table);
         engine.set_alias_sets(alias);
-        engine.seed_params();
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_quiet_callee_ids(&quiet_callee_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
@@ -2342,7 +2341,7 @@ struct ArithHoist<'a> {
     /// their use-site values cannot be trusted as loop-invariant.
     address_taken: &'a IndexSet<u32>,
     /// Loop-modified locals — a leaf is invariant iff none of its aliases are
-    /// here (replaces the `value_of` `use == entry` invariance check).
+    /// here.
     modified: &'a ModifiedVars,
     types: &'a TypeTable,
 }
@@ -2380,7 +2379,7 @@ impl ArithHoist<'_> {
             }
         }
         // With every `Local` leaf invariant, the structural key is exact
-        // value-identity for the dedup (replaces `engine.value(e)`).
+        // value-identity for the dedup.
         Some(arith_structural_key(body, self.types, e))
     }
 

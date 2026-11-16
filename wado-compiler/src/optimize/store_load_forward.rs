@@ -103,8 +103,7 @@ fn forward_one(
     let forwardable_locals: IndexSet<u32> = (0..engine.locals().len() as u32)
         .filter(|i| !unsafe_locals.contains(i))
         .collect();
-    // Born-as-operands (WEP item 3): promote each re-emittable reaching value
-    // straight into its operand slot, never through the persisted `value_of`.
+    // Promote each re-emittable reaching value straight into its operand slot.
     let forwarded: IndexMap<ExprId, ValueId> = engine
         .scoped_const_reads(&forwardable_locals, /* include_fields */ true)
         .into_iter()

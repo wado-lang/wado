@@ -350,7 +350,7 @@ pub fn optimize(
     // operands (born-as-operands), so store-load forwarding / cse become
     // operand reads. Runs after the optimization loop (so the struct shape is
     // post-SROA) but BEFORE select_lowering / multi_value_return, which rewrite
-    // the body into WIR-shaped forms the value-graph build would misread. The
+    // the body into WIR-shaped forms a scoped walk would misread. The
     // two soundness gates (scalar-field + receiver-availability) and the WIR
     // const-local propagation keep it default-safe.
     run_pass("nir/promote_fields", &mut project, profiler, |p| {

@@ -313,12 +313,12 @@ promoted nothing. What remained read it for one bit: whether a local held a
 value at a loop's entry, which LICM's in-loop CSE asks before it shares an
 expression.
 
-The graph answered that bit by accident of timing. The early freeze was the
-first value query, so it built every function's graph before inlining, and a
-loop that arrived by inlining had no snapshot. The CSE therefore reached a
-function's own loops and none of the inlined ones. The skeleton now answers,
-the same for every loop: the local is a parameter, or its definition dominates
-the loop. Against the graph, `node benchmark/fuel.ts check` moves three
+The graph answered that bit by the history of the function. The snapshots were
+taken at the first value query, before inlining, and never retaken. Inlining
+cleared them after any splice of a call that was impure or carried a loop, and
+loop versioning cleared them every time. The CSE therefore stopped reaching a
+function once either had touched it. The skeleton now answers, the same for
+every loop: the local is a parameter, or its `let` dominates the loop. Against the graph, `node benchmark/fuel.ts check` moves three
 regions, and 133 of 3 496 WIR goldens change, 138 KB smaller and 5 KB larger.
 
 | Region                  |    Fuel |

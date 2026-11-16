@@ -1880,8 +1880,7 @@ impl Body {
 
     /// Replace every direct operand child of `node` equal to `Operand::Expr(target)`
     /// with `new`, returning whether any slot changed. Used by the engine to promote
-    /// a folded subtree to an `Operand::Value` in its parent (WEP: The Live
-    /// `ValueGraph`).
+    /// a folded subtree to an `Operand::Value` in its parent.
     pub fn replace_operand_to(&mut self, node: NodeRef, target: ExprId, new: Operand) -> bool {
         let mut changed = false;
         self.for_each_operand_mut(node, |o| {

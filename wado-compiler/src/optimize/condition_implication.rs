@@ -172,7 +172,6 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
         );
         let mut engine = Engine::new(body, buffers, locals, params, type_table);
         engine.set_alias_sets(alias);
-        engine.seed_params();
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_quiet_callee_ids(&quiet_callee_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
@@ -181,7 +180,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
 }
 
 /// A structural bound: the right-hand side of a guard / check comparison,
-/// compared **syntactically** (no value graph). Two `BoundKey`s are equal iff
+/// compared **syntactically**. Two `BoundKey`s are equal iff
 /// they denote the same program object by structure.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum BoundKey {
@@ -541,8 +540,7 @@ fn resolve_through_opaque(engine: &Engine, binds: &Binds, op: Operand) -> Operan
     cur
 }
 
-/// The `Local idx` an `Opaque` value sources from, if any (pool read — not
-/// `value_of`).
+/// The `Local idx` an `Opaque` value sources from, if any.
 pub(super) fn opaque_local(engine: &Engine, v: ValueId) -> Option<u32> {
     operand_local(engine.body, Operand::Value(v))
 }
@@ -574,7 +572,7 @@ fn field_path(body: &nir_arena::Body, expr: ExprId) -> Option<(u32, FieldPath)> 
 /// Parse an operand (through copy temps) as a structural bound: a bare local or
 /// a `local.field` read over a by-value local root. Handles both the skeleton
 /// form and a **promoted** `Operand::Value` (the freeze promotes a `FieldAccess`
-/// bound), decomposed through the value **pool** (`body.values`, not `value_of`).
+/// bound), decomposed through the value **pool** (`body.values`).
 ///
 /// As in [`parse_var_offset`], a local whose binding reads as no bound (`let
 /// limit = black_box(10)`) is a bound in its own right, by its stable index.
@@ -644,7 +642,7 @@ pub(super) fn is_seq_length(engine: &Engine, binds: &Binds, op: Operand) -> bool
 }
 
 /// Parse an operand (through copy temps) as a constant `i64`. Constants live in
-/// the value **pool** as `Operand::Value(Int)`, never the `value_of` side-table.
+/// the value **pool** as `Operand::Value(Int)`.
 pub(super) fn parse_const_i64(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
     match resolve(engine, binds, op) {
         Operand::Value(v) => pool_int_const(engine, v),
@@ -713,12 +711,12 @@ fn parse_var_offset_depth(
             _ => None,
         },
         // A promoted (`Operand::Value`) `var + const` — the freeze promotes pure
-        // arith — decomposed through the value pool (not `value_of`).
+        // arith — decomposed through the value pool.
         Operand::Value(v) => parse_value_offset(engine, v),
     }
 }
 
-/// Decompose a pooled value as `Opaque(Local) + const` (pool read, not `value_of`).
+/// Decompose a pooled value as `Opaque(Local) + const`.
 fn parse_value_offset(engine: &Engine, v: ValueId) -> Option<(u32, i64)> {
     match engine.body.values.kind(v) {
         ValueKind::Opaque(_) => opaque_local(engine, v).map(|i| (i, 0)),
@@ -889,8 +887,7 @@ fn parse_ge_pair(
 /// condition denotes: `(left >= right)` directly, or its lowered form
 /// `!(left < right)`. Handles both the skeleton (`Operand::Expr`) and a
 /// **promoted** comparison (`Operand::Value`, decomposed through the value
-/// **pool** — never `value_of`). Operands are returned raw (caller decides how
-/// to parse each side).
+/// **pool**). Operands are returned raw (caller decides how to parse each side).
 pub(super) fn ge_check_operands(
     engine: &Engine,
     binds: &Binds,
@@ -1089,8 +1086,7 @@ fn bitand_mask(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
     parse_const_i64(engine, binds, right).or_else(|| parse_const_i64(engine, binds, left))
 }
 
-/// A pooled value's constant `i64`, if it is an `Int` (pool read, not
-/// `value_of`). The pool holds the `u64` bit pattern, and every caller here
+/// A pooled value's constant `i64`, if it is an `Int`. The pool holds the `u64` bit pattern, and every caller here
 /// compares signed, so an unsigned constant past `i64::MAX` is refused rather
 /// than read as the negative it would order as.
 fn pool_int_const(engine: &Engine, v: ValueId) -> Option<i64> {
@@ -1481,12 +1477,11 @@ impl Summary {
     }
 }
 
-/// Structural loop-guard BCE (value_of-free, mirrors the `licm` migration off
-/// the side-table). Recognises the loop guard `if !(var < bound) { break }` at
+/// Structural loop-guard BCE. Recognises the loop guard `if !(var < bound) { break }` at
 /// the loop head and drives to `false` a dominated bounds-check
 /// `if (var >= bound) { panic }` in the body — by **structural** comparison of
 /// the skeleton reads plus a position-aware "no modification of `var`/`bound`
-/// between the guard and the check" scan. No value graph, no promotion.
+/// between the guard and the check" scan.
 fn structural_loop_guard(
     engine: &mut Engine,
     parent: BlockId,
@@ -1951,7 +1946,7 @@ fn eliminate_const_ub_checks_in_node(
 }
 
 /// A dominating `if (var + K) < bound { … }` proves `var + K < bound` inside its
-/// then-block (structural, value_of-free), and a conjunct `C <= var` of a
+/// then-block (structural), and a conjunct `C <= var` of a
 /// condition `C <= var && var + K < bound` also proves the floor a range check
 /// `!(C <= var & var + K < bound)` asks for. Drive to `false` every dominated
 /// bounds-check `var + K >= bound` (identical offset — wrapping-add makes the
@@ -2059,8 +2054,8 @@ pub(super) fn break_guard_cmp(
 }
 
 /// A straight-line early-exit guard `if (var + K >= bound) { return/break }`:
-/// after it, the surviving path has `var + K < bound` (structural,
-/// value_of-free). Returns `(var, K, bound)`.
+/// after it, the surviving path has `var + K < bound` (structural). Returns
+/// `(var, K, bound)`.
 fn recognize_early_exit(engine: &Engine, s: StmtId, binds: &Binds) -> Option<(u32, i64, BoundKey)> {
     parse_check(engine, binds, early_exit_condition(engine, s)?)
 }
@@ -2081,7 +2076,7 @@ fn early_exit_condition(engine: &Engine, s: StmtId) -> Option<Operand> {
 
 fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
     let mut changed = false;
-    // Structural early-exit facts `var < bound` (value_of-free): a fact is used
+    // Structural early-exit facts `var < bound`: a fact is used
     // for a later statement's checks while no statement since the guard has
     // modified `var` / `bound` (`stmt_modifies`), then dropped when one does.
     let mut seguards: Vec<(u32, i64, BoundKey)> = Vec::new();
@@ -2263,7 +2258,7 @@ fn set_false(engine: &mut Engine, cond: ExprId) {
 /// to a pooled `false`, for a **promoted** condition (`Operand::Value`) that has
 /// no skeleton expr to [`set_false`]. Mirrors `replace_expr_with_value`'s end
 /// state (the condition operand becomes `Operand::Value(false)`) for the operand
-/// case (WEP: operand promotion — the value passes read operands, not `value_of`).
+/// case.
 fn force_condition_false(engine: &mut Engine, holder: NodeRef) {
     let false_v = engine
         .body
@@ -2339,7 +2334,7 @@ fn own_floor(engine: &Engine, binds: &Binds, var: u32) -> Option<Floor> {
 }
 
 /// Eliminates redundant bounds checks inside short-circuit `||` expressions
-/// (value_of-free, structural): in `(var + k) >= bound || expr`, the right
+/// (structural): in `(var + k) >= bound || expr`, the right
 /// operand only runs when `(var + k) < bound`, refuting every dominated check
 /// `var + k >= bound` (identical offset; wrapping-add makes `j < k` unsound)
 /// nested in it. Skipped when the right

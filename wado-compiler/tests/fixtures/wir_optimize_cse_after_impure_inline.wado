@@ -1,0 +1,41 @@
+// Test: the in-loop CSE reaches a loop in a function that an impure call was
+// inlined into.
+//
+// `bump` writes through its reference, so splicing it into `sqrt_bound_after`
+// is not a value-preserving inline. The loop after it still computes `p * p`
+// once per iteration.
+//
+// `black_box` keeps the arguments off the constant path: with constant ones
+// the loop runs at compile time and the function this fixture inspects is gone.
+
+#[inline(always)]
+fn bump(counter: &mut i32) {
+    *counter += 1;
+}
+
+#[inline(never)]
+fn sqrt_bound_after(limit: i32, counter: &mut i32) -> i32 {
+    bump(counter);
+    let mut p = 2;
+    let mut last_sq = 0;
+    while p * p <= limit {
+        last_sq = p * p;
+        p += 1;
+    }
+    return last_sq;
+}
+
+test {
+    let mut calls = 0;
+    assert sqrt_bound_after(builtin::black_box(100), &mut calls) == 100;
+    assert sqrt_bound_after(builtin::black_box(99), &mut calls) == 81;
+    assert calls == 2;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_pass": {"O2": ["nir/licm"]},
+    "wir_not_expect:O2": ["last_sq = p * p"],
+    "wir_expect:O2": ["$cse_"]
+}

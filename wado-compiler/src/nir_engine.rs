@@ -491,8 +491,8 @@ impl<'a> Engine<'a> {
         Some(v)
     }
 
-    /// The [`ValueId`](ValueId) of an operand: the
-    /// promoted value directly, or the skeleton expr's value from the graph.
+    /// The [`ValueId`](ValueId) of an operand: the promoted value directly, or
+    /// the skeleton expr's [`Engine::value`].
     pub fn operand_value(&mut self, op: Operand) -> Option<ValueId> {
         match op {
             Operand::Value(v) => Some(v),
@@ -1237,8 +1237,7 @@ impl<'a> Engine<'a> {
         self.redirect_expr(id, Operand::Value(vid))
     }
 
-    /// Edit API: redirect `id`'s parent operand slot to `new` (WEP: The Live
-    /// `ValueGraph`). Used to splice a promoted constant — or an existing
+    /// Edit API: redirect `id`'s parent operand slot to `new`. Used to splice a promoted constant — or an existing
     /// sub-expression — into the position `id` occupies, orphaning `id`'s node.
     /// Returns `false` (a no-op) when `id` has no parent or the parent references
     /// it through a non-operand slot.
