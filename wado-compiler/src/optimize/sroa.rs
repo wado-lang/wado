@@ -1384,6 +1384,7 @@ impl Rewrite<'_> {
 
 fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
     let old_stmts = engine.body.blocks[block].stmts.clone();
+    let tail = old_stmts.last().copied();
     let mut new_stmts: Vec<StmtId> = Vec::with_capacity(old_stmts.len());
     for stmt in old_stmts {
         // The reference a decomposed array's reads went through: they read slots
@@ -1422,12 +1423,59 @@ fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
             })
             .collect();
         rewrite_node(engine, NodeRef::Stmt(stmt), ctx);
-        new_stmts.push(stmt);
+        let yielded = if Some(stmt) == tail && !handed.is_empty() {
+            bind_yielded_value(engine, stmt)
+        } else {
+            None
+        };
+        new_stmts.push(yielded.map_or(stmt, |(bound, _)| bound));
         for (w, literal) in handed {
             read_fields_back(engine, stmt, w, literal, ctx, &mut new_stmts);
         }
+        if let Some((_, read)) = yielded {
+            let span = engine.body.stmts[stmt].span;
+            new_stmts.push(engine.alloc_stmt(StmtKind::Expr(read.into()), span));
+        }
     }
     engine.set_block_stmts(block, new_stmts);
+}
+
+/// Where `stmt` is the value its block yields, a `Let` binding that value to a
+/// fresh local in its place, and a read of the local to yield after the fields
+/// read back. A block in value position yields its last statement, so a
+/// read-back left last would end it as if it diverged.
+fn bind_yielded_value(engine: &mut Engine, stmt: StmtId) -> Option<(StmtId, ExprId)> {
+    let StmtKind::Expr(value) = engine.body.stmts[stmt].kind else {
+        return None;
+    };
+    let call = value.as_expr().expect("a write-back's statement is its call");
+    let type_id = engine.body.exprs[call].type_id;
+    if engine.type_table().is_stackless(type_id) {
+        return None;
+    }
+    let span = engine.body.stmts[stmt].span;
+    let local_index = engine.alloc_minted_local(&minted_what(SROA, "yielded"), type_id, false);
+    let name = engine.local_name(local_index);
+    let bound = engine.alloc_stmt(
+        StmtKind::Let {
+            name: name.clone(),
+            local_index,
+            is_mut: false,
+            type_id,
+            value,
+            skip_value_copy: true,
+        },
+        span,
+    );
+    let read = engine.alloc_expr(
+        ExprKind::Local {
+            index: local_index,
+            name,
+        },
+        type_id,
+        span,
+    );
+    Some((bound, read))
 }
 
 /// Bind a literal rebuilt from `w`'s slots ahead of `stmt`, and point the
