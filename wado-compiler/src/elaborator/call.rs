@@ -24,7 +24,7 @@ use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
-use super::method_call::{PreselectedArg, StaticReceiver};
+use super::method_call::{PreselectedArg, Qualifier, StaticReceiver};
 use super::scope::{BinderInScope, BoundsOf, ParamRef, Scope, ScopedBound};
 use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
@@ -1759,6 +1759,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some((written, _)) => receiver.written_as(written),
             None => receiver,
         });
+        if given_args.is_none()
+            && callee_kind.case_owner().is_none()
+            && let Some(receiver) = &call_receiver
+            && let Some((prefix, method_name)) = effective_name.rsplit_once("::")
+            && self.names_instance_method(receiver, method_name)
+        {
+            self.record_receiver_reference(ident, prefix);
+            let type_args = self.resolve_turbofish_args(&call.type_args);
+            return self.resolve_qualified_call_parts(
+                Qualifier::Type(receiver),
+                method_name,
+                &call.args,
+                type_args,
+                call.id,
+                ident.segments.last().map(|seg| seg.id),
+                call.span,
+                expected_type,
+                ctx,
+            );
+        }
         // A case is reachable wherever its type is; only a static method has
         // a visibility of its own to check.
         if callee_kind.case_owner().is_none()

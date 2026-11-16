@@ -13,9 +13,10 @@ use crate::primitive::PrimitiveType;
 use crate::synthesis::traits::REFLECT_FIELD_INPUTS_ASSOC;
 use crate::tir::{EffectRef, ResolvedType, TypeId, TypeParamId};
 use crate::trait_solver::{
-    ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
+    ArgDefault, AssocId, Candidate, Candidates, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    Source, TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, cmp_giving_eq,
+    Source, TraitDeclId, TypeDeclId, TypeDef, answering_link, bound_candidates, candidates,
+    cmp_giving_eq,
     comparison_row, derive, derive_alongside, holds_with_args, instance_candidates,
     mark_duplicates, owed, pair_comparisons, rank, sourced, written_comparison, written_over,
 };
@@ -2405,6 +2406,90 @@ impl SolverBridge {
         required_trait: Option<DefId>,
         required_args: &[TypeId],
     ) -> Option<Ordered> {
+        let (found, _) = self.call_candidates(
+            tysys,
+            ctx,
+            module,
+            type_id,
+            through_ref,
+            method_name,
+            required_trait,
+            required_args,
+        )?;
+        let named = |live: &[usize]| {
+            live.iter()
+                .map(|&i| self.impl_def_of(found.in_scope[i].impl_))
+                .collect()
+        };
+        Some(match rank(&found.in_scope) {
+            Selection::One(index) => Ordered::One(self.impl_def_of(found.in_scope[index].impl_)),
+            Selection::None if !found.out_of_scope.is_empty() => {
+                let mut traits: Vec<DefId> = Vec::new();
+                for c in &found.out_of_scope {
+                    let trait_ = self.lowering.trait_def_of(c.trait_);
+                    if !traits.contains(&trait_) {
+                        traits.push(trait_);
+                    }
+                }
+                Ordered::OutOfScope {
+                    traits,
+                    impls: found
+                        .out_of_scope
+                        .iter()
+                        .map(|c| self.impl_def_of(c.impl_))
+                        .collect(),
+                }
+            }
+            Selection::None => Ordered::Nothing,
+            Selection::AmbiguousTraits(live) => Ordered::AmbiguousTraits(named(&live)),
+            Selection::AmbiguousBlankets(live) => Ordered::AmbiguousBlankets(named(&live)),
+            // Coherence rejects these where they are written, so the order has
+            // nothing to add and the caller keeps whichever it collected.
+            Selection::Duplicated(live) => Ordered::Duplicated(named(&live)),
+            // One trait at several argument lists is the call's arguments to
+            // settle (WEP 2026-07-31), which the order does not answer.
+            Selection::Overloaded(live) => Ordered::Overloaded(named(&live)),
+        })
+    }
+
+    /// The link of `type_id`'s newtype chain where an impl the call site can
+    /// name answers `method_name`, as [`Self::select`] asks it: where rank 1
+    /// stops. An inherent method at that link or a nearer one shadows it.
+    pub(super) fn answering_link(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        module: &ModuleSource,
+        type_id: TypeId,
+        through_ref: Option<bool>,
+        method_name: &str,
+    ) -> Option<u32> {
+        let (found, receiver) = self.call_candidates(
+            tysys,
+            ctx,
+            module,
+            type_id,
+            through_ref,
+            method_name,
+            None,
+            &[],
+        )?;
+        answering_link(&self.program, &receiver, &found.in_scope)
+    }
+
+    /// The candidates [`Self::select`] ranks, with the receiver they were
+    /// collected on.
+    fn call_candidates(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        module: &ModuleSource,
+        type_id: TypeId,
+        through_ref: Option<bool>,
+        method_name: &str,
+        required_trait: Option<DefId>,
+        required_args: &[TypeId],
+    ) -> Option<(Candidates, SolverType)> {
         let method = MethodId(*self.lowering.methods.get(method_name)?);
         // A trait-qualified call named its trait, so the order runs within it:
         // every rank still applies, and the cross-trait question does not.
@@ -2461,40 +2546,7 @@ impl SolverBridge {
             found.in_scope.retain(on_ref);
             found.out_of_scope.retain(on_ref);
         }
-        let named = |live: &[usize]| {
-            live.iter()
-                .map(|&i| self.impl_def_of(found.in_scope[i].impl_))
-                .collect()
-        };
-        Some(match rank(&found.in_scope) {
-            Selection::One(index) => Ordered::One(self.impl_def_of(found.in_scope[index].impl_)),
-            Selection::None if !found.out_of_scope.is_empty() => {
-                let mut traits: Vec<DefId> = Vec::new();
-                for c in &found.out_of_scope {
-                    let trait_ = self.lowering.trait_def_of(c.trait_);
-                    if !traits.contains(&trait_) {
-                        traits.push(trait_);
-                    }
-                }
-                Ordered::OutOfScope {
-                    traits,
-                    impls: found
-                        .out_of_scope
-                        .iter()
-                        .map(|c| self.impl_def_of(c.impl_))
-                        .collect(),
-                }
-            }
-            Selection::None => Ordered::Nothing,
-            Selection::AmbiguousTraits(live) => Ordered::AmbiguousTraits(named(&live)),
-            Selection::AmbiguousBlankets(live) => Ordered::AmbiguousBlankets(named(&live)),
-            // Coherence rejects these where they are written, so the order has
-            // nothing to add and the caller keeps whichever it collected.
-            Selection::Duplicated(live) => Ordered::Duplicated(named(&live)),
-            // One trait at several argument lists is the call's arguments to
-            // settle (WEP 2026-07-31), which the order does not answer.
-            Selection::Overloaded(live) => Ordered::Overloaded(named(&live)),
-        })
+        Some((found, ty))
     }
 
     /// Which of `Eq` and `Ord` is written for `instance` without the other,

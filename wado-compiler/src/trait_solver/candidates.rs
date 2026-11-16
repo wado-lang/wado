@@ -58,6 +58,21 @@ pub fn candidates(
     answered
 }
 
+/// The link of `receiver`'s chain that `candidates` answer at: the nearest any
+/// of them sits on, which is where rank 1 stops. `None` where there are none.
+#[must_use]
+pub fn answering_link(
+    program: &Program,
+    receiver: &SolverType,
+    candidates: &[Candidate],
+) -> Option<u32> {
+    let levels = linked_chain(program, receiver);
+    candidates
+        .iter()
+        .map(|c| levels[c.depth as usize].1)
+        .min()
+}
+
 /// The impls of `trait_` that could answer a bound on `ty` writing `args`, for
 /// [`rank`](super::rank) to order as it orders a call's. A bound needs no import.
 #[must_use]
@@ -241,6 +256,18 @@ fn own_levels(receiver: &SolverType) -> u32 {
 /// is, so the walk goes on from `&mut T` to `T`. Any other reference ends it:
 /// the receiver's own is the caller's to peel, in a pass of its own.
 fn chain(program: &Program, receiver: &SolverType) -> Vec<SolverType> {
+    linked_chain(program, receiver)
+        .into_iter()
+        .map(|(ty, _)| ty)
+        .collect()
+}
+
+/// [`chain`]'s levels, each with its link: the newtype of the receiver's chain
+/// it belongs to, counted from the receiver's own as 0. A reference shares its
+/// pointee's link, and so does the pointee a newtype over a reference reaches,
+/// so a link is everything one newtype declaration's inherent impls answer
+/// beside.
+fn linked_chain(program: &Program, receiver: &SolverType) -> Vec<(SolverType, u32)> {
     let (through_ref, mut level) = match receiver {
         SolverType::Ref { is_mut, inner } => (Some(*is_mut), Some((**inner).clone())),
         SolverType::Decl(..)
@@ -250,12 +277,13 @@ fn chain(program: &Program, receiver: &SolverType) -> Vec<SolverType> {
         | SolverType::Projection { .. }
         | SolverType::AnyRow => (None, Some(receiver.clone())),
     };
-    let mut chain: Vec<SolverType> = Vec::new();
+    let mut chain: Vec<(SolverType, u32)> = Vec::new();
     let mut wrapped = false;
+    let mut link = 0;
     while let Some(ty) = level {
         // A newtype cycle is rejected where it is declared; refusing to walk one
         // twice keeps a malformed program from hanging the query.
-        if chain.contains(&ty) {
+        if chain.iter().any(|(seen, _)| *seen == ty) {
             break;
         }
         let base = newtype_base(program, &ty);
@@ -266,12 +294,18 @@ fn chain(program: &Program, receiver: &SolverType) -> Vec<SolverType> {
         };
         wrapped = base.is_some();
         if let Some(is_mut) = through_ref {
-            chain.push(SolverType::Ref {
-                is_mut,
-                inner: Box::new(ty.clone()),
-            });
+            chain.push((
+                SolverType::Ref {
+                    is_mut,
+                    inner: Box::new(ty.clone()),
+                },
+                link,
+            ));
         }
-        chain.push(ty);
+        chain.push((ty, link));
+        if wrapped {
+            link += 1;
+        }
     }
     chain
 }

@@ -635,6 +635,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         candidates.extend(self.trait_candidates(receiver, query.method_name, declaring_args));
         candidates.extend(self.blanket_candidates(query.method_name, receiver.ty));
+        // A receiver-taking declaration is the method call's to select.
+        candidates.retain(|c| c.kind == CandidateKind::Static);
         // As a method call's, a trait's declarations answer only where the
         // trait is in scope (WEP 2026-09-01, "Scope"). A qualified spelling
         // names its trait, which is what scope asks of a call.
@@ -1630,7 +1632,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether the receiver declares a `variant` case, `enum` case or `flags`
     /// member of this name, which the spelling constructs rather than calls.
-    fn declares_case_named(&self, key: &ImplTargetKey, name: &str) -> bool {
+    pub(super) fn declares_case_named(&self, key: &ImplTargetKey, name: &str) -> bool {
         let ImplTargetKey::Decl(def) = key else {
             return false;
         };

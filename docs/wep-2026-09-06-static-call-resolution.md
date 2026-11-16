@@ -108,24 +108,27 @@ statics a `resource` declares, and one it inherits along that chain.
 
 The rules run in this order, and the order is the design:
 
-1. The receiver's own declaration shadows the inherited candidates of its kind.
-2. A receiver-less declaration answers before a receiver-taking one, so
-   `Type::method(x)` is a static's call before it is a UFCS receiver.
-3. Where several traits supply the name, the spelling names none of them, and
+1. The receiver's own declaration shadows the inherited candidates.
+2. Where several traits supply the name, the spelling names none of them, and
    that is reported.
-4. The arguments pick among what is left.
-5. The earlier origin outranks: the receiver's own, then a written body, then an
+3. The arguments pick among what is left.
+4. The earlier origin outranks: the receiver's own, then a written body, then an
    inherited one, among what the arguments admit.
+
+Every candidate is receiver-less. A receiver-taking declaration is the method
+call's: where no receiver-less one answers, `Type::method(recv, …)` selects what
+`recv.method(…)` does (issue #2650). So `Type::method(x)` is a static's call
+before it is a receiver's.
 
 What remains is one declaration, or several of one trait that no argument
 separated: the overload.
 
-Steps 4 and 5 are in that order because a written body the argument rejects is
+Steps 3 and 4 are in that order because a written body the argument rejects is
 not an answer. `impl Conv<i32> for M {}` beside
 `impl Conv<String> for M { fn make(…) }` answers `M::make(5)` from the inherited
 default, though a block wrote a body for the other argument.
 
-An own candidate is exempt from step 4. The arguments choose among _impls_, and
+An own candidate is exempt from step 3. The arguments choose among _impls_, and
 a declaration the receiver makes itself has none to be chosen against. The call
 site reports an argument mismatch against the one declaration the spelling
 names.
@@ -184,21 +187,22 @@ constructor (`impl From<Array<T>> for List<T>`) leaves a concrete head to name
 and is kept, and a reference to a slot (`From<&T>`) is the slot, peeled before
 the question is asked.
 
-### The spelling names both kinds
+### The spelling names both kinds, through two resolutions
 
-`Type::method(recv, …)` reaches a trait's instance method as well as its static,
-passing the receiver first. Statics answer first, so a receiver-less declaration
-of the name still wins.
+`Type::method(recv, …)` reaches an instance method as well as a static, passing
+the receiver first. Statics answer first, so a receiver-less declaration of the
+name still wins.
 
-An inherent method shadows a trait's for this spelling, as it does for dot
-syntax: `Q::tag(&q)` names `impl Q`'s and the trait's is spelled `Tag::tag(&q)`.
+Where none does, the spelling is a method call on its first argument, and that
+argument must be of the spelled type. It once ran through this resolution
+instead, which kept a ladder of its own for instance methods: it collected no
+blanket's instance method, ranked a newtype's trait impl above its base's
+inherent method by link where dot syntax did not, and reported two traits where
+dot syntax ranked them (issue #2650). One resolution for both spellings removes
+the class.
+
 Shadowing holds within a kind, so an inherent method leaves a trait's associated
 function of the same name alone.
-
-A receiver-taking declaration has the receiver at argument zero, so its own
-parameters begin at argument one. Reading from argument zero for both kinds
-compares a receiver against the parameter two impls differ on, which separates
-nothing and admits nothing.
 
 ### The owning link is decided before the arguments
 

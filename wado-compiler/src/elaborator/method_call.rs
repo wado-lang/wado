@@ -106,6 +106,15 @@ fn primitive_receiver(prim: PrimitiveType) -> QualifiedReceiver {
     )
 }
 
+/// What a call passing its receiver first names before the method.
+pub(super) enum Qualifier<'a> {
+    /// `Trait::method(recv, …)`: only that trait's impls answer.
+    Trait(RequiredTrait),
+    /// `Type::method(recv, …)`: what `recv.method(…)` selects, `recv` being of
+    /// that type.
+    Type(&'a ReceiverId),
+}
+
 /// Inputs to [`Elaborator::resolve_method_call_with`], the TIR-level method-call
 /// dispatcher. [`Elaborator::resolve_method_call`] wraps it for AST-driven calls;
 /// a synthesised one (for-of's `into_iter()` / `next()`) calls it directly with
@@ -534,6 +543,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut matched_ref_kind: Option<RefKind> = None;
         let is_ref = self.tysys.type_table.borrow().is_reference(receiver);
 
+        // An inherent method shadows the trait impls at its link of the
+        // newtype chain and every link past it; a trait impl at a nearer link
+        // answers instead. A qualified call names a trait, which no inherent
+        // method answers for.
+        let inherent = if required_trait.is_none() {
+            self.lookup_method_info(receiver, method_name)
+                .map(|info| (self.inherent_link(base_type_id, info.owner), info))
+        } else {
+            None
+        };
+        let trait_answers_nearer = |this: &Self, through_ref: Option<bool>| match &inherent {
+            None => true,
+            Some((link, _)) => this.trait_answers_before(base_type_id, through_ref, method_name, *link),
+        };
+
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
         // Only specific ref impls are preferred (not blanket impls like impl Inspect for &T).
@@ -548,7 +572,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let subject_ref_kind = subject
             .and_then(|s| RefKind::from_resolved(&self.tysys.type_table.borrow().get(s).clone()));
-        if let Some(ref_kind) = subject_ref_kind {
+        if let Some(ref_kind) = subject_ref_kind
+            && trait_answers_nearer(self, Some(ref_kind == RefKind::Mut))
+        {
             let result = self.find_trait_method_for_type(
                 &ImplTargetKey::Ref(ref_kind),
                 method_name,
@@ -611,8 +637,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Look up method info based on receiver type (inherent + base type trait methods)
-        if method_info.is_none() && required_trait.is_none() {
-            method_info = self.lookup_method_info(receiver, method_name);
+        if method_info.is_none() && inherent.is_some() && !trait_answers_nearer(self, None) {
+            method_info = inherent.map(|(_, info)| info);
             if let Some(def) = method_info.as_ref().and_then(|info| info.impl_block) {
                 self.defer_awaited_impl_bounds(def, base_type_id, span);
             }
@@ -1426,6 +1452,98 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The link of `receiver`'s newtype chain whose inherent impl declares the
+    /// method `owner` says answered: 0 for the receiver's own. A reference a
+    /// newtype wraps is no link of its own.
+    fn inherent_link(&self, receiver: TypeId, owner: MethodOwner) -> u32 {
+        let declaring = match owner {
+            MethodOwner::Receiver => return 0,
+            MethodOwner::InheritedFrom(ty) | MethodOwner::Referent(ty) => Some(ty),
+            // A resource ends its newtype chain.
+            MethodOwner::Ancestor(_) => None,
+        };
+        let mut link = 0;
+        let mut ty = receiver;
+        loop {
+            if Some(ty) == declaring {
+                return link;
+            }
+            let ResolvedType::Newtype { base_type, .. } = self.tysys.type_table.borrow().get(ty).clone()
+            else {
+                return link;
+            };
+            ty = self.tysys.get_base_type(base_type);
+            link += 1;
+        }
+    }
+
+    /// Whether `Type::method(…)` names a receiver-taking method: no
+    /// receiver-less declaration answers it, and one taking a receiver is
+    /// declared along the type's newtype chain or by some trait, which a
+    /// blanket's covers. The call then selects as `recv.method(…)` does, and
+    /// that resolution reports a trait the type does not implement.
+    pub(super) fn names_instance_method(&mut self, receiver: &ReceiverId, method_name: &str) -> bool {
+        let lookup = self.resolve_static_callee(StaticQuery::of(receiver, method_name));
+        if !matches!(lookup, StaticLookup::NotStatic)
+            || self.declares_case_named(receiver.key(), method_name)
+        {
+            return false;
+        }
+        let mut key = receiver.key().clone();
+        loop {
+            if self
+                .impl_method_entries(&key, method_name)
+                .any(|entry| entry.has_self)
+            {
+                return true;
+            }
+            match self.newtype_link_target(&key) {
+                Some((link, _)) => key = link,
+                None => break,
+            }
+        }
+        self.tysys.trait_env.trait_decl_headers.values().any(|decl| {
+            decl.methods
+                .iter()
+                .any(|m| m.name == method_name && m.has_receiver)
+        })
+    }
+
+    /// Whether `receiver_type`, behind its references, is the type `spelled`
+    /// names.
+    fn receiver_is_spelled(&self, spelled: &ReceiverId, receiver_type: TypeId) -> bool {
+        if receiver_type == TypeTable::ERROR || receiver_type == TypeTable::UNKNOWN {
+            return true;
+        }
+        let pointee = self.tysys.type_table.borrow().peel_refs(receiver_type);
+        self.receiver_of(pointee).key() == spelled.key()
+    }
+
+    /// Whether a trait impl the call site can name answers `method_name` on
+    /// `receiver` at a link nearer than `inherent_link`.
+    fn trait_answers_before(
+        &self,
+        receiver: TypeId,
+        through_ref: Option<bool>,
+        method_name: &str,
+        inherent_link: u32,
+    ) -> bool {
+        inherent_link > 0
+            && self.tysys.solver.as_ref().is_some_and(|bridge| {
+                bridge
+                    .borrow()
+                    .answering_link(
+                        &self.tysys,
+                        &self.annotate_ctx,
+                        self.frame_module(),
+                        receiver,
+                        through_ref,
+                        method_name,
+                    )
+                    .is_some_and(|link| link < inherent_link)
+            })
+    }
+
     /// Whether the trait named at `head_site` declares `method_name` with a
     /// receiver, making a call on it the trait-qualified (UFCS) form
     /// `Trait::method(recv, args…)` (WEP 2026-07-31).
@@ -1475,8 +1593,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Expr::Ident(ident) => ident.segments.last().map(|seg| seg.id),
             _ => None,
         };
-        self.resolve_trait_qualified_call_parts(
-            required,
+        self.resolve_qualified_call_parts(
+            Qualifier::Trait(required),
             method_name,
             &call.args,
             type_args,
@@ -1488,13 +1606,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// The shared engine behind both qualified spellings: the bare
-    /// `Trait::method(recv, …)` ident form, and the trait-turbofish
+    /// The shared engine behind every spelling that passes the receiver first:
+    /// the bare `Trait::method(recv, …)` ident form, the trait-turbofish
     /// `Take::<A>::take(recv, …)` static form whose `required_trait` carries
-    /// the resolved trait arguments and thereby pins one argument list.
-    fn resolve_trait_qualified_call_parts(
+    /// the resolved trait arguments and thereby pins one argument list, and
+    /// `Type::method(recv, …)`, which selects what `recv.method(…)` does.
+    pub(super) fn resolve_qualified_call_parts(
         &mut self,
-        required_trait: RequiredTrait,
+        qualifier: Qualifier<'_>,
         method_name: &str,
         args: &[ast::Expr],
         type_args: Vec<TypeId>,
@@ -1505,16 +1624,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
+        let (required_trait, spelled, qualifier_display) = match qualifier {
+            Qualifier::Trait(required) => {
+                let display = required.display.clone();
+                (Some(required), None, display)
+            }
+            Qualifier::Type(receiver) => (None, Some(receiver), self.receiver_display(receiver)),
+        };
         let Some((receiver_ast, rest)) = args.split_first() else {
             let _ = self.emit(TypeError::TraitQualifiedCallNeedsReceiver {
-                trait_name: required_trait.display,
+                trait_name: qualifier_display,
                 method: method_name.to_string(),
                 span,
             });
             return TypeTable::ERROR;
         };
-        let trait_display = required_trait.display.clone();
         let receiver_type = self.resolve_expr(receiver_ast, ctx, None);
+        if let Some(spelled) = spelled
+            && !self.receiver_is_spelled(spelled, receiver_type)
+        {
+            let found = self.tysys.type_id_to_string(receiver_type);
+            let _ = self.emit(TypeError::TypeMismatch {
+                expected: format!("&{qualifier_display}"),
+                found,
+                span: receiver_ast.span(),
+            });
+            return self.resolve_args_without_callee(rest, ctx);
+        }
         // `call_id: None` — the dispatcher would file the decision under
         // `method_dispatch`, which reify only reads for a `MethodCallExpr`
         // node. A qualified call spells its receiver's mode itself (`&x` for
@@ -1536,13 +1672,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args: rest,
                 expected_type,
                 span,
-                required_trait: Some(required_trait),
+                required_trait,
             },
             ctx,
         );
         if let Some(sig) = &outcome.signature {
             self.check_trait_qualified_receiver_mode(
-                &trait_display,
+                &qualifier_display,
                 method_name,
                 sig.self_kind,
                 receiver_type,
@@ -1832,8 +1968,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 let method_type_args: Vec<TypeId> =
                     self.resolve_turbofish_args(&static_call.type_args);
-                return self.resolve_trait_qualified_call_parts(
-                    required,
+                return self.resolve_qualified_call_parts(
+                    Qualifier::Trait(required),
                     &static_call.method.clone(),
                     &static_call.args,
                     method_type_args,
@@ -1911,6 +2047,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         });
         let static_receiver = lookup_receiver.as_ref().map(ReceiverId::key);
+
+        let spelled = own_key.at_type(Some(target_type_id));
+        if required_trait.is_none() && self.names_instance_method(&spelled, &static_call.method) {
+            let method_type_args = self.resolve_turbofish_args(&static_call.type_args);
+            return self.resolve_qualified_call_parts(
+                Qualifier::Type(&spelled),
+                &static_call.method,
+                &static_call.args,
+                method_type_args,
+                static_call.id,
+                Some(static_call.method_id),
+                static_call.span,
+                expected_type,
+                ctx,
+            );
+        }
 
         // `Type::<T>::method()` parses as a static-method call and never
         // reaches `resolve_call`, which checks the bare spelling. The receiver

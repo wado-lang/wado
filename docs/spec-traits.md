@@ -112,12 +112,19 @@ test {
 A call `recv.m(args)` resolves in one order. The receiver decides which step
 answers:
 
-1. An inherent method (`impl Type { … }`) shadows every trait method of that
-   name, along the whole newtype chain.
+1. An inherent method (`impl Type { … }`) shadows the trait methods of that
+   name at its link of the newtype chain and at every link past it. A trait
+   impl at a nearer link answers instead.
 2. A reference receiver's concrete `&T` impls come before its pointee's.
 3. The trait impls that apply to the receiver are ranked, below.
 4. A receiver whose type is a type parameter answers from its bounds instead.
    A method that two or more of them declare is an error.
+
+A link is one type of the newtype chain together with the references to it. A
+call on `&W`, where `W` is a newtype over `Inner`, has two links: `&W` and `W`,
+then `&Inner` and `Inner`. So an inherent `fn m(&self)` on `W` shadows an
+`impl Tr for &W` as well as an `impl Tr for W`, and a trait impl on `W` answers
+before an inherent method on `Inner`.
 
 <!-- {"fixture":"spec_traits_inherent_wins.wado"} -->
 
@@ -215,7 +222,9 @@ blanket impls. They are ranked:
    the same trait at the same argument list.
 2. The newtype before its base. The search stops at the first level of the
    receiver's newtype chain that answers.
-3. Within one level, the impl that names more of the receiver. One written for
+3. Within one level, the impl that names more of the receiver, among the impls
+   of one trait. Impls of two traits at one level are the ambiguity below,
+   however much of the receiver each names. One written for
    the receiver (`impl Tag for Box<i32>`) comes first, then one written for its
    head (`impl<T> Tag for Box<T>`), then a value blanket
    (`impl<T: Bound> Tr for T`). A blanket names no type at all, only a condition
@@ -257,9 +266,11 @@ one.
 Candidates the ranks cannot separate are an error, reported at the call. There
 are three shapes, because the fix differs:
 
-- Two traits declaring the method name. They share no contract, so the call
-  names one: `Alpha::describe(&x)`. Blankets of two traits join this collision
-  like any other candidate.
+- Two traits declaring the method name at one level. They share no contract,
+  so the call names one: `Alpha::describe(&x)`. An impl written for the
+  receiver does not outrank another trait's head impl or blanket: ranking them
+  would let a library's new impl change what the call means. Blankets of two
+  traits join this collision like any other candidate.
 - Two blankets of one trait, the receiver satisfying both bounds. A blanket has
   no name to call it by, so the fix is an `impl Tr for TheType`, which
   generality puts above both.
@@ -372,10 +383,12 @@ A qualified call selects the impl the method form would:
 `IntoIterator::into_iter(&list)` takes `impl IntoIterator for &List<T>`, as
 `(&list).into_iter()` does.
 
-`Type::method(recv, args…)` names the type's own method instead. There, as in
-the method form, an inherent declaration shadows a trait impl's declaration of
-the same name when both take `self` or both do not. The trait's is reached as
-`Trait::method(recv, …)`.
+`Type::method(recv, args…)`, where no receiver-less declaration answers the
+name, selects what `recv.method(args…)` selects, and `recv` must be of that
+type. A trait impl's method is reached this way as an inherent one is, a
+blanket's included. A receiver-less declaration of the name answers first, so
+`Type::method(x)` is a static's call before it is a receiver's. A trait's
+method that the spelling does not reach is reached as `Trait::method(recv, …)`.
 
 An associated function with no `self` has no receiver argument to bind `Self`
 from, so the trait-qualified form cannot name it. A reflection trait is the
