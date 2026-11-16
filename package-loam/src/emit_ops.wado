@@ -502,7 +502,7 @@ fn built_gather(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
 }
 
 /// A `MatMulNBits` or a `GatherBlockQuantized` as its composite's call, and a
-/// product's bias added after it. Without zero points the turbofish spells
+/// product's bias added after it, both in f32 over halves. Without zero points the turbofish spells
 /// the scales' blocks for theirs.
 fn built_quantized(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
