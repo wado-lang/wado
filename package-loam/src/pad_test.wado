@@ -1,13 +1,13 @@
 //! Which lengths the run may pad to a capacity, and the node that refuses one.
 
+use { report } from "./dump.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
-use { padding } from "./pad.wado";
 
 /// Each symbol `source`'s inputs read, as `loam dump` reports it.
 fn judged(source: String) -> List<String> {
     let graph = read(&source).unwrap();
-    return padding(&graph, &infer(&graph).unwrap()).into_iter().map(|j| `${j}`).collect();
+    return report(&graph, &infer(&graph).unwrap()).padding.into_iter().map(|j| `${j}`).collect();
 }
 
 test "a length every operator keeps apart, or reads masked, is padded" {
@@ -47,6 +47,15 @@ test "a length merged behind the rows keeps it padded where each row is computed
         G = Gemm(F, W, B)
         H = Relu(G)
         C = Cast<to = 1>(H)
+        Y = Reshape(C, Back)
+    }`;
+    assert judged(source) == ["S: padded"] as List<String>;
+}
+
+test "a CastLike between merged rows is judged as the Cast it is" {
+    let source = `g (float[2, S, 4] X) => (float[2, S, 4] Y) <int64[2] Flat = {-1, 4}, int64[3] Back = {2, -1, 4}> {
+        F = Reshape(X, Flat)
+        C = CastLike(F, X)
         Y = Reshape(C, Back)
     }`;
     assert judged(source) == ["S: padded"] as List<String>;

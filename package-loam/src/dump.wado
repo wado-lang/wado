@@ -8,7 +8,7 @@ use { Serialize } from "core:serde";
 use { CodeWriter } from "lib:wadopoet";
 use { Graph, Known, Node, ValueInfo } from "./graph.wado";
 use { rows_judged } from "./emit.wado";
-use { Checked } from "./infer.wado";
+use { Checked, cast_likes_resolved } from "./infer.wado";
 use { Lowering, branches, lowerings } from "./lowering.wado";
 use { Judged, padding } from "./pad.wado";
 use { Shape } from "./shape.wado";
@@ -87,6 +87,7 @@ pub struct TensorReport {
 
 /// The report for `graph`, checked as `checked`.
 pub fn report(graph: &Graph, checked: &Checked) -> Report {
+    let graph = &cast_likes_resolved(graph, checked);
     return Report {
         graph: graph.name,
         opset: graph.opset,

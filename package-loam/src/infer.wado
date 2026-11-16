@@ -912,9 +912,15 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
     return Result::Ok(element);
 }
 
+/// `graph` with each `CastLike` the `Cast` it is, as everything that reads a
+/// checked graph's nodes takes it.
+pub fn cast_likes_resolved(graph: &Graph, checked: &Checked) -> Graph {
+    return Graph { ..*graph, nodes: resolved_nodes(graph.nodes, checked) };
+}
+
 /// `nodes`, their branches' among them, with each `CastLike` the `Cast` it
 /// is, by the element types `checked`, the scope that checked them, holds.
-pub fn cast_likes_resolved(nodes: List<Node>, checked: &Checked) -> List<Node> {
+fn resolved_nodes(nodes: List<Node>, checked: &Checked) -> List<Node> {
     let mut out: List<Node> = [];
     for let node of nodes {
         let mut attrs: List<Attr> = [];
@@ -925,7 +931,7 @@ pub fn cast_likes_resolved(nodes: List<Node>, checked: &Checked) -> List<Node> {
                     let scope = if a.name == "then_branch" { then_scope } else { else_scope };
                     Attr {
                         ..a,
-                        graph: Option::Some(Graph { ..g, nodes: cast_likes_resolved(g.nodes, &scope) }),
+                        graph: Option::Some(cast_likes_resolved(&g, &scope)),
                     };
                 },
                 None => a,
