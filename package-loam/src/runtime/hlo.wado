@@ -1661,6 +1661,92 @@ impl Graph for Cpu {
         assert pred.data.len() == 1, "a condition is one element";
         return if pred.data[0] { then() } else { otherwise() };
     }
+
+    /// Each row of the weight dequantized once, as the decomposition rounds it,
+    /// then summed against each row of `a` as `dot_general` sums.
+    fn quantized_product<E: Float, In, N, Blocks, Blob, Z, Out>(
+        &mut self,
+        a: &Tensor<E, In>,
+        packed: &Tensor<u8, [N, Blocks, Blob]>,
+        scales: &Tensor<E, [N, Blocks]>,
+        zero_points: Option<&Tensor<u8, [N, Z]>>,
+        quantized: &Quantized,
+    ) -> Tensor<E, Out> {
+        let mut extents = a.extents;
+        let last = extents.len() - 1;
+        let k = extents[last];
+        let n = packed.extents[0];
+        let rows = element_count(&a.extents) / k;
+        let bytes = packed.extents[1] * packed.extents[2];
+        let mut weights = List::<E>::filled(k, E::from_f32(0.0));
+        let mut out = List::<E>::filled(rows * n, E::from_f32(0.0));
+        for let c of 0..<n {
+            unpacked_row(&packed.data, bytes, scales, zero_points, quantized, c, &mut weights);
+            let column = product_by_rows(&a.data, &weights, 1, rows, k, 1);
+            for let r of 0..<rows {
+                out[r * n + c] = column[r];
+            }
+        }
+        extents[last] = n;
+        return Tensor { data: out, extents };
+    }
+
+    /// Each row `indices` name dequantized as the decomposition rounds it, or
+    /// zeros where the index, wrapped once from the end, falls outside the
+    /// table.
+    fn quantized_gather<E: Float, R, P, I, Blocks, Z, Out>(
+        &mut self,
+        packed: &Tensor<u8, [R, P]>,
+        indices: &Tensor<i64, I>,
+        scales: &Tensor<E, [R, Blocks]>,
+        zero_points: Option<&Tensor<u8, [R, Z]>>,
+        quantized: &Quantized,
+    ) -> Tensor<E, Out> {
+        let [rows, bytes] = [packed.extents[0], packed.extents[1]];
+        let width = bytes * (8 / quantized.bits);
+        let zeros = List::<E>::filled(width, E::from_f32(0.0));
+        let mut values = zeros;
+        let mut out = List::<E>::with_capacity(indices.data.len() * width);
+        for let index of indices.data {
+            let row = if index < 0 { index + rows as i64 } else { index };
+            if row < 0 || row >= rows as i64 {
+                out.extend(&zeros);
+                continue;
+            }
+            unpacked_row(&packed.data, bytes, scales, zero_points, quantized, row as i32, &mut values);
+            out.extend(&values);
+        }
+        let mut extents = indices.extents;
+        extents.push(width);
+        return Tensor { data: out, extents };
+    }
+}
+
+/// The first `into.len()` values of row `row` of a weight packed `bytes` to a
+/// row, rounded as `dequantized` rounds them.
+fn unpacked_row<E: Float, R, Blocks, Z>(
+    packed: &List<u8>,
+    bytes: i32,
+    scales: &Tensor<E, [R, Blocks]>,
+    zero_points: Option<&Tensor<u8, [R, Z]>>,
+    quantized: &Quantized,
+    row: i32,
+    into: &mut List<E>,
+) {
+    let bits = quantized.bits;
+    let per = 8 / bits;
+    let mask = (1 << bits) - 1;
+    let blocks = scales.extents[1];
+    for let i of 0..<into.len() {
+        let b = i / quantized.block;
+        let q = (packed[row * bytes + i / per] as i32 >> (i % per * bits)) & mask;
+        let zero = match zero_points {
+            Some(z) => (z.data[row * z.extents[1] + b / per] as i32 >> (b % per * bits)) & mask,
+            None => 1 << (bits - 1),
+        };
+        let scale = scales.data[row * blocks + b].cast_to::<f32>();
+        into[i] = E::from_f32((q - zero) as f32 * scale);
+    }
 }
 
 /// The axes a convolution's kernels type their operands by, which the CPU
