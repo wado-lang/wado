@@ -2,6 +2,7 @@
 //! and running it, and reading the tensors the ONNX backend test data ships
 //! beside each model, one bare `TensorProto` to a `.pb` file.
 
+use { HashMap } from "core:collections";
 use { eval, EvalHost } from "core:eval";
 use { emit } from "lib:loam/src/emit.wado";
 use { Graph, Known, Stored } from "lib:loam/src/graph.wado";
@@ -33,6 +34,13 @@ pub fn ran(program: String) -> String with EvalHost {
         },
         Err(e) => `${e:?}`,
     };
+}
+
+/// `bytes` as the one file `name` a `Params::load` reads.
+pub fn one_file(name: String, bytes: ByteList) -> HashMap<String, ByteList> {
+    let mut files = HashMap::<String, ByteList>::new();
+    files[name] = bytes;
+    return files;
 }
 
 /// A `.pb` file's elements and extents.

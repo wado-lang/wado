@@ -22,6 +22,7 @@ use {
     walked,
 } from "./tensor.wado";
 use { Any, Recorded, Recorder, Untyped, assert_carries, kept_any } from "./recorded.wado";
+use { HostWeight } from "./weight.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
 /// StableHLO has no error function.
@@ -144,18 +145,18 @@ pub affine trait Graph: Holds with _ {
     }
     /// The `count` weights a pass reads, `load(at)` the `at`th on the host,
     /// which the parameters `record` records take from its `first` on: each
-    /// kept as [`Holds::keep`] keeps it, or laid out for the operations the
-    /// recorded pass reads it in.
+    /// laid out from its stored bytes for the operations the recorded pass
+    /// reads it in, or decoded and kept as [`Holds::keep`] keeps it.
     fn kept_weights<Er>(
         &mut self,
         record: fn(&mut Recorder) -> Recorded with _,
         first: i32,
         count: i32,
-        load: fn(i32) -> Result<Any<Cpu>, Er> with _,
+        load: fn(i32) -> Result<HostWeight, Er> with _,
     ) -> Result<List<Any<Self>>, Er> with _ {
         let mut kept: List<Any<Self>> = [];
         for let at of 0..<count {
-            kept.push(kept_any(self, &load(at)?));
+            kept.push(kept_any(self, &load(at)?.decoded()));
         }
         return Result::Ok(kept);
     }
@@ -1057,9 +1058,9 @@ fn turned<affine G: Graph, E: Float, B, N, S, D, Half>(
     };
     let [a_start, a_limit] = columns(0, half);
     let [b_start, b_limit] = columns(half, 2 * half);
-    let half_of = |g: &mut G, start: List<i32>, limit: List<i32>| -> G::Tensor<f32, [B, N, S, Half]> {
-        let part: G::Tensor<E, [B, N, S, Half]> = g.slice(x, start, limit, [1, 1, 1, 1]);
-        return g.convert::<E, f32, [B, N, S, Half]>(&part);
+    let half_of = |on: &mut G, start: List<i32>, limit: List<i32>| -> G::Tensor<f32, [B, N, S, Half]> {
+        let part: G::Tensor<E, [B, N, S, Half]> = on.slice(x, start, limit, [1, 1, 1, 1]);
+        return on.convert::<E, f32, [B, N, S, Half]>(&part);
     };
     let a = half_of(g, a_start, a_limit);
     let b = half_of(g, b_start, b_limit);

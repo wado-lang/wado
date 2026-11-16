@@ -323,7 +323,19 @@ fn run_gc_heap_initial_suffixes() {
 #[test]
 fn run_gc_heap_initial_rejects_nonsense() {
     let parser = Parser::from_args(&["--gc-heap-initial", "lots", "input.wado"]);
-    assert_err(wado_cli::run::parse_args(parser), "invalid GC heap size");
+    assert_err(
+        wado_cli::run::parse_args(parser),
+        "--gc-heap-initial: invalid size 'lots'",
+    );
+}
+
+#[test]
+fn run_max_memory_rejects_nonsense_naming_itself() {
+    let parser = Parser::from_args(&["--max-memory", "lots", "input.wado"]);
+    assert_err(
+        wado_cli::run::parse_args(parser),
+        "--max-memory: invalid size 'lots'",
+    );
 }
 
 /// A suffix multiplies, so a value that fits `u64` on its own need not fit

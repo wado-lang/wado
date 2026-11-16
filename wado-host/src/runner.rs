@@ -586,7 +586,7 @@ async fn run_component<T: Guest>(
     link(&engine, &component, &mut linker)?;
     linker.define_unknown_imports_as_traps(&component)?;
 
-    let mut store = new_store(&engine, state);
+    let mut store = new_store(&engine, state, run_engine.knobs.max_memory);
     if run_engine.gc_log {
         gc_log::start();
     }
@@ -935,6 +935,8 @@ mod tests {
             "drc",
             "--gc-heap-initial",
             "1m",
+            "--max-memory",
+            "32m",
             "--report-fuel",
             "--deny-process",
             "app.wado",
@@ -945,6 +947,7 @@ mod tests {
             wasmtime::Collector::DeferredReferenceCounting
         ));
         assert_eq!(knobs.gc_heap_initial_size, 1 << 20);
+        assert_eq!(knobs.max_memory, Some(32 << 20));
         assert!(knobs.report_fuel);
         assert_eq!(knobs.process, ProcessGrant::Denied);
     }

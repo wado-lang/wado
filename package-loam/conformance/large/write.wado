@@ -1,0 +1,49 @@
+//! Writes the sharded checkpoint `chain.onnxtext` reads into `build/large/`,
+//! which is not committed: 80 MiB of weights, half in each of two shards, as
+//! `layout.wado` lays them out. Run from `conformance/`:
+//!
+//!     wado run large/write.wado
+
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { StoredTensor, write_safetensors } from "lib:loam/src/safetensors.wado";
+use { DIR, N, WEIGHTS, moved } from "./layout.wado";
+
+/// Weight `k`, the permutation moving element `i` to `moved(k, i)`.
+fn permutation(k: i32) -> StoredTensor {
+    let mut data = List::<u8>::filled(N * N * 4, 0) as ByteList;
+    for let i of 0..<N {
+        // 1.0 is 0x3F800000, little-endian.
+        let at = (i * N + moved(k, i)) * 4;
+        data[at + 2] = 0x80;
+        data[at + 3] = 0x3F;
+    }
+    return StoredTensor {
+        name: `w${k}`,
+        dtype: "F32",
+        shape: [N as i64, N as i64],
+        data,
+    };
+}
+
+/// The name of shard `s`, counting from 1, as an exporter names it.
+fn shard(s: i32) -> String {
+    return `model-0000${s}-of-00002.safetensors`;
+}
+
+export fn run() with Preopens {
+    fs::create_dir_all(DIR).unwrap();
+    let per_shard = WEIGHTS / 2;
+    let mut weight_map: List<String> = [];
+    for let s of 1..=2 {
+        let mut tensors: List<StoredTensor> = [];
+        for let k of (s - 1) * per_shard..<s * per_shard {
+            tensors.push(permutation(k));
+            weight_map.push(`"w${k}": "${shard(s)}"`);
+        }
+        fs::write(fs::join(DIR, shard(s)), &write_safetensors(&tensors)).unwrap();
+    }
+    let total = WEIGHTS * N * N * 4;
+    let index = `{"metadata": {"total_size": ${total}}, "weight_map": {${weight_map.join(", ")}}}`;
+    fs::write(fs::join(DIR, "model.safetensors.index.json"), &index).unwrap();
+}

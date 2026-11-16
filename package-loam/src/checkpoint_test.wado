@@ -2,17 +2,20 @@
 //! disagree with the graph a module was compiled for.
 
 use { HashMap } from "core:collections";
-use { LinearArray } from "core:linear";
+use fs from "core:fs";
 use { push_element } from "./graph.wado";
 use {
     Expected,
+    FileSource,
     LoadError,
     declared_header_end,
-    header_end,
-    read_checkpoint,
-    read_shards,
+    expect_holds,
+    header_of,
+    read_headers,
 } from "./runtime/checkpoint.wado";
 use { StoredTensor, write_safetensors } from "./safetensors.wado";
+use { Element } from "./runtime/tensor.wado";
+use { HostWeight } from "./runtime/weight.wado";
 
 fn is_error<E: Error>() {
 }
@@ -37,20 +40,28 @@ fn with_header(header: String) -> ByteList {
     return bytes;
 }
 
+fn weight() -> StoredTensor {
+    return StoredTensor {
+        name: "w",
+        dtype: "F32",
+        shape: [2, 3],
+        data: floats([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
+    };
+}
+
+fn bias() -> StoredTensor {
+    return StoredTensor {
+        name: "b",
+        dtype: "F32",
+        shape: [3],
+        data: floats([-1.0, 0.5, 0.25]),
+    };
+}
+
 fn two_tensors() -> ByteList {
     return write_safetensors(&[
-        StoredTensor {
-            name: "w",
-            dtype: "F32",
-            shape: [2, 3],
-            data: floats([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
-        },
-        StoredTensor {
-            name: "b",
-            dtype: "F32",
-            shape: [3],
-            data: floats([-1.0, 0.5, 0.25]),
-        },
+        weight(),
+        bias(),
     ]);
 }
 
@@ -76,90 +87,99 @@ fn b() -> Expected {
     };
 }
 
-test "a payload comes back as the elements written under its name" {
-    let bytes = two_tensors();
-    let checkpoint = read_checkpoint(&bytes).unwrap();
-    assert checkpoint.payload::<f32, ByteList>(&bytes, &w()).unwrap() == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as List<f32>;
-    assert checkpoint.payload::<f32, ByteList>(&bytes, &b()).unwrap() == [-1.0, 0.5, 0.25] as List<f32>;
+/// The first `len` of `bytes`.
+fn prefix(bytes: ByteList, len: i32) -> ByteList {
+    let mut kept = bytes;
+    kept.truncate(len);
+    return kept;
 }
 
-test "a checkpoint in linear memory reads as one in the GC heap" {
-    let bytes = LinearArray::from_slice(&two_tensors());
-    let checkpoint = read_checkpoint(&bytes).unwrap();
-    let weight = checkpoint.payload::<f32, LinearArray<u8>>(&bytes, &w()).unwrap();
-    assert weight == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as List<f32>;
-    assert checkpoint.payload::<f32, LinearArray<u8>>(&bytes, &b()).unwrap() == [-1.0, 0.5, 0.25] as List<f32>;
+/// `bytes` as the one file `m` of a source.
+fn held(bytes: ByteList) -> HashMap<String, ByteList> {
+    let mut given = HashMap::<String, ByteList>::new();
+    given["m"] = bytes;
+    return given;
+}
+
+/// The values `loaded` holds, or its error.
+fn loaded_values(loaded: Result<HostWeight, LoadError>) -> Result<List<f32>, LoadError> {
+    let host = loaded?;
+    return Result::Ok((0..<host.count()).map(|i| host.value(i)).collect());
+}
+
+/// `e`'s elements in the file `m` of `given`.
+fn payload<U: Element>(given: &HashMap<String, ByteList>, e: &Expected) -> Result<List<f32>, LoadError> {
+    return loaded_values(read_headers(given, ["m"])?.payload::<U, HashMap<String, ByteList>>(given, "m", e));
+}
+
+test "a payload comes back as the elements written under its name" {
+    let given = held(two_tensors());
+    assert payload::<f32>(&given, &w()).unwrap() == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as List<f32>;
+    assert payload::<f32>(&given, &b()).unwrap() == [-1.0, 0.5, 0.25] as List<f32>;
 }
 
 test "the header is read from its prefix alone" {
     let bytes = two_tensors();
-    let prefix = bytes.as_byte_slice().slice(0, header_end(&bytes).unwrap());
-    let checkpoint = read_checkpoint(&prefix).unwrap();
-    let [start, end] = checkpoint.range(&w()).unwrap();
-    assert end - start == 24;
+    let end = declared_header_end(&bytes).unwrap();
+    let checkpoint = header_of(prefix(bytes, end)).unwrap();
+    let [start, stop] = checkpoint.range(&w()).unwrap();
+    assert stop - start == 24;
 }
 
-test "a tensor the checkpoint lacks names itself" {
-    let bytes = two_tensors();
-    let e = read_checkpoint(&bytes).unwrap().payload::<f32, ByteList>(&bytes, &Expected { ..b(), tensor: "missing" }).unwrap_err();
-    assert `${e}` == "missing: the checkpoint has no such tensor";
+test "a tensor the checkpoint lacks names itself and the file" {
+    let e = payload::<f32>(&held(two_tensors()), &Expected { ..b(), tensor: "missing" }).unwrap_err();
+    assert `${e}` == "m: missing: the checkpoint has no such tensor";
 }
 
 test "an element type that disagrees names both" {
-    let bytes = two_tensors();
-    let e = read_checkpoint(&bytes).unwrap().payload::<f16, ByteList>(&bytes, &Expected {
+    let e = payload::<f16>(&held(two_tensors()), &Expected {
         ..b(),
         dtype: "F16",
         width: 2,
     }).unwrap_err();
-    assert `${e}` == "b: the checkpoint holds F32, and the graph F16";
+    assert `${e}` == "m: b: the checkpoint holds F32, and the graph F16";
 }
 
 test "a rank that disagrees names the graph's axes" {
-    let bytes = two_tensors();
-    let e = read_checkpoint(&bytes).unwrap().payload::<f32, ByteList>(&bytes, &Expected {
+    let e = payload::<f32>(&held(two_tensors()), &Expected {
         ..w(),
         axes: ["Out", "In", "Extra"],
         extents: [2, 3, 1],
         elements: 6,
     }).unwrap_err();
-    assert `${e}` == "w: the checkpoint gives 2 axes, and the graph [Out, In, Extra]";
+    assert `${e}` == "m: w: the checkpoint gives 2 axes, and the graph [Out, In, Extra]";
 }
 
 test "an extent that disagrees names the axis" {
-    let bytes = two_tensors();
-    let e = read_checkpoint(&bytes).unwrap().payload::<f32, ByteList>(&bytes, &Expected {
+    let e = payload::<f32>(&held(two_tensors()), &Expected {
         ..w(),
         extents: [2, 4],
         elements: 8,
     }).unwrap_err();
-    assert `${e}` == "w: axis In is 3 in the checkpoint and 4 in the graph";
+    assert `${e}` == "m: w: axis In is 3 in the checkpoint and 4 in the graph";
 }
 
 test "offsets that disagree with the shape name the tensor" {
     let bytes = write_safetensors(&[
         StoredTensor {
-            name: "b",
-            dtype: "F32",
-            shape: [3],
+            ..bias(),
             data: floats([1.0, 2.0]),
         },
     ]);
-    let e = read_checkpoint(&bytes).unwrap().payload::<f32, ByteList>(&bytes, &b()).unwrap_err();
-    assert `${e}` == "b: the checkpoint's offsets hold 8 bytes, and 3 F32 elements need 12";
+    let e = payload::<f32>(&held(bytes), &b()).unwrap_err();
+    assert `${e}` == "m: b: the checkpoint's offsets hold 8 bytes, and 3 F32 elements need 12";
 }
 
-test "a payload past the end of the bytes given names the tensor" {
+test "a file shorter than its header places the tensors stops the load before any is read" {
     let bytes = two_tensors();
-    let cut = bytes.as_byte_slice().slice(0, bytes.len() - 1);
-    let e = read_checkpoint(&cut).unwrap().payload::<f32, ByteSlice>(&cut, &b()).unwrap_err();
-    assert `${e}` == `b: the payload ends at byte ${bytes.len()}, past the ${cut.len()} given`;
+    let e = read_headers(&held(prefix(bytes, bytes.len() - 1)), ["m"]).unwrap_err();
+    assert `${e}` == `m: the header places tensors up to byte ${bytes.len()}, past the ${bytes.len() - 1} given`;
 }
 
-test "a header longer than the bytes given is refused" {
+test "a header longer than the file is refused" {
     let bytes = two_tensors();
-    let e = read_checkpoint(&bytes.as_byte_slice().slice(0, 12)).unwrap_err();
-    assert `${e}`.starts_with("the header is ");
+    let e = read_headers(&held(prefix(bytes, 12)), ["m"]).unwrap_err();
+    assert `${e}`.starts_with("m: the header is ");
 }
 
 test "a header no module can address is refused from its length alone" {
@@ -169,84 +189,96 @@ test "a header no module can address is refused from its length alone" {
 }
 
 test "a header that is not JSON is refused" {
-    let e = read_checkpoint(&with_header("{x}")).unwrap_err();
-    assert `${e}`.starts_with("the header is not JSON");
+    let e = read_headers(&held(with_header("{x}")), ["m"]).unwrap_err();
+    assert `${e}`.starts_with("m: the header is not JSON");
 }
 
 test "metadata keyed like a tensor entry's fields still reads" {
     let bytes = with_header("{\"__metadata__\":{\"shape\":\"NCHW\",\"data_offsets\":\"none\"}}");
-    assert read_checkpoint(&bytes) matches { Ok(_) };
+    assert header_of(bytes) matches { Ok(_) };
 }
 
 test "a tensor named twice in the header is refused" {
     let bytes = with_header(
         "{\"w\":{\"dtype\":\"F32\",\"shape\":[],\"data_offsets\":[0,4]},\"w\":{\"dtype\":\"F32\",\"shape\":[],\"data_offsets\":[4,8]}}",
     );
-    assert `${read_checkpoint(&bytes).unwrap_err()}`.starts_with("the header is not JSON");
+    assert `${header_of(bytes).unwrap_err()}`.starts_with("the header is not JSON");
 }
 
 test "the header's metadata is not a tensor" {
-    let bytes = with_header("{\"__metadata__\":{\"format\":\"pt\"}}");
-    let e = read_checkpoint(&bytes).unwrap().payload::<f32, ByteList>(&bytes, &Expected {
-        ..b(),
-        tensor: "__metadata__",
-    }).unwrap_err();
-    assert `${e}` == "__metadata__: the checkpoint has no such tensor";
+    let given = held(with_header("{\"__metadata__\":{\"format\":\"pt\"}}"));
+    let e = payload::<f32>(&given, &Expected { ..b(), tensor: "__metadata__" }).unwrap_err();
+    assert `${e}` == "m: __metadata__: the checkpoint has no such tensor";
 }
 
-/// `two_tensors` split across two shards, `w` in the first and `b` in the second.
+global FIRST: String = "m-00001-of-00002.safetensors";
+global SECOND: String = "m-00002-of-00002.safetensors";
+
+/// `two_tensors` split across two files, `w` in `FIRST` and `b` in `SECOND`.
 fn two_shards() -> HashMap<String, ByteList> {
     let mut shards = HashMap::<String, ByteList>::new();
-    shards["m-00001-of-00002.safetensors"] = write_safetensors(&[
-        StoredTensor {
-            name: "w",
-            dtype: "F32",
-            shape: [2, 3],
-            data: floats([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
-        },
-    ]);
-    shards["m-00002-of-00002.safetensors"] = write_safetensors(&[
-        StoredTensor {
-            name: "b",
-            dtype: "F32",
-            shape: [3],
-            data: floats([-1.0, 0.5, 0.25]),
-        },
-    ]);
+    shards[FIRST] = write_safetensors(&[weight()]);
+    shards[SECOND] = write_safetensors(&[bias()]);
     return shards;
 }
 
-test "a shard's payload comes back from the shard the index places it in" {
+test "each tensor comes back from the file that holds it" {
     let given = two_shards();
-    let shards = read_shards(&given).unwrap();
-    let bias = shards.payload::<f32>(&given, "m-00002-of-00002.safetensors", &b()).unwrap();
-    assert bias == [-1.0, 0.5, 0.25] as List<f32>;
+    let headers = read_headers(&given, [FIRST, SECOND]).unwrap();
+    let second = loaded_values(headers.payload::<f32, HashMap<String, ByteList>>(&given, SECOND, &b())).unwrap();
+    assert second == [-1.0, 0.5, 0.25] as List<f32>;
+    let first = loaded_values(headers.payload::<f32, HashMap<String, ByteList>>(&given, FIRST, &w())).unwrap();
+    assert first == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as List<f32>;
 }
 
-test "a tensor whose shard is not given names the shard" {
+test "a file not given is named" {
     let mut given = two_shards();
-    given.remove("m-00002-of-00002.safetensors");
-    let e = read_shards(&given).unwrap().payload::<f32>(&given, "m-00002-of-00002.safetensors", &b()).unwrap_err();
-    assert `${e}` == "b: the index places it in m-00002-of-00002.safetensors, which is not given";
+    given.remove(SECOND);
+    assert `${read_headers(&given, [FIRST, SECOND]).unwrap_err()}` == `${SECOND}: not given`;
 }
 
-test "a tensor its shard lacks names itself and the shard" {
+test "a tensor its file lacks names itself and the file" {
     let given = two_shards();
-    let e = read_shards(&given).unwrap().payload::<f32>(&given, "m-00001-of-00002.safetensors", &b()).unwrap_err();
-    assert `${e}` == "m-00001-of-00002.safetensors: b: the checkpoint has no such tensor";
+    let e = read_headers(&given, [FIRST, SECOND]).unwrap().payload::<f32, HashMap<String, ByteList>>(
+        &given,
+        FIRST,
+        &b(),
+    ).unwrap_err();
+    assert `${e}` == `${FIRST}: b: the checkpoint has no such tensor`;
 }
 
-test "a shard read but then left out of the payloads names the shard" {
+test "a file read but then gone names the tensor and the file" {
     let mut given = two_shards();
-    let shards = read_shards(&given).unwrap();
-    given.remove("m-00002-of-00002.safetensors");
-    let e = shards.payload::<f32>(&given, "m-00002-of-00002.safetensors", &b()).unwrap_err();
-    assert `${e}` == "b: the index places it in m-00002-of-00002.safetensors, which is not given";
+    let headers = read_headers(&given, [FIRST, SECOND]).unwrap();
+    given.remove(SECOND);
+    let e = headers.payload::<f32, HashMap<String, ByteList>>(&given, SECOND, &b()).unwrap_err();
+    assert `${e}` == `b: ${SECOND}: not given`;
 }
 
-test "a shard that is no safetensors file is named" {
+test "a file that is no safetensors file is named" {
     let mut given = two_shards();
-    given["m-00002-of-00002.safetensors"] = with_header("{x}");
-    let e = read_shards(&given).unwrap_err();
-    assert `${e}`.starts_with("m-00002-of-00002.safetensors: the header is not JSON");
+    given[SECOND] = with_header("{x}");
+    assert `${read_headers(&given, [FIRST, SECOND]).unwrap_err()}`.starts_with(`${SECOND}: the header is not JSON`);
+}
+
+test "a file the build never read must hold what the graph places in it" {
+    let given = held(floats([1.0, 2.0]));
+    assert expect_holds(&given, "m", 8) matches { Ok(_) };
+    assert `${expect_holds(&given, "m", 12).unwrap_err()}` == "m is 8 bytes, and the graph places weights up to 12";
+}
+
+test "files on disk read a range at a time as files held do" {
+    let dir = "target/loam-checkpoint-test";
+    fs::remove_dir_all(dir).unwrap();
+    fs::create_dir_all(dir).unwrap();
+    for let [name, bytes] of two_shards().entries() {
+        fs::write(fs::join(dir, name), bytes).unwrap();
+    }
+    let source = FileSource { dir };
+    let headers = read_headers(&source, [FIRST, SECOND]).unwrap();
+    assert loaded_values(headers.payload::<f32, FileSource>(&source, SECOND, &b())).unwrap() == [-1.0, 0.5, 0.25] as List<f32>;
+    let first = loaded_values(headers.payload::<f32, FileSource>(&source, FIRST, &w())).unwrap();
+    assert first == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as List<f32>;
+    let e = read_headers(&source, ["absent.safetensors"]).unwrap_err();
+    assert `${e}` == `${dir}/absent.safetensors: no such file or directory`;
 }

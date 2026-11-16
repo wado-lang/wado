@@ -28,6 +28,7 @@ use {
 use { Cpu, Tensor } from "lib:loam";
 use { WebGpuBackend } from "lib:loam";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
+use { one_file } from "./oracle.wado";
 use gpt2 from "./tiny_gpt2.wado";
 
 export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
@@ -35,7 +36,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         println("no WebGPU adapter");
         return;
     };
-    let checkpoint = #include_bytes("../tests/models/tiny-gpt2/model.safetensors");
+    let checkpoint = one_file("model.safetensors", #include_bytes("../tests/models/tiny-gpt2/model.safetensors"));
     let mut on_cpu = gpt2::Model::new(gpt2::Params::load(&mut Cpu {}, &checkpoint).unwrap());
     let mut on_gpu = gpt2::Model::new(gpt2::Params::load(&mut gpu, &checkpoint).unwrap());
     for let length of [4, 7] as List<i32> {

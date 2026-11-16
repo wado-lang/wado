@@ -8,7 +8,7 @@ use { eprintln, println, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { from_string } from "core:json";
-use { Graph, Sampling, Tensor } from "lib:loam";
+use { FileSource, Graph, Sampling, Tensor } from "lib:loam";
 /// The graph alone: its weights are external data in `model_fp16.onnx_data`.
 use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resolve/2dbbfdb1b59bd034eb959428c6a7da9dd7ea27f0/onnx/model_fp16.onnx"
     with {
@@ -40,10 +40,6 @@ struct Oracle {
 /// Continues each prompt on `backend`: the prompt in one pass, then every token
 /// after its first in one call.
 pub fn checked<affine Bk: Graph>(backend: Bk) with (_, Stdout, Stderr, Preopens) {
-    let Ok(checkpoint) = fs::read_linear("build/model_fp16.onnx_data") else {
-        eprintln("build/model_fp16.onnx_data is missing; run fetch.sh first");
-        return;
-    };
     let [Ok(text), Ok(recorded)] = [
         fs::read_to_string("generate_fp16.json"),
         fs::read_linear("build/logits_fp16.bin"),
@@ -53,9 +49,14 @@ pub fn checked<affine Bk: Graph>(backend: Bk) with (_, Stdout, Stderr, Preopens)
     };
     let expected = recorded.cast::<f32>();
     let mut on = backend;
-    let mut model = gemma::Model::new(gemma::Params::load(&mut on, &checkpoint).unwrap());
-    // The device holds the weights.
-    builtin::drop(checkpoint);
+    let params = match gemma::Params::load(&mut on, &FileSource { dir: "build" }) {
+        Ok(params) => params,
+        Err(e) => {
+            eprintln(`${e}; run fetch.sh first`);
+            return;
+        },
+    };
+    let mut model = gemma::Model::new(params);
     let greedy = Sampling {};
     let vocabulary = gemma::Logits2::EXTENT;
     let generate = from_string::<Oracle>(&text).unwrap().generate;

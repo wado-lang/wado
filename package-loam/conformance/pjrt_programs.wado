@@ -3,7 +3,20 @@
 //! device, and `pjrt_topology.wado` compiles them for one it does not have.
 
 use { PjrtHost } from "core:pjrt";
-use { Any, Cpu, Element, Graph, Holds, Located, PjrtBackend, Recorder, Slots, Tensor, Untyped } from "lib:loam";
+use {
+    Any,
+    Cpu,
+    Element,
+    Graph,
+    Holds,
+    HostWeight,
+    Located,
+    PjrtBackend,
+    Recorder,
+    Slots,
+    Tensor,
+    Untyped,
+} from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
 use { decoded_tokens, requests_apart, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
@@ -66,7 +79,7 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
         |r| r.finished([]),
         0,
         1,
-        |_| Result::<Any<Cpu>, ()>::Ok(Any::F32(cpu.relabeled(&x))),
+        |_| Result::<HostWeight, ()>::Ok(HostWeight::of(&x)),
     ).unwrap();
     assert device.weight_bytes()[0] == 12, "every element of the weight fits bf16";
     let over_half = device.compiled(|r| {

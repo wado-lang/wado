@@ -62,6 +62,31 @@ test "read_linear reports what read reports" {
     assert fs::read_linear(&dir).unwrap_err().kind matches { Io(IsDirectory) };
 }
 
+test "read_linear_range reads the bytes from an offset, and no further" {
+    let dir = scratch("linear-range");
+    let path = `${dir}/raw.bin`;
+    let mut bytes = ByteList::with_capacity(200000);
+    for let i of 0..<200000 {
+        bytes.push((i * 7) as u8);
+    }
+    fs::write(&path, &bytes).unwrap();
+    let whole = bytes as List<u8>;
+    assert fs::read_linear_range(&path, 0, 200000).unwrap().to_list() == whole;
+    assert fs::read_linear_range(&path, 70001, 100000).unwrap().to_list() == whole[70001..<170001].to_list();
+    assert fs::read_linear_range(&path, 199999, 1).unwrap().to_list() == [whole[199999]];
+    assert fs::read_linear_range(&path, 200000, 0).unwrap().is_empty();
+}
+
+test "read_linear_range refuses a range past the file's end" {
+    let dir = scratch("linear-range-past");
+    let path = `${dir}/raw.bin`;
+    fs::write(&path, &b"abcdef").unwrap();
+    let e = fs::read_linear_range(&path, 4, 3).unwrap_err();
+    assert e.kind matches { PastEnd };
+    assert `${e}` == `${path}: the file ends before the bytes asked for`;
+    assert fs::read_linear_range(`${dir}/nope.bin`, 0, 1).unwrap_err().kind matches { NotFound };
+}
+
 /// A file's stream that serves fixed bytes in place of the file's own. The
 /// drop reaches the host, whose write of the file then ends.
 struct Substitute {

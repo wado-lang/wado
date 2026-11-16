@@ -82,6 +82,53 @@ fn test_build_to_stdout_can_carry_its_entry() {
     assert_eq!(embedded_entry(&build(&[])), None);
 }
 
+/// `--max-memory` bounds linear memory and the GC heap alike, under `run` and
+/// under `test`, and a guest within it runs although the GC heap would start
+/// larger by default.
+#[test]
+fn test_max_memory_bounds_each_memory() {
+    let tmp = tempfile::tempdir().unwrap();
+    let write = |name: &str, body: &str| {
+        let path = tmp.path().join(name);
+        std::fs::write(
+            &path,
+            format!(
+                "use {{ println, Stdout }} from \"core:cli\";\n\
+                 use {{ LinearArray }} from \"core:linear\";\n\
+                 export fn run() with Stdout {{ {body} println(\"ran\"); }}\n\
+                 test {{ {body} }}\n"
+            ),
+        )
+        .unwrap();
+        path
+    };
+    // Each writes an element and reads it back, so no pass drops the
+    // allocation as unread.
+    let filled = |name: &str, kind: &str, len: &str| {
+        format!(
+            "let mut {name} = {kind}::<u8>::filled({len}, 1); {name}[12345] = 7; \
+             assert {name}[{name}.len() - 1] + {name}[12345] == 8;"
+        )
+    };
+    let within = write(
+        "within.wado",
+        &(filled("a", "LinearArray", "8 << 20") + &filled("l", "List", "8 << 20")),
+    );
+    let linear = write("linear.wado", &filled("a", "LinearArray", "64 << 20"));
+    let gc = write("gc.wado", &filled("l", "List", "64 << 20"));
+    for command in ["run", "test"] {
+        let run =
+            |file: &std::path::Path, cap: &[&str]| wado().arg(command).args(cap).arg(file).assert();
+        run(&within, &["--max-memory", "32m"]).success();
+        // A limit off a Wasm page still holds a guest within it.
+        run(&within, &["--max-memory", "33554433"]).success();
+        for past in [&linear, &gc] {
+            run(past, &[]).success();
+            run(past, &["--max-memory", "32m"]).failure();
+        }
+    }
+}
+
 /// With no input, the entry comes from the manifest, as under `wado run`.
 #[test]
 fn test_build_to_stdout_takes_its_entry_from_the_manifest() {

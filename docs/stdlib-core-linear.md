@@ -189,6 +189,14 @@ in the array's own block, so no byte passes through the GC heap; a
 handler's items are copied in. The block takes `expected` bytes up
 front and grows only for a stream that runs past them.
 
+#### `pub fn read_stream_prefix(stream: &Stream<u8>, len: i32) -> LinearArray<u8>`
+
+- `contract len >= 0`
+
+The first `len` bytes `stream` delivers, or every byte where it ends
+sooner, read as `read_stream` reads them. No copy asks for a byte past
+`len`, so the stream may go on for any length after them.
+
 #### `impl IndexValue<i32> for LinearArray<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`

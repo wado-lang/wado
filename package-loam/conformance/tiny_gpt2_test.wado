@@ -3,9 +3,15 @@
 //! different lengths.
 
 use { Cpu, Tensor } from "lib:loam";
-use { assert_close, ints_of, tensor_of } from "./oracle.wado";
+use { HashMap } from "core:collections";
+use { assert_close, ints_of, one_file, tensor_of } from "./oracle.wado";
 use { StoredTensor, write_safetensors } from "lib:loam/src/safetensors.wado";
 use gpt2 from "./tiny_gpt2.wado";
+
+/// The checkpoint the build read.
+fn checkpoint() -> HashMap<String, ByteList> {
+    return one_file("model.safetensors", #include_bytes("../tests/models/tiny-gpt2/model.safetensors"));
+}
 
 /// The logits the graph `build` adds to computes from one data set's inputs
 /// padded, against the ones onnxruntime computed.
@@ -15,10 +21,8 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     let [want, want_extents] = tensor_of(logits);
     let ids = Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> { data: ids, extents: ids_extents };
     let mask = Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> { data: mask, extents: mask_extents };
-    let checkpoint = #include_bytes("../tests/models/tiny-gpt2/model.safetensors");
-
     let mut cpu = Cpu {};
-    let mut model = gpt2::Model::new(gpt2::Params::load(&mut cpu, &checkpoint).unwrap());
+    let mut model = gpt2::Model::new(gpt2::Params::load(&mut cpu, &checkpoint()).unwrap());
     let built = gpt2::compute(&mut cpu, &ids, &mask, &mut model);
     assert built.extents == want_extents;
     assert_close(&built.data, &want);
@@ -46,7 +50,7 @@ test "the same module reproduces them for seven" {
 test "a sequence longer than the mask stops compute" {
     let ids = List::<i64>::filled(513, 0);
     let mask = List::<i64>::filled(513, 1);
-    let weights = gpt2::Params::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
+    let weights = gpt2::Params::load(&mut Cpu {}, &checkpoint()).unwrap();
     gpt2::compute(
         &mut Cpu {},
         &Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
@@ -70,6 +74,6 @@ test "a checkpoint of another model names the axis it disagrees on" {
             data: ByteList::filled(1024 * 64 * 4, 0),
         },
     ]);
-    let e = gpt2::Params::load(&mut Cpu {}, &other).unwrap_err();
-    assert `${e}` == "transformer.wte.weight: axis TransformerWteWeight1 is 64 in the checkpoint and 32 in the graph";
+    let e = gpt2::Params::load(&mut Cpu {}, &one_file("model.safetensors", other)).unwrap_err();
+    assert `${e}` == "model.safetensors: transformer.wte.weight: axis TransformerWteWeight1 is 64 in the checkpoint and 32 in the graph";
 }

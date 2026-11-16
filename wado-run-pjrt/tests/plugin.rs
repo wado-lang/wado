@@ -118,6 +118,32 @@ fn loams_programs_compute_what_its_cpu_graph_does() {
     }
 }
 
+/// A checkpoint larger than the guest may grow to, over two files, loads onto
+/// the device a tensor at a time.
+#[test]
+#[ignore = "needs a plugin: run `mise run test-pjrt`"]
+fn a_checkpoint_larger_than_the_guest_loads_onto_the_device() {
+    let conformance = Path::new(env!("CARGO_MANIFEST_DIR")).join("../package-loam/conformance");
+    let written = Command::new(std::env::var_os("WADO").expect("`mise run test-pjrt` sets it"))
+        .args(["run", "large/write.wado"])
+        .current_dir(&conformance)
+        .output()
+        .expect("running wado");
+    assert!(
+        written.status.success(),
+        "{}",
+        String::from_utf8_lossy(&written.stderr)
+    );
+    let mut command = Command::new(env!("CARGO_BIN_EXE_wado-run-pjrt"));
+    command
+        .args(["--max-memory", "32m"])
+        .current_dir(&conformance);
+    assert_eq!(
+        printed_by(command, "../package-loam/conformance/large/pjrt.wado"),
+        "misplaced 0\n"
+    );
+}
+
 /// A freed slot holds another tensor by the time this reads the one it held.
 #[test]
 #[ignore = "needs a plugin: run `mise run test-pjrt`"]

@@ -4,7 +4,7 @@ use onnx from "./onnx.proto"
         generator: { module: "lib:grog" },
     };
 use { HashMap } from "core:collections";
-use { Elements, Graph, Known, ReadError } from "./graph.wado";
+use { Elements, Graph, Known, ReadError, WeightRange } from "./graph.wado";
 use { external_locations, externalize, read, read_tensor, read_with_external } from "./onnx_proto.wado";
 
 /// A `data_type` or `elem_type` field naming `t`.
@@ -385,7 +385,7 @@ test "externalizing moves each weight's raw data out, back to back, and keeps a 
     assert data == b"\x00\x00\x80\x3f\x00\x00\x00\x40\x00\x00\x40\x40\x00\x00\x80\x40";
     let left = read(&external).unwrap();
     assert left.initializers[0].data matches { None } && left.initializers[1].data matches { None };
-    assert left.in_place.unwrap().ranges["W"] == [8, 16];
+    assert left.in_place.unwrap().ranges["W"] == WeightRange { file: "m.onnx_data", start: 8, end: 16 };
     assert left.constants.contains_key("S");
     let mut files = HashMap::<String, ByteList>::new();
     files["m.onnx_data"] = data;
@@ -424,8 +424,7 @@ test "a weight's external data the reader is not given stays in place, at its by
 
     assert g.initializers[0].data matches { None };
     let in_place = g.in_place.unwrap();
-    assert in_place.file == "w.bin";
-    assert in_place.ranges.len() == 1 && in_place.ranges["W"] == [4, 12];
+    assert in_place.ranges.len() == 1 && in_place.ranges["W"] == WeightRange { file: "w.bin", start: 4, end: 12 };
 }
 
 test "a weight left in place states its length" {
@@ -450,23 +449,27 @@ test "a weight left in place past what a module can address names its range" {
     assert e == "W: external data at 2147483644 for 8 bytes, past what a module can address";
 }
 
-test "weights are left in place in one file" {
+test "weights left in place may each be in a file of its own" {
     let other = onnx::TensorProto {
         ..external_weight([
             ["location", "b.bin"],
+            ["offset", "16"],
             ["length", "8"],
         ]),
         name: Option::Some("V"),
     };
-    let e = read_unread([
+    let g = read_unread([
         external_weight([
             ["location", "a.bin"],
             ["length", "8"],
         ]),
         other,
-    ]).unwrap_err().reason;
+    ]).unwrap();
 
-    assert e == "V: external data in b.bin, and W's in a.bin; the weights left in place are in one file";
+    let in_place = g.in_place.unwrap();
+    assert in_place.ranges["W"] == WeightRange { file: "a.bin", start: 0, end: 8 };
+    assert in_place.ranges["V"] == WeightRange { file: "b.bin", start: 16, end: 24 };
+    assert in_place.files() == ["a.bin", "b.bin"] as List<String>;
 }
 
 test "a constant's external data the reader was not given names its location" {

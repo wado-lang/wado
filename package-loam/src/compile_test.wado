@@ -1,6 +1,6 @@
 use { TreeMap } from "core:collections";
 use { Model, Spelling, Weights, check, generate_model } from "./compile.wado";
-use { InPlace } from "./graph.wado";
+use { InPlace, WeightRange } from "./graph.wado";
 
 global GRAPH: String = "<ir_version: 8, opset_import: [ \"\" : 13 ]>
 g (float[N, 2] X) => (float[N, 3] Y)
@@ -15,9 +15,13 @@ g (float[N, 2] X) => (float[N, 3] Y)
 fn in_place(ranges: TreeMap<String, [i32, i32]>) -> Model {
     let path = "g.onnxtext";
     let model = check(&path, Spelling::Text, GRAPH.bytes().collect(), &{}).unwrap();
+    let mut held = TreeMap::<String, WeightRange>::new();
+    for let [name, [start, end]] of ranges.entries() {
+        held[*name] = WeightRange { file: "w.bin", start: *start, end: *end };
+    }
     return Model {
         ..model,
-        graph: { ..model.graph, in_place: Option::Some(InPlace { file: "w.bin", ranges }) },
+        graph: { ..model.graph, in_place: Option::Some(InPlace { ranges: held }) },
     };
 }
 

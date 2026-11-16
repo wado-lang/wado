@@ -4,7 +4,7 @@
 use { HashMap, HashSet, TreeSet } from "core:collections";
 use { apply_case } from "core:serde";
 use { Extent, solved } from "./extent.wado";
-use { MAP, is_bound, module_idents } from "./idents.wado";
+use { is_bound, module_idents } from "./idents.wado";
 use { Axes, Axis, AxisConflict, Shape } from "./shape.wado";
 use {
     SliceBounds,
@@ -317,9 +317,6 @@ pub fn infer(graph: &Graph) -> Result<Checked, InferError> {
         taken: module_idents(),
         words: HashMap::new(),
     };
-    // Whether the module imports the map is emit's to decide, so no axis
-    // takes its name.
-    naming.taken.insert(MAP);
     name_axes(graph, &mut scope, &axes, &axes.roots(), &mut naming);
     return Result::Ok(scope);
 }

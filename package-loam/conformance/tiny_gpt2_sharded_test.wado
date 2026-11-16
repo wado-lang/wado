@@ -65,9 +65,9 @@ test "and for seven" {
     );
 }
 
-test "a shard left out of the load is named with a tensor it holds" {
+test "a shard left out of the load is named before any weight is read" {
     let mut given = every_shard();
     given.remove("model-00003-of-00003.safetensors");
     let e = Params::load(&mut Cpu {}, &given).unwrap_err();
-    assert `${e}` == "onnx::MatMul_1588: the index places it in model-00003-of-00003.safetensors, which is not given";
+    assert `${e}` == "model-00003-of-00003.safetensors: not given";
 }

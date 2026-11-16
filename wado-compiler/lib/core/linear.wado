@@ -329,6 +329,19 @@ impl LinearArray<u8> {
         return array;
     }
 
+    /// The first `len` bytes `stream` delivers, or every byte where it ends
+    /// sooner, read as `read_stream` reads them. No copy asks for a byte past
+    /// `len`, so the stream may go on for any length after them.
+    pub fn read_stream_prefix(stream: &Stream<u8>, len: i32) -> LinearArray<u8>
+        contract len >= 0
+    {
+        let mut array = LinearArray::<u8>::unwritten(len);
+        array.len = 0;
+        while array.len < len && array.read_more(stream) == CopyResult::Completed {
+        }
+        return array;
+    }
+
     /// One copy of what `stream` delivers next, appended. A host copy lands in
     /// the block's room. A full block reads into memory of the copy's own, so a
     /// stream exactly as long as the block ends without growing it.
