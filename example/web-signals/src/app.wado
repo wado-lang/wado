@@ -1,0 +1,149 @@
+//! A to-do list. `mount` runs once and builds the page; after that only the
+//! bindings run, each when a signal it read was written.
+
+use { Memo, Signal, Track, memo, scope, signal } from "./signals.wado";
+use { bind_attribute, bind_text, each, element, on, text } from "./view.wado";
+use { Dom, Element, Event, HtmlInputElement, SurfaceDom } from "wado-lang:web";
+
+struct Todo {
+    id: i32,
+    title: String,
+    done: Signal<bool>,
+}
+
+impl Eq for Todo {
+    fn eq(&self, other: &Self) -> bool {
+        return self.id == other.id;
+    }
+}
+
+fn todo_row(todos: Signal<List<Todo>>, todo: Todo) -> Element with (Track, Dom) {
+    let row = element("li");
+    row.set_id(`todo-${todo.id}`);
+    bind_attribute(row, "class", || if todo.done.get() { Option::Some("done") } else { null });
+
+    let title = text("span", todo.title);
+    on(title, "click", |_: Event| todo.done.set(!todo.done.get()));
+    row.append_child(title);
+
+    let remove = text("button", "×");
+    on(remove, "click", |_: Event| {
+        let mut rest: List<Todo> = [];
+        for let other of todos.get() {
+            if other != todo {
+                rest.push(other);
+            }
+        }
+        todos.set(rest);
+    });
+    row.append_child(remove);
+    return row;
+}
+
+/// Builds the list under `root`, and returns what takes it down again.
+pub fn mount(root: Element) -> fn mut() with Dom with Dom {
+    return scope(|| {
+        let todos: Signal<List<Todo>> = signal([]);
+        let mut next_id = 1;
+        let remaining: Memo<i32> = memo(|| {
+            let mut left = 0;
+            for let todo of todos.get() {
+                if !todo.done.get() {
+                    left += 1;
+                }
+            }
+            return left;
+        });
+
+        let field = element("input");
+        field.set_id("title");
+        root.append_child(field);
+
+        let add = text("button", "Add");
+        add.set_id("add");
+        on(add, "click", |_: Event| {
+            // A closure holds a narrowed resource only where it narrows it
+            // itself, so the listener cannot capture the handle as an input.
+            let input: HtmlInputElement = field else {
+                unreachable();
+            };
+            let title = input.value();
+            if title.is_empty() {
+                return;
+            }
+            let mut list = todos.get();
+            list.push(Todo { id: next_id, title, done: signal(false) });
+            next_id += 1;
+            todos.set(list);
+            input.set_value("");
+        });
+        root.append_child(add);
+
+        let list = element("ul");
+        each(list, || todos.get(), |todo: Todo| todo_row(todos, todo));
+        root.append_child(list);
+
+        let summary = element("p");
+        bind_text(summary, || `${remaining.get()} left`);
+        root.append_child(summary);
+    });
+}
+
+fn click(id: String) with Dom {
+    Dom::document().get_element_by_id(id).unwrap().dispatch_event(Event::new("click"));
+}
+
+fn add_todo(title: String) with Dom {
+    let Some(input: HtmlInputElement) = Dom::document().get_element_by_id("title") else {
+        unreachable();
+    };
+    input.set_value(title);
+    click("add");
+}
+
+/// The page after a short session, as a server would send it.
+pub fn render_html() -> String {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        mount(Dom::document().body().unwrap());
+        add_todo("write the signals");
+        add_todo("bind them to the DOM");
+        Dom::document().get_element_by_id("todo-1").unwrap().first_child().unwrap().dispatch_event(Event::new("click"));
+    };
+    return dom.to_html();
+}
+
+test "the list follows what the user does" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let body = Dom::document().body().unwrap();
+        let mut unmount = mount(body);
+        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul></ul><p>0 left</p>";
+
+        add_todo("one");
+        add_todo("two");
+        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul><li id=\"todo-1\"><span>one</span><button>×</button></li><li id=\"todo-2\"><span>two</span><button>×</button></li></ul><p>2 left</p>";
+
+        let first = Dom::document().get_element_by_id("todo-1").unwrap();
+        first.first_child().unwrap().dispatch_event(Event::new("click"));
+        assert first.get_attribute("class") == Option::Some("done");
+        assert body.last_child().unwrap().text_content() == Option::Some("1 left");
+
+        first.last_child().unwrap().dispatch_event(Event::new("click"));
+        assert Dom::document().get_element_by_id("todo-1") == null;
+        assert body.last_child().unwrap().text_content() == Option::Some("1 left");
+
+        unmount();
+    };
+}
+
+test "a row that stays keeps its node" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        mount(Dom::document().body().unwrap());
+        add_todo("one");
+        let before = Dom::document().get_element_by_id("todo-1").unwrap();
+        add_todo("two");
+        assert Dom::document().get_element_by_id("todo-1").unwrap() == before;
+    };
+}

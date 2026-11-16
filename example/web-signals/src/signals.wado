@@ -1,0 +1,252 @@
+//! Fine-grained reactivity as a library: signals, memos and effects, with the
+//! dependencies found as the code runs.
+//!
+//! A write only marks what depends on it. `flush` then reruns each marked
+//! effect once, so an effect never sees half of a batch of writes.
+
+use { Dom } from "wado-lang:web";
+
+/// What a computation reports while it runs. Outside one, both do nothing: a
+/// read is untracked, and what would have been owned lives on.
+pub interface Track {
+    fn read(dep: Dep) {
+    }
+
+    fn own(dispose: fn mut() with Dom) {
+    }
+}
+
+pub struct Dep {
+    subscribe: fn mut(Observer),
+}
+
+struct Observer {
+    invalidate: fn mut(),
+}
+
+struct Effect {
+    id: i32,
+    run: fn mut() with Dom,
+}
+
+global mut NEXT_EFFECT_ID: i32 = 0;
+global mut QUEUE: List<Effect> = [];
+
+struct Computation {
+    deps: List<Dep>,
+    owned: List<fn mut() with Dom>,
+}
+
+impl Track for Computation {
+    fn read(&mut self, dep: Dep) {
+        self.deps.push(dep);
+        resume ();
+    }
+
+    fn own(&mut self, dispose: fn mut() with Dom) {
+        self.owned.push(dispose);
+        resume ();
+    }
+}
+
+fn subscribe_all(deps: List<Dep>, observer: Observer) {
+    for let dep of deps {
+        let mut subscribe = dep.subscribe;
+        subscribe(observer);
+    }
+}
+
+fn dispose_all(owned: List<fn mut() with Dom>) with Dom {
+    for let mut dispose of owned {
+        dispose();
+    }
+}
+
+// A dependent is told once and then forgotten: it subscribes again when it
+// next runs, to whatever it reads then.
+fn notify(subscribers: &mut List<Observer>) {
+    let told = *subscribers;
+    *subscribers = [];
+    for let observer of told {
+        let mut invalidate = observer.invalidate;
+        invalidate();
+    }
+}
+
+/// A value that tells its readers when it is written.
+pub struct Signal<T> {
+    read: fn() -> T with Track,
+    write: fn mut(T),
+}
+
+pub fn signal<T>(initial: T) -> Signal<T> {
+    let mut value = initial;
+    let mut subscribers: List<Observer> = [];
+    let dep = Dep { subscribe: |observer: Observer| subscribers.push(observer) };
+    return Signal {
+        read: || {
+            Track::read(dep);
+            return value;
+        },
+        write: |next: T| {
+            value = next;
+            notify(&mut subscribers);
+        },
+    };
+}
+
+impl<T> Signal<T> {
+    pub fn get(&self) -> T with Track {
+        let read = self.read;
+        return read();
+    }
+
+    pub fn set(&self, value: T) {
+        let mut write = self.write;
+        write(value);
+    }
+}
+
+/// A value computed from others, again only when one of them changed and
+/// someone asks.
+pub struct Memo<T> {
+    read: fn mut() -> T with Track,
+}
+
+pub fn memo<T>(compute: fn mut() -> T with Track) -> Memo<T> {
+    let mut compute = compute;
+    let mut cached: Option<T> = null;
+    let mut subscribers: List<Observer> = [];
+    let dep = Dep { subscribe: |observer: Observer| subscribers.push(observer) };
+    return Memo {
+        read: || {
+            Track::read(dep);
+            if let Some(value) = cached {
+                return value;
+            }
+            let mut computation = Computation { deps: [], owned: [] };
+            let value = with Track => &mut computation do {
+                compute();
+            };
+            cached = Option::Some(value);
+            subscribe_all(computation.deps, Observer {
+                invalidate: || {
+                    if cached matches { Some(_) } {
+                        cached = null;
+                        notify(&mut subscribers);
+                    }
+                },
+            });
+            return value;
+        },
+    };
+}
+
+impl<T> Memo<T> {
+    pub fn get(&self) -> T with Track {
+        let mut read = self.read;
+        return read();
+    }
+}
+
+/// Runs `body` now, and again after a flush whenever something it read was
+/// written. What `body` owns is disposed before each rerun, and with the
+/// effect itself.
+pub fn observe(body: fn mut() with (Track, Dom)) with (Track, Dom) {
+    NEXT_EFFECT_ID += 1;
+    let id = NEXT_EFFECT_ID;
+    let mut body = body;
+    let mut owned: List<fn mut() with Dom> = [];
+    let mut disposed = false;
+    // Marks the run a subscription belongs to: one left on a dependency the
+    // body no longer reads must not rerun it.
+    let mut generation = 0;
+    let mut run: fn mut() with Dom = || {
+    };
+    run = || {
+        if disposed {
+            return;
+        }
+        dispose_all(owned);
+        let mut computation = Computation { deps: [], owned: [] };
+        with Track => &mut computation do {
+            body();
+        };
+        owned = computation.owned;
+        generation += 1;
+        let subscribed = generation;
+        subscribe_all(computation.deps, Observer {
+            invalidate: || {
+                if !disposed && subscribed == generation {
+                    QUEUE.push(Effect { id, run });
+                }
+            },
+        });
+    };
+    run();
+    Track::own(|| {
+        disposed = true;
+        dispose_all(owned);
+        owned = [];
+    });
+}
+
+/// Registers `cleanup` with the computation running now.
+pub fn on_cleanup(cleanup: fn mut() with Dom) with Track {
+    Track::own(cleanup);
+}
+
+/// Runs `body` owning what it creates, and returns what disposes of it all.
+/// Reads inside are untracked.
+pub fn scope(body: fn mut() with (Track, Dom)) -> fn mut() with Dom with Dom {
+    let mut body = body;
+    let mut computation = Computation { deps: [], owned: [] };
+    with Track => &mut computation do {
+        body();
+    };
+    let mut owned = computation.owned;
+    return || {
+        dispose_all(owned);
+        owned = [];
+    };
+}
+
+struct Untracked {
+}
+
+impl Track for Untracked {
+    fn read(&mut self, dep: Dep) {
+        resume ();
+    }
+
+    fn own(&mut self, dispose: fn mut() with Dom) {
+        resume ();
+    }
+}
+
+/// Runs `body` with its reads untracked and what it creates owned by nothing,
+/// as an event listener runs.
+pub fn untracked(body: fn mut() with (Track, Dom)) with Dom {
+    let mut body = body;
+    let mut nothing = Untracked {};
+    with Track => &mut nothing do {
+        body();
+    };
+}
+
+/// Reruns every effect a write marked, each once, until none is marked.
+pub fn flush() with Dom {
+    while !QUEUE.is_empty() {
+        let batch = QUEUE;
+        QUEUE = [];
+        let mut ran: List<i32> = [];
+        for let marked of batch {
+            if ran.contains(&marked.id) {
+                continue;
+            }
+            ran.push(marked.id);
+            let mut run = marked.run;
+            run();
+        }
+    }
+}
