@@ -53,9 +53,9 @@ struct Live {
 enum Origin {
     /// A binding, a parameter, or a temporary its scope owns.
     Bound,
-    /// A `let t: T;`, which writes nothing: a scope entered again finds the
-    /// slot holding what the last pass left, which an assignment drops, so its
-    /// drop empties the slot.
+    /// A `let t: T;`. It writes nothing, so a loop entering its scope again
+    /// finds the slot holding what the last turn left, which an assignment
+    /// drops: its own drop empties the slot.
     Declared,
     /// A temporary spilled by [`spill_temporary`] that a statement owns, which
     /// drops as that statement ends rather than with its scope.
@@ -1316,8 +1316,10 @@ fn elab_scope(block: &mut TirBlock, declared: Vec<Live>, kind: ScopeKind, tail: 
 /// innermost first.
 fn take_temporaries(cx: &mut Cx, first: usize) -> Vec<Live> {
     let scope = cx.scopes.last_mut().expect("a scope is open");
-    let (temporaries, kept): (Vec<Live>, Vec<Live>) =
-        scope.lives.drain(first..).partition(|live| live.origin == Origin::Temporary);
+    let (temporaries, kept): (Vec<Live>, Vec<Live>) = scope
+        .lives
+        .drain(first..)
+        .partition(|live| live.origin == Origin::Temporary);
     scope.lives.extend(kept);
     temporaries.into_iter().rev().collect()
 }
