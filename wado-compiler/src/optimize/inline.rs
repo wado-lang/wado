@@ -1265,7 +1265,7 @@ fn folds_to_constant(
     let recurse = |op| folds_to_constant(body, op, const_locals, ctfe_eligible);
     match op {
         // `Const` covers the aggregate a string / list literal becomes once
-        // `promote_pure_values_early` freezes it.
+        // frozen.
         Operand::Value(v) => {
             let kind = body.values.kind(v);
             kind.is_operand_constant() || matches!(kind, ValueKind::Const(..))

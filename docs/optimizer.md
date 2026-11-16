@@ -135,11 +135,6 @@ function inlines at its hot size.
 
 [`match_to_switch`](#match_to_switch) over global initializers.
 
-#### `promote_pure_values_early`
-
-Fold pure arithmetic into the value pool, so the passes in the loop read it as
-values.
-
 ### The Fixed-Point Loop
 
 The loop runs these passes in this order until none reports a change. Then

@@ -103,7 +103,6 @@ use sroa_variant_return::scalarize_variant_returns;
 use store_load_forward::forward_stores_to_loads;
 use value_copy_demote::demote_value_copies;
 
-use extract::FreezePhase;
 use gate::{FunctionGate, GatedPass};
 use heap_effect::HeapEffectsCache;
 
@@ -355,7 +354,7 @@ pub fn optimize(
     // two soundness gates (scalar-field + receiver-availability) and the WIR
     // const-local propagation keep it default-safe.
     run_pass("nir/promote_fields", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(p, &exec, Some(&mut heap_effects), FreezePhase::Terminal)
+        extract::freeze_pure_arith(p, &exec, Some(&mut heap_effects))
     });
     // Re-run the structural BCE matcher now that `promote_fields` froze
     // invariant bounds (`arr.used`) into constant operands the in-loop
@@ -406,10 +405,10 @@ pub fn optimize(
     // Binary/Unary/Cast) into operand values, materialised by the WIR
     // extractor. Runs last so no binary-walking pass sees the promoted form;
     // orphaned arith / local-read nodes become unreachable from the skeleton
-    // root and are simply not emitted. (Early arith promotion already ran before
-    // the loop; `FieldAccess` promotion ran above, after SROA.)
+    // root and are simply not emitted. (`FieldAccess` promotion ran above,
+    // after SROA.)
     run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(p, &exec, None, FreezePhase::Terminal)
+        extract::freeze_pure_arith(p, &exec, None)
     });
 
     // The born-resolved invariant is now enforced by the type system: a call
@@ -872,15 +871,6 @@ fn run_optimization_passes(
     // pass over globals here is equivalent to running it each iteration.
     run_pass("nir/match_to_switch_globals", project, profiler, |p| {
         match_to_switch_globals(p)
-    });
-    // Operand-promotion keystone. Pure values are
-    // frozen into `Operand::Value` before the value passes, so the passes read
-    // operands (`engine.operand_value`) instead of rebuilding the value graph.
-    // Arith only here (before the loop); `FieldAccess` promotion runs late (after
-    // the SROA passes), since SROA scalarizes the structs a promoted `FieldAccess`
-    // would reference. See the late call in `optimize`.
-    run_pass("nir/promote_pure_values_early", project, profiler, |p| {
-        extract::freeze_pure_arith(p, exec, None, FreezePhase::Early)
     });
     // What changed in the iteration just run, and so the convergence flag:
     // empty ends the loop, non-empty after it names what held the loop open.

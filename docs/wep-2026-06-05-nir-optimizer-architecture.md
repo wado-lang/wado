@@ -111,10 +111,11 @@ shape: one set of rules over a view that resolves the tier at the leaves. A rule
 that reaches for `ExprKind` and `ValueKind` in two places is the shape to avoid.
 
 Promotion is staged. A freeze is sound only where nothing later
-re-contextualizes the operand it plants. Arithmetic that names no local
-freezes before the loop. Field reads freeze once the structural
-passes have settled the shape they read. The last arithmetic freeze runs after
-every pass that walks arithmetic. No freeze runs inside the loop.
+re-contextualizes the operand it plants. Lowering interns all-literal
+arithmetic, which names nothing outside the pool. Field reads freeze once the
+structural passes have settled the shape they read. The arithmetic freeze runs
+after every pass that walks arithmetic. No freeze runs before or inside the
+loop.
 
 ### Extraction
 
@@ -208,8 +209,7 @@ as the measurements below, and they say the remainder does not pay.
   15 % in the engine and 12 % in `niri`.
 
 So the tier is kept at the size that earns its place: the pool, the two freezes
-after the loop, the early freeze, post-scalarize store-load forwarding, and
-extraction. Growing it is a [known gap](#known-gaps).
+after the loop, post-scalarize store-load forwarding, and extraction. Growing it is a [known gap](#known-gaps).
 
 ## Soundness invariants
 
@@ -414,8 +414,7 @@ move under none of them.
 | Arena expressions per reachable expression |         2.15 × |         2.78 × |
 | Arena statements per reachable statement   |         2.64 × |         3.51 × |
 
-The early freeze tallies no promoted operand on either benchmark, and the
-terminal freezes promote 4.7–11.8 % of the pure operands. 75–85 % of local
+The two freezes promote 4.7–11.8 % of the pure operands. 75–85 % of local
 reads are of a single-version local.
 
 ## Known gaps
@@ -429,9 +428,9 @@ reads are of a single-version local.
   value, and so does the arithmetic above it, a field read, and a call result.
 - No pass inside the loop sees a promoted value naming a local, since every
   freeze that plants one runs after the loop.
-- The early freeze plants no value naming a local. Removing that refusal is
-  correct on the corpus and costs 6.4 % of the SQLite parser's code, and the
-  loop stops converging inside its cap.
+- No freeze runs before the loop. One that planted values naming a local was
+  correct on the corpus and cost 6.4 % of the SQLite parser's code, and the
+  loop stopped converging inside its cap.
 - Extraction re-materialises a multi-use non-constant scalar at each use. Two
   thirds of that 6.4 % is this.
 - `scalar_forward` cannot forward into a promoted read. In
@@ -443,8 +442,6 @@ reads are of a single-version local.
 - No value carries an induction variable's base and step.
 - `promote_fields` loses fuel wherever it changes it; see
   [What the value tier buys](#what-the-value-tier-buys).
-- The early freeze promotes nothing on either benchmark, and skipping it
-  leaves `sqlite_parse` byte-identical.
 - LICM's in-loop CSE costs fuel on the SQLite parser and saves it on zlib; see
   [Not a persistent value graph](#not-a-persistent-value-graph). What separates
   a sharing that pays from one that does not is unexamined.
@@ -506,7 +503,10 @@ Each was built, verified, and reverted. Do not retry as-is.
   though `100 / zero` is pure and traps, `niri` stopped at the pool, and the
   pool folded no short-circuit identity. All five are fixed, and
   `e2e/opt_early_freeze_names_a_local` reduces the real failure: a dropped
-  binding, not a merged value. The refusal stands on cost.
+  binding, not a merged value.
+- A freeze before the loop. Refusing every value that names a local, it
+  promoted nothing on either benchmark, and with the persistent graph gone
+  skipping it left `sqlite_parse` byte-identical. It was removed.
 - A query-time materialiser for a field read at function entry. Miscompiled
   about 165 fixtures. Reference and aggregate fields change copy and alias
   semantics.

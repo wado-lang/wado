@@ -393,9 +393,8 @@ pub(crate) struct ScopedWalk {
     pub stmt_entry_version: IndexMap<StmtId, HeapVersion>,
 }
 
-/// Whether `id`'s value is a build-context-free constant safe to freeze into an
-/// operand at the early freeze (see `extract::freeze_pure_arith`'s constant-leaf
-/// promotion). Not every constant qualifies — see
+/// Whether `id`'s value is a context-free constant safe to freeze into an
+/// operand. Not every constant qualifies — see
 /// [`ValueKind::is_operand_constant`].
 pub(crate) fn is_const_value(pool: &ValuePool, id: ValueId) -> bool {
     pool.kind(id).is_operand_constant()

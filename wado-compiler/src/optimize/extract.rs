@@ -24,13 +24,12 @@ use crate::nir_engine::FieldValues;
 #[cfg(test)]
 use crate::nir_engine::Rule;
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::builder::is_const_value;
 use crate::nir_value_graph::{ValuePool, value_kind_to_const};
 use crate::nir_visitor::reachable_exprs;
 use crate::optimize::alias::{
     CallImmutability, builder_alias_sets, call_verdicts, first_param_types,
 };
-use crate::optimize::arena_query::{local_available_at, storage_root};
+use crate::optimize::arena_query::local_available_at;
 use crate::optimize::heap_effect::HeapEffectsCache;
 use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
@@ -235,14 +234,6 @@ pub(super) fn freeze_pure_arith(
     // Freeze field reads too. A field read is versioned by what a call
     // writes, which these heap effects answer.
     fields: Option<&mut HeapEffectsCache>,
-    // `Early` runs before the optimize loop, on each function's freshly-built
-    // (clean, un-restructured) graph. Only then is it sound to freeze a
-    // *constant leaf read* (`Local` / `FieldAccess`) into its literal: born
-    // here, the `Operand::Value` survives `inline` / `sroa` (both copy
-    // operands), so no later pass re-contextualizes the read into a position the
-    // frozen literal is wrong for. A late freeze must not — its graph carries
-    // the loop's structural-edit staleness.
-    phase: FreezePhase,
 ) -> bool {
     let types = project.type_table.borrow();
     let type_table: &TypeTable = &types;
@@ -281,12 +272,6 @@ pub(super) fn freeze_pure_arith(
                 &call_immutability,
             );
             let local_count = locals.len();
-            // Locals a call may mutate through a `&mut` escape (`reference`'s
-            // `set_bool(&mut c, …)`). A constant read of one is point-specific and
-            // does not survive the structural passes; an
-            // *immutable*-`&`-escaped local (licm's `&config`) is stable and its field
-            // constant freezes soundly. Keep a copy before `set_alias_sets` moves it.
-            let mut_escaped_leaf = alias.mut_escaped.clone();
             let verdicts = call_verdicts(body, type_table, &first_param_types, &call_immutability);
             let call_writes = effects
                 .as_ref()
@@ -323,11 +308,9 @@ pub(super) fn freeze_pure_arith(
             // post-edit graph is not consumed, this being the last pass.)
             let ctx = FreezeCtx {
                 type_table,
-                mut_escaped_leaf: &mut_escaped_leaf,
                 multi_version_locals: &multi_version_locals,
                 address_taken: &address_taken,
                 field_values: &field_values,
-                phase,
                 include_fields,
             };
             // A displaced node may carry a type DCE has since pruned.
@@ -374,7 +357,7 @@ pub(super) fn freeze_pure_arith(
         changed |= changed_one;
         refusals.absorb(refused);
     }
-    refusals.report(phase, include_fields);
+    refusals.report(include_fields);
     changed
 }
 
@@ -431,15 +414,11 @@ impl Refusals {
         }
     }
 
-    fn report(&self, phase: FreezePhase, include_fields: bool) {
-        let phase = match phase {
-            FreezePhase::Early => "early",
-            FreezePhase::Terminal => "terminal",
-        };
+    fn report(&self, include_fields: bool) {
         let pct = |n: usize| 100.0 * n as f64 / self.pure_kinds.max(1) as f64;
         compiler_trace!(
             TRACE_TARGET,
-            "{phase} (fields={include_fields}): {} pure kinds, {} frozen ({:.1}%)",
+            "fields={include_fields}: {} pure kinds, {} frozen ({:.1}%)",
             self.pure_kinds,
             self.frozen,
             pct(self.frozen)
@@ -450,7 +429,7 @@ impl Refusals {
         for ((reason, kind), n) in rows {
             compiler_trace!(
                 TRACE_TARGET,
-                "{phase} (fields={include_fields}):   {n:>7} {:>5.1}%  {reason} / {kind}",
+                "fields={include_fields}:   {n:>7} {:>5.1}%  {reason} / {kind}",
                 pct(n)
             );
         }
@@ -462,9 +441,6 @@ impl Refusals {
 /// never mutates the skeleton.
 struct FreezeCtx<'a> {
     type_table: &'a TypeTable,
-    /// Locals a call may mutate through a retained `&mut` escape — a constant
-    /// read of one is point-specific and unstable across the structural passes.
-    mut_escaped_leaf: &'a hashmap::IndexSet<u32>,
     /// Locals not provably holding one value: a frozen value's `local.get idx`
     /// must read the version the opaque denotes, which only a single-assignment
     /// local guarantees.
@@ -474,18 +450,7 @@ struct FreezeCtx<'a> {
     /// The `FieldAccess` representative of each field read, from the scratch
     /// re-walk ([`Engine::scoped_field_values`]). Empty unless `include_fields`.
     field_values: &'a hashmap::IndexMap<ExprId, ValueId>,
-    phase: FreezePhase,
     include_fields: bool,
-}
-
-/// Where a freeze sits relative to the passes that relocate operands. There is
-/// no in-loop phase; the WEP records why.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum FreezePhase {
-    /// Before the loop. Plants context-free values only.
-    Early,
-    /// After the loop. Nothing relocates an operand from here on.
-    Terminal,
 }
 
 /// Why a candidate stayed in the skeleton. Tallied over the pure kinds under
@@ -499,8 +464,6 @@ enum Refusal {
     NotPureArith,
     /// The value query resolved to nothing.
     NoValue,
-    /// An early freeze plants no value naming a local; the bar is cost.
-    NamesALocal,
     /// The value cannot be re-emitted at the use.
     NotReemittable,
     /// Re-emitting at each use would repeat work.
@@ -513,7 +476,6 @@ impl Refusal {
             Refusal::LValue => "lvalue-or-let-value",
             Refusal::NotPureArith => "not-a-candidate-kind",
             Refusal::NoValue => "no-value",
-            Refusal::NamesALocal => "names-a-local",
             Refusal::NotReemittable => "not-reemittable",
             Refusal::DuplicatesWork => "duplicates-work",
         }
@@ -531,26 +493,6 @@ fn classify_candidate(
     if engine.is_assign_target(id) || is_let_value(engine, id) {
         return Err(Refusal::LValue);
     }
-    // Constant-leaf promotion (early only, clean graph): a value-position
-    // `Local` / `FieldAccess` read whose graph value is a constant literal is
-    // frozen to it. `is_place_read` excludes lvalue positions, where the storage
-    // is wanted. The root must not be `mut_escaped` — a write through a retained
-    // `&mut` makes the constant point-specific — but `&`-escaped is stable.
-    let leaf_root_stable = match &engine.body.exprs[id].kind {
-        ExprKind::Local { index, .. } => !ctx.mut_escaped_leaf.contains(index),
-        ExprKind::FieldAccess { .. } => {
-            storage_root(engine.body, id).is_none_or(|root| !ctx.mut_escaped_leaf.contains(&root))
-        }
-        _ => false,
-    };
-    if ctx.phase == FreezePhase::Early
-        && leaf_root_stable
-        && !is_place_read(engine, id)
-        && let Some(vid) = engine.value(id)
-        && is_const_value(&engine.body.values, vid)
-    {
-        return Ok((id, vid));
-    }
     if !is_pure_arith(engine, id, ctx.include_fields) {
         return Err(Refusal::NotPureArith);
     }
@@ -559,14 +501,6 @@ fn classify_candidate(
         _ => engine.value(id),
     }
     .ok_or(Refusal::NoValue)?;
-    // An early freeze plants no value naming a local. The bar is cost now, not
-    // soundness: the five miscompiles it was covering are fixed, and
-    // `optimize::run_pass` audits the invariant they broke. Lifting it grows the
-    // parser's code 6.4 % and stops the fixed-point loop converging inside its
-    // cap. See the WEP for the split of that 6.4 %.
-    if ctx.phase == FreezePhase::Early && engine.body.values.names_a_local(rep) {
-        return Err(Refusal::NamesALocal);
-    }
     // A standalone `FieldAccess` is reemittable when its receiver is (it
     // materialises via the source-point path). For every other value,
     // `FieldAccess` is non-reemittable (it cannot be inlined), so
