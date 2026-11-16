@@ -1869,13 +1869,13 @@ fn plan_clones<'s>(
         );
         let id = FuncId::new(next_id);
         next_id += 1;
+        if site.recursive {
+            state.record_recursive_values(&key);
+        }
         // A cached clone whose signature has since moved no longer serves a
         // call to the callee, so this one takes its key. Left with the key, it
         // sends every later call through a recursion to a fresh clone, whose
         // body calls the callee again, round after round.
-        if site.recursive {
-            state.record_recursive_values(&key);
-        }
         state.clones.insert(key.clone(), id);
         state.specs.insert(id, key);
         minted_from.insert(id, site.callee);
