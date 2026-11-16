@@ -6,6 +6,7 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::iter;
 use std::os::fd::OwnedFd;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -288,8 +289,8 @@ fn start(
 }
 
 /// The baseline and the paths `asked` names, relative to `cwd`, in place of
-/// the guest's directories. Each is opened once and granted through that
-/// descriptor, so what is checked against `guest` is what the child reaches.
+/// the guest's directories. Each is granted through one descriptor, so what is
+/// checked against `guest` is what the child reaches.
 fn narrowed(guest: &Policy, asked: &types::Grants, cwd: &File) -> Result<Policy, ErrorCode> {
     let held = guest.resolved();
     let start = sandbox::descriptor_path(cwd).map_err(error_code)?;
@@ -299,9 +300,20 @@ fn narrowed(guest: &Policy, asked: &types::Grants, cwd: &File) -> Result<Policy,
         (&asked.write, Reach::ReadWrite),
     ] {
         for path in paths {
-            let opened = File::open(start.join(path)).map_err(error_code)?;
-            let real = sandbox::descriptor_path(&opened).map_err(error_code)?;
+            // Checked before it is opened: opening a FIFO blocks, and lets a
+            // writer that waits on it go on, so a path past the guest's
+            // access is never opened.
+            let real = fs::canonicalize(start.join(path)).map_err(error_code)?;
             if !held.permits(&real, access) {
+                return Err(ErrorCode::NotPermitted);
+            }
+            let opened = fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_NONBLOCK)
+                .open(&real)
+                .map_err(error_code)?;
+            // A link swapped in between the two reaches elsewhere.
+            if sandbox::descriptor_path(&opened).map_err(error_code)? != real {
                 return Err(ErrorCode::NotPermitted);
             }
             policy.grant_opened(real, Arc::new(opened), access);

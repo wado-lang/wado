@@ -284,6 +284,15 @@ test "a grant the guest does not hold is NotPermitted" {
     assert Command::new("true").grant_read("/usr").status().unwrap() == ExitStatus::Exited(0);
 }
 
+test "a grant of a FIFO no one writes to starts the child" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let fifo = `${scratch("fifo")}/f`;
+    assert Command::new("mkfifo").arg(fifo).status().unwrap() == ExitStatus::Exited(0);
+    assert Command::new("true").grant_read(fifo).status().unwrap() == ExitStatus::Exited(0);
+}
+
 test "a grant of a missing path is NotFound" {
     if availability() != Availability::Available {
         return;
