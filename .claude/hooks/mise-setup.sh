@@ -10,9 +10,13 @@ log() {
     echo "$LOG_PREFIX $1" >&2
 }
 
-# Only run in remote Claude Code environment
+# A local session has mise installed already; it only needs mise.toml's
+# environment, `scripts/bin` among it, on every Bash command.
 if [ "$CLAUDE_CODE_REMOTE" != "true" ]; then
-    log "Not a remote session, skipping mise setup"
+    if [ -n "$CLAUDE_ENV_FILE" ] && command -v mise &>/dev/null; then
+        echo 'eval "$(mise activate bash)"' >> "$CLAUDE_ENV_FILE"
+        log "Local session: mise activation persisted to CLAUDE_ENV_FILE"
+    fi
     exit 0
 fi
 

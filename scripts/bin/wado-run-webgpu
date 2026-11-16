@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# `wado run-webgpu` from the dev build of its own workspace, built first.
+set -euo pipefail
+workspace="$(cd "$(dirname "$0")/../../wado-run-webgpu" && pwd)"
+(cd "${workspace}" && CARGO_TARGET_DIR="${workspace}/target" cargo build --bin wado-run-webgpu) >&2
+exec "${workspace}/target/debug/wado-run-webgpu" "$@"

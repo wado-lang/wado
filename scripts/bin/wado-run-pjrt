@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# `wado run-pjrt` from the dev build, built first, on XLA's CPU plugin unless
+# `--plugin` or WADO_PJRT_PLUGIN names another.
+set -euo pipefail
+here="$(dirname "$0")"
+if [ -z "${WADO_PJRT_PLUGIN:-}" ]; then
+    WADO_PJRT_PLUGIN="$("${here}/../fetch-pjrt-plugin.sh")"
+    export WADO_PJRT_PLUGIN
+fi
+exec "${here}/../dev-bin.sh" wado-run-pjrt "$@"
