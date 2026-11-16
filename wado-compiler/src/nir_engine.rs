@@ -877,6 +877,40 @@ impl<'a> Engine<'a> {
         NirLocal::push_minted(self.locals, what, type_id, is_mut)
     }
 
+    /// Edit API: bind `value` to an immutable local minted as
+    /// [`Self::alloc_minted_local`] does, returning the `let` and a read of it.
+    pub fn bind_minted(
+        &mut self,
+        what: &str,
+        value: Operand,
+        type_id: TypeId,
+        skip_value_copy: bool,
+        span: Span,
+    ) -> (StmtId, ExprId) {
+        let local_index = self.alloc_minted_local(what, type_id, false);
+        let name = self.local_name(local_index);
+        let bound = self.alloc_stmt(
+            StmtKind::Let {
+                name: name.clone(),
+                local_index,
+                is_mut: false,
+                type_id,
+                value,
+                skip_value_copy,
+            },
+            span,
+        );
+        let read = self.alloc_expr(
+            ExprKind::Local {
+                index: local_index,
+                name,
+            },
+            type_id,
+            span,
+        );
+        (bound, read)
+    }
+
     /// Build the session's three indices — parent map, local use index, and
     /// post-order worklist seed — in one walk of the live tree. Not an arena
     /// scan: the arena never compacts, and an orphan still referencing a live

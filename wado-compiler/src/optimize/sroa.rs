@@ -1423,7 +1423,8 @@ fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
             })
             .collect();
         rewrite_node(engine, NodeRef::Stmt(stmt), ctx);
-        let yielded = if Some(stmt) == tail && !handed.is_empty() {
+        let reads_back = handed.iter().any(|(w, _)| !w.written.is_empty());
+        let yielded = if Some(stmt) == tail && reads_back {
             bind_yielded_value(engine, stmt)
         } else {
             None
@@ -1456,28 +1457,7 @@ fn bind_yielded_value(engine: &mut Engine, stmt: StmtId) -> Option<(StmtId, Expr
         return None;
     }
     let span = engine.body.stmts[stmt].span;
-    let local_index = engine.alloc_minted_local(&minted_what(SROA, "yielded"), type_id, false);
-    let name = engine.local_name(local_index);
-    let bound = engine.alloc_stmt(
-        StmtKind::Let {
-            name: name.clone(),
-            local_index,
-            is_mut: false,
-            type_id,
-            value,
-            skip_value_copy: true,
-        },
-        span,
-    );
-    let read = engine.alloc_expr(
-        ExprKind::Local {
-            index: local_index,
-            name,
-        },
-        type_id,
-        span,
-    );
-    Some((bound, read))
+    Some(engine.bind_minted(&minted_what(SROA, "yielded"), value, type_id, true, span))
 }
 
 /// Bind a literal rebuilt from `w`'s slots ahead of `stmt`, and point the

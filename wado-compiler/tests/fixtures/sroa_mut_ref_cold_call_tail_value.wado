@@ -1,6 +1,6 @@
 // A cold call handed a split struct `&mut` may be the value its block yields:
-// here the one statement of a `for` body over `chars()`, which lowers to a
-// `match` arm. The fields it writes read back after it returns, and the arm
+// here the one statement of a `for` body over an iterator whose `next` stays a
+// call, so the body lowers to a `match` arm. The fields it writes read back after it returns, and the arm
 // must still yield the call's value, not end on the last read-back as if it
 // diverged.
 use { println, Stdout } from "core:cli";
