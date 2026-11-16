@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794839485624,
+  "lastUpdate": 1794859574887,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78333,6 +78333,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1c85ac8f4408fe1842000eb583de2e3ab0effdfa"
         },
         "date": 1794839484680,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c64c254331ebe49fa5106e57f9a8046015c41a6e",
+          "message": "Merge pull request #2649 from wado-lang/loam/int4-half-kernels\n\nfeat(loam): run half quantized products and gathers in WebGPU kernels",
+          "timestamp": "2026-11-17T04:50:36+09:00",
+          "tree_id": "83340743044d529628f12343bb06a93f31464d21",
+          "url": "https://github.com/wado-lang/wado/commit/c64c254331ebe49fa5106e57f9a8046015c41a6e"
+        },
+        "date": 1794859573831,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
