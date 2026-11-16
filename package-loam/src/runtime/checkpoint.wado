@@ -57,7 +57,8 @@ fn given(files: &HashMap<String, ByteList>, file: &String) -> Result<&ByteList, 
     return files.get_ref_str(file).ok_or(LoadError { reason: `${*file}: not given` });
 }
 
-/// A checkpoint that disagrees with the graph, or is not a safetensors file.
+/// Why the weights do not load: a file the source cannot read, or a checkpoint
+/// that disagrees with the graph or is not a safetensors file.
 pub struct LoadError {
     pub reason: String,
 }
