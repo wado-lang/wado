@@ -2362,7 +2362,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// inherent method is not found.
     ///
     /// `receiver_type_args` should contain the concrete type arguments for
-    /// generic receivers (e.g., `[i32]` for `Box_<i32>`), which fill the
+    /// generic receivers (e.g., `[i32]` for `Box<i32>`), which fill the
     /// declaring impl block's slots.
     pub(super) fn find_trait_method_for_type(
         &mut self,

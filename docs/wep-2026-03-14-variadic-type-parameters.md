@@ -126,7 +126,7 @@ impl<..T: Eq>  Tag for [..T] { ... }  // ERROR: duplicate impl
 Rule 2 first rejected the second impl at definition time, whatever its bounds, because
 a pack's bounds were then checked only at monomorphization. Selection now reads them
 ([Eligibility](./spec-traits.md#eligibility)), so a variadic impl follows the same rule
-as `impl<T: Eq> Tag for Box_<T>` beside `impl<T: Ord> Tag for Box_<T>`.
+as `impl<T: Eq> Tag for Box<T>` beside `impl<T: Ord> Tag for Box<T>`.
 
 These two rules together mirror the priority model used in WEP-2026-02-10 for tuple
 enumeration.
@@ -140,7 +140,7 @@ Rule 1 is scoped to one trait in both directions. It ranks a trait's own impls a
 each other and says nothing about another trait's, so a foreign blanket `impl<T> A for T`
 must not outrank a local `impl<..T> B for [..T]`. And it needs the trait's signature to
 make the specific and general methods interchangeable, so it does not extend to inherent
-impls: `impl<T> Box_<T> { fn a() -> String }` beside `impl Box_<i32> { fn a() -> i32 }`
+impls: `impl<T> Box<T> { fn a() -> String }` beside `impl Box<i32> { fn a() -> i32 }`
 is a duplicate definition, rejected as in Rust, rather than a specialization that would
 relink a generic caller to a differently-typed function.
 

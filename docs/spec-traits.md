@@ -187,8 +187,8 @@ A call's candidates come from two places:
 
 - The impls whose target reaches the receiver anywhere along its newtype chain:
   one written for the receiver's own type, for one instantiation of it
-  (`impl Tag for Box_<i32>`), for some of its instantiations
-  (`impl<T> Tag for Pair<T, i32>`), or for its head (`impl<T> Tag for Box_<T>`).
+  (`impl Tag for Box<i32>`), for some of its instantiations
+  (`impl<T> Tag for Pair<T, i32>`), or for its head (`impl<T> Tag for Box<T>`).
 - Every value blanket (`impl<T: Bound> Tr for T`) whose bounds the receiver
   satisfies.
 
@@ -216,8 +216,8 @@ blanket impls. They are ranked:
 2. The newtype before its base. The search stops at the first level of the
    receiver's newtype chain that answers.
 3. Within one level, the impl that names more of the receiver. One written for
-   the receiver (`impl Tag for Box_<i32>`) comes first, then one written for its
-   head (`impl<T> Tag for Box_<T>`), then a value blanket
+   the receiver (`impl Tag for Box<i32>`) comes first, then one written for its
+   head (`impl<T> Tag for Box<T>`), then a value blanket
    (`impl<T: Bound> Tr for T`). A blanket names no type at all, only a condition
    the receiver meets. At one argument list, an impl writing the trait's
    arguments (`impl Eq<String> for Tag`) comes before one writing a parameter
@@ -950,14 +950,14 @@ instantiation and the other is generic over the head:
 <!-- {"fixture":"spec_traits_specific_wins.wado"} -->
 
 ```wado
-impl<T> Tag for Box_<T> { fn tag(&self) -> String { return "general"; } }         // general
-impl Tag for Box_<i32> { fn tag(&self) -> String { return "specific"; } }         // specific — wins for Box_<i32>
+impl<T> Tag for Box<T> { fn tag(&self) -> String { return "general"; } }          // general
+impl Tag for Box<i32> { fn tag(&self) -> String { return "specific"; } }          // specific — wins for Box<i32>
 
 impl<..T> Tag for [..T] { fn tag(&self) -> String { return "general"; } }         // general
 impl Tag for [i32, i32] { fn tag(&self) -> String { return "specific"; } }        // specific — wins for [i32, i32]
 
 test {
-    assert Box_ { v: 1 }.tag() == "specific" && Box_ { v: "s" }.tag() == "general";
+    assert Box { v: 1 }.tag() == "specific" && Box { v: "s" }.tag() == "general";
     assert [1, 2].tag() == "specific" && [1, "s"].tag() == "general";
 }
 ```
@@ -1001,8 +1001,8 @@ that reach a common receiver may not both define one method name:
 <!-- {"fixture":"spec_traits_inherent_duplicate.wado"} -->
 
 ```wado
-impl<T> Box_<T> { fn a(&self) -> String { return "any"; } }
-impl Box_<i32> { fn a(&self) -> i32 { return self.v; } }   // ERROR: duplicate definition of `a`
+impl<T> Box<T> { fn a(&self) -> String { return "any"; } }
+impl Box<i32> { fn a(&self) -> i32 { return self.v; } }   // ERROR: duplicate definition of `a`
 ```
 
 Inherent blocks that reach no receiver in common may share a name.
