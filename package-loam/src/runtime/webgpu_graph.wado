@@ -731,14 +731,11 @@ impl Graph for WebGpuBackend {
             let last = extents.len() - 1;
             let inner = extents[last];
             let rows = element_count(&extents) / inner;
-            let mut operands = [
+            let operands = with_zero_points(self, [
                 self.reshaped(&self.device_view(a), &([rows, inner] as List<i32>)),
                 self.device_view(packed),
                 self.device_view(scales),
-            ] as List<DeviceTensor>;
-            if let Some(z) = zero_points {
-                operands.push(self.device_view(z));
-            }
+            ], zero_points);
             if let Some(out) = self.quantized_product_kernel(&operands, quantized.bits, quantized.block) {
                 extents[last] = out.extents[1];
                 return Placed::Device(self.reshaped(&out, &extents));
@@ -766,14 +763,11 @@ impl Graph for WebGpuBackend {
     ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         if E::is_f32() {
             let mut extents = self.extents_of(indices);
-            let mut operands = [
+            let operands = with_zero_points(self, [
                 self.device_view(packed),
                 self.reshaped(&self.device_view(indices), &([element_count(&extents)] as List<i32>)),
                 self.device_view(scales),
-            ] as List<DeviceTensor>;
-            if let Some(z) = zero_points {
-                operands.push(self.device_view(z));
-            }
+            ], zero_points);
             if let Some(out) = self.quantized_gather_kernel(&operands, quantized.bits, quantized.block) {
                 extents.push(out.extents[1]);
                 return Placed::Device(self.reshaped(&out, &extents));
@@ -788,6 +782,19 @@ impl Graph for WebGpuBackend {
             quantized,
         );
     }
+}
+
+/// A quantized kernel's `operands`, then its zero points where it has them.
+fn with_zero_points<Z>(
+    g: &mut WebGpuBackend,
+    operands: List<DeviceTensor>,
+    zero_points: Option<&Placed<u8, Z>>,
+) -> List<DeviceTensor> with (GpuDevice, GpuQueue, GpuBuffer) {
+    let mut all = operands;
+    if let Some(z) = zero_points {
+        all.push(g.device_view(z));
+    }
+    return all;
 }
 
 /// The length each of `rows` rows holds in `length`, one for every row or one
