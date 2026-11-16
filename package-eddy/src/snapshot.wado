@@ -1,0 +1,210 @@
+//! A checkout of one commit for a reviewer to read, index, build and write
+//! into, apart from the tree the developer works in.
+
+use { env, log_stderr, Environment } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Command, Process } from "core:process";
+use { git, try_git } from "./git.wado";
+use { Runner, ENTER_TREE } from "./tools.wado";
+
+/// A checkout of `sha` for a reviewer to read, and its directory. It is a
+/// worktree, so it shares the repository's objects, later commits included:
+/// only the tools' refusal to leave the tree keeps them out of reach. A
+/// symbolic link is checked out as a file holding its target, so no path
+/// resolves out of the tree through one. A tree an interrupted run left is
+/// checked out again rather than trusted.
+pub fn snapshot(sha: &String) -> String with Process {
+    let root = `scratchpad/eddy-trees/${*sha}`;
+    try_git(["worktree", "remove", "--force", root]);
+    tree_git(&".", ["worktree", "add", "--force", "--detach", root, *sha]);
+    return root;
+}
+
+/// `git` run in `dir`, a checkout a reviewer reaches, with every symbolic link
+/// kept a file: a command that rewrites the tree, such as `reset --hard`,
+/// would otherwise make it a link again.
+pub fn tree_git(dir: &String, args: List<String>) -> String with Process {
+    let mut full = ["-c", "core.symlinks=false", "-C", *dir] as List<String>;
+    full.extend(&args);
+    return git(full);
+}
+
+/// Checks out in the snapshot at `root` the submodules its `Cargo.toml` builds
+/// from, at the commits the tree records, so `cargo` builds it. Each is a
+/// worktree of the repository's own checkout of that submodule, which fetches
+/// a commit it lacks.
+pub fn add_build_submodules(root: &String) with (Process, Preopens) {
+    for let [path, sha] of build_submodules(root) {
+        assert fs::exists(fs::join(path, ".git")), `the submodule must be checked out: git submodule update --init ${path}`;
+        if try_git(["-C", path, "cat-file", "-e", `${sha}^{commit}`]) matches { None } {
+            git(["-C", path, "fetch", "--quiet", "--depth", "1", "origin", sha]);
+        }
+        tree_git(&path, ["worktree", "add", "--force", "--detach", from_submodule(&path, root), sha]);
+    }
+}
+
+/// The submodules `root`'s `Cargo.toml` names by path, as path and the commit
+/// HEAD records. Both are read from HEAD, so a reviewer's edit to the manifest
+/// or a commit checked out in a submodule changes nothing.
+fn build_submodules(root: &String) -> List<[String, String]> with Process {
+    let manifest = git(["-C", *root, "show", "HEAD:Cargo.toml"]);
+    let mut found: List<[String, String]> = [];
+    // A line is a status flag, a commit, and the path: `-<sha> vendor/x`.
+    for let line of git(["-C", *root, "submodule", "status"]).lines() {
+        let path = line.slice(1, line.len()).split(" ").collect()[1].to_string();
+        // A path is matched to its end, or `vendor/wasm` would match
+        // `vendor/wasmtime/...` too.
+        if manifest.contains(`${path}/`) || manifest.contains(`${path}"`) {
+            let recorded = git(["-C", *root, "rev-parse", `HEAD:${path}`]).trim().to_string();
+            found.push([path, recorded]);
+        }
+    }
+    return found;
+}
+
+/// `path` under `root`, as a path from the submodule checkout at `path`.
+fn from_submodule(path: &String, root: &String) -> String {
+    let up = "../".repeat(path.split("/").count());
+    return `${up}${*root}/${*path}`;
+}
+
+/// How Run builds a snapshot: with the toolchain the user's homes hold, into
+/// one target directory every snapshot shares.
+pub fn home_runner() -> Runner with Environment {
+    let home = env("HOME").expect("rustup's default homes are under HOME");
+    return Runner {
+        target_dir: "scratchpad/eddy-target",
+        cargo_home: env("CARGO_HOME").unwrap_or(`${home}/.cargo`),
+        rustup_home: env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`),
+        mise_data_dir: env("MISE_DATA_DIR").unwrap_or(`${home}/.local/share/mise`),
+    };
+}
+
+/// How long `mise` may take to list its tools, in seconds: the configuration
+/// it reads is the reviewed change's, which may make it run anything.
+global MISE_TIMEOUT: i32 = 60;
+
+/// `runner` with `mise` and the tools it has installed for the tree at `root`
+/// among its programs. Where `mise` does not list them, because it is not
+/// installed, `wado run` grants a child no read of it, or it refuses the
+/// tree's configuration, Run is left with `cargo` and the reason is logged.
+pub fn with_mise_tools(runner: Runner, root: &String) -> Runner with Process {
+    let dirs = match mise_bin_dirs(root, &runner.mise_data_dir) {
+        Ok(dirs) => dirs,
+        Err(e) => {
+            log_stderr(`eddy: Run has cargo alone, since mise lists no tools: ${e}`);
+            return runner;
+        },
+    };
+    let mut with_tools = runner;
+    with_tools.tool_path = dirs.join(":");
+    with_tools.programs.push("mise");
+    for let program of programs_in(&dirs) {
+        if !with_tools.programs.contains_str(&program) {
+            with_tools.programs.push(program);
+        }
+    }
+    return with_tools;
+}
+
+/// The directories of the tools `mise` has installed for the tree at `root`.
+fn mise_bin_dirs(root: &String, data_dir: &String) -> Result<List<String>, String> with Process {
+    let out = Command::new("timeout").args([
+        "--kill-after=10", `${MISE_TIMEOUT}`, "sh", "-c", `${ENTER_TREE} && exec mise bin-paths`, *root,
+    ]).env("MISE_DATA_DIR", *data_dir).output().map_err(|e| `${e}`)?;
+    if out.status != Exited(0) {
+        return Err(`${out.status:?}: ${String::from_utf8_lossy(out.stderr).trim()}`);
+    }
+    return Ok(
+        String::from_utf8_lossy(out.stdout).lines().filter(|dir| !dir.is_empty()).map(|dir| dir.to_string()).collect(),
+    );
+}
+
+/// The name of each program directly in `dirs`, a link to one included.
+fn programs_in(dirs: &List<String>) -> List<String> with Process {
+    // With no directory, `find` would search the current one.
+    if dirs.is_empty() {
+        return [];
+    }
+    let mut args = ["-L"] as List<String>;
+    args.extend(dirs);
+    args.extend(&["-maxdepth", "1", "-type", "f", "-perm", "-u+x"]);
+    // A link to nothing fails the run and is not a program: what `find`
+    // printed is still the answer.
+    let found = Command::new("find").args(args).output().unwrap().stdout;
+    return String::from_utf8_lossy(found).lines().map(|path| fs::file_name(path).unwrap().to_string()).collect();
+}
+
+test "a directory's programs are the files in it that can be executed" {
+    let dir = "build/programs-test";
+    fs::remove_dir_all(dir).unwrap();
+    fs::create_dir_all(`${dir}/nested`).unwrap();
+    for let name of ["tool", "notes.txt", "nested/deep"] {
+        fs::write(`${dir}/${name}`, &"").unwrap();
+    }
+    assert Command::new("chmod").args(["+x", `${dir}/tool`, `${dir}/nested/deep`]).status().unwrap() == Exited(0);
+    assert programs_in(&[dir]) == ["tool"];
+    assert programs_in(&[]).is_empty();
+}
+
+/// The snapshot of `sha` at `root`, its submodules included, back as checked
+/// out: a run may have written, committed or checked out anything in it.
+pub fn reset_snapshot(root: &String, sha: &String) with Process {
+    reset_checkout(root, sha);
+    // Read once the tree is back at `sha`, so HEAD records what it checked out.
+    for let [path, recorded] of build_submodules(root) {
+        reset_checkout(&`${*root}/${path}`, &recorded);
+    }
+}
+
+fn reset_checkout(dir: &String, commit: &String) with Process {
+    tree_git(dir, ["reset", "--hard", "--quiet", *commit]);
+    // Twice forced: once leaves an untracked directory that is a repository
+    // of its own, such as one a test made.
+    tree_git(dir, ["clean", "-ffdx", "--quiet"]);
+}
+
+pub fn drop_snapshot(root: &String) with (Process, Preopens) {
+    for let [path, _] of build_submodules(root) {
+        // Absent unless Run checked it out.
+        try_git(["-C", path, "worktree", "remove", "--force", from_submodule(&path, root)]);
+    }
+    git(["worktree", "remove", "--force", *root]);
+    fs::remove_dir_all(index_dir(root)).unwrap();
+}
+
+fn index_dir(root: &String) -> String {
+    return `${*root}-index`;
+}
+
+/// SCIP indexes of the tree at `root`, outside it so Glob never lists them:
+/// its Rust by rust-analyzer and its Wado by `wado`, the binary at
+/// `wado_path`. The Wado index reads the tree with that compiler, so a file
+/// it cannot compile indexes only what still resolves.
+pub fn index(root: &String, wado_path: &String) -> List<String> with (Process, Environment, Preopens) {
+    let dir = index_dir(root);
+    let rust = `${dir}/rust.scip`;
+    let wado = `${dir}/wado.scip`;
+    fs::create_dir_all(&dir).unwrap();
+    // A child gets a private HOME, where rustup would find no toolchain.
+    let homes = home_runner();
+    let analyzer = Command::new("rust-analyzer").args(["scip", *root, "--output", rust, "--exclude-vendored-libraries"]).env(
+        "RUSTUP_HOME",
+        homes.rustup_home,
+    ).env("CARGO_HOME", homes.cargo_home);
+    succeed(&analyzer);
+    // The generated and fixture tests are most of the tree's Wado and use the
+    // stdlib thousands of times over, which would bury a reference a reviewer
+    // wants.
+    succeed(&Command::new(*wado_path).args([
+        "query", "scip", "--output", wado, "--exclude", "wado-compiler/tests/**", "--exclude",
+        "package-gale/tests/generated/**", *root,
+    ]));
+    return [rust, wado];
+}
+
+fn succeed(command: &Command) with Process {
+    let out = command.capture_limit(i32::MAX).output().unwrap();
+    assert out.status == Exited(0), `${String::from_utf8_lossy(out.stderr)}`;
+}

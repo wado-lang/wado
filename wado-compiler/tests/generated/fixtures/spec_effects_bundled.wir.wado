@@ -168,17 +168,17 @@ struct spec_effects_bundled.wado//$tmpl$29318ef022efe831 {  // TypeId(16)
 
 struct spec_effects_bundled.wado//$Dispatch_spec_effects_bundled.wado/Greeting {  // TypeId(17)
     mut outer: ref null "spec_effects_bundled.wado//$Dispatch_spec_effects_bundled.wado/Greeting",
-    mut op_hello: ref struct,
+    mut op_hello: ref "canonical//CanonicalClosure_0",
 }
 
 struct spec_effects_bundled.wado//$Dispatch_spec_effects_bundled.wado/Counter {  // TypeId(18)
     mut outer: ref null "spec_effects_bundled.wado//$Dispatch_spec_effects_bundled.wado/Counter",
-    mut op_tick: ref struct,
+    mut op_tick: ref "canonical//CanonicalClosure_1",
 }
 
 struct spec_effects_bundled.wado//$Dispatch_spec_effects_bundled.wado/Stdout {  // TypeId(19)
     mut outer: ref null "spec_effects_bundled.wado//$Dispatch_spec_effects_bundled.wado/Stdout",
-    mut op_write: ref struct,
+    mut op_write: ref "canonical//CanonicalClosure_2",
 }
 
 struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(20)
@@ -610,8 +610,8 @@ fn "spec_effects_bundled.wado/$test_0"() {
         if @likely(ref.is_null(local.tee $local_0_28(global:spec_effects_bundled.wado::$effect_spec_effects_bundled.wado/Counter)) == 0) {
             global:spec_effects_bundled.wado::$effect_spec_effects_bundled.wado/Counter = local.tee $local_1_29(ref.as_non_null($local_0_28)).outer;
             $local_2_30 = block -> i32 {
-                let $indirect_call_2: ref "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($local_1_29.op_tick)).env);
+                let $indirect_call_2: ref null "canonical//CanonicalClosure_1";
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2($local_1_29.op_tick).env);
             };
             global:spec_effects_bundled.wado::$effect_spec_effects_bundled.wado/Counter = $local_0_28;
             break $inline__effect_dispatch__spec_effects_bundled_wado_Counter__tick_1: $local_2_30;
@@ -636,8 +636,8 @@ fn "spec_effects_bundled.wado/$test_0"() {
             if @likely(ref.is_null(local.tee $local_0_35(global:spec_effects_bundled.wado::$effect_spec_effects_bundled.wado/Greeting)) == 0) {
                 global:spec_effects_bundled.wado::$effect_spec_effects_bundled.wado/Greeting = local.tee $local_1_36(ref.as_non_null($local_0_35)).outer;
                 $mv_arg_1 = block -> ref "core:prelude/string.wado//String" {
-                    let $indirect_call_4: ref "canonical//CanonicalClosure_0";
-                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_0"($local_1_36.op_hello)).env);
+                    let $indirect_call_4: ref null "canonical//CanonicalClosure_0";
+                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_4.func, local.tee $indirect_call_4($local_1_36.op_hello).env);
                 };
                 global:spec_effects_bundled.wado::$effect_spec_effects_bundled.wado/Greeting = $local_0_35;
                 break $inline__effect_dispatch__spec_effects_bundled_wado_Greeting__hello_4: $mv_arg_1;
@@ -650,8 +650,8 @@ fn "spec_effects_bundled.wado/$test_0"() {
         $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_5: ref Array<u8>; $array_clone_src_5 = $mv_arg_1.repr; let $array_clone_dst_6: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_6(builtin::array_new<u8>($local_2_30)), 0, $array_clone_src_5, 0, $local_2_30); $array_clone_dst_6, used: $local_2_30 };
         if @likely(ref.is_null(local.tee $local_1_32(global:spec_effects_bundled.wado::$effect_spec_effects_bundled.wado/Stdout)) == 0) {
             global:spec_effects_bundled.wado::$effect_spec_effects_bundled.wado/Stdout = local.tee $local_2_33(ref.as_non_null($local_1_32)).outer;
-            let $indirect_call_9: ref "canonical//CanonicalClosure_2";
-            call_ref "functype/$canonical_closure_fn_2"($indirect_call_9.func, local.tee $indirect_call_9(ref.cast "canonical//CanonicalClosure_2"($local_2_33.op_write)).env, $mv_arg_1);
+            let $indirect_call_9: ref null "canonical//CanonicalClosure_2";
+            call_ref "functype/$canonical_closure_fn_2"($indirect_call_9.func, local.tee $indirect_call_9($local_2_33.op_write).env, $mv_arg_1);
             break $inline__effect_dispatch__spec_effects_bundled_wado_Stdout__write_2: global:spec_effects_bundled.wado::$effect_spec_effects_bundled.wado/Stdout = $local_1_32;
         } else {
             "core:rt/panic"(local.tee $mv_arg_1(global:spec_effects_bundled.wado::$const_obj_2).repr, $mv_arg_1.used);

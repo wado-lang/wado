@@ -130,7 +130,7 @@ struct spec_functions_closures.wado//$tmpl$ebaa20f4a908b504 {  // TypeId(12)
 }
 
 struct spec_functions_closures.wado//$tmpl$56882c3033786798 {  // TypeId(13)
-    mut h0: ref struct,
+    mut h0: ref "canonical//CanonicalClosure_0",
     mut h1: i32,
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
@@ -168,33 +168,33 @@ variant core:prelude/types.wado//Result<i32,core:prelude/string.wado/String> {  
     Err(ref "core:prelude/string.wado//String"),
 }
 
-struct core:prelude//$Cell<fn> {  // TypeId(22)
-    mut value: ref struct,
+struct core:prelude//$Cell<fn(i32,i32)->i32> {  // TypeId(22)
+    mut value: ref "canonical//CanonicalClosure_0",
 }
 
-struct core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok {  // TypeId(23)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32, i32) -> i32;  // TypeId(23)
+
+type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(24)
+
+struct canonical//CanonicalInspectableBase {  // TypeId(25)
+    env: ref null struct,
+    inspect: ref "functype/$canonical_callback_fn",
+}
+
+struct canonical//CanonicalClosure_0 {  // TypeId(26)
+    env: ref null struct,
+    inspect: ref "functype/$canonical_callback_fn",
+    func: ref "functype/$canonical_closure_fn_0",
+}
+
+struct core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok {  // TypeId(27)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err {  // TypeId(24)
+struct core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err {  // TypeId(28)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
-}
-
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32, i32) -> i32;  // TypeId(25)
-
-type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(26)
-
-struct canonical//CanonicalInspectableBase {  // TypeId(27)
-    env: ref null struct,
-    inspect: ref "functype/$canonical_callback_fn",
-}
-
-struct canonical//CanonicalClosure_0 {  // TypeId(28)
-    env: ref null struct,
-    inspect: ref "functype/$canonical_callback_fn",
-    func: ref "functype/$canonical_closure_fn_0",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(29)
@@ -415,7 +415,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/primitive.wado/$tmpl$c8d78b43997053ab,[core:prelude/string.wado/String,u32]>" = fn(ref "core:prelude/primitive.wado//$tmpl$c8d78b43997053ab") -> ref "core:prelude/string.wado//String";  // TypeId(137)
 
-type "functype//spec_functions_closures.wado/fn(i32,i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(138)
+type "functype//spec_functions_closures.wado/fn(i32,i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn(i32,i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(138)
 
 type "functype//spec_functions_closures.wado/spec_functions_closures.wado/$Closure_6::$call$dae[self]" = fn(i32, i32) -> i32;  // TypeId(139)
 
@@ -505,7 +505,7 @@ global global:spec_functions_closures.wado::$const_obj_12: ref Array<u8> = array
 global global:core:prelude/primitive.wado::$const_obj_13: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
 fn "spec_functions_closures.wado/$test_3_parameter_inference"() {
-    let $v0_3: ref struct;
+    let $v0_3: ref "canonical//CanonicalClosure_0";
     let acc: i32;
     let item_61: i32;
     let $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__fold_i32__15_0_index_80: i32;
@@ -518,8 +518,7 @@ fn "spec_functions_closures.wado/$test_3_parameter_inference"() {
             item_61 = builtin::array_get_value<i32>(global:spec_functions_closures.wado::$const_obj_1, $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__fold_i32__15_0_index_80);
             $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__fold_i32__15_0_index_80 = $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__fold_i32__15_0_index_80 + 1;
             acc = block -> i32 {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($v0_3)).env, acc, item_61);
+                call_ref "functype/$canonical_closure_fn_0"($v0_3.func, $v0_3.env, acc, item_61);
             };
             continue l1;
         };
@@ -572,7 +571,7 @@ fn "spec_functions_closures.wado/$template_segment$spec_functions_closures.wado/
 
 fn "spec_functions_closures.wado/$hole_fmt$spec_functions_closures.wado/$tmpl$56882c3033786798"(t, index, f) {
     if index == 0 {
-        "spec_functions_closures.wado/fn(i32,i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t.h0 }, f);
+        "spec_functions_closures.wado/fn(i32,i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn(i32,i32)->i32>" { value: t.h0 }, f);
     } else if @likely(index == 1) {
         "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(t.h1, f);
     } else {

@@ -1,0 +1,26 @@
+// A struct type nothing extends is declared final. wasmtime tests a cast to a
+// final type with one compare; a cast to any other type calls out on a
+// mismatch, which costs the function a stack frame even when the cast holds.
+// A closure's wrapper casts its environment on every call.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    f: fn(i32) -> i32,
+}
+
+export fn run() with Stdout {
+    let k = builtin::black_box(3);
+    let h = builtin::black_box(Holder { f: |x| x + k });
+    println(`${(h.f)(4)}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n",
+    "wat_lines": [
+        {"contains": ["(struct (field structref) (field (ref"]},
+        {"contains": ["(sub (struct (field structref)"], "count": 0},
+        {"contains": ["(sub (struct (field (mut i32))))"], "count": 0}
+    ]
+}

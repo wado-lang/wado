@@ -1664,14 +1664,9 @@ impl FunctionTranslator<'_, '_> {
                 self.type_table.get(fn_type_id)
             );
         };
-        // Unit params are erased from the canonical signature (they have no
-        // Wasm representation); every canonical-key site filters identically.
-        let param_wirs: Vec<WirType> = params
-            .iter()
-            .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
-            .filter(|t| !matches!(t, WirType::Unit))
-            .collect();
-        let result_wirs = self.result_wir_types(*return_type);
+        let (param_wirs, result_wirs) =
+            self.ctx
+                .canonical_signature(self.type_table, params, *return_type);
         let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
         let Some((fn_type, closure_struct, _)) = self.ctx.canonical_closure_types.get(&key) else {
             panic!("[WIR] canonical closure type not registered for signature {key:?}");
@@ -1696,25 +1691,28 @@ impl FunctionTranslator<'_, '_> {
         let callee_ty = self.operand_type_id(callee);
         let (fn_type_id, closure_struct_type_id) = self.canonical_closure_types_of(callee_ty);
 
-        // Generate a temp local for the callee as canonical closure struct ref
+        // Nullable, so a callee read from a nullable slot is not narrowed: the
+        // `struct.get`s that read it trap on null themselves.
         let temp_name = self.fresh_local("$indirect_call");
         let callee_ref_type = WirType::Ref {
             type_id: closure_struct_type_id.clone(),
-            nullable: false,
+            nullable: true,
         };
 
-        // Build: declare temp, cast callee from abstract structref to canonical closure,
-        // store, extract env + args + funcref, call_ref
-        let mut stmts = declare_and_set_local(
-            temp_name.clone(),
-            callee_ref_type.clone(),
+        // A function type absent from `fn_closure_types` lowers to
+        // `structref`, and casts down to the closure of its signature.
+        let callee_closure = if self.ctx.fn_closure_types.contains_key(&callee_ty) {
+            callee_wir
+        } else {
             WirInstr::RefCast {
                 type_id: closure_struct_type_id.clone(),
                 nullable: false,
                 expr: Box::new(callee_wir),
-            },
-        )
-        .to_vec();
+            }
+        };
+        let mut stmts =
+            declare_and_set_local(temp_name.clone(), callee_ref_type.clone(), callee_closure)
+                .to_vec();
 
         // Build args: env, then user args
         let env_result_ty = self.struct_field_wir_type(&closure_struct_type_id, "env");
@@ -1795,14 +1793,9 @@ impl FunctionTranslator<'_, '_> {
             ),
         };
 
-        // Unit params are erased from the canonical signature; every
-        // canonical-key site filters identically.
-        let param_wirs: Vec<WirType> = param_types
-            .iter()
-            .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
-            .filter(|t| !matches!(t, WirType::Unit))
-            .collect();
-        let result_wirs = self.result_wir_types(return_type);
+        let (param_wirs, result_wirs) =
+            self.ctx
+                .canonical_signature(self.type_table, &param_types, return_type);
 
         // Get canonical closure type and its inspectable schema flag.
         let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);

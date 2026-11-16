@@ -64,7 +64,7 @@ struct cm_component_import_interface_type_namespace.wado//$tmpl$f49e531e78d06e05
 
 struct cm_component_import_interface_type_namespace.wado//$Dispatch_sub/wasm_import_cm_geo_use_other.wat/Log {  // TypeId(6)
     mut outer: ref null "cm_component_import_interface_type_namespace.wado//$Dispatch_sub/wasm_import_cm_geo_use_other.wat/Log",
-    mut op_emit: ref struct,
+    mut op_emit: ref "canonical//CanonicalClosure_0",
 }
 
 struct core:prelude/format.wado//Formatter {  // TypeId(7)
@@ -203,16 +203,16 @@ struct core:prelude//$Cell<sub/wasm_import_cm_geo_use_other.wat/Geo::Shape> {  /
     mut value: ref "sub/wasm_import_cm_geo_use_other.wat//Geo::Shape",
 }
 
-struct sub/wasm_import_cm_geo_use_other.wat//Geo::Shape::Circle {  // TypeId(26)
-    discriminant: i32,
-    payload_0: u32,
-}
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, ref "sub/wasm_import_cm_geo_use_other.wat//Log::Entry");  // TypeId(26)
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, ref "sub/wasm_import_cm_geo_use_other.wat//Log::Entry");  // TypeId(27)
-
-struct canonical//CanonicalClosure_0 {  // TypeId(28)
+struct canonical//CanonicalClosure_0 {  // TypeId(27)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
+}
+
+struct sub/wasm_import_cm_geo_use_other.wat//Geo::Shape::Circle {  // TypeId(28)
+    discriminant: i32,
+    payload_0: u32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(29)
@@ -827,8 +827,8 @@ fn "cm_component_import_interface_type_namespace.wado/$cm_export__a:x/log@0.1.0#
     $inline__effect_dispatch__sub_wasm_import_cm_geo_use_other_wat_Log__emit_1: block {
         if @likely(ref.is_null(local.tee $local_1(global:cm_component_import_interface_type_namespace.wado::$effect_sub/wasm_import_cm_geo_use_other.wat/Log)) == 0) {
             global:cm_component_import_interface_type_namespace.wado::$effect_sub/wasm_import_cm_geo_use_other.wat/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
-            let $indirect_call_3: ref "canonical//CanonicalClosure_0";
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2.op_emit)).env, $struct_lift);
+            let $indirect_call_3: ref null "canonical//CanonicalClosure_0";
+            call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3($local_2.op_emit).env, $struct_lift);
             break $inline__effect_dispatch__sub_wasm_import_cm_geo_use_other_wat_Log__emit_1: global:cm_component_import_interface_type_namespace.wado::$effect_sub/wasm_import_cm_geo_use_other.wat/Log = $local_1;
         } else {
             "core:rt/panic"(array.new_data<u8>("no handler installed for `Log::emit`"), 36);

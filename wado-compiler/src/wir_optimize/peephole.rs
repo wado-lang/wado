@@ -1766,6 +1766,25 @@ mod tests {
         }
     }
 
+    #[test]
+    fn an_element_read_stored_to_a_nullable_local_keeps_its_unset_trap() {
+        let locals: WirLocals = [("c".to_string(), ref_ty(2, true))].into_iter().collect();
+        let mut instr = WirInstr::LocalSet {
+            name: "c".to_string(),
+            value: Box::new(WirInstr::ArrayGet {
+                type_id: tid(1),
+                array: Box::new(local_get("a", ref_ty(1, false))),
+                index: Box::new(WirInstr::I32Const(0)),
+                result_ty: ref_ty(2, false),
+            }),
+        };
+        assert!(!try_relax_gc_operands(&mut instr, &locals));
+        let WirInstr::LocalSet { value, .. } = &instr else {
+            unreachable!();
+        };
+        assert_matches!(value.as_ref(), WirInstr::ArrayGet { result_ty, .. } if result_ty.is_nonnull_ref());
+    }
+
     fn fold_short_fill(instr: &mut WirInstr) -> bool {
         try_fold_short_fill(instr, &Nullability::new(&WirLocals::default()))
     }

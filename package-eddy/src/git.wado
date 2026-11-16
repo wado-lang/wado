@@ -1,0 +1,111 @@
+//! Running `git` in the repository `wado run` grants, and the diff of a change
+//! as a reviewer reads it.
+
+use { Command, Process, ProcessError } from "core:process";
+
+/// `git`'s stdout, or `null` when it exits other than 0.
+pub fn try_git(args: List<String>) -> Option<String> with Process {
+    return match run_git(args) {
+        Ok(out) => Some(out),
+        Err(_) => null,
+    };
+}
+
+pub fn git(args: List<String>) -> String with Process {
+    return match run_git(args) {
+        Ok(out) => out,
+        Err(e) => panic(`${e}`),
+    };
+}
+
+fn run_git(args: List<String>) -> Result<String, ProcessError> with Process {
+    // Unquoted, a non-ASCII path reads back as the name `git` takes. A path
+    // handed to `git` is a file's name, never a pattern: one that starts with
+    // `:(` would otherwise select other files.
+    let mut full = ["--literal-pathspecs", "-c", "core.quotePath=false"] as List<String>;
+    full.extend(&args);
+    return Command::new("git").args(full).capture_limit(i32::MAX).read().map(|out| String::from_utf8_lossy(out));
+}
+
+/// The paths `.gitattributes` marked generated or vendored at `rev`.
+pub fn generated(rev: &String, paths: &List<String>) -> List<String> with Process {
+    if paths.is_empty() {
+        return [];
+    }
+    let mut check = ["check-attr", "-z", "--source", *rev, "linguist-generated", "linguist-vendored", "--"] as List<String>;
+    check.extend(paths);
+    return marked(&nul_separated(&git(check)));
+}
+
+/// The paths among `fields`, `check-attr -z`'s path, attribute and value in
+/// turn, whose attribute is set.
+fn marked(fields: &List<String>) -> List<String> {
+    assert fields.len() % 3 == 0, "check-attr -z prints a path, an attribute and a value";
+    let mut paths: List<String> = [];
+    for let i of (0..<fields.len()).step_by(3) {
+        let value = &fields[i + 2];
+        if (*value == "set" || *value == "true") && !paths.contains_str(&fields[i]) {
+            paths.push(fields[i]);
+        }
+    }
+    return paths;
+}
+
+/// The paths that differ from `base` to `head`, both sides of a rename: a diff
+/// given only the new path shows the renamed file as wholly added.
+pub fn paths_between(base: &String, head: &String) -> List<String> with Process {
+    return nul_separated(&git(["diff", "--name-only", "--no-renames", "-z", *base, *head]));
+}
+
+/// The fields of `output`, each ended by a NUL. `git -z` prints a path as it
+/// is; without it, a path holding a quote or a control character is printed
+/// quoted, a form `git` does not take back.
+pub fn nul_separated(output: &String) -> List<String> {
+    let mut fields: List<String> = output.split("\0").map(|field| field.to_string()).collect();
+    assert fields.pop() == Some(""), "every field ends in a NUL";
+    return fields;
+}
+
+test "git's NUL-separated output keeps a path as it is" {
+    assert nul_separated(&"a \"b\".rs\0c\nd.rs\0") == ["a \"b\".rs", "c\nd.rs"];
+    assert nul_separated(&"").is_empty();
+}
+
+test "a path is generated where either attribute is set" {
+    let fields = nul_separated(
+        &"a.json\0linguist-generated\0true\0a.json\0linguist-vendored\0unspecified\0v/x.c\0linguist-generated\0unspecified\0v/x.c\0linguist-vendored\0set\0m.rs\0linguist-generated\0false\0m.rs\0linguist-vendored\0unspecified\0",
+    );
+    assert marked(&fields) == ["a.json", "v/x.c"];
+}
+
+/// What changed in `paths` from `base` to `head`, generated, vendored and
+/// Markdown files left out. A diff past `limit` bytes is an error rather than
+/// clipped: the part left out may be the one that matters.
+pub fn diff_between(
+    base: &String,
+    head: &String,
+    paths: &List<String>,
+    what: String,
+    limit: i32,
+) -> Result<String, String> with Process {
+    // At `head`: a change that adds a generated file marks it in the same
+    // change, which `base` does not know of yet.
+    let gen = generated(head, paths);
+    let mut diff_args = ["diff", *base, *head, "--"] as List<String>;
+    let mut any = false;
+    for let p of paths {
+        if !gen.contains_str(p) && !p.ends_with(".md") {
+            diff_args.push(*p);
+            any = true;
+        }
+    }
+    // With no path, `git diff` would show every path.
+    let diff = if any { git(diff_args) } else { "" };
+    if diff.is_empty() {
+        return Err(`the ${what} diff is empty`);
+    }
+    if diff.len() > limit {
+        return Err(`the ${what} diff is ${diff.len()} bytes, over ${limit}`);
+    }
+    return Ok(diff);
+}

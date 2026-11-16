@@ -88,8 +88,8 @@ struct cm_component_import_list_arg.wado//$tmpl$b380cda5d6a6f4e6 {  // TypeId(8)
 
 struct cm_component_import_list_arg.wado//$Dispatch_sub/wasm_import_cm_list_sum.wat/Lists {  // TypeId(9)
     mut outer: ref null "cm_component_import_list_arg.wado//$Dispatch_sub/wasm_import_cm_list_sum.wat/Lists",
-    mut op_sum: ref struct,
-    mut op_wide: ref struct,
+    mut op_sum: ref "canonical//CanonicalClosure_0",
+    mut op_wide: ref "canonical//CanonicalClosure_1",
 }
 
 struct core:linear//Block {  // TypeId(10)
@@ -342,28 +342,28 @@ struct core:prelude//$Cell<core:prelude/types.wado/Option<&core:linear/LinearArr
     mut value: ref "core:prelude/types.wado//Option<&core:linear/LinearArray<f32>>",
 }
 
-struct core:prelude/types.wado//Option<&core:linear/LinearArray<u8>>::Some {  // TypeId(44)
-    discriminant: i32,
-    payload_0: ref null "core:linear//LinearArray<u8>",
-}
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, ref null "core:linear//ListView<u8>") -> u32;  // TypeId(44)
 
-struct core:prelude/types.wado//Option<&core:linear/LinearArray<f32>>::Some {  // TypeId(45)
-    discriminant: i32,
-    payload_0: ref null "core:linear//LinearArray<f32>",
-}
-
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, ref null "core:linear//ListView<u8>") -> u32;  // TypeId(46)
-
-struct canonical//CanonicalClosure_0 {  // TypeId(47)
+struct canonical//CanonicalClosure_0 {  // TypeId(45)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, ref null "core:linear//ListView<u8>") -> u32;  // TypeId(48)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, ref null "core:linear//ListView<u8>") -> u32;  // TypeId(46)
 
-struct canonical//CanonicalClosure_1 {  // TypeId(49)
+struct canonical//CanonicalClosure_1 {  // TypeId(47)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_1",
+}
+
+struct core:prelude/types.wado//Option<&core:linear/LinearArray<u8>>::Some {  // TypeId(48)
+    discriminant: i32,
+    payload_0: ref null "core:linear//LinearArray<u8>",
+}
+
+struct core:prelude/types.wado//Option<&core:linear/LinearArray<f32>>::Some {  // TypeId(49)
+    discriminant: i32,
+    payload_0: ref null "core:linear//LinearArray<f32>",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(50)
@@ -1300,8 +1300,8 @@ fn "cm_component_import_list_arg.wado/$test_2_an_interface_operation_takes_a_lin
         if ref.is_null(local.tee $local_1(global:cm_component_import_list_arg.wado::$effect_sub/wasm_import_cm_list_sum.wat/Lists)) == 0 {
             global:cm_component_import_list_arg.wado::$effect_sub/wasm_import_cm_list_sum.wat/Lists = local.tee $local_2(ref.as_non_null($local_1)).outer;
             $v3 = block -> u32 {
-                let $indirect_call_3: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2.op_sum)).env, $temp_5);
+                let $indirect_call_3: ref null "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3($local_2.op_sum).env, $temp_5);
             };
             global:cm_component_import_list_arg.wado::$effect_sub/wasm_import_cm_list_sum.wat/Lists = $local_1;
             break $inline__effect_dispatch__sub_wasm_import_cm_list_sum_wat_Lists__sum_0: $v3;
@@ -1340,8 +1340,8 @@ Lists::sum(&linear): "), used: 22 }, s2: struct.new "core:prelude/string.wado//S
         if ref.is_null(local.tee $local_1(global:cm_component_import_list_arg.wado::$effect_sub/wasm_import_cm_list_sum.wat/Lists)) == 0 {
             global:cm_component_import_list_arg.wado::$effect_sub/wasm_import_cm_list_sum.wat/Lists = local.tee $local_2(ref.as_non_null($local_1)).outer;
             $v3 = block -> u32 {
-                let $indirect_call_5: ref "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_5.func, local.tee $indirect_call_5(ref.cast "canonical//CanonicalClosure_1"($local_2.op_wide)).env, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, $temp_5);
+                let $indirect_call_5: ref null "canonical//CanonicalClosure_1";
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_5.func, local.tee $indirect_call_5($local_2.op_wide).env, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, $temp_5);
             };
             global:cm_component_import_list_arg.wado::$effect_sub/wasm_import_cm_list_sum.wat/Lists = $local_1;
             break $inline__effect_dispatch__sub_wasm_import_cm_list_sum_wat_Lists__wide_5: $v3;
@@ -1409,8 +1409,8 @@ fn "cm_component_import_list_arg.wado/$test_3_a_handler_reads_the_view_it_is_han
         if ref.is_null(local.tee $local_1_23(global:cm_component_import_list_arg.wado::$effect_sub/wasm_import_cm_list_sum.wat/Lists)) == 0 {
             global:cm_component_import_list_arg.wado::$effect_sub/wasm_import_cm_list_sum.wat/Lists = local.tee $local_2_24(ref.as_non_null($local_1_23)).outer;
             $v3 = block -> u32 {
-                let $indirect_call_3: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2_24.op_sum)).env, $temp_9);
+                let $indirect_call_3: ref null "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3($local_2_24.op_sum).env, $temp_9);
             };
             global:cm_component_import_list_arg.wado::$effect_sub/wasm_import_cm_list_sum.wat/Lists = $local_1_23;
             break $inline__effect_dispatch__sub_wasm_import_cm_list_sum_wat_Lists__sum_0: $v3;
@@ -1447,7 +1447,7 @@ Lists::sum(&linear): "), used: 22 }, s2: struct.new "core:prelude/string.wado//S
         if ref.is_null(local.tee $local_1_23(global:cm_component_import_list_arg.wado::$effect_sub/wasm_import_cm_list_sum.wat/Lists)) == 0 {
             global:cm_component_import_list_arg.wado::$effect_sub/wasm_import_cm_list_sum.wat/Lists = local.tee $local_2_24(ref.as_non_null($local_1_23)).outer;
             $v3 = block -> u32 {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2_24.op_sum)).env, $temp_9);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3($local_2_24.op_sum).env, $temp_9);
             };
             global:cm_component_import_list_arg.wado::$effect_sub/wasm_import_cm_list_sum.wat/Lists = $local_1_23;
             break $inline__effect_dispatch__sub_wasm_import_cm_list_sum_wat_Lists__sum_5: $v3;

@@ -84,7 +84,7 @@ global global:opt_closure_devirt_impure_callee.wado::$const_obj_0: ref Array<u8>
 
 fn "opt_closure_devirt_impure_callee.wado/run"() with Stdout {
     let $load_2: ref Array<u8>;
-    let c: ref struct;
+    let c: ref "canonical//CanonicalClosure_0";
     let y: i32;
     let out_37: ref "core:prelude/string.wado//String";
     let is_negative_104: bool;
@@ -92,8 +92,8 @@ fn "opt_closure_devirt_impure_callee.wado/run"() with Stdout {
     let $sroa_t_h1_258: i32;
     c = struct.new "canonical//CanonicalClosure_0" { env: struct.new "opt_closure_devirt_impure_callee.wado//$Closure_0" { $capture_0: 10 }, func: ref.func "closure/opt_closure_devirt_impure_callee.wado/$closure_wrapper_0" };
     y = block -> i32 {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(global:opt_closure_devirt_impure_callee.wado::SIDE = global:opt_closure_devirt_impure_callee.wado::SIDE + 1; c)).env, 5);
+        global:opt_closure_devirt_impure_callee.wado::SIDE = global:opt_closure_devirt_impure_callee.wado::SIDE + 1;
+        call_ref "functype/$canonical_closure_fn_0"(c.func, c.env, 5);
     };
     $sroa_t_h1_258 = global:opt_closure_devirt_impure_callee.wado::SIDE;
     out_37 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };

@@ -4,9 +4,9 @@ The tools a reviewer agent reads and checks a change with. A checked item is
 built; an unchecked one is wanted. The reasons come from the evaluation set in
 [`eval/`](../eval/README.md).
 
-Each tool sees the repository as it stood once the change merged, and nothing
-later. In the evaluation that tree is a `git worktree` of the merge, so no
-answer leaks from the fix that came after.
+Each tool sees the repository as the change leaves it, and nothing later. That
+tree is a `git worktree`: of the branch's head in a review, and of the merge in
+the evaluation, so no answer leaks from the fix that came after.
 
 ## Reading
 
@@ -61,7 +61,21 @@ one the code refutes is dropped on what the code did, not on a chain of
 reasoning.
 
 - [x] Write: a file into the tree, such as a test or a small program.
-- [x] Run: `cargo` at the tree's root, under a timeout, into one target
-  directory every tree shares. It covers a Rust test and `wado` itself
-  (`cargo run --bin wado -- run`, `test` or `dump`). A review makes a bounded
+- [x] Run: a program at the tree's root, under a timeout, into one target
+  directory every tree shares. The programs are `cargo`, and where `mise` is
+  set up, `mise` and each tool it has installed for the tree, which the
+  harness lists and puts on `PATH`. They cover a Rust test, `wado` itself
+  (`cargo run --bin wado -- run`, `test` or `dump`), a task of the project
+  (`mise run`) and a script (`node`). A review makes a bounded
   number of Runs, so a defect that will not reproduce cannot spend its turns.
+
+What a reviewer reproduced becomes a finding's `repro`, in `src/report.wado`:
+the files it wrote, the run that fails, and a text that run prints. A second
+model names them from the reviewer's calls, and Eddy reads the files from the
+tree, as a patch against the reviewed commit.
+
+- [x] Try each `repro` alone after the review: its patch on a clean checkout,
+  its run repeated. Only a run that fails with the expected text verifies the
+  finding, so one that leans on another finding's files does not.
+- [ ] Tell an assertion that failed from a test that did not compile by more
+  than the expected text, which the reviewer chooses.

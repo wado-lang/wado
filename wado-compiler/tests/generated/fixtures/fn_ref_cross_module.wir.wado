@@ -110,7 +110,7 @@ struct core:prelude/string.wado//$tmpl$b145b32c9a586330 {  // TypeId(9)
 }
 
 struct fn_ref_cross_module.wado//$tmpl$db7b22729ec4df1b {  // TypeId(10)
-    mut h0: ref struct,
+    mut h0: ref "canonical//CanonicalClosure_0",
     mut h1: i32,
     mut s0: ref "core:prelude/string.wado//String",
     mut r0: ref "core:prelude/string.wado//String",
@@ -130,8 +130,8 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 array Array<u8> (mut u8);  // TypeId(15)
 
-struct core:prelude//$Cell<fn> {  // TypeId(16)
-    mut value: ref struct,
+struct core:prelude//$Cell<fn(i32)->i32> {  // TypeId(16)
+    mut value: ref "canonical//CanonicalClosure_0",
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> i32;  // TypeId(17)
@@ -333,7 +333,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/primitive.wado/$tmpl$c8d78b43997053ab,[core:prelude/string.wado/String,u32]>" = fn(ref "core:prelude/primitive.wado//$tmpl$c8d78b43997053ab") -> ref "core:prelude/string.wado//String";  // TypeId(112)
 
-type "functype//fn_ref_cross_module.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(113)
+type "functype//fn_ref_cross_module.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(113)
 
 type "functype//fn_ref_cross_module.wado/fn_ref_cross_module.wado/$Closure_2::$call$dae[self]" = fn(i32) -> i32;  // TypeId(114)
 
@@ -420,7 +420,7 @@ fn "fn_ref_cross_module.wado/$template_segment$fn_ref_cross_module.wado/$tmpl$db
 
 fn "fn_ref_cross_module.wado/$hole_fmt$fn_ref_cross_module.wado/$tmpl$db7b22729ec4df1b"(t, index, f) {
     if index == 0 {
-        "fn_ref_cross_module.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: t.h0 }, f);
+        "fn_ref_cross_module.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn(i32)->i32>" { value: t.h0 }, f);
     } else if @likely(index == 1) {
         "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(t.h1, f);
     } else {
@@ -435,7 +435,7 @@ fn "fn_ref_cross_module.wado/$cm_export__$test_0_imported_bare_name_to_fn_parame
 fn "fn_ref_cross_module.wado/$cm_export__$test_1_imported__name_to__fn_parameter"() {
     let $v1: i32;
     if @unlikely(local.tee $v1(block -> i32 {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
+        let $indirect_call_1: ref null "canonical//CanonicalClosure_0";
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(struct.new "canonical//CanonicalClosure_0" { env: struct.new "fn_ref_cross_module.wado//$Closure_2" {}, inspect: ref.func "closure/fn_ref_cross_module.wado/$closure_inspect_wrapper_0", func: ref.func "closure/fn_ref_cross_module.wado/$closure_wrapper_0" }).env, 21);
     }) != 42) {
         cold_path;

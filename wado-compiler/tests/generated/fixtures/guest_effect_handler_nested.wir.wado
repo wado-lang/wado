@@ -24,7 +24,7 @@ struct guest_effect_handler_nested.wado//Reentrant {}  // TypeId(3)
 
 struct guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight {  // TypeId(4)
     mut outer: ref null "guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight",
-    mut op_highlight: ref struct,
+    mut op_highlight: ref "canonical//CanonicalClosure_0",
 }
 
 struct sub/hlc.wasm//Wrapped {  // TypeId(5)
@@ -282,8 +282,8 @@ fn "guest_effect_handler_nested.wado/$cm_export__test:hlc/highlight@0.1.0#highli
         if @likely(ref.is_null(local.tee $local_2(global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight)) == 0) {
             global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = local.tee $local_3(ref.as_non_null($local_2)).outer;
             $lifted_string_4 = block -> ref "core:prelude/string.wado//String" {
-                let $indirect_call_3: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_3.op_highlight)).env, $lifted_string_4, $lifted_string_5);
+                let $indirect_call_3: ref null "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3($local_3.op_highlight).env, $lifted_string_4, $lifted_string_5);
             };
             global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = $local_2;
             break $inline__effect_dispatch__sub_hlc_wasm_Highlight__highlight_8: $lifted_string_4;

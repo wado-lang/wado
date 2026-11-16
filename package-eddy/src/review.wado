@@ -1,0 +1,148 @@
+//! One review of a change: a model reads its diff, and the tree it leaves
+//! where a workspace gives one, and reports the defects it introduces. The
+//! reviewer is asked for nothing else: what a report needs beyond a finding's
+//! words is drawn from it afterwards, in `report.wado`.
+
+use { Preopens } from "core:fs";
+use { Process } from "core:process";
+use { Client } from "wasi:http";
+use { ask_json, json_object, Usage } from "./anthropic.wado";
+use { run_agent, Call } from "./agent.wado";
+use { empty_index } from "./symbols.wado";
+use { Runner, Workspace } from "./tools.wado";
+
+global REVIEW: String = #"You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
+Report the defects the change introduces: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.
+Answer with one JSON object and nothing else:
+{"findings": [{"file": "<path>", "summary": "<one sentence>", "detail": "<why it is wrong, and when it goes wrong>"}]}
+Report at most 10 findings, the most severe first. An empty list is a valid answer."#;
+
+global READING: String = "You can read the repository as it stood once this pull request merged, with the tools Read, Grep and Glob. Before you report, read what the diff alone does not show: the callers of what changed, the definitions it relies on, the rest of a file. Your final reply is the JSON object.";
+
+global SYMBOL_READING: String = "FindSymbol and FindReferences answer from the compiler's index of the Rust and Wado code: use them to find a definition and the uses of a function, type or field, and Grep for other text.";
+
+global RUNNING: String = "You can also run the code: Write a test or a small program into the tree, and build and run it with Run, which runs cargo and the other programs it names.
+Before you report a finding, reproduce it: write a test that asserts the right behaviour, so that it fails now and would pass once the defect is fixed, and run it. A finding you are already sure of from reading is still one to reproduce, since reading can be wrong either way. A suspicion a run refutes is one to drop.
+A defect that depends on timing, such as a race with another process, is reproduced by making the interleaving happen in the test, for example by deleting a file between the two steps the race separates, never by running it again in the hope of hitting it.
+Give each finding at most three runs. One that does not reproduce by then is reported only if the code makes it certain, saying in its detail that it was not reproduced and why.";
+
+pub struct Finding {
+    pub file: String,
+    pub summary: String,
+    pub detail: String,
+    /// A line of `file` as the change leaves it that the diff shows, which is
+    /// where a pull request takes a comment on a line, or 0 where none was
+    /// placed.
+    pub line: i32 = 0,
+    /// Absent where no test of the reviewer's was found to reproduce it.
+    pub repro: Option<Repro> = null,
+}
+
+/// What shows a finding: `git apply` the patch to the reviewed commit and run
+/// the command `run`, a program Run runs and its arguments, and it fails
+/// printing `expect`.
+pub struct Repro {
+    pub patch: String,
+    pub run: List<String>,
+    pub expect: String,
+    /// Whether it did so here, tried alone in a clean tree after the review.
+    pub verified: bool,
+    /// What that run reported, or why there was none.
+    pub output: String,
+}
+
+/// What one review reported and what it took. A review that failed keeps what
+/// it spent before the error.
+pub struct Reviewed {
+    pub findings: List<Finding> = [],
+    pub turns: i32 = 0,
+    pub calls: List<Call> = [],
+    pub usage: Option<Usage> = null,
+    pub error: Option<String> = null,
+}
+
+struct Answer {
+    findings: List<Finding>,
+}
+
+/// The change a reviewer is asked about: what it is, in `heading`, and its
+/// diff.
+pub struct Submission {
+    pub heading: String,
+    pub diff: String,
+}
+
+impl Submission {
+    fn task(&self) -> String {
+        return `${self.heading}
+
+<diff>
+${self.diff}
+</diff>`;
+    }
+}
+
+/// What a reviewer reading `w` is told: the task, and each kind of tool `w`
+/// offers.
+fn instructions(w: &Workspace) -> String {
+    let mut system = `${REVIEW}\n${READING}`;
+    if w.symbols matches { Some(_) } {
+        system.push_str(`\n${SYMBOL_READING}`);
+    }
+    if w.runner matches { Some(_) } {
+        system.push_str(`\n${RUNNING}`);
+    }
+    return system;
+}
+
+/// `model`'s review of `change`, in one call, or by an agent that reads `ws`
+/// for up to `max_turns` turns with every tool `ws` offers.
+pub fn review(
+    api_key: &String,
+    model: String,
+    change: &Submission,
+    ws: &Option<Workspace>,
+    max_turns: i32,
+) -> Reviewed with (Client, Preopens, Process) {
+    // Thinking spends from the same budget as the answer.
+    let Some(w) = ws else {
+        return match ask_json::<Answer>(api_key, model, REVIEW, change.task(), 32_000) {
+            Ok(a) => Reviewed { findings: a.findings },
+            Err(e) => Reviewed { error: Some(e) },
+        };
+    };
+    let agent = run_agent(api_key, model, instructions(w), change.task(), w, max_turns, 32_000);
+    let mut reviewed = Reviewed { turns: agent.turns, calls: agent.calls, usage: Some(agent.usage) };
+    match agent.answer {
+        Ok(answer) => match json_object::<Answer>(&answer) {
+            Ok(a) => reviewed.findings = a.findings,
+            Err(e) => reviewed.error = Some(e),
+        },
+        Err(e) => reviewed.error = Some(e),
+    }
+    return reviewed;
+}
+
+test "a reviewer is told of the tools its workspace offers, and no others" {
+    let reading = instructions(&Workspace { root: "src" });
+    assert reading.contains("Read, Grep and Glob");
+    assert !reading.contains("FindSymbol") && !reading.contains("reproduce it");
+
+    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "" };
+    let running = instructions(&Workspace {
+        root: "src",
+        symbols: Some(empty_index()),
+        runner: Some(runner),
+    });
+    assert running.contains("FindSymbol") && running.contains("reproduce it");
+}
+
+test "a reviewer is asked for a finding's words and nothing a report adds" {
+    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "" };
+    let told = instructions(&Workspace { root: "src", runner: Some(runner) });
+    assert !told.contains(#""line""#) && !told.contains(#""repro""#) && !told.contains(#""paths""#);
+}
+
+test "a change is its heading and then its diff" {
+    assert Submission { heading: "PULL REQUEST #1: t", diff: "+a" }.task() == "PULL REQUEST #1: t\n\n<diff>\n+a\n</diff>";
+}

@@ -9,7 +9,7 @@ struct core:prelude/string.wado//String {  // TypeId(0)
 
 struct effect_handler_xmod_shadowed_effect.wado//$Dispatch_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote {  // TypeId(1)
     mut outer: ref null "effect_handler_xmod_shadowed_effect.wado//$Dispatch_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote",
-    mut op_emit: ref struct,
+    mut op_emit: ref "canonical//CanonicalClosure_0",
 }
 
 struct sub/effect_handler_xmod_shadowed_effect_handler.wado//Ctx {  // TypeId(2)
@@ -114,8 +114,8 @@ fn "effect_handler_xmod_shadowed_effect.wado/run"() with Stdout {
         if @likely(ref.is_null(local.tee $local_0(global:effect_handler_xmod_shadowed_effect.wado::$effect_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote)) == 0) {
             global:effect_handler_xmod_shadowed_effect.wado::$effect_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote = local.tee $local_1(ref.as_non_null($local_0)).outer;
             $local_2 = block -> i32 {
-                let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1.op_emit)).env);
+                let $indirect_call_2: ref null "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_1.op_emit).env);
             };
             global:effect_handler_xmod_shadowed_effect.wado::$effect_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote = $local_0;
             break $inline__effect_dispatch__sub_effect_handler_xmod_shadowed_effect_handler_wado_Remote__emit_1: $local_2;

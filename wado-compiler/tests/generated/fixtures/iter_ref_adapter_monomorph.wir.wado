@@ -162,12 +162,12 @@ struct core:prelude/list.wado//List<&i32> {  // TypeId(15)
 
 struct core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool> {  // TypeId(16)
     mut inner: ref "core:prelude/slice.wado//SliceRefIter<i32>",
-    mut pred: ref struct,
+    mut pred: ref "canonical//CanonicalClosure_1",
 }
 
 struct core:prelude/traits.wado//IterMap<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>,fn mut(&i32)->i32> {  // TypeId(17)
     mut inner: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>",
-    mut f: ref struct,
+    mut f: ref "canonical//CanonicalClosure_0",
 }
 
 struct core:prelude/slice.wado//SliceRefIter<i32> {  // TypeId(18)
@@ -2261,7 +2261,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<&i32>^core:prelude/traits
     let $sroa_result_used_19: i32;
     let $sroa_write_back_20: ref "core:prelude/list.wado//List<&i32>";
     let $licm_inner_21: ref "core:prelude/slice.wado//SliceRefIter<i32>";
-    let $licm_pred_22: ref struct;
+    let $licm_pred_22: ref "canonical//CanonicalClosure_1";
     let $licm_end_23: i32;
     let $licm_repr_24: ref Array<i32>;
     $sroa_result_repr_18 = array.new_fixed<ref "core:prelude//$Cell<i32>">();
@@ -2281,8 +2281,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<&i32>^core:prelude/traits
                         ref_val = struct.new "core:prelude//$Cell<i32>" { value: builtin::array_get_value<i32>($licm_repr_24, $load_4) };
                         $licm_inner_21.index = $load_4 + 1;
                         if block -> bool {
-                            let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-                            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($licm_pred_22)).env, ref_val);
+                            call_ref "functype/$canonical_closure_fn_1"($licm_pred_22.func, $licm_pred_22.env, ref_val);
                         } {
                             break $inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceRefIter_i32__fn_mut__i32___bool__core_prelude_traits_wado_Iterator__next_1: ref_val;
                         }
@@ -2320,9 +2319,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
 fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>,fn mut(&i32)->i32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self) {
     let ref_val: ref "core:prelude//$Cell<i32>";
     let $licm_inner_8: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceRefIter<i32>,fn mut(&i32)->bool>";
-    let $licm_f_9: ref struct;
+    let $licm_f_9: ref "canonical//CanonicalClosure_0";
     let $licm_inner_10: ref "core:prelude/slice.wado//SliceRefIter<i32>";
-    let $licm_pred_11: ref struct;
+    let $licm_pred_11: ref "canonical//CanonicalClosure_1";
     let $licm_end_12: i32;
     let $licm_repr_13: ref Array<i32>;
     let $hfs_index_14: i32;
@@ -2343,12 +2342,10 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/trait
                 ref_val = struct.new "core:prelude//$Cell<i32>" { value: builtin::array_get_value<i32>($licm_repr_13, $hfs_index_14) };
                 $hfs_index_14 = $hfs_index_14 + 1;
                 if block -> bool {
-                    let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-                    call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($licm_pred_11)).env, ref_val);
+                    call_ref "functype/$canonical_closure_fn_1"($licm_pred_11.func, $licm_pred_11.env, ref_val);
                 } {
                     $licm_end_12 = block -> i32 {
-                        let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($licm_f_9)).env, ref_val);
+                        call_ref "functype/$canonical_closure_fn_0"($licm_f_9.func, $licm_f_9.env, ref_val);
                     };
                     $licm_inner_10.index = $hfs_index_14;
                     return 1, $licm_end_12;

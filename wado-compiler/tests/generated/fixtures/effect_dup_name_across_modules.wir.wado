@@ -13,7 +13,7 @@ struct effect_dup_name_across_modules.wado//Sink {  // TypeId(1)
 
 struct effect_dup_name_across_modules.wado//$Dispatch_effect_dup_name_across_modules.wado/Log {  // TypeId(2)
     mut outer: ref null "effect_dup_name_across_modules.wado//$Dispatch_effect_dup_name_across_modules.wado/Log",
-    mut op_emit: ref struct,
+    mut op_emit: ref "canonical//CanonicalClosure_0",
 }
 
 struct core:prelude/list.wado//List<core:prelude/string.wado/String> {  // TypeId(3)
@@ -125,8 +125,8 @@ fn "effect_dup_name_across_modules.wado/run"() with Stdout {
         message_6 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
         if @likely(ref.is_null(local.tee $local_1(global:effect_dup_name_across_modules.wado::$effect_effect_dup_name_across_modules.wado/Log)) == 0) {
             global:effect_dup_name_across_modules.wado::$effect_effect_dup_name_across_modules.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
-            let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_2.op_emit)).env, message_6);
+            let $indirect_call_2: ref null "canonical//CanonicalClosure_0";
+            call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_2.op_emit).env, message_6);
             break $inline__effect_dispatch__effect_dup_name_across_modules_wado_Log__emit_2: global:effect_dup_name_across_modules.wado::$effect_effect_dup_name_across_modules.wado/Log = $local_1;
         } else {
             "core:rt/panic"(local.tee message_6(global:effect_dup_name_across_modules.wado::$const_obj_0).repr, message_6.used);

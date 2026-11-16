@@ -61,7 +61,7 @@ struct core:prelude/types.wado//ResultBuffer {  // TypeId(7)
 
 struct core:prelude/types.wado//ArgBuffer {  // TypeId(8)
     mut ptr: i32,
-    mut release: ref struct,
+    mut release: ref "canonical//CanonicalClosure_0",
 }
 
 struct core:prelude/list.wado//List<core:prelude/types.wado/Resolution> {  // TypeId(9)
@@ -72,7 +72,7 @@ struct core:prelude/list.wado//List<core:prelude/types.wado/Resolution> {  // Ty
 struct core:prelude/types.wado//AsyncCall<()> {  // TypeId(10)
     mut subtask: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>",
     mut buffer: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>",
-    mut lift: ref struct,
+    mut lift: ref "canonical//CanonicalClosure_0",
     mut args: ref null "core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/types.wado/ArgBuffer>>",
     mut promise: ref null extern,
 }
@@ -116,26 +116,26 @@ struct core:prelude//$Cell<core:prelude/types.wado/Option<core:prelude/types.wad
     mut value: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>",
 }
 
-struct core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some {  // TypeId(23)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32);  // TypeId(23)
+
+struct canonical//CanonicalClosure_0 {  // TypeId(24)
+    env: ref null struct,
+    func: ref "functype/$canonical_closure_fn_0",
+}
+
+struct core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some {  // TypeId(25)
     discriminant: i32,
     payload_0: ref null "core:prelude//$Resource",
 }
 
-struct core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some {  // TypeId(24)
+struct core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some {  // TypeId(26)
     discriminant: i32,
     payload_0: ref null "core:prelude/types.wado//ResultBuffer",
 }
 
-struct core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>::Some {  // TypeId(25)
+struct core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>::Some {  // TypeId(27)
     discriminant: i32,
     payload_0: ref null "core:prelude/types.wado//ArgBuffer",
-}
-
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32);  // TypeId(26)
-
-struct canonical//CanonicalClosure_0 {  // TypeId(27)
-    env: ref null struct,
-    func: ref "functype/$canonical_closure_fn_0",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(28)
@@ -1101,8 +1101,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>^core:prelude/t
                 } else {
                     $load_14.value = $match_scrut_6;
                 }
-                let $indirect_call_6: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_6.func, local.tee $indirect_call_6(ref.cast "canonical//CanonicalClosure_0"(self.lift)).env, buffer.ptr);
+                let $indirect_call_6: ref null "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_6.func, local.tee $indirect_call_6(self.lift).env, buffer.ptr);
                 if ref.is_null(buffer) == 0 {
                     drop("mem/realloc"(buffer.ptr, buffer.size, buffer.align, 0));
                 }
@@ -1143,7 +1143,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>^core:prelude/t
                 $load_35.value;
             })).discriminant == 0 {
             } else {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_6.func, local.tee $indirect_call_6(ref.cast "canonical//CanonicalClosure_0"(local.tee $drop_v_8(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>::Some"($match_scrut_8).payload_0).release)).env, $drop_v_8.ptr);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_6.func, local.tee $indirect_call_6(local.tee $drop_v_8(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>::Some"($match_scrut_8).payload_0).release).env, $drop_v_8.ptr);
             }
         }
         $match_scrut_8 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>$0;

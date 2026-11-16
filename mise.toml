@@ -450,6 +450,33 @@ scripts/dev-bin.sh wado test "-${level}" -D log.level=warn wado-compiler/lib/cor
 description = "Run the Claude Code hook tests"
 run = "node --test .claude/hooks/*.test.mts"
 
+[tasks.eddy-review]
+description = "Review this branch with Eddy; arguments go to it (`--no-run` keeps it from building and running the code)"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+wado="$(scripts/dev-bin.sh --path wado)"
+case " $* " in
+    *" --no-run "*) set -- "$wado" run package-eddy/src/main.wado -- "$@" ;;
+    # The reviewer builds with cargo, which would starve a test run and be
+    # starved by it. `wado run` refuses a grant of a path that does not exist,
+    # so the homes are granted only to a review that runs cargo or mise, and
+    # mise's binary and data directory only where they exist.
+    *)
+        set -- package-eddy/src/main.wado -- "$@"
+        for granted in "${MISE_DATA_DIR:-$HOME/.local/share/mise}" "$(command -v mise)"; do
+            if [ -e "$granted" ]; then set -- --process-read "$granted" "$@"; fi
+        done
+        set -- ./scripts/exclusive.sh test "$wado" run \
+            --process-read "${CARGO_HOME:-$HOME/.cargo}" --process-read "${RUSTUP_HOME:-$HOME/.rustup}" "$@"
+        ;;
+esac
+# A child of `wado run` may run only a system-wide program, and mise's `rg`
+# shim is ahead of `/usr/bin/rg` on PATH otherwise. Set after `wado` is built,
+# which must find the toolchain mise installs.
+PATH="/usr/bin:$PATH" exec "$@"
+"""
+
 # The oracle tasks run the ANTLR4 jar, so Java is installed for them alone. A
 # child the guest spawns reaches it only where `[process] read` in
 # ~/.config/wado/config.toml names mise's installs (~/.local/share/mise/installs).

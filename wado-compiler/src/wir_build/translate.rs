@@ -37,8 +37,8 @@ use crate::{nir, tir};
 pub(super) fn ref_binding_needs_boxing(binding_wir: &WirType, source_wir: &WirType) -> bool {
     match (binding_wir, source_wir) {
         (WirType::Ref { type_id: bt, .. }, WirType::Ref { type_id: st, .. }) => bt != st,
-        // A closure's own handle is an abstract `structref`, so a concrete one
-        // bound over it is its cell, as for a scalar.
+        // A scalar, or a function value whose type has no closure struct and
+        // so is an abstract `structref`, is bound over by its cell.
         (WirType::Ref { .. }, _) => true,
         _ => false,
     }
@@ -1040,10 +1040,6 @@ impl FunctionTranslator<'_, '_> {
     /// Shorthand for `self.ctx.type_id_to_wir_type(self.type_table, type_id)`.
     pub(super) fn wir_type(&self, type_id: TypeId) -> WirType {
         self.ctx.type_id_to_wir_type(self.type_table, type_id)
-    }
-
-    pub(super) fn result_wir_types(&self, type_id: TypeId) -> Vec<WirType> {
-        self.ctx.result_wir_types(self.type_table, type_id)
     }
 
     /// The WIR type index of a `TypeId` that must lower to a concrete reference

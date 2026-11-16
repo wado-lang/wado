@@ -30,7 +30,7 @@ under your `-Ox` choice.
 ### What does pass X produce?
 
 ```sh
-WADO_DUMP_PASS_AFTER=wir/sroa_multi_value_returns \
+WADO_DUMP_PASS_AFTER=wir/flatten_variant_slots \
   cargo run --bin wado --quiet -- compile -O1 file.wado -o scratchpad/out.wasm 2>scratchpad/after.log
 ```
 
@@ -41,7 +41,7 @@ after the named pass, framed by `=== WIR after <name> ===` /
 ### What does pass X consume?
 
 ```sh
-WADO_DUMP_PASS_BEFORE=wir/sroa_multi_value_returns \
+WADO_DUMP_PASS_BEFORE=wir/flatten_variant_slots \
   cargo run --bin wado --quiet -- compile -O1 file.wado -o scratchpad/out.wasm 2>scratchpad/before.log
 ```
 
@@ -53,19 +53,19 @@ what the pass rewrote.
 The variables accept a comma-separated list:
 
 ```sh
-WADO_DUMP_PASS_AFTER=nir/inline,wir/sroa_multi_value_returns \
+WADO_DUMP_PASS_AFTER=nir/inline,wir/flatten_variant_slots \
   cargo run --bin wado --quiet -- compile -O1 file.wado -o scratchpad/out.wasm 2>scratchpad/dump.log
 ```
 
 ### Bisect by skipping a pass
 
 ```sh
-WADO_SKIP_PASS=nir/cse cargo run --bin wado --quiet -- compile -O3 file.wado -o scratchpad/out.wasm
+WADO_SKIP_PASS=nir/licm cargo run --bin wado --quiet -- compile -O3 file.wado -o scratchpad/out.wasm
 ```
 
 Same comma-separated list as `WADO_DUMP_PASS_*`, with one extra
 convenience: a `@N` suffix targets the Nth invocation of a pass within
-the fixed-point loop (1-based). `WADO_SKIP_PASS=nir/cse@2` skips `cse`
+the fixed-point loop (1-based). `WADO_SKIP_PASS=nir/licm@2` skips `licm`
 only on the second iteration — invaluable for iteration-dependent bugs
 whose failing test passes on the first iteration and only diverges once
 the inliner expands an additional function on a later one.
