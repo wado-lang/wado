@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794829998586,
+  "lastUpdate": 1794839485624,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78309,6 +78309,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 434873,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1c85ac8f4408fe1842000eb583de2e3ab0effdfa",
+          "message": "Merge pull request #2648 from wado-lang/ccr-43252666-dr1sqq\n\nrefactor(optimizer): settle the NIR value tier as a constant pool and post-loop extractor",
+          "timestamp": "2026-11-16T23:14:51+09:00",
+          "tree_id": "2489dbcb56921ac79594b526c7be9a70983f5813",
+          "url": "https://github.com/wado-lang/wado/commit/1c85ac8f4408fe1842000eb583de2e3ab0effdfa"
+        },
+        "date": 1794839484680,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
             "unit": "bytes"
           }
         ]
