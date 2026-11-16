@@ -2991,24 +2991,31 @@ impl WebGpuBackend {
     }
 
     /// `Graph::quantized_product` of `operands`, the input as `[M, K]`, the
-    /// packed weight, its scales and any zero points, as a `[M, N]` result:
-    /// one workgroup per `QUANTIZED_COLUMNS` columns and at most
-    /// `QUANTIZED_ROWS` rows, rounded to any
-    /// `half` and held as `new_tensor` holds it. `None` where they do not bind.
-    internal fn quantized_product_kernel(
+    /// packed weight, its scales and any zero points, then `then` over a
+    /// `[M, N]` product: one workgroup per `QUANTIZED_COLUMNS` columns and at
+    /// most `QUANTIZED_ROWS` rows, each weight rounded to any `half`, and the
+    /// result held as `new_tensor` holds what `then` stores. `None` where they
+    /// do not bind.
+    internal fn quantized_product_kernel<Out>(
         &mut self,
         operands: &List<DeviceTensor>,
         bits: i32,
         block: i32,
         half: Option<HalfFloat>,
+        then: &Epilogue<PlacedRead<Out>>,
     ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let [m, k] = [operands[0].extents[0], operands[0].extents[1]];
         let packed = &operands[1].extents;
         let n = packed[0];
-        if m * n > self.max_binding || !self.binds(operands) {
+        let product = [m, n] as List<i32>;
+        let mut all = *operands;
+        for let o of &then.operands {
+            all.push(DeviceTensor { ..o.view, extents: product, strides: stretched(&o.view, &product) });
+        }
+        if m * n > self.max_binding || !self.binds(&all) {
             return null;
         }
-        let out = self.new_tensor([m, n], half matches { Some(F16) });
+        let out = self.new_tensor(product, rounds_to_f16(&then.op));
         // An empty input dispatches no workgroup, whatever its rows.
         let rows = i32::clamp(m, 1, QUANTIZED_ROWS);
         let groups = n.div_ceil(QUANTIZED_COLUMNS) * m.div_ceil(rows);
@@ -3017,11 +3024,12 @@ impl WebGpuBackend {
         let weight = &operands[1];
         let blob = packed[2];
         let aligned = blob % 4 == 0 && weight.offset % 4 == 0 && weight.strides == [packed[1] * blob, blob, 1];
+        let shape = QuantizedShape { bits, block, zero_points, half, rows, aligned };
         self.dispatch_bound(
-            operands,
+            &all,
             fresh(&out),
             [groups as u32, gx as u32, m as u32, k as u32, n as u32, packed[1] as u32, blob as u32],
-            |bindings| ShaderKey::QuantizedProduct([bindings, bits, block, zero_points, half, rows, aligned]),
+            |bindings| ShaderKey::QuantizedProduct([then.op, bindings, shape]),
             [gx, gy, 1],
         );
         return Option::Some(out);
@@ -3622,7 +3630,7 @@ variant ShaderKey {
     /// [`arg_max_shader`]'s arguments.
     ArgMax([List<i32>, i32, ArgMaxStage]),
     /// [`quantized_product_shader`]'s arguments.
-    QuantizedProduct([List<i32>, i32, i32, bool, Option<HalfFloat>, i32, bool]),
+    QuantizedProduct([Expr, List<i32>, QuantizedShape]),
     /// [`quantized_gather_shader`]'s arguments.
     QuantizedGather([List<i32>, i32, i32, bool, Option<HalfFloat>]),
 }
@@ -3681,16 +3689,7 @@ impl Shader {
             ),
             AttendJoin(bindings) => attend_join_shader(bindings, words),
             ArgMax([bindings, rank, stage]) => arg_max_shader(bindings, *rank, *stage, words),
-            QuantizedProduct([bindings, bits, block, zero_points, half, rows, aligned]) => quantized_product_shader(
-                bindings,
-                *bits,
-                *block,
-                *zero_points,
-                *half,
-                *rows,
-                *aligned,
-                words,
-            ),
+            QuantizedProduct([op, bindings, shape]) => quantized_product_shader(op, bindings, shape, words),
             QuantizedGather([bindings, bits, block, zero_points, half]) => quantized_gather_shader(
                 bindings,
                 *bits,
@@ -4290,25 +4289,32 @@ fn zero(n: u32, b: u32) -> f32 {
 `;
 }
 
-/// The WGSL of `Graph::quantized_product`, one workgroup per
-/// `QUANTIZED_COLUMNS` columns of the output and `rows` of its rows: each of
-/// the `QUANTIZED_LANES / QUANTIZED_COLUMNS` lanes of a column takes every such byte of
-/// the column's packed weight, dequantizes its values and adds each times the
-/// rows' inputs, and the column's lanes sum. A `half` rounds each weight to
-/// it, as the decomposition stores one, and the sum once. Parameters: the
-/// workgroups, the workgroups per row of the grid, `M`, `K`, `N`, the blocks,
-/// the bytes of a block, then the views of the input `[M, K]`, the packed
-/// weight, the scales and any zero points.
-fn quantized_product_shader(
-    bindings: &List<i32>,
+/// What a quantized product's shader is specialized to beside its epilogue:
+/// the bits of a value and the values of a block, whether zero points are
+/// bound, the half each weight rounds to, the most rows a workgroup sums, and
+/// whether the weight's columns each start a word.
+struct QuantizedShape {
     bits: i32,
     block: i32,
     zero_points: bool,
     half: Option<HalfFloat>,
     rows: i32,
     aligned: bool,
-    words: &List<Words>,
-) -> String {
+}
+
+/// The WGSL of `Graph::quantized_product`, one workgroup per
+/// `QUANTIZED_COLUMNS` columns of the output and `rows` of its rows: each of
+/// the `QUANTIZED_LANES / QUANTIZED_COLUMNS` lanes of a column takes every such byte of
+/// the column's packed weight, dequantizes its values and adds each times the
+/// rows' inputs, and the column's lanes sum. A `half` rounds each weight to
+/// it, as the decomposition stores one. Each lane of a column then writes a
+/// row's element through `op`, whose `operand(0)` is the sum and `operand(i)`
+/// the `i - 1`th epilogue operand. Parameters: the workgroups, the workgroups
+/// per row of the grid, `M`, `K`, `N`, the blocks, the bytes of a block, then
+/// the views of the input `[M, K]`, the packed weight, the scales, any zero
+/// points and the epilogue's operands over `[M, N]`.
+fn quantized_product_shader(op: &Expr, bindings: &List<i32>, shape: &QuantizedShape, words: &List<Words>) -> String {
+    let QuantizedShape { bits, block, zero_points, half, rows, aligned } = *shape;
     let lanes = QUANTIZED_LANES / QUANTIZED_COLUMNS;
     assert lanes >= QUANTIZED_ROWS, "a column's lanes write its rows";
     let input = view_load_wgsl(bindings[0], 7, &(["m0 + r", "k"] as List<String>));
@@ -4320,7 +4326,14 @@ fn quantized_product_shader(
         [1, `u32(${view_load_wgsl(bindings[1], 10, &(["n", "b", "j % p[6]"] as List<String>))})`];
     };
     let scale = view_load_wgsl(bindings[2], 14, &(["n", "b"] as List<String>));
+    let weights = if zero_points { 4 } else { 3 };
     let zp = if zero_points { bindings[3] } else { 0 };
+    let mut epilogue = `        let x0 = sums[lane * ${QUANTIZED_LANES}u + lid - lane];\n`;
+    for let i of weights..<bindings.len() {
+        let at = 17 + (i - 3) * 3;
+        epilogue.push_str(`        let x${i - weights + 1} = ${view_load_wgsl(bindings[i], at, &(["m", "n"] as List<String>))};\n`);
+    }
+    epilogue.push_str(&steps_wgsl(op, op.steps.len() - 1, "        "));
     return `${buffers_wgsl(words)}
 ${dequantizing_wgsl(bits, block, zero_points, zp, 17)}
 var<workgroup> sums: array<f32, ${rows * QUANTIZED_LANES}>;
@@ -4366,7 +4379,8 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
         workgroupBarrier();
     }
     if lane < rows && n < p[4] {
-        put((m0 + lane) * p[4] + n, ${rounded_wgsl(half, `sums[lane * ${QUANTIZED_LANES}u + lid - lane]`)});
+        let m = m0 + lane;
+${epilogue}        put(m * p[4] + n, s${op.steps.len() - 1});
     }
 }
 ${ELEMENTWISE_OPERATORS}`;

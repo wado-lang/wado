@@ -60,6 +60,7 @@ use {
     constant,
     element_count,
     operand,
+    optional,
 } from "./tensor.wado";
 use {
     Kernel,
@@ -75,8 +76,11 @@ use {
 } from "./fusion.wado";
 use {
     Any,
+    Erasable,
     Operation,
+    QuantizedNode,
     Recorded,
+    RecordedNode,
     Recorder,
     Run,
     Untyped,
@@ -738,7 +742,8 @@ impl Graph for WebGpuBackend {
             self.device_view(scales),
         ], zero_points);
         let half = HalfFloat::of(E::kind());
-        if let Some(out) = self.quantized_product_kernel(&operands, quantized.bits, quantized.block, half) {
+        let stored = Epilogue::<PlacedRead<Untyped>> { operands: [], op: operand(0).stored_as(E::kind()) };
+        if let Some(out) = self.quantized_product_kernel(&operands, quantized.bits, quantized.block, half, &stored) {
             extents[last] = out.extents[1];
             return Placed::Device(self.reshaped(&out, &extents));
         }
@@ -1149,11 +1154,21 @@ fn kernel_signature(recorded: &Recorded, k: &Kernel) -> List<i32> {
     let root = &recorded.nodes[k.root];
     list(&mut s, &root.extents);
     s.push(ReflectEnum::<ElementKind>::discriminant(&root.kind));
-    if k.product matches { Some(_) } {
-        let dims = product_dims(recorded, k);
-        s.push(1);
-        for let axes of [dims.lhs_batch, dims.rhs_batch, dims.lhs_contracting, dims.rhs_contracting] as List<List<i32>> {
-            list(&mut s, &axes);
+    if let Some(p) = k.product {
+        match recorded.nodes[p].op {
+            DotGeneral(dims) => {
+                s.push(1);
+                for let axes of [dims.lhs_batch, dims.rhs_batch, dims.lhs_contracting, dims.rhs_contracting] as List<List<i32>> {
+                    list(&mut s, &axes);
+                }
+            },
+            QuantizedProduct(q) => {
+                s.push(3);
+                s.push(q.quantized.bits);
+                s.push(q.quantized.block);
+                s.push(if q.zero_points { 1 } else { 0 });
+            },
+            _ => unreachable(),
         }
     }
     if let Some(p) = &k.prologue {
@@ -1365,17 +1380,26 @@ fn kernel_result(
     let grouped = match k.product {
         Some(p) => {
             let node = &recorded.nodes[p];
-            let DotGeneral(dims) = node.op else {
-                unreachable();
-            };
-            let then = Option::Some(Epilogue {
+            let then = Epilogue {
                 operands: epilogue_reads(g, values, recorded, p, &k.operands, &k.extents),
                 op: k.op,
-            });
-            if k.prologue matches { Some(_) } {
-                left_product(g, values, recorded, k, &right_matrix(g, values, recorded, k), &then);
-            } else {
-                dotted(g, &view_of(g, values, node.operands[0]), &view_of(g, values, node.operands[1]), &dims, &then);
+            };
+            match node.op {
+                QuantizedProduct(q) => match node.kind {
+                    F32 => quantized_result::<f32>(g, values, node, &q, &then),
+                    F16 => quantized_result::<f16>(g, values, node, &q, &then),
+                    BF16 => quantized_result::<bf16>(g, values, node, &q, &then),
+                    U8 | I64 | Bool => unreachable(),
+                },
+                DotGeneral(dims) => {
+                    let then = Option::Some(then);
+                    if k.prologue matches { Some(_) } {
+                        left_product(g, values, recorded, k, &right_matrix(g, values, recorded, k), &then);
+                    } else {
+                        dotted(g, &view_of(g, values, node.operands[0]), &view_of(g, values, node.operands[1]), &dims, &then);
+                    }
+                },
+                _ => unreachable(),
             }
         },
         None => {
@@ -1388,6 +1412,48 @@ fn kernel_result(
     };
     let root = &recorded.nodes[k.root];
     return of_kind(g, root.kind, g.reshape::<f32, Untyped, Untyped>(&grouped, root.extents));
+}
+
+/// The quantized product `node` computes, of the element `E`, then `then`
+/// over its `product_space`: in one dispatch where the backend's kernel binds
+/// them, and as `Graph::quantized_product` computes it, then `then` on its
+/// own, otherwise.
+fn quantized_result<E: Erasable + Float>(
+    g: &mut WebGpuBackend,
+    values: &Values<WebGpuBackend>,
+    node: &RecordedNode,
+    q: &QuantizedNode,
+    then: &Epilogue<PlacedRead<Untyped>>,
+) -> Placed<f32, Untyped> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let input = view_of(g, values, node.operands[0]);
+    let last = input.extents.len() - 1;
+    let inner = input.extents[last];
+    let space = [element_count(&input.extents) / inner, node.extents[last]] as List<i32>;
+    let mut operands = [g.reshaped(&input, &([space[0], inner] as List<i32>))] as List<DeviceTensor>;
+    for let o of node.operands[1..<node.operands.len()].to_list() {
+        operands.push(view_of(g, values, o));
+    }
+    let half = HalfFloat::of(node.kind);
+    if let Some(out) = g.quantized_product_kernel(&operands, q.quantized.bits, q.quantized.block, half, then) {
+        return Placed::Device(out);
+    }
+    let zero_points = if q.zero_points {
+        Option::Some(g.relabeled::<u8, Untyped, [Untyped, Untyped]>(u8::of_any::<WebGpuBackend>(&values[node.operands[3]])));
+    } else {
+        null;
+    };
+    let product = g.quantized_product::<E, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
+        E::of_any::<WebGpuBackend>(&values[node.operands[0]]),
+        &g.relabeled::<u8, Untyped, [Untyped, Untyped, Untyped]>(u8::of_any::<WebGpuBackend>(&values[node.operands[1]])),
+        &g.relabeled::<E, Untyped, [Untyped, Untyped]>(E::of_any::<WebGpuBackend>(&values[node.operands[2]])),
+        optional(&zero_points),
+        &q.quantized,
+    );
+    let mut computed = [g.reshaped(&g.device_view(&product), &space)] as List<DeviceTensor>;
+    for let o of &then.operands {
+        computed.push(o.view);
+    }
+    return g.fused_on(&computed, &then.op);
 }
 
 /// The value of `p`'s second root: one product by both right matrices, where
@@ -1538,16 +1604,23 @@ fn epilogue_reads(
     operands: &List<KernelOperand>,
     extents: &List<i32>,
 ) -> List<PlacedRead<Untyped>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    return reads_over(g, values, operands, extents, &product_space(recorded, product));
+}
+
+/// The extents the product `product` computes before its result takes its
+/// own: `product_extents` of a `DotGeneral`, and a quantized product's input
+/// rows as one, by its columns.
+fn product_space(recorded: &Recorded, product: i32) -> List<i32> {
     let node = &recorded.nodes[product];
-    let DotGeneral(dims) = node.op else {
-        unreachable();
+    let lhs = &recorded.nodes[node.operands[0]].extents;
+    return match node.op {
+        DotGeneral(dims) => product_extents(lhs, &recorded.nodes[node.operands[1]].extents, &dims),
+        QuantizedProduct(_) => {
+            let last = lhs.len() - 1;
+            [element_count(&lhs[0..<last].to_list()), node.extents[last]];
+        },
+        _ => unreachable(),
     };
-    let space = product_extents(
-        &recorded.nodes[node.operands[0]].extents,
-        &recorded.nodes[node.operands[1]].extents,
-        &dims,
-    );
-    return reads_over(g, values, operands, extents, &space);
 }
 
 /// `operands`, of a kernel iterating `extents`, read over `space`: each
@@ -1586,7 +1659,8 @@ fn any_view(g: &mut WebGpuBackend, value: &Any<WebGpuBackend>) -> DeviceTensor w
         F16(t) => g.device_view(t),
         BF16(t) => g.device_view(t),
         Bool(t) => g.device_view(t),
-        U8(_) | I64(_) => unreachable(),
+        U8(t) => g.device_view(t),
+        I64(_) => unreachable(),
     };
 }
 

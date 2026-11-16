@@ -452,6 +452,40 @@ pub fn quantized_pass(r: &mut Recorder) -> Recorded {
     return r.finished([got.0.id, got.1.id]);
 }
 
+/// `quantizing`'s product gated by itself, plus each row's sum of `a`: what a
+/// device computes in the product's epilogue, reading one value per row.
+pub fn quantized_then<affine G: Graph>(
+    g: &mut G,
+    a: &G::Tensor<f32, [A, B]>,
+    weight: &[G::Tensor<u8, [C, Blocks, Blob]>, G::Tensor<f32, [C, Blocks]>, G::Tensor<u8, [C, Zeros]>],
+) -> G::Tensor<f32, [A, C]> with _ {
+    let product = g.quantized_product::<f32, [A, B], C, Blocks, Blob, Zeros, [A, C]>(
+        a,
+        &weight.0,
+        &weight.1,
+        Option::Some(&weight.2),
+        &Quantized { bits: 4, block: 32 },
+    );
+    let sums = g.reduce::<f32, [A, B], [A]>(a, Binary::Add, 0.0, [1]);
+    let q = quantized_case();
+    let spread = g.broadcast_in_dim::<f32, [A], [A, C]>(&sums, [q.a.extents[0], q.weight.extents[0]], [0]);
+    let gated = g.binary(Binary::Multiply, &product, &g.unary(Unary::Logistic, &product));
+    return g.binary(Binary::Add, &gated, &spread);
+}
+
+/// `quantized_then` recorded, its input then `quantized_case`'s weight with
+/// zero points as parameters.
+pub fn quantized_then_pass(r: &mut Recorder) -> Recorded {
+    let q = quantized_case();
+    let a = r.parameter::<f32, [A, B]>(q.a.extents);
+    let weight = [
+        r.parameter::<u8, [C, Blocks, Blob]>(q.weight.extents),
+        r.parameter::<f32, [C, Blocks]>(q.scales.extents),
+        r.parameter::<u8, [C, Zeros]>(q.zero_points.extents),
+    ];
+    return r.finished([quantized_then(r, &a, &weight).id]);
+}
+
 /// The weight `at` of `quantized_pass`, as a model's loader hands it over.
 pub fn quantized_weight(at: i32) -> Result<HostWeight, ()> {
     let q = quantized_case();
