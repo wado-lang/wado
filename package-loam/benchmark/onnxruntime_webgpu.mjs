@@ -1,7 +1,8 @@
 // An example's model on onnxruntime-node's WebGPU provider: the program
 // generate.wado times, timed as harness.hpp times the C++ arms. The argument
 // is the example's directory, whose decoder.mjs says how to feed the model and
-// whose generate.json records the prompt's ids.
+// whose generate.json records the prompt's ids. A second argument names
+// another export of decoder.mjs than `decoder`, such as `decoderQ4f16`.
 //
 //   mise run gpt2-124m   # runs it
 import { readFileSync } from 'node:fs';
@@ -14,7 +15,7 @@ const WARMUP = 1;
 const ITERATIONS = 3;
 
 const dir = resolve(process.argv[2]);
-const { decoder } = await import(pathToFileURL(join(dir, 'decoder.mjs')).href);
+const decoder = (await import(pathToFileURL(join(dir, 'decoder.mjs')).href))[process.argv[3] ?? 'decoder'];
 const { generate } = JSON.parse(readFileSync(join(dir, 'generate.json'), 'utf8'));
 const { ids } = generate.find((g) => g.prompt === PROMPT);
 const session = await opened(decoder, 'webgpu');

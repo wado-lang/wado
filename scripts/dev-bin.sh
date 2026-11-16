@@ -6,6 +6,10 @@
 #
 #   scripts/dev-bin.sh wado test -O2 package-gale
 #   WADO=$(scripts/dev-bin.sh --path wado)    # build once, then run "$WADO" in a loop
+#   scripts/dev-bin.sh --workspace wado-run-webgpu wado-run-webgpu app.wado
+#
+# `--workspace` names a workspace of its own under the root, which builds into
+# its own `target/` unless CARGO_TARGET_DIR says otherwise.
 #
 # With WADO_PREBUILT set, the binary is taken as built: a CI job that was handed
 # it by `build-wado`, or a caller that built it once and fans out. A missing one
@@ -13,15 +17,22 @@
 # exists to remove.
 set -euo pipefail
 
+root="$(cd "$(dirname "$0")/.." && pwd)"
 print_path=
-if [ "$1" = --path ]; then
-    print_path=1
+while true; do
+    case "$1" in
+        --path) print_path=1 ;;
+        --workspace)
+            root="${root}/$2"
+            shift
+            ;;
+        *) break ;;
+    esac
     shift
-fi
+done
 bin=$1
 shift
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
 # A relative CARGO_TARGET_DIR names a directory under the caller's, so it is
 # made absolute before cargo runs at the root.
 target_dir="${CARGO_TARGET_DIR:-${root}/target}"

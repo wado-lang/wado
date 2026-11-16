@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# `wado run-pjrt` from the dev build, built first. XLA's CPU plugin is the
+# default plugin where this host has one pinned; `--plugin` overrides it, as it
+# overrides any WADO_PJRT_PLUGIN.
+here="$(dirname "$0")"
+if [ -z "${WADO_PJRT_PLUGIN:-}" ] && plugin="$("${here}/../fetch-pjrt-plugin.sh")"; then
+    export WADO_PJRT_PLUGIN="${plugin}"
+fi
+exec "${here}/../dev-bin.sh" wado-run-pjrt "$@"

@@ -135,9 +135,11 @@ say) states that module's signatures; read it rather than guess.
 
 ## The CLI
 
-The `wado` binary is implemented in `wado-cli/`. In these files, `wado` is
-shorthand for `cargo run --bin wado --`. The `wado-cli` skill covers every
-subcommand; read it before invoking `wado`.
+The `wado` binary is implemented in `wado-cli/`. `mise.toml` puts
+`scripts/bin` on `PATH`. Its `wado`, `wado-run-webgpu` and `wado-run-pjrt` each
+build the dev binary before running it, so none of them runs a stale build.
+`wado-run-pjrt` runs on XLA's CPU plugin unless `--plugin` names another. The
+`wado-cli` skill covers every subcommand; read it before invoking `wado`.
 
 The Wado formatter skips `wado-compiler/tests/**`, so an e2e fixture keeps its
 hand-authored layout. Naming a file bypasses the exclusion, so never

@@ -1,6 +1,7 @@
 #!/bin/bash
 # .claude/hooks/mise-setup.sh
-# SessionStart hook for Claude Code Web to install mise and project tools
+# SessionStart hook: installs mise and the project tools in a Claude Code Web
+# session, and activates mise in every session
 # cf. https://code.claude.com/docs/en/settings
 
 set -e
@@ -10,9 +11,15 @@ log() {
     echo "$LOG_PREFIX $1" >&2
 }
 
-# Only run in remote Claude Code environment
+# A local session has mise installed already; it only needs mise.toml's
+# environment, `scripts/bin` among it, on every Bash command.
 if [ "$CLAUDE_CODE_REMOTE" != "true" ]; then
-    log "Not a remote session, skipping mise setup"
+    # mise's installer puts it in ~/.local/bin, which a hook's PATH may lack.
+    mise_exe=$(PATH="$PATH:$HOME/.local/bin" command -v mise || true)
+    if [ -n "$CLAUDE_ENV_FILE" ] && [ -n "$mise_exe" ]; then
+        echo "eval \"\$('$mise_exe' activate bash)\"" >> "$CLAUDE_ENV_FILE"
+        log "Local session: mise activation persisted to CLAUDE_ENV_FILE"
+    fi
     exit 0
 fi
 
