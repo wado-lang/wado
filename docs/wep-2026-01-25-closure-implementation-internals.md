@@ -94,10 +94,8 @@ A stub is synthesized as a bodyless `FunctionKind::FnCanonicalDispatch` and WIR 
 
 A value of a function type is a `(ref $CanonicalClosure_K)` of its signature,
 wherever it is held, so a call through it casts nothing. A signature no
-closure has lowers to `structref`. So does every function type of a signature
-the CM callback registry casts between: the `fn()` it keeps every callback as,
-and each callback's own. A cast between those is then a no-op, and two types of
-one signature, `fn()` and `fn mut()`, agree.
+closure has lowers to `structref`. Two function types of one signature, `fn()`
+and `fn mut()` say, lower to the same struct.
 
 Per-literal wrappers cast the canonical `env` back to `$Closure_N` and forward to `$call` or `^Inspect`. The specialised path never touches the vtable: lowering rewrites an `Inspect` call on a known-local closure receiver into a direct call, and DCE removes the impls when nothing calls them.
 

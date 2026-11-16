@@ -428,14 +428,6 @@ fn register_resource_object(ctx: &mut WirContext<'_>) -> WirTypeId {
     )
 }
 
-<<<<<<< HEAD
-/// Register a canonical closure type for every `Function` type in the type
-/// table, the type a value of it lowers to. Each unique function signature
-/// `fn(P1, P2, ...) -> R` gets:
-||||||| d6acc6b3a97
-/// Register canonical closure types for all `Function` types found in type tables.
-/// Each unique function signature `fn(P1, P2, ...) -> R` gets:
-=======
 /// The struct behind an extern handle a guest value backs (WEP: Extern Handles).
 fn register_backed_handle(ctx: &mut WirContext<'_>) -> WirTypeId {
     let module_source = ModuleSource::prelude();
@@ -470,64 +462,27 @@ fn register_backed_handle(ctx: &mut WirContext<'_>) -> WirTypeId {
     )
 }
 
-/// Register canonical closure types for all `Function` types found in type tables.
-/// Each unique function signature `fn(P1, P2, ...) -> R` gets:
->>>>>>> origin/main
+/// Register a canonical closure type for every `Function` type in the type
+/// table, the type a value of it lowers to. Each unique function signature
+/// `fn(P1, P2, ...) -> R` gets:
 /// - A canonical func type: `(ref struct, P1, P2, ...) -> R`
 /// - A canonical closure struct: `{ env: ref struct, func: ref $func_type }`
 fn register_canonical_closure_types(ctx: &mut WirContext<'_>, type_table: &TypeTable) {
-    let erased = callback_registry_keys(ctx, type_table);
     let mut visited = IndexSet::default();
     for type_id in type_table.iter_type_ids() {
-        register_fn_closure(ctx, type_table, &erased, &mut visited, type_id);
+        register_fn_closure(ctx, type_table, &mut visited, type_id);
     }
-}
-
-/// The signatures the Component Model callback registry casts between: the
-/// `fn()` it holds every callback as, and each callback's own. Every function
-/// type of such a signature lowers to `structref`, so each cast is a no-op and
-/// two types sharing the signature, `fn()` and `fn mut()` say, agree.
-fn callback_registry_keys(ctx: &WirContext<'_>, type_table: &TypeTable) -> IndexSet<String> {
-    let callbacks = &ctx.package.component_plan.callback_exports;
-    if callbacks.is_empty() {
-        return IndexSet::default();
-    }
-    let mut keys: IndexSet<String> = [WirContext::canonical_closure_key(&[], &[])]
-        .into_iter()
-        .collect();
-    for &closure in callbacks.iter().flat_map(|c| &c.closures) {
-        let ResolvedType::Function {
-            params,
-            return_type,
-            ..
-        } = type_table.get(closure)
-        else {
-            unreachable!("a callback is a closure");
-        };
-        assert!(
-            params
-                .iter()
-                .all(|&p| !matches!(type_table.get(p), ResolvedType::Function { .. })),
-            "a callback takes scalars and handles, whose lowering no erasure changes"
-        );
-        let (param_wirs, result_wirs) = ctx.canonical_signature(type_table, params, *return_type);
-        keys.insert(WirContext::canonical_closure_key(&param_wirs, &result_wirs));
-    }
-    keys
 }
 
 /// Register the `CanonicalClosure_K` function type `type_id` lowers to, after
 /// those of the function types its signature names: their closure types are
 /// part of its key. A signature over a type parameter, or over a type no value
-/// has, types no closure. An `erased` signature keeps its closure struct, for
-/// the closures built and called at it, but its values lower to `structref`.
-/// The first function type of a key decides whether its struct takes the
-/// inspectable `{ env, inspect, func }` schema, by whether a `fn(..)^Inspect`
-/// for its `(arity, return_type)` survived DCE.
+/// has, types no closure. The first function type of a key decides whether its
+/// struct takes the inspectable `{ env, inspect, func }` schema, by whether a
+/// `fn(..)^Inspect` for its `(arity, return_type)` survived DCE.
 fn register_fn_closure(
     ctx: &mut WirContext<'_>,
     type_table: &TypeTable,
-    erased: &IndexSet<String>,
     visited: &mut IndexSet<TypeId>,
     type_id: TypeId,
 ) {
@@ -551,28 +506,16 @@ fn register_fn_closure(
         return;
     }
     for &part in params.iter().chain([return_type]) {
-        register_fn_closure(
-            ctx,
-            type_table,
-            erased,
-            visited,
-            type_table.representation_head(part),
-        );
+        register_fn_closure(ctx, type_table, visited, type_table.representation_head(part));
     }
 
     let (param_wirs, result_wirs) = ctx.canonical_signature(type_table, params, *return_type);
-    let is_erased = erased.contains(&WirContext::canonical_closure_key(
-        &param_wirs,
-        &result_wirs,
-    ));
     let is_inspectable = ctx
         .inspectable_fn_dispatch
         .contains(&(params.len(), *return_type));
     let (_, closure) =
         ctx.get_or_create_canonical_closure_type(param_wirs, result_wirs, is_inspectable);
-    if !is_erased {
-        ctx.fn_closure_types.insert(type_id, closure);
-    }
+    ctx.fn_closure_types.insert(type_id, closure);
 }
 
 /// The WIR name of variant `def` at `type_args` (none for a plain variant):

@@ -1510,13 +1510,6 @@ fn populate_type_reachability(
                 analysis.types.insert(t);
             }
         }
-        // WIR build reads each callback's signature to lower it as the
-        // registry holds it.
-        for export in &project.component_plan.callback_exports {
-            for &closure in &export.closures {
-                collect_type_transitive(closure, &type_table, &mut analysis.types);
-            }
-        }
 
         // Reachable globals' declared type + initializer types. At NIR
         // level non-constant initializers have already been extracted

@@ -13,13 +13,13 @@ struct cm_callback_handler_path.wado//Mock {  // TypeId(1)
 
 struct cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Demo {  // TypeId(2)
     mut outer: ref null "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Demo",
-    mut op_target: ref "canonical//CanonicalClosure_2",
+    mut op_target: ref "canonical//CanonicalClosure_1",
 }
 
 struct cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Target {  // TypeId(3)
     mut outer: ref null "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Target",
-    mut op_listen: ref "canonical//CanonicalClosure_3",
-    mut op_fire: ref "canonical//CanonicalClosure_4",
+    mut op_listen: ref "canonical//CanonicalClosure_2",
+    mut op_fire: ref "canonical//CanonicalClosure_3",
 }
 
 struct core:prelude/format.wado//Formatter {  // TypeId(4)
@@ -73,7 +73,7 @@ array Array<u8> (mut u8);  // TypeId(14)
 
 array Array<i32> (mut i32);  // TypeId(15)
 
-array Array<fn mut(i32)->()> (mut ref struct);  // TypeId(16)
+array Array<fn mut(i32)->()> (mut ref "canonical//CanonicalClosure_0");  // TypeId(16)
 
 struct core:prelude//$Cell<extern> {  // TypeId(17)
     mut value: ref extern,
@@ -93,7 +93,7 @@ struct canonical//CanonicalClosure_1 {  // TypeId(21)
     func: ref "functype/$canonical_closure_fn_1",
 }
 
-type "functype/$canonical_closure_fn_2" = fn(ref null struct, ref "core:prelude//$Cell<extern>", ref struct);  // TypeId(22)
+type "functype/$canonical_closure_fn_2" = fn(ref null struct, ref "core:prelude//$Cell<extern>", ref "canonical//CanonicalClosure_0");  // TypeId(22)
 
 struct canonical//CanonicalClosure_2 {  // TypeId(23)
     env: ref null struct,
@@ -157,7 +157,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<fn mut(i32)->
 
 type "functype//cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_0::$call" = fn(ref "cm_callback_handler_path.wado//$Closure_0") -> ref extern;  // TypeId(50)
 
-type "functype//cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_1::$call$dae[self#1]" = fn(ref "cm_callback_handler_path.wado//$Closure_1", ref struct);  // TypeId(51)
+type "functype//cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_1::$call$dae[self#1]" = fn(ref "cm_callback_handler_path.wado//$Closure_1", ref "canonical//CanonicalClosure_0");  // TypeId(51)
 
 type "functype//cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_2::$call$dae[self#1]" = fn(ref "cm_callback_handler_path.wado//$Closure_2", i32);  // TypeId(52)
 
@@ -205,7 +205,7 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
     let $local_1: ref "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Demo";
     let $local_2_15: ref extern;
     let self_16: ref "core:prelude//$Cell<extern>";
-    let listener: ref struct;
+    let listener: ref "canonical//CanonicalClosure_0";
     let $local_2_18: ref null "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Target";
     let $local_3_19: ref "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Target";
     let $cm_pair_7: i64;
@@ -215,26 +215,16 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
     let $sroa_$pattern_temp_0_1_129: i32;
     let new_repr: ref Array<u8>;
     let self_136: i32;
-    mock = struct.new "cm_callback_handler_path.wado//Mock" { listeners: struct.new "core:prelude/list.wado//List<fn mut(i32)->()>" { repr: array.new_fixed<ref struct>(), used: 0 } };
+    mock = struct.new "cm_callback_handler_path.wado//Mock" { listeners: struct.new "core:prelude/list.wado//List<fn mut(i32)->()>" { repr: array.new_fixed<ref "canonical//CanonicalClosure_0">(), used: 0 } };
     seen = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Demo = struct.new "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Demo" { outer: local.tee $save_cm_callback_handler_path.wado/Demo(global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Demo), op_target: struct.new "canonical//CanonicalClosure_1" { env: struct.new "cm_callback_handler_path.wado//$Closure_0" { $capture_0: mock }, func: ref.func "closure/cm_callback_handler_path.wado/$closure_wrapper_0" } };
     global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = struct.new "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Target" { outer: local.tee $save_cm_callback_handler_path.wado/Target(global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target), op_listen: struct.new "canonical//CanonicalClosure_2" { env: struct.new "cm_callback_handler_path.wado//$Closure_1" { $capture_0: mock }, func: ref.func "closure/cm_callback_handler_path.wado/$closure_wrapper_1" }, op_fire: struct.new "canonical//CanonicalClosure_3" { env: struct.new "cm_callback_handler_path.wado//$Closure_2" { $capture_0: mock }, func: ref.func "closure/cm_callback_handler_path.wado/$closure_wrapper_2" } };
     $local_2_15 = $inline__effect_dispatch__cm_callback_handler_path_wado_Demo__target_3: block -> ref extern {
         if ref.is_null(local.tee $local_0(global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Demo)) == 0 {
             global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Demo = local.tee $local_1(ref.as_non_null($local_0)).outer;
-<<<<<<< HEAD
-            $local_2_15 = block -> u64 {
-                let $indirect_call_1: ref null "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1($local_1.op_target).env);
-||||||| d6acc6b3a97
-            $local_2_15 = block -> u64 {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($local_1.op_target)).env);
-=======
             $local_2_15 = block -> ref extern {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($local_1.op_target)).env);
->>>>>>> origin/main
+                let $indirect_call_1: ref null "canonical//CanonicalClosure_1";
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_1.op_target).env);
             };
             global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Demo = $local_0;
             break $inline__effect_dispatch__cm_callback_handler_path_wado_Demo__target_3: $local_2_15;
@@ -248,16 +238,8 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
         listener = struct.new "canonical//CanonicalClosure_0" { env: struct.new "cm_callback_handler_path.wado//$Closure_3" { $capture_0: seen }, func: ref.func "closure/cm_callback_handler_path.wado/$closure_wrapper_3" };
         if ref.is_null(local.tee $local_2_18(global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target)) == 0 {
             global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = local.tee $local_3_19(ref.as_non_null($local_2_18)).outer;
-<<<<<<< HEAD
-            let $indirect_call_2: ref null "canonical//CanonicalClosure_3";
-            call_ref "functype/$canonical_closure_fn_3"($indirect_call_2.func, local.tee $indirect_call_2($local_3_19.op_listen).env, $local_2_15, listener);
-||||||| d6acc6b3a97
-            let $indirect_call_2: ref "canonical//CanonicalClosure_3";
-            call_ref "functype/$canonical_closure_fn_3"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_3"($local_3_19.op_listen)).env, $local_2_15, listener);
-=======
-            let $indirect_call_2: ref "canonical//CanonicalClosure_2";
-            call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_2"($local_3_19.op_listen)).env, self_16, listener);
->>>>>>> origin/main
+            let $indirect_call_2: ref null "canonical//CanonicalClosure_2";
+            call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2($local_3_19.op_listen).env, self_16, listener);
             break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__listen_4: global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = $local_2_18;
         } else {
             break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__listen_4: "cm_callback_handler_path.wado/$cm_binding__example:demo/target#listen"(self_16.value, extern.externalize(listener));
@@ -267,16 +249,8 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
         self_16 = struct.new "core:prelude//$Cell<extern>" { value: $local_2_15 };
         if ref.is_null(local.tee $local_2_18(global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target)) == 0 {
             global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = local.tee $local_3_19(ref.as_non_null($local_2_18)).outer;
-<<<<<<< HEAD
-            let $indirect_call_3: ref null "canonical//CanonicalClosure_4";
-            call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3($local_3_19.op_fire).env, $local_2_15, 1);
-||||||| d6acc6b3a97
-            let $indirect_call_3: ref "canonical//CanonicalClosure_4";
-            call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_4"($local_3_19.op_fire)).env, $local_2_15, 1);
-=======
-            let $indirect_call_3: ref "canonical//CanonicalClosure_3";
-            call_ref "functype/$canonical_closure_fn_3"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_3"($local_3_19.op_fire)).env, self_16, 1);
->>>>>>> origin/main
+            let $indirect_call_3: ref null "canonical//CanonicalClosure_3";
+            call_ref "functype/$canonical_closure_fn_3"($indirect_call_3.func, local.tee $indirect_call_3($local_3_19.op_fire).env, self_16, 1);
             break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_5: global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = $local_2_18;
         } else {
             break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_5: "cm_callback_handler_path.wado/$cm_binding__example:demo/target#fire$spec0"(self_16.value, 1);
@@ -286,13 +260,7 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
         self_16 = struct.new "core:prelude//$Cell<extern>" { value: $local_2_15 };
         if ref.is_null(local.tee $local_2_18(global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target)) == 0 {
             global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = local.tee $local_3_19(ref.as_non_null($local_2_18)).outer;
-<<<<<<< HEAD
-            call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3($local_3_19.op_fire).env, $local_2_15, 2);
-||||||| d6acc6b3a97
-            call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_4"($local_3_19.op_fire)).env, $local_2_15, 2);
-=======
-            call_ref "functype/$canonical_closure_fn_3"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_3"($local_3_19.op_fire)).env, self_16, 2);
->>>>>>> origin/main
+            call_ref "functype/$canonical_closure_fn_3"($indirect_call_3.func, local.tee $indirect_call_3($local_3_19.op_fire).env, self_16, 2);
             break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_6: global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = $local_2_18;
         } else {
             break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_6: "cm_callback_handler_path.wado/$cm_binding__example:demo/target#fire$spec1"(self_16.value, 2);
@@ -332,41 +300,9 @@ fn "cm_callback_handler_path.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-s
     return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
-<<<<<<< HEAD
-fn "cm_callback_handler_path.wado/$cm_callback__call-i32"(key, a0) {
-    let self_7: ref "core:prelude/list.wado//List<fn()->()>";
-    let self_13: i32;
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:cm_callback_handler_path.wado::$modules_initialized);
-        cold_path;
-        "cm_callback_handler_path.wado/$initialize_modules$cold0"();
-    };
-    let $indirect_call_1: ref null "canonical//CanonicalClosure_1";
-    call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"(self_7 = global:core:rt::CM_CALLBACKS; self_13 = global:core:rt::CM_CALLBACKS.used; if @unlikely(((0 <= key) & (key < self_13)) == 0) {
-        cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(key, self_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:rt:322"), used: 11 });
-        unreachable;
-    }; builtin::array_get_value<ref struct>(self_7.repr, key))).env, a0);
-||||||| d6acc6b3a97
-fn "cm_callback_handler_path.wado/$cm_callback__call-i32"(key, a0) {
-    let self_7: ref "core:prelude/list.wado//List<fn()->()>";
-    let self_13: i32;
-    $inline__initialize_modules_0: block {
-        break_if $inline__initialize_modules_0 @likely(global:cm_callback_handler_path.wado::$modules_initialized);
-        cold_path;
-        "cm_callback_handler_path.wado/$initialize_modules$cold0"();
-    };
-    let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-    call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"(self_7 = global:core:rt::CM_CALLBACKS; self_13 = global:core:rt::CM_CALLBACKS.used; if @unlikely(((0 <= key) & (key < self_13)) == 0) {
-        cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(key, self_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:rt:322"), used: 11 });
-        unreachable;
-    }; builtin::array_get_value<ref struct>(self_7.repr, key))).env, a0);
-=======
 fn "cm_callback_handler_path.wado/$cm_callback__call-i32"(closure, a0) {
-    let $indirect_call_1: ref "canonical//CanonicalClosure_0";
+    let $indirect_call_1: ref null "canonical//CanonicalClosure_0";
     call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(extern.internalize(closure))).env, a0);
->>>>>>> origin/main
 }
 
 fn "cm_callback_handler_path.wado/$cm_export__run"() {
@@ -688,7 +624,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<fn mut(i32)->()>::grow"(s
     let $load_0: ref "Array<fn mut(i32)->()>";
     let new_repr: ref "Array<fn mut(i32)->()>";
     let a: i32;
-    builtin::array_copy<ref struct>(local.tee new_repr(builtin::array_new<ref struct>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    builtin::array_copy<ref "canonical//CanonicalClosure_0">(local.tee new_repr(builtin::array_new<ref "canonical//CanonicalClosure_0">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -705,51 +641,26 @@ fn "cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_1::$cal
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<fn mut(i32)->()>::grow"(self_5);
     }
-    builtin::array_set<ref struct>(self_5.repr, used, listener);
+    builtin::array_set<ref "canonical//CanonicalClosure_0">(self_5.repr, used, listener);
     self_5.used = used + 1;
 }
 
 fn "cm_callback_handler_path.wado/cm_callback_handler_path.wado/$Closure_2::$call$dae[self#1]"(self, value) {
     let $load_1: ref "core:prelude/list.wado//List<fn mut(i32)->()>";
     let end: i32;
-    let item: ref struct;
+    let item: ref "canonical//CanonicalClosure_0";
     let $sroa_$iter_0_repr_14: ref "Array<fn mut(i32)->()>";
     let $sroa_$iter_0_index_15: i32;
     end = local.tee $load_1(self.$capture_0.listeners).used;
-<<<<<<< HEAD
-    $sroa_$iter_0_repr_16 = $load_1.repr;
-    $sroa_$iter_0_index_17 = 0;
-    b139: block {
-        l140: loop {
-            break_if b139 $sroa_$iter_0_index_17 >= end;
-            item = builtin::array_get_value<ref struct>($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            let $indirect_call_1: ref null "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"(item)).env, value);
-            continue l140;
-||||||| d6acc6b3a97
-    $sroa_$iter_0_repr_16 = $load_1.repr;
-    $sroa_$iter_0_index_17 = 0;
-    b139: block {
-        l140: loop {
-            break_if b139 $sroa_$iter_0_index_17 >= end;
-            item = builtin::array_get_value<ref struct>($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"(item)).env, value);
-            continue l140;
-=======
     $sroa_$iter_0_repr_14 = $load_1.repr;
     $sroa_$iter_0_index_15 = 0;
     b60: block {
         l61: loop {
             break_if b60 $sroa_$iter_0_index_15 >= end;
-            item = builtin::array_get_value<ref struct>($sroa_$iter_0_repr_14, $sroa_$iter_0_index_15);
+            item = builtin::array_get_value<ref "canonical//CanonicalClosure_0">($sroa_$iter_0_repr_14, $sroa_$iter_0_index_15);
             $sroa_$iter_0_index_15 = $sroa_$iter_0_index_15 + 1;
-            let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(item)).env, value);
+            call_ref "functype/$canonical_closure_fn_0"(item.func, item.env, value);
             continue l61;
->>>>>>> origin/main
         };
     };
 }

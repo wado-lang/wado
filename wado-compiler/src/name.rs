@@ -942,22 +942,10 @@ pub const CELL_STRUCT: &str = "$Cell";
 /// The one field of a [`CELL_STRUCT`].
 pub const CELL_FIELD: &str = "value";
 
-<<<<<<< HEAD
-||||||| d6acc6b3a97
-/// How a cell's name spells a function payload: every function value lowers
-/// to one representation, so its cells are one struct.
-pub const CELL_FN_PAYLOAD: &str = "fn";
-
-=======
-/// How a cell's name spells a function payload: every function value lowers
-/// to one representation, so its cells are one struct.
-pub const CELL_FN_PAYLOAD: &str = "fn";
-
 /// How a cell's name spells an extern handle payload: every one is an
 /// `externref`, so a reference to a resource is one to each it extends.
 pub const CELL_EXTERN_PAYLOAD: &str = "extern";
 
->>>>>>> origin/main
 /// The WIR struct a cell holding the payload spelled `payload` lowers to.
 #[must_use]
 pub fn cell_struct_name(payload: &str) -> String {

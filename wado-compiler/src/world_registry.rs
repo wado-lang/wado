@@ -14,7 +14,7 @@ use crate::ast::{
 use crate::defs::DefId;
 use crate::kiln::GENERATOR_WORLD_FQ;
 use crate::module_source::ModuleSource;
-use crate::tir::{TirFunction, TypeId};
+use crate::tir::TirFunction;
 
 /// Well-known world name for the test world.
 ///
@@ -24,43 +24,6 @@ use crate::tir::{TirFunction, TypeId};
 /// dynamically from the entry module's `TirTest` declarations).
 pub const TEST_WORLD: &str = "test";
 
-<<<<<<< HEAD
-/// The interface every [`CallbackExport`] belongs to.
-pub const CALLBACK_INTERFACE: &str = "wado:callback/callback";
-
-/// An export the host calls a Wado closure back through: `key` names the
-/// closure, and the rest are its arguments at their CM primitive types.
-#[derive(Debug, Clone)]
-pub struct CallbackExport {
-    /// The function name in [`CALLBACK_INTERFACE`] (e.g. `"call-f64"`).
-    pub cm_name: String,
-    /// The core function that lifts it.
-    pub core_func: String,
-    /// `(name, Wado primitive)` per parameter, the key first.
-    pub params: Vec<(String, &'static str)>,
-    /// The closure types called back through it. The registry holds each as
-    /// an `fn()` and casts it back at the call.
-    pub closures: Vec<TypeId>,
-}
-
-||||||| d6acc6b3a97
-/// The interface every [`CallbackExport`] belongs to.
-pub const CALLBACK_INTERFACE: &str = "wado:callback/callback";
-
-/// An export the host calls a Wado closure back through: `key` names the
-/// closure, and the rest are its arguments at their CM primitive types.
-#[derive(Debug, Clone)]
-pub struct CallbackExport {
-    /// The function name in [`CALLBACK_INTERFACE`] (e.g. `"call-f64"`).
-    pub cm_name: String,
-    /// The core function that lifts it.
-    pub core_func: String,
-    /// `(name, Wado primitive)` per parameter, the key first.
-    pub params: Vec<(String, &'static str)>,
-}
-
-=======
->>>>>>> origin/main
 /// An operation of a guest effect a dependency component imports, which the
 /// program answers through its handler: the program's component nests the
 /// dependency and wires its import to a lift of the binding that calls

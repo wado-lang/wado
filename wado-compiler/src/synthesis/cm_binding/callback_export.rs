@@ -42,29 +42,12 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
     let mut shapes: IndexSet<String> = IndexSet::default();
     for &(closure, extern_object) in callbacks {
         let params = closure_params(&type_table.borrow(), closure);
-<<<<<<< HEAD
-        let boundary: Vec<Boundary> = params
-            .iter()
-            .map(|&param| boundary(&type_table.borrow(), param))
-            .collect();
-        let cm_name = callback_export_name(boundary.iter().map(|b| b.word));
-        if let Some(export) = exports.get_mut(&cm_name) {
-            export.closures.push(closure);
-||||||| d6acc6b3a97
-        let boundary: Vec<Boundary> = params
-            .iter()
-            .map(|&param| boundary(&type_table.borrow(), param))
-            .collect();
-        let cm_name = callback_export_name(boundary.iter().map(|b| b.word));
-        if exports.contains_key(&cm_name) {
-=======
         let shape = callback_export_name(
             params
                 .iter()
                 .map(|&param| argument_word(&type_table.borrow(), param)),
         );
         if !shapes.insert(shape.clone()) {
->>>>>>> origin/main
             continue;
         }
         let mut tir_params = vec![synth_param("closure", 0, extern_object)];
@@ -97,52 +80,6 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
             u32::try_from(locals.len()).expect("a closure takes few parameters"),
             locals,
         );
-<<<<<<< HEAD
-        {
-            let mut function = function.borrow_mut();
-            function.is_export = true;
-            function.is_cm_export = true;
-        }
-        functions.push(function);
-        let export_params = iter::once(("key".to_string(), "u32"))
-            .chain(
-                boundary
-                    .iter()
-                    .enumerate()
-                    .map(|(i, b)| (format!("a{i}"), b.primitive)),
-            )
-            .collect();
-        exports.insert(
-            cm_name.clone(),
-            CallbackExport {
-                cm_name,
-                core_func,
-                params: export_params,
-                closures: vec![closure],
-            },
-||||||| d6acc6b3a97
-        {
-            let mut function = function.borrow_mut();
-            function.is_export = true;
-            function.is_cm_export = true;
-        }
-        functions.push(function);
-        let export_params = iter::once(("key".to_string(), "u32"))
-            .chain(
-                boundary
-                    .iter()
-                    .enumerate()
-                    .map(|(i, b)| (format!("a{i}"), b.primitive)),
-            )
-            .collect();
-        exports.insert(
-            cm_name.clone(),
-            CallbackExport {
-                cm_name,
-                core_func,
-                params: export_params,
-            },
-=======
         export_to_host(project, function);
     }
 }
@@ -176,7 +113,6 @@ pub(super) fn synthesize_extern_slot_exports(project: &mut Package) {
             block(vec![return_stmt(Some(call))]),
             1,
             locals,
->>>>>>> origin/main
         );
         export_to_host(project, function);
     }

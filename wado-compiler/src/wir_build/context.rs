@@ -123,8 +123,8 @@ pub struct WirContext<'a> {
     /// slots. See `inspectable_fn_dispatch`.
     pub canonical_closure_types: IndexMap<String, (WirTypeId, WirTypeId, bool)>,
     /// The `CanonicalClosure_K` each function type lowers to. A function type
-    /// absent here, one with no closure or one of a signature the callback
-    /// registry casts between, lowers to `structref`.
+    /// absent here has no closure that could be called, and lowers to
+    /// `structref`.
     pub fn_closure_types: IndexMap<TypeId, WirTypeId>,
     /// Map from closure `(module_source, functor_id)` to the per-functor
     /// canonical wrapper triple. Keyed by module source + functor ID
