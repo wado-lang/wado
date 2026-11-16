@@ -1,0 +1,103 @@
+//! Signals bound to the DOM: each binding is an effect that writes one place,
+//! so a write to a signal touches the nodes that show it and no others.
+
+use { Track, flush, observe, on_cleanup, scope, untracked } from "./signals.wado";
+use { Dom, Element, Event, EventTarget } from "wado-lang:web";
+
+pub fn element(tag: String) -> Element with Dom {
+    return Dom::document().create_element(tag);
+}
+
+pub fn text(tag: String, content: String) -> Element with Dom {
+    let made = element(tag);
+    made.set_text_content(Option::Some(content));
+    return made;
+}
+
+pub fn bind_text(target: Element, content: fn mut() -> String with Track) with (Track, Dom) {
+    let mut content = content;
+    observe(|| target.set_text_content(Option::Some(content())));
+}
+
+/// Keeps the attribute at what `value` answers, absent for `None`.
+pub fn bind_attribute(target: Element, name: String, value: fn mut() -> Option<String> with Track) with (Track, Dom) {
+    let mut value = value;
+    observe(|| {
+        match value() {
+            Some(set) => target.set_attribute(name, set),
+            None => target.remove_attribute(name),
+        }
+    });
+}
+
+/// Listens on `target`, and flushes once the handler returns: the handler's
+/// writes are one batch.
+pub fn on(target: EventTarget, type: String, handler: fn mut(Event) with (Track, Dom)) with Dom {
+    let mut handler = handler;
+    target.add_event_listener(type, |event: Event| {
+        untracked(|| handler(event));
+        flush();
+    });
+}
+
+struct Row<T> {
+    item: T,
+    node: Element,
+    dispose: fn mut() with Dom,
+}
+
+fn remove_rows<T>(parent: Element, rows: List<Row<T>>) with Dom {
+    for let row of rows {
+        let mut dispose = row.dispose;
+        dispose();
+        parent.remove_child(row.node);
+    }
+}
+
+/// Keeps `parent`'s children at one node per item, in the items' order. An
+/// item equal to one already shown keeps its node, and whatever `render` made
+/// for an item that left is disposed.
+pub fn each<T: Eq>(
+    parent: Element,
+    items: fn mut() -> List<T> with Track,
+    render: fn mut(T) -> Element with (Track, Dom),
+) with (Track, Dom) {
+    let mut items = items;
+    let mut render = render;
+    let mut rows: List<Row<T>> = [];
+    on_cleanup(|| {
+        remove_rows(parent, rows);
+        rows = [];
+    });
+    observe(|| {
+        let mut kept: List<Row<T>> = [];
+        let mut moved = false;
+        for let item of items() {
+            let mut found: Option<Row<T>> = null;
+            for let i of 0..<rows.len() {
+                if rows[i].item == item {
+                    found = Option::Some(rows.remove(i));
+                    moved = moved || i != 0;
+                    break;
+                }
+            }
+            if let Some(row) = found {
+                kept.push(row);
+                continue;
+            }
+            let mut node: Option<Element> = null;
+            let dispose = scope(|| node = Option::Some(render(item)));
+            kept.push(Row { item, node: node.unwrap(), dispose });
+            moved = true;
+        }
+        remove_rows(parent, rows);
+        if moved {
+            // Appending a child already there moves it, so this leaves the
+            // children in the new order.
+            for let row of kept {
+                parent.append_child(row.node);
+            }
+        }
+        rows = kept;
+    });
+}

@@ -21,7 +21,7 @@ prints the tokens a second, and whether each request picked the tokens it picks
 alone. `pjrt_slots.wado` runs it on a PJRT plugin, and `webgpu_slots.wado` on a
 WebGPU device:
 
-    wado run-pjrt -O2 --plugin libpjrt_cpu.so pjrt_slots.wado
+    wado run-pjrt -O2 pjrt_slots.wado
     wado run-webgpu -O2 webgpu_slots.wado
 
 ## What the build reads

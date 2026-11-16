@@ -530,7 +530,7 @@ attention cache on the device and reads back the logits.
 ```sh
 cd package-loam/example/gemma3-270m
 wado run-webgpu -O2 webgpu.wado
-wado run-pjrt -O2 --plugin libpjrt_cpu.so pjrt.wado
+wado run-pjrt -O2 pjrt.wado
 ```
 
 A device run is a compute shader's dispatch on WebGPU and a program's execution
@@ -579,7 +579,7 @@ row's own past, so a step reads nothing back.
 
 ```sh
 cd package-loam/example/gpt2-124m
-wado run-pjrt -O2 --plugin libpjrt_cpu.so pjrt_slots.wado
+wado run-pjrt -O2 pjrt_slots.wado
 wado run-webgpu -O2 webgpu_slots.wado
 ```
 

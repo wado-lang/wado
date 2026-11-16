@@ -194,8 +194,8 @@ mod tests {
         assert_eq!(coherence_errors(&program([a, b])), vec![]);
     }
 
-    /// The specific-impls-win pair: `impl Tag for Box_<i32>` names one
-    /// instantiation and `impl<T> Tag for Box_<T>` the head, so the two targets
+    /// The specific-impls-win pair: `impl Tag for Box<i32>` names one
+    /// instantiation and `impl<T> Tag for Box<T>` the head, so the two targets
     /// differ and selection ranks them rather than coherence rejecting them.
     #[test]
     fn a_specific_instantiation_beside_a_generic_head_is_no_duplicate() {
@@ -320,8 +320,8 @@ mod tests {
         );
     }
 
-    /// The same reading one level in: `impl<T: A> Tr for Box_<T>` beside
-    /// `impl<T: B> Tr for Box_<T>` covers `Box_<X>` from both sides only for an
+    /// The same reading one level in: `impl<T: A> Tr for Box<T>` beside
+    /// `impl<T: B> Tr for Box<T>` covers `Box<X>` from both sides only for an
     /// `X` satisfying both, which is again undecidable where they are written.
     #[test]
     fn two_bounded_head_impls_at_different_bounds_are_no_duplicate() {

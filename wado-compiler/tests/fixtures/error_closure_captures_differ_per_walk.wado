@@ -1,0 +1,34 @@
+// A tuple loop walks its body once per element, and the closure in it is
+// checked once for them all: it holds only what every walk hands it.
+
+#[cm("example:demo/dom#input", linearity = "unrestricted", repr = "externref")]
+resource HtmlInputElement {}
+
+fn focused() -> String with HtmlInputElement {
+    return "focused";
+}
+
+fn call(f: fn() -> String) -> String {
+    return f();
+}
+
+fn each(input: HtmlInputElement) -> String {
+    let mut out = "";
+    for let v of [1, input] {
+        out.push_str(call(|| {
+            let _kept = v;
+            return focused();
+        }));
+    }
+    return out;
+}
+
+export fn run() with HtmlInputElement {
+    let _ = each(HtmlInputElement::backed_by("i"));
+}
+
+__DATA__
+{
+    "compile_error": ":18:27: analysis error: this function value performs resource 'HtmlInputElement', which the function type it is expected to be does not declare",
+    "compile_error_codes": ["MISSING_EFFECT"]
+}

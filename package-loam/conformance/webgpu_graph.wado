@@ -29,6 +29,7 @@ use {
     Comparison,
     Cpu,
     Element,
+    Float,
     full,
     Graph,
     Holds,
@@ -215,32 +216,14 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let w = cases::windowed_input();
     println(`windowed ${apart(&mut gpu, &cases::windowed(&mut gpu, &gpu.upload(&w)), &cases::windowed(cpu, &w))}`);
 
-    let q = cases::quantized_case();
-    let want_quantized = cases::quantizing(
-        cpu,
-        &q.a,
-        &[q.weight, q.scales, q.zero_points],
-        &[q.table, q.table_scales],
-        &q.ids,
-    );
-    let quantized_weight = [
-        gpu.upload(&q.weight),
-        gpu.upload(&q.scales),
-        gpu.upload(&q.zero_points),
-    ];
-    let quantized_table = [
-        gpu.upload(&q.table),
-        gpu.upload(&q.table_scales),
-    ];
-    let [held_a, held_ids] = [
-        gpu.upload(&q.a),
-        gpu.upload(&q.ids),
-    ];
-    let quantizing_from = gpu.dispatches();
-    let quantized = cases::quantizing(&mut gpu, &held_a, &quantized_weight, &quantized_table, &held_ids);
-    assert gpu.dispatches() - quantizing_from == 2, "a quantized product and gather each run in one kernel";
-    println(`quantized product ${apart(&mut gpu, &quantized.0, &want_quantized.0)}`);
-    println(`quantized gather ${apart(&mut gpu, &quantized.1, &want_quantized.1)}`);
+    let [held_a, held_ids, want_quantized] = quantized_in::<f32>(&mut gpu, "");
+    for let [words, device] of [
+        ["", &mut gpu],
+        [" in f32 words", &mut plain],
+    ] {
+        quantized_in::<f16>(device, ` of f16${words}`);
+        quantized_in::<bf16>(device, ` of bf16${words}`);
+    }
 
     // The packed weights a model keeps, as it keeps them.
     let packed = gpu.kept_weights(cases::quantized_pass, 2, 5, cases::quantized_weight).unwrap();
@@ -621,6 +604,50 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         println(`decoded split ${k} ${tokens_apart(&split, &want_tokens)}`);
         println(`requested ${k} ${requests_apart(&mut gpu, 2, &sampling)}`);
     }
+}
+
+/// `cases::quantizing` over `E`, which runs in its kernels on the device, each
+/// against `Cpu`'s, printed as `quantized product${name}` and the gather's.
+/// Returns its input and indices on the device, and `Cpu`'s results.
+fn quantized_in<E: Float>(
+    gpu: &mut WebGpuBackend,
+    name: String,
+) -> [Placed<E, [cases::A, cases::B]>, Placed<i64, [cases::A]>, [Tensor<E, [cases::A, cases::C]>, Tensor<E, [cases::A, cases::B]>]] with (Stdout, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let cpu = &mut Cpu {};
+    let q = cases::quantized_case();
+    let a: Tensor<E, [cases::A, cases::B]> = cpu.convert(&q.a);
+    let scales: Tensor<E, [cases::C, cases::Blocks]> = cpu.convert(&q.scales);
+    let table_scales: Tensor<E, [cases::Rows, cases::Blocks]> = cpu.convert(&q.table_scales);
+    let want = cases::quantizing::<Cpu, E>(
+        cpu,
+        &a,
+        &[q.weight, scales, q.zero_points],
+        &[q.table, table_scales],
+        &q.ids,
+    );
+    let weight = [
+        gpu.upload(&q.weight),
+        gpu.upload(&scales),
+        gpu.upload(&q.zero_points),
+    ];
+    let table = [
+        gpu.upload(&q.table),
+        gpu.upload(&table_scales),
+    ];
+    let [held_a, held_ids] = [
+        gpu.upload(&a),
+        gpu.upload(&q.ids),
+    ];
+    let [dispatched, read] = [
+        gpu.dispatches(),
+        gpu.read_backs(),
+    ];
+    let got = cases::quantizing::<WebGpuBackend, E>(gpu, &held_a, &weight, &table, &held_ids);
+    assert gpu.dispatches() - dispatched == 2, "a quantized product and gather each run in one kernel";
+    assert gpu.read_backs() == read, "a packed weight stays on the device";
+    println(`quantized product${name} ${apart(gpu, &got.0, &want.0)}`);
+    println(`quantized gather${name} ${apart(gpu, &got.1, &want.1)}`);
+    return [held_a, held_ids, want];
 }
 
 /// Passes enough that every launch is idle.

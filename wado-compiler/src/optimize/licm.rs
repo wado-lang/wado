@@ -29,7 +29,7 @@ use crate::nir::NirLocal;
 use crate::nir_arena::PatId;
 use crate::nir_value_graph::ValuePool;
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
-use crate::optimize::arena_query::{is_loop, is_pure_operand, storage_root};
+use crate::optimize::arena_query::{is_loop, is_pure_operand, local_available_at, storage_root};
 use crate::optimize::condition_implication::{
     eliminate_at_root, resolve_panic_ids, resolve_quiet_callee_ids,
 };
@@ -206,9 +206,7 @@ impl ModifiedVars {
 
     /// Whether `local_idx`'s value can change inside the loop — i.e. it is
     /// **not** loop-invariant: it is (re)bound by an in-loop `let`, or it (or
-    /// any alias) is fully modified. This is exactly the invariance the
-    /// `ValueGraph`'s `use-site value == loop-entry value` check computed, so an
-    /// arith-hoist leaf check can read it instead of querying `value_of`.
+    /// any alias) is fully modified.
     fn local_modified(&self, local_idx: u32) -> bool {
         self.rebound.contains(&local_idx)
             || self
@@ -263,14 +261,13 @@ pub fn apply_licm(
         );
         let mut engine = Engine::new(body, buffers, locals, params, type_table);
         engine.set_alias_sets(alias);
-        engine.seed_params();
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_quiet_callee_ids(&quiet_callee_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
         let licm_changed = engine.run(&[&rule]);
         // Condition implication shares licm's session: licm hoists only
-        // loop-invariant, move-safe code, so values are preserved and the
-        // ValueGraph stays valid. cond-impl runs after licm here — the same
+        // loop-invariant, move-safe code, so values are preserved.
+        // cond-impl runs after licm here — the same
         // document order as the standalone passes — so it still sees the hoisted
         // body.
         let cond_changed = eliminate_at_root(&mut engine);
@@ -395,9 +392,8 @@ fn licm_block(
     let mut changed = false;
     let mut new_stmts = Vec::new();
 
-    // Iterate a clone, not `mem::take`: `hoist_invariant_arith` rebuilds
-    // the value graph from the body root mid-walk, so ancestor blocks must
-    // stay populated.
+    // Iterate a clone, not `mem::take`: `hoist_invariant_arith` walks from
+    // the body root mid-walk, so ancestor blocks must stay populated.
     for s in engine.body.blocks[block].stmts.clone() {
         // Classify without holding the borrow across the mutable recursion.
         let loop_body = match &engine.body.stmts[s].kind {
@@ -2255,9 +2251,9 @@ fn collect_arith_local_leaves(body: &Body, e: ExprId, out: &mut Vec<(ExprId, u32
 
 /// A structural identity key for a hoistable-arith tree: kind / op / leaf-local
 /// / promoted-operand-value, with commutative operands sorted so `a + b` and
-/// `b + a` agree (matching the `ValueGraph` hash-cons). Once a tree's `Local`
+/// `b + a` agree (matching the pool's hash-cons). Once a tree's `Local`
 /// leaves are all loop-invariant, two trees with the same key denote the same
-/// value — so this replaces the `value_of` `ValueId` for the hoist dedup.
+/// value, which is what the hoist dedups on.
 ///
 /// Ops are stored as their discriminants (the enums are fieldless, so `as u8`
 /// is exact identity), which lets the key derive `Ord` for the commutative
@@ -2347,7 +2343,7 @@ struct ArithHoist<'a> {
     /// their use-site values cannot be trusted as loop-invariant.
     address_taken: &'a IndexSet<u32>,
     /// Loop-modified locals — a leaf is invariant iff none of its aliases are
-    /// here (replaces the `value_of` `use == entry` invariance check).
+    /// here.
     modified: &'a ModifiedVars,
     types: &'a TypeTable,
 }
@@ -2379,14 +2375,13 @@ impl ArithHoist<'_> {
             if self.address_taken.contains(&idx) {
                 return None;
             }
-            // The leaf must be loop-invariant. Read it from `modified_vars`
-            // (value-graph-free) instead of `value(leaf) == loop_entry_value`.
+            // The leaf must be loop-invariant.
             if self.modified.local_modified(idx) {
                 return None;
             }
         }
         // With every `Local` leaf invariant, the structural key is exact
-        // value-identity for the dedup (replaces `engine.value(e)`).
+        // value-identity for the dedup.
         Some(arith_structural_key(body, self.types, e))
     }
 
@@ -2427,10 +2422,7 @@ fn hoist_invariant_arith(
     ctx: &mut LicmCtx,
 ) -> bool {
     // Earlier hoist rounds may have changed which locals are address-taken;
-    // refresh that scan. The value graph is not rebuilt (build-once invariant):
-    // an arith hoist appends a pre-header `let t = <invariant>` and never
-    // reassigns an existing local, so every existing local's loop-entry value
-    // stays valid; the new `t` simply has no entry and is not a candidate.
+    // refresh that scan.
     engine.invalidate_address_taken();
 
     let mut pending_hoist_locals: IndexSet<u32> = IndexSet::default();
@@ -2510,8 +2502,17 @@ fn hoist_invariant_arith(
     true
 }
 
+/// Whether `idx` holds a value in the pre-header of the loop whose body is
+/// `loop_body`.
+fn bound_before_loop(engine: &Engine, loop_body: BlockId, idx: u32) -> bool {
+    let Some(NodeRef::Stmt(loop_stmt)) = engine.parent_of(NodeRef::Block(loop_body)) else {
+        panic!("[NIR] licm: a loop body must hang off its `Loop` statement");
+    };
+    local_available_at(engine, idx, loop_stmt)
+}
+
 /// Whether `idx` is in scope at the CSE insertion point (before `min_i`): it is
-/// a loop-entry local, or bound by a top-level `let` of the loop body earlier.
+/// bound before the loop, or by a top-level `let` of the loop body earlier.
 fn cse_local_available(
     engine: &mut Engine,
     idx: u32,
@@ -2520,7 +2521,7 @@ fn cse_local_available(
     loop_body: BlockId,
 ) -> bool {
     toplevel_lets.iter().any(|(i, l)| *i < min_i && *l == idx)
-        || engine.loop_entry_value(loop_body, idx).is_some()
+        || bound_before_loop(engine, loop_body, idx)
 }
 
 /// Whether cloning skeleton `e` at the insertion point is sound: every `Local`
@@ -2589,12 +2590,11 @@ fn cse_loop_body(
     types: &TypeTable,
 ) -> bool {
     let stmts = engine.body.blocks[loop_body].stmts.clone();
-    // Occurrences of each materialisable arith value, keyed by a value-graph-free
-    // **structural key**, as (top-level stmt index, expr) in first-seen order.
+    // Occurrences of each materialisable arith value, keyed by a structural
+    // key, as (top-level stmt index, expr) in first-seen order.
     // Two structurally-equal trees denote the same value exactly when their
     // leaves hold the same values at both points; the per-run split below (no
-    // leaf assigned across the span) establishes that without `value_of`,
-    // replacing the value graph's per-point flow-sensitivity. Nested loops are
+    // leaf assigned across the span) establishes that. Nested loops are
     // not descended.
     let mut occ: IndexMap<ArithKey, Vec<(usize, ExprId)>> = IndexMap::default();
     for (i, &s) in stmts.iter().enumerate() {
@@ -2651,9 +2651,8 @@ fn cse_loop_body(
         }
         // Split the occurrences (in statement order) into maximal **runs** within
         // which no non-address-taken leaf is directly assigned across the span —
-        // each run computes one value, soundly CSE'd into one temp. This replaces
-        // the value graph's per-point flow-sensitivity (`p*p` before `p += 1` is
-        // one value; after, a new one).
+        // each run computes one value, soundly CSE'd into one temp (`p*p` before
+        // `p += 1` is one value; after, a new one).
         let mut occs = occs;
         occs.sort_by_key(|(i, _)| *i);
         let mut runs: Vec<Vec<(usize, ExprId)>> = Vec::new();
@@ -2684,8 +2683,8 @@ fn cse_loop_body(
             let ty = engine.body.exprs[occs[0].1].type_id;
             let min_i = occs.iter().map(|(i, _)| *i).min().unwrap();
             // Clone an occurrence whose skeleton is in scope at the insertion point
-            // (before `min_i`): every `Local` leaf must be a loop-entry local or
-            // bound by a top-level `let` before `min_i`. The value graph already
+            // (before `min_i`): every `Local` leaf must be bound before the loop or
+            // by a top-level `let` before `min_i`. The run split already
             // proved every occurrence equal, so any in-scope occurrence computes the
             // right value; cloning a bare alias read of an inner-scope local (e.g.
             // `let $cse = a` where `a` is bound inside a nested block) would read a
@@ -2717,8 +2716,7 @@ fn cse_loop_body(
             // Redirect each occurrence to a *skeleton* `local.get $cse` (not a
             // promoted value): the temp is reassigned every iteration, so a value
             // operand `Opaque(Local($cse))` would read as loop-invariant to the
-            // arith hoist. `$cse` has no loop-entry value, so a skeleton read is
-            // correctly treated as loop-carried.
+            // arith hoist. A skeleton read is treated as loop-carried.
             let mut any = false;
             for (_, e) in &occs {
                 let lread = engine.alloc_expr(
@@ -2814,8 +2812,8 @@ fn local_assigned_in(body: &Body, node: NodeRef, idx: u32) -> bool {
 }
 
 /// Whether `e` is a pure arithmetic compound worth CSE-materialising: a
-/// `Binary` / `Unary` with a non-trap-prone op, or a cast, checked structurally
-/// (value-graph-free). The leaves need no availability check here — see
+/// `Binary` / `Unary` with a non-trap-prone op, or a cast, checked structurally.
+/// The leaves need no availability check here — see
 /// [`cse_loop_body`]'s soundness note (shared scope of ≥2 occurrences) — only
 /// the root must be a compound, not a bare leaf.
 fn is_cse_candidate_expr(body: &Body, e: ExprId) -> bool {
@@ -2859,13 +2857,12 @@ fn hoist_invariant_value_operands(
         });
     }
 
-    // Locals available at the loop pre-header (where the hoisted `let` lands):
-    // exactly those with a loop-entry value. A value whose `Opaque(Local)` leaf
-    // names a local *bound inside* the loop (a pattern / while-let / nested
-    // binding — the value graph gives it a fresh per-iteration Opaque, never a
-    // `LoopPhi`) has no entry value, so hoisting it would compute the wrong
-    // thing. Collect the candidate leaves first, then keep only the entry-live
-    // ones — soundness gate for the hoist.
+    // Locals available at the loop pre-header, where the hoisted `let` lands.
+    // A value whose `Opaque(Local)` leaf names a local *bound inside* the loop
+    // (a pattern / while-let / nested binding) holds a value per iteration, so
+    // hoisting it would compute the wrong thing. Collect the candidate leaves
+    // first, then keep only the ones bound before the loop — soundness gate for
+    // the hoist.
     let mut leaf_locals: IndexSet<u32> = IndexSet::default();
     for op in &ops {
         if let Operand::Value(v) = *op {
@@ -2877,7 +2874,7 @@ fn hoist_invariant_value_operands(
     }
     let mut entry_locals: IndexSet<u32> = IndexSet::default();
     for idx in leaf_locals {
-        if engine.loop_entry_value(loop_body, idx).is_some() {
+        if bound_before_loop(engine, loop_body, idx) {
             entry_locals.insert(idx);
         }
     }

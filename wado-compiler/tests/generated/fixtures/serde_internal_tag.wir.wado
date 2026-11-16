@@ -4678,13 +4678,13 @@ fn "core:prelude/fpfmt.wado/compare_to_midpoint"($mv$digits$repr, $mv$digits$sta
     let c: u8;
     let midpoint: ref "core:prelude/list.wado//List<u32>";
     let carry: u64;
-    let $licm_repr_84: ref Array<u32>;
+    let $licm_repr_85: ref Array<u32>;
     decimal = struct.new "core:prelude/list.wado//List<u32>" { repr: array.new_fixed<u32>(), used: 0 };
     kept = 0;
     sticky = 0;
     k_7 = 0;
     $mv$digits$end = $mv$digits$end - $mv$digits$start;
-    $licm_repr_84 = decimal.repr;
+    $licm_repr_85 = decimal.repr;
     b429: block {
         l430: loop {
             break_if b429 k_7 >= $mv$digits$end;
@@ -4700,20 +4700,20 @@ fn "core:prelude/fpfmt.wado/compare_to_midpoint"($mv$digits$repr, $mv$digits$sta
                     b433: block {
                         l434: loop {
                             break_if b433 (builtin::i64_extend_i32_s(c) + 3_i64) >= builtin::i64_extend_i32_s($load_1);
-                            carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_84, c)) * 10_i64) + carry;
-                            builtin::array_set<u32>($licm_repr_84, c, builtin::i32_wrap_i64(carry));
+                            carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_85, c)) * 10_i64) + carry;
+                            builtin::array_set<u32>($licm_repr_85, c, builtin::i32_wrap_i64(carry));
                             carry = carry >>u 32_i64;
                             c = c + 1;
-                            carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_84, c)) * 10_i64) + carry;
-                            builtin::array_set<u32>($licm_repr_84, c, builtin::i32_wrap_i64(carry));
+                            carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_85, c)) * 10_i64) + carry;
+                            builtin::array_set<u32>($licm_repr_85, c, builtin::i32_wrap_i64(carry));
                             carry = carry >>u 32_i64;
                             c = c + 1;
-                            carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_84, c)) * 10_i64) + carry;
-                            builtin::array_set<u32>($licm_repr_84, c, builtin::i32_wrap_i64(carry));
+                            carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_85, c)) * 10_i64) + carry;
+                            builtin::array_set<u32>($licm_repr_85, c, builtin::i32_wrap_i64(carry));
                             carry = carry >>u 32_i64;
                             c = c + 1;
-                            carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_84, c)) * 10_i64) + carry;
-                            builtin::array_set<u32>($licm_repr_84, c, builtin::i32_wrap_i64(carry));
+                            carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_85, c)) * 10_i64) + carry;
+                            builtin::array_set<u32>($licm_repr_85, c, builtin::i32_wrap_i64(carry));
                             carry = carry >>u 32_i64;
                             c = c + 1;
                             continue l434;
@@ -4722,8 +4722,8 @@ fn "core:prelude/fpfmt.wado/compare_to_midpoint"($mv$digits$repr, $mv$digits$sta
                     b435: block {
                         l436: loop {
                             break_if b435 c >= $load_1;
-                            carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_84, c)) * 10_i64) + carry;
-                            builtin::array_set<u32>($licm_repr_84, c, builtin::i32_wrap_i64(carry));
+                            carry = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_85, c)) * 10_i64) + carry;
+                            builtin::array_set<u32>($licm_repr_85, c, builtin::i32_wrap_i64(carry));
                             carry = carry >>u 32_i64;
                             c = c + 1;
                             continue l436;
@@ -4731,12 +4731,12 @@ fn "core:prelude/fpfmt.wado/compare_to_midpoint"($mv$digits$repr, $mv$digits$sta
                     };
                     if carry != 0_i64 {
                         c = builtin::i32_wrap_i64(carry);
-                        if @unlikely($load_1 >= builtin::array_len($licm_repr_84)) {
+                        if @unlikely($load_1 >= builtin::array_len($licm_repr_85)) {
                             cold_path;
                             "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(decimal);
-                            $licm_repr_84 = decimal.repr;
+                            $licm_repr_85 = decimal.repr;
                         }
-                        builtin::array_set<u32>($licm_repr_84, $load_1, c);
+                        builtin::array_set<u32>($licm_repr_85, $load_1, c);
                         decimal.used = $load_1 + 1;
                     }
                     kept = kept + 1;
@@ -4752,8 +4752,8 @@ fn "core:prelude/fpfmt.wado/compare_to_midpoint"($mv$digits$repr, $mv$digits$sta
     p = builtin::i32_wrap_i64(below >>u builtin::i64_extend_i32_s($mv$format$precision - 1));
     below = select u64(p == 0, carry, carry | (1_i64 << builtin::i64_extend_i32_s($mv$format$precision - 1)));
     $mv$digits$end = select i32(p == 0, 0 - $mv$digits$end, (p - $mv$digits$end) - 1);
-    p = builtin::array_len(local.tee $licm_repr_84(array.new_fixed<u32>(builtin::i32_wrap_i64(local.tee below((2_i64 * below) + 1_i64)), builtin::i32_wrap_i64(below >>u 32_i64))));
-    midpoint = struct.new "core:prelude/list.wado//List<u32>" { repr: $licm_repr_84, used: p };
+    p = builtin::array_len(local.tee $licm_repr_85(array.new_fixed<u32>(builtin::i32_wrap_i64(local.tee below((2_i64 * below) + 1_i64)), builtin::i32_wrap_i64(below >>u 32_i64))));
+    midpoint = struct.new "core:prelude/list.wado//List<u32>" { repr: $licm_repr_85, used: p };
     p = 0;
     $mv$digits$end = $mv$digits$end - 1;
     if $mv$digits$start >= 0 {
@@ -11341,23 +11341,25 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
         $load_1 = $load_1 - $load_2;
         b1611: block {
             l1612: loop {
+                cap = pos < $load_1;
+                d_13 = $load_2 + pos;
                 break_if b1611 (if pos < len -> i32 {
-                    if @unlikely(((0 <= pos) & (pos < $load_1)) == 0) {
+                    if @unlikely(((0 <= pos) & cap) == 0) {
                         cold_path;
                         "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos, $load_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1676"), used: 14 });
                         unreachable;
-                    }; builtin::array_get_value<u8>($licm_repr_186, $load_2 + pos) - 48 <=u 9;
+                    }; builtin::array_get_value<u8>($licm_repr_186, d_13) - 48 <=u 9;
                 } else {
                     0;
                 }) == 0;
                 inexact = (if inexact -> i32 {
                     1;
                 } else {
-                    if @unlikely(((0 <= pos) & (pos < $load_1)) == 0) {
+                    if @unlikely(((0 <= pos) & cap) == 0) {
                         cold_path;
                         "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos, $load_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1677"), used: 14 });
                         unreachable;
-                    }; builtin::array_get_value<u8>($licm_repr_186, $load_2 + pos) != 48;
+                    }; builtin::array_get_value<u8>($licm_repr_186, d_13) != 48;
                 });
                 pos = pos + 1;
                 continue l1612;
@@ -11435,23 +11437,25 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
                 lead = lead - d_13;
                 b1633: block {
                     l1634: loop {
+                        $load_14 = pos < lead;
+                        d_23 = d_13 + pos;
                         break_if b1633 (if pos < len -> i32 {
-                            if @unlikely(((0 <= pos) & (pos < lead)) == 0) {
+                            if @unlikely(((0 <= pos) & $load_14) == 0) {
                                 cold_path;
                                 "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos, lead, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1713"), used: 14 });
                                 unreachable;
-                            }; builtin::array_get_value<u8>($licm_repr_186, d_13 + pos) - 48 <=u 9;
+                            }; builtin::array_get_value<u8>($licm_repr_186, d_23) - 48 <=u 9;
                         } else {
                             0;
                         }) == 0;
                         inexact = (if inexact -> i32 {
                             1;
                         } else {
-                            if @unlikely(((0 <= pos) & (pos < lead)) == 0) {
+                            if @unlikely(((0 <= pos) & $load_14) == 0) {
                                 cold_path;
                                 "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos, lead, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1714"), used: 14 });
                                 unreachable;
-                            }; builtin::array_get_value<u8>($licm_repr_186, d_13 + pos) != 48;
+                            }; builtin::array_get_value<u8>($licm_repr_186, d_23) != 48;
                         });
                         pos = pos + 1;
                         continue l1634;
@@ -14330,8 +14334,9 @@ fn "core:serde/core:serde/TaggedCaseSerializer<core:json/JsonSerializer>^core:se
             b2067: block {
                 l2068: loop {
                     break_if b2067 start_22 >= new_used_21;
+                    b = start_22 < new_used_21;
                     $inline_core_json_json_escape_free__core_prelude_string_wado_String__0__$for_0_body: block {
-                        if @unlikely(start_22 >=u new_used_21) {
+                        if @unlikely(((0 <= start_22) & b) == 0) {
                             cold_path;
                             "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::$contract$byte_at$contract_report0"(start_22, new_used_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:170"), used: 13 });
                             unreachable;
@@ -20835,11 +20840,12 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     let other: ref "core:prelude/string.wado//String";
     let end: i32;
     let $licm_alive_38: ref Array<bool>;
+    let $cse_39: i32;
     let min_len: i32;
     let i: i32;
     let x: u8;
     let y: u8;
-    let $sroa_o_repr_53: ref Array<u8>;
+    let $sroa_o_repr_54: ref Array<u8>;
     if $mv$self$root == -1 {
         return -1;
     }
@@ -20854,8 +20860,9 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                 l2931: loop {
                     break_if b2930 lo >= hi;
                     mid = (lo + hi) >> 1;
-                    end = local.tee other(builtin::array_get_value<ref "core:prelude/string.wado//String">($mv$self$nkeys, base + mid)).used;
-                    $sroa_o_repr_53 = other.repr;
+                    $cse_39 = base + mid;
+                    end = local.tee other(builtin::array_get_value<ref "core:prelude/string.wado//String">($mv$self$nkeys, $cse_39)).used;
+                    $sroa_o_repr_54 = other.repr;
                     if local.tee end($inline_core_prelude_array_wado_seq_cmp_u8__0: block -> "core:prelude/traits.wado//enum:Ordering" {
                         min_len = select i32(4 < end, 4, end);
                         i = 0;
@@ -20863,7 +20870,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                             l2934: loop {
                                 break_if b2933 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(min_len);
                                 x = builtin::array_get_value<u8>(key, i);
-                                y = builtin::array_get_value<u8>($sroa_o_repr_53, i);
+                                y = builtin::array_get_value<u8>($sroa_o_repr_54, i);
                                 if x <u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                 }
@@ -20872,7 +20879,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                                 }
                                 i = i + 1;
                                 x = builtin::array_get_value<u8>(key, i);
-                                y = builtin::array_get_value<u8>($sroa_o_repr_53, i);
+                                y = builtin::array_get_value<u8>($sroa_o_repr_54, i);
                                 if x <u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                 }
@@ -20881,7 +20888,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                                 }
                                 i = i + 1;
                                 x = builtin::array_get_value<u8>(key, i);
-                                y = builtin::array_get_value<u8>($sroa_o_repr_53, i);
+                                y = builtin::array_get_value<u8>($sroa_o_repr_54, i);
                                 if x <u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                 }
@@ -20890,7 +20897,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                                 }
                                 i = i + 1;
                                 x = builtin::array_get_value<u8>(key, i);
-                                y = builtin::array_get_value<u8>($sroa_o_repr_53, i);
+                                y = builtin::array_get_value<u8>($sroa_o_repr_54, i);
                                 if x <u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                 }
@@ -20905,7 +20912,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                             l2944: loop {
                                 break_if b2943 i >= min_len;
                                 x = builtin::array_get_value<u8>(key, i);
-                                y = builtin::array_get_value<u8>($sroa_o_repr_53, i);
+                                y = builtin::array_get_value<u8>($sroa_o_repr_54, i);
                                 if x <u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                 }
@@ -20928,7 +20935,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                     } else if end == 2 {
                         lo = mid + 1;
                     } else {
-                        return select i32(builtin::array_get_value<bool>($licm_alive_38, $mv$self$root), local.tee $mv$self$root(builtin::array_get_value<i32>($mv$self$slots, base + mid)), -1);
+                        return select i32(builtin::array_get_value<bool>($licm_alive_38, $mv$self$root), local.tee $mv$self$root(builtin::array_get_value<i32>($mv$self$slots, $cse_39)), -1);
                     }
                     continue l2931;
                 };

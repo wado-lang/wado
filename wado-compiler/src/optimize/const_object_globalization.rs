@@ -1354,8 +1354,7 @@ fn is_globalizable_const_operand(
 ) -> bool {
     match op {
         // A promoted operand is a closed constant only if its value graph node is
-        // a constant literal. `promote_pure_values_early` (and the born-as-operands
-        // path) can freeze a runtime-dependent pure value — e.g. `depth * 2` over a
+        // a constant literal. A freeze can plant a runtime-dependent pure value — e.g. `depth * 2` over a
         // recursion parameter — into an `Operand::Value`; hoisting such a `let`
         // into a shared global would re-initialize it per activation, so an outer
         // recursive frame would observe an inner frame's value. Only a genuine

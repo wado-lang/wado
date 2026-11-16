@@ -1,0 +1,294 @@
+//! Fine-grained reactivity as a library: signals, memos and effects, with the
+//! dependencies found as the code runs.
+//!
+//! A write only marks what depends on it. `flush` then reruns each marked
+//! effect once, so an effect never sees half of a batch of writes.
+
+use { Dom } from "wado-lang:web";
+
+/// What a computation reports while it runs. Outside one, both do nothing: a
+/// read is untracked, and what would have been owned lives on.
+pub interface Track {
+    fn read(dep: Dep) {
+    }
+
+    fn own(dispose: fn mut() with Dom) {
+    }
+}
+
+pub struct Dep {
+    /// Whether the observer was not subscribed yet.
+    subscribe: fn mut(Observer) -> bool,
+    unsubscribe: fn mut(i32),
+}
+
+struct Observer {
+    id: i32,
+    invalidate: fn mut(),
+}
+
+struct Effect {
+    id: i32,
+    run: fn mut() with Dom,
+}
+
+global mut NEXT_OBSERVER_ID: i32 = 0;
+global mut QUEUE: List<Effect> = [];
+
+fn next_observer_id() -> i32 {
+    NEXT_OBSERVER_ID += 1;
+    return NEXT_OBSERVER_ID;
+}
+
+struct Subscribers {
+    dep: Dep,
+    notify: fn mut(),
+}
+
+fn subscribers() -> Subscribers {
+    let mut observers: List<Observer> = [];
+    return Subscribers {
+        dep: Dep {
+            subscribe: |observer: Observer| {
+                for let subscribed of observers {
+                    if subscribed.id == observer.id {
+                        return false;
+                    }
+                }
+                observers.push(observer);
+                return true;
+            },
+            unsubscribe: |id: i32| {
+                let mut rest: List<Observer> = [];
+                for let subscribed of observers {
+                    if subscribed.id != id {
+                        rest.push(subscribed);
+                    }
+                }
+                observers = rest;
+            },
+        },
+        notify: || {
+            for let observer of observers {
+                let mut invalidate = observer.invalidate;
+                invalidate();
+            }
+        },
+    };
+}
+
+struct Computation {
+    // `None` leaves the reads untracked.
+    observer: Option<Observer>,
+    deps: List<Dep>,
+    owns: bool,
+    owned: List<fn mut() with Dom>,
+}
+
+impl Track for Computation {
+    // Subscribing here and not once the run ends, so a write the run itself
+    // makes to what it already read marks it.
+    fn read(&mut self, dep: Dep) {
+        if let Some(observer) = self.observer {
+            let mut subscribe = dep.subscribe;
+            if subscribe(observer) {
+                self.deps.push(dep);
+            }
+        }
+        resume ();
+    }
+
+    fn own(&mut self, dispose: fn mut() with Dom) {
+        assert self.owns, "a memo owns nothing: it has no end to dispose of it at";
+        self.owned.push(dispose);
+        resume ();
+    }
+}
+
+fn unsubscribe_all(deps: List<Dep>, id: i32) {
+    for let dep of deps {
+        let mut unsubscribe = dep.unsubscribe;
+        unsubscribe(id);
+    }
+}
+
+fn dispose_all(owned: List<fn mut() with Dom>) with Dom {
+    for let mut dispose of owned {
+        dispose();
+    }
+}
+
+/// A value that tells its readers when it is written.
+pub struct Signal<T> {
+    read: fn() -> T with Track,
+    write: fn mut(T),
+}
+
+pub fn signal<T>(initial: T) -> Signal<T> {
+    let mut value = initial;
+    let readers = subscribers();
+    return Signal {
+        read: || {
+            Track::read(readers.dep);
+            return value;
+        },
+        write: |next: T| {
+            value = next;
+            let mut notify = readers.notify;
+            notify();
+        },
+    };
+}
+
+impl<T> Signal<T> {
+    pub fn get(&self) -> T with Track {
+        let read = self.read;
+        return read();
+    }
+
+    pub fn set(&self, value: T) {
+        let mut write = self.write;
+        write(value);
+    }
+}
+
+/// A value computed from others, again only when one of them changed and
+/// someone asks. It stops listening when the computation that made it is
+/// disposed of, and listens again if it is read after that.
+pub struct Memo<T> {
+    read: fn mut() -> T with Track,
+}
+
+pub fn memo<T>(compute: fn mut() -> T with Track) -> Memo<T> with Track {
+    let id = next_observer_id();
+    let mut compute = compute;
+    let mut cached: Option<T> = null;
+    let mut fresh = false;
+    let mut deps: List<Dep> = [];
+    let readers = subscribers();
+    let observer = Observer {
+        id,
+        invalidate: || {
+            if fresh {
+                fresh = false;
+                let mut notify = readers.notify;
+                notify();
+            }
+        },
+    };
+    Track::own(|| {
+        fresh = false;
+        unsubscribe_all(deps, id);
+        deps = [];
+    });
+    return Memo {
+        read: || {
+            Track::read(readers.dep);
+            if fresh && let Some(value) = cached {
+                return value;
+            }
+            unsubscribe_all(deps, id);
+            // Before the run, so a write during it leaves the value stale.
+            fresh = true;
+            let mut computation = Computation { observer: Option::Some(observer), deps: [], owns: false, owned: [] };
+            let value = with Track => &mut computation do {
+                compute();
+            };
+            deps = computation.deps;
+            cached = Option::Some(value);
+            return value;
+        },
+    };
+}
+
+impl<T> Memo<T> {
+    pub fn get(&self) -> T with Track {
+        let mut read = self.read;
+        return read();
+    }
+}
+
+/// Runs `body` now, and again after a flush whenever something it read was
+/// written. What `body` owns is disposed before each rerun, and with the
+/// effect itself.
+pub fn observe(body: fn mut() with (Track, Dom)) with (Track, Dom) {
+    let id = next_observer_id();
+    let mut body = body;
+    let mut deps: List<Dep> = [];
+    let mut owned: List<fn mut() with Dom> = [];
+    let mut disposed = false;
+    let mut run: fn mut() with Dom = || {
+    };
+    let observer = Observer {
+        id,
+        invalidate: || {
+            if !disposed {
+                QUEUE.push(Effect { id, run });
+            }
+        },
+    };
+    run = || {
+        if disposed {
+            return;
+        }
+        dispose_all(owned);
+        unsubscribe_all(deps, id);
+        let mut computation = Computation { observer: Option::Some(observer), deps: [], owns: true, owned: [] };
+        with Track => &mut computation do {
+            body();
+        };
+        deps = computation.deps;
+        owned = computation.owned;
+    };
+    run();
+    Track::own(|| {
+        disposed = true;
+        dispose_all(owned);
+        owned = [];
+        unsubscribe_all(deps, id);
+        deps = [];
+    });
+}
+
+/// Registers `cleanup` with the computation running now.
+pub fn on_cleanup(cleanup: fn mut() with Dom) with Track {
+    Track::own(cleanup);
+}
+
+/// Runs `body` owning what it creates, and returns what disposes of it all.
+/// Reads inside are untracked.
+pub fn scope(body: fn mut() with (Track, Dom)) -> fn mut() with Dom with Dom {
+    let mut body = body;
+    let mut computation = Computation { observer: null, deps: [], owns: true, owned: [] };
+    with Track => &mut computation do {
+        body();
+    };
+    let mut owned = computation.owned;
+    return || {
+        dispose_all(owned);
+        owned = [];
+    };
+}
+
+/// Runs `body` with its reads untracked and what it creates never disposed
+/// of, as an event listener runs.
+pub fn untracked(body: fn mut() with (Track, Dom)) with Dom {
+    let _never_disposed = scope(body);
+}
+
+/// Reruns every effect a write marked, each once, until none is marked.
+pub fn flush() with Dom {
+    while !QUEUE.is_empty() {
+        let batch = QUEUE;
+        QUEUE = [];
+        let mut ran: List<i32> = [];
+        for let marked of batch {
+            if ran.contains(&marked.id) {
+                continue;
+            }
+            ran.push(marked.id);
+            let mut run = marked.run;
+            run();
+        }
+    }
+}

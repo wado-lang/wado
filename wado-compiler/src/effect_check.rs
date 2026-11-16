@@ -2954,9 +2954,11 @@ impl SemEffectWalker<'_> {
     }
 
     /// What a closure literal's body performs, which is its type's row. The
-    /// body holds only what a function's would, the resources its signature
-    /// names and what the body grants itself, so every other effect it needs
-    /// is one it performs, a handler it installs discharging its own.
+    /// body holds what a function's would, the resources its signature names
+    /// and what the body grants itself, and the resources the types of its
+    /// captures name: a captured handle is one it was handed, as a parameter
+    /// is. Every other effect it needs is one it performs, a handler it
+    /// installs discharging its own.
     fn closure_performs(&mut self, closure: &ast::ClosureExpr) -> Vec<EffectRef> {
         if let Some(performed) = self.closures.get(&closure.id) {
             return performed.clone();
@@ -2968,15 +2970,31 @@ impl SemEffectWalker<'_> {
             resolutions: self.index.resolutions,
             members: self.index.members,
         };
-        let mut signature = IndexSet::default();
-        for &closure_type in &closure_types {
-            scan.collect(closure_type, &mut signature, &mut TypeSet::default());
-        }
+        // The body is checked once for every walk, its demands those of them
+        // all, so it holds only what every walk hands it.
+        let handed_in_each_walk = self
+            .annotations
+            .into_iter()
+            .flat_map(TypeAnnotations::walks)
+            .filter_map(|facts| {
+                let closure_type = *facts.expression_types.get(&closure.id)?;
+                let captures = &facts.closure_captures.get(&closure.id)?.captures;
+                let mut handed = IndexSet::default();
+                for type_id in
+                    std::iter::once(closure_type).chain(captures.iter().map(|c| c.type_id))
+                {
+                    scan.collect(type_id, &mut handed, &mut TypeSet::default());
+                }
+                Some(handed)
+            });
+        let handed = handed_in_each_walk
+            .reduce(|every, walk| every.intersection(&walk).cloned().collect())
+            .unwrap_or_default();
         let current = held_in_body(
             self.annotations,
             self.index,
             &scan,
-            signature,
+            handed,
             Body::Expr(&closure.body),
         );
         let mut scratch = Vec::new();

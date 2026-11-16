@@ -1,0 +1,30 @@
+// A closure capturing a function value holds no part of that value's row:
+// calling it performs the row, as calling it anywhere does.
+
+#[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
+resource Node {}
+
+#[cm("example:demo/dom#input", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource HtmlInputElement extends Node {}
+
+fn focused() -> String with HtmlInputElement {
+    return "focused";
+}
+
+fn call(f: fn() -> String) -> String {
+    return f();
+}
+
+fn read(inner: fn() -> String with HtmlInputElement) -> String {
+    return call(|| inner());
+}
+
+export fn run() with HtmlInputElement {
+    let _ = read(|| focused());
+}
+
+__DATA__
+{
+    "compile_error": ":19:17: analysis error: this function value performs resource 'HtmlInputElement', which the function type it is expected to be does not declare",
+    "compile_error_codes": ["MISSING_EFFECT"]
+}

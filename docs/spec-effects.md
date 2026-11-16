@@ -409,6 +409,32 @@ test {
 }
 ```
 
+A closure holds the resources the types of its captures mention, as a function holds those its signature mentions. So it uses a handle it captured, and narrows one, without performing anything for it, and its type's row lists only what it reaches some other way:
+
+<!-- {"fixture":"spec_effects_narrowing_captured.wado"} -->
+
+```wado
+fn call(f: fn() -> String) -> String {
+    return f();
+}
+
+fn describe(n: Node) -> String {
+    return call(|| match n {                       // captures a Node, so holds it
+        input: HtmlInputElement => input.value(),  // and what it narrows to
+        _ => "",
+    });
+}
+
+test {
+    with HtmlInputElement => &Typed {} do {
+        assert describe(an_input()) == "typed";
+        assert describe(a_node()) == "";
+    }
+}
+```
+
+A tuple `for-of` checks its body once for every element. A closure there holds only the resources its captures mention for each of them.
+
 Apart from a narrowing, nothing a body does adds to what its function holds.
 
 ### Ambient Functions

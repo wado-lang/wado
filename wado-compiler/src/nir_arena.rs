@@ -19,7 +19,6 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::minted_name;
 use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
-use crate::nir_value_graph::builder::ValueGraphBuild;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::nir_visitor::NirRefVisitor;
 use crate::pgo::Heat;
@@ -800,9 +799,6 @@ pub struct Body {
     /// The pure-value pool every [`Operand::Value`] indexes. Maintained in
     /// place; never re-derived from the skeleton.
     pub values: Tracked<ValuePool>,
-    /// The graph build's persisted product. `None` until the first value query
-    /// builds it; never cleared after.
-    pub value_graph: Tracked<Option<ValueGraphBuild>>,
 }
 
 impl Body {
@@ -825,7 +821,7 @@ impl Body {
     /// Its parts' versions: different after any edit, by any route, since a
     /// part's edit count only grows and a part put in place of another carries
     /// an epoch of its own.
-    pub fn version(&self) -> [(u64, u64); 9] {
+    pub fn version(&self) -> [(u64, u64); 8] {
         [
             self.exprs.version(),
             self.stmts.version(),
@@ -835,7 +831,6 @@ impl Body {
             self.locals.version(),
             self.address_taken_locals.version(),
             self.values.version(),
-            self.value_graph.version(),
         ]
     }
 
@@ -1007,7 +1002,6 @@ impl Body {
             locals: Tracked::new(Vec::new()),
             address_taken_locals: Tracked::new(IndexSet::default()),
             values: Tracked::new(ValuePool::new()),
-            value_graph: Tracked::new(None),
         }
     }
 
@@ -1025,9 +1019,6 @@ impl Body {
             locals: Tracked::new(Vec::new()),
             address_taken_locals: Tracked::new(IndexSet::default()),
             values: self.values.clone(),
-            // Scratch clone (niri CTFE): the value graph is a per-function
-            // optimizer artifact and is not carried into a node-only working copy.
-            value_graph: Tracked::new(None),
         }
     }
 
@@ -1899,8 +1890,7 @@ impl Body {
 
     /// Replace every direct operand child of `node` equal to `Operand::Expr(target)`
     /// with `new`, returning whether any slot changed. Used by the engine to promote
-    /// a folded subtree to an `Operand::Value` in its parent (WEP: The Live
-    /// `ValueGraph`).
+    /// a folded subtree to an `Operand::Value` in its parent.
     pub fn replace_operand_to(&mut self, node: NodeRef, target: ExprId, new: Operand) -> bool {
         let mut changed = false;
         self.for_each_operand_mut(node, |o| {

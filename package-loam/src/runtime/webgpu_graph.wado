@@ -726,20 +726,21 @@ impl Graph for WebGpuBackend {
         zero_points: Option<&Placed<u8, [N, Z]>>,
         quantized: &Quantized,
     ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if E::is_f32() {
-            let mut extents = self.extents_of(a);
-            let last = extents.len() - 1;
-            let inner = extents[last];
-            let rows = element_count(&extents) / inner;
-            let operands = with_zero_points(self, [
-                self.reshaped(&self.device_view(a), &([rows, inner] as List<i32>)),
-                self.device_view(packed),
-                self.device_view(scales),
-            ], zero_points);
-            if let Some(out) = self.quantized_product_kernel(&operands, quantized.bits, quantized.block) {
-                extents[last] = out.extents[1];
-                return Placed::Device(self.reshaped(&out, &extents));
-            }
+        // Held once, for the kernel and for the decomposition where it declines.
+        let a = &Placed::<E, In>::Device(self.device_view(a));
+        let mut extents = self.extents_of(a);
+        let last = extents.len() - 1;
+        let inner = extents[last];
+        let rows = element_count(&extents) / inner;
+        let operands = with_zero_points(self, [
+            self.reshaped(&self.device_view(a), &([rows, inner] as List<i32>)),
+            self.device_view(packed),
+            self.device_view(scales),
+        ], zero_points);
+        let half = HalfFloat::of(E::kind());
+        if let Some(out) = self.quantized_product_kernel(&operands, quantized.bits, quantized.block, half) {
+            extents[last] = out.extents[1];
+            return Placed::Device(self.reshaped(&out, &extents));
         }
         return decomposed_product::<WebGpuBackend, E, In, N, Blocks, Blob, Z, Out>(
             self,
@@ -762,14 +763,15 @@ impl Graph for WebGpuBackend {
         quantized: &Quantized,
     ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         // The kernel reads each index as an f32.
-        if E::is_f32() && within_index_bound(indices) {
+        if within_index_bound(indices) {
             let mut extents = self.extents_of(indices);
             let operands = with_zero_points(self, [
                 self.device_view(packed),
                 self.reshaped(&self.device_view(indices), &([element_count(&extents)] as List<i32>)),
                 self.device_view(scales),
             ], zero_points);
-            if let Some(out) = self.quantized_gather_kernel(&operands, quantized.bits, quantized.block) {
+            let half = HalfFloat::of(E::kind());
+            if let Some(out) = self.quantized_gather_kernel(&operands, quantized.bits, quantized.block, half) {
                 extents.push(out.extents[1]);
                 return Placed::Device(self.reshaped(&out, &extents));
             }
