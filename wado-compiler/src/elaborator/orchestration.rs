@@ -13,7 +13,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{
     self, AstId, AstVisitor, Block, Expr, GenericParam, HandleClasses, Item, Module, Pattern, Stmt,
-    Type, declared_handle_classes, declares_unrestricted, walk_expr, walk_stmt, walk_type,
+    Type, declared_handle_classes, declares_extern_handle, walk_expr, walk_stmt, walk_type,
     world_import_of,
 };
 use crate::bail_with;
@@ -259,7 +259,7 @@ fn resolve_resource_extends<H: CompilerHost>(
             reject(
                 clause,
                 format!(
-                    "`extends` requires `#[cm(..., linearity = \"unrestricted\")]` on both resources; `{lacking}` does not declare it"
+                    "`extends` requires `#[cm(..., repr = \"externref\")]` on both resources; `{lacking}` does not declare it"
                 ),
             );
             continue;
@@ -635,7 +635,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 type_params: RealTypeParams::of(&resource_decl.type_params),
                             },
                         );
-                        if declares_unrestricted(&resource_decl.attrs) {
+                        if declares_extern_handle(&resource_decl.attrs) {
                             type_table.borrow_mut().mark_unrestricted_resource(
                                 def,
                                 declared_handle_classes(&resource_decl.attrs),
@@ -943,6 +943,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             CompilerItem::Ref,
             CompilerItem::RefMut,
             CompilerItem::AffineResource,
+            CompilerItem::ExternHandle,
             CompilerItem::AnyBits,
             CompilerItem::Waitable,
         ]) {

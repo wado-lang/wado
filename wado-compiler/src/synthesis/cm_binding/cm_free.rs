@@ -3,6 +3,8 @@
 //! records where they are — nested ones the outer pointer cannot reach included
 //! — and the `synthesize_free_cm_*` pair releases them at either export
 //! boundary. [`cm_shape`] panics on an unrecognised shape rather than leaking.
+//! The slot an extern handle crosses a web import in is owned the same way,
+//! and freed by the same walk.
 
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
@@ -15,7 +17,7 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, expr_stmt, i32_const, if_stmt,
-    let_mut_stmt, let_stmt, linear_free, local_ref, loop_stmt,
+    internal_call, let_mut_stmt, let_stmt, linear_free, local_ref, loop_stmt,
 };
 
 use super::export_adapter::FlatLocal;
@@ -46,12 +48,15 @@ impl CmField {
 /// How a Wado type owns linear memory once lowered to the CM ABI.
 pub(super) enum CmShape {
     /// Owns nothing: integers, floats, `bool`, `char`, unit, an `enum` or
-    /// `flags` discriminant, and every handle.
+    /// `flags` discriminant, and every Component Model handle.
     ///
     /// Handles belong here because lifting *transfers* them to the host, so
     /// dropping one would be a double-drop. `Scalar` means "owns no memory",
     /// never "is four bytes".
     Scalar,
+    /// An extern handle: the `i32` index of the slot it was put in, which is
+    /// the guest's to free once the host has read it (WEP: Extern Handles).
+    ExternSlot,
     /// `string`: `(ptr, len)` at the value's address, `len` bytes at align 1.
     Str,
     /// `list<T>`: `(ptr, len)` at the value's address, elements at
@@ -68,7 +73,7 @@ impl CmShape {
     pub(super) fn owns_memory(&self) -> bool {
         match self {
             CmShape::Scalar => false,
-            CmShape::Str | CmShape::List(_) => true,
+            CmShape::Str | CmShape::List(_) | CmShape::ExternSlot => true,
             CmShape::Record(fields) => fields.iter().any(CmField::owns_memory),
             CmShape::Variant(cases) => cases.iter().flatten().any(CmField::owns_memory),
         }
@@ -78,7 +83,11 @@ impl CmShape {
 /// Classify `ty` by how it owns linear memory at the CM boundary, mirroring the
 /// dispatch of `lower::synthesize_lower_wasi_type_to_memory`.
 pub(super) fn cm_shape(ty: &Type, registry: &CmInterfaceRegistry) -> CmShape {
-    let resolved = registry.resolve_type(ty);
+    if registry.extern_handle(ty).is_some() {
+        return CmShape::ExternSlot;
+    }
+    // An extern handle stays itself, so the walk meets it at any depth.
+    let resolved = registry.value_type(ty);
     let item = registry.type_decls().item_of(&resolved);
     match &resolved {
         Type::Named(_) if item == Some(CompilerItem::String) => CmShape::Str,
@@ -131,7 +140,7 @@ fn named_shape(named: &NamedType, registry: &CmInterfaceRegistry) -> CmShape {
     {
         let field_types: Vec<Type> = fields
             .iter()
-            .map(|(_, _, ty)| registry.resolve_type(ty))
+            .map(|(_, _, ty)| registry.value_type(ty))
             .collect();
         return CmShape::Record(field_list(&field_types, registry));
     }
@@ -200,6 +209,7 @@ pub(super) fn synthesize_free_cm_value(
 ) -> Vec<TirStmt> {
     match shape {
         CmShape::Scalar => vec![],
+        CmShape::ExternSlot => vec![free_extern_slot(load_ptr(addr))],
         CmShape::Str => free_buffer(
             &byte_element(),
             load_ptr(addr),
@@ -288,6 +298,7 @@ fn free_flat(
 ) -> Vec<TirStmt> {
     match shape {
         CmShape::Scalar => vec![],
+        CmShape::ExternSlot => vec![free_extern_slot(slot_i32(slots, base))],
         CmShape::Str => free_buffer(
             &byte_element(),
             slot_i32(slots, base),
@@ -343,6 +354,15 @@ fn byte_element() -> CmField {
     }
 }
 
+fn free_extern_slot(index: TirExpr) -> TirStmt {
+    expr_stmt(internal_call(
+        CompilerItem::ExternSlotFree.attr_name(),
+        vec![index],
+        TypeTable::UNIT,
+    ))
+}
+
+/// The `i32` at `addr`: a buffer's pointer, or a slot's index.
 fn load_ptr(addr: &TirExpr) -> TirExpr {
     builtin_call("i32_load", vec![addr.clone()], TypeTable::I32)
 }

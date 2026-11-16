@@ -1,6 +1,6 @@
 // A resource answers a trait bound through the impl written for it, as a
 // struct does: a generic function and a type pack both accept it.
-#[cm("wasi:demo/dom@0.1.0#node", linearity = "unrestricted", classes = "0..=0")]
+#[cm("wasi:demo/dom@0.1.0#node", linearity = "unrestricted", repr = "externref", classes = "0..=0")]
 resource Node {}
 
 trait Tag with () {
@@ -32,12 +32,12 @@ fn tags<..T: Tag>(xs: [..T]) -> List<i32> {
 }
 
 test "a generic bound accepts a resource" {
-    let node = builtin::black_box(0.0) as Node;
+    let node = builtin::black_box(Node::backed_by(&mut "node"));
     assert tag_of(node) == 1;
 }
 
 test "a type pack mixes a resource with other types" {
-    let node = builtin::black_box(0.0) as Node;
+    let node = builtin::black_box(Node::backed_by(&mut "node"));
     assert tags([node, "text", node]) == [1, 2, 1];
 }
 

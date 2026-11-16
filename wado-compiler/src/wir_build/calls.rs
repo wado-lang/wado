@@ -8,7 +8,7 @@
 use std::array;
 
 use crate::module_source::ModuleSource;
-use crate::name::{MangledName, cm_import_alias};
+use crate::name::{BACKED_HANDLE_CLASS_FIELD, ExternHostQuery, MangledName, cm_import_alias};
 use crate::rarity::Mark;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
@@ -869,6 +869,74 @@ impl FunctionTranslator<'_, '_> {
                 let resource = self.translate_operand(args[0].expr);
                 Some(self.handle_of(resource))
             }
+            "extern_handle_backed_by" => {
+                let class = self
+                    .type_table
+                    .narrowing_classes(type_args[0])
+                    .map_or(0, |classes| i32::from(classes.lo));
+                let value = self.translate_operand(args[0].expr);
+                Some(WirInstr::ExternExternalize(Box::new(self.struct_new(
+                    self.ctx.backed_handle().clone(),
+                    vec![WirInstr::I32Const(class), value],
+                ))))
+            }
+            "extern_handle_is_backed" => {
+                let handle = self.translate_operand(args[0].expr);
+                Some(self.is_backed_handle(handle))
+            }
+            "extern_handle_is_backed_by" => {
+                let backing = self.backing_struct(type_args[1]);
+                let handle_ty = self.wir_type(self.operand_type_id(args[0].expr));
+                let (mut seq, [handle]) = self.spill_operands(args, [handle_ty]);
+                seq.push(WirInstr::If {
+                    condition: Box::new(self.is_backed_handle(handle.clone())),
+                    result: Some(WirType::Bool),
+                    then_body: vec![WirInstr::RefTest {
+                        type_id: backing,
+                        nullable: false,
+                        expr: Box::new(self.backing_of(handle)),
+                    }],
+                    else_body: Some(vec![WirInstr::I32Const(0)]),
+                });
+                Some(WirInstr::Seq(seq))
+            }
+            "extern_handle_backing" => {
+                let handle = self.translate_operand(args[0].expr);
+                Some(WirInstr::RefCast {
+                    type_id: self.backing_struct(type_args[1]),
+                    nullable: false,
+                    expr: Box::new(self.backing_of(handle)),
+                })
+            }
+            "extern_handle_backed_class" => {
+                let handle = self.translate_operand(args[0].expr);
+                Some(self.backed_handle_field(handle, BACKED_HANDLE_CLASS_FIELD, WirType::I32))
+            }
+            "extern_handle_same_backing" => {
+                let [a, b] = [0, 1].map(|i| {
+                    let handle = self.translate_operand(args[i].expr);
+                    Box::new(self.backing_of(handle))
+                });
+                Some(WirInstr::RefEq(a, b))
+            }
+            "closure_as_extern" => {
+                let closure = self.translate_operand(args[0].expr);
+                Some(WirInstr::ExternExternalize(Box::new(closure)))
+            }
+            "extern_as_closure" => {
+                let handle = self.translate_operand(args[0].expr);
+                let (_, closure_struct) = self.canonical_closure_types_of(result_type_id);
+                Some(WirInstr::RefCast {
+                    type_id: closure_struct,
+                    nullable: false,
+                    expr: Box::new(WirInstr::ExternInternalize(Box::new(handle))),
+                })
+            }
+            "extern_handle_host_class" => {
+                Some(self.ask_extern_host(ExternHostQuery::ClassOf, args))
+            }
+            "extern_handle_host_same" => Some(self.ask_extern_host(ExternHostQuery::Same, args)),
+            "extern_promise_wait" => Some(self.ask_extern_host(ExternHostQuery::PromiseWait, args)),
             "swap_handles" => {
                 let box_ty = self.wir_type(self.operand_type_id(args[0].expr));
                 let (mut seq, [a, b]) = self.spill_operands(args, [box_ty.clone(), box_ty]);
@@ -902,6 +970,27 @@ impl FunctionTranslator<'_, '_> {
             }
 
             _ => None,
+        }
+    }
+
+    /// A call of the import that answers `query` about the host objects `args`.
+    /// A program calling no web import holds no such object, and imports
+    /// nothing to ask about one.
+    fn ask_extern_host(&mut self, query: ExternHostQuery, args: &[ArenaCallArg]) -> WirInstr {
+        assert_eq!(
+            args.len(),
+            query.objects() + usize::from(query.takes_address())
+        );
+        if !self.ctx.has_extern_import {
+            return WirInstr::Unreachable;
+        }
+        let func_id = self.ctx.ensure_extern_host_query(query);
+        WirInstr::Call {
+            func_id,
+            args: args
+                .iter()
+                .map(|arg| self.translate_operand(arg.expr))
+                .collect(),
         }
     }
 
@@ -1560,6 +1649,36 @@ impl FunctionTranslator<'_, '_> {
             _ => return None,
         })
     }
+
+    /// The canonical function type and closure struct every closure of the
+    /// function type `fn_type_id` shares, by signature.
+    fn canonical_closure_types_of(&self, fn_type_id: TypeId) -> (WirTypeId, WirTypeId) {
+        let ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } = self.type_table.get(fn_type_id)
+        else {
+            panic!(
+                "[WIR] expected a function type, got {:?}",
+                self.type_table.get(fn_type_id)
+            );
+        };
+        // Unit params are erased from the canonical signature (they have no
+        // Wasm representation); every canonical-key site filters identically.
+        let param_wirs: Vec<WirType> = params
+            .iter()
+            .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
+            .filter(|t| !matches!(t, WirType::Unit))
+            .collect();
+        let result_wirs = self.result_wir_types(*return_type);
+        let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
+        let Some((fn_type, closure_struct, _)) = self.ctx.canonical_closure_types.get(&key) else {
+            panic!("[WIR] canonical closure type not registered for signature {key:?}");
+        };
+        (fn_type.clone(), closure_struct.clone())
+    }
+
     /// Translate `IndirectCall { callee, args }` to `call_ref` through canonical closure.
     pub(super) fn translate_indirect_call(
         &mut self,
@@ -1575,39 +1694,7 @@ impl FunctionTranslator<'_, '_> {
         }
         let callee_wir = self.translate_operand(callee);
         let callee_ty = self.operand_type_id(callee);
-
-        // Look up the Function type to get param/result info
-        let fn_type = self.type_table.get(callee_ty);
-        let (param_types, return_type) = match fn_type {
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => (params.clone(), *return_type),
-            other => panic!(
-                "[WIR] translate_indirect_call: expected Function type, got {other:?} (callee type_id={callee_ty:?})"
-            ),
-        };
-
-        // Compute canonical closure types directly by signature key. Unit
-        // params are erased from the canonical signature (they have no Wasm
-        // representation); every canonical-key site filters identically.
-        let param_wirs: Vec<WirType> = param_types
-            .iter()
-            .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
-            .filter(|t| !matches!(t, WirType::Unit))
-            .collect();
-        let result_wirs = self.result_wir_types(return_type);
-        let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
-        let (fn_type_id, closure_struct_type_id) = if let Some((ftid, stid, _)) =
-            self.ctx.canonical_closure_types.get(&key)
-        {
-            (ftid.clone(), stid.clone())
-        } else {
-            panic!(
-                "[WIR] translate_indirect_call: canonical closure type not registered for signature {key:?}"
-            );
-        };
+        let (fn_type_id, closure_struct_type_id) = self.canonical_closure_types_of(callee_ty);
 
         // Generate a temp local for the callee as canonical closure struct ref
         let temp_name = self.fresh_local("$indirect_call");

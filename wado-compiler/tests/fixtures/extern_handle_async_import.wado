@@ -1,0 +1,47 @@
+// An `async` web import answers a promise of the host's, which its
+// `AsyncCall` holds in place of a Component Model subtask. `wait` hands the
+// promise and the result's buffer to the host, which writes the result there
+// once the promise settles.
+
+#[cm("example:demo/node", linearity = "unrestricted", repr = "externref", classes = "0..=0")]
+resource Node {}
+
+#[cm("example:demo/rejection", linearity = "unrestricted", repr = "externref")]
+resource Rejection {}
+
+#[cm("example:demo/global")]
+interface Dom {
+    #[cm("example:demo/global#load")]
+    async fn load(n: Node) -> AsyncCall<Result<Node, Rejection>>;
+
+    #[cm("example:demo/global#settle")]
+    async fn settle(n: Node) -> AsyncCall<()>;
+
+    #[cm("example:demo/global#root")]
+    fn root() -> Node;
+}
+
+fn ask_the_host() -> bool with (Dom, Subtask) {
+    let n = Dom::root();
+    Dom::settle(n).wait();
+    // A call nobody waits on drops without a result to lift.
+    let _ = Dom::load(n);
+    return Dom::load(n).wait() matches { Ok(_) };
+}
+
+// No host answers under `wado run`, so the calls are compiled and never made.
+export fn run() with (Dom, Subtask) {
+    if builtin::black_box(false) {
+        let _ = ask_the_host();
+    }
+}
+
+__DATA__
+{
+  "skip_os": true,
+  "wat_lines": [
+    { "contains": ["(import \"extern\" \"$example:demo/global#load\"", "(param (ref extern))", "(result (ref extern))"], "count": 1 },
+    { "contains": ["(import \"extern\" \"$example:demo/global#settle\"", "(param (ref extern))", "(result (ref extern))"], "count": 1 },
+    { "contains": ["(import \"extern\" \"$promise-wait\"", "(param (ref extern) i32)"], "count": 1 }
+  ]
+}

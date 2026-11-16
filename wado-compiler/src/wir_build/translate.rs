@@ -16,8 +16,8 @@ use crate::wir::{WirFunction, WirInstr, WirName, WirType, WirTypeDef, WirTypeId}
 use super::context::{SplitParam, WirContext};
 use crate::canonical::CanonicalIntrinsic;
 use crate::name::{
-    CELL_FIELD, MangledName, closure_call_wrapper_name, closure_inspect_wrapper_name,
-    multi_value_split_local,
+    BACKED_HANDLE_VALUE_FIELD, CELL_FIELD, MangledName, RefKind, closure_call_wrapper_name,
+    closure_inspect_wrapper_name, multi_value_split_local,
 };
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
@@ -1807,6 +1807,61 @@ impl FunctionTranslator<'_, '_> {
         self.struct_new(self.ctx.handle_box().clone(), vec![handle])
     }
 
+    /// Whether a guest value backs the extern handle `handle`: no host object
+    /// is a `$BackedHandle`.
+    pub(super) fn is_backed_handle(&self, handle: WirInstr) -> WirInstr {
+        WirInstr::RefTest {
+            type_id: self.ctx.backed_handle().clone(),
+            nullable: false,
+            expr: Box::new(WirInstr::ExternInternalize(Box::new(handle))),
+        }
+    }
+
+    /// Field `field_name` of the struct behind the backed handle `handle`.
+    /// Traps on a host object.
+    pub(super) fn backed_handle_field(
+        &self,
+        handle: WirInstr,
+        field_name: &str,
+        result_ty: WirType,
+    ) -> WirInstr {
+        let backed = self.ctx.backed_handle().clone();
+        WirInstr::StructGet {
+            type_id: backed.clone(),
+            field_name: field_name.to_string(),
+            expr: Box::new(WirInstr::RefCast {
+                type_id: backed,
+                nullable: false,
+                expr: Box::new(WirInstr::ExternInternalize(Box::new(handle))),
+            }),
+            result_ty,
+        }
+    }
+
+    /// The value behind the backed handle `handle`, as the `eqref` it is held as.
+    pub(super) fn backing_of(&self, handle: WirInstr) -> WirInstr {
+        self.backed_handle_field(
+            handle,
+            BACKED_HANDLE_VALUE_FIELD,
+            WirType::AbstractRef {
+                heap_type: WirAbstractHeapType::Eq,
+                nullable: false,
+            },
+        )
+    }
+
+    /// The struct a `&mut T` is, which is what backs a handle a `T` backs.
+    pub(super) fn backing_struct(&self, backing: TypeId) -> WirTypeId {
+        let reference = self
+            .type_table
+            .find_ref(RefKind::Mut, backing)
+            .expect("`ExternHandle::backing` names `&mut T` beside every `T` it asks for");
+        match self.wir_type(reference) {
+            WirType::Ref { type_id, .. } => type_id,
+            other => panic!("a reference to a backing value is a struct, got {other:?}"),
+        }
+    }
+
     /// Whether `op` hands its resource over as an `own`: the box itself, not a
     /// reference to it, which lowers as a `borrow`.
     fn is_owned_handle_box(&self, op: Operand) -> bool {
@@ -2750,9 +2805,6 @@ impl FunctionTranslator<'_, '_> {
             // the passes can add a divergent-width use). Behavior-neutral today
             // (late freeze sets `type_of` to the same type); load-bearing for
             // early promotion.
-            // The width is the storage's, whatever the type: an unrestricted
-            // resource is the `u64` bits of an `f64`, so the zero
-            // `sroa_variant_return` pads its slot with is an `i64`.
             ValueKind::Int(value, int_ty) => match self.wir_type(int_ty) {
                 WirType::I64 | WirType::U64 => WirInstr::I64Const(value as i64),
                 _ => WirInstr::I32Const(value as i32),

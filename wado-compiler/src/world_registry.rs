@@ -24,21 +24,6 @@ use crate::tir::TirFunction;
 /// dynamically from the entry module's `TirTest` declarations).
 pub const TEST_WORLD: &str = "test";
 
-/// The interface every [`CallbackExport`] belongs to.
-pub const CALLBACK_INTERFACE: &str = "wado:callback/callback";
-
-/// An export the host calls a Wado closure back through: `key` names the
-/// closure, and the rest are its arguments at their CM primitive types.
-#[derive(Debug, Clone)]
-pub struct CallbackExport {
-    /// The function name in [`CALLBACK_INTERFACE`] (e.g. `"call-f64"`).
-    pub cm_name: String,
-    /// The core function that lifts it.
-    pub core_func: String,
-    /// `(name, Wado primitive)` per parameter, the key first.
-    pub params: Vec<(String, &'static str)>,
-}
-
 /// An operation of a guest effect a dependency component imports, which the
 /// program answers through its handler: the program's component nests the
 /// dependency and wires its import to a lift of the binding that calls
@@ -54,13 +39,12 @@ pub struct GuestCallback {
     pub wrapper: String,
 }
 
-/// What a compiled component imports, and the callback exports it adds: the
-/// part of its world only the backend knows.
+/// What a compiled component imports: the part of its world only the backend
+/// knows.
 #[derive(Debug, Clone, Default)]
 pub struct WorldSurface {
     /// Every CM interface FQ the component imports.
     pub imports: Vec<String>,
-    pub callbacks: Vec<CallbackExport>,
 }
 
 /// Information about a world export function.

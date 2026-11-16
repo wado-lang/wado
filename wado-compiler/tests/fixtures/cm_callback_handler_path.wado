@@ -3,7 +3,7 @@
 
 use { println, Stdout } from "core:cli";
 
-#[cm("example:demo/target", linearity = "unrestricted", classes = "0..=0")]
+#[cm("example:demo/target", linearity = "unrestricted", repr = "externref", classes = "0..=0")]
 resource Target {
     #[cm("example:demo/target#listen")]
     #[cm_params("self", "listener")]
@@ -25,7 +25,7 @@ struct Mock {
 
 impl Demo for Mock {
     fn target(&mut self) -> Target {
-        resume 0.0 as Target;
+        resume Target::backed_by(self);
     }
 }
 

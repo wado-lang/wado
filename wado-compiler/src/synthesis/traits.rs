@@ -5,7 +5,6 @@
 //! are concrete only once instantiated.
 
 use std::cell::RefCell;
-use std::convert::identity;
 use std::rc::Rc;
 
 use crate::compiler_item::{CompilerItem, CompilerItems};
@@ -31,7 +30,7 @@ use super::common::{
     FormatterWriteStr, deref_expr, make_synthetic_free_function, make_synthetic_method,
     param_local, ref_expr, synth_span, write_str_stmt,
 };
-use crate::ast::{HandleClasses, NamePolicy, Visibility};
+use crate::ast::{NamePolicy, Visibility};
 use crate::defs::DefId;
 use crate::name::{
     FqTraitName, case_construct_helper_name, case_extract_helper_name, case_ref_helper_name,
@@ -3556,8 +3555,8 @@ fn written_cmps(module: &TirModule, tt: &TypeTable) -> Vec<WrittenCmp> {
 
 /// What a derived `Eq` compares, by the kind of declaration it is for.
 enum EqMembers {
-    /// An `enum` or `flags` value, or a handle: one scalar `read` produces.
-    Scalar(TypeId, fn(TirExpr) -> TirExpr),
+    /// An `enum` or `flags` value, or a handle: `same` compares two of it.
+    Scalar(TypeId, fn(TirExpr, TirExpr, Span) -> TirExpr),
     Fields(TypeId, Vec<FieldInfo>),
     Cases(TypeId, Vec<VariantCaseInfo>),
     /// A newtype, whose `==` is its base's, reached through the newtype chain.
@@ -3620,7 +3619,7 @@ fn generate_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>)
             continue;
         }
         let func = match &target.members {
-            &EqMembers::Scalar(ty, read) => {
+            &EqMembers::Scalar(ty, same) => {
                 let ref_type = tt.make_ref(ty);
                 generate_scalar_eq_fn(
                     &target.receiver,
@@ -3629,7 +3628,7 @@ fn generate_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>)
                     ref_type,
                     &eq_trait_name,
                     target.span,
-                    read,
+                    same,
                 )
             }
             EqMembers::Fields(ty, fields) => {
@@ -3680,13 +3679,13 @@ fn eq_targets(
     for e in &module.enums {
         let receiver = FqTypeName::declared(tt.defs(), e.def);
         targets.extend(eq_target(&requested, receiver, Vec::new(), e.span, || {
-            EqMembers::Scalar(tt.make_enum(e.def), identity)
+            EqMembers::Scalar(tt.make_enum(e.def), scalars_equal)
         }));
     }
     for f in &module.flags {
         let receiver = FqTypeName::declared(tt.defs(), f.def);
         targets.extend(eq_target(&requested, receiver, Vec::new(), f.span, || {
-            EqMembers::Scalar(tt.make_flags(f.def), identity)
+            EqMembers::Scalar(tt.make_flags(f.def), scalars_equal)
         }));
     }
     for r in &module.resources {
@@ -3707,7 +3706,7 @@ fn eq_targets(
                     let ids = make_type_param_ids(def, &r.type_params, tt);
                     tt.make_generic_instance(def, ids)
                 };
-                EqMembers::Scalar(ty, common::handle_bits)
+                EqMembers::Scalar(ty, |a, b, _| common::handle_eq(a, b))
             },
         ));
     }
@@ -4530,7 +4529,7 @@ fn generate_fn_inspect_fn(
 }
 
 /// Generate `Inspect` for an opaque handle (a resource, Future, Stream), rendered as `Name#0x<hex>`,
-/// or as `Name { type_id, object_id }` for an unrestricted one.
+/// or as the name of the resource its class names for an extern handle.
 fn generate_opaque_inspect_fn(
     receiver: &FqTypeName,
     type_arg_names: &[FqTypeName],
@@ -4559,7 +4558,7 @@ fn generate_opaque_inspect_fn(
     let body = if let Some(def) = tt.resource_def_of(resource_type)
         && tt.is_unrestricted_resource(def)
     {
-        unrestricted_inspect_body(
+        extern_handle_inspect_body(
             def,
             type_name,
             deref_self,
@@ -4605,9 +4604,9 @@ fn generate_opaque_inspect_fn(
     )
 }
 
-/// `inspect_handle(f, name, h, class)`, where `name` is the resource the
-/// handle's class names: its dynamic type, or `type_name` where no resource does.
-fn unrestricted_inspect_body(
+/// `inspect_handle(f, name)`, where `name` is the resource the handle's class
+/// names: its dynamic type, or `type_name` where the tree numbers no classes.
+fn extern_handle_inspect_body(
     def: DefId,
     type_name: &str,
     handle: TirExpr,
@@ -4616,23 +4615,23 @@ fn unrestricted_inspect_body(
     locals: &mut Vec<TirLocal>,
     tt: &TypeTable,
 ) -> TirBlock {
-    let mut next_local = u32::try_from(locals.len()).expect("a local index is a u32");
-    let handle_local = common::alloc_local(&mut next_local, locals, TypeTable::F64);
-    let class_local = common::alloc_local(&mut next_local, locals, TypeTable::I32);
-    let h = || common::local_ref(handle_local, "$h", TypeTable::F64);
-    let class = || common::local_ref(class_local, "$class", TypeTable::I32);
-    let class_value = if tt.handle_classes(def).is_some() {
-        common::internal_call(
-            CompilerItem::HandleClass.attr_name(),
-            vec![h(), common::f64_const(HandleClasses::STRIDE)],
-            TypeTable::I32,
-        )
-    } else {
-        common::i32_const(-1)
+    let static_name = common::string_lit(type_name, string_type, synth_span());
+    let inspect = |name| {
+        common::expr_stmt(common::internal_call(
+            CompilerItem::InspectHandle.attr_name(),
+            vec![fmt, name],
+            TypeTable::UNIT,
+        ))
     };
-    let name = tt.handle_class_owners(def).fold(
-        common::string_lit(type_name, string_type, synth_span()),
-        |otherwise, (lo, owner)| {
+    if tt.handle_classes(def).is_none() {
+        return common::block(vec![inspect(static_name)]);
+    }
+    let mut next_local = u32::try_from(locals.len()).expect("a local index is a u32");
+    let class_local = common::alloc_local(&mut next_local, locals, TypeTable::I32);
+    let class = || common::local_ref(class_local, "$class", TypeTable::I32);
+    let name = tt
+        .handle_class_owners(def)
+        .fold(static_name, |otherwise, (lo, owner)| {
             let is_owner = common::binary(
                 TirBinaryOp::Eq,
                 class(),
@@ -4649,27 +4648,15 @@ fn unrestricted_inspect_body(
                 string_type,
                 synth_span(),
             )
-        },
-    );
+        });
     common::block(vec![
         common::let_stmt(
-            "$h",
-            handle_local,
-            TypeTable::F64,
-            common::handle_to_f64(handle),
+            "$class",
+            class_local,
+            TypeTable::I32,
+            common::handle_class(handle),
         ),
-        common::let_stmt("$class", class_local, TypeTable::I32, class_value),
-        common::expr_stmt(common::internal_call(
-            CompilerItem::InspectHandle.attr_name(),
-            vec![
-                fmt,
-                name,
-                h(),
-                class(),
-                common::f64_const(HandleClasses::STRIDE),
-            ],
-            TypeTable::UNIT,
-        )),
+        inspect(name),
     ])
 }
 
@@ -4798,6 +4785,19 @@ struct FnSignature {
 
 /// Generate `Name^Eq::eq(&self, &Self) -> bool` for a type that compares as
 /// the scalar `scalar` maps each dereferenced operand to.
+/// `a == b` on two values that are one Wasm scalar each.
+fn scalars_equal(a: TirExpr, b: TirExpr, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Binary {
+            left: Box::new(a),
+            op: TirBinaryOp::Eq,
+            right: Box::new(b),
+        },
+        TypeTable::BOOL,
+        span,
+    )
+}
+
 fn generate_scalar_eq_fn(
     receiver: &FqTypeName,
     impl_type_params: &[TirTypeParam],
@@ -4805,21 +4805,13 @@ fn generate_scalar_eq_fn(
     ref_type: TypeId,
     eq_trait_name: &FqTraitName,
     span: Span,
-    scalar: fn(TirExpr) -> TirExpr,
+    same: fn(TirExpr, TirExpr, Span) -> TirExpr,
 ) -> TirFunction {
     let method_info = trait_method_info(receiver, eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
-    let operand = |index, name| scalar(deref_local(index, name, ref_type, ty, span));
-    let comparison = TirExpr::new(
-        TirExprKind::Binary {
-            left: Box::new(operand(0, "self")),
-            op: TirBinaryOp::Eq,
-            right: Box::new(operand(1, "other")),
-        },
-        TypeTable::BOOL,
-        span,
-    );
+    let operand = |index, name| deref_local(index, name, ref_type, ty, span);
+    let comparison = same(operand(0, "self"), operand(1, "other"), span);
     let body = TirBlock::new(vec![return_stmt(comparison, span)], span);
 
     let mut function = make_synthetic_method(

@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::affine_move_check::check_affine_moves_semantic;
-use crate::ast::{AstIdSpace, Item, declares_unrestricted};
+use crate::ast::{AstIdSpace, Item, declares_extern_handle};
 use crate::compiler_host::{
     CompilerHost, DependencyIndex, Diagnostic, LogLevel, ModuleDir, Severity, SourceError,
     SourceReader,
@@ -142,7 +142,7 @@ fn servable(load: &LoadResult, source: &ModuleSource) -> bool {
         && !module
             .items
             .iter()
-            .any(|item| matches!(item, Item::Resource(decl) if declares_unrestricted(&decl.attrs)))
+            .any(|item| matches!(item, Item::Resource(decl) if declares_extern_handle(&decl.attrs)))
 }
 
 /// Load the modules `key` names from an empty entry beside `load`'s, so they

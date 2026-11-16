@@ -195,13 +195,13 @@ fn an_interface_is_an_unrestricted_resource_with_its_own_cm_interface() {
     let (code, _) = chain().generate();
     assert!(
         code.contains(
-            "#[cm(\"wado-lang:web/event-target\", linearity = \"unrestricted\", classes = \"0..=3\")]\npub resource EventTarget {"
+            "#[cm(\"wado-lang:web/event-target\", linearity = \"unrestricted\", repr = \"externref\", classes = \"0..=3\")]\npub resource EventTarget {"
         ),
         "{code}"
     );
     assert!(
         code.contains(
-            "#[cm(\"wado-lang:web/node\", linearity = \"unrestricted\", classes = \"1..=2\")]\npub resource Node extends EventTarget {"
+            "#[cm(\"wado-lang:web/node\", linearity = \"unrestricted\", repr = \"externref\", classes = \"1..=2\")]\npub resource Node extends EventTarget {"
         ),
         "{code}"
     );
@@ -224,7 +224,7 @@ fn classes_number_the_inheritance_forest_in_pre_order() {
     ] {
         assert!(
             code.contains(&format!(
-                "#[cm(\"wado-lang:web/{resource}\", linearity = \"unrestricted\", classes = \"{classes}\")]"
+                "#[cm(\"wado-lang:web/{resource}\", linearity = \"unrestricted\", repr = \"externref\", classes = \"{classes}\")]"
             )),
             "{resource} should carry {classes}: {code}"
         );
@@ -405,11 +405,9 @@ fn the_global_yields_the_dom_effect_with_its_resource_typed_attributes() {
 
 #[test]
 fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
-    let promise = r#"{"type": "return-type", "extAttrs": [], "generic": "Promise", "nullable": false, "union": false, "idlType": [{"type": "return-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "undefined"}]}"#;
     let union = r#"{"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": true, "idlType": [{"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "DOMString"}, {"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "Node"}]}"#;
     let members = [
         attribute("attributes", &plain("NamedNodeMap"), true),
-        operation("requestFullscreen", promise, &[], ""),
         operation(
             "append",
             &plain("undefined"),
@@ -462,7 +460,6 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
         skipped,
         [
             "Element.attributes: `NamedNodeMap` is outside the slice",
-            "Element.request_fullscreen: `Promise<…>`",
             "Element.append: `nodes`: union of 2 expressible types",
             "Element.prepend: `nodes`: `NodeList` is outside the slice",
             "Element.alert: 2 overloads",
@@ -509,11 +506,169 @@ fn a_variadic_argument_is_a_list_the_glue_spreads() {
         .expect("the slice should transform")
         .glue;
     assert!(
-        glue.contains("  append(self, nodes) {\n    $object(self).append(...Array.from(nodes, (x) => $object(x)));\n  },"),
+        glue.contains(
+            "p0.write($string(p1, p2), ...$list(p3, p4, 8, (at) => \
+             $string($view().getUint32(at, true), $view().getUint32(at + 4, true))));"
+        ),
+        "{glue}"
+    );
+    // A handle in a list is the index of its slot, which the host reads.
+    assert!(
+        glue.contains(
+            "p0.append(...$list(p1, p2, 4, (at) => \
+             $core.exports[$SLOT_GET]($view().getUint32(at, true))));"
+        ),
+        "{glue}"
+    );
+}
+
+fn sequence(generic: &str, element: &str) -> String {
+    format!(
+        r#"{{"type": "return-type", "extAttrs": [], "generic": "{generic}", "nullable": false, "union": false, "idlType": [{element}]}}"#
+    )
+}
+
+#[test]
+fn a_sequence_is_a_list_either_way() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation("path", &sequence("sequence", &plain("Node")), &[], ""),
+            operation("names", &sequence("sequence", &plain("DOMString")), &[], ""),
+            operation(
+                "observe",
+                &plain("undefined"),
+                &[argument(
+                    "targets",
+                    &sequence("sequence", &plain("Node")),
+                    false,
+                    "null",
+                )],
+                "",
+            ),
+            attribute("ports", &sequence("FrozenArray", &plain("long")), true),
+            // A list's element is a scalar, a string or a handle.
+            operation(
+                "nested",
+                &sequence("sequence", &sequence("sequence", &plain("long"))),
+                &[],
+                "",
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(code.contains("fn path(&self) -> List<Node>;"), "{code}");
+    assert!(code.contains("fn names(&self) -> List<String>;"), "{code}");
+    assert!(
+        code.contains("fn observe(&self, targets: List<Node>);"),
+        "{code}"
+    );
+    assert!(code.contains("fn ports(&self) -> List<i32>;"), "{code}");
+    assert_eq!(
+        skipped,
+        ["Element.nested: `sequence` of a list, a nullable type or a callback"]
+    );
+
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    // The host puts each handle it answers in a slot of the guest's.
+    assert!(
+        glue.contains(
+            "const $SLOT_GET = \"$cm_extern_slot_get\";\nconst $SLOT_PUT = \"$cm_extern_slot_put\";"
+        ),
         "{glue}"
     );
     assert!(
-        glue.contains("$object(self).write(prefix, ...text);"),
+        glue.contains(
+            "$putList($ret, $value, 4, 4, (at, item) => {\n          \
+             $view().setUint32(at, $core.exports[$SLOT_PUT](item), true);\n        });"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "$putList($ret, $value, 8, 4, (at, item) => {\n          \
+             $putString(at, item);\n        });"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "p0.observe($list(p1, p2, 4, (at) => \
+             $core.exports[$SLOT_GET]($view().getUint32(at, true))));"
+        ),
+        "{glue}"
+    );
+}
+
+#[test]
+fn a_promise_is_an_async_call_settling_to_a_result() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation("ready", &sequence("Promise", &plain("Node")), &[], ""),
+            operation("lock", &sequence("Promise", &plain("undefined")), &[], ""),
+            operation("title", &sequence("Promise", &plain("DOMString")), &[], ""),
+            // A promise is a member's whole result.
+            operation(
+                "all",
+                &sequence("sequence", &sequence("Promise", &plain("Node"))),
+                &[],
+                "",
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains("async fn ready(&self) -> AsyncCall<Result<Node, Rejection>>;"),
+        "{code}"
+    );
+    assert!(
+        code.contains("async fn lock(&self) -> AsyncCall<Result<(), Rejection>>;"),
+        "{code}"
+    );
+    assert!(
+        code.contains(
+            "#[cm(\"wado-lang:web/rejection\", linearity = \"unrestricted\", repr = \"externref\")]\n\
+             pub resource Rejection {"
+        ),
+        "{code}"
+    );
+    assert!(code.contains("fn message(&self) -> String;"), "{code}");
+    assert_eq!(skipped, ["Element.all: `sequence` of `Promise<…>`"]);
+
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    // The import answers the promise; `wait` has the result written.
+    assert!(
+        glue.contains(
+            "\"$wado-lang:web/element#ready\": (p0) => {\n        \
+             return $settle(p0.ready(), 4, ($ret, $value) => {\n          \
+             $view().setUint32($ret, $core.exports[$SLOT_PUT]($value), true);\n        \
+             });\n      },"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "\"$wado-lang:web/element#lock\": (p0) => {\n        \
+             return $settle(p0.lock(), 4, ($ret, $value) => {\n        });\n      },"
+        ),
+        "{glue}"
+    );
+    assert!(
+        glue.contains("\"$promise-wait\": new WebAssembly.Suspending("),
+        "{glue}"
+    );
+    assert!(
+        glue.contains(
+            "\"$wado-lang:web/rejection#message\": (p0, $ret) => {\n        \
+             const $value = String(p0.message ?? p0);"
+        ),
         "{glue}"
     );
 }

@@ -11,7 +11,7 @@ use std::ops::ControlFlow;
 use crate::compiler_item::CompilerItem;
 use crate::lower::wide_int_literal::{create_conversion, method_ref};
 use crate::primitive::PrimitiveType;
-use crate::synthesis::common::{bare_cast, handle_from_f64, handle_to_f64, rt_call, unary_call};
+use crate::synthesis::common::{bare_cast, rt_call, unary_call};
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, to_layers_of};
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -83,18 +83,6 @@ fn cast_read(
     let inner = match wide_int_cast(type_table, inner, target, span) {
         ControlFlow::Break(lowered) => return lowered,
         ControlFlow::Continue(inner) => inner,
-    };
-    let (from_handle, to_handle) = {
-        let tt = type_table.borrow();
-        (
-            tt.is_unrestricted_handle(inner.type_id),
-            tt.is_unrestricted_handle(target),
-        )
-    };
-    let inner = match (from_handle, to_handle) {
-        (true, false) => handle_to_f64(inner),
-        (false, true) => return handle_from_f64(inner, target),
-        _ => inner,
     };
     bare_cast(inner, target, span)
 }

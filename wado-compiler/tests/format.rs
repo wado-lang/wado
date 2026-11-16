@@ -220,7 +220,7 @@ fn assert_format_preserves_ast(source: &str) {
 #[test]
 fn test_format_keeps_resource_extends() {
     let source = concat!(
-        "#[cm(\"wado-lang:web/node\", linearity=\"unrestricted\")]\n",
+        "#[cm(\"wado-lang:web/node\", linearity=\"unrestricted\",repr=\"externref\")]\n",
         "pub resource Node extends EventTarget {\n",
         "    #[cm(\"wado-lang:web/node#text-content\")]\n",
         "    #[cm_params(\"self\")]\n",
@@ -233,7 +233,7 @@ fn test_format_keeps_resource_extends() {
         "the parent must survive formatting, got:\n{formatted}"
     );
     assert!(
-        formatted.contains("linearity = \"unrestricted\""),
+        formatted.contains("linearity = \"unrestricted\", repr = \"externref\""),
         "the linearity must survive formatting, got:\n{formatted}"
     );
     let again = wado_compiler::format(&formatted).expect("format failed");

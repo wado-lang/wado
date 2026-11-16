@@ -1,5 +1,5 @@
-// An unrestricted handle is `Eq`, so a type holding one compares too.
-#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted")]
+// An extern handle is `Eq`, so a type holding one compares too.
+#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted", repr = "externref")]
 resource Node {}
 
 struct Pair {
@@ -8,8 +8,8 @@ struct Pair {
 }
 
 export fn run() {
-    let a = builtin::black_box(1.0) as Node;
-    let b = builtin::black_box(2.0) as Node;
+    let a = builtin::black_box(Node::backed_by(&mut "a"));
+    let b = builtin::black_box(Node::backed_by(&mut "b"));
     assert Option::Some(a) == Option::Some(a);
     assert Option::Some(a) != Option::Some(b);
     assert Option::Some(a) != null;

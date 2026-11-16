@@ -61,7 +61,7 @@ moment you wonder whether you should.
 mise run test            # check the spec examples, then test Rust crates
 mise run test-e2e        # run the compiler's e2e fixtures
 mise run test-wado       # test the Wado packages, except the stdlib and Gale
-mise run test-stdlib O3  # test the stdlib at one optimization level (CI runs each)
+mise run test-stdlib     # test the stdlib at O2; CI runs the other levels
 mise run test-gale-o2    # test Gale
 mise run check           # run the corpus checks that finish in seconds
 mise run format          # format Rust, Markdown, and Wado files

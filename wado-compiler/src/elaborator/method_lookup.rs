@@ -95,7 +95,7 @@ enum OwedBounds {
 /// The values [`TypeSystem::is_replace_on_assign_place_type`] answers for, which
 /// every refused `&mut` into a larger value names.
 pub(super) const REPLACE_ON_ASSIGN_TYPE: &str =
-    "a replace-on-assign type (primitive, enum, flags, fn, reference)";
+    "a replace-on-assign type (primitive, enum, flags, fn, reference, extern handle)";
 
 /// Shared so the explicit `&mut x.f` and the implicit `&mut self` say
 /// the same thing about the same refusal.

@@ -230,6 +230,9 @@ pub enum CompilerItem {
     FutureWritable,
     /// `Subtask` — the subtask an async import call runs as.
     Subtask,
+    /// `ExternObject` — any extern handle, whatever resource declares it: what
+    /// a closure crosses to a web import as.
+    ExternObject,
     /// `Stream<T>` — the CM stream handle a `stream` type lowers to.
     Stream,
     /// `StreamWritable<T>` — the write end of a CM stream.
@@ -302,6 +305,9 @@ pub enum CompilerItem {
     /// `AffineResource` — sealed marker every affine resource holds, so
     /// `ResourceId::of` takes one and nothing else.
     AffineResource,
+    /// `ExternHandle` — sealed marker every extern handle holds, whose
+    /// methods back a handle with a guest value (WEP: Extern Handles).
+    ExternHandle,
     /// `AnyBits` — sealed marker of a type every bit pattern of its width is a
     /// value of, so `builtin::load` may read one from any bytes.
     AnyBits,
@@ -729,6 +735,18 @@ pub enum CompilerItem {
     CoverageReport,
     /// `core:rt::handle_class`.
     HandleClass,
+    /// `core:rt::handle_eq`.
+    HandleEq,
+    /// `core:rt::handle_identical`.
+    HandleIdentical,
+    /// `core:rt::extern_slot_put`.
+    ExternSlotPut,
+    /// `core:rt::extern_slot_get`.
+    ExternSlotGet,
+    /// `core:rt::extern_slot_take`.
+    ExternSlotTake,
+    /// `core:rt::extern_slot_free`.
+    ExternSlotFree,
     /// `core:rt::inspect_handle`.
     InspectHandle,
     /// `core:rt::memory_to_gc_string`.
@@ -739,10 +757,6 @@ pub enum CompilerItem {
     CmLowerString,
     /// `core:rt::cm_lower_array_u8`.
     CmLowerArrayU8,
-    /// `core:rt::cm_callback_key`.
-    CmCallbackKey,
-    /// `core:rt::cm_callback`.
-    CmCallback,
     /// `core:rt::cm_await_blocked`.
     CmAwaitBlocked,
     /// `core:prelude/types::CopyResult`, how a CM copy ended.
@@ -855,6 +869,7 @@ impl CompilerItem {
         Self::Future,
         Self::FutureWritable,
         Self::Subtask,
+        Self::ExternObject,
         Self::Stream,
         Self::StreamWritable,
         Self::ByteList,
@@ -867,6 +882,7 @@ impl CompilerItem {
         Self::Ref,
         Self::RefMut,
         Self::AffineResource,
+        Self::ExternHandle,
         Self::AnyBits,
         Self::Waitable,
         Self::Copyable,
@@ -1035,13 +1051,17 @@ impl CompilerItem {
         Self::CoverageProbe,
         Self::CoverageReport,
         Self::HandleClass,
+        Self::HandleEq,
+        Self::HandleIdentical,
+        Self::ExternSlotPut,
+        Self::ExternSlotGet,
+        Self::ExternSlotTake,
+        Self::ExternSlotFree,
         Self::InspectHandle,
         Self::MemoryToGcString,
         Self::MemoryToByteList,
         Self::CmLowerString,
         Self::CmLowerArrayU8,
-        Self::CmCallbackKey,
-        Self::CmCallback,
         Self::CmAwaitBlocked,
         Self::CmFutureWriteResult,
         Self::CmCopyCount,
@@ -1141,6 +1161,7 @@ impl CompilerItem {
             Self::Future => "future",
             Self::FutureWritable => "future_writable",
             Self::Subtask => "subtask",
+            Self::ExternObject => "extern_object",
             Self::Stream => "stream",
             Self::StreamWritable => "stream_writable",
             Self::ByteList => "byte_list",
@@ -1153,6 +1174,7 @@ impl CompilerItem {
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
             Self::AffineResource => "affine_resource",
+            Self::ExternHandle => "extern_handle",
             Self::AnyBits => "any_bits",
             Self::Waitable => "waitable",
             Self::Copyable => "copyable",
@@ -1262,13 +1284,17 @@ impl CompilerItem {
             Self::CoverageProbe => "coverage_probe",
             Self::CoverageReport => "coverage_report",
             Self::HandleClass => "handle_class",
+            Self::HandleEq => "handle_eq",
+            Self::HandleIdentical => "handle_identical",
+            Self::ExternSlotPut => "extern_slot_put",
+            Self::ExternSlotGet => "extern_slot_get",
+            Self::ExternSlotTake => "extern_slot_take",
+            Self::ExternSlotFree => "extern_slot_free",
             Self::InspectHandle => "inspect_handle",
             Self::MemoryToGcString => "memory_to_gc_string",
             Self::MemoryToByteList => "memory_to_byte_list",
             Self::CmLowerString => "cm_lower_string",
             Self::CmLowerArrayU8 => "cm_lower_array_u8",
-            Self::CmCallbackKey => "cm_callback_key",
-            Self::CmCallback => "cm_callback",
             Self::CmAwaitBlocked => "cm_await_blocked",
             Self::CmFutureWriteResult => "cm_future_write_result",
             Self::CmCopyCount => "cm_copy_count",
@@ -1378,13 +1404,17 @@ impl CompilerItem {
             | Self::CoverageProbe
             | Self::CoverageReport
             | Self::HandleClass
+            | Self::HandleEq
+            | Self::HandleIdentical
+            | Self::ExternSlotPut
+            | Self::ExternSlotGet
+            | Self::ExternSlotTake
+            | Self::ExternSlotFree
             | Self::InspectHandle
             | Self::MemoryToGcString
             | Self::MemoryToByteList
             | Self::CmLowerString
             | Self::CmLowerArrayU8
-            | Self::CmCallbackKey
-            | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmFutureWriteResult
             | Self::CmCopyCount
@@ -1460,6 +1490,7 @@ impl CompilerItem {
             | Self::Future
             | Self::FutureWritable
             | Self::Subtask
+            | Self::ExternObject
             | Self::Stream
             | Self::StreamWritable
             | Self::ByteList
@@ -1472,6 +1503,7 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::AffineResource
+            | Self::ExternHandle
             | Self::AnyBits
             | Self::Waitable
             | Self::Copyable
@@ -1680,6 +1712,7 @@ impl CompilerItem {
                 // `lower`
                 Self::AssertFailed
                 | Self::FormatterWriteLiteral
+                | Self::HandleIdentical
                 | Self::I128FromF64
                 | Self::I128FromI64
                 | Self::I128FromPair
@@ -1740,13 +1773,17 @@ impl CompilerItem {
             | Self::CoverageProbe
             | Self::CoverageReport
             | Self::HandleClass
+            | Self::HandleEq
+            | Self::HandleIdentical
+            | Self::ExternSlotPut
+            | Self::ExternSlotGet
+            | Self::ExternSlotTake
+            | Self::ExternSlotFree
             | Self::InspectHandle
             | Self::MemoryToGcString
             | Self::MemoryToByteList
             | Self::CmLowerString
             | Self::CmLowerArrayU8
-            | Self::CmCallbackKey
-            | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmFutureWriteResult
             | Self::CmCopyCount
@@ -1794,7 +1831,8 @@ impl CompilerItem {
             | Self::FutureWritable
             | Self::Stream
             | Self::StreamWritable
-            | Self::Subtask => CompilerItemKind::Resource,
+            | Self::Subtask
+            | Self::ExternObject => CompilerItemKind::Resource,
             Self::ByteList | Self::ByteSlice => CompilerItemKind::Newtype,
             Self::Option | Self::Result => CompilerItemKind::Variant,
             Self::Ordering
@@ -1820,6 +1858,7 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::AffineResource
+            | Self::ExternHandle
             | Self::AnyBits
             | Self::Waitable
             | Self::Copyable

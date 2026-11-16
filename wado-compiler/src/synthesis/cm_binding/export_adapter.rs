@@ -11,7 +11,9 @@ use crate::ast::Type;
 use crate::call_args::CallArgs;
 use crate::canonical::CanonicalIntrinsic;
 use crate::cm_abi;
-use crate::component_model::{CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
+use crate::component_model::{
+    CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, EXTERN_HANDLE_AT_EXPORT,
+};
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{cm_export_func_name, cm_post_return_func_name};
@@ -25,10 +27,9 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
-    cm_canonical_call, expr_stmt, handle_from_f64, handle_to_f64, i32_const, if_stmt,
-    internal_call, let_mut_stmt, let_stmt, linear_alloc, linear_free, local_ref, loop_stmt,
-    option_none, option_some, param_local, return_stmt, split_packed_ptr_len, struct_literal,
-    synth_param, synth_span,
+    cm_canonical_call, expr_stmt, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
+    linear_alloc, linear_free, local_ref, loop_stmt, option_none, option_some, param_local,
+    return_stmt, split_packed_ptr_len, struct_literal, synth_param, synth_span,
 };
 
 use super::cm_free::{FlatSlot, cm_shape, synthesize_free_cm_flat, synthesize_free_cm_value};
@@ -39,10 +40,10 @@ use super::lower::synthesize_lower_map_to_buffer;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::lower::{list_element, list_len};
 use super::types::{
-    CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_from_type_id,
-    cm_val_type_to_type_id, cm_zero, coerce_flat_lift, coerce_flat_lower,
-    export_needs_param_lifting, field_access, flat_types_from_type_id, struct_decl_of,
-    type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag, variant_test,
+    CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id,
+    cm_zero, coerce_flat_lift, coerce_flat_lower, export_needs_param_lifting, field_access,
+    flat_types_from_type_id, struct_decl_of, type_id_to_ast_type, variant_decl_of, variant_payload,
+    variant_tag, variant_test,
 };
 use crate::ast::Visibility;
 use crate::cm_abi::layout_tuple_with_registry;
@@ -124,16 +125,20 @@ fn lower_to_flat_inner(
             }]
         }
         _ if ctx.type_table.borrow().is_resource_type(type_id) => {
-            let (scalar, flat_value) = if ctx.type_table.borrow().is_unrestricted_handle(type_id) {
-                (TypeTable::F64, handle_to_f64(value))
-            } else {
-                (TypeTable::I32, cast(value, TypeTable::I32))
-            };
-            let local = alloc_local(next_local, locals, scalar);
-            stmts.push(let_stmt("$flat", local, scalar, flat_value));
+            assert!(
+                !ctx.type_table.borrow().is_extern_handle(type_id),
+                "{EXTERN_HANDLE_AT_EXPORT}"
+            );
+            let local = alloc_local(next_local, locals, TypeTable::I32);
+            stmts.push(let_stmt(
+                "$flat",
+                local,
+                TypeTable::I32,
+                cast(value, TypeTable::I32),
+            ));
             vec![FlatLocal {
                 index: local,
-                cm_type: cm_val_type_from_type_id(scalar),
+                cm_type: cm_abi::CmValType::I32,
             }]
         }
         ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => {
@@ -816,13 +821,11 @@ pub(super) fn synthesize_lift_from_flat_params(
                 }
                 ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => flat(TypeTable::I32),
                 ResolvedType::Resource { .. } => {
+                    assert!(
+                        !type_table_cell.borrow().is_extern_handle(target_type_id),
+                        "{EXTERN_HANDLE_AT_EXPORT}"
+                    );
                     let handle = flat(cm_val_type_to_type_id(flat_types[0]));
-                    if type_table_cell
-                        .borrow()
-                        .is_unrestricted_handle(target_type_id)
-                    {
-                        return (handle_from_f64(handle.0, target_type_id), 1);
-                    }
                     (cast(handle.0, target_type_id), handle.1)
                 }
                 other @ (ResolvedType::Never

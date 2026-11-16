@@ -203,9 +203,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(67)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(68)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from" = fn(ref "Array<core:prelude/types.wado/CopySettlement>") -> [ref "Array<core:prelude/types.wado/CopySettlement>", i32];  // TypeId(68)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from" = fn(ref "Array<core:prelude/types.wado/CopySettlement>") -> [ref "Array<core:prelude/types.wado/CopySettlement>", i32];  // TypeId(69)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(69)
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude/types.wado//CopyBuffer", ref "core:prelude/list.wado//List<u8>");  // TypeId(70)
 
@@ -1430,6 +1430,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
 }
 
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(elements) {
+    let used: i32;
+    used = builtin::array_len(elements);
+    return elements, used;
+}
+
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, alt_prefix, digit_count) {
     let $load_6: i32;
     let $load_17: char;
@@ -1486,12 +1492,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         return "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(alt_prefix, digit_count);
     }
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/From<Array<T#core:prelude/list.wado/2519>>::from"(elements) {
-    let used: i32;
-    used = builtin::array_len(elements);
-    return elements, used;
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>^core:prelude/traits.wado/Drop::drop"($mv$self$buffer, $mv$self$data) {

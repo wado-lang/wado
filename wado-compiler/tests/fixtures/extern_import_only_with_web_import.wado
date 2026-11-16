@@ -1,0 +1,17 @@
+// `AsyncCall::wait` asks the host to settle a promise where the call answered
+// one. Only a web import answers one, so a program calling none imports
+// nothing from the host to ask.
+use { MonotonicClock } from "wasi:clocks";
+
+test "waiting on a subtask" {
+    MonotonicClock::wait_for(1000).wait();
+}
+
+__DATA__
+{
+    "test": {},
+    "skip_os": true,
+    "wat_lines": [
+        { "contains": ["(import \"extern\""], "count": 0 }
+    ]
+}

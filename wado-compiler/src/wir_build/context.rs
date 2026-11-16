@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::MangledName;
+use crate::name::{EXTERN_IMPORT_MODULE, ExternHostQuery, MangledName};
 
 use crate::canonical::CanonicalIntrinsic;
 use crate::module_source::ModuleSource;
@@ -62,6 +62,9 @@ pub struct WirContext<'a> {
     /// place, so a reference to the resource sees a store through another
     /// (WEP: Affine Types). Set while types register, before any is looked up.
     pub handle_box: Option<WirTypeId>,
+    /// The struct behind an extern handle a guest value backs. Set beside
+    /// `handle_box`.
+    pub backed_handle: Option<WirTypeId>,
     /// Each cell struct by [`TypeTable::cell_struct_name`].
     pub cell_type_map: IndexMap<String, WirTypeId>,
     /// What [`TypeTable::holds_affine_resource`] has answered, by type.
@@ -140,6 +143,10 @@ pub struct WirContext<'a> {
 
     /// Available WASI function names (computed during component generation).
     pub available_wasi_funcs: IndexSet<String>,
+
+    /// Whether the program calls a web import. Without one it holds no object
+    /// of the host, so it has nothing to ask the host about.
+    pub has_extern_import: bool,
 
     /// Map from `ModuleSource` to wasm module name (e.g., "mem").
     /// Functions/globals from these modules are extracted into separate wasm core modules.
@@ -297,6 +304,7 @@ impl<'a> WirContext<'a> {
             struct_decls: StructDecls::new(&package.structs),
             wado_types: IndexMap::default(),
             handle_box: None,
+            backed_handle: None,
             cell_type_map: IndexMap::default(),
             affine: TypeMemo::default(),
             variant_case_info: IndexMap::default(),
@@ -330,6 +338,7 @@ impl<'a> WirContext<'a> {
             canonical_inspectable_base_type_id: None,
             wasm_module_sources: IndexMap::<ModuleSource, String>::default(),
             available_wasi_funcs: IndexSet::default(),
+            has_extern_import: false,
             pending_bodies: Vec::new(),
             needed_canonicals: IndexMap::default(),
             multi_value_return_funcs,
@@ -674,6 +683,29 @@ impl<'a> WirContext<'a> {
         func_id
     }
 
+    /// The import that answers `query`, registered where a function first asks.
+    pub fn ensure_extern_host_query(&mut self, query: ExternHostQuery) -> WirFuncId {
+        let name = query.import_name();
+        let key = MangledName::wasi_import(&name);
+        if let Some(func_id) = self.func_map.get(&key) {
+            return func_id.clone();
+        }
+        let mut params = vec![WirType::EXTERN; query.objects()];
+        if query.takes_address() {
+            params.push(WirType::I32);
+        }
+        let results = if query.answers() {
+            vec![WirType::I32]
+        } else {
+            Vec::new()
+        };
+        let type_id = self.register_func_type(format!("functype//wasi/{name}"), params, results);
+        let wir_name = WirName {
+            fq: key.into_string(),
+        };
+        self.register_import_func(EXTERN_IMPORT_MODULE.to_string(), name, type_id, wir_name)
+    }
+
     fn ref_to(type_id: &WirTypeId) -> WirType {
         WirType::non_null_ref(type_id.clone())
     }
@@ -682,6 +714,12 @@ impl<'a> WirContext<'a> {
         self.handle_box
             .as_ref()
             .expect("`$Resource` registers before any type is looked up")
+    }
+
+    pub fn backed_handle(&self) -> &WirTypeId {
+        self.backed_handle
+            .as_ref()
+            .expect("`$BackedHandle` registers before any type is looked up")
     }
 
     /// Convert a TIR `TypeId` to a `WirType`. Registration reserves every
@@ -803,8 +841,8 @@ impl<'a> WirContext<'a> {
             // the same absence `Unit` denotes.
             ResolvedType::Never => WirType::Unit,
             ResolvedType::Resource { .. } => {
-                if type_table.is_unrestricted_handle(type_id) {
-                    self.lookup_wir_type(type_table, TypeTable::U64)?
+                if type_table.is_extern_handle(type_id) {
+                    WirType::EXTERN
                 } else {
                     Self::ref_to(self.handle_box())
                 }

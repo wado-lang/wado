@@ -15,9 +15,7 @@ use crate::pgo::HeatMap;
 use crate::symbol::SymbolTable;
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::{TirModule, TirTest};
-use crate::world_registry::{
-    self, CallbackExport, ExportMappings, GuestCallback, WorldInfo, WorldRegistry,
-};
+use crate::world_registry::{self, ExportMappings, GuestCallback, WorldInfo, WorldRegistry};
 use std::sync::Arc;
 
 /// A Wado package in per-module form.
@@ -91,8 +89,10 @@ pub struct Package {
     /// `export_binding_names`; absent for every other export, which gets no
     /// `post-return` canonical option.
     pub post_return_binding_names: IndexMap<String, String>,
-    /// One per closure signature an import takes. Populated by `synthesis::cm_binding`.
-    pub callback_exports: Vec<CallbackExport>,
+    /// The entry module's functions a host of the web imports calls, to call
+    /// a closure back or to reach an extern handle's slot: core exports the
+    /// component does not lift. Populated by `synthesis::cm_binding`.
+    pub host_core_exports: Vec<String>,
     /// The guest-effect interfaces a provider component satisfies, which no
     /// handler of the program answers.
     pub provided_import_fqs: IndexSet<String>,
@@ -205,7 +205,7 @@ impl Package {
             // CM export adapter mapping
             export_binding_names: IndexMap::default(),
             post_return_binding_names: IndexMap::default(),
-            callback_exports: Vec::new(),
+            host_core_exports: Vec::new(),
             provided_import_fqs: IndexSet::default(),
             guest_callbacks: Vec::new(),
             // Wasm assets loaded from `use _ from "<path>" with { type: ... }`

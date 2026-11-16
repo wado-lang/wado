@@ -1,10 +1,10 @@
 // A type pattern inside a closure narrows for the closure's own body, and the
 // local it holds the handle in is the closure's.
 
-#[cm("example:demo/dom#node", linearity = "unrestricted", classes = "0..=1")]
+#[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
 resource Node {}
 
-#[cm("example:demo/dom#input", linearity = "unrestricted", classes = "1..=1")]
+#[cm("example:demo/dom#input", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
 resource HtmlInputElement extends Node {
     #[cm("example:demo/dom#input-value")]
     fn value(&self) -> String;
@@ -48,12 +48,10 @@ impl HtmlInputElement for Typed {
     }
 }
 
-// A handle is `class * 2^37 + index`: class 0 is a plain `Node`, class 1 an
-// `HtmlInputElement`.
 fn a_node() -> Node {
-    return builtin::black_box(1.0) as Node;
+    return builtin::black_box(Node::backed_by(&mut Typed {}));
 }
 
 fn an_input() -> Node {
-    return builtin::black_box(137438953472.0 + 1.0) as Node;
+    return builtin::black_box(HtmlInputElement::backed_by(&mut Typed {}));
 }

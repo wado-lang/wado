@@ -1,13 +1,13 @@
 // A generic type is invariant: an `Option` of a child is not an `Option` of
 // its parent.
 
-#[cm("example:dom/node", linearity = "unrestricted", classes = "0..=2")]
+#[cm("example:dom/node", linearity = "unrestricted", repr = "externref", classes = "0..=2")]
 resource Node {}
 
-#[cm("example:dom/element", linearity = "unrestricted", classes = "1..=2")]
+#[cm("example:dom/element", linearity = "unrestricted", repr = "externref", classes = "1..=2")]
 resource Element extends Node {}
 
-#[cm("example:dom/html-input-element", linearity = "unrestricted", classes = "2..=2")]
+#[cm("example:dom/html-input-element", linearity = "unrestricted", repr = "externref", classes = "2..=2")]
 resource HtmlInputElement extends Element {}
 
 fn widen(input: HtmlInputElement) {

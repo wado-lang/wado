@@ -58,6 +58,10 @@ This makes the web bindings the right pilot for unrestricted resources. The blas
 
 ### `resource extends` is gated on `unrestricted` (v1)
 
+> Superseded in part by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md#repr--externref-declares-an-extern-handle):
+> `extends` is gated on `repr = "externref"`, which itself requires
+> `unrestricted`.
+
 In v1, `resource X extends Y { ... }` is permitted **only when `X` and `Y` are both unrestricted**.
 
 The reason is mechanical, not philosophical: an upcast hands out a second name for one handle, which is a copy. An unrestricted handle may be copied, so `HTMLInputElement` and the same value typed as `Element` are the identical wasm value, differing only in Wado's static type witness; upcast is a no-op and narrowing reads the class the host tagged that one value with. An affine handle may not be copied at all — with CM `resource` handles the two are distinct entries in distinct tables, so every cast becomes a host call that mints a handle the caller then owes a drop on.
@@ -85,6 +89,10 @@ Concretely:
   [Resource Ownership](./wep-2026-05-21-resource-ownership.md), `Waitable`, has never had: its value semantics is inferred today from the absence of a `dtor`, and nothing in the declaration says so.
 
 ### Why the field names linearity, not representation
+
+> Superseded in part by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md#repr--externref-declares-an-extern-handle):
+> the two axes stay apart, and the representation gets a field of its own,
+> `repr`.
 
 Linearity is what the compiler enforces. Whether a handle may be copied decides
 the move check, the cleanup pass, and whether `extends` is possible at all.
@@ -506,6 +514,10 @@ exception.
 
 #### Host runtime contract
 
+> Superseded by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md):
+> the handle becomes an `externref`, and the class is read from a minted handle
+> or asked of the host. The class numbering stands.
+
 A handle is a number the host mints, `class * 2^37 + index`: an integer-valued
 `f64` below 2^53, holding a 16-bit class and a 37-bit index into the host's
 object table. It is never a NaN and never takes part in arithmetic; the guest
@@ -577,6 +589,9 @@ Four interactions need explicit rules. Effects have one more, stated in §"Narro
 
 #### `Eq` is auto-derived as reference equality
 
+> Superseded in part by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md#-is-identity):
+> equality is still identity, but it is no longer a compare of bits.
+
 Every unrestricted resource auto-derives `Eq`, so a type holding one derives it as well. Two handles compare equal iff they reference the same host object — JavaScript's `===` semantics for the browser case.
 
 `Eq` compares the bits of the two handles. The host interns handles, and an object's class never changes, so two handles are equal exactly when they name one object. No host call is made.
@@ -588,6 +603,9 @@ Cross-type comparison falls out of subtyping. `el == html_input` is well-typed w
 `Ord` is **not** auto-derived. Resources have no natural ordering and the host has no obligation to define one.
 
 #### `Inspect` shows the dynamic type, `Display` asks the host
+
+> Superseded in part by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md#narrowing-asks-for-the-class-once):
+> `Inspect` still names the dynamic type, with no index beside it.
 
 Debug output is most useful when it shows what is really there. So `Inspect` (`${x:?}` / `${x:#?}`) renders the dynamic type, not the static one. The handle carries its class, and the class names one resource in the tree:
 
@@ -637,6 +655,10 @@ Coming from languages where `Option` is covariant (Scala, Kotlin's nullable type
 This is deliberate. Wado does not special-case a container or a constructor to make an upcast fit. The consistency comes from rules Wado already has: aggregates are invariant, type parameters are solved to the most specific type, and `as` converts a value explicitly.
 
 ### Lowering
+
+> Superseded by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md):
+> the handle is an `externref`, and an import that takes one is a core import
+> rather than a canonical ABI one. The erasure to one type stands.
 
 How `extends` and the operations on it lower from Wado to WIT/CM, and from WIT/CM to wasm. The recurring pattern is **erasure at the CM layer**: extends-related Wado types collapse to a single CM resource type, with method namespacing carrying the only distinction the host needs.
 
@@ -755,9 +777,9 @@ Implemented, with tests in `wado-compiler/tests/integration/unrestricted_resourc
 - The registry reads that newtype two ways. `resolve_type` peels the handle to its `f64`, the view the boundary decides with: the flat ABI, the canonical options, the emitted WIT. `value_type` keeps the resource's own type, the view the guest holds. A binding's signature takes the second, because `Option<Element>` and `Option<f64>` are distinct GC types (`tests/integration/web_dom.rs`). A module outside the stdlib declares such a resource as the stdlib would: it is not a local newtype, so no instance exports it as a named type.
 
 - Type patterns. `p: T` is a pattern wherever one stands, and a `let` annotation is that pattern. An ascription `T` strictly extending the subject's type narrows: a plain `let` rejects it as refutable, and a `match` over one needs a final `_` and reports an arm an earlier ancestor arm shadows. The test compares the handle against `T`'s class range, and a target without `classes` is rejected.
-- `Eq`. `==` / `!=` on two handles one of whose types extends the other compares their bits (`tests/fixtures/unrestricted_handle_bits.wado`). The trait holds of every unrestricted resource, so `Option<Node>` or a struct holding one derives it too (`tests/fixtures/resource_eq_through_option.wado`).
-- `as` between a handle and anything but `f64` or a handle type it upcasts to is rejected (`tests/fixtures/error_unrestricted_resource_cast.wado`).
-- `Inspect` renders the dynamic type (`tests/fixtures/inspect_unrestricted_handle.wado`).
+- `Eq`. `==` / `!=` compares two handles one of whose types extends the other, as [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md) now defines it (`tests/fixtures/extern_handle_backed.wado`). The trait holds of every unrestricted resource, so `Option<Node>` or a struct holding one derives it too (`tests/fixtures/resource_eq_through_option.wado`).
+- `as` between a handle and anything but a handle type it upcasts to is rejected (`tests/fixtures/error_extern_handle_cast.wado`).
+- `Inspect` renders the dynamic type (`tests/fixtures/inspect_extern_handle.wado`).
 
 Not built:
 
@@ -767,6 +789,9 @@ Not built:
 - A parent declared by a prebuilt module. The collect pass skips what the stdlib snapshot covers, so a snapshot parent reaches validation without its method names or its arity; rather than accept what it cannot check, the compiler rejects the clause. A dependency package declaring an unrestricted resource is never snapshotted, so `wado-lang:web` never reaches it.
 
 ### Known gap: the handle is an index, not a reference
+
+> Superseded by [WEP: Extern Handles](./wep-2026-11-14-extern-handles.md),
+> which closes this gap by leaving the canonical ABI for these imports.
 
 An extern-handle would rather be a Wasm GC `externref`: the collector would reclaim it, and the host table would disappear along with the leak above. The WIR already carries the type (`WirAbstractHeapType::Extern`), so the guest side is not what blocks it.
 

@@ -7,9 +7,9 @@ use crate::ast::{
     AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
     CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
     CmResourceLinearity, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ConditionElement, ContinueStmt, EFFECT_HOLE, EffectHandlerBinding, EffectName, EffectsSource,
-    EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, ExportTarget, Expr, ExprStmt,
-    FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
+    ConditionElement, ContinueStmt, EFFECT_HOLE, EXTERNREF_REPR, EffectHandlerBinding, EffectName,
+    EffectsSource, EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, ExportTarget, Expr,
+    ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
     FunctionType, GenericParam, GenericType, GlobalDecl, HandleClasses, IdentExpr, IfExpr,
     ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
     LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MAX_GENERIC_PARAMS, MatchArm,
@@ -7683,6 +7683,7 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
         };
         let mut linearity = None;
         let mut classes = None;
+        let mut extern_handle = false;
         for field in fields {
             let AttrArg::KeyValue(key, value) = field else {
                 return Err(
@@ -7711,17 +7712,40 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
                         return Err("#[cm] takes one `classes` field".to_string());
                     }
                 }
+                "repr" => {
+                    if value != EXTERNREF_REPR {
+                        return Err(format!(
+                            "unknown #[cm] repr `{value}`; expected \"{EXTERNREF_REPR}\""
+                        ));
+                    }
+                    if std::mem::replace(&mut extern_handle, true) {
+                        return Err("#[cm] takes one `repr` field".to_string());
+                    }
+                }
                 _ => {
                     return Err(format!(
-                        "unknown #[cm] field `{key}`; the fields are `linearity` and `classes`"
+                        "unknown #[cm] field `{key}`; the fields are `linearity`, `repr` and `classes`"
                     ));
                 }
             }
         }
-        if classes.is_some() && linearity != Some(CmResourceLinearity::Unrestricted) {
+        let unrestricted = linearity == Some(CmResourceLinearity::Unrestricted);
+        if extern_handle && !unrestricted {
             return Err(
-                "#[cm] `classes` numbers the handles of an unrestricted resource; \
+                "#[cm] `repr = \"externref\"` is reclaimed by the collector, with no drop to run; \
                  it needs `linearity = \"unrestricted\"` beside it"
+                    .to_string(),
+            );
+        }
+        if classes.is_some() && !extern_handle {
+            return Err("#[cm] `classes` numbers the handles of an extern handle; \
+                 it needs `repr = \"externref\"` beside it"
+                .to_string());
+        }
+        if unrestricted && !extern_handle {
+            return Err(
+                "#[cm] `linearity = \"unrestricted\"` has no representation of its own; \
+                 it needs `repr = \"externref\"` beside it"
                     .to_string(),
             );
         }
@@ -7926,7 +7950,7 @@ mod tests {
     use super::*;
     use crate::ast::{
         AstVisitor, ConditionElement, EffectHandlerBinding, Item, Visibility,
-        declared_handle_classes, written_params,
+        declared_handle_classes, declares_extern_handle, written_params,
     };
     use crate::lexer::lex;
     use crate::name::INTERNAL_PREFIX;
@@ -8428,7 +8452,7 @@ mod tests {
     #[test]
     fn resource_declares_a_parent() {
         let source = r#"
-            #[cm("wado-lang:web/node", linearity="unrestricted")]
+            #[cm("wado-lang:web/node", linearity="unrestricted", repr="externref")]
             pub resource Node extends EventTarget {}
         "#;
         let module = parse(source).unwrap();
@@ -8463,7 +8487,7 @@ mod tests {
     #[test]
     fn cm_attribute_carries_a_resource_linearity() {
         let source = r#"
-            #[cm("wado-lang:web/element", linearity="unrestricted")]
+            #[cm("wado-lang:web/element", linearity="unrestricted", repr="externref")]
             pub resource Element {}
         "#;
         let module = parse(source).unwrap();
@@ -8528,7 +8552,7 @@ mod tests {
     #[test]
     fn cm_attribute_rejects_a_repeated_linearity_field() {
         let source = r#"
-            #[cm("wado-lang:web/element", linearity="unrestricted", linearity="affine")]
+            #[cm("wado-lang:web/element", linearity="unrestricted", repr="externref", linearity="affine")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
@@ -8556,7 +8580,7 @@ mod tests {
     #[test]
     fn cm_attribute_carries_handle_classes() {
         let source = r#"
-            #[cm("wado-lang:web/element", linearity="unrestricted", classes="2..=4")]
+            #[cm("wado-lang:web/element", linearity="unrestricted", repr="externref", classes="2..=4")]
             pub resource Element {}
         "#;
         let module = parse(source).unwrap();
@@ -8573,7 +8597,7 @@ mod tests {
     fn cm_attribute_rejects_malformed_classes() {
         for classes in ["4..=2", "1..3", "0..=65536", "a..=b", "", "1..=1..=2"] {
             let source = format!(
-                "#[cm(\"wado-lang:web/element\", linearity=\"unrestricted\", classes=\"{classes}\")]\n\
+                "#[cm(\"wado-lang:web/element\", linearity=\"unrestricted\", repr=\"externref\", classes=\"{classes}\")]\n\
                  pub resource Element {{}}"
             );
             let err = parse(&source).unwrap_err();
@@ -8586,7 +8610,7 @@ mod tests {
     }
 
     #[test]
-    fn cm_attribute_classes_need_an_unrestricted_resource() {
+    fn cm_attribute_classes_need_an_extern_handle() {
         for linearity in ["", ", linearity=\"affine\""] {
             let source = format!(
                 "#[cm(\"wado-lang:web/element\"{linearity}, classes=\"0..=0\")]\n\
@@ -8594,17 +8618,97 @@ mod tests {
             );
             let err = parse(&source).unwrap_err();
             assert!(
-                err.message.contains("linearity = \"unrestricted\""),
-                "expected classes without unrestricted rejected, got: {}",
+                err.message.contains("`classes`") && err.message.contains("repr = \"externref\""),
+                "expected classes without an extern handle rejected, got: {}",
                 err.message
             );
         }
     }
 
     #[test]
+    fn cm_attribute_carries_an_extern_handle_repr() {
+        let source = r#"
+            #[cm("wado-lang:web/element", linearity="unrestricted", repr="externref")]
+            pub resource Element {}
+            #[cm("wasi:http/types@0.3.0#request")]
+            pub resource Request {}
+        "#;
+        let module = parse(source).unwrap();
+        let declared: Vec<bool> = module
+            .items
+            .iter()
+            .map(|item| match item {
+                Item::Resource(decl) => declares_extern_handle(&decl.attrs),
+                _ => panic!("expected resource declaration"),
+            })
+            .collect();
+        assert_eq!(declared, [true, false]);
+    }
+
+    #[test]
+    fn cm_attribute_rejects_an_unknown_repr() {
+        let source = r#"
+            #[cm("wado-lang:web/element", linearity="unrestricted", repr="i32")]
+            pub resource Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("`i32`") && err.message.contains("\"externref\""),
+            "expected the allowed value in the message, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_repr_needs_an_unrestricted_resource() {
+        for linearity in ["", ", linearity=\"affine\""] {
+            let source = format!(
+                "#[cm(\"wado-lang:web/element\"{linearity}, repr=\"externref\")]\n\
+                 pub resource Element {{}}"
+            );
+            let err = parse(&source).unwrap_err();
+            assert!(
+                err.message.contains("repr = \"externref\"")
+                    && err.message.contains("linearity = \"unrestricted\""),
+                "expected an extern handle that is not unrestricted rejected, got: {}",
+                err.message
+            );
+        }
+    }
+
+    #[test]
+    fn cm_attribute_unrestricted_needs_a_repr() {
+        let source = r#"
+            #[cm("wado-lang:web/element", linearity="unrestricted")]
+            pub resource Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("linearity = \"unrestricted\"")
+                && err.message.contains("repr = \"externref\""),
+            "expected an unrestricted resource with no representation rejected, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_rejects_a_repeated_repr() {
+        let source = r#"
+            #[cm("wado-lang:web/element", linearity="unrestricted", repr="externref", repr="externref")]
+            pub resource Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("one `repr` field"),
+            "a second repr must not be silently dropped, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
     fn cm_attribute_rejects_repeated_classes() {
         let source = r#"
-            #[cm("wado-lang:web/element", linearity="unrestricted", classes="0..=1", classes="0..=2")]
+            #[cm("wado-lang:web/element", linearity="unrestricted", repr="externref", classes="0..=1", classes="0..=2")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
@@ -8618,7 +8722,7 @@ mod tests {
     #[test]
     fn cm_attribute_linearity_belongs_on_a_resource() {
         let source = r#"
-            #[cm("wado-lang:web/element", linearity="unrestricted")]
+            #[cm("wado-lang:web/element", linearity="unrestricted", repr="externref")]
             pub struct Element {}
         "#;
         let err = parse(source).unwrap_err();

@@ -27,11 +27,14 @@ use crate::demanded_imports;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::import_check::KILN_TYPES_INTERFACE;
 use crate::loader::WasmAsset;
+use crate::name::EXTERN_IMPORT_MODULE;
 use crate::nir_package::NirPackage;
 use crate::synthesis::cm_binding::types::kebab_to_pascal;
 use crate::test_names::{SECTION_NAME, encode};
 use crate::token::Span;
-use crate::wir::{ImportEntry, ImportKind, WirPackage};
+use crate::wir::{
+    ImportEntry, ImportKind, WirAbstractHeapType, WirImportDesc, WirPackage, WirScalarKind, WirType,
+};
 use crate::wir_build::component_plan::{CmExportType, ComponentPlan, WorldExportPlan};
 use crate::world_registry::fq_name_package;
 use crate::{ProviderComponent, ast};
@@ -397,12 +400,17 @@ pub fn build_component(
         wasm_namespace_instances.push((namespace.clone(), instance));
     }
 
+    let extern_instance = embed_extern_import_stubs(&mut builder, &mut ctx, wir_package);
+
     // Instantiate core module
     ctx.register_core_instance("main");
     let mut main_args: Vec<(&str, ModuleArg)> = vec![
         ("wasi", ModuleArg::Instance(wasi_instance)),
         ("mem", ModuleArg::Instance(mem_instance)),
     ];
+    if let Some(instance) = extern_instance {
+        main_args.push((EXTERN_IMPORT_MODULE, ModuleArg::Instance(instance)));
+    }
     for (namespace, instance) in &wasm_namespace_instances {
         main_args.push((namespace.as_str(), ModuleArg::Instance(*instance)));
     }
@@ -747,6 +755,91 @@ fn embed_imported_wasm_modules(
             );
         }
     }
+}
+
+/// Satisfy the main module's extern imports inside the component, with a core
+/// module whose every function traps. An `externref` cannot cross the canonical
+/// ABI, so no component import can provide them: the web loader instantiates the
+/// main module itself and supplies the real ones. Returns the instance, or
+/// `None` when the program imports none.
+fn embed_extern_import_stubs(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    wir_package: &WirPackage,
+) -> Option<u32> {
+    use wasm_encoder::{
+        AbstractHeapType, CodeSection, ExportSection, Function, FunctionSection, HeapType, Module,
+        RefType, TypeSection, ValType,
+    };
+
+    let val_type = |ty: &WirType| match ty.scalar_kind() {
+        Some(WirScalarKind::I32) => ValType::I32,
+        Some(WirScalarKind::I64) => ValType::I64,
+        Some(WirScalarKind::F32) => ValType::F32,
+        Some(WirScalarKind::F64) => ValType::F64,
+        Some(WirScalarKind::V128) => unreachable!("no canonical ABI type flattens to v128"),
+        None => {
+            let WirType::AbstractRef {
+                heap_type: WirAbstractHeapType::Extern,
+                nullable,
+            } = ty
+            else {
+                unreachable!("an extern import takes numbers and extern handles, not {ty:?}");
+            };
+            ValType::Ref(RefType {
+                nullable: *nullable,
+                heap_type: HeapType::Abstract {
+                    shared: false,
+                    ty: AbstractHeapType::Extern,
+                },
+            })
+        }
+    };
+
+    let mut types = TypeSection::new();
+    let mut functions = FunctionSection::new();
+    let mut exports = ExportSection::new();
+    let mut code = CodeSection::new();
+    for import in &wir_package.imports {
+        let WirImportDesc::Func { type_id, .. } = &import.desc else {
+            continue;
+        };
+        if import.module != EXTERN_IMPORT_MODULE {
+            continue;
+        }
+        let index = functions.len();
+        let signature = wir_package.types[type_id.index() as usize].expect_func();
+        types.ty().function(
+            signature.params.iter().map(val_type),
+            signature.results.iter().map(val_type),
+        );
+        functions.function(index);
+        exports.export(&import.field, ExportKind::Func, index);
+        let mut body = Function::new([]);
+        body.instructions().unreachable().end();
+        code.function(&body);
+    }
+    if functions.is_empty() {
+        return None;
+    }
+
+    let mut module = Module::new();
+    module
+        .section(&types)
+        .section(&functions)
+        .section(&exports)
+        .section(&code);
+
+    ctx.register_core_module("extern-stubs");
+    builder.core_module_raw(Some("extern-stubs"), &module.finish());
+    let no_args: [(&str, ModuleArg); 0] = [];
+    let instance = builder.core_instantiate(
+        Some("extern-stubs"),
+        ctx.core_module_idx("extern-stubs"),
+        no_args,
+    );
+    ctx.register_core_instance("extern-stubs");
+    Some(instance)
 }
 
 /// Build the `future<result<_, error-code>>` type for one `ErrorCode`

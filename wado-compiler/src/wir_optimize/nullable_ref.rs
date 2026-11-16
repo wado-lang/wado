@@ -7,9 +7,7 @@
 
 use crate::hashmap::IndexMap;
 use crate::name::{VARIANT_DISCRIMINANT_FIELD, is_variant_payload_field};
-use crate::wir::{
-    WirAbstractHeapType, WirInstr, WirPackage, WirType, WirTypeDef, WirVariantCase, WirVariantRepr,
-};
+use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirVariantCase, WirVariantRepr};
 
 /// Lower eligible variants to the `NullableRef` representation. Mandatory at every
 /// `-O` — not gated like the optimization passes.
@@ -41,7 +39,7 @@ pub(super) fn lower_nullable_refs(module: &mut WirPackage) {
             .expect_func()
             .results
             .iter()
-            .map(|r| matches!(r, WirType::Ref { nullable: true, .. }))
+            .map(WirType::is_nullable_ref)
             .collect();
         if let Some(body) = &mut func.body {
             transform_body(body, &module.types, &vci, &nullable_map);
@@ -276,9 +274,9 @@ fn transform_instr(
         WirInstr::StructNew { type_id, fields } => {
             // Pattern 1: case struct type.
             if let Some(&(variant_idx, case_idx)) = vci.get(&type_id.index())
-                && let Some(&(payload_case, _)) = nullable_map.get(&variant_idx)
+                && let Some((payload_case, nullable_payload)) = nullable_map.get(&variant_idx)
             {
-                if case_idx == payload_case {
+                if case_idx == *payload_case {
                     // Payload case: replace with the payload expression directly.
                     // fields = [I32Const(case_idx), payload_expr]
                     // First recurse into the payload expression, then lift it.
@@ -291,20 +289,18 @@ fn transform_instr(
                     }
                     return;
                 } else {
-                    // Unit case: replace with ref.null none.
-                    *instr = WirInstr::RefNull {
-                        heap_type: WirAbstractHeapType::None,
-                    };
+                    // Unit case: the null of the payload's hierarchy.
+                    *instr = nullable_payload.default_value();
                     return;
                 }
             }
             // Pattern 2: variant BASE type (fallback path in translate_variant_construct).
             // The discriminant is the first field (I32Const).
-            if let Some(&(payload_case, _)) = nullable_map.get(&type_id.index())
+            if let Some((payload_case, nullable_payload)) = nullable_map.get(&type_id.index())
                 && let Some(WirInstr::I32Const(disc)) = fields.first()
             {
                 let disc = u32::try_from(*disc).unwrap_or(u32::MAX);
-                if disc == payload_case {
+                if disc == *payload_case {
                     // Payload case: emit payload (second field).
                     if fields.len() >= 2 {
                         transform_instr(&mut fields[1], types, vci, nullable_map);
@@ -314,10 +310,7 @@ fn transform_instr(
                         *instr = WirInstr::Unreachable;
                     }
                 } else {
-                    // Unit case: replace with ref.null none.
-                    *instr = WirInstr::RefNull {
-                        heap_type: WirAbstractHeapType::None,
-                    };
+                    *instr = nullable_payload.default_value();
                 }
                 return;
             }
@@ -332,13 +325,7 @@ fn transform_instr(
                     st.fields
                         .iter()
                         .enumerate()
-                        .filter_map(|(i, f)| {
-                            if matches!(f.ty, WirType::Ref { nullable: true, .. }) {
-                                Some(i)
-                            } else {
-                                None
-                            }
-                        })
+                        .filter_map(|(i, f)| f.ty.is_nullable_ref().then_some(i))
                         .collect()
                 } else {
                     Vec::new()
@@ -476,8 +463,7 @@ fn transform_instr(
             let WirTypeDef::Struct(st) = &types[type_id.index() as usize] else {
                 panic!("struct.set names a non-struct type");
             };
-            let field_is_nullable =
-                matches!(st.field(field_name).ty, WirType::Ref { nullable: true, .. });
+            let field_is_nullable = st.field(field_name).ty.is_nullable_ref();
             if field_is_nullable && let WirInstr::RefAsNonNull(inner) = value.as_mut() {
                 let inner_val = std::mem::replace(inner.as_mut(), WirInstr::Nop);
                 **value = inner_val;

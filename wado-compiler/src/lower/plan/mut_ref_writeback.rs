@@ -11,6 +11,7 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::logger::{Bail, ErrorSink};
+use crate::synthesis::common::{handle_identical, not_expr};
 use crate::tir::{
     LetStorage, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId,
@@ -626,17 +627,24 @@ impl WriteBack<'_> {
                 )),
                 span,
             ));
+            // An `externref` has no `ref.eq`: its identity is the host's to
+            // answer, unless a guest value backs it.
+            let replaced = if self.type_table.is_externref(temp.type_id) {
+                not_expr(handle_identical(temp.read(), before.read()), span)
+            } else {
+                TirExpr::new(
+                    TirExprKind::Binary {
+                        left: Box::new(temp.read()),
+                        op: TirBinaryOp::NotIdentical,
+                        right: Box::new(before.read()),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                )
+            };
             write_backs.push(TirStmt::new(
                 TirStmtKind::If {
-                    condition: TirExpr::new(
-                        TirExprKind::Binary {
-                            left: Box::new(temp.read()),
-                            op: TirBinaryOp::NotIdentical,
-                            right: Box::new(before.read()),
-                        },
-                        TypeTable::BOOL,
-                        span,
-                    ),
+                    condition: replaced,
                     then_block: TirBlock {
                         stmts: store_back,
                         span,

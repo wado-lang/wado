@@ -1,0 +1,83 @@
+//! What only the host's own objects answer, which `glue/dom.test.mjs` reads
+//! back from the attributes of `<body>`: identity, narrowing through more than
+//! one level of `extends`, the name `Inspect` writes, a list of handles each
+//! way, a promise settled and rejected, a listener entered while `run` waits,
+//! which waits itself, and what the collector reclaims.
+
+use { Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node } from "wado-lang:web";
+use { MonotonicClock } from "wasi:clocks";
+
+global mut KEPT: Option<Element> = null;
+
+export fn run() with (Dom, MonotonicClock) {
+    let doc = Dom::document();
+    let input = doc.get_element_by_id("input").unwrap();
+    let div = doc.get_element_by_id("div").unwrap();
+    report("same", `${input == doc.get_element_by_id("input").unwrap()} ${input == div}`);
+
+    let node: Node = input;
+    let other: Node = div;
+    let narrowed = `${node matches { _: HtmlElement }} ${node matches { _: HtmlInputElement }}`;
+    report("narrow", `${narrowed} ${other matches { _: HtmlInputElement }}`);
+    report("inspect", `${node:?} ${other:?}`);
+
+    // A list carries handles both ways, each as the index of a slot.
+    div.set_aria_labelled_by_elements(Option::Some([input, div]));
+    let labels = div.aria_labelled_by_elements().unwrap();
+    report("labels", `${labels.len()} ${labels[0] == input} ${labels[1] == div}`);
+
+    // A promise settles to its value, or to the reason it was rejected for.
+    report("settled", `${doc.has_storage_access().wait() matches { Ok(true) }}`);
+    if let Err(reason) = doc.exit_fullscreen().wait() {
+        report("rejected", `${reason.name()}: ${reason.message()}`);
+    }
+    // A call nobody waits on is dropped with its promise still pending.
+    let _ = doc.request_storage_access();
+
+    let mut clicks = 0;
+    let target: EventTarget = div;
+    div.add_event_listener("click", |event: Event| {
+        clicks += 1;
+        report("clicks", `${clicks}`);
+        let path = event.composed_path();
+        report("path", `${path.len()} ${path[0] == target}`);
+    });
+    // A listener that waits suspends alone: the page and `run` go on.
+    input.add_event_listener("focus", |_event: Event| {
+        report("focus", "waiting");
+        let entered = input.request_fullscreen().wait();
+        report("focus", `${entered matches { Ok(_) }}`);
+    });
+    // What the collector is asked about: the test holds each element weakly,
+    // takes it out of the page, and looks again.
+    div.add_event_listener("make", |_event: Event| {
+        let body = doc.body().unwrap();
+        // Its only handle dies with this call.
+        let dropped = doc.create_element("i");
+        dropped.set_id("dropped");
+        body.append_child(dropped);
+        // It holds a listener whose closure holds it: a cycle through both heaps.
+        let cyclic = doc.create_element("b");
+        cyclic.set_id("cyclic");
+        cyclic.add_event_listener("ping", |_ping: Event| report("cyclic", cyclic.id()));
+        body.append_child(cyclic);
+        // A global of the program keeps this one, until `release`.
+        let kept = doc.create_element("u");
+        kept.set_id("kept");
+        body.append_child(kept);
+        KEPT = Option::Some(kept);
+    });
+    div.add_event_listener("release", |_event: Event| {
+        if let Some(kept) = KEPT {
+            report("released", kept.id());
+        }
+        KEPT = null;
+    });
+    report("state", "waiting");
+    MonotonicClock::wait_for(50_000_000).wait();
+    report("state", "done");
+}
+
+fn report(key: String, value: String) with Dom {
+    Dom::document().body().unwrap().set_attribute(`data-${key}`, value);
+}

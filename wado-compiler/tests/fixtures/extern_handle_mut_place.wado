@@ -1,0 +1,83 @@
+// A `&mut` to a place holding an extern handle goes through a temp that is
+// stored back when the callee replaced it. Whether it did is asked of the
+// handles themselves: an `externref` has no `ref.eq`.
+#[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
+resource Node {}
+
+#[cm("example:demo/dom#element", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource Element extends Node {}
+
+struct Tag {
+    name: String,
+}
+
+struct Holder {
+    node: Option<Node>,
+    plain: Node,
+}
+
+fn replace(place: &mut Node, next: Node) -> Node {
+    let before = *place;
+    *place = next;
+    return before;
+}
+
+fn is_element(node: &Node) -> bool {
+    return *node matches { _: Element };
+}
+
+test "a reference to a resource is one to what it extends" {
+    let mut tag = Tag { name: "a" };
+    let element = Element::backed_by(&mut tag);
+    let node = Node::backed_by(&mut tag);
+    assert is_element(&element);
+    assert !is_element(&node);
+}
+
+test "take empties the place" {
+    let mut tag = Tag { name: "a" };
+    let mut holder = Holder { node: Option::Some(Node::backed_by(&mut tag)), plain: Node::backed_by(&mut tag) };
+    let taken = holder.node.take();
+    assert taken == Option::Some(Node::backed_by(&mut tag));
+    assert holder.node == null;
+    assert holder.node.take() == null;
+}
+
+test "a replaced handle is stored back" {
+    let mut a = Tag { name: "a" };
+    let mut b = Tag { name: "b" };
+    let mut node = Node::backed_by(&mut a);
+    let before = replace(&mut node, Node::backed_by(&mut b));
+    assert before == Node::backed_by(&mut a);
+    assert node == Node::backed_by(&mut b);
+    let same = replace(&mut node, Node::backed_by(&mut b));
+    assert same == node;
+}
+
+variant Slot {
+    Empty,
+    Full(Node),
+}
+
+struct Shelf {
+    slot: Slot,
+}
+
+fn fill(place: &mut Slot, next: Slot) {
+    *place = next;
+}
+
+test "a two-case variant over a handle is stored back too" {
+    let mut a = Tag { name: "a" };
+    let mut shelf = Shelf { slot: Slot::Empty };
+    fill(&mut shelf.slot, Slot::Full(Node::backed_by(&mut a)));
+    let Full(node) = shelf.slot else {
+        panic("the slot was filled");
+    };
+    assert node == Node::backed_by(&mut a);
+    fill(&mut shelf.slot, Slot::Empty);
+    assert shelf.slot matches { Empty };
+}
+
+__DATA__
+{"test": {}}

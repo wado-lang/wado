@@ -1052,13 +1052,12 @@ Rules the table does not carry:
   no short form.
 - A newtype writes its base, then `as` and its own name, as the cast that
   builds it reads. A chain writes one link per newtype: `7 as A as B`.
-- An [unrestricted resource](./spec-components.md#resource-linearity) renders
-  as the resource its handle's class names, whatever the static type says, with
-  the class and object index: `Element { type_id: 1, object_id: 7 }`. A class no
-  resource in the [inheritance tree](./spec-components.md#resource-inheritance)
-  owns keeps the static type's name. An `f64` that encodes no class and object,
-  or the handle of a resource that declares no classes, renders as the `f64`:
-  `Node { handle: 1.5 }`. Inspecting a handle never traps.
+- An [extern handle](./spec-components.md#extern-handles) renders as the name
+  of the resource its class names, whatever the static type says: `Element`. A
+  class no resource in the
+  [inheritance tree](./spec-components.md#resource-inheritance) owns keeps the
+  static type's name, and so does the handle of a resource that declares no
+  classes.
 - A closure under `#` renders its own source, reprinted with each binary
   operation parenthesised: `|x: i32| (x + 1)`. A captured variable appears by
   name. A function used as a value renders as a closure that forwards to it:
