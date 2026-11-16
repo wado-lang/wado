@@ -93,7 +93,11 @@ internal fn checkout_at(repo: &String, tree: &String, sha: &String) -> String wi
     if !fs::exists(&root) || worktree_git_dir(repo, &root) matches { None } {
         git(["-C", *repo, "worktree", "prune"]);
         fs::remove_dir_all(&root).unwrap();
-        git(["-c", "core.symlinks=false", "-C", *repo, "worktree", "add", "--force", "--detach", *tree, *sha]);
+        // `worktree_git_dir` finds the tree by the absolute path git records.
+        git([
+            "-c", "core.symlinks=false", "-c", "worktree.useRelativePaths=false", "-C", *repo, "worktree", "add",
+            "--force", "--detach", *tree, *sha,
+        ]);
         return root;
     }
     tree_git(repo, &root, ["checkout", "--force", "--detach", "--quiet", *sha]);
@@ -114,6 +118,9 @@ test "a tree is checked out again in place, and what a review left is gone" {
         return git(full);
     };
     in_repo(["init", "--quiet"]);
+    // From git 2.48, a developer's configuration may record worktrees by
+    // relative paths.
+    in_repo(["config", "worktree.useRelativePaths", "true"]);
     in_repo(["add", "."]);
     in_repo(["commit", "--quiet", "-m", "c"]);
     let head = in_repo(["rev-parse", "HEAD"]).trim().to_string();
