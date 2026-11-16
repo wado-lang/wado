@@ -1,0 +1,45 @@
+// A closure narrowing a handle it captured holds what it narrowed to, and
+// performs the resource the `extends` chain starts from.
+
+#[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
+resource Node {}
+
+#[cm("example:demo/dom#input", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource HtmlInputElement extends Node {
+    #[cm("example:demo/dom#input-value")]
+    fn value(&self) -> String;
+}
+
+fn call(f: fn() -> String with Node) -> String with Node {
+    return f();
+}
+
+fn describe(n: Node) -> String {
+    return call(|| match n {                       // performs Node
+        input: HtmlInputElement => input.value(),  // holds HtmlInputElement
+        _ => "",
+    });
+}
+
+test {
+    with HtmlInputElement => &Typed {} do {
+        assert describe(an_input()) == "typed";
+        assert describe(a_node()) == "";
+    }
+}
+
+struct Typed {}
+
+impl HtmlInputElement for Typed {
+    fn value(&self, this: &HtmlInputElement) -> String {
+        resume "typed"
+    }
+}
+
+fn a_node() -> Node {
+    return builtin::black_box(Node::backed_by(Typed {}));
+}
+
+fn an_input() -> Node {
+    return builtin::black_box(HtmlInputElement::backed_by(Typed {}));
+}

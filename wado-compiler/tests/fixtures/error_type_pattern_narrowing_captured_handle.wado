@@ -1,0 +1,32 @@
+// A closure that narrows a handle it captured performs the resource the
+// narrowing starts from, so a function type declaring nothing refuses it.
+
+#[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
+resource Node {}
+
+#[cm("example:demo/dom#input", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource HtmlInputElement extends Node {
+    #[cm("example:demo/dom#input-value")]
+    fn value(&self) -> String;
+}
+
+fn call(f: fn() -> String) -> String {
+    return f();
+}
+
+fn read(n: Node) -> String {
+    return call(|| match n {
+        input: HtmlInputElement => input.value(),
+        _ => "",
+    });
+}
+
+export fn run() with Node {
+    let _ = read(Node::backed_by("node"));
+}
+
+__DATA__
+{
+    "compile_error": ":18:17: analysis error: this function value performs resource 'Node', which the function type it is expected to be does not declare",
+    "compile_error_codes": ["MISSING_EFFECT"]
+}

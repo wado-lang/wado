@@ -1,0 +1,67 @@
+// A closure that narrows a handle it captured holds what it narrowed to, and
+// performs the resource the narrowing starts from: a function type declaring
+// that resource takes it.
+
+#[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
+resource Node {}
+
+#[cm("example:demo/dom#input", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource HtmlInputElement extends Node {
+    #[cm("example:demo/dom#input-value")]
+    fn value(&self) -> String;
+}
+
+fn call(f: fn() -> String with Node) -> String with Node {
+    return f();
+}
+
+fn by_match(n: Node) -> String {
+    return call(|| match n {
+        input: HtmlInputElement => input.value(),
+        _ => "",
+    });
+}
+
+fn by_let_else(n: Node) -> String {
+    return call(|| {
+        let input: HtmlInputElement = n else {
+            return "";
+        };
+        return input.value();
+    });
+}
+
+fn nested(n: Node) -> String {
+    return call(|| call(|| {
+        let input: HtmlInputElement = n else {
+            return "";
+        };
+        return input.value();
+    }));
+}
+
+test {
+    with HtmlInputElement => &Typed {} do {
+        assert by_match(an_input()) == "typed";
+        assert by_match(a_node()) == "";
+        assert by_let_else(an_input()) == "typed";
+        assert by_let_else(a_node()) == "";
+        assert nested(an_input()) == "typed";
+    }
+}
+
+struct Typed {}
+
+impl HtmlInputElement for Typed {
+    fn value(&self, this: &HtmlInputElement) -> String {
+        resume "typed"
+    }
+}
+
+fn a_node() -> Node {
+    return builtin::black_box(Node::backed_by(Typed {}));
+}
+
+fn an_input() -> Node {
+    return builtin::black_box(HtmlInputElement::backed_by(Typed {}));
+}

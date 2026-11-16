@@ -409,6 +409,30 @@ test {
 }
 ```
 
+A closure holds what a function would, so a handle it captured is one its signature does not mention. Narrowing such a handle to `R` still holds `R` in the closure's body. The closure then performs the resource that `R`'s `extends` chain starts from, so a function type takes it where that type holds any resource of the chain:
+
+<!-- {"fixture":"spec_effects_narrowing_captured.wado"} -->
+
+```wado
+fn call(f: fn() -> String with Node) -> String with Node {
+    return f();
+}
+
+fn describe(n: Node) -> String {
+    return call(|| match n {                       // performs Node
+        input: HtmlInputElement => input.value(),  // holds HtmlInputElement
+        _ => "",
+    });
+}
+
+test {
+    with HtmlInputElement => &Typed {} do {
+        assert describe(an_input()) == "typed";
+        assert describe(a_node()) == "";
+    }
+}
+```
+
 Apart from a narrowing, nothing a body does adds to what its function holds.
 
 ### Ambient Functions

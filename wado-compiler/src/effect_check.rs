@@ -1400,7 +1400,7 @@ fn held_by(
         add_signature_resources(ann, func.id, &scan, &mut current);
     }
     current.extend(granted);
-    held_in_body(annotations, index, &scan, current, Body::Block(body))
+    held_in_body(annotations, index, &scan, current, Body::Block(body)).0
 }
 
 /// The `wasi:*` interfaces some function of `exports` holds by what it
@@ -1664,13 +1664,14 @@ fn add_signature_resources(
 
 /// Union into `held` the resources the body's type patterns narrow to. A
 /// narrowing hands out a held ancestor's handle, as an operation returning it would.
+/// Returns the targets no held resource is an ancestor of.
 fn add_narrowed_resources(
     walk: impl FnOnce(&mut TypePatternSites),
     annotations: &TypeAnnotations,
     scan: &ResourceScan<'_>,
     closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
     held: &mut IndexSet<EffectRef>,
-) {
+) -> Vec<DefId> {
     let mut sites = TypePatternSites::default();
     walk(&mut sites);
     let mut targets: Vec<DefId> = sites
@@ -1694,7 +1695,7 @@ fn add_narrowed_resources(
             !narrows_held
         });
         if targets.len() == pending {
-            return;
+            return targets;
         }
     }
 }
@@ -1746,22 +1747,23 @@ impl Body<'_> {
 /// What `body` holds, given `declared` from its signature: the waits on an
 /// async call it starts, what a held effect needs internally (a function
 /// holding `Stdout` may call operations that need `Stream`), and what its type
-/// patterns narrow to.
+/// patterns narrow to. Beside it, the narrowed-to resources `declared` holds
+/// no ancestor of: the handle narrowed came from outside the signature.
 fn held_in_body(
     annotations: Option<&TypeAnnotations>,
     index: &EffectIndex<'_>,
     scan: &ResourceScan<'_>,
     mut declared: IndexSet<EffectRef>,
     body: Body<'_>,
-) -> IndexSet<EffectRef> {
+) -> (IndexSet<EffectRef>, Vec<DefId>) {
     if starts_async_call(annotations, scan.tt, |v| body.walk(v)) {
         declared.extend(index.waiting.iter().cloned());
     }
     let mut held = expand_through_closure(&declared, index.closure);
-    if let Some(ann) = annotations {
-        add_narrowed_resources(|v| body.walk(v), ann, scan, index.closure, &mut held);
-    }
-    held
+    let unheld_narrowings = annotations.map_or_else(Vec::new, |ann| {
+        add_narrowed_resources(|v| body.walk(v), ann, scan, index.closure, &mut held)
+    });
+    (held, unheld_narrowings)
 }
 
 /// Whether the body `walk` visits starts an async call.
@@ -2972,13 +2974,24 @@ impl SemEffectWalker<'_> {
         for &closure_type in &closure_types {
             scan.collect(closure_type, &mut signature, &mut TypeSet::default());
         }
-        let current = held_in_body(
+        let (mut current, unheld_narrowings) = held_in_body(
             self.annotations,
             self.index,
             &scan,
             signature,
             Body::Expr(&closure.body),
         );
+        // A handle the closure captured is narrowed as an operation on it
+        // would return the narrower one: the closure performs the resource the
+        // chain starts from, which holding any resource of the chain admits,
+        // and holds the rest.
+        let mut narrowed_from = IndexSet::default();
+        for target in unheld_narrowings {
+            let chain: IndexSet<EffectRef> =
+                resource_chain_effects(scan.tt, scan.resolutions, target).collect();
+            narrowed_from.insert(chain.last().expect("a chain holds its resource").clone());
+            current.extend(expand_through_closure(&chain, self.index.closure));
+        }
         let mut scratch = Vec::new();
         let mut body = SemEffectWalker {
             sem: self.sem,
@@ -2999,6 +3012,7 @@ impl SemEffectWalker<'_> {
             .take()
             .expect("the walk collects")
             .into_iter()
+            .chain(narrowed_from)
             .collect();
         self.closures = std::mem::take(&mut body.closures);
         self.rows = std::mem::take(&mut body.rows);
