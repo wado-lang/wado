@@ -1990,8 +1990,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// Intern all-literal arithmetic as one pool value rather than building
     /// skeleton nodes for it. Sound this early because such a value names
-    /// nothing outside the pool, so no later pass can re-contextualize it. A
-    /// value naming a local can be, which is why the early freeze refuses one.
+    /// nothing outside the pool, so no later pass can re-contextualize it.
     fn intern_constant_arith(&self, expr: &TirExpr) -> Option<Operand> {
         // Only a compound: a bare literal took the caller's path above.
         if !matches!(

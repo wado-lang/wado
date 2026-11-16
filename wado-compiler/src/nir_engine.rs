@@ -18,7 +18,7 @@ use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind,
     PatNode, StmtId, StmtKind, StmtNode, SubtreeCopy, Tracked,
 };
-use crate::nir_value_graph::builder::{AliasSets, CallFacts, build};
+use crate::nir_value_graph::builder::AliasSets;
 use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind, builder, constant_kind};
 use crate::niri::CtfeBuiltinMap;
 use crate::tir::{ObjectTypes, ResolvedType, TypeId};
@@ -297,14 +297,14 @@ impl EngineBuffers {
     }
 }
 
-/// What a value-graph walk reads where the session was told nothing. Empty is
+/// What a scoped walk reads where the session was told nothing. Empty is
 /// conservative — it leaves a call opaque — and shared, so asking costs no map.
 static NO_PURE_BUILTINS: std::sync::LazyLock<IndexSet<FuncId>> =
     std::sync::LazyLock::new(IndexSet::default);
 static NO_CTFE_BUILTINS: std::sync::LazyLock<CtfeBuiltinMap> =
     std::sync::LazyLock::new(CtfeBuiltinMap::default);
 
-/// The parameters a value-graph build seeds: all of them once a pass asked
+/// The parameters a scoped walk seeds: all of them once a pass asked
 /// ([`Engine::seed_params`]), none before.
 fn seeded(params: &[u32], seeds: bool) -> &[u32] {
     if seeds { params } else { &[] }
@@ -328,18 +328,15 @@ pub struct Engine<'a> {
     /// edits. Consumed by `Local`-read exclusions (`store_load_forward`, licm's
     /// arithmetic hoist).
     body_address_taken: Option<IndexSet<u32>>,
-    /// What bounds the `ValueGraph` builder's heap-write invalidation; aliased
-    /// locals lose their fields across writes and calls, the rest get precise
+    /// What bounds a scoped walk's heap-write invalidation; aliased locals lose
+    /// their fields across writes and calls, the rest get precise
     /// per-`(root, field)` forwarding. Empty unless a pass supplies it via
-    /// [`Engine::set_alias_sets`] before the first `value` query.
+    /// [`Engine::set_alias_sets`].
     alias: AliasSets,
     /// The owning function's parameter locals, which no `let` binds: what
     /// [`Engine::local_has_one_version`] answers a binding-less local by.
     params: Vec<u32>,
-    /// Whether the value graph seeds `params` as stable `Opaque`s. Only
-    /// up-front seeding makes parameters visible in the loop-entry snapshots,
-    /// so passes consuming [`Engine::loop_entry_value`] must call
-    /// [`Engine::seed_params`] first.
+    /// Whether a scoped walk seeds `params` as stable `Opaque`s up front.
     seeds_params: bool,
     /// The locals a clone under way binds afresh: see
     /// [`Engine::clone_block_renaming`].
@@ -370,7 +367,7 @@ pub struct Engine<'a> {
     /// `condition_implication`. Set via [`Engine::set_quiet_callee_ids`].
     quiet_callee_ids: Option<&'a IndexSet<FuncId>>,
     /// [`FuncId`]s of pure builtin intrinsics (`array_get_value`, `array_len`, …),
-    /// supplied by a value-graph pass so the builder knows such a call writes no
+    /// supplied by a pass so a scoped walk knows such a call writes no
     /// heap — the call node no longer carries a `FunctionRef` to classify by.
     /// `None` (the default) is conservative: every call is a heap write. Set via
     /// [`Engine::set_pure_builtin_callees`] before the first value query.
@@ -446,40 +443,17 @@ impl<'a> Engine<'a> {
             pure_builtin_callees: None,
             promoted_reads: OnceCell::new(),
         };
-        // The value graph lives on `Body` and is built once, then maintained
-        // through every edit (`replace_expr_with_value` / `redirect_expr`, plus
-        // structural-pass coarsening). A new session reuses it as-is — there is
-        // no session-start drop and no rebuild path (build-once is invariant).
         engine.build_indices();
         engine
     }
 
-    /// The `ValueId` the per-function `ValueGraph` assigned to `expr`, built
-    /// lazily; `None` for an impure, allocation-bearing or control-flow
-    /// expression, and for any `ExprId` allocated after the build.
-    ///
-    /// The graph is built once and maintained in place, never rebuilt: engine
-    /// edits keep the operands current and a query re-derives through them
-    /// (`Engine::maintain_pure_node`), a direct arena edit coarsens the region
-    /// it touched, and a caller needing the reaching values regrows them into a
+    /// The `ValueId` of `expr`, derived from its operands: arithmetic over
+    /// promoted operands and reads of single-version locals. Every other kind,
+    /// and any unresolved operand, gives `None`, which is sound as the finest
+    /// partition: a consumer skips the expression rather than over-merging it.
+    /// A caller needing the values that flow reaches regrows them into a
     /// scratch pool ([`Engine::scoped_const_reads`]).
     pub fn value(&mut self, expr: ExprId) -> Option<ValueId> {
-        self.ensure_value_graph();
-        // There is no skeleton-expr → value side-table. An expr's value comes
-        // only from promoted operands (born-as-operands) and pure re-derivation
-        // over them; an unpromoted leaf (`Local` / `FieldAccess`) resolves to
-        // `None`. Sound — `None` is the finest partition, so a consumer skips the
-        // expr rather than over-merging it with another.
-        self.maintain_pure_node(expr)
-    }
-
-    /// Re-derive `expr`'s value from its operands — the sole value source now
-    /// that `value_of` is retired. Operand-determined kinds only, plus a read of
-    /// a stable parameter; every other kind, and any unresolved operand, gives
-    /// `None`. The parameter base case is load-bearing: without it only
-    /// all-constant trees resolve and no promoted value can name a local.
-    fn maintain_pure_node(&mut self, expr: ExprId) -> Option<ValueId> {
-        self.body.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
         let result_ty = self.body.exprs[expr].type_id;
         let tt = self.type_table;
@@ -517,8 +491,8 @@ impl<'a> Engine<'a> {
         Some(v)
     }
 
-    /// The [`ValueId`](ValueId) of an operand: the
-    /// promoted value directly, or the skeleton expr's value from the graph.
+    /// The [`ValueId`](ValueId) of an operand: the promoted value directly, or
+    /// the skeleton expr's [`Engine::value`].
     pub fn operand_value(&mut self, op: Operand) -> Option<ValueId> {
         match op {
             Operand::Value(v) => Some(v),
@@ -526,30 +500,9 @@ impl<'a> Engine<'a> {
         }
     }
 
-    /// Read-only view of a value's kind. The returned reference borrows the
-    /// engine's value-graph cache; callers that need to hold the kind across
-    /// further `engine` calls should clone it.
-    pub fn value_kind(&mut self, id: ValueId) -> &ValueKind {
-        self.ensure_value_graph();
-        self.body.values.kind(id)
-    }
-
-    /// The `ValueId` a read of `local` would produce in the pre-header of
-    /// the loop whose body block is `loop_body` (the builder's
-    /// `current_value` snapshot at loop entry). `None` when the loop is
-    /// unrecorded or the local was unbound at that point. A hoisting pass
-    /// may move a pure expression to the pre-header exactly when each of
-    /// its `Local` leaves' use-site value equals this pre-header value —
-    /// see `ValueGraphBuild::loop_entry_values`.
-    pub fn loop_entry_value(&mut self, loop_body: BlockId, local: u32) -> Option<ValueId> {
-        self.ensure_value_graph();
-        self.body
-            .value_graph
-            .as_ref()?
-            .loop_entry_values
-            .get(&loop_body)?
-            .get(&local)
-            .copied()
+    /// Whether `local` is a parameter of the owning function.
+    pub fn is_param(&self, local: u32) -> bool {
+        self.params.contains(&local)
     }
 
     /// Every read whose reaching value the use site can re-emit, recovered by a
@@ -562,11 +515,7 @@ impl<'a> Engine<'a> {
         forwardable: &IndexSet<u32>,
         include_fields: bool,
     ) -> Vec<(ExprId, ValueId)> {
-        // Only grow an already-built graph: building it here would use this
-        // session's alias config, which is sound only when the caller has set the
-        // real sets (`store_load_forward` does). A missing graph is left for the
-        // natural lazy build at the next query.
-        if self.body.value_graph.is_none() || (forwardable.is_empty() && !include_fields) {
+        if forwardable.is_empty() && !include_fields {
             return Vec::new();
         }
         let root = self.body.root();
@@ -640,10 +589,6 @@ impl<'a> Engine<'a> {
     /// `canonical_local(i)`, sound only where `i` holds one value, at a version
     /// above `max_heap_version` so it cannot collide with an existing triple.
     pub fn scoped_field_values(&mut self) -> FieldValues {
-        self.ensure_value_graph();
-        if self.body.value_graph.is_none() {
-            return FieldValues::default();
-        }
         let root = self.body.root();
         let mut scratch = self.body.values.clone();
         let empty = IndexMap::default();
@@ -725,9 +670,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Drop the session's `&local` address-taken scan so the next
-    /// [`Engine::body_address_taken`] recomputes it. The value graph is
-    /// **never** dropped — it is built once and maintained in place (build-once
-    /// is a structural invariant; there is no rebuild path).
+    /// [`Engine::body_address_taken`] recomputes it.
     pub fn invalidate_address_taken(&mut self) {
         self.body_address_taken = None;
     }
@@ -764,15 +707,12 @@ impl<'a> Engine<'a> {
         &self.alias.aliased
     }
 
-    /// Have the value graph seed the parameters up front (see the field doc on
-    /// `seeds_params`). Used by the one build-once construction; the graph is
-    /// never rebuilt on a later change.
+    /// Have a scoped walk seed the parameters up front.
     pub fn seed_params(&mut self) {
         self.seeds_params = true;
     }
 
-    /// Record the per-call verdicts the build reads. Supply before the first
-    /// value query; the build is lazy.
+    /// Record the per-call verdicts a scoped walk reads.
     pub fn set_call_verdicts(
         &mut self,
         pure_calls: IndexSet<ExprId>,
@@ -782,17 +722,15 @@ impl<'a> Engine<'a> {
         self.receiver_immutable_calls = receiver_immutable_calls;
     }
 
-    /// Record what each call may write behind a reference. Supply before the
-    /// first value query; the build is lazy.
+    /// Record what each call may write behind a reference, for a scoped walk.
     pub fn set_call_writes(&mut self, call_writes: IndexMap<ExprId, ObjectTypes>) {
         self.call_writes = call_writes;
     }
 
-    /// Record the function's alias sets so the value graph invalidates field
-    /// forwarding at the right granularity. Used by the one build-once
-    /// construction. Without it the builder treats every receiver as
-    /// non-aliased — sound only when the function has no reference aliasing, so
-    /// passes that may see aliasing must supply it before the first value query.
+    /// Record the function's alias sets so a scoped walk invalidates field
+    /// forwarding at the right granularity. Without it the walk treats every
+    /// receiver as non-aliased — sound only when the function has no reference
+    /// aliasing, so a pass that may see aliasing must supply it before it walks.
     pub fn set_alias_sets(&mut self, alias: AliasSets) {
         self.alias = alias;
     }
@@ -815,10 +753,8 @@ impl<'a> Engine<'a> {
         self.quiet_callee_ids.is_some_and(|s| s.contains(&func_id))
     }
 
-    /// Supply the pure-builtin callee ids so the value-graph build classifies a
-    /// call's heap effect by `func_id`. See `Engine::pure_builtin_callees`.
-    /// Must be set before the first value query to take effect (the graph is
-    /// built once and reused).
+    /// Supply the pure-builtin callee ids so a scoped walk classifies a call's
+    /// heap effect by `func_id`. See `Engine::pure_builtin_callees`.
     pub fn set_pure_builtin_callees(&mut self, ids: &'a IndexSet<FuncId>) {
         self.pure_builtin_callees = Some(ids);
     }
@@ -845,36 +781,6 @@ impl<'a> Engine<'a> {
 
     pub fn type_table(&self) -> &'a TypeTable {
         self.type_table
-    }
-
-    /// Build the persisted value graph now, for a caller that has already set
-    /// the real alias sets.
-    ///
-    /// [`Self::scoped_const_reads`] only grows a graph that already exists, so
-    /// whether a body has one is otherwise incidental — it depends on whether
-    /// some earlier pass happened to run a value query on it.
-    pub fn build_value_graph_now(&mut self) {
-        self.ensure_value_graph();
-    }
-
-    fn ensure_value_graph(&mut self) {
-        if self.body.value_graph.is_some() {
-            return;
-        }
-        let build = build(
-            &mut *self.body,
-            seeded(&self.params, self.seeds_params),
-            &self.alias,
-            CallFacts {
-                pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
-                pure: &self.pure_calls,
-                receiver_immutable: &self.receiver_immutable_calls,
-                ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
-                writes: &self.call_writes,
-            },
-            self.type_table,
-        );
-        *self.body.value_graph = Some(build);
     }
 
     /// Report that this rewrite deleted the binding that defined `local`, so
@@ -1331,8 +1237,7 @@ impl<'a> Engine<'a> {
         self.redirect_expr(id, Operand::Value(vid))
     }
 
-    /// Edit API: redirect `id`'s parent operand slot to `new` (WEP: The Live
-    /// `ValueGraph`). Used to splice a promoted constant — or an existing
+    /// Edit API: redirect `id`'s parent operand slot to `new`. Used to splice a promoted constant — or an existing
     /// sub-expression — into the position `id` occupies, orphaning `id`'s node.
     /// Returns `false` (a no-op) when `id` has no parent or the parent references
     /// it through a non-operand slot.

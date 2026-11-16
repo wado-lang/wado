@@ -103,7 +103,6 @@ use sroa_variant_return::scalarize_variant_returns;
 use store_load_forward::forward_stores_to_loads;
 use value_copy_demote::demote_value_copies;
 
-use extract::FreezePhase;
 use gate::{FunctionGate, GatedPass};
 use heap_effect::HeapEffectsCache;
 
@@ -351,11 +350,11 @@ pub fn optimize(
     // operands (born-as-operands), so store-load forwarding / cse become
     // operand reads. Runs after the optimization loop (so the struct shape is
     // post-SROA) but BEFORE select_lowering / multi_value_return, which rewrite
-    // the body into WIR-shaped forms the value-graph build would misread. The
+    // the body into WIR-shaped forms a scoped walk would misread. The
     // two soundness gates (scalar-field + receiver-availability) and the WIR
     // const-local propagation keep it default-safe.
     run_pass("nir/promote_fields", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(p, &exec, Some(&mut heap_effects), FreezePhase::Terminal)
+        extract::freeze_pure_arith(p, &exec, Some(&mut heap_effects))
     });
     // Re-run the structural BCE matcher now that `promote_fields` froze
     // invariant bounds (`arr.used`) into constant operands the in-loop
@@ -406,10 +405,10 @@ pub fn optimize(
     // Binary/Unary/Cast) into operand values, materialised by the WIR
     // extractor. Runs last so no binary-walking pass sees the promoted form;
     // orphaned arith / local-read nodes become unreachable from the skeleton
-    // root and are simply not emitted. (Early arith promotion already ran before
-    // the loop; `FieldAccess` promotion ran above, after SROA.)
+    // root and are simply not emitted. (`FieldAccess` promotion ran above,
+    // after SROA.)
     run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(p, &exec, None, FreezePhase::Terminal)
+        extract::freeze_pure_arith(p, &exec, None)
     });
 
     // The born-resolved invariant is now enforced by the type system: a call
@@ -873,15 +872,6 @@ fn run_optimization_passes(
     run_pass("nir/match_to_switch_globals", project, profiler, |p| {
         match_to_switch_globals(p)
     });
-    // Operand-promotion keystone. Pure values are
-    // frozen into `Operand::Value` before the value passes, so the passes read
-    // operands (`engine.operand_value`) instead of rebuilding the value graph.
-    // Arith only here (before the loop); `FieldAccess` promotion runs late (after
-    // the SROA passes), since SROA scalarizes the structs a promoted `FieldAccess`
-    // would reference. See the late call in `optimize`.
-    run_pass("nir/promote_pure_values_early", project, profiler, |p| {
-        extract::freeze_pure_arith(p, exec, None, FreezePhase::Early)
-    });
     // What changed in the iteration just run, and so the convergence flag:
     // empty ends the loop, non-empty after it names what held the loop open.
     let mut iter_changed: Vec<&'static str> = Vec::new();
@@ -1113,7 +1103,7 @@ fn run_optimization_passes(
     // Forward the scalarization shadow inits (`$hfs_x = obj.f`) to constants.
     // `field_scalarize` runs after the fixed-point loop, so no in-loop
     // `store_load_forward` sees its shadow reads; this once-over folds an
-    // `obj.f` whose field the ValueGraph still knows (`obj` built from a
+    // `obj.f` whose field a scoped walk still knows (`obj` built from a
     // constant literal upstream) into the literal, before globalization. Runs
     // before `const_object_globalization` so it never sees the nullable
     // `GlobalVarGet`s globalization emits.

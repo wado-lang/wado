@@ -287,13 +287,6 @@ pub(super) fn version_loops(
             .map(|plan| apply_version(&mut engine, &binds, &type_table, plan))
             .collect();
 
-        // The splice invalidates licm's loop-entry snapshots (cloned loops
-        // have no entry; the original moved under a new guard). An absent
-        // entry is sound; clear like `inline` does for non-preserving splices.
-        if let Some(vg) = engine.body.value_graph.as_mut() {
-            vg.loop_entry_values.clear();
-        }
-
         // Sweep the deleted checks' residue: the `if false { panic }` shells
         // and any now-write-only condition temps. The proofs are taken after
         // the splice, so the fast arm's cloned calls carry theirs.
