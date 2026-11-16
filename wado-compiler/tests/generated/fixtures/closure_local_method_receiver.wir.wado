@@ -135,8 +135,8 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 array Array<u8> (mut u8);  // TypeId(16)
 
-struct core:prelude//$Cell<fn> {  // TypeId(17)
-    mut value: ref struct,
+struct core:prelude//$Cell<fn(i32)->i32> {  // TypeId(17)
+    mut value: ref "canonical//CanonicalClosure_0",
 }
 
 type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> i32;  // TypeId(18)
@@ -360,7 +360,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/primitive.wado/$tmpl$c8d78b43997053ab,[core:prelude/string.wado/String,u32]>" = fn(ref "core:prelude/primitive.wado//$tmpl$c8d78b43997053ab") -> ref "core:prelude/string.wado//String";  // TypeId(124)
 
-type "functype//core:prelude/traits.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn>", ref "core:prelude/format.wado//Formatter");  // TypeId(125)
+type "functype//core:prelude/traits.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(125)
 
 type "functype//closure_local_method_receiver.wado/closure_local_method_receiver.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(126)
 
@@ -448,13 +448,13 @@ global global:core:prelude/primitive.wado::$const_obj_25: ref "core:prelude/stri
 global global:core:prelude/primitive.wado::$const_obj_27: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
 fn "closure_local_method_receiver.wado/$test_0_inspect_through_a_newtype_over_a_fn_type"() {
-    let g: ref struct;
+    let g: ref "canonical//CanonicalClosure_0";
     let out_10: ref "core:prelude/string.wado//String";
     let $temp_inline_core_prelude_traits_wado_TemplateHole_closure_local_method_receiver_wado__tmpl_c3fc107a580e7ec7_closure_local_method_receiver_wado_Cb___fmt_25_0: ref "core:prelude/format.wado//Formatter";
     let self_68: ref "core:prelude/string.wado//String";
     let new_used_80: i32;
     let start_81: i32;
-    let self_192: ref "core:prelude//$Cell<fn>";
+    let self_192: ref "core:prelude//$Cell<fn(i32)->i32>";
     let $licm_repr_265: ref Array<u8>;
     g = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_local_method_receiver.wado//$Closure_0" {}, inspect: ref.func "closure/closure_local_method_receiver.wado/$closure_inspect_wrapper_0", func: ref.func "closure/closure_local_method_receiver.wado/$closure_wrapper_0" };
     out_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -462,7 +462,7 @@ fn "closure_local_method_receiver.wado/$test_0_inspect_through_a_newtype_over_a_
         break $inline_core_prelude_string_wado_String__internal_push_view_21;
     };
     $temp_inline_core_prelude_traits_wado_TemplateHole_closure_local_method_receiver_wado__tmpl_c3fc107a580e7ec7_closure_local_method_receiver_wado_Cb___fmt_25_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_10 };
-    "core:prelude/traits.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn>" { value: g }, $temp_inline_core_prelude_traits_wado_TemplateHole_closure_local_method_receiver_wado__tmpl_c3fc107a580e7ec7_closure_local_method_receiver_wado_Cb___fmt_25_0);
+    "core:prelude/traits.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn(i32)->i32>" { value: g }, $temp_inline_core_prelude_traits_wado_TemplateHole_closure_local_method_receiver_wado__tmpl_c3fc107a580e7ec7_closure_local_method_receiver_wado_Cb___fmt_25_0);
     if @unlikely(local.tee new_used_80(local.tee self_68($temp_inline_core_prelude_traits_wado_TemplateHole_closure_local_method_receiver_wado__tmpl_c3fc107a580e7ec7_closure_local_method_receiver_wado_Cb___fmt_25_0.buf).used + 4) > builtin::array_len(self_68.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_68, new_used_80);
@@ -532,7 +532,7 @@ condition: `${g:?}` == \"|i32| -> i32 as Cb\"
     $inline_core_prelude_string_wado_String__internal_push_view_77: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_77;
     };
-    self_192 = struct.new "core:prelude//$Cell<fn>" { value: g };
+    self_192 = struct.new "core:prelude//$Cell<fn(i32)->i32>" { value: g };
     $temp_inline_core_prelude_traits_wado_TemplateHole_closure_local_method_receiver_wado__tmpl_c3fc107a580e7ec7_closure_local_method_receiver_wado_Cb___fmt_25_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_10 };
     "core:prelude/traits.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self_192, $temp_inline_core_prelude_traits_wado_TemplateHole_closure_local_method_receiver_wado__tmpl_c3fc107a580e7ec7_closure_local_method_receiver_wado_Cb___fmt_25_0);
     if @unlikely(local.tee new_used_80(local.tee self_68($temp_inline_core_prelude_traits_wado_TemplateHole_closure_local_method_receiver_wado__tmpl_c3fc107a580e7ec7_closure_local_method_receiver_wado_Cb___fmt_25_0.buf).used + 4) > builtin::array_len(self_68.repr)) {
@@ -603,9 +603,9 @@ condition: `${g:#?}` == \"|x: i32| (x + 2) as Cb\"
 }
 
 fn "closure_local_method_receiver.wado/$test_1_inspect_through_a_newtype_chain"() {
-    let h_0: ref struct;
+    let h_0: ref "canonical//CanonicalClosure_0";
     let out_6: ref "core:prelude/string.wado//String";
-    let self_62: ref "core:prelude//$Cell<fn>";
+    let self_62: ref "core:prelude//$Cell<fn(i32)->i32>";
     let $temp_inline_closure_local_method_receiver_wado_Cb2_core_prelude_traits_wado_Inspect__inspect_28_0: ref "core:prelude/format.wado//Formatter";
     let self_67: ref "core:prelude/string.wado//String";
     let new_used_79: i32;
@@ -616,7 +616,7 @@ fn "closure_local_method_receiver.wado/$test_1_inspect_through_a_newtype_chain"(
     $inline_core_prelude_string_wado_String__internal_push_view_21: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_21;
     };
-    self_62 = struct.new "core:prelude//$Cell<fn>" { value: h_0 };
+    self_62 = struct.new "core:prelude//$Cell<fn(i32)->i32>" { value: h_0 };
     $temp_inline_closure_local_method_receiver_wado_Cb2_core_prelude_traits_wado_Inspect__inspect_28_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_6 };
     "core:prelude/traits.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self_62, $temp_inline_closure_local_method_receiver_wado_Cb2_core_prelude_traits_wado_Inspect__inspect_28_0);
     if @unlikely(local.tee new_used_79(local.tee self_67($temp_inline_closure_local_method_receiver_wado_Cb2_core_prelude_traits_wado_Inspect__inspect_28_0.buf).used + 4) > builtin::array_len(self_67.repr)) {

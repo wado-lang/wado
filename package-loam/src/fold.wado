@@ -514,13 +514,18 @@ fn slice(x: &Known, node: &Node, known: &HashMap<String, Known>) -> Result<Optio
     return Result::Ok(Option::Some(Known { ..*x, extents, elements: picked(&x.elements, &picks) }));
 }
 
-/// `Cast` to float, int32, int64 or bool. A float becomes an integer by
-/// truncation toward zero, `in_width` takes an int32's low 32 bits, and
-/// anything nonzero becomes `true`. A symbolic integer stays one. The run
-/// converts one to anything else.
+/// `Cast` to a float, int32, int64 or bool. A float becomes an integer by
+/// truncation toward zero, `in_width` takes an int32's low 32 bits and rounds
+/// a float to the half it is cast to, and anything nonzero becomes `true`. A
+/// symbolic integer stays one. The run converts one to anything else.
 fn cast(x: &Known, to: i64) -> Result<Option<Known>, String> {
     let target = data_type(to);
-    let stored = if target matches { Some(Int32) } { Stored::Int32 } else { Stored::Computed };
+    let stored = match target {
+        Some(Int32) => Stored::Int32,
+        Some(Float16) => Stored::Float16,
+        Some(Bfloat16) => Stored::BFloat16,
+        _ => Stored::Computed,
+    };
     if x.elements matches { Symbolic(_) } {
         return Result::Ok(if target matches { Some(Int32 | Int64) } {
             Option::Some(Known { ..*x, stored });
@@ -528,9 +533,13 @@ fn cast(x: &Known, to: i64) -> Result<Option<Known>, String> {
             null;
         });
     }
+    // An integer would round to f32 and then to the half; the run rounds once.
+    if target matches { Some(Float16 | Bfloat16) } && !x.elements matches { Floats(_) } {
+        return Result::Ok(null);
+    }
     let count = x.len();
     let elements = match target {
-        Some(Float) => {
+        Some(Float | Float16 | Bfloat16) => {
             let mut out = List::<f32>::with_capacity(count);
             for let i of 0..<count {
                 out.push(as_float(&x.elements, i));

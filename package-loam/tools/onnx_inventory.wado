@@ -1,0 +1,270 @@
+//! What a model asks of Loam, read from its graph alone: each operator with the
+//! attribute values and the input and output counts its nodes use, the graph's
+//! inputs and outputs, and its weights by element type and by the file holding
+//! them. `loam dump` stops at the first node it refuses, so this is how the rest
+//! are seen before the build reaches them.
+
+use { args, eprintln, exit, println, Environment, Exit, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { TreeMap } from "core:collections";
+use grog from "lib:grog";
+use onnx from "../src/onnx.proto"
+    with {
+        generator: { module: "lib:grog" },
+    };
+use { external_entry } from "../src/onnx_proto.wado";
+
+/// An attribute's values are capped, since a `Constant`'s are as many as its
+/// nodes.
+global VALUES_SHOWN: i32 = 6;
+global LARGEST_SHOWN: i32 = 12;
+
+struct Operator {
+    nodes: i32 = 0,
+    inputs: List<i32> = [],
+    outputs: List<i32> = [],
+    attrs: TreeMap<String, List<String>> = TreeMap::<String, List<String>>::new(),
+}
+
+struct Tally {
+    tensors: i32 = 0,
+    bytes: i64 = 0,
+}
+
+struct Weight {
+    name: String,
+    typed: String,
+    bytes: i64,
+}
+
+fn element_name(number: i32) -> String {
+    return match onnx::TensorProtoDataType::from_number(number) {
+        Some(element) => `${element}`.to_ascii_lowercase(),
+        None => `${number}`,
+    };
+}
+
+fn joined<T: Display>(values: &List<T>, separator: String) -> String {
+    let mut text = "";
+    for let v of values {
+        if !text.is_empty() {
+            text.push_str(&separator);
+        }
+        text.push_str(&`${*v}`);
+    }
+    return text;
+}
+
+fn typed_tensor(t: &onnx::TensorProto) -> String {
+    return `${element_name(t.data_type.unwrap_or(0))}[${joined(&t.dims, ",")}]`;
+}
+
+fn typed_value(vi: &onnx::ValueInfoProto) -> String {
+    let name = vi.name.unwrap_or("");
+    let Some(ty) = &vi.type else {
+        return `${name}: no type`;
+    };
+    let Some(TensorType(tensor)) = &ty.value else {
+        return `${name}: not a tensor`;
+    };
+    let mut dims: List<String> = [];
+    if let Some(shape) = &tensor.shape {
+        for let d of shape.dim {
+            dims.push(match &d.value {
+                Some(DimParam(param)) => *param,
+                Some(DimValue(value)) => `${*value}`,
+                None => "?",
+            });
+        }
+    }
+    return `${name}: ${element_name(tensor.elem_type.unwrap_or(0))}[${joined(&dims, ",")}]`;
+}
+
+fn attr_value(a: &onnx::AttributeProto) -> String {
+    return match a.type {
+        Some(onnx::AttributeProtoAttributeType::Float) => `${a.f.unwrap_or(0.0)}`,
+        Some(onnx::AttributeProtoAttributeType::Int) => `${a.i.unwrap_or(0)}`,
+        Some(onnx::AttributeProtoAttributeType::String) => String::from_utf8_lossy(a.s.unwrap_or(b"")),
+        Some(onnx::AttributeProtoAttributeType::Floats) => `[${joined(&a.floats, ",")}]`,
+        Some(onnx::AttributeProtoAttributeType::Ints) => `[${joined(&a.ints, ",")}]`,
+        Some(onnx::AttributeProtoAttributeType::Strings) => {
+            let strings: List<String> = a.strings.into_iter().map(|s| String::from_utf8_lossy(s)).collect();
+            `[${joined(&strings, ",")}]`;
+        },
+        Some(onnx::AttributeProtoAttributeType::Tensor) => match &a.t {
+            Some(t) => `tensor<${typed_tensor(t)}>`,
+            None => "tensor",
+        },
+        Some(onnx::AttributeProtoAttributeType::Graph) => "graph",
+        Some(onnx::AttributeProtoAttributeType::Graphs) => "graphs",
+        _ => "?",
+    };
+}
+
+fn push_new<T: Eq>(values: &mut List<T>, value: T) {
+    if !values.contains(&value) {
+        values.push(value);
+    }
+}
+
+/// Counts `graph`'s nodes into `ops`, and those of every branch under them.
+fn count_nodes(graph: &onnx::GraphProto, ops: &mut TreeMap<String, Operator>) {
+    for let node of graph.node {
+        let domain = match node.domain {
+            Some(domain) && domain != "" => domain,
+            _ => "ai.onnx",
+        };
+        let key = `${domain}::${node.op_type.unwrap_or("")}`;
+        let mut op = ops.get(key).unwrap_or(Operator {});
+        op.nodes += 1;
+        push_new(&mut op.inputs, node.input.len());
+        push_new(&mut op.outputs, node.output.len());
+        for let a of node.attribute {
+            let name = a.name.unwrap_or("");
+            let mut values = op.attrs.get(name).unwrap_or([]);
+            if values.len() < VALUES_SHOWN {
+                push_new(&mut values, attr_value(&a));
+            }
+            op.attrs[name] = values;
+        }
+        // Stored before the branches count into `ops`, which may hold this key.
+        ops[key] = op;
+        for let a of node.attribute {
+            if let Some(branch) = &a.g {
+                count_nodes(branch, ops);
+            }
+            for let branch of a.graphs {
+                count_nodes(&branch, ops);
+            }
+        }
+    }
+}
+
+/// The bytes `t` stores: its external `length`, its `raw_data`, or else, for
+/// typed fields or external data that runs to the end of its file, its
+/// element count at its type's width, packed as `raw_data` packs it.
+fn stored_bytes(t: &onnx::TensorProto) -> i64 {
+    if let Some(length) = external_entry(t, "length") {
+        return i64::from_str(&length).unwrap_or(0);
+    }
+    if let Some(raw) = &t.raw_data {
+        return raw.len() as i64;
+    }
+    let mut count: i64 = 1;
+    for let d of t.dims {
+        count *= d;
+    }
+    // `TensorProto.DataType`'s numbers. A string has no width, so it counts
+    // only where `raw_data` or a `length` gives its bytes.
+    let bits: i64 = match t.data_type.unwrap_or(0) {
+        25 | 26 => 2,
+        21 | 22 | 23 => 4,
+        27 | 28 => 6,
+        2 | 3 | 9 | 17 | 18 | 19 | 20 | 24 => 8,
+        4 | 5 | 10 | 16 => 16,
+        1 | 6 | 12 => 32,
+        7 | 11 | 13 | 14 => 64,
+        15 => 128,
+        _ => 0,
+    };
+    return (bits * count).div_ceil(8);
+}
+
+fn tally(into: &mut TreeMap<String, Tally>, key: String, bytes: i64) {
+    let mut entry = into.get(key).unwrap_or(Tally {});
+    entry.tensors += 1;
+    entry.bytes += bytes;
+    into[key] = entry;
+}
+
+fn print_tallies(title: String, tallies: &TreeMap<String, Tally>) with Stdout {
+    println(`\n${title}`);
+    for let [key, t] of tallies.entries() {
+        println(`  ${key}: ${t.tensors} tensors, ${t.bytes} bytes`);
+    }
+}
+
+export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
+    let given = args();
+    if given.len() != 1 {
+        eprintln("usage: onnx_inventory <model.onnx>");
+        exit(2);
+    }
+    let bytes = match fs::read(&given[0]) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln(`${e}`);
+            exit(1);
+        },
+    };
+    let model = match grog::decode::<onnx::ModelProto, ByteList>(bytes) {
+        Ok(model) => model,
+        Err(e) => {
+            eprintln(`${given[0]}: ${e}`);
+            exit(1);
+        },
+    };
+    let Some(graph) = &model.graph else {
+        eprintln(`${given[0]}: a model without a graph`);
+        exit(1);
+    };
+
+    let opsets: List<String> = model.opset_import.into_iter().map(|o| {
+        let domain = match o.domain {
+            Some(domain) && domain != "" => domain,
+            _ => "ai.onnx",
+        };
+        return `${domain}=${o.version.unwrap_or(0)}`;
+    }).collect();
+    println(`opsets ${joined(&opsets, " ")}`);
+    println(`functions ${model.functions.len()}`);
+
+    let mut ops = TreeMap::<String, Operator>::new();
+    count_nodes(graph, &mut ops);
+    let mut names: List<String> = [];
+    for let [name, _] of ops.entries() {
+        names.push(*name);
+    }
+    names.sort();
+    println("\noperators");
+    for let name of names {
+        let op = ops[name];
+        println(`  ${name} x${op.nodes} inputs=${joined(&op.inputs, ",")} outputs=${joined(&op.outputs, ",")}`);
+        for let [attr, values] of op.attrs.entries() {
+            println(`    ${attr}: ${joined(values, " | ")}`);
+        }
+    }
+
+    let mut by_type = TreeMap::<String, Tally>::new();
+    let mut by_file = TreeMap::<String, Tally>::new();
+    let mut weights: List<Weight> = [];
+    let mut initializers: List<String> = [];
+    for let t of graph.initializer {
+        let name = t.name.unwrap_or("");
+        let size = stored_bytes(&t);
+        tally(&mut by_type, element_name(t.data_type.unwrap_or(0)), size);
+        tally(&mut by_file, external_entry(&t, "location").unwrap_or("(in the graph)"), size);
+        weights.push(Weight { name, typed: typed_tensor(&t), bytes: size });
+        initializers.push(name);
+    }
+
+    println("\ninputs");
+    for let vi of graph.input {
+        if !initializers.contains(&vi.name.unwrap_or("")) {
+            println(`  ${typed_value(&vi)}`);
+        }
+    }
+    println("outputs");
+    for let vi of graph.output {
+        println(`  ${typed_value(&vi)}`);
+    }
+
+    print_tallies("weights by element type", &by_type);
+    print_tallies("weights by file", &by_file);
+    println("\nlargest weights");
+    weights.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+    for let w of weights.into_iter().take(LARGEST_SHOWN) {
+        println(`  ${w.name}: ${w.typed} ${w.bytes} bytes`);
+    }
+}

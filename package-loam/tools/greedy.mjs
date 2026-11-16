@@ -13,13 +13,22 @@ import * as ort from 'onnxruntime-node';
 
 export const STEPS = 32;
 
+// Where the global exists, onnxruntime holds float16 in a Float16Array, which
+// its native side reads as empty when one is fed back on the CPU. Without the
+// global it holds the bits. It looks once, at the first tensor.
+const Float16Array = globalThis.Float16Array;
+delete globalThis.Float16Array;
+
 /**
- * Writes `dir`/generate.json for `decoder`, continuing each of `prompts`.
- * A decoder is `{ model, layers, emptyPast, feeds }`: `emptyPast` is the shape
- * of a layer's cache before the first token, and `feeds(seen)` any input
- * beyond the ids, the mask and the cache.
+ * Writes `dir`/`name` for `decoder`, continuing each of `prompts`, and into
+ * `dir`/`logits`, where given, the logits the CPU picks each prompt's first
+ * token from: little-endian f32s, a prompt after another.
+ * A decoder is `{ model, layers, emptyPast, half, feeds }`: `emptyPast` is the
+ * shape of a layer's cache before the first token, `half` says the cache and
+ * the logits are float16, and `feeds(seen)` any input beyond the ids, the mask
+ * and the cache.
  */
-export async function writeGenerated({ dir, prompts, decoder }) {
+export async function writeGenerated({ dir, prompts, decoder, name = 'generate.json', logits }) {
   const recorded = JSON.parse(readFileSync(join(dir, 'tokenize.json'), 'utf8')).tokenize;
   const cpu = await generate('cpu');
   const webgpu = await generate('webgpu');
@@ -31,7 +40,8 @@ export async function writeGenerated({ dir, prompts, decoder }) {
     return { ...c, webgpu_ms_per_token: w.ms_per_token };
   });
 
-  writeFileSync(join(dir, 'generate.json'), `${JSON.stringify({ generate: generated }, null, 2)}\n`);
+  writeFileSync(join(dir, name), `${JSON.stringify({ generate: generated }, null, 2)}\n`);
+  if (logits) writeFileSync(join(dir, logits), Buffer.concat(cpu.firsts.map((f) => Buffer.from(f.buffer))));
   console.log(`smallest lead of a greedy pick over the runner-up: ${cpu.lead}`);
   for (const g of generated) {
     console.log(
@@ -44,13 +54,15 @@ export async function writeGenerated({ dir, prompts, decoder }) {
     const session = await opened(decoder, provider);
     let lead = Infinity;
     const timed = [];
+    const firsts = [];
     for (const prompt of prompts) {
       const { ids } = recorded.find((t) => t.text === prompt);
       const c = await continued(session, decoder, ids);
       lead = Math.min(lead, c.lead);
+      firsts.push(c.first);
       timed.push({ prompt, ids, generated: c.generated, ms_per_token: c.ms_after_first / (STEPS - 1) });
     }
-    return { prompts: timed, lead };
+    return { prompts: timed, lead, firsts };
   }
 }
 
@@ -68,16 +80,18 @@ export async function opened({ model, layers }, provider) {
 
 /**
  * The STEPS tokens greedy decoding picks after `ids` from an empty cache, the
- * smallest lead of a pick over the runner-up, and the milliseconds the steps
- * after the first took.
+ * smallest lead of a pick over the runner-up, the logits the first is picked
+ * from, and the milliseconds the steps after the first took.
  */
-export async function continued(session, { layers, emptyPast, feeds = () => ({}) }, ids) {
+export async function continued(session, { layers, emptyPast, half = false, feeds = () => ({}) }, ids) {
+  const empty = half ? new ort.Tensor('float16', new Uint16Array(0), emptyPast) : new ort.Tensor('float32', new Float32Array(0), emptyPast);
   const generated = [];
   let lead = Infinity;
   let caches = {};
   let fresh = ids;
   let seen = 0;
   let started;
+  let first;
   for (let s = 0; s < STEPS; s++) {
     const total = seen + fresh.length;
     const inputs = {
@@ -87,17 +101,20 @@ export async function continued(session, { layers, emptyPast, feeds = () => ({})
     };
     for (let l = 0; l < layers; l++) {
       for (const kind of ['key', 'value']) {
-        inputs[`past_key_values.${l}.${kind}`] = caches[`present.${l}.${kind}`] ?? new ort.Tensor('float32', new Float32Array(0), emptyPast);
+        inputs[`past_key_values.${l}.${kind}`] = caches[`present.${l}.${kind}`] ?? empty;
       }
     }
     const out = await session.run(inputs);
     const vocab = out.logits.dims[2];
-    const last = out.logits.data.subarray((fresh.length - 1) * vocab, fresh.length * vocab);
+    const last = values(out.logits.data).subarray((fresh.length - 1) * vocab, fresh.length * vocab);
     let best = 0;
     for (let v = 1; v < vocab; v++) if (last[v] > last[best]) best = v;
     let second = -Infinity;
     for (let v = 0; v < vocab; v++) if (v !== best && last[v] > second) second = last[v];
-    if (s === 0) started = performance.now();
+    if (s === 0) {
+      first = Float32Array.from(last);
+      started = performance.now();
+    }
     seen = total;
     released(caches);
     caches = out;
@@ -106,7 +123,12 @@ export async function continued(session, { layers, emptyPast, feeds = () => ({})
     lead = Math.min(lead, last[best] - second);
   }
   released(caches);
-  return { generated, lead, ms_after_first: performance.now() - started };
+  return { generated, lead, first, ms_after_first: performance.now() - started };
+}
+
+/** A tensor's data as numbers, which float16's bits are not. */
+function values(data) {
+  return data instanceof Uint16Array ? new Float16Array(data.buffer, data.byteOffset, data.length) : data;
 }
 
 /** Frees the caches a step returned on the device, which only `dispose` does. */

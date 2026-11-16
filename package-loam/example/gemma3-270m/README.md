@@ -46,6 +46,30 @@ program (`scripts/fetch-pjrt-plugin.sh tpu` prints its path):
 
     TPU_SKIP_MDS_QUERY=1 wado run-pjrt --plugin libtpu.so analyzed.wado
 
+## The `fp16` export
+
+`fp16.wado` builds `onnx/model_fp16.onnx`, whose weights and computed floats
+are all halves. It continues each prompt `generate_fp16.json` records, and says
+whether it picks the tokens onnxruntime picks, and how far the logits it picks
+the first from are from onnxruntime's. It reads onnxruntime's logits from
+`build/logits_fp16.bin`, which `generate.mjs` writes. A file runs it on each
+device:
+
+    mise run loam-oracle-deps
+    cd package-loam/example/gemma3-270m
+    node generate.mjs
+    wado run --collector drc fp16_cpu.wado
+    wado run-webgpu fp16_webgpu.wado
+    wado run-pjrt --plugin libpjrt_cpu.so fp16_pjrt.wado
+
+`wado run-webgpu fp16_webgpu.wado -- --forgo-shader-f16` computes as a device
+without `shader-f16` does. What each prints is in
+[Half Element Types](../../design.md#half-element-types).
+
+`generate.mjs` writes `generate_fp16.json` beside `generate.json`, and the
+logits into `build/logits_fp16.bin`. It also times onnxruntime's WebGPU
+provider, so it needs a WebGPU device.
+
 ## What the build reads
 
 The model is

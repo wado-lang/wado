@@ -5,7 +5,7 @@ completion, and this file what was built after it. These documents hold a part
 each:
 
 - [Loam on TPU and WebGPU](./devices.md): running at the best speed on both
-  devices, which the roadmap builds.
+  devices.
 - [Loam on WebGPU](./webgpu.md): how a pass runs on a WebGPU device.
 - [Loam Tokenizer](./tokenizer.md): the tokenizer.
 - [Runtime Assets](./remote-import.md): files a program reads at run time, not
@@ -165,3 +165,55 @@ A model under 2 GiB is published with its weights in the protobuf, each in a
 records where each weight's `raw_data` sits, and holds no payload it does not
 read. The loader is handed the model file itself, and checks its length against
 the one the build read before reading a weight.
+
+## Half Element Types
+
+A graph's `float16` and `bfloat16` tensors are `f16` and `bf16` on every device,
+as
+[WEP: Loam § Wado Stores a Half, a Device Computes In It](../docs/wep-2026-09-20-loam.md#wado-stores-a-half-a-device-computes-in-it)
+decided, with one departure on `WebGpuBackend`.
+
+The WEP has a device with `shader-f16` compute in f16. `WebGpuBackend` reads
+and writes f16s there, but computes in f32 between the two. A kernel widens
+each half it reads, computes in f32, rounds what it stores with `to_f16`, and
+stores the f16. A device without the feature reads two halves from each `u32`
+and stores the rounded value as an f32. Both paths compute in f32. A product
+whose operand holds halves reads two elements a word, which sums in another
+order, so the two paths' results can differ by a rounding. Arithmetic in f16 would be faster on some devices, and would hold
+the results to a tolerance instead. bf16 has no WGSL type, so it takes the f32
+path on every device.
+
+| Holds            | With `shader-f16` (f16) | Without, or bf16                     |
+| ---------------- | ----------------------- | ------------------------------------ |
+| A weight         | `array<f16>`            | two halves to a `u32`                |
+| What it computes | `array<f16>`            | f32s, each equal to its rounded half |
+
+`forgo_shader_f16` makes a backend compute as a device without the feature
+does, so one device tests both paths.
+
+A node of halves that takes several steps computes them in f32 and rounds its
+result once, on every device: a mean, a softmax, an attention with its rotary
+embedding, a normalization, a `Gelu`, and a `Gemm` or `Conv` through its scale
+and bias. A step
+rounded on the way would turn a value past a half's range into an infinity
+that the next step could have brought back.
+
+On the CPU, onnxruntime computes the float16 nodes of Gemma 3 (270M)'s `fp16`
+export in f32. Loam rounds each node's result to f16, as the graph says, so
+its logits sit apart from onnxruntime's while the tokens match. Each row is the
+largest deviation of the first token's logits, on an NVIDIA RTX 4060 Ti over
+Vulkan and on XLA's CPU plugin. Every row picks onnxruntime's tokens.
+
+| Run, in `example/gemma3-270m/`                             | "Hello, my name is" | The France prompt |
+| ---------------------------------------------------------- | ------------------- | ----------------- |
+| `wado run --collector drc fp16_cpu.wado`                   | 0.0625              | 0.109375          |
+| `wado run-webgpu fp16_webgpu.wado`                         | 0.09375             | 0.1484375         |
+| `wado run-webgpu fp16_webgpu.wado -- --forgo-shader-f16`   | 0.125               | 0.1484375         |
+| `wado run-pjrt -O2 --plugin libpjrt_cpu.so fp16_pjrt.wado` | 0.109375            | 0.078125          |
+
+onnxruntime's greedy pick leads the next logit by as little as this, over every
+step of every prompt, so a deviation above can exceed a pick's lead:
+
+| Run, in `example/gemma3-270m/` | Smallest lead |
+| ------------------------------ | ------------- |
+| `node generate.mjs`            | 0.03125       |

@@ -78,19 +78,19 @@ pub struct ValueInfo {
     pub data: Option<ByteList> = null,
 }
 
-/// An element type a kernel reaches: the primitive a tensor is held in, its
-/// width in a payload, the primitive the kernels compute it in, and its name
-/// in a safetensors header.
+/// An element type a kernel reaches: the primitive a tensor is held and
+/// computed in, its width in a payload, and its name in a safetensors header.
 pub struct Element {
     pub primitive: String,
     pub width: i32,
-    pub computed: String,
     pub stored: String,
 }
 
-/// The one element type the kernels have arithmetic for. A layout kernel moves
-/// an `i64` or `bool` tensor, and every other kernel reads and produces this.
-pub global KERNEL_ELEMENT: String = "f32";
+/// Whether `primitive` is one the kernels have arithmetic for. A layout kernel
+/// moves any element, and every other kernel reads and produces one of these.
+pub fn is_float(primitive: &String) -> bool {
+    return *primitive == "f32" || *primitive == "f16" || *primitive == "bf16";
+}
 
 /// The `TensorProto.DataType` an attribute's number names, as `Cast`'s `to`
 /// carries one. `None` for a number the enum does not declare.
@@ -102,16 +102,15 @@ pub fn data_type(number: i64) -> Option<onnx::TensorProtoDataType> {
 }
 
 /// `dtype`'s element, or `None` for one no kernel reaches, whose payload is not
-/// read. Half precision is held and widened, never computed.
+/// read.
 pub fn element_of(dtype: &String) -> Option<Element> {
     return match dtype.as_str_slice() {
-        "float" => Option::Some(
-            Element { primitive: KERNEL_ELEMENT, width: 4, computed: KERNEL_ELEMENT, stored: "F32" },
-        ),
-        "float16" => Option::Some(Element { primitive: "f16", width: 2, computed: KERNEL_ELEMENT, stored: "F16" }),
-        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, computed: KERNEL_ELEMENT, stored: "BF16" }),
-        "int64" => Option::Some(Element { primitive: "i64", width: 8, computed: "i64", stored: "I64" }),
-        "bool" => Option::Some(Element { primitive: "bool", width: 1, computed: "bool", stored: "BOOL" }),
+        "float" => Option::Some(Element { primitive: "f32", width: 4, stored: "F32" }),
+        "float16" => Option::Some(Element { primitive: "f16", width: 2, stored: "F16" }),
+        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, stored: "BF16" }),
+        "uint8" => Option::Some(Element { primitive: "u8", width: 1, stored: "U8" }),
+        "int64" => Option::Some(Element { primitive: "i64", width: 8, stored: "I64" }),
+        "bool" => Option::Some(Element { primitive: "bool", width: 1, stored: "BOOL" }),
         _ => null,
     };
 }
@@ -598,10 +597,15 @@ pub global GROUP_QUERY_ATTENTION: String = "com.microsoft.GroupQueryAttention";
 /// - `SimplifiedLayerNormalization` is onnxruntime's RMS normalization over the
 ///   last axis: `x / √(mean(x²) + epsilon) · scale`, the function ONNX's
 ///   `RMSNormalization` (opset 23) defines.
+/// - `Max` and `Min` take any number of operands, two at a time.
+/// - `Clip` is `Min(Max(x, min), max)`, as ONNX defines it, each bound an
+///   optional operand, or before opset 11 an optional attribute.
 fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
     let [needed, write]: [i32, fn(&Node, &mut FunctionBody) -> Result<(), String>] = match node.op.as_str_slice() {
         "Gelu" => [1, gelu],
         "SimplifiedLayerNormalization" => [2, rms_normalization],
+        "Max" | "Min" => [1, pairwise],
+        "Clip" => [1, clip],
         _ => {
             return Result::Ok(null);
         },
@@ -610,7 +614,7 @@ fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
     if given < needed {
         return Result::Err(`${node.site()}: ${operands_short(needed, given)}`);
     }
-    let mut body = FunctionBody { prefix: node.outputs.first().unwrap_or(node.op), nodes: [] };
+    let mut body = FunctionBody { prefix: node.outputs.first().unwrap_or(node.op), x: node.inputs[0], nodes: [] };
     write(node, &mut body)?;
     return Result::Ok(Option::Some(body.nodes));
 }
@@ -626,8 +630,11 @@ fn at_node(node: &Node, e: AttrError) -> String {
     return `${node.site()}: ${e}`;
 }
 
+/// Computed in f32 and rounded once, since a half would round `erf` or `tanh`
+/// near -1 to it, and the tanh form's cube past a half's range.
 fn gelu(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
-    let x = node.inputs[0];
+    let given = node.inputs[0];
+    let x = body.computed_in(given, 1);
     let inner = match node.string_attr("approximate", "none").map_err(|e| at_node(node, e))?.as_str_slice() {
         "none" => body.unary("Erf", &body.binary("Mul", &x, &body.constant(f32::sqrt(0.5)))),
         "tanh" => {
@@ -640,7 +647,8 @@ fn gelu(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
         },
     };
     let half = body.binary("Mul", &x, &body.constant(0.5));
-    body.output("Mul", [half, body.binary("Add", &inner, &body.constant(1.0))], node);
+    let product = body.binary("Mul", &half, &body.binary("Add", &inner, &body.constant(1.0)));
+    body.output("CastLike", [product, given], node);
     return Result::Ok(());
 }
 
@@ -648,8 +656,10 @@ fn rms_normalization(node: &Node, body: &mut FunctionBody) -> Result<(), String>
     if node.int_attr("axis", -1).map_err(|e| at_node(node, e))? != -1 {
         return Result::Err(`${node.site()}: only the last axis normalizes`);
     }
-    let [x, scale] = [node.inputs[0], node.inputs[1]];
+    let [given, scale] = [node.inputs[0], node.inputs[1]];
     let epsilon = node.float_attr("epsilon", 1e-5).map_err(|e| at_node(node, e))?;
+    let stash = node.int_attr("stash_type", 1).map_err(|e| at_node(node, e))?;
+    let x = body.computed_in(given, stash);
     let square = body.binary("Mul", &x, &x);
     let mean = body.node("ReduceMean", [square], [
         Attr {
@@ -659,13 +669,39 @@ fn rms_normalization(node: &Node, body: &mut FunctionBody) -> Result<(), String>
         },
     ]);
     let root = body.unary("Sqrt", &body.binary("Add", &mean, &body.constant(epsilon)));
-    body.output("Mul", [body.binary("Div", &x, &root), scale], node);
+    // The result takes the scale's element, which may differ from the input's.
+    let normalized = body.node("CastLike", [body.binary("Div", &x, &root), scale], []);
+    body.output("Mul", [normalized, scale], node);
+    return Result::Ok(());
+}
+
+fn pairwise(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
+    let steps: List<[String, String]> = node.inputs.into_iter().skip(1).map(|operand| [node.op, operand]).collect();
+    body.chained(node.inputs[0], steps, node);
+    return Result::Ok(());
+}
+
+fn clip(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
+    let mut steps: List<[String, String]> = [];
+    for let [index, bound, op] of [
+        [1, "min", "Max"],
+        [2, "max", "Min"],
+    ] {
+        if node.has_operand(index) {
+            steps.push([op, node.inputs[index]]);
+        } else if node.attr(bound) matches { Some(_) } {
+            steps.push([op, body.constant(node.float_attr(bound, 0.0).map_err(|e| at_node(node, e))?)]);
+        }
+    }
+    body.chained(node.inputs[0], steps, node);
     return Result::Ok(());
 }
 
 /// A function's body as it is written out, each tensor named under `prefix`.
 struct FunctionBody {
     prefix: String,
+    /// The function's first operand, whose element its constants take.
+    x: String,
     nodes: List<Node>,
 }
 
@@ -682,14 +718,17 @@ impl FunctionBody {
         return out;
     }
 
+    /// `value` in the element `x` has, as ONNX's function bodies write a
+    /// constant: through `CastLike`.
     fn constant(&mut self, value: f32) -> String {
-        return self.node("Constant", [], [
+        let written = self.node("Constant", [], [
             Attr {
                 name: "value_float",
                 values: [`${value}`],
                 is_list: false,
             },
         ]);
+        return self.binary("CastLike", &written, &self.x);
     }
 
     fn unary(&mut self, op: String, x: &String) -> String {
@@ -700,7 +739,35 @@ impl FunctionBody {
         return self.node(op, [*a, *b], []);
     }
 
+    /// `x` through each `[op, operand]` of `steps` in turn, the last of them
+    /// computing the function's output, which is `x` where there is none.
+    fn chained(&mut self, x: String, steps: List<[String, String]>, function: &Node) {
+        let mut rest = steps;
+        let Some([last_op, last]) = rest.pop() else {
+            self.output("Identity", [x], function);
+            return;
+        };
+        let mut reached = x;
+        for let [op, operand] of rest {
+            reached = self.binary(op, &reached, &operand);
+        }
+        self.output(last_op, [reached, last], function);
+    }
+
     /// The body's last node, which computes the function's output.
+    /// `given` cast to the element `TensorProto.DataType` numbers `to`, which
+    /// the body's constants then take too.
+    fn computed_in(&mut self, given: String, to: i64) -> String {
+        self.x = self.node("Cast", [given], [
+            Attr {
+                name: "to",
+                values: [`${to}`],
+                is_list: false,
+            },
+        ]);
+        return self.x;
+    }
+
     fn output(&mut self, op: String, inputs: List<String>, function: &Node) {
         self.nodes.push(Node {
             op,
@@ -731,10 +798,26 @@ pub fn settled<T, E>(read: Result<T, E>) -> T {
     return value;
 }
 
-/// The operators that broadcast two operands against each other: each a case of
-/// the runtime's `BinaryOp`, by name.
+/// Whether `op` broadcasts two operands against each other.
 pub fn is_binary_elementwise(op: &String) -> bool {
-    return case_named::<BinaryOp>(op) matches { Some(_) };
+    return binary_operator(op) matches { Some(_) };
+}
+
+/// What an operator broadcasting two operands against each other computes of
+/// each pair, or `None` for any other operator.
+pub fn binary_operator(op: &String) -> Option<BinaryOp> {
+    return Option::Some(match op.as_str_slice() {
+        "Add" => BinaryOp::Add,
+        "Sub" => BinaryOp::Sub,
+        "Mul" => BinaryOp::Mul,
+        "Div" => BinaryOp::Div,
+        "Pow" => BinaryOp::Pow,
+        "Max" => BinaryOp::Maximum,
+        "Min" => BinaryOp::Minimum,
+        _ => {
+            return null;
+        },
+    });
 }
 
 /// The one-operand operators an `Expr` applies: each a case of the runtime's

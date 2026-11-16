@@ -2,9 +2,9 @@
 //! them.
 
 use { HashMap } from "core:collections";
-use { EmitError, Operands, Symbols, axis_list, float_literal } from "./emit_symbols.wado";
+use { EmitError, Operands, Symbols, axis_list, f32_literal, float_literal } from "./emit_symbols.wado";
 use { fill_of } from "./fold.wado";
-use { Elements, KERNEL_ELEMENT, Node, case_named, settled, trailing_axes } from "./graph.wado";
+use { Elements, Node, binary_operator, case_named, settled, trailing_axes } from "./graph.wado";
 use { BACKEND_PARAM } from "./idents.wado";
 use {
     Checked,
@@ -52,7 +52,7 @@ internal fn built_call(
         return built_slice(node, checked, exprs, symbols);
     }
     if op == "ConstantOfShape" {
-        let value = element_literal(&fill_of(node).unwrap().elements);
+        let value = element_literal(&element, &fill_of(node).unwrap().elements);
         return Result::Ok(
             `full::<${BACKEND_PARAM}, ${element}, [${axes}]>(backend, ${value}, ${symbols.spell_shape(&out)?})`,
         );
@@ -74,7 +74,7 @@ internal fn built_call(
         return built_gather(node, checked, exprs, symbols);
     }
     if op == "MaxPool" {
-        return built_max_pool(node, shapes, exprs, symbols);
+        return built_max_pool(node, &element, shapes, exprs, symbols);
     }
     if op == "Where" {
         let mut operands: List<String> = [];
@@ -89,9 +89,9 @@ internal fn built_call(
         let normalized: List<i32> = if lane.flattened { (lane.axis..<out.rank()).collect() } else { [lane.axis] };
         let mut x = operand(0);
         for let axis of normalized {
-            x = masked_along(x, &out, axis, float_literal(f32::NEG_INFINITY), symbols)?;
+            x = masked_along(x, &element, &out, axis, f32::NEG_INFINITY, symbols)?;
         }
-        return Result::Ok(`${helper}::<${BACKEND_PARAM}, [${axes}]>(backend, ${x}, ${lane.axis})`);
+        return Result::Ok(`${helper}::<${BACKEND_PARAM}, ${element}, [${axes}]>(backend, ${x}, ${lane.axis})`);
     }
     if is_reduction(&op) {
         return built_reduction(node, checked, exprs, symbols);
@@ -99,7 +99,8 @@ internal fn built_call(
     if op == "ArgMax" {
         let x = shapes[node.inputs[0]];
         let axis = settled(arg_max_axis(node, x.rank()));
-        let a = masked_along(operand(0), &x, axis, float_literal(f32::NEG_INFINITY), symbols)?;
+        let ranked_in = checked.primitives[node.inputs[0]];
+        let a = masked_along(operand(0), &ranked_in, &x, axis, f32::NEG_INFINITY, symbols)?;
         return ranked(node, checked, `backend.arg_max(${a}, ${axis})`, symbols);
     }
     if op == "Concat" {
@@ -125,7 +126,7 @@ internal fn built_call(
     if op == "Conv" {
         return built_conv(node, checked, exprs, symbols);
     }
-    if let Some(binary) = case_named::<BinaryOp>(&op) {
+    if let Some(binary) = binary_operator(&op) {
         let trailing = settled(trailing_axes(node, shapes[node.inputs[0]].rank(), shapes[node.inputs[1]].rank()));
         let a = stretched(checked, exprs, symbols, &node.inputs[0], &out, 0)?;
         let b = stretched(checked, exprs, symbols, &node.inputs[1], &out, trailing)?;
@@ -135,16 +136,20 @@ internal fn built_call(
             Mul => "Multiply",
             Div => "Divide",
             Pow => "Power",
-            // No ONNX operator is named as these are.
-            Maximum | Minimum | Eq | Ne | Lt | Le | Gt | Ge => unreachable(),
+            Maximum => "Maximum",
+            Minimum => "Minimum",
+            // A comparison yields no element of its operands' type.
+            Eq | Ne | Lt | Le | Gt | Ge => unreachable(),
         };
         return Result::Ok(`backend.binary::<${element}, [${axes}]>(Binary::${name}, ${a}, ${b})`);
     }
     // Stage 0 refuses every operator the graph lowers no other way.
     let unary = case_named::<UnaryOp>(&op).unwrap();
     if unary matches { Relu } {
-        let zero = `&full::<${BACKEND_PARAM}, f32, [${axes}]>(backend, 0 as f32, ${symbols.spell_shape(&out)?})`;
-        return Result::Ok(`backend.binary::<f32, [${axes}]>(Binary::Maximum, ${operand(0)}, ${zero})`);
+        let zero = `&full::<${BACKEND_PARAM}, ${element}, [${axes}]>(backend, ${float_literal(&element, 0.0)}, ${symbols.spell_shape(
+            &out,
+        )?})`;
+        return Result::Ok(`backend.binary::<${element}, [${axes}]>(Binary::Maximum, ${operand(0)}, ${zero})`);
     }
     let name = match unary {
         Relu => unreachable(),
@@ -157,7 +162,7 @@ internal fn built_call(
         Neg => "Negate",
         Abs => "Abs",
     };
-    return Result::Ok(`backend.unary::<[${axes}]>(Unary::${name}, ${operand(0)})`);
+    return Result::Ok(`backend.unary::<${element}, [${axes}]>(Unary::${name}, ${operand(0)})`);
 }
 
 /// `operand`, of axes `from`, broadcast to `to`'s axes, its axes meeting
@@ -179,9 +184,7 @@ fn broadcast_call(
     );
 }
 
-/// `tensor` read under `out`'s axes: as it is where they are its own, and
-/// broadcast to them otherwise. An axis of 1 may share its name with the one
-/// it stretches over, so the names alone do not say they are one.
+/// `tensor` read under `out`'s axes, as `stretched_operand` reads it.
 fn stretched(
     checked: &Checked,
     exprs: &Operands,
@@ -191,26 +194,78 @@ fn stretched(
     trailing: i32,
 ) -> Result<String, EmitError> {
     let shape = checked.shapes[*tensor];
-    if same_axes(&shape, out) {
-        return Result::Ok(exprs.reference(tensor));
-    }
-    let element = checked.primitives[*tensor];
-    return Result::Ok(`&${broadcast_call(&element, &shape, out, &exprs.reference(tensor), trailing, symbols)?}`);
+    return stretched_operand(&checked.primitives[*tensor], &shape, out, exprs.reference(tensor), trailing, symbols);
 }
 
-/// The value `operand` refers to, of axes `shape`, times `factor`.
+/// `operand`, of `element` and axes `shape`, read under `out`'s axes: as it is
+/// where they are its own, and broadcast to them otherwise. An axis of 1 may
+/// share its name with the one it stretches over, so the names alone do not
+/// say they are one.
+fn stretched_operand(
+    element: &String,
+    shape: &Shape,
+    out: &Shape,
+    operand: String,
+    trailing: i32,
+    symbols: &mut Symbols,
+) -> Result<String, EmitError> {
+    if same_axes(shape, out) {
+        return Result::Ok(operand);
+    }
+    return Result::Ok(`&${broadcast_call(element, shape, out, &operand, trailing, symbols)?}`);
+}
+
+/// The element a node of `element` computes in: f32 for a half whose node
+/// takes several steps, so that neither a value past a half's range nor a
+/// scalar no half holds is rounded on the way, and the result rounds once.
+struct Computed {
+    element: String,
+    wide: bool,
+}
+
+impl Computed {
+    fn new(element: String, several_steps: bool) -> Computed {
+        return Computed { element, wide: (element == "f16" || element == "bf16") && several_steps };
+    }
+
+    fn element(&self) -> String {
+        return if self.wide { "f32" } else { self.element };
+    }
+
+    /// `operand`, of axes `shape`, in the element computed in.
+    fn operand(&self, operand: String, shape: &Shape) -> String {
+        if !self.wide {
+            return operand;
+        }
+        return `&backend.convert::<${self.element}, f32, [${axis_list(shape)}]>(${operand})`;
+    }
+
+    /// `call`, of axes `shape`, in the node's own element.
+    fn result(&self, call: String, shape: &Shape) -> String {
+        if !self.wide {
+            return call;
+        }
+        return `backend.convert::<f32, ${self.element}, [${axis_list(shape)}]>(&${call})`;
+    }
+}
+
+/// The f32s `operand` refers to, of axes `shape`, times `factor`.
 fn scaled(operand: &String, shape: &Shape, factor: f32, symbols: &mut Symbols) -> Result<String, EmitError> {
     let axes = axis_list(shape);
-    let by = `&full::<${BACKEND_PARAM}, f32, [${axes}]>(backend, ${float_literal(factor)}, ${symbols.spell_shape(shape)?})`;
+    let by = `&full::<${BACKEND_PARAM}, f32, [${axes}]>(backend, ${float_literal(&"f32", factor)}, ${symbols.spell_shape(
+        shape,
+    )?})`;
     return Result::Ok(`backend.binary::<f32, [${axes}]>(Binary::Multiply, ${*operand}, ${by})`);
 }
 
 /// `dot_general` of `lhs`, of axes `left`, by `rhs`, of axes `right`, into
-/// `out`, over the axes `batch` on both sides, contracting the left's axis
-/// `contracting.0` with the right's `contracting.1`. A contraction sums over
-/// its padding as a sum does, so where a valid length enters it, both
-/// operands hold zeros there: either may hold anything in its own.
+/// `out`, each of `element`, over the axes `batch` on both sides, contracting
+/// the left's axis `contracting.0` with the right's `contracting.1`. A
+/// contraction sums over its padding as a sum does, so where a valid length
+/// enters it, both operands hold zeros there: either may hold anything in its
+/// own.
 fn dot_call(
+    element: &String,
     left: &Shape,
     right: &Shape,
     out: &Shape,
@@ -223,11 +278,11 @@ fn dot_call(
     let [l, r] = contracting;
     let dims = `&DotDims { lhs_batch: ${batch}, rhs_batch: ${batch}, lhs_contracting: [${l}], rhs_contracting: [${r}] }`;
     let [a, b] = [
-        masked_along(*lhs, left, l, "0 as f32", symbols)?,
-        masked_along(*rhs, right, r, "0 as f32", symbols)?,
+        masked_along(*lhs, element, left, l, 0.0, symbols)?,
+        masked_along(*rhs, element, right, r, 0.0, symbols)?,
     ];
     return Result::Ok(
-        `backend.dot_general::<[${axis_list(left)}], [${axis_list(right)}], [${axis_list(out)}]>(${a}, ${b}, ${dims})`,
+        `backend.dot_general::<${*element}, [${axis_list(left)}], [${axis_list(right)}], [${axis_list(out)}]>(${a}, ${b}, ${dims})`,
     );
 }
 
@@ -238,17 +293,18 @@ fn dot_call(
 fn built_matmul(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     let out = shapes[node.outputs[0]];
+    let element = checked.primitives[node.outputs[0]];
     let left = shapes[node.inputs[0]];
     let a = exprs.reference(&node.inputs[0]);
     let last = left.rank() - 1;
     if let Some(weight) = exprs.transposed.get(node.inputs[1]) {
-        return dot_call(&left, &shapes[weight], &out, &a, &exprs.reference(&weight), [], [last, 1], symbols);
+        return dot_call(&element, &left, &shapes[weight], &out, &a, &exprs.reference(&weight), [], [last, 1], symbols);
     }
     let right = shapes[node.inputs[1]];
     let b = exprs.reference(&node.inputs[1]);
     if right.rank() <= 2 || left.rank() == 1 {
         let contracted = if right.rank() == 1 { 0 } else { right.rank() - 2 };
-        return dot_call(&left, &right, &out, &a, &b, [], [last, contracted], symbols);
+        return dot_call(&element, &left, &right, &out, &a, &b, [], [last, contracted], symbols);
     }
     let batch = out.rank() - 2;
     let under_batch = |matrix: &Shape| {
@@ -261,6 +317,7 @@ fn built_matmul(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
         under_batch(&right),
     ];
     return dot_call(
+        &element,
         &lhs,
         &rhs,
         &out,
@@ -279,12 +336,16 @@ fn built_gemm(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
     let shapes = &checked.shapes;
     let [alpha, beta, trans_a, trans_b] = settled(gemm_options(node));
     let product = gemm_product(node, shapes);
+    let computed = Computed::new(checked.primitives[node.outputs[0]], alpha != 1.0 || has_bias(node));
+    let element = computed.element();
+    let operand = |index: i32| computed.operand(exprs.reference(&node.inputs[index]), &shapes[node.inputs[index]]);
     let mut call = dot_call(
+        &element,
         &shapes[node.inputs[0]],
         &shapes[node.inputs[1]],
         &product,
-        &exprs.reference(&node.inputs[0]),
-        &exprs.reference(&node.inputs[1]),
+        &operand(0),
+        &operand(1),
         [],
         [if trans_a { 0 } else { 1 }, if trans_b { 1 } else { 0 }],
         symbols,
@@ -292,18 +353,28 @@ fn built_gemm(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
     if alpha != 1.0 {
         call = scaled(&`&${call}`, &product, alpha, symbols)?;
     }
-    if !has_bias(node) {
-        return Result::Ok(call);
+    let mut out = product;
+    if has_bias(node) {
+        out = shapes[node.outputs[0]];
+        if !same_axes(&product, &out) {
+            call = broadcast_call(&element, &product, &out, &`&${call}`, 0, symbols)?;
+        }
+        // Widened at its own extents, before it is broadcast to the output's.
+        let c = shapes[node.inputs[2]];
+        let mut bias = stretched_operand(
+            &element,
+            &c,
+            &out,
+            computed.operand(exprs.reference(&node.inputs[2]), &c),
+            0,
+            symbols,
+        )?;
+        if beta != 1.0 {
+            bias = `&${scaled(&bias, &out, beta, symbols)?}`;
+        }
+        call = `backend.binary::<${element}, [${axis_list(&out)}]>(Binary::Add, &${call}, ${bias})`;
     }
-    let out = shapes[node.outputs[0]];
-    if !same_axes(&product, &out) {
-        call = broadcast_call(&KERNEL_ELEMENT, &product, &out, &`&${call}`, 0, symbols)?;
-    }
-    let mut bias = stretched(checked, exprs, symbols, &node.inputs[2], &out, 0)?;
-    if beta != 1.0 {
-        bias = `&${scaled(&bias, &out, beta, symbols)?}`;
-    }
-    return Result::Ok(`backend.binary::<f32, [${axis_list(&out)}]>(Binary::Add, &${call}, ${bias})`);
+    return Result::Ok(computed.result(call, &out));
 }
 
 /// A `Conv` as `convolution`, its bias broadcast along the output's channels.
@@ -323,21 +394,26 @@ fn built_conv(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
     let conv = `&Convolution { window_strides: ${window.strides}, padding: [${pads.join(
         ", ",
     )}], rhs_dilation: ${window.dilations}, feature_group_count: ${settled(conv_group(node, &w))} }`;
-    let call = `backend.convolution::<[${axis_list(&x)}], [${axis_list(&w)}], [${axis_list(&y)}]>(${exprs.reference(
-        &node.inputs[0],
-    )}, ${exprs.reference(&node.inputs[1])}, ${conv})`;
+    let computed = Computed::new(checked.primitives[node.outputs[0]], has_bias(node));
+    let element = computed.element();
+    let call = `backend.convolution::<${element}, [${axis_list(&x)}], [${axis_list(&w)}], [${axis_list(&y)}]>(${computed.operand(
+        exprs.reference(&node.inputs[0]),
+        &x,
+    )}, ${computed.operand(exprs.reference(&node.inputs[1]), &w)}, ${conv})`;
     if !has_bias(node) {
         return Result::Ok(call);
     }
+    let b = shapes[node.inputs[2]];
     let bias = broadcast_call(
-        &KERNEL_ELEMENT,
-        &shapes[node.inputs[2]],
+        &element,
+        &b,
         &y,
-        &exprs.reference(&node.inputs[2]),
+        &computed.operand(exprs.reference(&node.inputs[2]), &b),
         spatial,
         symbols,
     )?;
-    return Result::Ok(`backend.binary::<f32, [${axis_list(&y)}]>(Binary::Add, &${call}, &${bias})`);
+    let sum = `backend.binary::<${element}, [${axis_list(&y)}]>(Binary::Add, &${call}, &${bias})`;
+    return Result::Ok(computed.result(sum, &y));
 }
 
 /// A `MaxPool` as `reduce_window` by the greatest, the batch and channel axes
@@ -346,6 +422,7 @@ fn built_conv(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
 /// where the last window ends short of the input's end.
 fn built_max_pool(
     node: &Node,
+    element: &String,
     shapes: &HashMap<String, Shape>,
     exprs: &Operands,
     symbols: &mut Symbols,
@@ -375,9 +452,9 @@ fn built_max_pool(
         ", ",
     )}] }`;
     return Result::Ok(
-        `backend.reduce_window::<[${axis_list(&x)}], [${axis_list(&y)}]>(${exprs.reference(&node.inputs[0])}, Binary::Maximum, ${float_literal(
-            f32::NEG_INFINITY,
-        )}, ${reduce})`,
+        `backend.reduce_window::<${*element}, [${axis_list(&x)}], [${axis_list(&y)}]>(${exprs.reference(
+            &node.inputs[0],
+        )}, Binary::Maximum, ${f32_literal(f32::NEG_INFINITY)}, ${reduce})`,
     );
 }
 
@@ -423,11 +500,12 @@ fn built_reduction(node: &Node, checked: &Checked, exprs: &Operands, symbols: &m
             kept.axes.push(axis);
         }
     }
-    let types = `[${axis_list(&x)}], [${axis_list(&kept)}]`;
+    let element = checked.primitives[node.outputs[0]];
+    let types = `${element}, [${axis_list(&x)}], [${axis_list(&kept)}]`;
     let mut a = exprs.reference(&node.inputs[0]);
     let mut count = Poly::constant(1);
     for let d of reduced {
-        a = masked_along(a, &x, d, "0 as f32", symbols)?;
+        a = masked_along(a, &element, &x, d, 0.0, symbols)?;
         count = count.try_mul(&x.axes[d].extent.poly()).expect("a count of elements is within i64");
     }
     let call = if node.op == "ReduceMean" {
@@ -439,7 +517,9 @@ fn built_reduction(node: &Node, checked: &Checked, exprs: &Operands, symbols: &m
         return Result::Ok(call);
     }
     return Result::Ok(
-        `backend.reshape::<f32, [${axis_list(&kept)}], [${axis_list(&out)}]>(&${call}, ${symbols.spell_shape(&out)?})`,
+        `backend.reshape::<${element}, [${axis_list(&kept)}], [${axis_list(&out)}]>(&${call}, ${symbols.spell_shape(
+            &out,
+        )?})`,
     );
 }
 
@@ -489,22 +569,26 @@ fn built_concat(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
     return Result::Ok(call);
 }
 
-/// `operand`, of axes `shape`, its padding along `axis` read as `fill`, where
-/// a valid length enters that axis's extent.
+/// `operand`, of `element`, a float, and axes `shape`, its padding along
+/// `axis` read as `fill`, where a valid length enters that axis's extent.
 fn masked_along(
     operand: String,
+    element: &String,
     shape: &Shape,
     axis: i32,
-    fill: String,
+    fill: f32,
     symbols: &mut Symbols,
 ) -> Result<String, EmitError> {
     let extent = shape.axes[axis].extent.poly();
     if !symbols.reads_lengths(&extent) {
         return Result::Ok(operand);
     }
-    let typed = `${KERNEL_ELEMENT}, [${axis_list(shape)}]`;
+    let typed = `${*element}, [${axis_list(shape)}]`;
     return Result::Ok(
-        `&masked::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${axis}, ${symbols.lengths_along(&extent, shape)?}, ${fill})`,
+        `&masked::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${axis}, ${symbols.lengths_along(&extent, shape)?}, ${float_literal(
+            element,
+            fill,
+        )})`,
     );
 }
 
@@ -659,11 +743,12 @@ fn ranked(node: &Node, checked: &Checked, call: String, symbols: &mut Symbols) -
     );
 }
 
-/// The first of `elements` as an expression the generated source spells.
-fn element_literal(elements: &Elements) -> String {
+/// The first of `elements`, each of `element`, as an expression the generated
+/// source spells.
+fn element_literal(element: &String, elements: &Elements) -> String {
     return match elements {
         Ints(v) => `${v[0]}`,
-        Floats(v) => float_literal(v[0]),
+        Floats(v) => float_literal(element, v[0]),
         Bools(v) => `${v[0]}`,
         // A tensor attribute holds numbers.
         Symbolic(_) => unreachable(),

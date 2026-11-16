@@ -211,6 +211,46 @@ test "Identity" {
     assert_agrees(#include_bytes("./operators/Identity.onnx"), #include_str("./operators/Identity.txt"));
 }
 
+test "Max broadcasts a trailing operand" {
+    assert_agrees(#include_bytes("./operators/Max.onnx"), #include_str("./operators/Max.txt"));
+}
+
+test "Min broadcasts a unit axis" {
+    assert_agrees(#include_bytes("./operators/Min.onnx"), #include_str("./operators/Min.txt"));
+}
+
+test "Max of three operands" {
+    assert_agrees(#include_bytes("./operators/MaxOfThree.onnx"), #include_str("./operators/MaxOfThree.txt"));
+}
+
+test "Min of one operand" {
+    assert_agrees(#include_bytes("./operators/MinOfOne.onnx"), #include_str("./operators/MinOfOne.txt"));
+}
+
+test "Clip between two bounds" {
+    assert_agrees(#include_bytes("./operators/Clip.onnx"), #include_str("./operators/Clip.txt"));
+}
+
+test "Clip with a lower bound alone" {
+    assert_agrees(#include_bytes("./operators/ClipBelow.onnx"), #include_str("./operators/ClipBelow.txt"));
+}
+
+test "Clip with an upper bound alone" {
+    assert_agrees(#include_bytes("./operators/ClipAbove.onnx"), #include_str("./operators/ClipAbove.txt"));
+}
+
+test "Clip with no bound" {
+    assert_agrees(#include_bytes("./operators/ClipUnbounded.onnx"), #include_str("./operators/ClipUnbounded.txt"));
+}
+
+test "Clip bounded by attributes, as before opset 11" {
+    assert_agrees(#include_bytes("./operators/ClipByAttributes.onnx"), #include_str("./operators/ClipByAttributes.txt"));
+}
+
+test "Clip whose lower bound passes its upper" {
+    assert_agrees(#include_bytes("./operators/ClipCrossed.onnx"), #include_str("./operators/ClipCrossed.txt"));
+}
+
 test "MatMul of two matrices" {
     assert_agrees(#include_bytes("./operators/MatMul.onnx"), #include_str("./operators/MatMul.txt"));
 }
@@ -243,6 +283,31 @@ test "MatMul broadcasts a batch axis of 1" {
 
 test "Gemm adds a bias along the columns" {
     assert_agrees(#include_bytes("./operators/Gemm.onnx"), #include_str("./operators/Gemm.txt"));
+}
+
+test "Gemm of halves scales by an alpha no half holds" {
+    assert_agrees(#include_bytes("./operators/GemmHalfScaled.onnx"), #include_str("./operators/GemmHalfScaled.txt"));
+}
+
+test "Gemm of halves scales a product past a half's range back into it" {
+    assert_agrees(
+        #include_bytes("./operators/GemmHalfScaledBack.onnx"),
+        #include_str("./operators/GemmHalfScaledBack.txt"),
+    );
+}
+
+test "Gemm of halves adds a bias to a product past a half's range" {
+    assert_agrees(
+        #include_bytes("./operators/GemmHalfBiasedBack.onnx"),
+        #include_str("./operators/GemmHalfBiasedBack.txt"),
+    );
+}
+
+test "Gemm of halves scales a bias past a half's range" {
+    assert_agrees(
+        #include_bytes("./operators/GemmHalfBiasScaled.onnx"),
+        #include_str("./operators/GemmHalfBiasScaled.txt"),
+    );
 }
 
 test "Gemm transposes both operands and scales by alpha and beta" {
@@ -337,6 +402,10 @@ test "MaxPool over one spatial axis" {
 
 test "Conv with padding and a bias" {
     assert_agrees(#include_bytes("./operators/Conv.onnx"), #include_str("./operators/Conv.txt"));
+}
+
+test "Conv of halves adds a bias to a result past a half's range" {
+    assert_agrees(#include_bytes("./operators/ConvHalfBiased.onnx"), #include_str("./operators/ConvHalfBiased.txt"));
 }
 
 test "Conv with strides and dilations" {
@@ -498,6 +567,39 @@ test "Cast to int32 truncates toward 0" {
     assert_agrees(#include_bytes("./operators/CastToInt32.onnx"), #include_str("./operators/CastToInt32.txt"));
 }
 
+test "Cast to float16 rounds to the nearest half" {
+    assert_agrees(
+        #include_bytes("./operators/CastThroughFloat16.onnx"),
+        #include_str("./operators/CastThroughFloat16.txt"),
+    );
+}
+
+test "Cast to bfloat16 rounds to the nearest half" {
+    assert_agrees(
+        #include_bytes("./operators/CastThroughBFloat16.onnx"),
+        #include_str("./operators/CastThroughBFloat16.txt"),
+    );
+}
+
+test "Cast of a constant to float16 rounds it at build time" {
+    assert_agrees(
+        #include_bytes("./operators/CastConstantToFloat16.onnx"),
+        #include_str("./operators/CastConstantToFloat16.txt"),
+    );
+}
+
+test "CastLike gives a constant the element of a tensor the run computes" {
+    assert_agrees(#include_bytes("./operators/CastLikeConstant.onnx"), #include_str("./operators/CastLikeConstant.txt"));
+}
+
+test "CastLike gives a value the run computes the element of another" {
+    assert_agrees(#include_bytes("./operators/CastLikeComputed.onnx"), #include_str("./operators/CastLikeComputed.txt"));
+}
+
+test "Gelu computes in the float16 its operand is" {
+    assert_agrees(#include_bytes("./operators/GeluFloat16.onnx"), #include_str("./operators/GeluFloat16.txt"));
+}
+
 test "Cast of int64 to float rounds to the nearest" {
     assert_agrees(#include_bytes("./operators/CastFromInt64.onnx"), #include_str("./operators/CastFromInt64.txt"));
 }
@@ -514,6 +616,20 @@ test "Concat of two shapes" {
     assert_agrees(#include_bytes("./operators/ConcatShapes.onnx"), #include_str("./operators/ConcatShapes.txt"));
 }
 
+test "SimplifiedLayerNormalization of halves computes in f32" {
+    assert_agrees(
+        #include_bytes("./operators/SimplifiedLayerNormalizationHalf.onnx"),
+        #include_str("./operators/SimplifiedLayerNormalizationHalf.txt"),
+    );
+}
+
+test "SimplifiedLayerNormalization of f32s by a scale of halves gives halves" {
+    assert_agrees(
+        #include_bytes("./operators/SimplifiedLayerNormalizationMixed.onnx"),
+        #include_str("./operators/SimplifiedLayerNormalizationMixed.txt"),
+    );
+}
+
 test "SimplifiedLayerNormalization scales each row by the root of its mean square" {
     assert_agrees(
         #include_bytes("./operators/SimplifiedLayerNormalization.onnx"),
@@ -523,6 +639,14 @@ test "SimplifiedLayerNormalization scales each row by the root of its mean squar
 
 test "Gelu approximated by tanh" {
     assert_agrees(#include_bytes("./operators/GeluTanh.onnx"), #include_str("./operators/GeluTanh.txt"));
+}
+
+test "Gelu of halves through erf computes in f32" {
+    assert_agrees(#include_bytes("./operators/GeluHalfErf.onnx"), #include_str("./operators/GeluHalfErf.txt"));
+}
+
+test "Gelu of halves approximated by tanh computes in f32" {
+    assert_agrees(#include_bytes("./operators/GeluHalfTanh.onnx"), #include_str("./operators/GeluHalfTanh.txt"));
 }
 
 test "Gelu through erf" {
@@ -568,6 +692,13 @@ test "GroupQueryAttention's present key holds the rotated keys after the past" {
     assert_agrees(
         #include_bytes("./operators/GqaRotaryPresentKey.onnx"),
         #include_str("./operators/GqaRotaryPresentKey.txt"),
+    );
+}
+
+test "GroupQueryAttention of halves rotates the present key in f32" {
+    assert_agrees(
+        #include_bytes("./operators/GqaHalfRotaryPresentKey.onnx"),
+        #include_str("./operators/GqaHalfRotaryPresentKey.txt"),
     );
 }
 

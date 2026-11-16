@@ -511,3 +511,11 @@ test "an operator the build does not evaluate is left to the run" {
     ]);
     assert fold(&node("Relu", ["A"], []), &k, &runtime([2])).unwrap() matches { None };
 }
+
+test "an integer cast to a half is left to the run, which rounds it once" {
+    // Through f32, 16842753 rounds to 16777216 in bf16; in one step, to 16908288.
+    let k = knowns([
+        ["D", ints([1], [16842753])],
+    ]);
+    assert fold(&node("Cast", ["D"], [attr("to", ["16"])]), &k, &runtime([2])).unwrap() matches { None };
+}

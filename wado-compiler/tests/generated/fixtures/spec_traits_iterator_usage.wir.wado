@@ -135,7 +135,7 @@ struct core:prelude/list.wado//List<i32> {  // TypeId(12)
 
 struct core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool> {  // TypeId(13)
     mut inner: ref "core:prelude/slice.wado//SliceValueIter<i32>",
-    mut pred: ref struct,
+    mut pred: ref "canonical//CanonicalClosure_0",
 }
 
 struct core:prelude/slice.wado//SliceValueIter<i32> {  // TypeId(14)
@@ -159,16 +159,16 @@ variant core:prelude/types.wado//Option<i32> {  // TypeId(20)
     Some(i32),
 }
 
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(21)
-    discriminant: i32,
-    payload_0: i32,
-}
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(21)
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(22)
-
-struct canonical//CanonicalClosure_0 {  // TypeId(23)
+struct canonical//CanonicalClosure_0 {  // TypeId(22)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
+}
+
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(23)
+    discriminant: i32,
+    payload_0: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(24)
@@ -2172,7 +2172,7 @@ fn "spec_traits_iterator_usage.wado/core:prelude/traits.wado/IterFilter<core:pre
     let $sroa_slot_20: i32;
     let $sroa_slot_21: i32;
     let $licm_inner_22: ref "core:prelude/slice.wado//SliceValueIter<i32>";
-    let $licm_pred_23: ref struct;
+    let $licm_pred_23: ref "canonical//CanonicalClosure_0";
     let $licm_end_24: i32;
     let $licm_repr_25: ref Array<i32>;
     let $hfs_index_27: i32;
@@ -2191,8 +2191,7 @@ fn "spec_traits_iterator_usage.wado/core:prelude/traits.wado/IterFilter<core:pre
                 item_10 = builtin::array_get_value<i32>($licm_repr_25, $hfs_index_27);
                 $hfs_index_27 = $hfs_index_27 + 1;
                 if block -> bool {
-                    let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($licm_pred_23)).env, item_10);
+                    call_ref "functype/$canonical_closure_fn_0"($licm_pred_23.func, $licm_pred_23.env, item_10);
                 } {
                     b285: block {
                         l286: loop {
@@ -2207,7 +2206,7 @@ fn "spec_traits_iterator_usage.wado/core:prelude/traits.wado/IterFilter<core:pre
                                         $sroa_slot_21 = builtin::array_get_value<i32>($licm_repr_25, $hfs_index_27);
                                         $hfs_index_27 = $hfs_index_27 + 1;
                                         if block -> bool {
-                                            call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($licm_pred_23)).env, $sroa_slot_21);
+                                            call_ref "functype/$canonical_closure_fn_0"($licm_pred_23.func, $licm_pred_23.env, $sroa_slot_21);
                                         } {
                                             $sroa_slot_20 = 1;
                                             break $inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__next_sroa_return__2;

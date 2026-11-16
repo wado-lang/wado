@@ -19,6 +19,7 @@ use {
     GpuShaderModule,
     GpuComputePipeline,
     GpuComputePassEncoder,
+    GpuSupportedFeatures,
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
@@ -28,7 +29,6 @@ use {
     Comparison,
     Cpu,
     Element,
-    f32_of,
     full,
     Graph,
     Holds,
@@ -36,6 +36,7 @@ use {
     Slots,
     strided_gather,
     Tensor,
+    typed,
     Untyped,
     WebGpuBackend,
 } from "lib:loam";
@@ -43,6 +44,11 @@ use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
 use { decoded_tokens, requests_apart, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
 use gated from "./gated.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: { module: "lib:loam" },
+    };
+use gated_f16 from "./gated_f16.onnxtext"
     with {
         type: "onnxtext",
         generator: { module: "lib:loam" },
@@ -73,7 +79,7 @@ use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
         },
     };
 
-export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
     let Some(mut gpu) = WebGpuBackend::new() else {
         println("no WebGPU adapter");
         return;
@@ -92,6 +98,32 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let [ex, ey] = cases::elementwise_inputs();
     let every = cases::elementwise(&mut gpu, &gpu.upload(&ex), &gpu.upload(&ey));
     println(`elementwise ${apart(&mut gpu, &every, &cases::elementwise(cpu, &ex, &ey))}`);
+
+    // A device without `shader-f16` computes a half as one with it does.
+    let mut plain = WebGpuBackend::new().unwrap();
+    plain.forgo_shader_f16();
+    let [hx, edges] = cases::halved_inputs();
+    for let [words, device] of [
+        ["", &mut gpu],
+        [" in f32 words", &mut plain],
+    ] {
+        let [held_x, held_edges] = [
+            device.upload(&hx),
+            device.upload(&edges),
+        ];
+        let read_before_halves = device.read_backs();
+        let in_f16 = cases::halved::<WebGpuBackend, f16>(device, &held_x, &held_edges);
+        let in_bf16 = cases::halved::<WebGpuBackend, bf16>(device, &held_x, &held_edges);
+        assert device.read_backs() == read_before_halves, "a half is computed on the device";
+        for let [name, got_half, want_half] of [
+            ["f16", in_f16, cases::halved::<Cpu, f16>(cpu, &hx, &edges)],
+            ["bf16", in_bf16, cases::halved::<Cpu, bf16>(cpu, &hx, &edges)],
+        ] {
+            println(`halved ${name}${words} product ${apart(device, &got_half.0, &want_half.0)}`);
+            println(`halved ${name}${words} summed ${apart(device, &got_half.1, &want_half.1)}`);
+            println(`halved ${name}${words} stored ${apart(device, &got_half.2, &want_half.2)}`);
+        }
+    }
 
     // A gather of consecutive rows is a view of them, and dispatches nothing.
     let rows = rows_of::<[Rows, Run, Pair]>(1, 5);
@@ -315,6 +347,26 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     idle(&mut gpu);
     assert gpu.kept_bytes() == idle_bytes, "a call leaves nothing once its launches idle";
 
+    // A graph in f16 keeps a matrix bf16 would round as f16s, two to a word:
+    // the embedding's 8 elements, the paired products' 12 and the product
+    // down's 6, beside the normalization's weight and the epsilon in f32.
+    let before_f16 = gpu.kept_bytes();
+    let mut f16_gpu = gated_f16::Model::new(gated_f16::Params::embedded(&mut gpu));
+    assert gpu.kept_bytes() - before_f16 == 2 * 4 + 4 + (8 + 12 + 6) * 2, "a matrix of f16s is kept as f16s";
+    let mut f16_cpu = gated_f16::Model::new(gated_f16::Params::embedded(cpu));
+    let mut f16_plain = gated_f16::Model::new(gated_f16::Params::embedded(&mut plain));
+    for let positions of [3, 9] as List<i32> {
+        let rows = Tensor::<i64, [gated_f16::N, gated_f16::S]> {
+            data: (0..<positions).map(|i| (i * 3 % 4) as i64).collect(),
+            extents: [1, positions],
+        };
+        let on_device = widened(&gated_f16::compute(&mut gpu, &rows, &mut f16_gpu));
+        let in_words = widened(&gated_f16::compute(&mut plain, &rows, &mut f16_plain));
+        let reference = widened(&gated_f16::compute(cpu, &rows, &mut f16_cpu));
+        println(`compiled gated f16 ${positions} ${deviation(&on_device, &reference)}`);
+        println(`compiled gated f16 in f32 words ${positions} ${deviation(&in_words, &reference)}`);
+    }
+
     // The three projections of one input are one product, by their weights
     // kept side by side.
     let mut projected_gpu = projected::Model::new(projected::Params::embedded(&mut gpu));
@@ -458,7 +510,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             Any::I64(gpu.relabeled::<i64, [], Untyped>(&gpu.upload(&turns))),
             Any::F32(gpu.relabeled::<f32, [cases::A, cases::A], Untyped>(&gpu.upload(&square))),
         ], &[]);
-        let turned = f32_of::<WebGpuBackend, [cases::A, cases::A]>(&gpu, &viewed[0]);
+        let turned = typed::<WebGpuBackend, f32, [cases::A, cases::A]>(&gpu, &viewed[0]);
         println(`repeated view ${times} ${apart(&mut gpu, &turned, &cases::repeating_view(cpu, &turns, &square))}`);
     }
 
@@ -484,7 +536,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         ],
         &[],
     );
-    let looped_out = f32_of::<WebGpuBackend, [cases::Bt, cases::St, cases::Qt]>(&gpu, &looped[0]);
+    let looped_out = typed::<WebGpuBackend, f32, [cases::Bt, cases::St, cases::Qt]>(&gpu, &looped[0]);
     let looped_want = cases::repeating_attention(cpu, &runs, &query, &key, &value, &looped_past);
     println(`repeated attention ${apart(&mut gpu, &looped_out, &looped_want)}`);
 
@@ -557,6 +609,11 @@ fn rows_of<Axes>(rows: i32, positions: i32) -> Tensor<f32, Axes> {
         data,
         extents: [rows, positions, 2],
     };
+}
+
+fn widened<E: Element, Axes>(t: &Tensor<E, Axes>) -> List<f32> {
+    let cpu = &mut Cpu {};
+    return cpu.convert::<E, f32, Axes>(t).data;
 }
 
 /// How far `got` sits from `want`, NaN where their extents differ.

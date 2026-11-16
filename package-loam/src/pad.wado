@@ -84,6 +84,7 @@ impl Display for Judged {
 
 /// Each symbol an input's axes read, in the order they first read it.
 pub fn padding(graph: &Graph, checked: &Checked) -> List<Judged> {
+    assert !graph.nodes.into_iter().any(|n| n.op == "CastLike"), "a judged graph must have its CastLikes resolved";
     let mut refusals = HashMap::<String, PadRefusal>::new();
     let mut ties: List<Poly> = [];
     judge_scope(graph, checked, &mut refusals, &mut ties, &mut HashMap::<String, Merged>::new());

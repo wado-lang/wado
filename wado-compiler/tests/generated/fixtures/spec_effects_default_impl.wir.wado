@@ -9,8 +9,8 @@ struct core:prelude/string.wado//String {  // TypeId(0)
 
 struct spec_effects_default_impl.wado//$Dispatch_spec_effects_default_impl.wado/Log {  // TypeId(1)
     mut outer: ref null "spec_effects_default_impl.wado//$Dispatch_spec_effects_default_impl.wado/Log",
-    mut op_emit: ref struct,
-    mut op_level: ref struct,
+    mut op_emit: ref "canonical//CanonicalClosure_0",
+    mut op_level: ref "canonical//CanonicalClosure_1",
 }
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(2)
@@ -88,8 +88,8 @@ fn "spec_effects_default_impl.wado/$cm_export__$test_0_a_default_answers_with_no
         message_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("degraded to stderr"), used: 18 };
         if ref.is_null(local.tee $local_1(global:spec_effects_default_impl.wado::$effect_spec_effects_default_impl.wado/Log)) == 0 {
             global:spec_effects_default_impl.wado::$effect_spec_effects_default_impl.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
-            let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_2.op_emit)).env, message_0);
+            let $indirect_call_1: ref null "canonical//CanonicalClosure_0";
+            call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1($local_2.op_emit).env, message_0);
             break $inline__effect_dispatch__spec_effects_default_impl_wado_Log__emit_2: global:spec_effects_default_impl.wado::$effect_spec_effects_default_impl.wado/Log = $local_1;
         } else {
             break $inline__effect_dispatch__spec_effects_default_impl_wado_Log__emit_2: "core:rt/log_stderr"(message_0.repr, message_0.used);
@@ -106,8 +106,8 @@ fn "spec_effects_default_impl.wado/$cm_export__$test_trap_1_an_operation_without
         if @likely(ref.is_null(local.tee $local_0(global:spec_effects_default_impl.wado::$effect_spec_effects_default_impl.wado/Log)) == 0) {
             global:spec_effects_default_impl.wado::$effect_spec_effects_default_impl.wado/Log = local.tee $local_1(ref.as_non_null($local_0)).outer;
             $local_2 = block -> i32 {
-                let $indirect_call_3: ref "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_1"($local_1.op_level)).env);
+                let $indirect_call_3: ref null "canonical//CanonicalClosure_1";
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_3.func, local.tee $indirect_call_3($local_1.op_level).env);
             };
             global:spec_effects_default_impl.wado::$effect_spec_effects_default_impl.wado/Log = $local_0;
             break $inline__effect_dispatch__spec_effects_default_impl_wado_Log__level_2: $local_2;

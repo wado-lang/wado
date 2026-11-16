@@ -21,10 +21,10 @@ use {
     slice_bounds,
 } from "./fold.wado";
 use {
+    Attr,
     AttrError,
     Dim,
     Graph,
-    KERNEL_ELEMENT,
     Known,
     Node,
     Rank,
@@ -35,8 +35,10 @@ use {
     dims_of,
     element_of,
     is_binary_elementwise,
+    is_float,
     is_unary_operator,
     operands_short,
+    settled,
     trailing_axes,
 } from "./graph.wado";
 use { Condition, Poly, equalities, owe as owe_at, owe_equal as owe_equal_at } from "./poly.wado";
@@ -476,7 +478,7 @@ fn checked_graph(graph: &Graph, scope: &mut Checked) -> Result<(), InferError> {
             scope.shapes[vi.name] = shape_of(&vi, &mut scope.axes)?;
             // An element no kernel reaches is left out, for emit to name.
             if let Some(element) = element_of(&vi.dtype) {
-                scope.primitives[vi.name] = element.computed;
+                scope.primitives[vi.name] = element.primitive;
             }
         }
     }
@@ -496,7 +498,7 @@ fn checked_graph(graph: &Graph, scope: &mut Checked) -> Result<(), InferError> {
         scope.shapes[vi.name] = held(&vi.name, merge_declared(vi, &produced, &mut scope.owed, &mut scope.axes)?)?;
         if let Some(element) = element_of(&vi.dtype)
             && let Some(computed) = scope.primitives.get(vi.name)
-            && element.computed != computed {
+            && element.primitive != computed {
             builtin::cold_path();
             return Result::Err(InferError::DeclaredElement(DeclaredElementConflict {
                 tensor: vi.name,
@@ -554,6 +556,8 @@ fn checked_node(node: &Node, scope: &mut Checked, opset: Option<i64>) -> Result<
         }
     }
     operands_given(node, &scope.known, &scope.shapes)?;
+    // The graph keeps the `CastLike` until `cast_likes_resolved` rewrites it.
+    let node = if node.op == "CastLike" { &cast_like(node, &scope.primitives)? } else { node };
     match fold(node, &scope.known, &scope.shapes) {
         Ok(Some(k)) => {
             scope.primitives[node.outputs[0]] = known_primitive(&k);
@@ -820,13 +824,16 @@ fn is_layout(op: &String) -> bool {
 }
 
 /// The primitive a node's kernel produces: its operand's for a layout kernel,
-/// `Cast`'s target, and f32 for every other; `None` for an element emit refuses.
+/// `Cast`'s target, and the one float its operands share for every other;
+/// `None` for an element emit refuses.
 fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Result<Option<String>, InferError> {
     let op = node.op;
     if op == "Cast" {
         let to = attr_read(node, node.required_int_attr("to"))?;
         return match data_type(to) {
-            Some(Float) => Result::Ok(Option::Some(KERNEL_ELEMENT)),
+            Some(Float) => Result::Ok(Option::Some("f32")),
+            Some(Float16) => Result::Ok(Option::Some("f16")),
+            Some(Bfloat16) => Result::Ok(Option::Some("bf16")),
             Some(Int64) => Result::Ok(Option::Some("i64")),
             Some(Bool) => Result::Ok(Option::Some("bool")),
             _ => Result::Err(refusal(node, `\`to\` is element type ${to}, which no kernel holds`)),
@@ -838,8 +845,8 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
     }
     if op == "ArgMax" {
         let x = node.inputs[0];
-        if let Some(p) = primitives.get(x) && p != KERNEL_ELEMENT {
-            return Result::Err(refusal(node, `operand ${x} is ${p}, and ArgMax ranks ${KERNEL_ELEMENT}`));
+        if let Some(p) = primitives.get(x) && !is_float(&p) {
+            return Result::Err(refusal(node, `operand ${x} is ${p}, and ArgMax ranks a float`));
         }
         return Result::Ok(Option::Some("i64"));
     }
@@ -881,24 +888,101 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
         }
         return Result::Ok(px);
     }
+    let mut first: Option<String> = null;
+    let mut element: Option<String> = null;
     for let [index, input] of node.inputs.into_iter().enumerate() {
         if read_at_build_time(node, index) {
             continue;
         }
-        if let Some(p) = primitives.get(input) && p != KERNEL_ELEMENT {
-            return Result::Err(refusal(node, `operand ${input} is ${p}, and ${op} computes in ${KERNEL_ELEMENT}`));
+        let Some(p) = primitives.get(input) else {
+            continue;
+        };
+        if !is_float(&p) {
+            return Result::Err(refusal(node, `operand ${input} is ${p}, and ${op} computes in a float`));
         }
+        if let Some(e) = element && e != p {
+            return Result::Err(refusal(
+                node,
+                `operand ${input} is ${p} and ${first.unwrap()} is ${e}, and ${op} computes in one float`,
+            ));
+        }
+        first = Option::Some(input);
+        element = Option::Some(p);
     }
-    return Result::Ok(Option::Some(KERNEL_ELEMENT));
+    return Result::Ok(element);
+}
+
+/// `graph` with each `CastLike` the `Cast` it is, as everything that reads a
+/// checked graph's nodes takes it.
+pub fn cast_likes_resolved(graph: &Graph, checked: &Checked) -> Graph {
+    return Graph { ..*graph, nodes: resolved_nodes(graph.nodes, checked) };
+}
+
+/// `nodes`, their branches' among them, with each `CastLike` the `Cast` it
+/// is, by the element types `checked`, the scope that checked them, holds.
+fn resolved_nodes(nodes: List<Node>, checked: &Checked) -> List<Node> {
+    let mut out: List<Node> = [];
+    for let node of nodes {
+        let mut attrs: List<Attr> = [];
+        for let a of node.attrs {
+            attrs.push(match a.graph {
+                Some(g) => {
+                    let [then_scope, else_scope] = checked.branches[node.outputs[0]];
+                    let scope = if a.name == "then_branch" { then_scope } else { else_scope };
+                    Attr {
+                        ..a,
+                        graph: Option::Some(cast_likes_resolved(&g, &scope)),
+                    };
+                },
+                None => a,
+            });
+        }
+        let node = Node { ..node, attrs };
+        out.push(if node.op == "CastLike" { settled(cast_like(&node, &checked.primitives)) } else { node });
+    }
+    return out;
+}
+
+/// `CastLike` as the `Cast` it is, to the element its second operand has.
+/// int32 and int64 are one primitive, so an integer target names neither.
+fn cast_like(node: &Node, primitives: &HashMap<String, String>) -> Result<Node, InferError> {
+    let like = node.inputs[1];
+    let Some(p) = primitives.get(like) else {
+        return Result::Err(refusal(node, `operand ${like} has no element type the build knows`));
+    };
+    // `TensorProto.DataType`'s numbers.
+    let to = match p.as_str_slice() {
+        "f32" => 1,
+        "bool" => 9,
+        "f16" => 10,
+        "bf16" => 16,
+        _ => {
+            return Result::Err(refusal(node, `operand ${like} is ${p}, which CastLike does not convert to`));
+        },
+    };
+    return Result::Ok(Node {
+        ..*node,
+        op: "Cast",
+        inputs: [node.inputs[0]],
+        attrs: [
+            Attr {
+                name: "to",
+                values: [`${to}`],
+                is_list: false,
+            },
+        ],
+    });
 }
 
 /// The primitive a folded tensor is held in once a kernel reads it. Every
 /// folded tensor has one, read or not, so no two compare equal for want of it.
 fn known_primitive(k: &Known) -> String {
-    return match k.elements {
-        Ints(_) | Symbolic(_) => "i64",
-        Floats(_) => KERNEL_ELEMENT,
-        Bools(_) => "bool",
+    return match [k.elements, k.stored] {
+        [Ints(_) | Symbolic(_), _] => "i64",
+        [Floats(_), Float16] => "f16",
+        [Floats(_), BFloat16] => "bf16",
+        [Floats(_), _] => "f32",
+        [Bools(_), _] => "bool",
     };
 }
 
@@ -2077,7 +2161,7 @@ fn required_operands(op: &String) -> Option<i32> {
         "Shape" | "Reshape" | "Unsqueeze" | "Squeeze" | "Flatten" | "Concat" | "Slice" | "ConstantOfShape" | "Transpose" | "Softmax" | "Split" | "MaxPool" | "ArgMax" => Option::Some(
             1,
         ),
-        "Gather" | "MatMul" | "Gemm" | "Conv" | "Expand" => Option::Some(2),
+        "Gather" | "MatMul" | "Gemm" | "Conv" | "Expand" | "CastLike" => Option::Some(2),
         "If" => Option::Some(1),
         "Range" | "Where" => Option::Some(3),
         _ => null,

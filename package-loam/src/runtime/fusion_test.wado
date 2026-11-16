@@ -1,7 +1,7 @@
 use { Binary, DotDims, Graph, Unary } from "./hlo.wado";
 use { Kernel, Plan, planned, replanned, splats_of } from "./fusion.wado";
 use { Recorded, Recorder, Untyped, Value, constants } from "./recorded.wado";
-use { BinaryOp, Holds, Tensor, UnaryOp, operand } from "./tensor.wado";
+use { BinaryOp, ElementKind, Float, HalfFloat, Holds, Tensor, UnaryOp, operand } from "./tensor.wado";
 
 fn plan_of(recorded: &Recorded) -> Plan {
     return planned(recorded, &splats_of(&constants(recorded)));
@@ -37,7 +37,7 @@ fn last_axis_by_rows() -> DotDims {
 /// generator records one from ONNX's `SimplifiedLayerNormalization`.
 fn rms_norm(r: &mut Recorder, x: &Value<f32, Untyped>, w: &Value<f32, Untyped>) -> Value<f32, Untyped> {
     let squared = r.binary(Binary::Multiply, x, x);
-    let sum = r.reduce::<Untyped, Untyped>(&squared, Binary::Add, 0.0, [2]);
+    let sum = r.reduce::<f32, Untyped, Untyped>(&squared, Binary::Add, 0.0, [2]);
     let two = r.upload(&Tensor::<f32, []> {
         data: [2.0],
         extents: [],
@@ -61,7 +61,7 @@ fn rms_norm(r: &mut Recorder, x: &Value<f32, Untyped>, w: &Value<f32, Untyped>) 
 fn centered(rows: i32, width: i32) -> Recorded {
     let mut r = Recorder::new();
     let x = r.parameter::<f32, Untyped>([rows, width]);
-    let sum = r.reduce::<Untyped, Untyped>(&x, Binary::Add, 0.0, [1]);
+    let sum = r.reduce::<f32, Untyped, Untyped>(&x, Binary::Add, 0.0, [1]);
     let spread = r.broadcast_in_dim::<f32, Untyped, Untyped>(&sum, [rows, width], [0]);
     let y = r.binary(Binary::Subtract, &x, &spread);
     return r.finished([y.id]);
@@ -113,7 +113,7 @@ test "a value read outside the kernel is written by a kernel of its own" {
 test "a fold whose result the kernel reads per row writes one value a row" {
     let mut r = Recorder::new();
     let x = r.parameter::<f32, Untyped>([3, 5]);
-    let largest = r.reduce::<Untyped, Untyped>(&x, Binary::Maximum, f32::NEG_INFINITY, [1]);
+    let largest = r.reduce::<f32, Untyped, Untyped>(&x, Binary::Maximum, f32::NEG_INFINITY, [1]);
     let recorded = r.finished([largest.id]);
     let plan = plan_of(&recorded);
     assert spelled(&plan) == [`node ${x.id}`, `kernel ${largest.id}`] as List<String>;
@@ -126,7 +126,7 @@ test "a fold whose result the kernel reads per row writes one value a row" {
 test "a broadcast along a row's axis is a view the kernel reads, not a step of it" {
     let mut r = Recorder::new();
     let x = r.parameter::<f32, Untyped>([3, 2]);
-    let column = r.reduce::<Untyped, Untyped>(&x, Binary::Add, 0.0, [0]);
+    let column = r.reduce::<f32, Untyped, Untyped>(&x, Binary::Add, 0.0, [0]);
     let spread = r.broadcast_in_dim::<f32, Untyped, Untyped>(&column, [3, 2], [1]);
     let y = r.binary(Binary::Subtract, &x, &spread);
     let recorded = r.finished([y.id]);
@@ -138,7 +138,7 @@ test "a fold joins no kernel whose operands it would read neither per element no
     let mut r = Recorder::new();
     let z = r.parameter::<f32, Untyped>([3, 4, 5]);
     let y = r.parameter::<f32, Untyped>([3]);
-    let sum = r.reduce::<Untyped, Untyped>(&z, Binary::Add, 0.0, [2]);
+    let sum = r.reduce::<f32, Untyped, Untyped>(&z, Binary::Add, 0.0, [2]);
     let spread = r.broadcast_in_dim::<f32, Untyped, Untyped>(&y, [3, 4], [0]);
     let biased = r.binary(Binary::Add, &sum, &spread);
     let recorded = r.finished([biased.id]);
@@ -148,15 +148,15 @@ test "a fold joins no kernel whose operands it would read neither per element no
 
 /// A gated layer over `x`: the product by one weight, through SiLU, times the
 /// product by another. The two products, then the result.
-fn gated(
+fn gated<E: Float>(
     r: &mut Recorder,
-    x: &Value<f32, Untyped>,
-    scale: Option<&Value<f32, Untyped>>,
-) -> [Value<f32, Untyped>, Value<f32, Untyped>, Value<f32, Untyped>] {
-    let gate_w = r.parameter::<f32, Untyped>([2, 8]);
-    let up_w = r.parameter::<f32, Untyped>([2, 8]);
-    let gate = r.dot_general::<Untyped, Untyped, Untyped>(x, &gate_w, &last_axis_by_rows());
-    let up = r.dot_general::<Untyped, Untyped, Untyped>(x, &up_w, &last_axis_by_rows());
+    x: &Value<E, Untyped>,
+    scale: Option<&Value<E, Untyped>>,
+) -> [Value<E, Untyped>, Value<E, Untyped>, Value<E, Untyped>] {
+    let gate_w = r.parameter::<E, Untyped>([2, 8]);
+    let up_w = r.parameter::<E, Untyped>([2, 8]);
+    let gate = r.dot_general::<E, Untyped, Untyped, Untyped>(x, &gate_w, &last_axis_by_rows());
+    let up = r.dot_general::<E, Untyped, Untyped, Untyped>(x, &up_w, &last_axis_by_rows());
     let silu = r.binary(Binary::Multiply, &gate, &r.unary(Unary::Logistic, &gate));
     let mut y = r.binary(Binary::Multiply, &silu, &up);
     if let Some(s) = scale {
@@ -183,6 +183,38 @@ test "a gated layer is one paired product, the gate and the scale in its epilogu
     assert p.op == silu.binary(BinaryOp::Mul, &operand(1)).binary(BinaryOp::Mul, &operand(2));
 }
 
+test "a gated layer over a half pairs as one over f32 does, each value it names rounded to the half" {
+    let mut r = Recorder::new();
+    let x = r.parameter::<bf16, Untyped>([1, 4, 2]);
+    let s = r.parameter::<bf16, Untyped>([1, 4, 8]);
+    let [gate, _, y] = gated(&mut r, &x, Option::Some(&s));
+    let recorded = r.finished([y.id]);
+    let plan = plan_of(&recorded);
+    assert spelled(&plan)[4] == `paired ${gate.id} ${y.id}`;
+    let Paired(p) = plan.launches[4] else {
+        unreachable();
+    };
+    let half = HalfFloat::BF16;
+    let stored = operand(0).rounded(half);
+    let silu = stored.binary(BinaryOp::Mul, &stored.unary(UnaryOp::Sigmoid).rounded(half)).rounded(half);
+    let product = silu.binary(BinaryOp::Mul, &operand(1).rounded(half)).rounded(half);
+    assert p.op == product.binary(BinaryOp::Mul, &operand(2)).rounded(half);
+}
+
+test "a step rounded to a half is the value the CPU stores, and a substitution reaches under it" {
+    let x: f32 = 1.0 + 1.0 / 2048.0;
+    let doubled = operand(0).binary(BinaryOp::Add, &operand(0));
+    let xs: List<f32> = [x];
+    let large: List<f32> = [65520.0];
+    let unread: List<f32> = [0.0];
+    assert operand(0).rounded(HalfFloat::F16).over(1, &[&xs]) == [1.0] as List<f32>;
+    assert operand(0).rounded(HalfFloat::BF16).over(1, &[&large]) == [65536.0] as List<f32>;
+    assert operand(0).rounded(HalfFloat::F16).over(1, &[&large]) == [f32::INFINITY] as List<f32>;
+    let under = doubled.rounded(HalfFloat::F16).substituted(0, &operand(1).rounded(HalfFloat::F16));
+    assert under.over(1, &[&unread, &xs]) == [2.0] as List<f32>;
+    assert operand(0).stored_as(ElementKind::F32) == operand(0);
+}
+
 test "a gate read outside the layer is written, and pairs with nothing" {
     let mut r = Recorder::new();
     let x = r.parameter::<f32, Untyped>([1, 4, 2]);
@@ -198,8 +230,8 @@ test "a normalization only a launch's products read is their prologue" {
     let q_w = r.parameter::<f32, Untyped>([2, 8]);
     let k_w = r.parameter::<f32, Untyped>([2, 4]);
     let normal = rms_norm(&mut r, &x, &w);
-    let q = r.dot_general::<Untyped, Untyped, Untyped>(&normal, &q_w, &last_axis_by_rows());
-    let k = r.dot_general::<Untyped, Untyped, Untyped>(&normal, &k_w, &last_axis_by_rows());
+    let q = r.dot_general::<f32, Untyped, Untyped, Untyped>(&normal, &q_w, &last_axis_by_rows());
+    let k = r.dot_general::<f32, Untyped, Untyped, Untyped>(&normal, &k_w, &last_axis_by_rows());
     let other = rms_norm(&mut r, &x, &w);
     let [gate, _, y] = gated(&mut r, &other, null);
     let recorded = r.finished([q.id, k.id, y.id]);
@@ -226,7 +258,7 @@ test "a normalization read beside its product is no prologue" {
     let w = r.parameter::<f32, Untyped>([2]);
     let q_w = r.parameter::<f32, Untyped>([2, 2]);
     let normal = rms_norm(&mut r, &x, &w);
-    let q = r.dot_general::<Untyped, Untyped, Untyped>(&normal, &q_w, &last_axis_by_rows());
+    let q = r.dot_general::<f32, Untyped, Untyped, Untyped>(&normal, &q_w, &last_axis_by_rows());
     let y = r.binary(Binary::Add, &q, &normal);
     let recorded = r.finished([y.id]);
     assert spelled(&plan_of(&recorded)).contains(&`kernel ${normal.id}`);
@@ -240,9 +272,9 @@ test "products of one left matrix by weights, with nothing in their epilogues, l
     let v_w = r.parameter::<f32, Untyped>([2, 4]);
     let normal = r.unary(Unary::Tanh, &x);
     let dims = last_axis_by_rows();
-    let q = r.dot_general::<Untyped, Untyped, Untyped>(&normal, &q_w, &dims);
-    let k = r.dot_general::<Untyped, Untyped, Untyped>(&normal, &k_w, &dims);
-    let v = r.dot_general::<Untyped, Untyped, Untyped>(&normal, &v_w, &dims);
+    let q = r.dot_general::<f32, Untyped, Untyped, Untyped>(&normal, &q_w, &dims);
+    let k = r.dot_general::<f32, Untyped, Untyped, Untyped>(&normal, &k_w, &dims);
+    let v = r.dot_general::<f32, Untyped, Untyped, Untyped>(&normal, &v_w, &dims);
     let scaled = r.unary(Unary::Negate, &v);
     let recorded = r.finished([q.id, k.id, scaled.id]);
     // `v`'s epilogue negates it, so it is a product of its own.
@@ -263,7 +295,7 @@ test "a value the product reads is not computed in its epilogue" {
         rhs_contracting: [0],
     };
     let doubled = r.binary(Binary::Add, &x, &x);
-    let product = r.dot_general::<Untyped, Untyped, Untyped>(&doubled, &w, &dims);
+    let product = r.dot_general::<f32, Untyped, Untyped, Untyped>(&doubled, &w, &dims);
     let y = r.binary(Binary::Add, &product, &doubled);
     let recorded = r.finished([y.id]);
     assert spelled(&plan_of(&recorded)) == [`node ${x.id}`, `node ${w.id}`, `kernel ${doubled.id}`, `kernel ${y.id}`] as List<String>;

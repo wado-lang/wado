@@ -20,6 +20,7 @@ use {
     GpuShaderModule,
     GpuComputePipeline,
     GpuComputePassEncoder,
+    GpuSupportedFeatures,
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
@@ -52,7 +53,7 @@ fn millis(elapsed: u64) -> u64 {
     return elapsed / 1_000_000;
 }
 
-export fn run() with (Stdout, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+export fn run() with (Stdout, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
     let Some(mut gpu) = WebGpuBackend::new() else {
         println("no WebGPU adapter");
         return;

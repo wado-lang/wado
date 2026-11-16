@@ -69,14 +69,89 @@ test "convert casts as ONNX's Cast does" {
     assert g.convert::<f32, i64, [A]>(&floats).data[1] == -2;
 }
 
+fn halves(values: List<f32>) -> List<f16> {
+    return values.into_iter().map(|v| f16::from_f32(v)).collect();
+}
+
+fn bits(values: &List<f16>) -> List<u16> {
+    return values.into_iter().map(|v| v.to_bits()).collect();
+}
+
+test "a half computes in f32 and rounds once to its own type" {
+    let g = &mut Cpu {};
+    let a = t::<f16>(halves([1.0, 0.1, 65504.0]), [3]);
+    let b = t::<f16>(halves([2.0, 0.2, 65504.0]), [3]);
+
+    let sum = g.binary::<f16, [A]>(Binary::Add, &a, &b);
+    let third = f16::from_f32(f32::from(a.data[1]) + f32::from(b.data[1]));
+    assert bits(&sum.data) == [
+        f16::from_f32(3.0).to_bits(),
+        third.to_bits(),
+        f16::INFINITY.to_bits(),
+    ];
+
+    let roots = g.unary::<f16, [A]>(Unary::Sqrt, &b);
+    assert roots.data[1].to_bits() == f16::from_f32(f32::sqrt(f32::from(b.data[1]))).to_bits();
+
+    assert g.compare::<f16, [A]>(Comparison::Lt, &a, &b).data == [true, true, false];
+    assert g.convert::<f16, i64, [A]>(&b).data == [2, 0, 65504] as List<i64>;
+    assert bits(&g.convert::<i64, f16, [A]>(&t::<i64>([3], [1])).data) == [f16::from_f32(3.0).to_bits()];
+}
+
+test "a sum over halves accumulates in f32" {
+    let g = &mut Cpu {};
+    // 2048 + 1 is 2048 in a half, so a half accumulator never leaves it.
+    let x = Tensor::<f16, [A, B]> {
+        data: halves([2048.0, 1.0, 1.0, 1.0, 1.0]),
+        extents: [1, 5],
+    };
+    let total = g.reduce::<f16, [A, B], [A]>(&x, Binary::Add, 0.0, [1]);
+    assert total.data[0].to_bits() == f16::from_f32(2052.0).to_bits();
+
+    let ones = Tensor::<f16, [B, C]> {
+        data: halves([1.0, 1.0, 1.0, 1.0, 1.0]),
+        extents: [5, 1],
+    };
+    let dims = DotDims {
+        lhs_batch: [],
+        rhs_batch: [],
+        lhs_contracting: [1],
+        rhs_contracting: [0],
+    };
+    let product = g.dot_general::<f16, [A, B], [B, C], [A, C]>(&x, &ones, &dims);
+    assert product.data[0].to_bits() == f16::from_f32(2052.0).to_bits();
+    assert g.arg_max::<f16, [A, B]>(&x, 1).data == [0] as List<i64>;
+}
+
+test "a bf16 is computed as a half is" {
+    let g = &mut Cpu {};
+    let a = t::<bf16>([
+        bf16::from_f32(1.5),
+        bf16::from_f32(0.1),
+    ], [2]);
+    let doubled = g.binary::<bf16, [A]>(Binary::Add, &a, &a);
+    let expected = bf16::from_f32(f32::from(a.data[1]) * 2.0);
+    assert doubled.data[0].to_bits() == bf16::from_f32(3.0).to_bits();
+    assert doubled.data[1].to_bits() == expected.to_bits();
+}
+
+test "a byte wraps as an unsigned integer does" {
+    let g = &mut Cpu {};
+    let a = t::<u8>([200, 3], [2]);
+    let b = t::<u8>([100, 4], [2]);
+    assert g.binary::<u8, [A]>(Binary::Add, &a, &b).data == [44, 7] as List<u8>;
+    assert g.convert::<u8, f32, [A]>(&a).data == [200.0, 3.0] as List<f32>;
+    assert g.compare::<u8, [A]>(Comparison::Gt, &a, &b).data == [true, false];
+}
+
 test "softmax normalizes along its axis" {
     let g = &mut Cpu {};
     let x = Tensor::<f32, [A, B]> {
         data: [0.0, 0.0, 1000.0, 1000.0],
         extents: [2, 2],
     };
-    assert softmax::<Cpu, [A, B]>(g, &x, 0).data == [0.0, 0.0, 1.0, 1.0] as List<f32>;
-    assert softmax::<Cpu, [A, B]>(g, &x, 1).data == [0.5, 0.5, 0.5, 0.5] as List<f32>;
+    assert softmax::<Cpu, f32, [A, B]>(g, &x, 0).data == [0.0, 0.0, 1.0, 1.0] as List<f32>;
+    assert softmax::<Cpu, f32, [A, B]>(g, &x, 1).data == [0.5, 0.5, 0.5, 0.5] as List<f32>;
 }
 
 test "reduce_mean divides each sum by the count it summed" {
@@ -85,8 +160,32 @@ test "reduce_mean divides each sum by the count it summed" {
         data: [1.0, 2.0, 3.0, 6.0],
         extents: [2, 2],
     };
-    let mean = reduce_mean::<Cpu, [A, B], [A]>(g, &x, [1], &value(2));
+    let mean = reduce_mean::<Cpu, f32, [A, B], [A]>(g, &x, [1], &value(2));
     assert mean.data == [1.5, 4.5] as List<f32>;
+}
+
+test "softmax of halves sums a row in f32" {
+    let g = &mut Cpu {};
+    let x = Tensor::<f16, [A, B]> {
+        data: List::<f16>::filled(65536, 0.0),
+        extents: [1, 65536],
+    };
+    // The row sums to 65536, which f16 rounds to infinity.
+    let y = softmax::<Cpu, f16, [A, B]>(g, &x, 1);
+    assert y.data[0] == f16::from_f32(1.0 / 65536.0);
+}
+
+test "reduce_mean of halves divides in f32 by a count bf16 cannot hold" {
+    let g = &mut Cpu {};
+    let mut data = List::<bf16>::filled(257, 1.0);
+    data[0] = 2.0;
+    let x = Tensor::<bf16, [A, B]> {
+        data,
+        extents: [1, 257],
+    };
+    // 258 / 257 rounds to 1.0; dividing by the count in bf16, 256, gives 1.0078125.
+    let mean = reduce_mean::<Cpu, bf16, [A, B], [A]>(g, &x, [1], &value(257));
+    assert mean.data == [1.0] as List<bf16>;
 }
 
 test "masking replaces each position along the axis from the length on" {
@@ -791,7 +890,7 @@ test "the attention composite decomposes to what the direct attention computes" 
             null,
             &options,
         );
-        let got = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+        let got = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
             &mut Cpu {},
             &q,
             &k,
@@ -862,7 +961,7 @@ test "a past of fixed capacity takes the new positions at its valid length, and 
             hidden: Option::Some(-4.0),
         },
     ] as List<Attention> {
-        let want = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+        let want = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
             g,
             &prefix(g, &q, 1, s),
             &prefix(g, &k, 1, s),
@@ -876,7 +975,7 @@ test "a past of fixed capacity takes the new positions at its valid length, and 
             null,
             &options,
         );
-        let got = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+        let got = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
             g,
             &q,
             &k,
@@ -946,7 +1045,7 @@ test "each row attends over its own past, and writes its new positions after it"
             hidden: Option::Some(-4.0),
         },
     ] as List<Attention> {
-        let got = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+        let got = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
             g,
             &q,
             &k,
@@ -961,7 +1060,7 @@ test "each row attends over its own past, and writes its new positions after it"
             &options,
         );
         for let r of 0..<batch {
-            let want = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+            let want = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
                 g,
                 &row_of(g, &q, r),
                 &row_of(g, &k, r),

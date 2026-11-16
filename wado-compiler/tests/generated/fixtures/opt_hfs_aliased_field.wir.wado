@@ -50,7 +50,7 @@ type "functype//opt_hfs_aliased_field.wado/touch" = fn(ref "opt_hfs_aliased_fiel
 
 type "functype//opt_hfs_aliased_field.wado/through_container" = fn(ref "opt_hfs_aliased_field.wado//H", ref "opt_hfs_aliased_field.wado//C");  // TypeId(17)
 
-type "functype//opt_hfs_aliased_field.wado/through_closure" = fn(ref "opt_hfs_aliased_field.wado//C", ref struct);  // TypeId(18)
+type "functype//opt_hfs_aliased_field.wado/through_closure" = fn(ref "opt_hfs_aliased_field.wado//C", ref "canonical//CanonicalClosure_0");  // TypeId(18)
 
 type "functype//opt_hfs_aliased_field.wado/poke" = fn();  // TypeId(19)
 
@@ -155,8 +155,7 @@ fn "opt_hfs_aliased_field.wado/through_closure"(c, f) {
             break_if b4 i >= 3;
             $hfs_n_3 = $hfs_n_3 + 1;
             c.n = $hfs_n_3;
-            let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f)).env);
+            call_ref "functype/$canonical_closure_fn_0"(f.func, f.env);
             $hfs_n_3 = c.n;
             i = i + 1;
             c.n = $hfs_n_3;

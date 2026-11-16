@@ -163,7 +163,7 @@ fn read_value_info(vi: &onnx::ValueInfoProto) -> Result<ValueInfo, String> {
 }
 
 /// The `external_data` entry `key` of `t`.
-fn external_entry(t: &onnx::TensorProto, key: String) -> Option<String> {
+internal fn external_entry(t: &onnx::TensorProto, key: String) -> Option<String> {
     let entry = t.external_data.into_iter().find(|e| e.key == Option::Some(key))?;
     return entry.value;
 }

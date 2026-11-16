@@ -20,6 +20,8 @@ use {
     branching_inputs,
     elementwise,
     elementwise_inputs,
+    halved,
+    halved_inputs,
     mixed,
     mixed_inputs,
     repeating,
@@ -27,7 +29,7 @@ use {
     windowed,
     windowed_input,
 } from "./graph_cases.wado";
-use { Any, Recorder, Untyped, f32_of, host_of, run } from "./recorded.wado";
+use { Any, Recorder, Untyped, host_of, run, typed } from "./recorded.wado";
 use { Binary, Graph, Slots, branched } from "./hlo.wado";
 use { Cpu, Holds, Tensor } from "./tensor.wado";
 
@@ -83,6 +85,32 @@ test "every recorded elementwise operation computes the CPU's" {
         host_of(&x),
         host_of(&y),
     ]) == [host_of(&want)] as List<Any<Cpu>>;
+}
+
+test "a recorded graph over halves stores each result in its half, as the CPU does" {
+    let cpu = &mut Cpu {};
+    let [x, edges] = halved_inputs();
+    let mut r = Recorder::new();
+    let rx = r.parameter::<f32, [A, B]>(x.extents);
+    let redges = r.parameter::<f32, [C]>(edges.extents);
+    let narrow = halved::<Recorder, f16>(&mut r, &rx, &redges);
+    let wide = halved::<Recorder, bf16>(&mut r, &rx, &redges);
+    let recorded = r.finished([narrow.0.id, narrow.1.id, narrow.2.id, wide.0.id, wide.1.id, wide.2.id]);
+    let want_narrow = halved::<Cpu, f16>(cpu, &x, &edges);
+    let want_wide = halved::<Cpu, bf16>(cpu, &x, &edges);
+    assert want_narrow.0.data != want_wide.0.data, "each half rounds its own way";
+    assert want_narrow.2.data[4] == f32::INFINITY && want_wide.2.data[4] == 65536.0;
+    assert run(cpu, &recorded, &[
+        host_of(&x),
+        host_of(&edges),
+    ]) == [
+        host_of(&want_narrow.0),
+        host_of(&want_narrow.1),
+        host_of(&want_narrow.2),
+        host_of(&want_wide.0),
+        host_of(&want_wide.1),
+        host_of(&want_wide.2),
+    ] as List<Any<Cpu>>;
 }
 
 test "a recorded convolution and pooling compute the CPU's, an uploaded tensor a constant of the graph" {
@@ -145,7 +173,7 @@ fn doubled_on_host<affine G: Graph>(
     pred: &G::Tensor<bool, [C]>,
 ) -> List<Any<G>> with _ {
     return g.repeated(count, &[Any::F32(g.relabeled::<f32, [A], Untyped>(x))], |_, state| {
-        let v = f32_of::<G, [A]>(g, &state[0]);
+        let v = typed::<G, f32, [A]>(g, &state[0]);
         let doubled = branched::<G, [C], G::Tensor<f32, [A]>>(g, pred, Option::Some(true), || {
             let sum = g.binary(Binary::Add, &v, &v);
             return g.yielded(&sum);
@@ -165,7 +193,7 @@ test "a branch the host took in a loop's body adds nothing to what the loop retu
     let pred = r.parameter::<bool, [C]>([1]);
     let last = doubled_on_host(&mut r, &rcount, &rx, &pred);
     assert last.len() == 1;
-    let result = f32_of::<Recorder, [A]>(&r, &last[0]);
+    let result = typed::<Recorder, f32, [A]>(&r, &last[0]);
     let recorded = r.finished([result.id]);
     let count = Tensor::<i64, []> {
         data: [2],

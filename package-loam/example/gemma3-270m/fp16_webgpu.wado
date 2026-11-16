@@ -1,0 +1,37 @@
+//! Gemma 3 (270M)'s `fp16` export on a WebGPU device, checked as `fp16.wado`
+//! says. With `--forgo-shader-f16`, the device computes a half as one without
+//! `shader-f16` does.
+
+use { args, Environment, eprintln, Stderr, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuSupportedFeatures,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { WebGpuBackend } from "lib:loam";
+use { checked } from "./fp16.wado";
+
+export fn run() with (Environment, Stdout, Stderr, Preopens, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        eprintln("no WebGPU adapter");
+        return;
+    };
+    if args().contains_str("--forgo-shader-f16") {
+        gpu.forgo_shader_f16();
+    }
+    checked(gpu);
+}

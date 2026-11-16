@@ -98,10 +98,11 @@ lane takes a column, and a layer's products of 256 to 2048 columns ran in 4 to
 
 A weight is written in bf16 when every value's low 16 bits are zero. A model
 released in bf16 and exported in f32 has such weights: every product weight of
-Gemma 3 (270M) and its embedding do. The product, gather and copy shaders widen
-each element as they read it, so the results are the ones f32 storage gives. The
-weights take half the device memory, and a lane of a product of a few rows reads
-two elements a word.
+Gemma 3 (270M) and its embedding do. Every shader widens each element as it
+reads it, so the results are the ones f32 storage gives. The weights take half
+the device memory, and a lane of a product of a few rows reads two elements a
+word. A half graph's weights and results are halves too, as
+[Half Element Types](./design.md#half-element-types) says.
 
 ### Fusion is chosen for dispatches
 
