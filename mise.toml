@@ -461,7 +461,7 @@ case " $* " in
     # The reviewer builds with cargo, which would starve a test run and be
     # starved by it. `wado run` refuses a grant of a path that does not exist,
     # so the homes are granted only to a review that runs cargo or mise, and
-    # mise's only where it has installed a tool.
+    # mise's binary and data directory only where they exist.
     *)
         set -- package-eddy/src/main.wado -- "$@"
         for granted in "${MISE_DATA_DIR:-$HOME/.local/share/mise}" "$(command -v mise)"; do

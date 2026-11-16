@@ -110,15 +110,9 @@ pub fn with_mise_tools(runner: Runner, root: &String) -> Runner with Process {
 
 /// The directories of the tools `mise` has installed for the tree at `root`.
 fn mise_bin_dirs(root: &String, data_dir: &String) -> Result<List<String>, String> with Process {
-    let listing = Command::new("timeout").args([
+    let out = Command::new("timeout").args([
         "--kill-after=10", `${MISE_TIMEOUT}`, "sh", "-c", `${ENTER_TREE} && exec mise bin-paths`, *root,
-    ]).env("MISE_DATA_DIR", *data_dir).output();
-    let out = match listing {
-        Ok(out) => out,
-        Err(e) => {
-            return Err(`${e}`);
-        },
-    };
+    ]).env("MISE_DATA_DIR", *data_dir).output().map_err(|e| `${e}`)?;
     if out.status != Exited(0) {
         return Err(`${out.status:?}: ${String::from_utf8_lossy(out.stderr).trim()}`);
     }
