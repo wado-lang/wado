@@ -1057,9 +1057,9 @@ fn turned<affine G: Graph, E: Float, B, N, S, D, Half>(
     };
     let [a_start, a_limit] = columns(0, half);
     let [b_start, b_limit] = columns(half, 2 * half);
-    let half_of = |g: &mut G, start: List<i32>, limit: List<i32>| -> G::Tensor<f32, [B, N, S, Half]> {
-        let part: G::Tensor<E, [B, N, S, Half]> = g.slice(x, start, limit, [1, 1, 1, 1]);
-        return g.convert::<E, f32, [B, N, S, Half]>(&part);
+    let half_of = |on: &mut G, start: List<i32>, limit: List<i32>| -> G::Tensor<f32, [B, N, S, Half]> {
+        let part: G::Tensor<E, [B, N, S, Half]> = on.slice(x, start, limit, [1, 1, 1, 1]);
+        return on.convert::<E, f32, [B, N, S, Half]>(&part);
     };
     let a = half_of(g, a_start, a_limit);
     let b = half_of(g, b_start, b_limit);

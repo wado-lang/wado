@@ -24,14 +24,17 @@ g (float[N, 2] X) => (float[N, 3] Y, float[N, 3] Z)
 }
 ";
 
+/// `GRAPH` carrying `W`, so it needs no checkpoint.
+global WEIGHED: String = GRAPH.replace("float[2, 3] W,", "float[2, 3] W = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0},");
+
 global OPTIONS: String = "{\"embed\": true}";
 
-/// `target/loam-main-test/<case>`, emptied, holding the graph and its options.
-fn scratch(case: String) -> String with Preopens {
+/// `target/loam-main-test/<case>`, emptied, holding `graph` and its options.
+fn scratch(case: String, graph: &String = &GRAPH) -> String with Preopens {
     let dir = `target/loam-main-test/${case}`;
     fs::remove_dir_all(&dir).unwrap();
     fs::create_dir_all(&dir).unwrap();
-    fs::write(`${dir}/g.onnxtext`, &GRAPH).unwrap();
+    fs::write(`${dir}/g.onnxtext`, graph).unwrap();
     fs::write(`${dir}/options.json`, &OPTIONS).unwrap();
     return dir;
 }
@@ -95,11 +98,11 @@ fn kiln(primary: [String, ByteList, String], options: Options) -> String with (S
 }
 
 test "gen prints the module the Kiln generator builds for the same graph and options" {
-    let dir = scratch("gen");
+    let dir = scratch("gen", &WEIGHED);
     let path = `${dir}/g.onnxtext`;
     let [gen_header, gen_body] = split_header(on_graph("gen", &dir, []).unwrap());
     let [kiln_header, kiln_body] = split_header(
-        kiln([path, GRAPH.bytes().collect(), "onnxtext"], Options { embed: true }),
+        kiln([path, WEIGHED.bytes().collect(), "onnxtext"], Options { embed: true }),
     );
     assert gen_header == `#![generated(by = "loam", sources = ["${path}"])]`;
     assert kiln_header == `#![generated(by = "lib:loam", sources = ["${path}"])]`;
@@ -128,14 +131,14 @@ fn split_header(source: String) -> [String, String] {
 }
 
 test "gen --output writes the module and prints nothing" {
-    let dir = scratch("gen-output");
+    let dir = scratch("gen-output", &WEIGHED);
     let printed = on_graph("gen", &dir, []).unwrap();
     assert on_graph("gen", &dir, ["--output", `${dir}/model.wado`]).unwrap() == "";
     assert fs::read_to_string(`${dir}/model.wado`).unwrap() == printed;
 }
 
 test "gen --runtime names the package the module imports" {
-    let dir = scratch("gen-runtime");
+    let dir = scratch("gen-runtime", &WEIGHED);
     let printed = on_graph("gen", &dir, ["--runtime", "lib:elsewhere"]).unwrap();
     assert printed.contains("} from \"lib:elsewhere\";");
 }
@@ -174,7 +177,7 @@ test "gen --index reads each weight from the shard the index places it in" {
         `${dir}/g-00002-of-00002.safetensors`,
     ]).unwrap();
     assert printed.contains(
-        "header.payload::<f32>(shards, \"g-00002-of-00002.safetensors\", &Expected { tensor: \"W\",",
+        "header.payload::<f32, Src>(source, \"g-00002-of-00002.safetensors\", &Expected { tensor: \"W\",",
     );
 }
 
@@ -219,7 +222,7 @@ test "gen reads weights in place from the external data file the model places th
     let path = "tests/models/tiny-gpt2/external/model.onnx";
     let printed = loam(["gen", "--type", "onnx", path]).unwrap();
     assert printed.contains("those the graph does not carry read from model.onnx_data where the build found them.");
-    assert printed.contains("payload_at::<f32, Ck>(checkpoint, ");
+    assert printed.contains("payload_at::<f32, Src>(source, \"model.onnx_data\", ");
 }
 
 test "gen with embed off reads the weights in place from the model file itself" {
@@ -228,8 +231,8 @@ test "gen with embed off reads the weights in place from the model file itself" 
     let path = "tests/models/tiny-gpt2/model.onnx";
     let printed = loam(["gen", "--type", "onnx", "--options", `${dir}/options.json`, path]).unwrap();
     assert printed.contains("those the graph does not carry read from model.onnx where the build found them.");
-    assert printed.contains(`expect_len(checkpoint, ${fs::read(path).unwrap().len()})?;`);
-    assert printed.contains("payload_at::<f32, Ck>(checkpoint, ");
+    assert printed.contains(`expect_len(source, "model.onnx", ${fs::read(path).unwrap().len()})?;`);
+    assert printed.contains("payload_at::<f32, Src>(source, \"model.onnx\", ");
 }
 
 test "embed off reads a protobuf, not the textual format" {

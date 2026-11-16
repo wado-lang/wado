@@ -26,13 +26,9 @@ use {
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
 use { Sampling, WebGpuBackend } from "lib:loam";
-use { continued, read_checkpoint, recorded } from "./continued.wado";
-use { Model } from "./model.wado";
+use { continued, loaded, recorded } from "./continued.wado";
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
-    let Some(checkpoint) = read_checkpoint() else {
-        return;
-    };
     let Some(generate) = recorded() else {
         return;
     };
@@ -40,9 +36,9 @@ export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, Gpu
         eprintln("no WebGPU adapter");
         return;
     };
-    let mut model = Model::load(gpu, &checkpoint).unwrap();
-    // The device holds the weights.
-    builtin::drop(checkpoint);
+    let Some(mut model) = loaded(gpu) else {
+        return;
+    };
     continued(generate, |ids, count, room| model.next_tokens(ids, count, &Sampling {}, room), || [
         model.backend().read_backs(),
         model.backend().dispatches(),

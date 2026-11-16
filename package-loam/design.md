@@ -81,6 +81,32 @@ axis keeps the WEP's signature.
 `compute` retains the cache before it begins. A caller that drives `build`
 itself calls `retain_fields(&mut backend, &cache)` there.
 
+## Weight Sources
+
+[WEP: Loam § The Graph Is the Schema, the Checkpoint Is Data](../docs/wep-2026-09-20-loam.md#the-graph-is-the-schema-the-checkpoint-is-data)
+gives the loader one `ByteList`. A model larger than the guest's memory cannot
+be one, so the loader reads from a source instead, a range at a time:
+
+```wado
+Params::load<affine Src: WeightSource>(backend: &mut Bk, source: &Src) -> Result<Params<Bk>, LoadError>
+```
+
+`WeightSource` reads a byte range of a file, by the name the build gave it, and
+says how long a file is. The generated module names every file it reads, so one
+model may spread its weights over several, and the loader holds one weight's
+bytes at a time. Each file's header, or its length, is checked before any
+weight is read, so a file that is missing or of another length stops the load
+before a weight reaches the device. An error names the file and the tensor.
+
+Two sources come with the runtime. `FileSource { dir }` reads the files of a
+directory, a range at a time. A `HashMap<String, ByteList>` holds each file
+whole, by name, for a model small enough to hold or bytes embedded with
+`#include_bytes`.
+
+A build whose graph lacks a weight's data and is given no checkpoint stops,
+naming the weight. Without the checkpoint the build knows neither the file the
+loader reads nor the header it checks.
+
 ## Sharded Checkpoints
 
 A large model is published as several safetensors files beside an index, in
@@ -117,17 +143,8 @@ each shard's is its header. A build refuses:
 Each tensor is then checked against its shard's header as against a single
 file's, and a disagreement names the shard.
 
-[WEP: Loam § The Graph Is the Schema, the Checkpoint Is Data](../docs/wep-2026-09-20-loam.md#the-graph-is-the-schema-the-checkpoint-is-data)
-gives the loader one `ByteList`. A sharded module's loader takes the shards
-instead, keyed by the file names the index uses:
-
-```wado
-Params::load(backend: &mut Bk, shards: &HashMap<String, ByteList>) -> Result<Params<Bk>, LoadError>
-```
-
-The generated module carries the placement, so the loader reads no index. A
-shard absent from the map is a `LoadError` naming a tensor the shard holds and
-the shard. A single file's use site and loader are unchanged.
+The generated module carries the placement, so the loader reads no index. It
+reads each shard from the source under the file name the index uses.
 
 `tools/onnx_split.wado --max-shard-bytes <n>` writes the shards and the index.
 It fills each shard in the graph's order up to `n` payload bytes, and a tensor
@@ -147,24 +164,20 @@ use { Model, Params, compute } from "./model.onnx" with {
 };
 ```
 
-The build reads no byte of the data file. It takes each weight's range from
-the graph, checked against the weight's shape, so the generated module carries
-the ranges and the loader is handed the data file:
-
-```wado
-Params::load(backend: &mut Bk, checkpoint: &Ck) -> Result<Params<Bk>, LoadError>
-```
-
-A file shorter than a range is a `LoadError` naming the tensor. A build
-refuses a weight with no length, a range past what a module can address,
-weights in two files, and a checkpoint given beside them.
-`tools/onnx_split.wado --external-data` writes a model this way.
+The build reads no byte of the data files. It takes each weight's file and
+range from the graph, checked against the weight's shape, so the generated
+module carries them, and the loader reads each weight from its file. The
+weights may be spread over several files. A file shorter than a range is a
+`LoadError` naming the tensor and the file. A build refuses a weight with no
+length, a range past what a module can address, and a checkpoint given beside
+them. `tools/onnx_split.wado --external-data` writes a model this way.
 
 A model under 2 GiB is published with its weights in the protobuf, each in a
 `raw_data` field. `embed: false` in the options leaves them there: the build
 records where each weight's `raw_data` sits, and holds no payload it does not
-read. The loader is handed the model file itself, and checks its length against
-the one the build read before reading a weight.
+read. The loader reads the model file itself, under the name the build read it
+by, and checks its length against the one the build read before reading a
+weight.
 
 ## Half Element Types
 

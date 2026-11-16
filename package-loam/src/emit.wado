@@ -23,7 +23,6 @@ use { Extent } from "./extent.wado";
 use {
     BACKEND_PARAM,
     CACHE,
-    CHECKPOINT_PARAM,
     CHOSEN,
     DECODE,
     DECODE_ROWS,
@@ -31,7 +30,6 @@ use {
     DECODED_TYPE,
     LEAST_EXTENTS,
     LENGTHS,
-    MAP,
     MODEL,
     OUTPUTS,
     PARAMS,
@@ -40,6 +38,7 @@ use {
     RECORDED,
     REQUESTS,
     RUNTIME_NAMES,
+    SOURCE_PARAM,
 } from "./idents.wado";
 use { padding } from "./pad.wado";
 use { Condition, Poly, equalities } from "./poly.wado";
@@ -74,13 +73,27 @@ use {
 
 pub use { EmitError, NameCollision, UnmappedDtype } from "./emit_symbols.wado";
 
-/// Where `Params::load` reads the weights the graph leaves to it: a
-/// checkpoint in one file, each in the shard an index places it in, or one
-/// file at the byte ranges the build found them at.
+/// Where `Params::load` reads the weights the graph leaves to it: nowhere,
+/// where the graph carries every one; a safetensors checkpoint in the file
+/// named; each in the shard an index places it in; or the files the model
+/// names at the byte ranges the build found them at.
 pub variant Placement {
-    File,
+    Embedded,
+    File(String),
     Shards(HashMap<String, String>),
     InPlace(InPlace),
+}
+
+impl Placement {
+    /// Whether `load` finds the weight `name` where this places weights.
+    fn places(&self, name: &String) -> bool {
+        return match *self {
+            Embedded => false,
+            File(_) => true,
+            Shards(placed) => placed.contains_key(*name),
+            InPlace(in_place) => in_place.ranges.contains_key(*name),
+        };
+    }
 }
 
 /// The tensors a `decode` entry loops over: the input taking each row's token,
@@ -102,11 +115,14 @@ pub fn emit(
     graph: &Graph,
     checked: &Checked,
     runtime: &String,
-    placement: Placement = Placement::File,
+    placement: Placement = Placement::Embedded,
     decode: Option<Decode> = null,
 ) -> Result<String, EmitError> {
+    for let vi of &graph.initializers {
+        assert vi.data matches { Some(_) } || placement.places(&vi.name), "the placement must place every weight the graph leaves to `load`";
+    }
     let graph = &cast_likes_resolved(graph, checked);
-    let prepared = Prepared::of(graph, checked, &placement)?;
+    let prepared = Prepared::of(graph, checked)?;
     let rows = match prepared.rows(graph, checked) {
         Ok(rows) => rows,
         Err(_) => null,
@@ -118,7 +134,7 @@ pub fn emit(
 /// own in what `emit` writes, `null` where the inputs pad no length, and the
 /// refusal where the rows share their lengths.
 pub fn rows_judged(graph: &Graph, checked: &Checked) -> Result<Option<String>, EmitError> {
-    let rows = Prepared::of(graph, checked, &Placement::File)?.rows(graph, checked).map_err(|r| EmitError::Shared(r))?;
+    let rows = Prepared::of(graph, checked)?.rows(graph, checked).map_err(|r| EmitError::Shared(r))?;
     return Result::Ok(rows.map(|r| r.name));
 }
 
@@ -132,8 +148,6 @@ fn padded_symbols(graph: &Graph, checked: &Checked, carriers: &List<Carrier>) ->
 /// What `emit` writes the module from but `build`: the graph's names, and the
 /// lengths every entry reads.
 struct Prepared {
-    /// Only a sharded `load` names the map.
-    imports_map: bool,
     axes: List<String>,
     literals: Literals,
     crossing: Crossing,
@@ -153,35 +167,24 @@ struct Built {
 }
 
 impl Prepared {
-    fn of(graph: &Graph, checked: &Checked, placement: &Placement) -> Result<Prepared, EmitError> {
-        if let Shards(placed) = placement {
-            for let vi of &graph.initializers {
-                assert vi.data matches { Some(_) } || placed.contains_key(vi.name), "a sharded placement must place every weight the graph leaves to the checkpoint";
-            }
-        }
-        if let InPlace(in_place) = placement {
-            for let vi of &graph.initializers {
-                assert vi.data matches { Some(_) } || in_place.ranges.contains_key(vi.name), "weights left in place must each have a range";
-            }
-        }
+    fn of(graph: &Graph, checked: &Checked) -> Result<Prepared, EmitError> {
         if graph.outputs.is_empty() {
             builtin::cold_path();
             return Result::Err(EmitError::NoOutput);
         }
         refuse_unmapped_dtype(graph)?;
-        let imports_map = placement matches { Shards(_) } && loads_weights(graph);
         let axes = axis_names(graph, checked);
         let literals = graph_literals(graph, checked);
         let crossing = Crossing::of(graph, cache_pairs(graph));
         let carriers = symbol_carriers(graph, &checked.shapes, &crossing.cached);
-        let names = Names::of(named_tensors(graph, checked, &literals.spelled, &carriers), &axes, imports_map)?;
+        let names = Names::of(named_tensors(graph, checked, &literals.spelled, &carriers), &axes)?;
         let kept = kept_literals(&literals, checked);
         let grown = grown_lengths(checked, &crossing, &carriers)?;
         let padded = padded_symbols(graph, checked, &carriers);
         let inputs: List<String> = graph.inputs.into_iter().map(|vi| vi.name).filter(|t| !crossing.cached.contains(t)).collect();
         let conditions = held_conditions(graph, checked, &inputs);
         return Result::Ok(
-            Prepared { imports_map, axes, literals, crossing, carriers, names, kept, grown, padded, conditions },
+            Prepared { axes, literals, crossing, carriers, names, kept, grown, padded, conditions },
         );
     }
 
@@ -244,9 +247,6 @@ impl Prepared {
             w.line(`    ${name},`);
         }
         w.line(wado`} from "${*runtime}";`);
-        if self.imports_map {
-            w.line(`use { ${MAP} } from "core:collections";`);
-        }
         w.blank();
         let fixed = boundary_extents(graph, &checked.shapes);
         for let axis of &self.axes {
@@ -490,9 +490,9 @@ fn loads_weights(graph: &Graph) -> bool {
 }
 
 /// `Params::embedded` where the graph carries every initializer's data, and
-/// `Params::load` reading the rest from a safetensors checkpoint otherwise.
-/// Each tensor is kept as it is read, so the host copy of one weight at a time
-/// is all that lives beside the kept ones.
+/// `Params::load` reading the rest a tensor at a time from a `WeightSource`
+/// otherwise. Each tensor is kept as it is read, so the host copy of one
+/// weight at a time is all that lives beside the kept ones.
 fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placement: &Placement) {
     let loads = loads_weights(graph);
     w.blank();
@@ -500,36 +500,44 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
     block.add_generic(GRAPH_BOUND);
     block.emit_begin(w);
     if loads {
-        // What `load` checks of its file before reading a weight out of it.
-        let [doc, param, ty, first]: [String, String, String, Option<String>] = match *placement {
-            File => [
-                "a safetensors checkpoint",
-                "checkpoint",
-                `&${CHECKPOINT_PARAM}`,
-                Option::Some("let header = read_checkpoint(checkpoint)?;"),
+        // Where the weights are, and what `load` checks of its files before
+        // reading a weight out of one.
+        let [doc, firsts]: [String, List<String>] = match *placement {
+            Embedded => unreachable(),
+            File(file) => [
+                `the safetensors checkpoint ${file}`,
+                [wado`let header = read_headers(source, ["${file}"])?;`],
             ],
-            Shards(_) => [
-                "the shards of a safetensors checkpoint, by the file name its index gives each",
-                "shards",
-                `&${MAP}<String, ByteList>`,
-                Option::Some("let header = read_shards(shards)?;"),
-            ],
-            InPlace(in_place) => [
-                `${in_place.file} where the build found them`,
-                "checkpoint",
-                `&${CHECKPOINT_PARAM}`,
-                in_place.len.map(|len: i32| `expect_len(checkpoint, ${len})?;`),
-            ],
+            Shards(placed) => {
+                let mut shards: List<String> = [];
+                for let [_, shard] of placed.entries() {
+                    if !shards.contains(shard) {
+                        shards.push(*shard);
+                    }
+                }
+                shards.sort();
+                let spelled: List<String> = shards.into_iter().map(|shard| wado`"${shard}"`).collect();
+                [
+                    `the shards of a safetensors checkpoint, by the file name its index gives each`,
+                    [`let header = read_headers(source, [${spelled.join(", ")}])?;`],
+                ];
+            },
+            InPlace(in_place) => {
+                let mut checks: List<String> = [];
+                for let [file, len] of in_place.lens.entries() {
+                    checks.push(wado`expect_len(source, "${*file}", ${*len})?;`);
+                }
+                [`${in_place.files().join(", ")} where the build found them`, checks];
+            },
         };
         w.line(`/// The weights, those the graph does not carry read from ${doc}.`);
-        let mut load = FnSpec::new("load", Vis::Pub);
-        if !placement matches { Shards(_) } {
-            load.add_generic(`affine ${CHECKPOINT_PARAM}: CheckpointBytes`);
-        }
-        load.add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(param, ty).set_return_type(
-            `Result<${PARAMS_TYPE}, LoadError>`,
-        ).add_effect("_").emit_begin(w);
-        if let Some(line) = first {
+        FnSpec::new("load", Vis::Pub).add_generic(`affine ${SOURCE_PARAM}: WeightSource`).add_param(
+            "backend",
+            `&mut ${BACKEND_PARAM}`,
+        ).add_param("source", `&${SOURCE_PARAM}`).set_return_type(`Result<${PARAMS_TYPE}, LoadError>`).add_effect(
+            "_",
+        ).emit_begin(w);
+        for let line of firsts {
             w.line(line);
         }
     } else {
@@ -593,19 +601,20 @@ fn emit_embedded_data(w: &mut CodeWriter, graph: &Graph) {
     w.end();
 }
 
-/// The call reading a tensor's `primitive` elements out of the checkpoint
-/// `load` was given, checked against what the build compiled it as.
+/// The call reading a tensor's `primitive` elements out of the source `load`
+/// was given, checked against what the build compiled it as.
 fn checkpoint_payload(e: &Expected, primitive: &String, placement: &Placement) -> String {
     let axes: List<String> = e.axes.into_iter().map(|axis| wado`"${axis}"`).collect();
-    let [types, within] = match *placement {
-        File => [`${*primitive}, ${CHECKPOINT_PARAM}`, "checkpoint"],
-        Shards(placed) => [*primitive, wado`shards, "${placed[e.tensor]}"`],
+    let file = match *placement {
+        Embedded => unreachable(),
+        File(file) => file,
+        Shards(placed) => placed[e.tensor],
         InPlace(in_place) => {
-            let [start, end] = in_place.ranges[e.tensor];
-            return wado`payload_at::<${*primitive}, ${CHECKPOINT_PARAM}>(checkpoint, "${e.tensor}", ${start}, ${end})?`;
+            let range = in_place.ranges[e.tensor];
+            return wado`payload_at::<${*primitive}, ${SOURCE_PARAM}>(source, "${range.file}", "${e.tensor}", ${range.start}, ${range.end})?`;
         },
     };
-    return wado`header.payload::<${types}>(${within}, &Expected { tensor: "${e.tensor}", dtype: "${e.dtype}", axes: [${axes.join(
+    return wado`header.payload::<${*primitive}, ${SOURCE_PARAM}>(source, "${file}", &Expected { tensor: "${e.tensor}", dtype: "${e.dtype}", axes: [${axes.join(
         ", ",
     )}], extents: ${e.extents}, elements: ${e.elements}, width: ${e.width} })?`;
 }

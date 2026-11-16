@@ -30,7 +30,7 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Cpu, Graph, WebGpuBackend } from "lib:loam";
+use { Cpu, FileSource, Graph, WebGpuBackend } from "lib:loam";
 use { Model, Tokenizer } from "./model.wado";
 
 /// One prompt and the tokens onnxruntime picks after it, as `generate.mjs`
@@ -65,13 +65,7 @@ fn continued<affine Bk: Graph>(model: &mut Model<Bk>, all: &mut List<i32>, steps
 }
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
-    let checkpoint = match fs::read_linear("model.onnx") {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            eprintln(`${e}; run fetch.sh first`);
-            return;
-        },
-    };
+    let weights = FileSource { dir: "." };
     let Ok(text) = fs::read_to_string("generate.json") else {
         eprintln("generate.json is missing; run generate.mjs");
         return;
@@ -81,8 +75,14 @@ export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, Gpu
         eprintln("no WebGPU adapter");
         return;
     };
-    let mut on_device = Model::load(gpu, &checkpoint).unwrap();
-    let mut on_cpu = Model::load(Cpu {}, &checkpoint).unwrap();
+    let mut on_device = match Model::load(gpu, &weights) {
+        Ok(model) => model,
+        Err(e) => {
+            eprintln(`${e}; run fetch.sh first`);
+            return;
+        },
+    };
+    let mut on_cpu = Model::load(Cpu {}, &weights).unwrap();
     for let g of oracle.generate {
         // Each token after the prompt's first, as onnxruntime's are timed.
         let steps = g.generated.len() - 1;

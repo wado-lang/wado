@@ -48,11 +48,11 @@ The embedding is a `float16` table a `Gather` reads, so the model has no
 `GatherBlockQuantized`. The inputs and outputs are `int64` and `float16`, and
 the two `Cast`s give `int32`.
 
-1. [ ] Loading a tensor at a time. `load` reads the checkpoint from a source
-   that yields one tensor's bytes at a time, rather than from the whole file
-   the guest holds. A range names one of several data files. A tensor reaches
-   the device in its stored type, where today each passes through the guest as
-   a list of f32. Finished when a checkpoint larger than the guest's memory,
+1. [ ] Loading a tensor at a time. `load` reads a
+   [`WeightSource`](./design.md#weight-sources) a range at a time, and a range
+   names one of several data files. What is left: a tensor reaches the device
+   in its stored type, where today each passes through the guest as a list of
+   its primitive. Finished when a checkpoint larger than the guest's memory,
    spread over several data files, loads onto `WebGpuBackend` and
    `PjrtBackend`, and `Cpu` loads one it can hold through the same source.
 2. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
@@ -300,10 +300,9 @@ the mask and the input ids at the boundary.
 
 An initializer the textual format gives a `["location": ...]` list stops the
 build, naming the tensor. The protobuf form's `external_data` is read in place
-instead, as `design.md` describes, from one file. A model spreading its weights
-over several data files stops the build naming two of them, and so does a
-constant kept in one, since the build reads a constant and Kiln hands the
-generator the model alone.
+instead, as `design.md` describes. A constant kept in a data file stops the
+build, since the build reads a constant and Kiln hands the generator the model
+alone.
 
 ### Element types and precision
 

@@ -17,7 +17,7 @@ static const char* MODEL = "../example/gpt2-124m";
 
 int main() {
     Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "gpt2-124m");
-    Ort::Session session(env, (std::string(MODEL) + "/model.onnx").c_str(), decoder::on_cuda());
+    Ort::Session session(env, (std::string(MODEL) + "/decoder_model_merged.onnx").c_str(), decoder::on_cuda());
     const decoder::Shape shape = {12, 12, 64, true};
     const decoder::Names names(shape);
     const std::vector<int64_t> ids = harness::prompt_ids(std::string(MODEL) + "/tokenize.json");

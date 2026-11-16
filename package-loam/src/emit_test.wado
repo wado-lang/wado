@@ -1,6 +1,6 @@
 use { HashMap, HashSet, TreeMap } from "core:collections";
 use { Decode, EmitError, NameCollision, Placement, UnmappedDtype, emit, rows_judged } from "./emit.wado";
-use { Attr, Dim, Elements, Graph, InPlace, Known, Node, Rank, ValueInfo } from "./graph.wado";
+use { Attr, Dim, Elements, Graph, InPlace, Known, Node, Rank, ValueInfo, WeightRange } from "./graph.wado";
 use { module_idents } from "./idents.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
@@ -9,9 +9,12 @@ use { keep_last } from "./specialize.wado";
 /// The package spec the generated module imports the runtime from.
 global RUNTIME: String = "lib:loam";
 
+/// The checkpoint `generate` reads the weights a graph lacks from.
+global CHECKPOINT: Placement = Placement::File("model.safetensors");
+
 fn generate(source: String) -> Result<String, EmitError> {
     let graph = read(&source).unwrap();
-    return emit(&graph, &infer(&graph).unwrap(), &RUNTIME);
+    return emit(&graph, &infer(&graph).unwrap(), &RUNTIME, CHECKPOINT);
 }
 
 /// `build`, and what the module declares between it and `compute`, out of the
@@ -343,11 +346,11 @@ test "weights the graph lacks are read from a checkpoint by Params::load" {
 
     assert !out.contains("fn embedded");
     assert out.contains(
-        "pub fn load<affine Ck: CheckpointBytes>(backend: &mut Bk, checkpoint: &Ck) -> Result<Params<Bk>, LoadError> with _ {",
+        "pub fn load<affine Src: WeightSource>(backend: &mut Bk, source: &Src) -> Result<Params<Bk>, LoadError> with _ {",
     );
-    assert out.contains("let header = read_checkpoint(checkpoint)?;");
+    assert out.contains("let header = read_headers(source, [\"model.safetensors\"])?;");
     assert out.contains(
-        "0 => hosted(Tensor::<f32, [X1, W11]> { data: header.payload::<f32, Ck>(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"X1\", \"W11\"], extents: [4, 3], elements: 12, width: 4 })?, extents: [4, 3] }),",
+        "0 => hosted(Tensor::<f32, [X1, W11]> { data: header.payload::<f32, Src>(source, \"model.safetensors\", &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"X1\", \"W11\"], extents: [4, 3], elements: 12, width: 4 })?, extents: [4, 3] }),",
     );
 }
 
@@ -359,37 +362,32 @@ test "a sharded checkpoint's weights are read each from the shard the index plac
     }
     let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::Shards(placed)).unwrap();
 
-    assert out.contains("use { HashMap } from \"core:collections\";\n");
     assert out.contains(
-        "pub fn load(backend: &mut Bk, shards: &HashMap<String, ByteList>) -> Result<Params<Bk>, LoadError> with _ {",
+        "let header = read_headers(source, [\"m-00001-of-00002.safetensors\", \"m-00002-of-00002.safetensors\"])?;",
     );
-    assert out.contains("let header = read_shards(shards)?;");
     assert out.contains(
-        "2 => hosted(Tensor::<f32, [W11, Y1]> { data: header.payload::<f32>(shards, \"m-00002-of-00002.safetensors\", &Expected { tensor: \"W2\",",
+        "2 => hosted(Tensor::<f32, [W11, Y1]> { data: header.payload::<f32, Src>(source, \"m-00002-of-00002.safetensors\", &Expected { tensor: \"W2\",",
     );
 }
 
-test "weights left in place are read where the build found them" {
+test "weights left in place are read where the build found them, in each file" {
     let graph = read(&MLP).unwrap();
-    let mut ranges = TreeMap::<String, [i32, i32]>::new();
-    ranges["W1"] = [0, 48];
-    ranges["B1"] = [48, 60];
-    ranges["W2"] = [60, 84];
-    ranges["B2"] = [84, 92];
-    let in_place = InPlace { file: "model.onnx_data", ranges };
-    let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::InPlace(in_place)).unwrap();
+    let mut ranges = TreeMap::<String, WeightRange>::new();
+    ranges["W1"] = WeightRange { file: "a.bin", start: 0, end: 48 };
+    ranges["B1"] = WeightRange { file: "a.bin", start: 48, end: 60 };
+    ranges["W2"] = WeightRange { file: "b.bin", start: 0, end: 24 };
+    ranges["B2"] = WeightRange { file: "b.bin", start: 24, end: 32 };
+    let mut lens = TreeMap::<String, i32>::new();
+    lens["a.bin"] = 60;
+    lens["b.bin"] = 32;
+    let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::InPlace(InPlace { ranges, lens })).unwrap();
 
     assert out.contains(
-        "    /// The weights, those the graph does not carry read from model.onnx_data where the build found them.\n    pub fn load<affine Ck: CheckpointBytes>(backend: &mut Bk, checkpoint: &Ck) -> Result<Params<Bk>, LoadError> with _ {\n",
+        "    /// The weights, those the graph does not carry read from a.bin, b.bin where the build found them.\n    pub fn load<affine Src: WeightSource>(backend: &mut Bk, source: &Src) -> Result<Params<Bk>, LoadError> with _ {\n        expect_len(source, \"a.bin\", 60)?;\n        expect_len(source, \"b.bin\", 32)?;\n",
     );
     assert out.contains(
-        "2 => hosted(Tensor::<f32, [W11, Y1]> { data: payload_at::<f32, Ck>(checkpoint, \"W2\", 60, 84)?, extents: [3, 2] }),",
+        "2 => hosted(Tensor::<f32, [W11, Y1]> { data: payload_at::<f32, Src>(source, \"b.bin\", \"W2\", 0, 24)?, extents: [3, 2] }),",
     );
-    assert !out.contains("core:collections");
-}
-
-test "a single file's module imports no map" {
-    assert !generate(MLP).unwrap().contains("core:collections");
 }
 
 test "a graph carrying some weights embeds those and loads the rest" {
@@ -958,7 +956,7 @@ g (float[N, 2] HashMap) => (float[N, 2] Y)
     assert out.contains("(Binary::Maximum, HashMap, ");
 }
 
-test "a sharded checkpoint that supplies no weight imports no map" {
+test "a sharded checkpoint that supplies no weight leaves the weights embedded" {
     let source = `
 g (float[N, 2] X) => (float[N, 2] Y)
 <float[2] B = {1.0, 2.0}>
@@ -969,8 +967,8 @@ g (float[N, 2] X) => (float[N, 2] Y)
     let graph = read(&source).unwrap();
     let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::Shards(HashMap::new())).unwrap();
 
-    assert !out.contains("core:collections");
     assert out.contains("pub fn embedded(");
+    assert !out.contains("fn load");
 }
 
 test "a renamed tensor steps past a tensor already named as the renaming would" {
@@ -1186,7 +1184,7 @@ fn node(op: String, output: String, inputs: List<String>) -> Node {
 }
 
 fn emit_graph(graph: &Graph) -> Result<String, EmitError> {
-    return emit(graph, &infer(graph).unwrap(), &RUNTIME);
+    return emit(graph, &infer(graph).unwrap(), &RUNTIME, CHECKPOINT);
 }
 
 fn matrix_rank() -> Rank {
@@ -1792,7 +1790,7 @@ fn decoded(
     if let Some(output) = last {
         keep_last(&mut graph, &infer(&graph).unwrap(), &output, 1).unwrap();
     }
-    return emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::File, Option::Some(Decode { ids, mask, logits }));
+    return emit(&graph, &infer(&graph).unwrap(), &RUNTIME, CHECKPOINT, Option::Some(Decode { ids, mask, logits }));
 }
 
 /// `decoded` of `source`, an edit of `DECODER`, by its usual tensors.
@@ -1959,7 +1957,7 @@ test "decode refuses a graph with no cache" {
     ).unwrap();
     let decode = Decode { ids: "ids", mask: "ids", logits: "Y" };
     assert refused_for(
-        emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::File, Option::Some(decode)),
+        emit(&graph, &infer(&graph).unwrap(), &RUNTIME, CHECKPOINT, Option::Some(decode)),
         "no cache",
     );
 }

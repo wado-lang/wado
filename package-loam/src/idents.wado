@@ -7,8 +7,8 @@ use { is_reserved } from "lib:wadopoet";
 /// The type parameter `build` takes its backend as.
 pub global BACKEND_PARAM: String = "Bk";
 
-/// The type parameter `load` takes its checkpoint's bytes as.
-pub global CHECKPOINT_PARAM: String = "Ck";
+/// The type parameter `load` takes its weight source as.
+pub global SOURCE_PARAM: String = "Src";
 
 /// The struct `build` returns several outputs in, as the backend holds them.
 pub global PASSED: String = "Passed";
@@ -56,20 +56,17 @@ pub global DECODED: String = "decoded";
 /// `DECODED` recorded for a backend to compile.
 pub global RECORDED_DECODED: String = "recorded_decoded";
 
-/// The map a sharded `load` takes the shards in, keyed by file name.
-pub global MAP: String = "HashMap";
-
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 pub global RUNTIME_NAMES: List<String> = [
-    "Any", "Attention", "Binary", "CheckpointBytes", "Convolution", "Cpu", "Decoding", "DotDims", "Expected",
-    "GatherDims", "Graph", "Holds", "LoadError", "Merged", "One", "Picks", "Programs", "Recorded", "Recorder", "Sampler",
-    "Sampling", "Slots", "Tensor", "Unary", "Untyped", "WindowReduce", "assembled", "axis_mismatch", "branched",
+    "Any", "Attention", "Binary", "Convolution", "Cpu", "Decoding", "DotDims", "Expected", "GatherDims", "Graph",
+    "Holds", "LoadError", "Merged", "One", "Picks", "Programs", "Recorded", "Recorder", "Sampler", "Sampling", "Slots",
+    "Tensor", "Unary", "Untyped", "WeightSource", "WindowReduce", "assembled", "axis_mismatch", "branched",
     "capacity_of", "erased_fields", "expect_len", "extent_mismatch", "extents_mismatch", "fitted", "fitted_fields",
     "from_end", "from_end_indices", "full", "hosted", "input_mismatch", "joined_at", "lifted", "masked", "opened",
-    "payload_at", "quotient", "range_i64", "read_checkpoint", "read_shards", "recorded_fields", "reduce_mean", "refuse",
-    "resized", "restored_fields", "retain_fields", "row_binary", "row_from_end", "row_quotient", "row_range", "scalar",
-    "shared", "softmax", "softmax_flattened", "stepped", "strided_gather", "to_extent", "typed", "unmet", "written_at",
+    "payload_at", "quotient", "range_i64", "read_headers", "recorded_fields", "reduce_mean", "refuse", "resized",
+    "restored_fields", "retain_fields", "row_binary", "row_from_end", "row_quotient", "row_range", "scalar", "shared",
+    "softmax", "softmax_flattened", "stepped", "strided_gather", "to_extent", "typed", "unmet", "written_at",
     "written_fields", "zeroed_fields",
 ];
 
@@ -125,6 +122,6 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert("embedded_data");
     reserved.insert("backend");
     reserved.insert(BACKEND_PARAM);
-    reserved.insert(CHECKPOINT_PARAM);
+    reserved.insert(SOURCE_PARAM);
     return reserved;
 }

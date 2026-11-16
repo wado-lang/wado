@@ -7,7 +7,6 @@
 //! `decode`, rather than a read back each.
 
 use { args, eprintln, Environment, Stderr, Stdout } from "core:cli";
-use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { MonotonicClock } from "wasi:clocks";
 use {
@@ -28,20 +27,16 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Sampling, WebGpuBackend } from "lib:loam";
+use { FileSource, Sampling, WebGpuBackend } from "lib:loam";
 use { Model } from "../../example/gemma3-270m/model.wado";
 use { STEPS, timed, timed_by } from "./generate.wado";
 
 export fn run() with (Environment, Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
-    let Ok(checkpoint) = fs::read_linear("build/model.onnx_data") else {
-        eprintln("build/model.onnx_data is missing; run package-loam/example/gemma3-270m/fetch.sh");
-        return;
-    };
     let Some(gpu) = WebGpuBackend::new() else {
         eprintln("no WebGPU adapter");
         return;
     };
-    let mut model = Model::load(gpu, &checkpoint).unwrap();
+    let mut model = Model::load(gpu, &FileSource { dir: "build" }).unwrap();
     if args().contains_str("decode") {
         timed_by("Gemma 3 (270M), Loam WebGPU decode", &mut model, |m, ids| m.next_tokens(ids, STEPS, &Sampling {}));
     } else {

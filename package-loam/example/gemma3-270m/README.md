@@ -84,7 +84,8 @@ and the `Gelu` and `SimplifiedLayerNormalization` functions.
 pinned by their SHA-256. The build downloads them once into Wado's cache. The
 graph names its weights in `onnx/model.onnx_data`, at an offset and a length
 each, and the build reads none of that file. `Params::load` reads the weights
-from it at run time. A program reaches no file the build read, so `fetch.sh`
+from it at run time, a weight at a time, through a `FileSource` over `build/`.
+A program reaches no file the build read, so `fetch.sh`
 downloads the data file into `build/`, which Git ignores, with the model and
 the tokenizer files the oracle scripts read.
 

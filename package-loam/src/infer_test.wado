@@ -140,10 +140,10 @@ test "a dim_param joining axes of two lengths stops the build" {
 }
 
 test "a dim_param minted into a name the module may import takes another" {
-    let source = `g (float[hash_map, 2] X) => (float[hash_map, 2] Y) {
+    let source = `g (float[weight_source, 2] X) => (float[weight_source, 2] Y) {
         Y = Relu(X)
     }`;
-    assert y_axes(source).unwrap() == "HashMap_=hash_map,X1=2";
+    assert y_axes(source).unwrap() == "WeightSource_=weight_source,X1=2";
 }
 
 test "an outer constant both branches read is one tensor, under one name" {

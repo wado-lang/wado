@@ -492,16 +492,36 @@ pub struct Graph {
     pub in_place: Option<InPlace> = null,
 }
 
-/// Weights left in one file at the byte ranges the build found them at.
+/// Weights left in the files the model names, at the byte ranges the build
+/// found them at.
 pub struct InPlace {
-    /// The file as the model names it: an external data file's location, or
-    /// the model file's own name.
+    /// Where each weight is, by its name.
+    pub ranges: TreeMap<String, WeightRange>,
+    /// The length of each file the build read the whole of, which the file
+    /// `Params::load` reads must have.
+    pub lens: TreeMap<String, i32> = TreeMap::<String, i32>::new(),
+}
+
+/// A weight's place: its file as the model names it, an external data file's
+/// location or the model file's own name, and its first byte and the byte past
+/// its last.
+pub struct WeightRange {
     pub file: String,
-    /// Each weight's first byte and the byte past its last, by its name.
-    pub ranges: TreeMap<String, [i32, i32]>,
-    /// The file's length, where the build read the whole of it, which the file
-    /// `Params::load` is handed must have.
-    pub len: Option<i32> = null,
+    pub start: i32,
+    pub end: i32,
+}
+
+impl InPlace {
+    /// The files the weights are in, in their order of first use.
+    pub fn files(&self) -> List<String> {
+        let mut files: List<String> = [];
+        for let [_, stored] of self.ranges.entries() {
+            if !files.contains(&stored.file) {
+                files.push(stored.file);
+            }
+        }
+        return files;
+    }
 }
 
 impl Graph {

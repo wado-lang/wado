@@ -6,7 +6,7 @@
 use { HashMap, HashSet } from "core:collections";
 use { Extent, Solved, solved } from "./extent.wado";
 use { Graph } from "./graph.wado";
-use { BACKEND_PARAM, MAP, is_bound, module_idents } from "./idents.wado";
+use { BACKEND_PARAM, is_bound, module_idents } from "./idents.wado";
 use { Lowers, Op, Poly } from "./poly.wado";
 use { RowRefusal, SLOTS } from "./rows.wado";
 use { Shape } from "./shape.wado";
@@ -93,11 +93,8 @@ internal struct Names {
 impl Names {
     /// An identifier for each of `tensors`, in the order first seen, past the
     /// names the module binds and `axes`, which name its marker types.
-    internal fn of(tensors: List<String>, axes: &List<String>, imports_map: bool) -> Result<Names, EmitError> {
+    internal fn of(tensors: List<String>, axes: &List<String>) -> Result<Names, EmitError> {
         let mut reserved = module_idents();
-        if imports_map {
-            reserved.insert(MAP);
-        }
         for let axis of *axes {
             assert !is_bound(&reserved, &axis), "infer names an axis past every name the module declares";
             reserved.insert(axis);

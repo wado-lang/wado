@@ -19,6 +19,7 @@ use {
     Rank,
     ReadError,
     ValueInfo,
+    WeightRange,
     bit_pattern,
     check_element_count,
     check_payload_len,
@@ -236,19 +237,13 @@ fn leave_in_place(t: &onnx::TensorProto, name: &String, in_place: &mut Option<In
     if offset < 0 || length < 0 || length > i32::MAX as i64 - offset {
         return Result::Err(`${*name}: external data at ${offset} for ${length} bytes, past what a module can address`);
     }
-    let range = [offset as i32, (offset + length) as i32];
+    let range = WeightRange { file: location, start: offset as i32, end: (offset + length) as i32 };
     let Some(held) = in_place else {
-        let mut ranges = TreeMap::<String, [i32, i32]>::new();
+        let mut ranges = TreeMap::<String, WeightRange>::new();
         ranges[*name] = range;
-        *in_place = Option::Some(InPlace { file: location, ranges });
+        *in_place = Option::Some(InPlace { ranges });
         return Result::Ok(());
     };
-    if held.file != location {
-        let [first, _] = held.ranges.entries().next().unwrap();
-        return Result::Err(
-            `${*name}: external data in ${location}, and ${first}'s in ${held.file}; the weights left in place are in one file`,
-        );
-    }
     held.ranges[*name] = range;
     return Result::Ok(());
 }

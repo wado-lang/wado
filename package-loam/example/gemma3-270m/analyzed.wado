@@ -5,17 +5,14 @@
 use { println, Stderr, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
 use { PjrtHost } from "core:pjrt";
-use { PjrtBackend, summary } from "lib:loam";
-use { read_checkpoint } from "./continued.wado";
-use { Model } from "./model.wado";
+use { PjrtBackend, WeightSource, summary } from "lib:loam";
+use { WEIGHTS, loaded } from "./continued.wado";
 
 export fn run() with (Stdout, Stderr, Preopens, PjrtHost) {
-    let Some(checkpoint) = read_checkpoint() else {
+    let Some(mut model) = loaded(PjrtBackend::analyzing("v5e:1x1")) else {
         return;
     };
-    let f32_bytes = checkpoint.len();
-    let mut model = Model::load(PjrtBackend::analyzing("v5e:1x1"), &checkpoint).unwrap();
-    builtin::drop(checkpoint);
+    let f32_bytes = WEIGHTS.len(&"model.onnx_data").unwrap();
     let [halved, whole] = model.backend().weight_bytes();
     println(`${f32_bytes} bytes in f32: ${halved} in bf16, ${whole} staying f32`);
     let mut ids: List<i32> = [1, 2, 3, 4, 5, 6, 7, 8];

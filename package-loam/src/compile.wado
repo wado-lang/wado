@@ -8,10 +8,10 @@ use { Decode, Placement, emit } from "./emit.wado";
 use { emit_tokenizer } from "./emit_tokenizer.wado";
 use { read as read_tokenizer } from "./tokenizer_json.wado";
 use fs from "core:fs";
-use { Graph, InPlace, ValueInfo, check_payload_len, element_of, static_extents } from "./graph.wado";
+use { Graph, InPlace, ValueInfo, WeightRange, check_payload_len, element_of, static_extents } from "./graph.wado";
 use { leave_weights } from "./onnx_stream.wado";
 use { Checked, infer } from "./infer.wado";
-use { declared_header_end, read_checkpoint } from "./runtime/checkpoint.wado";
+use { declared_header_end, header_of } from "./runtime/checkpoint.wado";
 use { CheckpointFile, check_checkpoint, check_shards, placement, read_index } from "./safetensors.wado";
 use onnx_proto from "./onnx_proto.wado";
 use onnx_text from "./onnx_text.wado";
@@ -130,15 +130,13 @@ pub fn check_in_place(
     if slim.ranges.is_empty() {
         return Result::Ok(model);
     }
-    if let Some(external) = model.graph.in_place {
-        return Result::Err(at(
-            path,
-            &`weights in the model and in ${external.file}; the weights left in place are in one file`,
-        ));
-    }
     // A path the reader was handed content for names a file.
     let file = fs::file_name(path).unwrap().to_string();
-    let in_place = InPlace { file, ranges: slim.ranges, len: Option::Some(slim.len) };
+    let mut in_place = model.graph.in_place.unwrap_or(InPlace { ranges: TreeMap::<String, WeightRange>::new() });
+    for let [name, [start, end]] of slim.ranges.entries() {
+        in_place.ranges[*name] = WeightRange { file, start: *start, end: *end };
+    }
+    in_place.lens[file] = slim.len;
     return Result::Ok(Model {
         ..model,
         graph: { ..model.graph, in_place: Option::Some(in_place) },
@@ -193,7 +191,7 @@ pub fn generate_model(model: &Model, path: &String, weights: Weights, runtime: &
     if let Some(in_place) = graph.in_place {
         if !weights matches { Unchecked } {
             return Result::Err(
-                at(path, &`the weights are left in place in ${in_place.file}, so no checkpoint is given`),
+                at(path, &`the weights are left in place in ${in_place.files().join(", ")}, so no checkpoint is given`),
             );
         }
         for let vi of &graph.initializers {
@@ -204,10 +202,15 @@ pub fn generate_model(model: &Model, path: &String, weights: Weights, runtime: &
         return emit_with(Placement::InPlace(in_place));
     }
     return match weights {
-        Unchecked => emit_with(Placement::File),
+        Unchecked => {
+            if let Some(vi) = graph.initializers.into_iter().find(|vi| vi.data matches { None }) {
+                return Result::Err(at(path, &`${vi.name}: no data, and no checkpoint is given`));
+            }
+            emit_with(Placement::Embedded);
+        },
         File(file) => {
-            let generated = emit_with(Placement::File)?;
-            let checkpoint = read_checkpoint(&file.header).map_err(|e| at(&file.path, &e))?;
+            let generated = emit_with(Placement::File(fs::file_name(&file.path).unwrap().to_string()))?;
+            let checkpoint = header_of(file.header).map_err(|e| at(&file.path, &e))?;
             check_checkpoint(graph, shapes, &checkpoint).map_err(|e| at(&file.path, &e))?;
             Result::Ok(generated);
         },
@@ -227,9 +230,10 @@ pub fn generate_model(model: &Model, path: &String, weights: Weights, runtime: &
 /// Whether `in_place` holds weight `vi` whole: a range of whole elements, as
 /// many as its shape declares. The build checks a weight's bytes nowhere else.
 fn check_left_in_place(vi: &ValueInfo, in_place: &InPlace) -> Result<(), String> {
-    let Some([start, end]) = in_place.ranges.get(vi.name) else {
-        return Result::Err(`${vi.name}: no data, and the weights left in place are in ${in_place.file}`);
+    let Some(range) = in_place.ranges.get(vi.name) else {
+        return Result::Err(`${vi.name}: no data, and the weights left in place are in ${in_place.files().join(", ")}`);
     };
+    let [start, end] = [range.start, range.end];
     let Some(element) = element_of(&vi.dtype) else {
         return Result::Err(`${vi.name}: ${vi.dtype} weights left in place`);
     };
