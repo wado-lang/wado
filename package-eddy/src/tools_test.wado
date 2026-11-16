@@ -98,6 +98,27 @@ test "Run runs its runner's programs and no other" {
     assert `${run.input_schema:?}`.contains("node") && run.description.contains("task runner");
 }
 
+test "Run writes the tree and the target directory, and nothing else" {
+    let dir = "build/run-grants";
+    fs::remove_dir_all(dir).unwrap();
+    for let sub of ["tree", "target"] {
+        fs::create_dir_all(`${dir}/${sub}`).unwrap();
+    }
+    let runner = Runner {
+        target_dir: `${dir}/target`,
+        cargo_home: "",
+        rustup_home: "",
+        mise_data_dir: "",
+        programs: ["sh"],
+    };
+    let ws = Workspace { root: `${dir}/tree`, runner: Some(runner) };
+    let writes = |path: String| ws.run_command(&["sh", "-c", `echo x > ${path}`], 10).unwrap().succeeded;
+    assert writes("in-tree") && writes("$CARGO_TARGET_DIR/built");
+    assert !writes("../outside");
+    assert fs::exists(`${dir}/tree/in-tree`) && fs::exists(`${dir}/target/built`);
+    assert !fs::exists(`${dir}/outside`);
+}
+
 test "a limit past the end reads the rest" {
     let ws = Workspace { root: "src" };
     let out = ws.call(&"Read", &tool_input(`{"file_path": "tools.wado", "offset": 2, "limit": 2147483647}`)).unwrap();

@@ -374,7 +374,12 @@ impl Workspace {
             runner.target_dir, runner.tool_path,
         ] as List<String>;
         args.extend(command);
-        let run = Command::new("timeout").args(args).env("CARGO_HOME", runner.cargo_home).env(
+        // What it runs is the reviewed change's, so it writes nothing but the
+        // tree and the build, the developer's checkout and its `.git` least.
+        let run = Command::new("timeout").args(args).grant_write(self.root).grant_write(runner.target_dir).env(
+            "CARGO_HOME",
+            runner.cargo_home,
+        ).env(
             "RUSTUP_HOME",
             runner.rustup_home,
         ).env("MISE_DATA_DIR", runner.mise_data_dir).env("MISE_YES", "1").env("CARGO_TERM_COLOR", "never").env(
@@ -511,7 +516,7 @@ ${tail(String::from_utf8_lossy(out.stdout))}</stdout>` });
     fn rg(&self, args: List<String>) -> Result<List<String>, String> with Process {
         let mut full = ["--hidden", "--glob", "!.git", "--sort", "path"] as List<String>;
         full.extend(&args);
-        let out = match Command::new("rg").args(full).output() {
+        let out = match Command::new("rg").args(full).grant_read(self.root).output() {
             Ok(out) => out,
             Err(e) => {
                 return Err(if e.kind matches { OutputTooLarge } {
@@ -541,6 +546,8 @@ ${tail(String::from_utf8_lossy(out.stdout))}</stdout>` });
 
     /// `path` inside the root, or an error when it leaves the root.
     pub fn resolve(&self, path: &String) -> Result<String, String> {
+        // Or no path would compare as inside it.
+        assert fs::normalize(self.root).unwrap() == self.root, "a workspace's root must be normalized";
         let full = fs::normalize(fs::join(self.root, unrooted(path))).map_err(|e| `${e}`)?;
         if full != self.root && !full.starts_with(`${self.root}/`) {
             return Err(`${*path} is outside the repository`);

@@ -27,7 +27,7 @@ pub fn snapshot(sha: &String) -> String with (Process, Preopens) {
 /// `sha`, and its path. A tree an earlier review left, written to or
 /// interrupted, is reset rather than trusted.
 fn checkout_at(repo: &String, tree: &String, sha: &String) -> String with (Process, Preopens) {
-    let root = fs::join(repo, tree);
+    let root = fs::normalize(fs::join(repo, tree)).unwrap();
     if !fs::exists(fs::join(&root, ".git")) {
         // Registered still where the directory was removed by hand.
         tree_git(repo, ["worktree", "prune"]);
@@ -65,6 +65,7 @@ test "a tree is checked out again in place, and what a review left is gone" {
     fs::write(fs::join(&root, "left-behind.rs"), &"").unwrap();
 
     assert checkout_at(&repo, &"tree", &head) == root;
+    assert checkout_at(&".", &root, &head) == root, "a root is normalized, so a tool's paths compare with it";
     assert fs::metadata(&kept).unwrap().modified == before;
     assert fs::read_to_string(fs::join(&root, "README.md")).unwrap() == "read me";
     assert !fs::exists(fs::join(&root, "left-behind.rs"));
@@ -119,11 +120,14 @@ fn from_submodule(path: &String, root: &String) -> String {
 }
 
 /// How Run builds a snapshot: with the toolchain the user's homes hold, into
-/// one target directory every snapshot shares.
-pub fn home_runner() -> Runner with Environment {
+/// one target directory every snapshot shares. It is made here, since Run
+/// grants a child only a directory that exists.
+pub fn home_runner() -> Runner with (Environment, Preopens) {
     let home = env("HOME").expect("rustup's default homes are under HOME");
+    let target_dir = "scratchpad/eddy-target";
+    fs::create_dir_all(target_dir).unwrap();
     return Runner {
-        target_dir: "scratchpad/eddy-target",
+        target_dir,
         cargo_home: env("CARGO_HOME").unwrap_or(`${home}/.cargo`),
         rustup_home: env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`),
         mise_data_dir: env("MISE_DATA_DIR").unwrap_or(`${home}/.local/share/mise`),
@@ -161,7 +165,7 @@ pub fn with_mise_tools(runner: Runner, root: &String) -> Runner with Process {
 fn mise_bin_dirs(root: &String, data_dir: &String) -> Result<List<String>, String> with Process {
     let out = Command::new("timeout").args([
         "--kill-after=10", `${MISE_TIMEOUT}`, "sh", "-c", `${ENTER_TREE} && exec mise bin-paths`, *root,
-    ]).env("MISE_DATA_DIR", *data_dir).output().map_err(|e| `${e}`)?;
+    ]).grant_read(*root).env("MISE_DATA_DIR", *data_dir).output().map_err(|e| `${e}`)?;
     if out.status != Exited(0) {
         return Err(`${out.status:?}: ${String::from_utf8_lossy(out.stderr).trim()}`);
     }
@@ -229,7 +233,11 @@ pub fn index(root: &String, wado_path: &String) -> List<String> with (Process, E
     fs::create_dir_all(&dir).unwrap();
     // A child gets a private HOME, where rustup would find no toolchain.
     let homes = home_runner();
-    let analyzer = Command::new("rust-analyzer").args(["scip", *root, "--output", rust, "--exclude-vendored-libraries"]).env(
+    // It runs the tree's build scripts and procedural macros, so it writes
+    // nothing but the tree and the index.
+    let analyzer = Command::new("rust-analyzer").args(["scip", *root, "--output", rust, "--exclude-vendored-libraries"]).grant_write(
+        *root,
+    ).grant_write(dir).env(
         "RUSTUP_HOME",
         homes.rustup_home,
     ).env("CARGO_HOME", homes.cargo_home);
