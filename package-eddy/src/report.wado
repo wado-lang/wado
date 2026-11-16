@@ -16,15 +16,15 @@ use { ask_json, json_object } from "./anthropic.wado";
 use { git, try_git } from "./git.wado";
 use { Repro, Reviewed, Submission } from "./review.wado";
 use { reset_snapshot, tree_git } from "./snapshot.wado";
-use { Ran, Runner, Workspace, RUN_TIMEOUT } from "./tools.wado";
+use { Ran, RunInput, Runner, Workspace, WriteInput, RUN_TIMEOUT } from "./tools.wado";
 
-global REPORT: String = "You prepare the findings of a code review for reporting. You do not judge, reword or drop a finding.
+global REPORT: String = #"You prepare the findings of a code review for reporting. You do not judge, reword or drop a finding.
 You are given the FINDINGS a reviewer reported on a pull request, the CALLS it made while reviewing (each file it wrote, and each command it ran with the end of its output, in order), and the DIFF of the files the findings name, with the number of each line as the pull request leaves it.
 For each finding, in order, answer two things.
 line: the number of the one line in the DIFF where the defect the finding describes is. 0 if the DIFF does not show that line.
 repro: the test that reproduced the finding, or null if no run among the CALLS failed showing this finding. In it, paths is every file among the written ones that the run needs; run is the command of that failing run, copied exactly; expect is a short text copied exactly from that run's output, on one line, that a passing run would not print, such as the assertion's message.
 Answer with one JSON object and nothing else, one entry per finding in the same order:
-{\"findings\": [{\"line\": <number>, \"repro\": {\"paths\": [\"<path>\"], \"run\": [\"<word>\"], \"expect\": \"<text>\"}}]}";
+{"findings": [{"line": <number>, "repro": {"paths": ["<path>"], "run": ["<word>"], "expect": "<text>"}}]}"#;
 
 /// The most of a written file, of a run's output from its end, and of the
 /// numbered diff that the reporter is shown, in bytes.
@@ -48,17 +48,6 @@ struct Claim {
 
 struct Answer {
     findings: List<Placed>,
-}
-
-struct Wrote {
-    file_path: String,
-    content: String,
-}
-
-/// Run's input. A call recorded before Run took a program ran `cargo`.
-struct RanCommand {
-    program: String = "cargo",
-    args: List<String>,
 }
 
 struct Told {
@@ -143,13 +132,11 @@ fn calls_shown(calls: &List<Call>) -> String {
             continue;
         }
         if c.name == "Write" {
-            let wrote = from_value::<Wrote>(&c.input).unwrap();
+            let wrote = from_value::<WriteInput>(&c.input).unwrap();
             let cut = wrote.content.substr_bytes(0, wrote.content.floor_char_boundary(WRITTEN_SHOWN));
             out.push_str(`<wrote path="${wrote.file_path}">\n${cut}\n</wrote>\n`);
         } else if c.name == "Run" {
-            let ran = from_value::<RanCommand>(&c.input).unwrap();
-            let mut command = [ran.program] as List<String>;
-            command.extend(&ran.args);
+            let command = from_value::<RunInput>(&c.input).unwrap().command();
             let output = c.output.unwrap_or("");
             let from = output.ceil_char_boundary(i32::max(0, output.len() - OUTPUT_SHOWN));
             out.push_str(
@@ -329,7 +316,13 @@ test "the reporter reads what the reviewer wrote and ran, not what was refused" 
             output: Some("exit code 101"),
         },
     ];
-    assert calls_shown(&calls) == "<wrote path=\"tests/t.rs\">\nfn t() {}\n</wrote>\n<ran command='[\"cargo\",\"test\",\"--test\",\"t\"]'>\nexit code 101\n</ran>\n";
+    assert calls_shown(&calls) == #"<wrote path="tests/t.rs">
+fn t() {}
+</wrote>
+<ran command='["cargo","test","--test","t"]'>
+exit code 101
+</ran>
+"#;
 }
 
 test "the reporter may leave a finding without a reproduction" {

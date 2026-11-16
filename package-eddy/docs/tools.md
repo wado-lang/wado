@@ -61,10 +61,12 @@ one the code refutes is dropped on what the code did, not on a chain of
 reasoning.
 
 - [x] Write: a file into the tree, such as a test or a small program.
-- [x] Run: `cargo` or `mise` at the tree's root, under a timeout, into one
-  target directory every tree shares. It covers a Rust test, `wado` itself
-  (`cargo run --bin wado -- run`, `test` or `dump`) and a task of the project
-  (`mise run`), with the tools `mise` has already installed. A review makes a bounded
+- [x] Run: a program at the tree's root, under a timeout, into one target
+  directory every tree shares. The programs are `cargo`, and where `mise` is
+  set up, `mise` and each tool it has installed for the tree, which the
+  harness lists and puts on `PATH`. They cover a Rust test, `wado` itself
+  (`cargo run --bin wado -- run`, `test` or `dump`), a task of the project
+  (`mise run`) and a script (`node`). A review makes a bounded
   number of Runs, so a defect that will not reproduce cannot spend its turns.
 
 What a reviewer reproduced becomes a finding's `repro`, in `src/report.wado`:

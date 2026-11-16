@@ -4,8 +4,10 @@
 //! The reviewer reads the diff from the merge base of `--base` (`origin/main`)
 //! to `--head` (`HEAD`), and a checkout of the head under `scratchpad/`,
 //! through Read, Grep and Glob. It also writes tests into that checkout and
-//! runs them with `cargo`, through Write and Run. That needs `--process-read`
-//! on the `cargo` and `rustup` homes; `--no-run` reviews by reading alone.
+//! runs them through Write and Run: with `cargo`, and where `mise` is set up,
+//! with it and each tool it installed for the project. That needs
+//! `--process-read` on the `cargo` and `rustup` homes, and for `mise` on its
+//! binary and its data directory; `--no-run` reviews by reading alone.
 //!
 //! A second model, `--reporter` (`claude-haiku-5-5`), then reads what the
 //! reviewer did and gives each finding its line and the test that reproduced
@@ -40,7 +42,7 @@ use { git, try_git, paths_between, diff_between } from "./git.wado";
 use { comment } from "./comment.wado";
 use { report } from "./report.wado";
 use { review, Submission, Finding, Reviewed } from "./review.wado";
-use { snapshot, add_build_submodules, home_runner, drop_snapshot } from "./snapshot.wado";
+use { snapshot, add_build_submodules, home_runner, with_mise_tools, drop_snapshot } from "./snapshot.wado";
 use { Runner, Workspace } from "./tools.wado";
 
 #[param(from_env = "CLAUDE_MODEL")]
@@ -129,7 +131,7 @@ ${commits.trim()}`;
         null;
     } else {
         add_build_submodules(&root);
-        Some(home_runner());
+        Some(with_mise_tools(home_runner(), &root));
     };
     let w = Workspace { root, runner };
     let change = Submission { heading, diff };

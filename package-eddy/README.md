@@ -20,8 +20,9 @@ The findings go to stdout as JSON. A finding the reviewer reproduced carries
 its `repro`:
 
 - `patch` is the test it wrote, as a diff against the reviewed commit.
-- `run` is the command that runs it: `cargo`, or `mise` for a task of the
-  project, and its arguments.
+- `run` is the command that runs it: `cargo`, `mise` for a task of the
+  project, or a tool `mise` installed for it such as `node`, and its
+  arguments.
 - `expect` is a text the failing run prints. It tells an assertion that failed
   from a test that did not compile.
 - `verified` says whether the run failed with that text when Eddy tried the

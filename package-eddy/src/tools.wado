@@ -6,7 +6,7 @@
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Command, Process } from "core:process";
-use { from_string } from "core:json";
+use { from_string, to_string } from "core:json";
 use { Deserialize } from "core:serde";
 use { Value, from_value } from "core:value";
 use { Tool } from "./anthropic.wado";
@@ -31,21 +31,28 @@ pub struct Workspace {
     pub runner: Option<Runner> = null,
 }
 
-/// How Run runs `cargo` and `mise`. A child gets a private `HOME`, so the
-/// toolchain's homes and the directory `mise` installs its tools into are
-/// named, and every tree builds into one target directory, so a tree reuses
-/// what an earlier one built.
+/// How Run runs a program. A child gets a private `HOME`, so the toolchain's
+/// homes and the directory `mise` installs its tools into are named, and
+/// every tree builds into one target directory, so a tree reuses what an
+/// earlier one built.
 pub struct Runner {
     /// From the directory `wado run` grants, which a child starts in.
     pub target_dir: String,
     pub cargo_home: String,
     pub rustup_home: String,
     pub mise_data_dir: String,
+    /// The programs Run runs, by name: the build tool, and where `mise` is
+    /// set up, the project's task runner and each tool it installed.
+    pub programs: List<String> = ["cargo"],
+    /// The directories of those tools, as a `PATH` to search first.
+    pub tool_path: String = "",
 }
 
-/// The programs Run runs: the build tool, and the project's task runner,
-/// which reaches what only a task does.
-global PROGRAMS: List<String> = ["cargo", "mise"];
+/// Shell that moves into the tree at `$0` and has `mise` read that tree's
+/// configuration alone. `mise` reads only a tree it trusts, and a child's
+/// `HOME` records no trust; it would also read the configuration of every
+/// directory above, and a snapshot sits inside the developer's checkout.
+pub global ENTER_TREE: String = #"cd "$0" && export MISE_TRUSTED_CONFIG_PATHS="$PWD" MISE_CEILING_PATHS="$(dirname "$PWD")""#;
 
 /// One run of a program: whether it exited 0, and how it ended with the end of
 /// its stderr and stdout, as Run reports it.
@@ -69,15 +76,24 @@ global RUN_TIMEOUT_LIMIT: i32 = 1800;
 /// error and a test's verdict come last.
 global RUN_TAIL: i32 = 20_000;
 
-struct WriteInput {
-    file_path: String,
-    content: String,
+pub struct WriteInput {
+    pub file_path: String,
+    pub content: String,
 }
 
-struct RunInput {
-    program: String = "cargo",
-    args: List<String>,
-    timeout: i32 = RUN_TIMEOUT,
+pub struct RunInput {
+    pub program: String = "cargo",
+    pub args: List<String>,
+    pub timeout: i32 = RUN_TIMEOUT,
+}
+
+impl RunInput {
+    /// The program and then its arguments, as `run_command` takes them.
+    pub fn command(&self) -> List<String> {
+        let mut command = [self.program] as List<String>;
+        command.extend(&self.args);
+        return command;
+    }
 }
 
 struct ReadInput {
@@ -156,14 +172,20 @@ impl Workspace {
                 ),
             );
         }
-        if self.runner matches { Some(_) } {
-            out.extend(&running_tools());
+        if let Some(runner) = &self.runner {
+            out.extend(&running_tools(&runner.programs));
         }
         return out;
     }
 }
 
-fn running_tools() -> List<Tool> {
+fn running_tools(programs: &List<String>) -> List<Tool> {
+    let mise = if programs.contains_str("mise") {
+        #"
+- mise is the project's task runner: ["tasks"] lists the tasks of mise.toml, and ["run", "<task>", "<argument>"] runs one. The other programs are the tools it installed for the project."#;
+    } else {
+        "";
+    };
     return [
         tool("Write", `Writes a file into the repository, replacing any file at that path. ${PATHS}
 - Use it for a test or a small program that checks a suspicion, then run it with Run.
@@ -178,15 +200,14 @@ fn running_tools() -> List<Tool> {
 }`),
         tool(
             "Run",
-            `Runs cargo at the repository root with the given arguments, and returns how it ended and the end of its stderr and stdout.
-- Examples: ["test", "-p", "wado-lsp", "--test", "my_check"]; ["run", "--bin", "wado", "--", "run", "check.wado"]; ["test", "-p", "wado-compiler", "--lib", "some_test_name"].
-- With program "mise" it runs mise, the project's task runner, instead: ["tasks"] lists the tasks of mise.toml, and ["run", "<task>", "<argument>"] runs one.
+            `Runs a program at the repository root with the given arguments, cargo unless program names another, and returns how it ended and the end of its stderr and stdout.
+- Examples for cargo: ["test", "-p", "wado-lsp", "--test", "my_check"]; ["run", "--bin", "wado", "--", "run", "check.wado"]; ["test", "-p", "wado-compiler", "--lib", "some_test_name"].${mise}
 - The first build takes minutes; later ones reuse it. It stops after timeout seconds (default ${RUN_TIMEOUT}, at most ${RUN_TIMEOUT_LIMIT}).
 - A review makes at most ${RUN_LIMIT} runs.`,
             `{
   "type": "object",
   "properties": {
-    "program": {"type": "string", "enum": ["cargo", "mise"], "description": "The program to run. Defaults to cargo."},
+    "program": {"type": "string", "enum": ${to_string(programs).unwrap()}, "description": "The program to run. Defaults to cargo."},
     "args": {"type": "array", "items": {"type": "string"}, "description": "The arguments to the program"},
     "timeout": {"type": "integer", "minimum": 1, "maximum": ${RUN_TIMEOUT_LIMIT}, "description": "Seconds before the run is stopped"}
   },
@@ -335,26 +356,22 @@ impl Workspace {
         if input.timeout < 1 || input.timeout > RUN_TIMEOUT_LIMIT {
             return Err(`timeout must be from 1 to ${RUN_TIMEOUT_LIMIT}`);
         }
-        let mut command = [input.program] as List<String>;
-        command.extend(&input.args);
-        return Ok(self.run_command(&command, input.timeout)?.report);
+        return Ok(self.run_command(&input.command(), input.timeout)?.report);
     }
 
-    /// What `command`, `cargo` or `mise` and its arguments, did at the tree's
-    /// root within `timeout` seconds, or why it could not start.
+    /// What `command`, one of the runner's programs and its arguments, did at
+    /// the tree's root within `timeout` seconds, or why it could not start.
     pub fn run_command(&self, command: &List<String>, timeout: i32) -> Result<Ran, String> with Process {
         let runner = self.runner.expect("only a workspace with a runner runs a program");
-        if command.is_empty() || !PROGRAMS.contains_str(&command[0]) {
-            return Err("the program must be cargo or mise");
+        if command.is_empty() || !runner.programs.contains_str(&command[0]) {
+            return Err(`the program must be one of: ${runner.programs.join(", ")}`);
         }
         // `core:process` starts a child where the guest's grant is, so the
-        // shell moves into the tree, the target directory and the tree's own
-        // path resolved first. `mise` runs the tasks of a tree it trusts, and
-        // a child's `HOME` records no trust.
+        // shell moves into the tree, the target directory resolved first.
         let mut args = [
             "--kill-after=10", `${timeout}`, "sh", "-c",
-            "export CARGO_TARGET_DIR=\"$PWD/$1\" MISE_TRUSTED_CONFIG_PATHS=\"$PWD/$0\"; cd \"$0\" && shift && exec \"$@\"",
-            self.root, runner.target_dir,
+            `export CARGO_TARGET_DIR="$PWD/$1" PATH="$2\${2:+:}$PATH"; ${ENTER_TREE} && shift 2 && exec "$@"`, self.root,
+            runner.target_dir, runner.tool_path,
         ] as List<String>;
         args.extend(command);
         let run = Command::new("timeout").args(args).env("CARGO_HOME", runner.cargo_home).env(

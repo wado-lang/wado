@@ -7,8 +7,8 @@ description: "Review the branch with Eddy, the repository's own review bot (`pac
 
 Eddy reviews what the branch changes from its merge base with `origin/main`.
 It reads the diff and a checkout of `HEAD`, so an uncommitted change is not
-reviewed. It also writes tests into that checkout and runs them with `cargo`
-or `mise`.
+reviewed. It also writes tests into that checkout and runs them with `cargo`,
+`mise`, or a tool `mise` installed for the project.
 
 1. Commit everything the review should see.
 2. Run the review in the background, its output in files:
@@ -31,8 +31,8 @@ or `mise`.
 ## Reading a Finding
 
 A finding the reviewer reproduced carries a `repro`: a `patch` against the
-reviewed commit, the command in `run` (`cargo` or `mise`), and `expect`, a text the
-failing run prints. `verified` says whether Eddy, after the review, applied
+reviewed commit, the command in `run`, and `expect`, a text the failing run
+prints. `verified` says whether Eddy, after the review, applied
 that patch alone to a clean checkout and saw the run fail with that text.
 
 - With `verified` true, the finding is already reproduced. The log names the

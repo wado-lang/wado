@@ -48,7 +48,15 @@ use {
 } from "./eval.wado";
 use { ask_json } from "../src/anthropic.wado";
 use { review, Submission } from "../src/review.wado";
-use { snapshot, add_build_submodules, home_runner, reset_snapshot, drop_snapshot, index } from "../src/snapshot.wado";
+use {
+    snapshot,
+    add_build_submodules,
+    home_runner,
+    with_mise_tools,
+    reset_snapshot,
+    drop_snapshot,
+    index,
+} from "../src/snapshot.wado";
 use { Runner, Workspace } from "../src/tools.wado";
 use { load, SymbolIndex } from "../src/symbols.wado";
 
@@ -181,7 +189,7 @@ fn workspace(sha: &String) -> Workspace with (Process, Preopens, Environment) {
         add_build_submodules(&root);
     }
     let symbols: Option<SymbolIndex> = if SYMBOLS { Some(load(&index(&root, &WADO)).unwrap()) } else { null };
-    let runner: Option<Runner> = if RUN { Some(home_runner()) } else { null };
+    let runner: Option<Runner> = if RUN { Some(with_mise_tools(home_runner(), &root)) } else { null };
     return Workspace { root, symbols, runner };
 }
 

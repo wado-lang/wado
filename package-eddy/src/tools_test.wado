@@ -81,14 +81,21 @@ test "an input out of range is an error the model can retry" {
     assert ws.call(&"Read", &tool_input(`{"file_path": "tools.wado", "limit": 0}`)).is_err();
 }
 
-test "Run runs cargo or mise and no other program" {
-    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "" };
+test "Run runs its runner's programs and no other" {
+    let runner = Runner {
+        target_dir: "build/target",
+        cargo_home: "",
+        rustup_home: "",
+        mise_data_dir: "",
+        programs: ["cargo", "mise", "node"],
+    };
     let ws = Workspace { root: "src", runner: Some(runner) };
     assert ws.call(&"Run", &tool_input(`{"program": "sh", "args": ["-c", "true"]}`)).unwrap_err().contains(
-        "cargo or mise",
+        "one of: cargo, mise, node",
     );
-    assert ws.run_command(&["sh", "-c", "true"], 1).unwrap_err().contains("cargo or mise");
-    assert ws.run_command(&[], 1).is_err();
+    assert ws.run_command(&["sh", "-c", "true"], 1).is_err() && ws.run_command(&[], 1).is_err();
+    let run = ws.tools().into_iter().filter(|t| t.name == "Run").collect()[0];
+    assert `${run.input_schema:?}`.contains("node") && run.description.contains("task runner");
 }
 
 test "a limit past the end reads the rest" {

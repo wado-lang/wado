@@ -6,7 +6,7 @@ use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Command, Process } from "core:process";
 use { git, try_git } from "./git.wado";
-use { Runner } from "./tools.wado";
+use { Runner, ENTER_TREE } from "./tools.wado";
 
 /// A checkout of `sha` for a reviewer to read, and its directory. It is a
 /// worktree, so it shares the repository's objects, later commits included:
@@ -79,6 +79,54 @@ pub fn home_runner() -> Runner with Environment {
         rustup_home: env("RUSTUP_HOME").unwrap_or(`${home}/.rustup`),
         mise_data_dir: env("MISE_DATA_DIR").unwrap_or(`${home}/.local/share/mise`),
     };
+}
+
+/// Prints the directories of the tools `mise` has installed for the tree at
+/// `$0` as one `PATH`, then the name of each program in them.
+global LIST_MISE_TOOLS: String = `${ENTER_TREE} && dirs=$(mise bin-paths) || exit
+echo "$dirs" | paste -sd: -
+echo "$dirs" | while IFS= read -r dir; do
+    for file in "$dir"/*; do
+        if [ -f "$file" ] && [ -x "$file" ]; then basename "$file"; fi
+    done
+done`;
+
+/// `runner` with `mise` and the tools it has installed for the tree at `root`
+/// among its programs. Where `mise` does not run, because it is not installed
+/// or `wado run` grants a child no read of it, `runner` is left as it is.
+pub fn with_mise_tools(runner: Runner, root: &String) -> Runner with Process {
+    let listing = Command::new("sh").args(["-c", LIST_MISE_TOOLS, *root]).env(
+        "MISE_DATA_DIR",
+        runner.mise_data_dir,
+    ).output();
+    return match listing {
+        Ok(out) && out.status == Exited(0) => with_listed(runner, &String::from_utf8_lossy(out.stdout)),
+        _ => runner,
+    };
+}
+
+/// `runner` with `mise` and what `listing`, the output of `LIST_MISE_TOOLS`,
+/// names.
+fn with_listed(runner: Runner, listing: &String) -> Runner {
+    let mut with_tools = runner;
+    with_tools.programs.push("mise");
+    for let [i, line] of listing.lines().enumerate() {
+        if i == 0 {
+            with_tools.tool_path = line.to_string();
+        } else if !with_tools.programs.contains_str(line) {
+            with_tools.programs.push(line.to_string());
+        }
+    }
+    return with_tools;
+}
+
+test "a runner's programs are cargo, mise and each tool mise lists once" {
+    let bare = Runner { target_dir: "", cargo_home: "", rustup_home: "", mise_data_dir: "" };
+    let tools = with_listed(bare, &"/m/node/bin:/m/npm/bin\nnode\nnpm\nnpx\nnpm\n");
+    assert tools.tool_path == "/m/node/bin:/m/npm/bin";
+    assert tools.programs == ["cargo", "mise", "node", "npm", "npx"];
+    let none = with_listed(bare, &"\n");
+    assert none.tool_path == "" && none.programs == ["cargo", "mise"];
 }
 
 /// The snapshot of `sha` at `root`, its submodules included, back as checked
