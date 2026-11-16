@@ -24,17 +24,14 @@ g (float[N, 2] X) => (float[N, 3] Y, float[N, 3] Z)
 }
 ";
 
-/// `GRAPH` carrying `W`, so it needs no checkpoint.
-global WEIGHED: String = GRAPH.replace("float[2, 3] W,", "float[2, 3] W = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0},");
-
 global OPTIONS: String = "{\"embed\": true}";
 
-/// `target/loam-main-test/<case>`, emptied, holding `graph` and its options.
-fn scratch(case: String, graph: &String = &GRAPH) -> String with Preopens {
+/// `target/loam-main-test/<case>`, emptied, holding the graph and its options.
+fn scratch(case: String) -> String with Preopens {
     let dir = `target/loam-main-test/${case}`;
     fs::remove_dir_all(&dir).unwrap();
     fs::create_dir_all(&dir).unwrap();
-    fs::write(`${dir}/g.onnxtext`, graph).unwrap();
+    fs::write(`${dir}/g.onnxtext`, &GRAPH).unwrap();
     fs::write(`${dir}/options.json`, &OPTIONS).unwrap();
     return dir;
 }
@@ -98,11 +95,11 @@ fn kiln(primary: [String, ByteList, String], options: Options) -> String with (S
 }
 
 test "gen prints the module the Kiln generator builds for the same graph and options" {
-    let dir = scratch("gen", &WEIGHED);
+    let dir = scratch("gen");
     let path = `${dir}/g.onnxtext`;
     let [gen_header, gen_body] = split_header(on_graph("gen", &dir, []).unwrap());
     let [kiln_header, kiln_body] = split_header(
-        kiln([path, WEIGHED.bytes().collect(), "onnxtext"], Options { embed: true }),
+        kiln([path, GRAPH.bytes().collect(), "onnxtext"], Options { embed: true }),
     );
     assert gen_header == `#![generated(by = "loam", sources = ["${path}"])]`;
     assert kiln_header == `#![generated(by = "lib:loam", sources = ["${path}"])]`;
@@ -131,14 +128,14 @@ fn split_header(source: String) -> [String, String] {
 }
 
 test "gen --output writes the module and prints nothing" {
-    let dir = scratch("gen-output", &WEIGHED);
+    let dir = scratch("gen-output");
     let printed = on_graph("gen", &dir, []).unwrap();
     assert on_graph("gen", &dir, ["--output", `${dir}/model.wado`]).unwrap() == "";
     assert fs::read_to_string(`${dir}/model.wado`).unwrap() == printed;
 }
 
 test "gen --runtime names the package the module imports" {
-    let dir = scratch("gen-runtime", &WEIGHED);
+    let dir = scratch("gen-runtime");
     let printed = on_graph("gen", &dir, ["--runtime", "lib:elsewhere"]).unwrap();
     assert printed.contains("} from \"lib:elsewhere\";");
 }

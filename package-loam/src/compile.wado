@@ -202,12 +202,7 @@ pub fn generate_model(model: &Model, path: &String, weights: Weights, runtime: &
         return emit_with(Placement::InPlace(in_place));
     }
     return match weights {
-        Unchecked => {
-            if let Some(vi) = graph.initializers.into_iter().find(|vi| vi.data matches { None }) {
-                return Result::Err(at(path, &`${vi.name}: no data, and no checkpoint is given`));
-            }
-            emit_with(Placement::Embedded);
-        },
+        Unchecked => emit_with(Placement::Unplaced),
         File(file) => {
             let generated = emit_with(Placement::File(fs::file_name(&file.path).unwrap().to_string()))?;
             let checkpoint = header_of(file.header).map_err(|e| at(&file.path, &e))?;

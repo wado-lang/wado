@@ -103,9 +103,9 @@ directory, a range at a time. A `HashMap<String, ByteList>` holds each file
 whole, by name, for a model small enough to hold or bytes embedded with
 `#include_bytes`.
 
-A build whose graph lacks a weight's data and is given no checkpoint stops,
-naming the weight. Without the checkpoint the build knows neither the file the
-loader reads nor the header it checks.
+A build whose graph lacks a weight's data and is given no checkpoint knows no
+file to read it from, so the module has no `load`, and the caller builds
+`Weights` itself.
 
 ## Sharded Checkpoints
 

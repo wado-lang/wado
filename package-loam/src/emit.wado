@@ -73,22 +73,23 @@ use {
 
 pub use { EmitError, NameCollision, UnmappedDtype } from "./emit_symbols.wado";
 
-/// Where `Params::load` reads the weights the graph leaves to it: nowhere,
-/// where the graph carries every one; a safetensors checkpoint in the file
-/// named; each in the shard an index places it in; or the files the model
-/// names at the byte ranges the build found them at.
+/// Where `Params::load` reads the weights the graph leaves to it: nowhere, so
+/// there is no `load` and the caller builds `Weights`; a safetensors checkpoint
+/// in the file named; each in the shard an index places it in; or the files
+/// the model names at the byte ranges the build found them at.
 pub variant Placement {
-    Embedded,
+    Unplaced,
     File(String),
     Shards(HashMap<String, String>),
     InPlace(InPlace),
 }
 
 impl Placement {
-    /// Whether `load` finds the weight `name` where this places weights.
+    /// Whether a weight the graph lacks, `name`, is where this says: anywhere,
+    /// where there is no `load` to find it.
     fn places(&self, name: &String) -> bool {
         return match *self {
-            Embedded => false,
+            Unplaced => true,
             File(_) => true,
             Shards(placed) => placed.contains_key(*name),
             InPlace(in_place) => in_place.ranges.contains_key(*name),
@@ -115,7 +116,7 @@ pub fn emit(
     graph: &Graph,
     checked: &Checked,
     runtime: &String,
-    placement: Placement = Placement::Embedded,
+    placement: Placement = Placement::Unplaced,
     decode: Option<Decode> = null,
 ) -> Result<String, EmitError> {
     for let vi of &graph.initializers {
@@ -491,10 +492,14 @@ fn loads_weights(graph: &Graph) -> bool {
 
 /// `Params::embedded` where the graph carries every initializer's data, and
 /// `Params::load` reading the rest a tensor at a time from a `WeightSource`
-/// otherwise. Each tensor is kept as it is read, so the host copy of one
-/// weight at a time is all that lives beside the kept ones.
+/// where `placement` says where they are. Each tensor is kept as it is read, so
+/// the host copy of one weight at a time is all that lives beside the kept
+/// ones.
 fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placement: &Placement) {
     let loads = loads_weights(graph);
+    if loads && placement matches { Unplaced } {
+        return;
+    }
     w.blank();
     let mut block = ImplSpec::new(PARAMS_TYPE);
     block.add_generic(GRAPH_BOUND);
@@ -503,7 +508,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         // Where the weights are, and what `load` checks of its files before
         // reading a weight out of one.
         let [doc, firsts]: [String, List<String>] = match *placement {
-            Embedded => unreachable(),
+            Unplaced => unreachable(),
             File(file) => [
                 `the safetensors checkpoint ${file}`,
                 [wado`let header = read_headers(source, ["${file}"])?;`],
@@ -606,7 +611,7 @@ fn emit_embedded_data(w: &mut CodeWriter, graph: &Graph) {
 fn checkpoint_payload(e: &Expected, primitive: &String, placement: &Placement) -> String {
     let axes: List<String> = e.axes.into_iter().map(|axis| wado`"${axis}"`).collect();
     let file = match *placement {
-        Embedded => unreachable(),
+        Unplaced => unreachable(),
         File(file) => file,
         Shards(placed) => placed[e.tensor],
         InPlace(in_place) => {
