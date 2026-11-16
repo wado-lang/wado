@@ -2970,23 +2970,29 @@ impl SemEffectWalker<'_> {
             resolutions: self.index.resolutions,
             members: self.index.members,
         };
-        let mut signature = IndexSet::default();
-        for &closure_type in &closure_types {
-            scan.collect(closure_type, &mut signature, &mut TypeSet::default());
-        }
-        let captured = self.annotations.into_iter().flat_map(|annotations| {
-            annotations
-                .all(|facts| &facts.closure_captures, closure.id)
-                .flat_map(|info| &info.captures)
-        });
-        for capture in captured {
-            scan.collect(capture.type_id, &mut signature, &mut TypeSet::default());
-        }
+        // The body is checked once for every walk, its demands those of them
+        // all, so it holds only what every walk hands it.
+        let handed_in_each_walk = self
+            .annotations
+            .into_iter()
+            .flat_map(TypeAnnotations::walks)
+            .filter_map(|facts| {
+                let closure_type = *facts.expression_types.get(&closure.id)?;
+                let captures = &facts.closure_captures.get(&closure.id)?.captures;
+                let mut handed = IndexSet::default();
+                for type_id in std::iter::once(closure_type).chain(captures.iter().map(|c| c.type_id)) {
+                    scan.collect(type_id, &mut handed, &mut TypeSet::default());
+                }
+                Some(handed)
+            });
+        let handed = handed_in_each_walk
+            .reduce(|every, walk| every.intersection(&walk).cloned().collect())
+            .unwrap_or_default();
         let current = held_in_body(
             self.annotations,
             self.index,
             &scan,
-            signature,
+            handed,
             Body::Expr(&closure.body),
         );
         let mut scratch = Vec::new();
