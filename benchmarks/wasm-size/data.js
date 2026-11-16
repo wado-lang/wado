@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794806963226,
+  "lastUpdate": 1794812990964,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78025,6 +78025,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9e2f3bbbc9e44f3515bf2de2d2df9e1f514b8ec2"
         },
         "date": 1794806962473,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24433,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434873,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "15e736fbc662002c70b6e0ec4b1a27f2fa86b810",
+          "message": "Merge pull request #2641 from wado-lang/ccr-ab6e1e8d-gpq450\n\nfeat(eddy): print what a review cost, in total and for each model",
+          "timestamp": "2026-11-16T15:54:04+09:00",
+          "tree_id": "63d2abbce340e32c5106cfe1cc2c0bbdbe1249ae",
+          "url": "https://github.com/wado-lang/wado/commit/15e736fbc662002c70b6e0ec4b1a27f2fa86b810"
+        },
+        "date": 1794812989908,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
