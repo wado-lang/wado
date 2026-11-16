@@ -1,0 +1,46 @@
+// Test: a recursion passing a counter one higher at each level is not
+// specialized level by level, though `sroa_param` reshapes the clone the
+// recursive call sits in.
+//
+// param_spec clones `write` on `depth` and refuses a clone for a call that
+// recurses into a function its clone was minted under. `sroa_param` then
+// splits `w.out` out of that clone into a function of its own, which knew
+// nothing of what the clone was minted under: each optimizer iteration
+// minted a clone for the next depth, and the NIR loop hit its cap without
+// converging. Before the refusal, every level was minted in one invocation
+// until the clone budget ran out.
+
+use { println, Stdout } from "core:cli";
+
+struct Node {
+    n: i32,
+    next: Option<Node>,
+}
+
+struct Writer {
+    out: &mut String,
+    depth: i32,
+}
+
+fn write(node: &Node, w: Writer) {
+    w.out.push_str(`${w.depth}:${node.n} `);
+    write_next(&node.next, Writer { out: w.out, depth: w.depth + 1 });
+}
+
+fn write_next(next: &Option<Node>, w: Writer) {
+    if let Some(node) = next {
+        write(node, w);
+    }
+}
+
+export fn run() with Stdout {
+    let node = builtin::black_box(Node { n: 1, next: Some(Node { n: 2, next: Some(Node { n: 3, next: null }) }) });
+    let mut out = "";
+    write(&node, Writer { out: &mut out, depth: 0 });
+    println(out);
+}
+
+__DATA__
+{
+    "stdout": "0:1 1:2 2:3 \n"
+}

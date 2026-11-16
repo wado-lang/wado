@@ -300,6 +300,10 @@ pub(super) struct ParamSpecState {
     clones: IndexMap<SpecKey, FuncId>,
     /// Each clone's identity, which a clone of it extends.
     specs: IndexMap<FuncId, SpecKey>,
+    /// The roots of the callers each clone was minted under, down from the
+    /// first. A call to one of them recurses, and a constant that changes on
+    /// each level, such as a depth, would mint a clone per level without end.
+    lineage: IndexMap<FuncId, IndexSet<FuncId>>,
     /// Clones minted per original callee, which numbers the next one's name.
     per_callee: IndexMap<FuncId, usize>,
     /// What each clone knows about its own parameters. Keyed by *name*, since
@@ -328,6 +332,7 @@ impl ParamSpecState {
             cap_hit: None,
             clones: IndexMap::default(),
             specs: IndexMap::default(),
+            lineage: IndexMap::default(),
             per_callee: IndexMap::default(),
             param_consts: IndexMap::default(),
             callees: BodyMemo::default(),
@@ -372,9 +377,21 @@ impl ParamSpecState {
     pub(super) fn cached_clones(&self, project: &NirPackage) -> Vec<FuncId> {
         self.clones
             .values()
-            .chain(project.sroa_param_clones.iter())
+            .chain(project.sroa_param_clones.keys())
             .copied()
             .collect()
+    }
+
+    /// The lineage of a clone minted at a call in `caller`: the caller's own,
+    /// and the caller's root. A function `sroa_param` minted stands for the
+    /// one it was minted from, which keeps the lineage.
+    fn lineage_through(&self, project: &NirPackage, mut caller: FuncId) -> IndexSet<FuncId> {
+        while let Some(&source) = project.sroa_param_clones.get(&caller) {
+            caller = source;
+        }
+        let mut lineage = self.lineage.get(&caller).cloned().unwrap_or_default();
+        lineage.insert(self.specs.get(&caller).map_or(caller, |key| key.root));
+        lineage
     }
 
     /// Whether `func` is itself a clone this pass minted.
@@ -1688,7 +1705,7 @@ fn propagate_scalar_constants(
         if !is_dae_sroa_eligible(&func, false)
             || func.compiler_item.is_some()
             || state.is_clone(id)
-            || project.sroa_param_clones.contains(&id)
+            || project.sroa_param_clones.contains_key(&id)
         {
             continue;
         }
@@ -1812,9 +1829,11 @@ fn plan_clones<'s>(
             continue;
         }
         let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
+        let lineage = state.lineage_through(project, FuncId::new(*caller));
         if site.diverges
             || (site.cold && !site.binds_hot_field)
             || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
+            || lineage.contains(&key.root)
         {
             continue;
         }
@@ -1824,10 +1843,12 @@ fn plan_clones<'s>(
         }
         compiler_trace!(
             "param_spec",
-            "specialized {} on {} binding(s){}",
+            "specialized {} for {} on {} binding(s){} {:?}",
             project.functions[site.callee.index()].borrow().name,
+            project.functions[*caller].borrow().name,
             site.bindings.len(),
-            if site.cold { " for a cold call" } else { "" }
+            if site.cold { " for a cold call" } else { "" },
+            site.bindings
         );
         let id = FuncId::new(next_id);
         next_id += 1;
@@ -1837,6 +1858,7 @@ fn plan_clones<'s>(
         // body calls the callee again, round after round.
         state.clones.insert(key.clone(), id);
         state.specs.insert(id, key);
+        state.lineage.insert(id, lineage);
         minted_from.insert(id, site.callee);
         state.per_callee.insert(site.callee, ordinal + 1);
         retarget.push((*caller, site.call, id));
