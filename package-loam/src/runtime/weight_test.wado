@@ -39,6 +39,12 @@ test "an element reads as the f32 that holds it" {
     assert w.value(1) == -2.0;
 }
 
+test "a bool stored as any nonzero byte is true to every backend" {
+    let w = HostWeight::of_bytes::<bool>([3], &b"\x00\x02\xff");
+    assert w.bytes().to_list() == [0, 1, 1] as List<u8>;
+    assert w.value(1) == 1.0 && w.value(2) == 1.0;
+}
+
 #[expect_trap]
 test "stored bytes must hold the extents' elements" {
     HostWeight::stored(f32::kind(), [2], LinearArray::<u8>::filled(4, 0));

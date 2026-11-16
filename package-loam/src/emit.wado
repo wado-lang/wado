@@ -2,7 +2,7 @@
 //! adds the operations the graph's operators lower to, and a `compute` that
 //! runs it from inputs on the host.
 
-use { HashMap, HashSet } from "core:collections";
+use { HashMap, HashSet, TreeMap } from "core:collections";
 use { Deserialize } from "core:serde";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, wado } from "lib:wadopoet";
 use { built_call, built_split } from "./emit_ops.wado";
@@ -531,6 +531,17 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
                 let mut checks: List<String> = [];
                 for let [file, len] of in_place.lens.entries() {
                     checks.push(wado`expect_len(source, "${*file}", ${*len})?;`);
+                }
+                // A file the build did not read, as external data, must hold
+                // at least what the graph places in it.
+                let mut ends = TreeMap::<String, i32>::new();
+                for let [_, range] of in_place.ranges.entries() {
+                    if !in_place.lens.contains_key(range.file) {
+                        ends[range.file] = i32::max(ends.get(range.file).unwrap_or(0), range.end);
+                    }
+                }
+                for let [file, end] of ends.entries() {
+                    checks.push(wado`expect_holds(source, "${*file}", ${*end})?;`);
                 }
                 [`${in_place.files().join(", ")} where the build found them`, checks];
             },

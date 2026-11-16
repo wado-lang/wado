@@ -27,11 +27,18 @@ pub fn stored_width(kind: ElementKind) -> i32 {
 
 impl HostWeight {
     /// `bytes`, which hold the `kind` elements of `extents` as a checkpoint
-    /// stores them.
+    /// stores them. A bool's nonzero byte becomes 1 here, so every backend
+    /// reads one truth from it, as a PJRT `PRED` must hold 0 or 1.
     pub fn stored(kind: ElementKind, extents: List<i32>, bytes: LinearArray<u8>) -> HostWeight
         contract bytes.len() == element_count(&extents) * stored_width(kind)
     {
-        return HostWeight { kind, extents, bytes };
+        let mut held = bytes;
+        if kind matches { Bool } {
+            for let i of 0..<held.len() {
+                held[i] = (held[i] != 0) as u8;
+            }
+        }
+        return HostWeight { kind, extents, bytes: held };
     }
 
     /// `t`'s elements, stored.

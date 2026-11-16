@@ -386,6 +386,22 @@ test "weights left in place are read where the build found them, in each file" {
     assert out.contains("2 => payload_at::<f32, Src>(source, \"b.bin\", \"W2\", [3, 2], 0, 24)?,");
 }
 
+test "a file the build never read is checked to hold its weights before any loads" {
+    let graph = read(&MLP).unwrap();
+    let mut ranges = TreeMap::<String, WeightRange>::new();
+    ranges["W1"] = WeightRange { file: "a.bin", start: 0, end: 48 };
+    ranges["B1"] = WeightRange { file: "a.bin", start: 48, end: 60 };
+    ranges["W2"] = WeightRange { file: "b.bin", start: 8, end: 32 };
+    ranges["B2"] = WeightRange { file: "b.bin", start: 0, end: 8 };
+    let mut lens = TreeMap::<String, i32>::new();
+    lens["a.bin"] = 60;
+    let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, Placement::InPlace(InPlace { ranges, lens })).unwrap();
+
+    assert out.contains(
+        "        expect_len(source, \"a.bin\", 60)?;\n        expect_holds(source, \"b.bin\", 32)?;\n",
+    );
+}
+
 test "a graph carrying some weights embeds those and loads the rest" {
     let source = `
 bias (float[N, 2] X) => (float[N, 2] Y)

@@ -433,9 +433,11 @@ fn a_checkpoint_larger_than_the_guest_loads_onto_the_device() {
     };
     assert_eq!(printed(chain(&limited, &[])), "misplaced 0\n");
     assert_eq!(printed(chain(&[], &["cpu"])), "misplaced 0\n");
+    let held_whole = chain(&limited, &["cpu"]);
+    let stderr = String::from_utf8_lossy(&held_whole.stderr);
     assert!(
-        !chain(&limited, &["cpu"]).status.success(),
-        "the checkpoint must not fit the limit"
+        !held_whole.status.success() && stderr.contains("GC heap out of memory"),
+        "the checkpoint must not fit the limit: {stderr}"
     );
 }
 

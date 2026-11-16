@@ -94,17 +94,20 @@ Params::load<affine Src: WeightSource>(backend: &mut Bk, source: &Src) -> Result
 `WeightSource` reads a byte range of a file, by the name the build gave it, and
 says how long a file is. The generated module names every file it reads, so one
 model may spread its weights over several, and the loader holds one weight's
-bytes at a time. Each file's header, or its length, is checked before any
-weight is read, so a file that is missing or of another length stops the load
-before a weight reaches the device. An error names the file and the tensor.
+bytes at a time. Before any weight is read, each file is checked: a
+safetensors file's header, a model file's length, and an external data file's
+length against the last byte the graph places in it. So a file that is missing
+or too short stops the load before a weight reaches the device. An error names
+the file and the tensor.
 
 A weight reaches the backend as a `HostWeight`: its element kind, its extents,
 and the little-endian bytes the checkpoint stores, in linear memory. Each
 backend lays its copy out from those bytes. `PjrtBackend` uploads them as they
 are, and an f32 weight as bf16 where every value's low half is zero.
 `WebGpuBackend` builds its matrix layout, packed in a half where one holds every
-value, by reading values from the bytes. `Cpu` decodes them into a tensor. No
-weight passes through a GC list on its way to a device.
+value, by reading values from the bytes. `Cpu` decodes them into a tensor. A
+float or bool weight reaches a device with no GC list on the way; WebGPU decodes
+a `u8` or `i64` one and keeps it as `keep` does.
 
 Two sources come with the runtime. `FileSource { dir }` reads the files of a
 directory, a range at a time. A `HashMap<String, ByteList>` holds each file

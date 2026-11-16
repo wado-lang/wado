@@ -813,12 +813,10 @@ impl RuntimeKnobs {
                     parse_collector(&require_string(parser)?).map_err(CliExit::error)?;
             }
             RuntimeKnobOpt::GcHeapInitial => {
-                self.gc_heap_initial_size =
-                    parse_size(&require_string(parser)?).map_err(CliExit::error)?;
+                self.gc_heap_initial_size = parse_size_of(opt, parser)?;
             }
             RuntimeKnobOpt::MaxMemory => {
-                self.max_memory =
-                    Some(parse_size(&require_string(parser)?).map_err(CliExit::error)?);
+                self.max_memory = Some(parse_size_of(opt, parser)?);
             }
             RuntimeKnobOpt::FunctionAlignment => {
                 self.function_alignment = Some(
@@ -857,6 +855,13 @@ impl RuntimeKnobs {
         }
         Ok(())
     }
+}
+
+/// The size the value of `opt` names, or an error naming `opt`, which takes
+/// one of several sizes.
+fn parse_size_of(opt: RuntimeKnobOpt, parser: &mut Parser) -> Result<u64, CliExit> {
+    let long = opt.spec().long.expect("a size knob has a long name");
+    parse_size(&require_string(parser)?).map_err(|e| CliExit::error(format!("--{long}: {e}")))
 }
 
 fn child_knob_with_deny() -> CliExit {

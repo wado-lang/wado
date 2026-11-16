@@ -4,7 +4,15 @@
 use { HashMap } from "core:collections";
 use fs from "core:fs";
 use { push_element } from "./graph.wado";
-use { Expected, FileSource, LoadError, declared_header_end, header_of, read_headers } from "./runtime/checkpoint.wado";
+use {
+    Expected,
+    FileSource,
+    LoadError,
+    declared_header_end,
+    expect_holds,
+    header_of,
+    read_headers,
+} from "./runtime/checkpoint.wado";
 use { StoredTensor, write_safetensors } from "./safetensors.wado";
 use { Element } from "./runtime/tensor.wado";
 use { HostWeight } from "./runtime/weight.wado";
@@ -251,6 +259,12 @@ test "a file that is no safetensors file is named" {
     let mut given = two_shards();
     given[SECOND] = with_header("{x}");
     assert `${read_headers(&given, [FIRST, SECOND]).unwrap_err()}`.starts_with(`${SECOND}: the header is not JSON`);
+}
+
+test "a file the build never read must hold what the graph places in it" {
+    let given = held(floats([1.0, 2.0]));
+    assert expect_holds(&given, "m", 8) matches { Ok(_) };
+    assert `${expect_holds(&given, "m", 12).unwrap_err()}` == "m is 8 bytes, and the graph places weights up to 12";
 }
 
 test "files on disk read a range at a time as files held do" {

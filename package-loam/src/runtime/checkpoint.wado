@@ -228,6 +228,16 @@ pub fn expect_len<affine Src: WeightSource>(source: &Src, file: String, len: i32
     return Result::Ok(());
 }
 
+/// Whether `file` of `source`, which the build did not read, is at least `end`
+/// bytes long, holding every weight the graph places in it.
+pub fn expect_holds<affine Src: WeightSource>(source: &Src, file: String, end: i32) -> Result<(), LoadError> with _ {
+    let held = source.len(&file)?;
+    if held < end as i64 {
+        return Result::Err(LoadError { reason: `${file} is ${held} bytes, and the graph places weights up to ${end}` });
+    }
+    return Result::Ok(());
+}
+
 /// `tensor`, the `U`s of `extents` at bytes `start` to `end` of `file`, where
 /// the build found them.
 pub fn payload_at<U: Element, affine Src: WeightSource>(
@@ -267,8 +277,10 @@ impl Headers {
         source: &Src,
         file: String,
         e: &Expected,
-    ) -> Result<HostWeight, LoadError> with _ {
-        assert e.width == stored_width(U::kind());
+    ) -> Result<HostWeight, LoadError> with _
+        contract self.headers.contains_key(file), "`file` must be one `read_headers` read"
+        contract e.width == stored_width(U::kind())
+    {
         let [start, end] = self.headers[file].range(e).map_err(|err| LoadError { reason: `${file}: ${err}` })?;
         return payload_at::<U, Src>(source, file, e.tensor, e.extents, start, end);
     }
