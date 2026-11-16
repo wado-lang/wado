@@ -78,8 +78,8 @@ test "a run holds the tree until it lets go" {
 internal fn checkout_at(repo: &String, tree: &String, sha: &String) -> String with (Process, Preopens) {
     let root = fs::normalize(fs::join(repo, tree)).unwrap();
     if worktree_git_dir(repo, &root) matches { None } {
-        // Registered still where the directory was removed by hand, and left
-        // where git's record of it was.
+        // Either half may outlive the other when one is removed by hand: git's
+        // record of the worktree, or its directory.
         git(["-C", *repo, "worktree", "prune"]);
         fs::remove_dir_all(&root).unwrap();
         git(["-c", "core.symlinks=false", "-C", *repo, "worktree", "add", "--force", "--detach", *tree, *sha]);
