@@ -33,6 +33,7 @@ it the arm is skipped.
 cd package-loam/benchmark
 mise run gpt2-124m     # GPT-2 (124M) greedy generation
 mise run gemma3-270m   # Gemma 3 (270M) greedy generation
+mise run gemma3-270m-quantized   # its q4 and q4f16 exports
 mise run all
 ```
 
@@ -106,3 +107,25 @@ example's `generate.json` records.
 | onnxruntime CUDA                | 142.65 tokens/s |   224.322 ms | 2.01x   |
 | onnxruntime WebGPU              | 100.19 tokens/s |   319.407 ms | 2.86x   |
 | **Loam** `Cpu`                  |   3.01 tokens/s | 10633.566 ms | 95.10x  |
+
+### The `q4` and `q4f16` exports
+
+`mise run gemma3-270m-quantized` runs the same prompt on the `q4` and `q4f16`
+exports, whose matrices hold 4-bit weights, on WebGPU alone:
+
+| Arm                         | Program                                                |
+| --------------------------- | ------------------------------------------------------ |
+| onnxruntime WebGPU          | `onnxruntime_webgpu.mjs`, `decoderQ4` / `decoderQ4f16` |
+| Loam `WebGpuBackend` decode | `gemma3_270m/q4_webgpu.wado`, `q4f16_webgpu.wado`      |
+
+Each figure is from one run of the task. Loam picks the tokens
+`generate_q4.json` and `generate_q4f16.json` record.
+onnxruntime's WebGPU provider picks other tokens from one run to the next on
+both exports.
+
+| Implementation                          |      Throughput |    ms/iter | vs best |
+| --------------------------------------- | --------------: | ---------: | ------- |
+| onnxruntime WebGPU `q4`                 | 151.93 tokens/s | 210.620 ms | 1.00x   |
+| onnxruntime WebGPU `q4f16`              | 124.33 tokens/s | 257.380 ms | 1.22x   |
+| **Loam** `WebGpuBackend` decode `q4`    |  89.54 tokens/s | 357.373 ms | 1.70x   |
+| **Loam** `WebGpuBackend` decode `q4f16` |  50.12 tokens/s | 638.413 ms | 3.03x   |

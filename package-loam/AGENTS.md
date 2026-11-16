@@ -45,6 +45,13 @@ CI tests the logic on every device with very small programs, which should
 reach as many operations and paths as they can. A real model such as Gemma 3
 runs by hand, and its figures go in a measurement table.
 
+## Measuring speed
+
+A change that can move a model's speed is measured with
+[`benchmark/`](./benchmark/README.md): `mise run <model>` there times Loam's
+backends against onnxruntime and llama.cpp, and the result replaces the row in
+its README's table.
+
 ## Oracles
 
 A case in `conformance/operators_test.wado` or `semantics_test.wado` where Loam

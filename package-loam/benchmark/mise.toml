@@ -135,6 +135,28 @@ echo "=== Loam (Cpu) ==="
 "$wado_exe" run -O2 --collector drc $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m.wado
 """
 
+[tasks.gemma3-270m-quantized]
+description = "Run Gemma 3 (270M)'s q4 and q4f16 exports (Loam WebGPU vs onnxruntime WebGPU)"
+depends = ["build"]
+run = """
+#!/usr/bin/env bash
+set -e
+model=../example/gemma3-270m
+if [ ! -f $model/build/model_q4.onnx_data ] || [ ! -f $model/build/model_q4f16.onnx_data ]; then
+    echo "SKIP: run $model/fetch.sh first"
+    exit 0
+fi
+wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
+
+./onnxruntime_webgpu.sh $model decoderQ4
+./onnxruntime_webgpu.sh $model decoderQ4f16
+
+for export in q4 q4f16; do
+    echo "=== Loam (WebGPU $export decode) ==="
+    WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gemma3_270m/${export}_webgpu.wado
+done
+"""
+
 [tasks.all]
 description = "Run all Loam benchmarks serially"
 run = """
@@ -142,4 +164,5 @@ run = """
 set -e
 MISE_JOBS=1 mise run gpt2-124m
 MISE_JOBS=1 mise run gemma3-270m
+MISE_JOBS=1 mise run gemma3-270m-quantized
 """

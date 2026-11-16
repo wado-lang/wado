@@ -1,0 +1,59 @@
+//! Gemma 3 (270M)'s `q4` export on Loam's `WebGpuBackend`: the prompt in one
+//! pass and the tokens after the first in one call, as the `decode` arm of
+//! `gemma3_270m_webgpu.wado` picks them. `q4f16_webgpu.wado` is the same over
+//! the `q4f16` export; one program holding both outgrows the compiler's memory.
+//!
+//!     wado run-webgpu --dir ../example/gemma3-270m gemma3_270m/q4_webgpu.wado
+
+use { eprintln, Environment, Stderr, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+use { MonotonicClock } from "wasi:clocks";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuSupportedFeatures,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { Graph, WebGpuBackend } from "lib:loam";
+use { Tokenizer } from "../../example/gemma3-270m/model.wado";
+use { Q4Model } from "../../example/gemma3-270m/q4.wado";
+use { Generator, STEPS, timed_by } from "../generate.wado";
+
+export fn run() with (Environment, Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(gpu) = WebGpuBackend::new() else {
+        eprintln("no WebGPU adapter");
+        return;
+    };
+    let mut model = Q4Model::load(gpu).unwrap();
+    timed_by("Gemma 3 (270M) q4, Loam WebGPU decode", &mut model, |m, ids| m.continued(ids, STEPS).0);
+}
+
+impl<affine Bk: Graph> Generator for Q4Model<Bk> {
+    /// Each run starts from an empty cache, so there is nothing to drop.
+    fn reset(&mut self) {
+    }
+
+    fn step(&mut self, ids: &List<i32>) -> i32 with _ {
+        return self.continued(ids, 1).0[0];
+    }
+
+    fn encode(text: &String) -> List<i32> {
+        return Tokenizer::encode(text);
+    }
+
+    fn decode(ids: &List<i32>) -> String {
+        return Tokenizer::decode(ids);
+    }
+}

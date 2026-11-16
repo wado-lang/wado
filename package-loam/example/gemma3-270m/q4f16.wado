@@ -7,7 +7,7 @@
 
 use { eprintln, Stderr, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
-use { FileSource, Graph, Sampling, Tensor } from "lib:loam";
+use { Element, FileSource, Graph, LoadError, Sampling, Tensor } from "lib:loam";
 use { deviation, recorded, reported } from "./checks.wado";
 /// The graph alone: its weights are external data in `model_q4f16.onnx_data`.
 use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resolve/2dbbfdb1b59bd034eb959428c6a7da9dd7ea27f0/onnx/model_q4f16.onnx"
@@ -25,46 +25,64 @@ use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resol
         },
     };
 
-/// Continues each prompt on `backend`: the prompt in one pass, then every token
-/// after its first in one call.
+/// Continues each prompt on `backend`, as `Q4f16Model::continued` does.
 pub fn checked<affine Bk: Graph>(backend: Bk) with (_, Stdout, Stderr, Preopens) {
     let Some([generate, expected]) = recorded("generate_q4f16.json", "build/logits_q4f16.bin") else {
         return;
     };
-    let mut on = backend;
-    let params = match gemma::Params::load(&mut on, &FileSource { dir: "build" }) {
-        Ok(params) => params,
+    let mut loaded = match Q4f16Model::load(backend) {
+        Ok(loaded) => loaded,
         Err(e) => {
             eprintln(`${e}; run fetch.sh first`);
             return;
         },
     };
-    let mut model = gemma::Model::new(params);
-    let greedy = Sampling {};
     for let p of 0..<generate.len() {
         let g = &generate[p];
-        let steps = g.generated.len();
+        let [generated, logits] = loaded.continued(&g.ids, g.generated.len());
+        reported(g, &generated, deviation(&logits, &expected, p));
+    }
+}
+
+/// The export's weights, loaded from `build/` onto a backend.
+pub struct Q4f16Model<affine Bk: Graph> {
+    on: Bk,
+    model: gemma::Model<Bk>,
+}
+
+impl<affine Bk: Graph> Q4f16Model<Bk> {
+    pub fn load(backend: Bk) -> Result<Q4f16Model<Bk>, LoadError> with (_, Preopens) {
+        let mut on = backend;
+        let model = gemma::Model::new(gemma::Params::load(&mut on, &FileSource { dir: "build" })?);
+        return Ok(Q4f16Model { on, model });
+    }
+
+    /// The `steps` tokens greedy decoding picks after `ids` from an empty
+    /// cache, and the logits it picks the first from: the prompt in one pass,
+    /// then every token after its first in one call.
+    pub fn continued(&mut self, ids: &List<i32>, steps: i32) -> [List<i32>, List<f32>] with _ {
+        let greedy = Sampling {};
         let passed = gemma::compute(
-            &mut on,
-            &token_ids(g.ids.into_iter().map(|id| id as i64).collect()),
-            &mask_of(g.ids.len()),
-            &gemma::Cache::empty(&mut on),
+            &mut self.on,
+            &token_ids(ids.into_iter().map(|id| id as i64).collect()),
+            &mask_of(ids.len()),
+            &gemma::Cache::empty(&mut self.on),
             steps - 1,
-            &mut model,
+            &mut self.model,
         );
-        let first = greedy.first_tokens(&passed.logits, g.ids.len() as i64)[0];
+        let first = greedy.first_tokens(&passed.logits, ids.len() as i64)[0];
         let decoded = gemma::decode(
-            &mut on,
+            &mut self.on,
             &token_ids([first]),
-            &mask_of(g.ids.len() + 1),
+            &mask_of(ids.len() + 1),
             &passed.cache,
             steps - 1,
             &greedy,
-            &mut model,
+            &mut self.model,
         );
         let mut generated: List<i32> = [first as i32];
         generated.extend(&decoded.tokens.data.into_iter().map(|id| id as i32).collect());
-        reported(g, &generated, deviation(&passed.logits.data, &expected, p));
+        return [generated, passed.logits.data.into_iter().map(|v| v.cast_to::<f32>()).collect()];
     }
 }
 
