@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794859574887,
+  "lastUpdate": 1794860912978,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78377,6 +78377,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c64c254331ebe49fa5106e57f9a8046015c41a6e"
         },
         "date": 1794859573831,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8e2870e78209ee662b8413d9757d2ad40e83e3a5",
+          "message": "Merge pull request #2651 from wado-lang/ccr-5a053762-2x7vni\n\nfix(compiler): a closure holds the resources its captures mention",
+          "timestamp": "2026-11-17T04:51:55+09:00",
+          "tree_id": "933903acbf755852cab285b7f9b3916e949fabf1",
+          "url": "https://github.com/wado-lang/wado/commit/8e2870e78209ee662b8413d9757d2ad40e83e3a5"
+        },
+        "date": 1794860911804,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
