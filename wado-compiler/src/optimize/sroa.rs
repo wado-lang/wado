@@ -1448,7 +1448,9 @@ fn bind_yielded_value(engine: &mut Engine, stmt: StmtId) -> Option<(StmtId, Expr
     let StmtKind::Expr(value) = engine.body.stmts[stmt].kind else {
         return None;
     };
-    let call = value.as_expr().expect("a write-back's statement is its call");
+    let call = value
+        .as_expr()
+        .expect("a write-back's statement is its call");
     let type_id = engine.body.exprs[call].type_id;
     if engine.type_table().is_stackless(type_id) {
         return None;
