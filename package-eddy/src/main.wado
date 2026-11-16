@@ -38,13 +38,14 @@ use { to_bytes_pretty, from_string } from "core:json";
 use { Process } from "core:process";
 use { Deserialize } from "core:serde";
 use { Client } from "wasi:http";
+use { MonotonicClock } from "wasi:clocks";
 use { git, try_git, paths_between, diff_between } from "./git.wado";
 use { Usage } from "./anthropic.wado";
 use { comment } from "./comment.wado";
 use { cost_summary } from "./cost.wado";
 use { report } from "./report.wado";
 use { review, Submission, Finding, Reviewed } from "./review.wado";
-use { snapshot, add_build_submodules, home_runner, with_mise_tools, drop_snapshot } from "./snapshot.wado";
+use { snapshot, add_build_submodules, home_runner, with_mise_tools } from "./snapshot.wado";
 use { Runner, Workspace } from "./tools.wado";
 
 #[param(from_env = "CLAUDE_MODEL")]
@@ -91,7 +92,7 @@ struct Report {
     findings: List<Finding>,
 }
 
-export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Client) {
+export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Client, MonotonicClock) {
     let options = match from_env::<Options>() {
         Ok(options) => options,
         Err(e) => fail(`${e}\n${USAGE}`),
@@ -179,8 +180,6 @@ ${commits.trim()}`;
         [CLAUDE_MODEL, result.usage.unwrap_or(Usage {})],
         [options.reporter, report_usage],
     ]));
-    // After the record: a cleanup that fails must not take the review with it.
-    drop_snapshot(&root);
 
     if let Some(e) = &result.error {
         fail(*e);
@@ -199,6 +198,7 @@ fn reviewed_again(w: &Workspace, earlier: &Reviewed) -> Reviewed with (Preopens,
     let mut again = *earlier;
     // The earlier attempt holds what the review took; this one took nothing.
     again.usage = null;
+    again.requests = [];
     for let f of &mut again.findings {
         f.line = 0;
         f.repro = null;

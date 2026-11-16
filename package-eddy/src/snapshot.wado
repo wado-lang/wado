@@ -8,17 +8,65 @@ use { Command, Process } from "core:process";
 use { git, try_git } from "./git.wado";
 use { Runner, ENTER_TREE } from "./tools.wado";
 
+/// Where every review's checkout lives. One path for all of them keeps
+/// `cargo`'s build of the last review fresh for the next: it tells the
+/// workspace's crates apart by path, and a checkout leaves a file the two
+/// commits share untouched.
+global TREE: String = "scratchpad/eddy-tree";
+
 /// A checkout of `sha` for a reviewer to read, and its directory. It is a
 /// worktree, so it shares the repository's objects, later commits included:
 /// only the tools' refusal to leave the tree keeps them out of reach. A
 /// symbolic link is checked out as a file holding its target, so no path
-/// resolves out of the tree through one. A tree an interrupted run left is
-/// checked out again rather than trusted.
-pub fn snapshot(sha: &String) -> String with Process {
-    let root = `scratchpad/eddy-trees/${*sha}`;
-    try_git(["worktree", "remove", "--force", root]);
-    tree_git(&".", ["worktree", "add", "--force", "--detach", root, *sha]);
+/// resolves out of the tree through one.
+pub fn snapshot(sha: &String) -> String with (Process, Preopens) {
+    return checkout_at(&".", &TREE, sha);
+}
+
+/// The worktree `tree`, a path under the repository `repo`, checked out at
+/// `sha`, and its path. A tree an earlier review left, written to or
+/// interrupted, is reset rather than trusted.
+fn checkout_at(repo: &String, tree: &String, sha: &String) -> String with (Process, Preopens) {
+    let root = fs::join(repo, tree);
+    if !fs::exists(fs::join(&root, ".git")) {
+        // Registered still where the directory was removed by hand.
+        tree_git(repo, ["worktree", "prune"]);
+        tree_git(repo, ["worktree", "add", "--force", "--detach", *tree, *sha]);
+        return root;
+    }
+    tree_git(&root, ["checkout", "--force", "--detach", "--quiet", *sha]);
+    // Its submodules are reset where Run checks them out again.
+    reset_checkout(&root, sha);
     return root;
+}
+
+test "a tree is checked out again in place, and what a review left is gone" {
+    // `wado test` lets git see no repository above the package.
+    let repo = "build/checkout-test";
+    fs::remove_dir_all(repo).unwrap();
+    fs::create_dir_all(repo).unwrap();
+    fs::write(fs::join(repo, "kept.rs"), &"kept").unwrap();
+    fs::write(fs::join(repo, "README.md"), &"read me").unwrap();
+    let in_repo = |args: List<String>| {
+        let mut full = ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t"] as List<String>;
+        full.extend(&args);
+        return git(full);
+    };
+    in_repo(["init", "--quiet"]);
+    in_repo(["add", "."]);
+    in_repo(["commit", "--quiet", "-m", "c"]);
+    let head = in_repo(["rev-parse", "HEAD"]).trim().to_string();
+
+    let root = checkout_at(&repo, &"tree", &head);
+    let kept = fs::join(&root, "kept.rs");
+    let before = fs::metadata(&kept).unwrap().modified;
+    fs::write(fs::join(&root, "README.md"), &"scribbled").unwrap();
+    fs::write(fs::join(&root, "left-behind.rs"), &"").unwrap();
+
+    assert checkout_at(&repo, &"tree", &head) == root;
+    assert fs::metadata(&kept).unwrap().modified == before;
+    assert fs::read_to_string(fs::join(&root, "README.md")).unwrap() == "read me";
+    assert !fs::exists(fs::join(&root, "left-behind.rs"));
 }
 
 /// `git` run in `dir`, a checkout a reviewer reaches, with every symbolic link
@@ -40,7 +88,14 @@ pub fn add_build_submodules(root: &String) with (Process, Preopens) {
         if try_git(["-C", path, "cat-file", "-e", `${sha}^{commit}`]) matches { None } {
             git(["-C", path, "fetch", "--quiet", "--depth", "1", "origin", sha]);
         }
-        tree_git(&path, ["worktree", "add", "--force", "--detach", from_submodule(&path, root), sha]);
+        let checkout = fs::join(root, &path);
+        if fs::exists(fs::join(&checkout, ".git")) {
+            tree_git(&checkout, ["checkout", "--force", "--detach", "--quiet", sha]);
+            reset_checkout(&checkout, &sha);
+        } else {
+            git(["-C", path, "worktree", "prune"]);
+            tree_git(&path, ["worktree", "add", "--force", "--detach", from_submodule(&path, root), sha]);
+        }
     }
 }
 
@@ -163,15 +218,6 @@ fn reset_checkout(dir: &String, commit: &String) with Process {
     // Twice forced: once leaves an untracked directory that is a repository
     // of its own, such as one a test made.
     tree_git(dir, ["clean", "-ffdx", "--quiet"]);
-}
-
-pub fn drop_snapshot(root: &String) with (Process, Preopens) {
-    for let [path, _] of build_submodules(root) {
-        // Absent unless Run checked it out.
-        try_git(["-C", path, "worktree", "remove", "--force", from_submodule(&path, root)]);
-    }
-    git(["worktree", "remove", "--force", *root]);
-    fs::remove_dir_all(index_dir(root)).unwrap();
 }
 
 fn index_dir(root: &String) -> String {

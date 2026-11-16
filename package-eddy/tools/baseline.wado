@@ -31,6 +31,7 @@ use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Process } from "core:process";
 use { Client } from "wasi:http";
+use { MonotonicClock } from "wasi:clocks";
 use { to_bytes_pretty, to_string, from_string } from "core:json";
 use { TreeMap } from "core:collections";
 use {
@@ -49,15 +50,7 @@ use {
 use { ask_json, Usage } from "../src/anthropic.wado";
 use { cost_summary } from "../src/cost.wado";
 use { review, Submission } from "../src/review.wado";
-use {
-    snapshot,
-    add_build_submodules,
-    home_runner,
-    with_mise_tools,
-    reset_snapshot,
-    drop_snapshot,
-    index,
-} from "../src/snapshot.wado";
+use { snapshot, add_build_submodules, home_runner, with_mise_tools, reset_snapshot, index } from "../src/snapshot.wado";
 use { Runner, Workspace } from "../src/tools.wado";
 use { load, SymbolIndex } from "../src/symbols.wado";
 
@@ -99,7 +92,7 @@ A finding is a hit when it points at the same root cause: the same code and the 
 Answer with one JSON object and nothing else:
 {\"hit\": bool, \"finding\": <the index of the hit, or -1>, \"reason\": \"<one sentence>\"}";
 
-export fn run() with (Stderr, Environment, Preopens, Process, Client) {
+export fn run() with (Stderr, Environment, Preopens, Process, Client, MonotonicClock) {
     let arguments = args();
     assert !SYMBOLS || TOOLS, "the symbol tools read the tree that tools=true checks out";
     assert !RUN || TOOLS, "Run builds the tree that tools=true checks out";
@@ -169,15 +162,12 @@ ${fix_diff}
             if RUN && let Some(w) = &ws {
                 reset_snapshot(&w.root, &culprit.sha);
             }
-            let run = review_once(&api_key, &review_prompt, &known, &ws, &mut grading);
-            reviewing.add(&run.usage.unwrap_or(Usage {}));
-            out.entries[i].runs.push(run);
+            let graded = review_once(&api_key, &review_prompt, &known, &ws, &mut grading);
+            reviewing.add(&graded.usage.unwrap_or(Usage {}));
+            out.entries[i].runs.push(graded);
             // Written after every run, so a run that dies keeps what it paid for.
             fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
             eprintln(`#${fix} run ${out.entries[i].runs.len()}`);
-        }
-        if let Some(w) = &ws {
-            drop_snapshot(&w.root);
         }
     }
     fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
@@ -229,7 +219,7 @@ fn review_once(
     known: &String,
     ws: &Option<Workspace>,
     grading: &mut Usage,
-) -> Run with (Client, Preopens, Process) {
+) -> Run with (Client, Preopens, Process, MonotonicClock) {
     let r = review(api_key, CLAUDE_MODEL, review_prompt, ws, MAX_TURNS);
     let mut reviewed = Run { findings: r.findings, turns: r.turns, calls: r.calls, usage: r.usage, error: r.error };
     if reviewed.error matches { Some(_) } {
