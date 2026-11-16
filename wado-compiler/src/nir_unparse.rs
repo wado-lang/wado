@@ -339,8 +339,10 @@ impl<'a> NirUnparser<'a> {
                 self.output.push_str(": ");
                 self.output
                     .push_str(&self.type_table.mangle_type_arg_for_generic(*type_id));
-                self.output.push_str(" = ");
-                self.unparse_operand(body, value);
+                if let Some(value) = value {
+                    self.output.push_str(" = ");
+                    self.unparse_operand(body, value);
+                }
                 self.output.push_str(";\n");
             }
             StmtKind::Expr(expr) => {

@@ -538,7 +538,10 @@ pub enum StmtKind {
         local_index: u32,
         is_mut: bool,
         type_id: TypeId,
-        value: Operand,
+        /// `None` declares the local without a value, as `let x: T;` does:
+        /// the statement writes nothing, so the slot holds `T`'s Wasm default
+        /// on first entry and what it last held on a later one.
+        value: Option<Operand>,
         skip_value_copy: bool,
     },
     Expr(Operand),
@@ -850,6 +853,17 @@ impl Body {
         }
     }
 
+    /// Detach `stmts` from every block they appear in. A full scan is
+    /// load-bearing: an early exit that stops after N removals can leave one
+    /// behind in a later block, which then double-lists once a new block also
+    /// claims it.
+    pub fn detach_stmts(&mut self, stmts: &[StmtId]) {
+        let set: IndexSet<StmtId> = stmts.iter().copied().collect();
+        for bid in self.blocks.keys().collect::<Vec<_>>() {
+            self.blocks[bid].stmts.retain(|s| !set.contains(s));
+        }
+    }
+
     /// The case `value` builds, with its payload: a variant built in place, or a
     /// promoted payload-less case.
     pub fn built_case(&self, value: Operand) -> Option<(u32, Option<Operand>)> {
@@ -867,13 +881,6 @@ impl Body {
                 _ => None,
             },
         }
-    }
-
-    /// Whether a `let` of `type_id` binding `value` declares its local without
-    /// a value, as `let x: T;` does: the unit it binds is no value of `T`, and
-    /// the slot holds `T`'s Wasm default until its first assignment.
-    pub fn declares_without_value(&self, type_id: TypeId, value: Operand) -> bool {
-        type_id != TypeTable::UNIT && self.operand_type(value) == TypeTable::UNIT
     }
 
     /// The local a bare skeleton `Local` operand reads, with its node. `None` for
@@ -1442,7 +1449,7 @@ pub trait SubtreeCopy {
                     local_index,
                     is_mut,
                     type_id,
-                    value: self.clone_operand(value),
+                    value: value.map(|o| self.clone_operand(o)),
                     skip_value_copy,
                 }
             }
@@ -1790,10 +1797,10 @@ impl Body {
                 }
             }
             NodeRef::Stmt(s) => match &mut self.stmts[s].kind {
+                StmtKind::Expr(value) | StmtKind::LetDestructure { value, .. } => f(value),
                 StmtKind::Let { value, .. }
-                | StmtKind::Expr(value)
-                | StmtKind::LetDestructure { value, .. } => f(value),
-                StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+                | StmtKind::Return { value }
+                | StmtKind::Break { value, .. } => {
                     if let Some(o) = value {
                         f(o);
                     }
@@ -2180,9 +2187,8 @@ impl Body {
                 }
             }
             NodeRef::Stmt(s) => match &self.stmts[s].kind {
-                StmtKind::Let { value, .. } => f(Slot::Operand(*value)),
                 StmtKind::Expr(e) => f(Slot::Operand(*e)),
-                StmtKind::Return { value } => {
+                StmtKind::Let { value, .. } | StmtKind::Return { value } => {
                     if let Some(o) = value {
                         f(Slot::Operand(*o));
                     }

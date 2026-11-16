@@ -385,8 +385,8 @@ impl BoxedLocals {
     }
 }
 
-/// The locals declared without a value (`let x: T;`, a unit initializer) that an
-/// assignment writing in place replaces whole, or that live in a cell.
+/// The locals declared without a value that an assignment writing in place
+/// replaces whole, or that live in a cell.
 fn guarded_locals(func: &TirFunction, boxed: impl Fn(u32, tir::TypeId) -> bool) -> IndexSet<u32> {
     struct Scan {
         deferred: IndexMap<u32, tir::TypeId>,
@@ -397,11 +397,9 @@ fn guarded_locals(func: &TirFunction, boxed: impl Fn(u32, tir::TypeId) -> bool) 
             if let TirStmtKind::Let {
                 local_index,
                 type_id,
-                value,
+                value: None,
                 ..
             } = &stmt.kind
-                && *type_id != TypeTable::UNIT
-                && value.type_id == TypeTable::UNIT
             {
                 self.deferred.insert(*local_index, *type_id);
             }
@@ -1537,7 +1535,7 @@ impl FunctionTranslator<'_, '_> {
                 local_index: index,
                 is_mut: false,
                 type_id,
-                value,
+                value: Some(value),
                 skip_value_copy: true,
             },
             span,
@@ -1734,7 +1732,7 @@ impl FunctionTranslator<'_, '_> {
                 local_index: flag,
                 is_mut: true,
                 type_id: TypeTable::BOOL,
-                value: start,
+                value: Some(start),
                 skip_value_copy: true,
             },
             span,
@@ -1853,30 +1851,29 @@ impl FunctionTranslator<'_, '_> {
                 // without a value gets its box at its first assignment
                 // ([`Self::guarded_assign`]).
                 let box_type = self.box_type_of_local(*local_index, *type_id);
-                let effective_type = box_type.unwrap_or(*type_id);
-                let box_wrap_type = box_type.filter(|_| !self.guarded_locals.contains(local_index));
-                let shares_value = self.share_eligible_locals.contains(local_index)
-                    && pass_dump::decides("lower/value_copy/share");
-                let needs_value_copy_wrap = !storage.skips_copy()
-                    && !shares_value
-                    && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))
-                    && self.should_wrap_value_copy(value);
-                let value_op = self.convert_operand(value);
-                let value_op = if needs_value_copy_wrap {
-                    self.wrap_value_copy_operand(value_op, *type_id)
-                } else {
-                    value_op
-                };
-                let value_op = if let Some(box_type) = box_wrap_type {
-                    self.new_cell(value_op, box_type, value.span).into()
-                } else {
-                    value_op
-                };
+                let value_op = value.as_ref().map(|value| {
+                    let shares_value = self.share_eligible_locals.contains(local_index)
+                        && pass_dump::decides("lower/value_copy/share");
+                    let needs_value_copy_wrap = !storage.skips_copy()
+                        && !shares_value
+                        && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))
+                        && self.should_wrap_value_copy(value);
+                    let value_op = self.convert_operand(value);
+                    let value_op = if needs_value_copy_wrap {
+                        self.wrap_value_copy_operand(value_op, *type_id)
+                    } else {
+                        value_op
+                    };
+                    match box_type {
+                        Some(box_type) => self.new_cell(value_op, box_type, value.span).into(),
+                        None => value_op,
+                    }
+                });
                 StmtKind::Let {
                     name: name.clone(),
                     local_index: *local_index,
                     is_mut: *is_mut,
-                    type_id: effective_type,
+                    type_id: box_type.unwrap_or(*type_id),
                     value: value_op,
                     skip_value_copy: storage.skips_copy(),
                 }
@@ -2143,7 +2140,7 @@ impl FunctionTranslator<'_, '_> {
                     local_index: scrut_idx,
                     is_mut: false,
                     type_id: scrutinee.type_id,
-                    value: (**scrutinee).clone(),
+                    value: Some((**scrutinee).clone()),
                     // Translator-synthesized; invisible to
                     // `value_copy::analyze`'s seed walker, so any
                     // wrap would look up a helper that was never

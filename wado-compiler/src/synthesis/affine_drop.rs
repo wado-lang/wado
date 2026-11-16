@@ -1384,7 +1384,7 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
             value,
             storage,
         } => {
-            let value = elab_value_expr(value, cx);
+            let value = value.map(|value| elab_value_expr(value, cx));
             if cx.carries_affine(type_id) {
                 cx.declare(Live {
                     local: local_index,

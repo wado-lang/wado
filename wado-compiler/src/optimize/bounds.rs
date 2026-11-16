@@ -78,7 +78,7 @@ struct Scan<'a, F> {
     types: &'a TypeTable,
     builtin: F,
     /// Every `let` of each local.
-    lets: IndexMap<u32, Vec<(StmtId, Operand)>>,
+    lets: IndexMap<u32, Vec<(StmtId, Option<Operand>)>>,
     /// Every other write of each local: an assignment, a `&mut` escape, a
     /// pattern binding, or a receiver call.
     writes: IndexMap<u32, u32>,
@@ -148,7 +148,7 @@ impl<'b, F: Fn(FuncId) -> Option<&'b BuiltinDeclaration>> Scan<'_, F> {
     /// The one `let` of a local nothing else writes.
     fn sole_let(&self, local: u32) -> Option<Operand> {
         match self.lets.get(&local).map(Vec::as_slice) {
-            Some(&[(_, value)]) if self.writes_of(local) == 0 => Some(value),
+            Some(&[(_, Some(value))]) if self.writes_of(local) == 0 => Some(value),
             _ => None,
         }
     }
@@ -213,7 +213,7 @@ impl<'b, F: Fn(FuncId) -> Option<&'b BuiltinDeclaration>> Scan<'_, F> {
         if !self.increments(step, counter) || self.writes_of(counter) != 1 {
             return None;
         }
-        let &[(let_stmt, entry)] = self.lets.get(&counter)?.as_slice() else {
+        let &[(let_stmt, Some(entry))] = self.lets.get(&counter)?.as_slice() else {
             return None;
         };
         if !before.contains(&let_stmt) {

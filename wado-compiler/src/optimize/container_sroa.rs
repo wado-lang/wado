@@ -1258,7 +1258,7 @@ fn collect_candidates(
                 name,
                 local_index,
                 type_id,
-                value,
+                value: Some(value),
                 ..
             } = &body.stmts[*s].kind
             else {
@@ -1919,7 +1919,7 @@ impl Rewriter<'_, '_> {
                     // must agree.
                     is_mut: false,
                     type_id: field.list_type,
-                    value: init.into(),
+                    value: Some(init.into()),
                     skip_value_copy: false,
                 },
                 span,
@@ -2401,7 +2401,7 @@ fn spill(
             local_index,
             is_mut: false,
             type_id,
-            value: op,
+            value: Some(op),
             // The temporary carries the element to its one use, as the
             // argument it replaces did.
             skip_value_copy: true,

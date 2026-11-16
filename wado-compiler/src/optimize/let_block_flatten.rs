@@ -152,7 +152,7 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
         let StmtKind::Let { value, is_mut, .. } = &body.stmts[*s].kind else {
             return true;
         };
-        !value.as_expr().is_some_and(|e| match &body.exprs[e].kind {
+        !value.and_then(Operand::as_expr).is_some_and(|e| match &body.exprs[e].kind {
             ExprKind::Local { .. } => !is_mut,
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
@@ -170,13 +170,14 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
 /// body runs again, so nothing in it is first.
 fn leading_operand(kind: &StmtKind) -> Option<Operand> {
     match kind {
-        StmtKind::Let { value, .. }
-        | StmtKind::LetDestructure { value, .. }
+        StmtKind::LetDestructure { value, .. }
         | StmtKind::Expr(value)
         | StmtKind::If {
             condition: value, ..
         } => Some(*value),
-        StmtKind::Return { value } | StmtKind::Break { value, .. } => *value,
+        StmtKind::Let { value, .. }
+        | StmtKind::Return { value }
+        | StmtKind::Break { value, .. } => *value,
         StmtKind::Loop { .. } | StmtKind::Continue | StmtKind::LabeledBlock { .. } => None,
     }
 }
@@ -259,7 +260,7 @@ mod tests {
                 local_index: index,
                 is_mut: false,
                 type_id: TypeTable::I32,
-                value,
+                value: Some(value),
                 skip_value_copy: false,
             },
             span: sp(),

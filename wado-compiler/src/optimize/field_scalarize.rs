@@ -603,7 +603,7 @@ fn scalarize_loop(
                 local_index: c.new_local_index,
                 is_mut: true,
                 type_id: c.type_id,
-                value: field.into(),
+                value: Some(field.into()),
                 skip_value_copy: true,
             },
             span,
@@ -1013,7 +1013,7 @@ impl NirRefVisitor for FieldAccessScan<'_> {
                     // A bare GC-`Local` value aliases its source (the struct is a
                     // reference, so the copy shares the heap object); mutations
                     // through the new binding bypass the source's HFS scalar.
-                    if let Some(ve) = value.as_expr()
+                    if let Some(ve) = value.and_then(Operand::as_expr)
                         && let ExprKind::Local { index, .. } = &body.exprs[ve].kind
                         && is_gc_heap_type(body.exprs[ve].type_id, self.type_table)
                     {
@@ -1922,8 +1922,9 @@ fn walk_stmt(
             out.push(sid);
         }
         StmtKind::Let { value, .. } => {
-            let value = *value;
-            walk_operand(body, value, states, true, out, ctx);
+            if let Some(value) = *value {
+                walk_operand(body, value, states, true, out, ctx);
+            }
             out.push(sid);
         }
         StmtKind::LetDestructure { value, .. } => {
@@ -1974,7 +1975,7 @@ fn bind_temp(
             local_index: tmp_idx,
             is_mut: false,
             type_id,
-            value,
+            value: Some(value),
             skip_value_copy: true,
         },
         span,

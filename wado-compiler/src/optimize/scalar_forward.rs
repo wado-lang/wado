@@ -212,7 +212,9 @@ fn forwardable_binding(body: &Body, stmt: StmtId) -> Option<(u32, ExprId, TypeId
             value,
             type_id,
             ..
-        } => value.as_expr().map(|e| (*local_index, e, *type_id)),
+        } => value
+            .and_then(Operand::as_expr)
+            .map(|e| (*local_index, e, *type_id)),
         _ => None,
     }
 }

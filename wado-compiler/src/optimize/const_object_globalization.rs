@@ -604,7 +604,9 @@ fn ref_args_that_escape(body: &Body, aliases: &Aliases, gate: &Gate<'_>) -> Inde
             // used other than to read: `let mut it = *r` shares the referent.
             NodeRef::Stmt(st) => {
                 if let StmtKind::Let {
-                    local_index, value, ..
+                    local_index,
+                    value: Some(value),
+                    ..
                 } = &body.stmts[st].kind
                     && let Some(e) = value.as_expr().and_then(|v| ref_node(body, v))
                     && (local_leaks_through_call(body, *local_index, gate)
@@ -967,7 +969,7 @@ fn let_stmt_qualifies(
     let StmtKind::Let {
         name,
         local_index,
-        value,
+        value: Some(value),
         type_id,
         ..
     } = &body.stmts[stmt].kind
@@ -1119,7 +1121,9 @@ fn substitute_sibling_lets(
     let mut defs: IndexMap<u32, ExprId> = IndexMap::default();
     for &s in sibling_lets {
         let StmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value: Some(value),
+            ..
         } = &body.stmts[s].kind
         else {
             continue;
@@ -1127,7 +1131,7 @@ fn substitute_sibling_lets(
         let Some(def) = value.as_expr() else { continue };
         defs.insert(*local_index, def);
     }
-    detach_stmts(body, sibling_lets);
+    body.detach_stmts(sibling_lets);
     let mut stack = vec![NodeRef::Expr(find_global_var_set(
         body,
         module_source,
@@ -1142,16 +1146,6 @@ fn substitute_sibling_lets(
             continue;
         }
         body.for_each_child(node, |c| stack.push(c));
-    }
-}
-
-/// Detach `stmts` from every block they appear in. A full scan is load-bearing:
-/// an early exit that stops after N removals can leave one behind in a later
-/// block, which then double-lists once a new block also claims it.
-fn detach_stmts(body: &mut Body, stmts: &[StmtId]) {
-    let set: IndexSet<StmtId> = stmts.iter().copied().collect();
-    for bid in body.blocks.keys().collect::<Vec<_>>() {
-        body.blocks[bid].stmts.retain(|s| !set.contains(s));
     }
 }
 
@@ -1217,7 +1211,7 @@ fn sibling_const_locals(
             if let NodeRef::Stmt(s) = node
                 && let StmtKind::Let {
                     local_index,
-                    value,
+                    value: Some(value),
                     type_id,
                     ..
                 } = &body.stmts[s].kind
@@ -1438,7 +1432,9 @@ fn block_is_const(body: &Body, block: BlockId, gate: &Gate<'_>, bound: &mut Inde
     let (last, init) = (*last, init.to_vec());
     for stmt in init {
         let StmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value: Some(value),
+            ..
         } = &body.stmts[stmt].kind
         else {
             return false;
@@ -1512,7 +1508,9 @@ fn worth_hoisting(body: &Body, expr: ExprId, gate: &Gate<'_>, reach: Reach) -> b
         ExprKind::LabeledBlock { block, .. } => {
             let stmts = body.blocks[*block].stmts.clone();
             stmts.iter().any(|&s| match &body.stmts[s].kind {
-                StmtKind::Let { value, .. } => worth_hoisting_operand(body, *value, gate, reach),
+                StmtKind::Let { value, .. } => {
+                    value.is_some_and(|value| worth_hoisting_operand(body, value, gate, reach))
+                }
                 StmtKind::Expr(value) => value
                     .as_expr()
                     .is_some_and(|e| worth_hoisting(body, e, gate, reach)),
@@ -2116,8 +2114,11 @@ fn alias_sites(body: &Body) -> Vec<AliasSite> {
         match node {
             NodeRef::Stmt(s) => match &body.stmts[s].kind {
                 StmtKind::Let {
-                    local_index, value, ..
+                    local_index,
+                    value: Some(value),
+                    ..
                 } => site(*value, vec![*local_index]),
+                StmtKind::Let { value: None, .. } => {}
                 StmtKind::LetDestructure { pattern, value, .. } => {
                     let mut binds = Vec::new();
                     collect_pattern_bindings(body, *pattern, &mut binds);
@@ -2309,15 +2310,16 @@ fn stmt_readonly(body: &Body, stmt: StmtId, idx: u32, gate: &Gate<'_>) -> bool {
         // A second name for the binding, not a copy of it: `Aliases::binding_names`
         // judges what is done through it as it judges the binding.
         StmtKind::Let {
-            value,
+            value: Some(value),
             skip_value_copy: true,
             ..
         } if value.as_expr().is_some_and(|e| is_local(body, e, idx)) => true,
-        StmtKind::Let { value, .. } => expr_readonly_operand(body, *value, idx, gate),
         StmtKind::Expr(e) => e
             .as_expr()
             .is_none_or(|e| expr_readonly(body, e, idx, gate)),
-        StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+        StmtKind::Let { value, .. }
+        | StmtKind::Return { value }
+        | StmtKind::Break { value, .. } => {
             value.is_none_or(|v| expr_readonly_operand(body, v, idx, gate))
         }
         StmtKind::If {
@@ -2676,7 +2678,7 @@ fn inline_sibling_lets(
     if sibling_lets.is_empty() {
         return;
     }
-    detach_stmts(body, sibling_lets);
+    body.detach_stmts(sibling_lets);
     let e = find_global_var_set(body, module_source, name);
     let ExprKind::GlobalVarSet { value, .. } = &body.exprs[e].kind else {
         unreachable!("find_global_var_set matched a GlobalVarSet")
@@ -2780,8 +2782,13 @@ fn array_literal_promotes_to_data(body: &Body, elements: &[Operand], gate: &Gate
 }
 
 fn stmt_needs_lazy_guard(body: &Body, stmt: StmtId, gate: &Gate<'_>) -> bool {
-    let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
-        unreachable!("[NIR] const_object_globalization: guard candidates are `let` bindings");
+    let StmtKind::Let {
+        value: Some(value), ..
+    } = &body.stmts[stmt].kind
+    else {
+        unreachable!(
+            "[NIR] const_object_globalization: guard candidates are `let` bindings with a value"
+        );
     };
     value
         .as_expr()
@@ -2860,7 +2867,7 @@ fn replace_let_with_set(
         if let NodeRef::Stmt(s) = node
             && let StmtKind::Let {
                 local_index: li,
-                value,
+                value: Some(value),
                 ..
             } = &body.stmts[s].kind
             && *li == local_index

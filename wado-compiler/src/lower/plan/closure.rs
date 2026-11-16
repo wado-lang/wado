@@ -1468,7 +1468,9 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
         // closure, mark the closure specialisable, then walk the body
         // (which owns a fresh local-index namespace).
         if let TirStmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value: Some(value),
+            ..
         } = &stmt.kind
             && let TirExprKind::Closure {
                 body,
@@ -1791,7 +1793,7 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) {
         if let TirStmtKind::Let {
             local_index,
-            value,
+            value: Some(value),
             type_id,
             ..
         } = &mut stmt.kind

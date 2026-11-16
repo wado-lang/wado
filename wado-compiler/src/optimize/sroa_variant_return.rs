@@ -435,10 +435,11 @@ fn collect_call_sites(
         NodeRef::Stmt(s) => match &body.stmts[s].kind {
             StmtKind::Let {
                 type_id,
-                value,
+                value: Some(value),
                 local_index,
                 ..
             } => direct(*value, *type_id, Some(*local_index)),
+            StmtKind::Let { value: None, .. } => {}
             StmtKind::Return { value: Some(value) } => {
                 collect_return_tail_calls(body, *value, own_return, out);
             }
@@ -608,7 +609,7 @@ fn rebox_call(
             local_index,
             is_mut: false,
             type_id: layout.tuple_type,
-            value: Operand::Expr(call_node),
+            value: Some(Operand::Expr(call_node)),
             skip_value_copy: true,
         },
         span,
@@ -1361,7 +1362,7 @@ fn single_def_variant_construct(body: &Body, local: u32, cand: &Candidate) -> Op
     if *is_mut {
         return None;
     }
-    let init = value.as_expr()?;
+    let init = value.and_then(Operand::as_expr)?;
     match &body.exprs[init].kind {
         ExprKind::VariantConstruct { variant_type, .. } if *variant_type == cand.variant_type => {
             Some(init)
@@ -2191,7 +2192,7 @@ fn retain_rewritable_locals(
                     && candidates.contains_key(local_index)
                 {
                     defined.insert(*local_index);
-                    if body.built_case(*value).is_none() {
+                    if !value.is_some_and(|v| body.built_case(v).is_some()) {
                         refused.insert(*local_index);
                     }
                 }
@@ -2283,12 +2284,15 @@ fn rewrite_variant_local_defs(body: &mut Body, candidates: &IndexMap<u32, Candid
         _ => {}
     });
     for (s, local) in lets {
-        let StmtKind::Let { value, .. } = body.stmts[s].kind else {
-            unreachable!()
+        let StmtKind::Let {
+            value: Some(value), ..
+        } = body.stmts[s].kind
+        else {
+            unreachable!("a candidate's every `let` builds a case")
         };
         let tuple = case_tuple(body, value, &candidates[&local], span);
         if let StmtKind::Let { value, .. } = &mut body.stmts[s].kind {
-            *value = tuple;
+            *value = Some(tuple);
         }
     }
     for (e, local) in assigns {
@@ -2449,7 +2453,7 @@ fn hoist_call_scrutinees(
                 local_index,
                 is_mut: false,
                 type_id: call_type,
-                value: Operand::Expr(call),
+                value: Some(Operand::Expr(call)),
                 // A call result is fresh; nothing aliases it.
                 skip_value_copy: true,
             },
@@ -2620,7 +2624,7 @@ fn refuse_temp_uses(
             local_index, value, ..
         } = &body.stmts[s].kind
         && layouts.contains_key(local_index)
-        && let Some(e) = value.as_expr()
+        && let Some(e) = value.and_then(Operand::as_expr)
         && matches!(&body.exprs[e].kind, ExprKind::Call { .. })
     {
         binding.push(*local_index);
@@ -2837,7 +2841,7 @@ fn bind_payload_before(
             local_index: binding_local,
             is_mut: false,
             type_id: init_type,
-            value: init,
+            value: Some(init),
             // The payload already went through whatever value copy `lower`
             // decided when it was a variant payload; this read introduces none.
             skip_value_copy: true,

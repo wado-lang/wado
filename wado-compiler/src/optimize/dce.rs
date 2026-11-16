@@ -1964,7 +1964,9 @@ impl GlobalGuards<'_> {
         calls: CallFacts,
     ) -> Option<ExprId> {
         let StmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value: Some(value),
+            ..
         } = &body.stmts[stmt].kind
         else {
             return None;
@@ -1981,11 +1983,12 @@ impl GlobalGuards<'_> {
             .stmts
             .iter()
             .all(|s| match body.stmts[*s].kind {
-                StmtKind::Expr(value) | StmtKind::Let { value, .. } => {
-                    self.inert_value(body, value, calls)
+                StmtKind::Expr(value)
+                | StmtKind::Let {
+                    value: Some(value), ..
                 }
-                StmtKind::Return { value: None } => true,
-                StmtKind::Return { value: Some(value) } => self.inert_value(body, value, calls),
+                | StmtKind::Return { value: Some(value) } => self.inert_value(body, value, calls),
+                StmtKind::Let { value: None, .. } | StmtKind::Return { value: None } => true,
                 _ => false,
             })
     }
@@ -2060,9 +2063,11 @@ impl GlobalGuards<'_> {
             return None;
         }
         if !work.iter().all(|s| match body.stmts[*s].kind {
-            StmtKind::Expr(value) | StmtKind::Let { value, .. } => {
-                self.inert_value(body, value, calls)
-            }
+            StmtKind::Expr(value)
+            | StmtKind::Let {
+                value: Some(value), ..
+            } => self.inert_value(body, value, calls),
+            StmtKind::Let { value: None, .. } => true,
             _ => false,
         }) {
             return None;
@@ -2079,7 +2084,9 @@ fn root_callees(body: &Body) -> Vec<FuncId> {
         .iter()
         .filter_map(|s| match body.stmts[*s].kind {
             StmtKind::Expr(value)
-            | StmtKind::Let { value, .. }
+            | StmtKind::Let {
+                value: Some(value), ..
+            }
             | StmtKind::Return { value: Some(value) } => value.as_expr(),
             _ => None,
         })
@@ -2442,7 +2449,7 @@ fn carriers(
             local_index, value, ..
         } = body.stmts[s].kind
         {
-            if deletable_value(body, value, types, calls) {
+            if value.is_none_or(|value| deletable_value(body, value, types, calls)) {
                 let found = mentions_outside(body, NodeRef::Stmt(s), &no_regions);
                 let mentions = deletable.entry(local_index).or_default();
                 mentions.locals.extend(found.locals);

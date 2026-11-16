@@ -193,7 +193,7 @@ fn int_key(body: &Body, table: &TypeTable, op: Operand) -> Option<i128> {
 fn constant_let(body: &Body, stmt: StmtId) -> Option<u32> {
     let StmtKind::Let {
         is_mut: false,
-        value: Operand::Value(v),
+        value: Some(Operand::Value(v)),
         local_index,
         ..
     } = body.stmts[stmt].kind

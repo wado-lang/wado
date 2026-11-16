@@ -58,7 +58,9 @@ fn forward(engine: &mut Engine, dst: ExprId, payload: Operand) -> bool {
 /// The value `stmt` binds, with the local it binds it to.
 fn binding(body: &Body, stmt: StmtId) -> Option<(u32, ExprId)> {
     let StmtKind::Let {
-        local_index, value, ..
+        local_index,
+        value: Some(value),
+        ..
     } = &body.stmts[stmt].kind
     else {
         return None;

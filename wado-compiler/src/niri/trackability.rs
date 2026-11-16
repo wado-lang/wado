@@ -30,8 +30,9 @@ fn performed_exprs(body: &Body) -> IndexSet<ExprId> {
     let mut performed = IndexSet::default();
     for s in reachable_stmts(body) {
         let op = match &body.stmts[s].kind {
-            StmtKind::Expr(op) | StmtKind::Let { value: op, .. } => *op,
-            StmtKind::Return { .. }
+            StmtKind::Expr(op) | StmtKind::Let { value: Some(op), .. } => *op,
+            StmtKind::Let { value: None, .. }
+            | StmtKind::Return { .. }
             | StmtKind::If { .. }
             | StmtKind::Loop { .. }
             | StmtKind::Break { .. }
@@ -95,7 +96,9 @@ impl Reached {
     fn record_alias_refs(&mut self, body: &Body, reassigned: &LocalSet, type_table: &TypeTable) {
         for s in reachable_stmts(body) {
             let StmtKind::Let {
-                value, local_index, ..
+                value: Some(value),
+                local_index,
+                ..
             } = &body.stmts[s].kind
             else {
                 continue;
@@ -377,7 +380,7 @@ pub(super) fn aggregate_safe_locals(
             } => {
                 read_value(*op, &mut value_reads);
             }
-            StmtKind::Let { value: op, .. } | StmtKind::Expr(op) => {
+            StmtKind::Let { value: Some(op), .. } | StmtKind::Expr(op) => {
                 read_value(*op, &mut value_reads);
             }
             _ => {}
@@ -489,7 +492,7 @@ fn reassigned_locals(body: &Body) -> LocalSet {
             local_index, value, ..
         } = &body.stmts[s].kind
         {
-            let place = place_of(body, *value);
+            let place = value.and_then(|value| place_of(body, value));
             let_places
                 .entry(*local_index)
                 .and_modify(|bound| *bound = None)
@@ -546,7 +549,7 @@ pub(super) fn const_view_locals(
                 local_index, value, ..
             } = &body.stmts[s].kind
             {
-                if settled(*value) {
+                if value.is_some_and(settled) {
                     set.insert(*local_index);
                 } else {
                     rebound.insert(*local_index);

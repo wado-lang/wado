@@ -361,7 +361,7 @@ impl Interpreter<'_> {
                 type_id,
                 ..
             } => {
-                let (index, value, type_id) = (*local_index, *value, *type_id);
+                let (index, type_id) = (*local_index, *type_id);
                 // A fresh binding forks the local's storage; an alias taken
                 // over the same index would keep pointing at the old one.
                 if self
@@ -373,10 +373,10 @@ impl Interpreter<'_> {
                 {
                     return Flow::Bail;
                 }
-                if body.declares_without_value(type_id, value) {
+                let Some(value) = *value else {
                     self.bind_local(index, Lattice::Unevaluated);
                     return Flow::Fallthrough(Lattice::Unevaluated);
-                }
+                };
                 // What makes a binding of a reference an alias is that nothing
                 // displaces it. `mut` does not say so: scalarizing leaves an
                 // immutable `let` that is assigned later.

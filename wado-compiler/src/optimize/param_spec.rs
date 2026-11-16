@@ -1032,7 +1032,9 @@ fn scan_caller(
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(id) => {
             if let StmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value: Some(value),
+                ..
             } = &body.stmts[id].kind
             {
                 define(*local_index, *value, &mut roots);
@@ -1136,7 +1138,9 @@ fn param_aliases(body: &Body, params: &IndexSet<u32>) -> (IndexMap<u32, u32>, In
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(id) => {
             if let StmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value: Some(value),
+                ..
             } = &body.stmts[id].kind
             {
                 match body.referenced_local(*value) {
@@ -1320,7 +1324,8 @@ fn built_in_cold_run(body: &Body, cold: &IndexSet<ExprId>, local: u32) -> bool {
             return;
         }
         bound = true;
-        all_cold &= is_cold_literal(body, cold, *value);
+        // A local declared without a value takes its object from an assignment.
+        all_cold &= value.is_some_and(|v| is_cold_literal(body, cold, v));
     });
     bound && all_cold
 }
@@ -2195,7 +2200,7 @@ fn redirect_const_reads(engine: &mut Engine, reads: Vec<(ExprId, FieldConst)>) -
                             local_index: local,
                             is_mut: false,
                             type_id,
-                            value: Operand::Expr(init),
+                            value: Some(Operand::Expr(init)),
                             skip_value_copy: true,
                         },
                         span,

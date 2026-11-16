@@ -696,7 +696,7 @@ const MAX_CALL_MISSES: usize = 64;
 fn let_ref_global(body: &Body, stmt: &StmtKind) -> Option<(u32, GlobalKey)> {
     let StmtKind::Let {
         local_index,
-        value,
+        value: Some(value),
         is_mut,
         ..
     } = stmt
@@ -835,21 +835,16 @@ impl<'a> Interpreter<'a> {
         self.record_aggregate_locals(body);
         for stmt in lets {
             let StmtKind::Let {
-                local_index,
-                value,
-                type_id,
-                ..
+                local_index, value, ..
             } = &body.stmts[*stmt].kind
             else {
                 return;
             };
-            let (local_index, value) = (*local_index, *value);
-            let lattice = if body.declares_without_value(*type_id, value) {
-                Lattice::Unevaluated
-            } else {
-                self.operand_to_lattice(body, value)
+            let lattice = match *value {
+                Some(value) => self.operand_to_lattice(body, value),
+                None => Lattice::Unevaluated,
             };
-            self.bind_local(local_index, lattice);
+            self.bind_local(*local_index, lattice);
         }
     }
 

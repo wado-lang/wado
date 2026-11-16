@@ -313,7 +313,9 @@ impl BindWalk<'_, '_> {
                     }
                 }
                 StmtKind::Let {
-                    local_index, value, ..
+                    local_index,
+                    value: Some(value),
+                    ..
                 } => self.bind(*local_index, *value),
                 _ => {}
             }
@@ -1596,7 +1598,9 @@ fn structural_loop_guard(
             };
         }
         if let StmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value: Some(value),
+            ..
         } = engine.body.stmts[s].kind
             && operand_local(engine.body, value).is_some_and(|v| guarded.contains(&v))
         {
@@ -2116,7 +2120,9 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
         }
         // As at a loop guard, a `let c = var` carries what is proven of `var`.
         if let StmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value: Some(value),
+            ..
         } = engine.body.stmts[s].kind
         {
             if let Some(copied) = operand_local(engine.body, value) {
@@ -2971,7 +2977,9 @@ fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<(u32,
         return None;
     };
     let StmtKind::Let {
-        local_index, value, ..
+        local_index,
+        value: Some(value),
+        ..
     } = &engine.body.stmts[s].kind
     else {
         return None;
@@ -3119,7 +3127,7 @@ fn stmt_written_value(engine: &Engine, s: StmtId, var: u32) -> Option<Operand> {
     match &engine.body.stmts[s].kind {
         StmtKind::Let {
             local_index, value, ..
-        } if *local_index == var => Some(*value),
+        } if *local_index == var => *value,
         StmtKind::Expr(op) => match &engine.body.exprs[op.as_expr()?].kind {
             ExprKind::Assign { target, value } => matches!(
                 &engine.body.exprs[*target].kind,

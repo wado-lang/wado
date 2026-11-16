@@ -1623,7 +1623,11 @@ struct CmMethodRewriter<'a> {
 impl TirMutVisitor for CmMethodRewriter<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) {
         match &mut stmt.kind {
-            TirStmtKind::Let { value, type_id, .. } => {
+            TirStmtKind::Let {
+                value: Some(value),
+                type_id,
+                ..
+            } => {
                 let old_type = value.type_id;
                 self.visit_expr(value);
                 // A streaming rewrite can retype the let value (e.g. to i32);

@@ -867,10 +867,14 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
                 // associated type can still carry the unresolved projection
                 // as its own `type_id` where the local's declared type is
                 // already the monomorphized reference.
-                let names = if self.resolver.type_table.is_reference(*type_id) {
+                // One declared without a value names what its first
+                // assignment does, which rebinds it.
+                let names = if !self.resolver.type_table.is_reference(*type_id) {
+                    Names::Place(Place::local(*local_index))
+                } else if let Some(value) = value {
                     self.resolver.names(value)
                 } else {
-                    Names::Place(Place::local(*local_index))
+                    Names::Unknown
                 };
                 self.resolver.bindings.set(*local_index, names);
             }

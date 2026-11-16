@@ -378,7 +378,9 @@ fn stmt_binding(body: &Body, s: StmtId) -> Option<(ExprId, u32)> {
     match &body.stmts[s].kind {
         StmtKind::Let {
             local_index, value, ..
-        } => value.as_expr().map(|e| (e, *local_index)),
+        } => value
+            .and_then(Operand::as_expr)
+            .map(|e| (e, *local_index)),
         _ => None,
     }
 }
@@ -547,7 +549,7 @@ fn retarget_block(
 /// [`stmt_binding`].
 fn stmt_binding_value(body: &Body, s: StmtId) -> Option<ExprId> {
     match &body.stmts[s].kind {
-        StmtKind::Let { value, .. } => value.as_expr(),
+        StmtKind::Let { value, .. } => value.and_then(Operand::as_expr),
         _ => None,
     }
 }
@@ -991,7 +993,7 @@ impl ElementImmutable<'_, '_, '_> {
             } => {
                 let local_index = *local_index;
                 let value = *value;
-                if let Some(ve) = value.as_expr() {
+                if let Some(ve) = value.and_then(Operand::as_expr) {
                     self.visit_expr(body, ve);
                     if self.clean
                         && is_self_derived(

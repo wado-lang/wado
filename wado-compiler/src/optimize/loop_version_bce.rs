@@ -1565,7 +1565,9 @@ fn constify_check_temp(
     while let Some(n) = stack.pop() {
         if let NodeRef::Stmt(s) = n
             && let StmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value: Some(value),
+                ..
             } = &engine.body.stmts[s].kind
             && *local_index == temp
             && is_pure_operand(engine.body, *value)
@@ -2084,7 +2086,7 @@ fn alloc_local_set(engine: &mut Engine, l: u32, value: Operand, span: Span) -> S
             local_index: l,
             is_mut,
             type_id: ty,
-            value,
+            value: Some(value),
             skip_value_copy: true,
         },
         span,

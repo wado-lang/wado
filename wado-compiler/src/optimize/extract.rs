@@ -76,7 +76,7 @@ fn is_let_value(e: &Engine, id: ExprId) -> bool {
         e.parent_of(NodeRef::Expr(id)),
         Some(NodeRef::Stmt(s))
             if matches!(&e.body.stmts[s].kind,
-                StmtKind::Let { value, .. } if value.as_expr() == Some(id))
+                StmtKind::Let { value: Some(value), .. } if value.as_expr() == Some(id))
     )
 }
 
@@ -679,7 +679,7 @@ fn apply_field_materialise(
             local_index: av,
             is_mut: false,
             type_id: id_ty,
-            value: Operand::Value(rep),
+            value: Some(Operand::Value(rep)),
             skip_value_copy: true,
         },
         span,
@@ -780,7 +780,7 @@ fn apply_value_freeze(
                 local_index: av,
                 is_mut: false,
                 type_id: id_ty,
-                value: Operand::Value(rep),
+                value: Some(Operand::Value(rep)),
                 skip_value_copy: true,
             },
             Span::default(),

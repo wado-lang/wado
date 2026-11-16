@@ -2245,7 +2245,9 @@ impl FunctionTranslator<'_, '_> {
         let arena = self.body;
         match &arena.stmts[stmt_id].kind {
             StmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value: Some(value),
+                ..
             } => {
                 // Phase 5: when the initializer is a direct call to a
                 // multi-value-return function, bind the result's N tuple
@@ -2281,6 +2283,7 @@ impl FunctionTranslator<'_, '_> {
                     })
                 }
             }
+            StmtKind::Let { value: None, .. } => None,
             StmtKind::Expr(expr) => {
                 let expr = *expr;
                 if let Some(instrs) = self.try_emit_multi_value_discard(expr) {

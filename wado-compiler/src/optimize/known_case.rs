@@ -186,7 +186,7 @@ fn collapse_to_binding(
                 local_index: binding.local_index,
                 is_mut: false,
                 type_id: payload_type,
-                value: Operand::Expr(payload),
+                value: Some(Operand::Expr(payload)),
                 // The payload is read out of the scrutinee, as the pattern
                 // binding this replaces read it.
                 skip_value_copy: true,
@@ -214,7 +214,7 @@ fn known_index(engine: &mut Engine, operand: Operand) -> Option<u32> {
             let StmtKind::Let { value, .. } = engine.body.stmts[def].kind else {
                 return None;
             };
-            value
+            value?
         }
         None => operand,
     };
@@ -303,7 +303,7 @@ mod tests {
                 local_index: 0,
                 is_mut: false,
                 type_id: TypeTable::I32,
-                value: Operand::Value(case_b),
+                value: Some(Operand::Value(case_b)),
                 skip_value_copy: false,
             },
             span: Span::default(),

@@ -288,8 +288,10 @@ pub(crate) fn tir_block_always_exits(tt: &TypeTable, block: &TirBlock) -> bool {
 /// Whether control never reaches past `stmt`.
 pub(crate) fn tir_stmt_always_exits(tt: &TypeTable, stmt: &TirStmt) -> bool {
     match &stmt.kind {
-        TirStmtKind::Let { value, .. }
-        | TirStmtKind::LetDestructure { value, .. }
+        TirStmtKind::Let { value, .. } => value
+            .as_ref()
+            .is_some_and(|value| tir_expr_always_exits(tt, value)),
+        TirStmtKind::LetDestructure { value, .. }
         | TirStmtKind::Expr(value)
         | TirStmtKind::TaskReturn { value }
         | TirStmtKind::VariadicForOf {

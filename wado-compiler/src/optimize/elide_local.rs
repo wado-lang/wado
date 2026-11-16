@@ -104,13 +104,15 @@ fn classify(engine: &mut Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) 
             let (idx, value) = (*local_index, *value);
             if is_kept(engine, idx) {
                 Action::Keep
-            } else if deletable(engine, value, rule) {
+            } else if value.is_none_or(|value| deletable(engine, value, rule)) {
                 Action::Drop
             } else {
                 // Effectful or trap-capable. A skeleton expr demotes to a bare
                 // `Expr(value)`, which still runs it; a promoted value has no
                 // `ExprId` to demote to, so its binding is what runs it.
-                value.as_expr().map_or(Action::Keep, Action::Demote)
+                value
+                    .and_then(Operand::as_expr)
+                    .map_or(Action::Keep, Action::Demote)
             }
         }
         StmtKind::Expr(operand @ Operand::Value(_)) => {
@@ -286,7 +288,7 @@ mod tests {
                 local_index: 0,
                 is_mut: false,
                 type_id: TypeTable::I32,
-                value: Operand::Value(one),
+                value: Some(Operand::Value(one)),
                 skip_value_copy: false,
             },
             span: Span::default(),
@@ -339,7 +341,7 @@ mod tests {
                 local_index: 0,
                 is_mut: false,
                 type_id: TypeTable::I32,
-                value: Operand::Expr(call),
+                value: Some(Operand::Expr(call)),
                 skip_value_copy: false,
             },
             span: Span::default(),

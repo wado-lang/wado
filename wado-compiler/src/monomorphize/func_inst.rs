@@ -1488,7 +1488,15 @@ impl Monomorphizer {
         match &mut stmt.kind {
             TirStmtKind::Let { value, type_id, .. } => {
                 *type_id = self.substitute_type(*type_id, substitution, type_table);
-                self.substitute_types_in_expr(value, substitution, type_table, local_count, locals);
+                if let Some(value) = value {
+                    self.substitute_types_in_expr(
+                        value,
+                        substitution,
+                        type_table,
+                        local_count,
+                        locals,
+                    );
+                }
             }
             TirStmtKind::Expr(expr) => {
                 self.substitute_types_in_expr(expr, substitution, type_table, local_count, locals);
@@ -3387,7 +3395,9 @@ impl Monomorphizer {
             .then(|| {
                 body.stmts.iter().find_map(|s| {
                     let TirStmtKind::Let {
-                        local_index, value, ..
+                        local_index,
+                        value: Some(value),
+                        ..
                     } = &s.kind
                     else {
                         return None;
@@ -3441,7 +3451,7 @@ impl Monomorphizer {
                     local_index: temp_local_idx,
                     is_mut: false,
                     type_id: iterable_type,
-                    value: iterable.clone(),
+                    value: Some(iterable.clone()),
                     storage: LetStorage::Planned,
                 },
                 span,
@@ -3516,7 +3526,7 @@ impl Monomorphizer {
                         local_index: iter_binding,
                         is_mut: b_mut,
                         type_id: bind_type,
-                        value: bind_value,
+                        value: Some(bind_value),
                         storage: LetStorage::Taken,
                     },
                     span,
@@ -3582,7 +3592,7 @@ impl Monomorphizer {
                             name,
                             local_index,
                             is_mut,
-                            value: orig_value,
+                            value: Some(orig_value),
                             ..
                         } = &orig_stmt.kind
                         {
@@ -3633,7 +3643,7 @@ impl Monomorphizer {
                                     local_index: *local_index,
                                     is_mut: *is_mut,
                                     type_id: field_type,
-                                    value: field_access,
+                                    value: Some(field_access),
                                     storage: LetStorage::Taken,
                                 },
                                 span,
@@ -3816,7 +3826,7 @@ impl Monomorphizer {
     /// `.enumerate()` index — i.e. whether the unroll reads the element at all.
     fn binds_element_field(destructure: &[TirStmt]) -> bool {
         destructure.iter().any(|s| {
-            matches!(&s.kind, TirStmtKind::Let { value, .. }
+            matches!(&s.kind, TirStmtKind::Let { value: Some(value), .. }
                 if matches!(&value.kind, TirExprKind::FieldAccess { field_index, .. } if *field_index != 0))
         })
     }
@@ -3841,7 +3851,9 @@ impl Monomorphizer {
         body.stmts
             .iter()
             .take_while(|s| {
-                if let TirStmtKind::Let { value, .. } = &s.kind
+                if let TirStmtKind::Let {
+                    value: Some(value), ..
+                } = &s.kind
                     && let TirExprKind::FieldAccess { expr: inner, .. } = &value.kind
                     && let TirExprKind::Local { index, .. } = &inner.kind
                 {
@@ -4000,7 +4012,7 @@ impl Monomorphizer {
                         local_index: iter_binding,
                         is_mut: false,
                         type_id: bind_type,
-                        value: bind_value,
+                        value: Some(bind_value),
                         storage: LetStorage::Taken,
                     },
                     span,
@@ -4020,7 +4032,7 @@ impl Monomorphizer {
                 let TirStmtKind::Let {
                     name,
                     local_index,
-                    value,
+                    value: Some(value),
                     ..
                 } = &template.kind
                 else {
@@ -4056,7 +4068,7 @@ impl Monomorphizer {
                         local_index: sub_local,
                         is_mut: false,
                         type_id: field_type,
-                        value: if inline_enumerate_pair {
+                        value: Some(if inline_enumerate_pair {
                             if field_index == 0 {
                                 index_literal.clone()
                             } else {
@@ -4079,7 +4091,7 @@ impl Monomorphizer {
                                 field_type,
                                 span,
                             )
-                        },
+                        }),
                         storage: LetStorage::Taken,
                     },
                     span,
@@ -4169,7 +4181,7 @@ impl Monomorphizer {
                     local_index: temp_local,
                     is_mut: false,
                     type_id: source_type,
-                    value: source,
+                    value: Some(source),
                     storage: LetStorage::Planned,
                 },
                 span,

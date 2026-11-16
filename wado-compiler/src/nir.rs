@@ -991,7 +991,7 @@ impl NirLocal {
                 local_index,
                 is_mut: false,
                 type_id,
-                value,
+                value: Some(value),
                 skip_value_copy,
             },
             span,

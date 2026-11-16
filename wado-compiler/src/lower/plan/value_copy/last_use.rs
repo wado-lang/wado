@@ -2900,10 +2900,12 @@ impl<'a> Analyzer<'a> {
                 let mut values = Vec::new();
                 for stmt in &stmts[start..end] {
                     let TirStmtKind::Let {
-                        local_index, value, ..
+                        local_index,
+                        value: Some(value),
+                        ..
                     } = &stmt.kind
                     else {
-                        unreachable!("a field run holds only `let`s");
+                        unreachable!("a field run holds only `let`s with a value");
                     };
                     self.kill_local(*local_index, &mut live_out);
                     values.push(value);
@@ -2929,7 +2931,12 @@ impl<'a> Analyzer<'a> {
         match &stmt.kind {
             TirStmtKind::Let {
                 local_index,
-                value,
+                value: None,
+                ..
+            } => self.kill_local(*local_index, live),
+            TirStmtKind::Let {
+                local_index,
+                value: Some(value),
                 storage,
                 ..
             } => {
@@ -3643,7 +3650,9 @@ fn overwritten_field(place: &TirExpr) -> Option<(u32, u32, TypeId)> {
 fn field_let_run(stmts: &[TirStmt], end: usize) -> Option<usize> {
     let field_let = |stmt: &TirStmt| match &stmt.kind {
         TirStmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value: Some(value),
+            ..
         } => match as_materialize(strip_casts(value)) {
             Some((base, Some(top))) if base != *local_index => Some((base, top)),
             _ => None,

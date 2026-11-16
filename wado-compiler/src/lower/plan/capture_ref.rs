@@ -198,14 +198,14 @@ fn redeclaration(locals: &FrameLocals, header: u32) -> TirStmt {
             local_index: header,
             is_mut: true,
             type_id,
-            value: TirExpr::new(
+            value: Some(TirExpr::new(
                 TirExprKind::Local {
                     index: header,
                     name: name.to_string(),
                 },
                 type_id,
                 Span::default(),
-            ),
+            )),
             storage: LetStorage::Planned,
         },
         Span::default(),
@@ -469,7 +469,7 @@ impl TirMutVisitor for Rewriter<'_, '_> {
                     local_index: proxy,
                     is_mut: false,
                     type_id: ref_type,
-                    value: reference,
+                    value: Some(reference),
                     storage: LetStorage::Planned,
                 },
                 span,

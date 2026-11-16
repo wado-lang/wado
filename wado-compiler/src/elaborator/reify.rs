@@ -2265,7 +2265,7 @@ impl<'a> Reify<'a> {
                 local_index,
                 is_mut: ctx.locals[local_index as usize].is_mut,
                 type_id,
-                value,
+                value: Some(value),
                 storage: LetStorage::Planned,
             },
             pattern => TirStmtKind::LetDestructure { pattern, value },
@@ -2410,17 +2410,20 @@ impl<'a> Reify<'a> {
     fn reify_let(&mut self, let_stmt: &ast::LetStmt, ctx: &mut FunctionContext) -> TirStmt {
         // Uninitialised `let x: T;` — the parser guarantees `ty`
         // is present, and annotate that the pattern is a single name or `_`.
-        // The WIR builder zero-initialises the slot; reify emits a Unit
-        // placeholder as the `value` and the `type_id` field carries the
-        // user-declared type.
         let Some(ast_value) = let_stmt.value.as_ref() else {
-            let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
             let Some(binding) = let_stmt.pattern.as_name() else {
                 assert!(
                     matches!(let_stmt.pattern, ast::Pattern::Wildcard),
                     "annotate rejects an uninitialized `let` that destructures"
                 );
-                return TirStmt::new(TirStmtKind::Expr(placeholder), let_stmt.span);
+                return TirStmt::new(
+                    TirStmtKind::Expr(TirExpr::new(
+                        TirExprKind::Unit,
+                        TypeTable::UNIT,
+                        let_stmt.span,
+                    )),
+                    let_stmt.span,
+                );
             };
             let type_id = self
                 .ann_local_type(binding.id)
@@ -2439,7 +2442,7 @@ impl<'a> Reify<'a> {
                     local_index,
                     is_mut,
                     type_id,
-                    value: placeholder,
+                    value: None,
                     storage: LetStorage::Planned,
                 },
                 let_stmt.span,
@@ -2489,7 +2492,7 @@ impl<'a> Reify<'a> {
                         local_index,
                         is_mut,
                         type_id,
-                        value,
+                        value: Some(value),
                         storage: LetStorage::Planned,
                     },
                     let_stmt.span,
@@ -3063,7 +3066,7 @@ impl<'a> Reify<'a> {
         let seen_local_index = conditional
             .then(|| ctx.add_local(seen_local_name(&cap_name), TypeTable::BOOL, true, None));
 
-        let binding = |value: TirExpr, is_mut: bool| {
+        let binding = |value: Option<TirExpr>, is_mut: bool| {
             TirStmt::new(
                 TirStmtKind::Let {
                     name: cap_name.clone(),
@@ -3086,7 +3089,7 @@ impl<'a> Reify<'a> {
                 "a conditional slot is never hoisted"
             );
             let local_ref = local_ref.expect("a hoisted slot is never a place");
-            decls.push(binding(resolved, false));
+            decls.push(binding(Some(resolved), false));
             // The capture stands where the operand did: what consumed the
             // operand moves the local.
             if self.takes(expr) {
@@ -3106,10 +3109,7 @@ impl<'a> Reify<'a> {
                 // The local hands on what the operand evaluated to, which it
                 // owns if the value is affine.
                 Some(local_ref) => {
-                    decls.push(binding(
-                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, cap_span),
-                        true,
-                    ));
+                    decls.push(binding(None, true));
                     stmts.push(assign_stmt(local_ref.clone(), resolved, cap_span));
                     if self.is_affine(expr) {
                         local_ref.clone().moved()
@@ -3133,7 +3133,7 @@ impl<'a> Reify<'a> {
                         local_index: seen_index,
                         is_mut: true,
                         type_id: TypeTable::BOOL,
-                        value: bool_lit(false, cap_span),
+                        value: Some(bool_lit(false, cap_span)),
                         storage: LetStorage::Taken,
                     },
                     cap_span,
@@ -3211,7 +3211,7 @@ impl<'a> Reify<'a> {
                 local_index: render_index,
                 is_mut: false,
                 type_id: string_type,
-                value: choice,
+                value: Some(choice),
                 storage: LetStorage::Planned,
             },
             span,
@@ -3343,7 +3343,7 @@ impl<'a> Reify<'a> {
                 local_index: cond_local_index,
                 is_mut: false,
                 type_id: cond_type,
-                value: cond_tir,
+                value: Some(cond_tir),
                 storage: LetStorage::Planned,
             },
             span,
@@ -3581,7 +3581,7 @@ impl<'a> Reify<'a> {
                 local_index: iter_local_index,
                 is_mut: true,
                 type_id: iter_type,
-                value: into_iter_call,
+                value: Some(into_iter_call),
                 storage: LetStorage::Planned,
             },
             span,
@@ -3717,7 +3717,7 @@ impl<'a> Reify<'a> {
                 local_index: temp_local,
                 is_mut: false,
                 type_id: tuple_type_id,
-                value: iterable,
+                value: Some(iterable),
                 storage: LetStorage::Planned,
             },
             span,
@@ -3833,7 +3833,7 @@ impl<'a> Reify<'a> {
                                     local_index,
                                     is_mut,
                                     type_id: bind_elem_type,
-                                    value: bind_value,
+                                    value: Some(bind_value),
                                     storage: LetStorage::Planned,
                                 },
                                 span,
@@ -4071,7 +4071,7 @@ impl<'a> Reify<'a> {
                     local_index,
                     is_mut,
                     type_id: elem_type,
-                    value: field_access,
+                    value: Some(field_access),
                     storage: LetStorage::Planned,
                 },
                 span,
@@ -4831,7 +4831,7 @@ impl<'a> Reify<'a> {
                         local_index,
                         is_mut: false,
                         type_id: hole_ty,
-                        value,
+                        value: Some(value),
                         storage: LetStorage::Planned,
                     },
                     hole_span,
@@ -5538,7 +5538,7 @@ impl<'a> Reify<'a> {
                 local_index,
                 is_mut: false,
                 type_id,
-                value: j,
+                value: Some(j),
                 storage: LetStorage::Planned,
             },
             span,
@@ -6140,7 +6140,7 @@ impl<'a> Reify<'a> {
                     local_index: ref_index,
                     is_mut: false,
                     type_id: mc.ref_type,
-                    value: TirExpr::new(
+                    value: Some(TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::MutRef,
                             expr: Box::new(TirExpr::new(
@@ -6154,7 +6154,7 @@ impl<'a> Reify<'a> {
                         },
                         mc.ref_type,
                         span,
-                    ),
+                    )),
                     storage: LetStorage::Planned,
                 },
                 span,
@@ -6479,7 +6479,7 @@ impl<'a> Reify<'a> {
                         TirStmtKind::Let {
                             name,
                             local_index: idx,
-                            value,
+                            value: Some(value),
                             is_mut: false,
                             type_id,
                             storage: LetStorage::Planned,
@@ -6584,7 +6584,7 @@ impl<'a> Reify<'a> {
                             local_index: index,
                             is_mut: true,
                             type_id: output_type,
-                            value,
+                            value: Some(value),
                             storage: LetStorage::Planned,
                         },
                         member_span,
@@ -10096,7 +10096,7 @@ fn bind_to_local(
         TirStmtKind::Let {
             name: name.clone(),
             local_index: index,
-            value,
+            value: Some(value),
             is_mut: false,
             type_id,
             storage: LetStorage::Planned,
