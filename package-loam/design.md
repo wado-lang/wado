@@ -237,12 +237,12 @@ its logits sit apart from onnxruntime's while the tokens match. Each row is the
 largest deviation of the first token's logits, on an NVIDIA RTX 4060 Ti over
 Vulkan and on XLA's CPU plugin. Every row picks onnxruntime's tokens.
 
-| Run, in `example/gemma3-270m/`                             | "Hello, my name is" | The France prompt |
-| ---------------------------------------------------------- | ------------------- | ----------------- |
-| `wado run --collector drc fp16_cpu.wado`                   | 0.0625              | 0.109375          |
-| `wado run-webgpu fp16_webgpu.wado`                         | 0.09375             | 0.1484375         |
-| `wado run-webgpu fp16_webgpu.wado -- --forgo-shader-f16`   | 0.125               | 0.1484375         |
-| `wado run-pjrt -O2 --plugin libpjrt_cpu.so fp16_pjrt.wado` | 0.109375            | 0.078125          |
+| Run, in `example/gemma3-270m/`                           | "Hello, my name is" | The France prompt |
+| -------------------------------------------------------- | ------------------- | ----------------- |
+| `wado run --collector drc fp16_cpu.wado`                 | 0.0625              | 0.109375          |
+| `wado run-webgpu fp16_webgpu.wado`                       | 0.09375             | 0.1484375         |
+| `wado run-webgpu fp16_webgpu.wado -- --forgo-shader-f16` | 0.125               | 0.1484375         |
+| `wado run-pjrt -O2 fp16_pjrt.wado`                       | 0.109375            | 0.078125          |
 
 onnxruntime's greedy pick leads the next logit by as little as this, over every
 step of every prompt, so a deviation above can exceed a pick's lead:
@@ -283,11 +283,11 @@ onnxruntime's, for Gemma 3 (270M)'s `q4` export, on an NVIDIA RTX 4060 Ti over
 Vulkan and on XLA's CPU plugin. Every row picks onnxruntime's tokens, whose
 smallest lead over the next logit is 0.290.
 
-| Run, in `example/gemma3-270m/`                           | "Hello, my name is" | The France prompt |
-| -------------------------------------------------------- | ------------------- | ----------------- |
-| `wado run --collector drc q4_cpu.wado`                   | 0.0000777           | 0.000122          |
-| `wado run-webgpu q4_webgpu.wado`                         | 0.0000758           | 0.000104          |
-| `wado run-pjrt -O2 --plugin libpjrt_cpu.so q4_pjrt.wado` | 0.0000820           | 0.000102          |
+| Run, in `example/gemma3-270m/`         | "Hello, my name is" | The France prompt |
+| -------------------------------------- | ------------------- | ----------------- |
+| `wado run --collector drc q4_cpu.wado` | 0.0000777           | 0.000122          |
+| `wado run-webgpu q4_webgpu.wado`       | 0.0000758           | 0.000104          |
+| `wado run-pjrt -O2 q4_pjrt.wado`       | 0.0000820           | 0.000102          |
 
 The `q4f16` export computes in halves, so its logits sit as far from
 onnxruntime's as the fp16 export's. Every row picks onnxruntime's tokens, whose

@@ -735,9 +735,8 @@ impl Graph for WebGpuBackend {
             self.device_view(packed),
             self.device_view(scales),
         ], zero_points);
-        if let Some(out) = self.quantized_product_kernel(&operands, quantized.bits, quantized.block, HalfFloat::of(
-            E::kind(),
-        )) {
+        let half = HalfFloat::of(E::kind());
+        if let Some(out) = self.quantized_product_kernel(&operands, quantized.bits, quantized.block, half) {
             extents[last] = out.extents[1];
             return Placed::Device(self.reshaped(&out, &extents));
         }
@@ -769,9 +768,8 @@ impl Graph for WebGpuBackend {
                 self.reshaped(&self.device_view(indices), &([element_count(&extents)] as List<i32>)),
                 self.device_view(scales),
             ], zero_points);
-            if let Some(out) = self.quantized_gather_kernel(&operands, quantized.bits, quantized.block, HalfFloat::of(
-                E::kind(),
-            )) {
+            let half = HalfFloat::of(E::kind());
+            if let Some(out) = self.quantized_gather_kernel(&operands, quantized.bits, quantized.block, half) {
                 extents.push(out.extents[1]);
                 return Placed::Device(self.reshaped(&out, &extents));
             }

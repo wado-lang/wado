@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Downloads Gemma 3 (270M, instruction-tuned) as onnx-community exports it into
-# build/: the weights gemma3.wado, fp16.wado, q4.wado and q4f16.wado load, and the models and
-# tokenizer the oracle scripts run.
+# build/: the weights gemma3.wado, fp16.wado, q4.wado and q4f16.wado load, and
+# the models and tokenizer the oracle scripts run.
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p build

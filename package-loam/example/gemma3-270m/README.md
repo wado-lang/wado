@@ -34,11 +34,11 @@ runs and read backs a token takes:
 
 ## On a PJRT plugin
 
-`pjrt.wado` does the same on `PjrtBackend`, and needs a plugin
-(`scripts/fetch-pjrt-plugin.sh` prints the path of XLA's CPU plugin):
+`pjrt.wado` does the same on `PjrtBackend`, on XLA's CPU plugin unless
+`--plugin` names another:
 
     cd package-loam/example/gemma3-270m
-    wado run-pjrt --plugin libpjrt_cpu.so pjrt.wado
+    wado run-pjrt pjrt.wado
 
 `analyzed.wado` compiles the model's programs for a TPU topology, which needs
 no TPU, and prints the weights' bytes and what `libtpu.so` reports of each
@@ -60,7 +60,7 @@ device:
     node generate.mjs
     wado run --collector drc fp16_cpu.wado
     wado run-webgpu fp16_webgpu.wado
-    wado run-pjrt --plugin libpjrt_cpu.so fp16_pjrt.wado
+    wado run-pjrt fp16_pjrt.wado
 
 `wado run-webgpu fp16_webgpu.wado -- --forgo-shader-f16` computes as a device
 without `shader-f16` does. What each prints is in
@@ -80,7 +80,7 @@ Each device keeps those weights packed. It checks its tokens and logits as
     node generate.mjs generate_q4.json
     wado run --collector drc q4_cpu.wado
     wado run-webgpu q4_webgpu.wado
-    wado run-pjrt --plugin libpjrt_cpu.so q4_pjrt.wado
+    wado run-pjrt q4_pjrt.wado
 
 ## The `q4f16` export
 
@@ -91,7 +91,7 @@ against `generate_q4f16.json` and `build/logits_q4f16.bin`:
     node generate.mjs generate_q4f16.json
     wado run --collector drc q4f16_cpu.wado
     wado run-webgpu q4f16_webgpu.wado
-    wado run-pjrt --plugin libpjrt_cpu.so q4f16_pjrt.wado
+    wado run-pjrt q4f16_pjrt.wado
 
 ## What the build reads
 
@@ -122,7 +122,8 @@ a test file to run it once `fetch.sh` has.
   it.
 - `generate.json` is the oracle for the model: the tokens onnxruntime picks
   greedily after each prompt, up to the first `<eos>` or `<end_of_turn>`, and
-  its time per token on the CPU and on WebGPU, which must pick the same tokens. `generate.mjs` writes it, running
+  its time per token on the CPU and on WebGPU, which must pick the same tokens.
+  `generate.mjs` writes it, running
   `build/model.onnx` with `onnxruntime-node` and feeding each step the attention
   cache, as `model.wado` does. `generate_test.wado` checks Loam's tokens
   against it:
