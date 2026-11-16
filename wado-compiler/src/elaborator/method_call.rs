@@ -659,9 +659,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // A newtype inherits a trait impl its base wrote, and the impl
                 // spells `Self` as that base. Name the link the impl sits on, so
                 // the signature re-types to the receiver the way an inherited
-                // inherent method's does, and the call is named as one on the
-                // link is: a block written at one instantiation keeps its
-                // arguments (issue #2644).
+                // inherent method's does, and the call is named as a call on the
+                // link: a block written at one instantiation keeps its arguments
+                // (issue #2644).
                 if let Some(trait_def) = trait_name.as_ref().and_then(FqTraitName::canonical)
                     && let Some(link) = self.tysys.impl_link(base_type_id, trait_def)
                     && link != base_type_id
