@@ -409,7 +409,7 @@ test {
 }
 ```
 
-Holding a resource is therefore holding every resource a handle of it narrows to. A function value that performs `R` is taken where a resource `R` extends is held: by a function type that holds one, and at a call in a body that holds one. A closure's signature does not mention a handle it captured, so this is what lets it narrow one, or use one narrowed before the capture:
+A function value that performs `R` is taken where a resource `R` extends is held: by a function type that holds one, and at a call in a body that holds one. Whoever holds that resource could narrow a handle of it to `R` anyway. A closure's signature does not mention a handle it captured, so this is what lets it narrow one, or use one narrowed before the capture:
 
 <!-- {"fixture":"spec_effects_narrowing_captured.wado"} -->
 
