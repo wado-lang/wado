@@ -23,18 +23,17 @@ pub struct FileSource {
 
 impl WeightSource for FileSource {
     fn read(&self, file: &String, start: i32, end: i32) -> Result<LinearArray<u8>, LoadError> with Preopens {
-        return fs::read_linear_range(fs::join(&self.dir, file), start as u64, end - start).map_err(
-            |e: FsError| LoadError { reason: `${e}` },
-        );
+        return fs::read_linear_range(fs::join(&self.dir, file), start as u64, end - start).map_err(failed);
     }
 
     fn len(&self, file: &String) -> Result<i64, LoadError> with Preopens {
-        let path = fs::join(&self.dir, file);
-        return match fs::metadata(&path) {
-            Ok(meta) => Result::Ok(meta.size as i64),
-            Err(e) => Result::Err(LoadError { reason: `${e}` }),
-        };
+        return fs::metadata(fs::join(&self.dir, file)).map(|meta| meta.size as i64).map_err(failed);
     }
+}
+
+/// An `FsError` names the path it failed on, as a source's error must.
+fn failed(e: FsError) -> LoadError {
+    return LoadError { reason: `${e}` };
 }
 
 /// Files the guest holds whole, by the name the model gives each.
