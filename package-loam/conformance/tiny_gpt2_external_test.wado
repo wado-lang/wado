@@ -50,11 +50,9 @@ test "and for seven" {
     );
 }
 
-test "a file shorter than the build found the weights in names the tensor it cuts off" {
+test "a data file shorter than the weights the graph places in it stops the load before any is read" {
     let data = #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data");
     let cut = data[0..<data.len() - 1].to_list() as ByteList;
     let e = Params::load(&mut Cpu {}, &one_file("model.onnx_data", cut)).unwrap_err();
-    let reason = `${e}`;
-    assert reason.contains(": model.onnx_data: bytes ");
-    assert reason.ends_with(` to ${data.len()} asked for, past the ${data.len() - 1} it holds`);
+    assert `${e}` == `model.onnx_data is ${data.len() - 1} bytes, and the graph places weights up to ${data.len()}`;
 }
