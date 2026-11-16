@@ -409,7 +409,7 @@ test {
 }
 ```
 
-A closure holds what a function would, so a handle it captured is one its signature does not mention. Narrowing such a handle to `R` still holds `R` in the closure's body. The closure then performs the resource that `R`'s `extends` chain starts from, so a function type takes it where that type holds any resource of the chain:
+Holding a resource is therefore holding every resource a handle of it narrows to. A function value that performs `R` is taken where a resource `R` extends is held: by a function type that holds one, and at a call in a body that holds one. A closure's signature does not mention a handle it captured, so this is what lets it narrow one, or use one narrowed before the capture:
 
 <!-- {"fixture":"spec_effects_narrowing_captured.wado"} -->
 
@@ -419,8 +419,8 @@ fn call(f: fn() -> String with Node) -> String with Node {
 }
 
 fn describe(n: Node) -> String {
-    return call(|| match n {                       // performs Node
-        input: HtmlInputElement => input.value(),  // holds HtmlInputElement
+    return call(|| match n {                       // performs HtmlInputElement,
+        input: HtmlInputElement => input.value(),  // which extends Node
         _ => "",
     });
 }

@@ -1400,7 +1400,7 @@ fn held_by(
         add_signature_resources(ann, func.id, &scan, &mut current);
     }
     current.extend(granted);
-    held_in_body(annotations, index, &scan, current, Body::Block(body)).0
+    held_in_body(annotations, index, &scan, current, Body::Block(body))
 }
 
 /// The `wasi:*` interfaces some function of `exports` holds by what it
@@ -1664,14 +1664,13 @@ fn add_signature_resources(
 
 /// Union into `held` the resources the body's type patterns narrow to. A
 /// narrowing hands out a held ancestor's handle, as an operation returning it would.
-/// Returns the targets no held resource is an ancestor of.
 fn add_narrowed_resources(
     walk: impl FnOnce(&mut TypePatternSites),
     annotations: &TypeAnnotations,
     scan: &ResourceScan<'_>,
     closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
     held: &mut IndexSet<EffectRef>,
-) -> Vec<DefId> {
+) {
     let mut sites = TypePatternSites::default();
     walk(&mut sites);
     let mut targets: Vec<DefId> = sites
@@ -1695,7 +1694,7 @@ fn add_narrowed_resources(
             !narrows_held
         });
         if targets.len() == pending {
-            return targets;
+            return;
         }
     }
 }
@@ -1747,23 +1746,22 @@ impl Body<'_> {
 /// What `body` holds, given `declared` from its signature: the waits on an
 /// async call it starts, what a held effect needs internally (a function
 /// holding `Stdout` may call operations that need `Stream`), and what its type
-/// patterns narrow to. Beside it, the narrowed-to resources `declared` holds
-/// no ancestor of: the handle narrowed came from outside the signature.
+/// patterns narrow to.
 fn held_in_body(
     annotations: Option<&TypeAnnotations>,
     index: &EffectIndex<'_>,
     scan: &ResourceScan<'_>,
     mut declared: IndexSet<EffectRef>,
     body: Body<'_>,
-) -> (IndexSet<EffectRef>, Vec<DefId>) {
+) -> IndexSet<EffectRef> {
     if starts_async_call(annotations, scan.tt, |v| body.walk(v)) {
         declared.extend(index.waiting.iter().cloned());
     }
     let mut held = expand_through_closure(&declared, index.closure);
-    let unheld_narrowings = annotations.map_or_else(Vec::new, |ann| {
-        add_narrowed_resources(|v| body.walk(v), ann, scan, index.closure, &mut held)
-    });
-    (held, unheld_narrowings)
+    if let Some(ann) = annotations {
+        add_narrowed_resources(|v| body.walk(v), ann, scan, index.closure, &mut held);
+    }
+    held
 }
 
 /// Whether the body `walk` visits starts an async call.
@@ -1901,6 +1899,8 @@ struct CalleeEffects {
     params: IndexMap<String, IndexSet<EffectRef>>,
     /// The callee's declared return type, which the call's type instantiates.
     returns: Option<TypeId>,
+    /// The callee is a function value, whose row `declared` is.
+    is_value: bool,
 }
 
 /// Every callee a call at `id` resolves to: a free function, each static
@@ -1926,6 +1926,7 @@ fn call_site_effects(
         resource: OperationDemands::default(),
         params: IndexMap::default(),
         returns: None,
+        is_value: false,
     };
     if let Expr::Ident(ident) = callee
         && let Some(def) = sem.referenced_symbol(ident.id)
@@ -1953,7 +1954,10 @@ fn call_site_effects(
             return Vec::new();
         }
         let performed: Vec<EffectRef> = rows.row(&rows_of.concat());
-        return vec![bare(INDIRECT_CALLEE.to_string(), performed)];
+        return vec![CalleeEffects {
+            is_value: true,
+            ..bare(INDIRECT_CALLEE.to_string(), performed)
+        }];
     }
     // Only a free function outside the bindings dispatches through the path: a
     // method names its receiver, and a host binding is already the import.
@@ -1979,6 +1983,7 @@ fn call_site_effects(
                 resource,
                 params: resolved.params,
                 returns: index.callee_return(&func_ref),
+                is_value: false,
             }
         })
         .collect()
@@ -2056,6 +2061,19 @@ struct SemEffectWalker<'a> {
 }
 
 impl EffectIndex<'_> {
+    /// Whether `held` holds a resource `effect` extends. A body holding one
+    /// narrows a handle of it to `effect`, so it takes a function value that
+    /// performs `effect`.
+    fn extends_held(&self, effect: &EffectRef, held: &IndexSet<EffectRef>) -> bool {
+        let EffectRef::Concrete(head) = effect else {
+            return false;
+        };
+        self.resources.contains(effect)
+            && resource_chain_effects(self.types, self.resolutions, head.def())
+                .skip(1)
+                .any(|ancestor| held.contains(&ancestor))
+    }
+
     fn kind_of(&self, effect: &EffectRef) -> EffectKind {
         if self.resources.contains(effect) {
             EffectKind::Resource
@@ -2974,24 +2992,13 @@ impl SemEffectWalker<'_> {
         for &closure_type in &closure_types {
             scan.collect(closure_type, &mut signature, &mut TypeSet::default());
         }
-        let (mut current, unheld_narrowings) = held_in_body(
+        let current = held_in_body(
             self.annotations,
             self.index,
             &scan,
             signature,
             Body::Expr(&closure.body),
         );
-        // A handle the closure captured is narrowed as an operation on it
-        // would return the narrower one: the closure performs the resource the
-        // chain starts from, which holding any resource of the chain admits,
-        // and holds the rest.
-        let mut narrowed_from = IndexSet::default();
-        for target in unheld_narrowings {
-            let chain: IndexSet<EffectRef> =
-                resource_chain_effects(scan.tt, scan.resolutions, target).collect();
-            narrowed_from.insert(chain.last().expect("a chain holds its resource").clone());
-            current.extend(expand_through_closure(&chain, self.index.closure));
-        }
         let mut scratch = Vec::new();
         let mut body = SemEffectWalker {
             sem: self.sem,
@@ -3012,7 +3019,6 @@ impl SemEffectWalker<'_> {
             .take()
             .expect("the walk collects")
             .into_iter()
-            .chain(narrowed_from)
             .collect();
         self.closures = std::mem::take(&mut body.closures);
         self.rows = std::mem::take(&mut body.rows);
@@ -3038,8 +3044,12 @@ impl SemEffectWalker<'_> {
             args,
             &self.rows,
         );
-        for site in sites {
+        for mut site in sites {
             self.solve_rows(site.returns, id, &site.params);
+            if site.is_value {
+                site.declared
+                    .retain(|effect| !self.index.extends_held(effect, &self.current));
+            }
             self.report_missing(&site.declared, &site.name, span);
             self.report_dispatched(&site.dispatched, &site.name, span);
             self.report_dispatched(&site.resource, &site.name, span);
@@ -3182,7 +3192,7 @@ impl Rows {
                     !effect.is_var(),
                     "a settled body's flows read only solved variables"
                 );
-                if admitted.contains(&effect) {
+                if admitted.contains(&effect) || index.extends_held(&effect, &admitted) {
                     continue;
                 }
                 out.push(EffectError {

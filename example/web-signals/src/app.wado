@@ -40,7 +40,8 @@ fn todo_row(todos: Signal<List<Todo>>, todo: Todo) -> Element with (Track, Dom) 
     return row;
 }
 
-/// Builds the list under `root`, and returns what takes it down again.
+/// Builds the list under `root`, and returns what stops its bindings. The
+/// nodes stay where they are, and so do the listeners, which nothing removes.
 pub fn mount(root: Element) -> fn mut() with Dom with Dom {
     return scope(|| {
         let todos: Signal<List<Todo>> = signal([]);
@@ -55,18 +56,15 @@ pub fn mount(root: Element) -> fn mut() with Dom with Dom {
             return left;
         });
 
-        let field = element("input");
-        field.set_id("title");
-        root.append_child(field);
+        let input: HtmlInputElement = element("input") else {
+            unreachable();
+        };
+        input.set_id("title");
+        root.append_child(input);
 
         let add = text("button", "Add");
         add.set_id("add");
         on(add, "click", |_: Event| {
-            // A closure holds a narrowed resource only where it narrows it
-            // itself, so the listener cannot capture the handle as an input.
-            let input: HtmlInputElement = field else {
-                unreachable();
-            };
             let title = input.value();
             if title.is_empty() {
                 return;

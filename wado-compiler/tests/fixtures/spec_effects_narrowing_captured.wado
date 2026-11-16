@@ -1,5 +1,5 @@
-// A closure narrowing a handle it captured holds what it narrowed to, and
-// performs the resource the `extends` chain starts from.
+// A function type holding a resource takes a function value that performs a
+// resource extending it.
 
 #[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
 resource Node {}
@@ -15,8 +15,8 @@ fn call(f: fn() -> String with Node) -> String with Node {
 }
 
 fn describe(n: Node) -> String {
-    return call(|| match n {                       // performs Node
-        input: HtmlInputElement => input.value(),  // holds HtmlInputElement
+    return call(|| match n {                       // performs HtmlInputElement,
+        input: HtmlInputElement => input.value(),  // which extends Node
         _ => "",
     });
 }

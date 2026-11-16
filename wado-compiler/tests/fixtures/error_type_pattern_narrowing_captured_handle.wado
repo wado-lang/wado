@@ -1,5 +1,5 @@
-// A closure that narrows a handle it captured performs the resource the
-// narrowing starts from, so a function type declaring nothing refuses it.
+// A closure that narrows a handle it captured performs what it narrowed to,
+// so a function type holding no resource of that chain refuses it.
 
 #[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
 resource Node {}
@@ -27,6 +27,6 @@ export fn run() with Node {
 
 __DATA__
 {
-    "compile_error": ":18:17: analysis error: this function value performs resource 'Node', which the function type it is expected to be does not declare",
+    "compile_error": ":18:17: analysis error: this function value performs resource 'HtmlInputElement', which the function type it is expected to be does not declare",
     "compile_error_codes": ["MISSING_EFFECT"]
 }
