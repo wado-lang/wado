@@ -9,11 +9,11 @@ use super::program::{ImplId, SolverType, TraitDeclId};
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Generality {
     /// Written for the type itself: `impl Tr for Point`, `impl Tag for
-    /// Box_<i32>`, `impl Tr for &Point`. Names the exact function the call
+    /// Box<i32>`, `impl Tr for &Point`. Names the exact function the call
     /// wants.
     Exact,
     /// Written for the type's head, or for a reference to a bounded parameter:
-    /// `impl<T> Tag for Box_<T>`, `impl<T: Bound> Tr for &T`.
+    /// `impl<T> Tag for Box<T>`, `impl<T: Bound> Tr for &T`.
     Head,
     /// A value blanket, `impl<T: Bound> Tr for T`: every type the bound holds
     /// of.
@@ -285,8 +285,8 @@ mod tests {
         );
     }
 
-    /// `spec-traits.md`'s "Specific Impls Win": `impl Tag for Box_<i32>` beside
-    /// `impl<T> Tag for Box_<T>` is the same rank one level finer.
+    /// `spec-traits.md`'s "Specific Impls Win": `impl Tag for Box<i32>` beside
+    /// `impl<T> Tag for Box<T>` is the same rank one level finer.
     #[test]
     fn rank2_prefers_one_instantiation_over_the_head_impl() {
         assert_eq!(

@@ -7,11 +7,11 @@ trait Container with () {
     fn get(&self) -> Option<Self::Item>;
 }
 
-struct Box_<T> {
+struct Box<T> {
     value: T,
 }
 
-impl<T> Container for Box_<T> {
+impl<T> Container for Box<T> {
     type Item = T;
 
     fn get(&self) -> Option<Self::Item> {
@@ -20,7 +20,7 @@ impl<T> Container for Box_<T> {
 }
 
 export fn run() with Stdout {
-    let box_: Box_<i32> = Box_ { value: 42 };
+    let box_: Box<i32> = Box { value: 42 };
     let result = box_.get();
 
     if let Some(v) = result {

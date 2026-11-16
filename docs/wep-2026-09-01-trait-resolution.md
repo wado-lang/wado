@@ -107,8 +107,8 @@ A call's candidates come from three places.
 
 First, the impls whose target reaches the receiver anywhere along its newtype
 chain: an impl written for the receiver's own type, for one instantiation of it
-(`impl Tag for Box_<i32>`), for some of its instantiations
-(`impl<T> Tag for Pair<T, i32>`), or for its head (`impl<T> Tag for Box_<T>`).
+(`impl Tag for Box<i32>`), for some of its instantiations
+(`impl<T> Tag for Pair<T, i32>`), or for its head (`impl<T> Tag for Box<T>`).
 
 A target reaches a receiver when every position it pins holds the receiver's
 argument there. A type parameter takes one type wherever the target writes it,
@@ -244,11 +244,11 @@ answers yes.
 Within one level, the impl that names the most of the receiver answers. A target
 is one of three, least general first:
 
-| Generality | Target                       | Example                                                                               |
-| ---------- | ---------------------------- | ------------------------------------------------------------------------------------- |
-| exact      | mentions no type parameter   | `impl Tr for Point`, `impl Tag for Box_<i32>`                                         |
-| head       | mentions one, but is not one | `impl<T> Tag for Box_<T>`, `impl<T> Tag for Pair<T, i32>`, `impl<T: Bound> Tr for &T` |
-| any        | is a bare type parameter     | `impl<T: Bound> Tr for T`                                                             |
+| Generality | Target                       | Example                                                                              |
+| ---------- | ---------------------------- | ------------------------------------------------------------------------------------ |
+| exact      | mentions no type parameter   | `impl Tr for Point`, `impl Tag for Box<i32>`                                         |
+| head       | mentions one, but is not one | `impl<T> Tag for Box<T>`, `impl<T> Tag for Pair<T, i32>`, `impl<T: Bound> Tr for &T` |
+| any        | is a bare type parameter     | `impl<T: Bound> Tr for T`                                                            |
 
 An impl written for the receiver defines the exact function the call names, so a
 foreign `impl Tr for Point` beats a blanket written here. One written for the
@@ -256,7 +256,7 @@ receiver's head still names the receiver's own type constructor, where a value
 blanket names only a condition the receiver happens to meet.
 
 Both steps carry weight. Exact over head is `spec-traits.md`'s "Specific Impls Win":
-`impl Tag for Box_<i32>` beside `impl<T> Tag for Box_<T>` answers for `Box_<i32>`
+`impl Tag for Box<i32>` beside `impl<T> Tag for Box<T>` answers for `Box<i32>`
 and the head impl answers for the rest (`impl_trait_exact_over_partial_head.wado`).
 Head over any is what the prelude turns
 on: `RangeExclusive<T>` implements `Iterator`, so

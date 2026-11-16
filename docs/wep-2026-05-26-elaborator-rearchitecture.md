@@ -549,7 +549,7 @@ graph never sees, but the impls it calls are reached through the bound like any
 other, from a `T: Serialize` entry point down through `Serializer::begin_seq`.
 
 A generic impl block standing beside one written for a single instantiation of
-the same head (`impl<T> Tag for Box_<T>` and `impl Tag for Box_<i32>`):
+the same head (`impl<T> Tag for Box<T>` and `impl Tag for Box<i32>`):
 coherence Rule 1 gives the specific block, and monomorphization settles it by
 mangled-name collision. The source spells only the call through the template,
 so the template's method gets an edge to the specific block's same-named
