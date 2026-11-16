@@ -36,15 +36,15 @@ struct MessagesResponse {
 
 /// The prompt size past which some models price a whole request higher, in
 /// tokens.
-pub global LONG_PROMPT: i32 = 100_000;
+pub global LONG_PROMPT: i64 = 100_000;
 
 /// The tokens one request took, as the API reports them, or the sum over
-/// several.
+/// several. A sum over an evaluation's runs passes `i32::MAX` in cache reads.
 pub struct Usage {
-    pub input_tokens: i32 = 0,
-    pub output_tokens: i32 = 0,
-    pub cache_creation_input_tokens: i32 = 0,
-    pub cache_read_input_tokens: i32 = 0,
+    pub input_tokens: i64 = 0,
+    pub output_tokens: i64 = 0,
+    pub cache_creation_input_tokens: i64 = 0,
+    pub cache_read_input_tokens: i64 = 0,
     /// The part of a sum that requests with a prompt past `LONG_PROMPT` took.
     /// A sum alone cannot be priced without it: the price is per request.
     pub long_prompts: Option<Usage> = null,
@@ -84,6 +84,12 @@ test "a sum keeps apart what its long prompts took" {
     both.add(&sum);
     both.add(&sum);
     assert both.input_tokens == 31 && both.long_prompts.unwrap().output_tokens == 4;
+
+    let mut eval = Usage {};
+    for let _ of 0..<3 {
+        eval.add(&Usage { cache_read_input_tokens: i32::MAX as i64 });
+    }
+    assert eval.cache_read_input_tokens == 3 * i32::MAX as i64;
 }
 
 /// A tool the model may call, as the API declares one.
