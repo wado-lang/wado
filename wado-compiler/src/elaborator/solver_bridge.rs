@@ -2474,7 +2474,43 @@ impl SolverBridge {
             None,
             &[],
         )?;
-        answering_link(&self.program, &receiver, &found.in_scope)
+        answering_link(&self.program, &receiver, &found.in_scope).map(|(link, _)| link)
+    }
+
+    /// The impl blocks answering `method_name` on `type_id` at the nearest
+    /// link any does, with that link: those the call site can name, else
+    /// those an import would enable. A block answers whether its declaration
+    /// takes a receiver or not, so the caller reads which kind it names.
+    pub(super) fn nearest_impls(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        module: &ModuleSource,
+        type_id: TypeId,
+        through_ref: Option<bool>,
+        method_name: &str,
+    ) -> Option<(u32, Vec<DefId>)> {
+        let (found, receiver) = self.call_candidates(
+            tysys,
+            ctx,
+            module,
+            type_id,
+            through_ref,
+            method_name,
+            None,
+            &[],
+        )?;
+        let set = if found.in_scope.is_empty() {
+            &found.out_of_scope
+        } else {
+            &found.in_scope
+        };
+        let (link, at) = answering_link(&self.program, &receiver, set)?;
+        let blocks = at
+            .into_iter()
+            .filter_map(|i| self.impl_def_of(set[i].impl_))
+            .collect();
+        Some((link, blocks))
     }
 
     /// The candidates [`Self::select`] ranks, with the receiver they were

@@ -1,0 +1,34 @@
+// `P::k(&p)` names what `P` answers `k` with, whichever kind a declaration is:
+// one trait's static and another trait's method at one link are two traits,
+// which only the level could separate (issue #2650).
+trait Alpha with () {
+    fn k() -> i32;
+}
+
+trait Beta with () {
+    fn k(&self) -> i32;
+}
+
+struct P {
+    v: i32,
+}
+
+impl Alpha for P {
+    fn k() -> i32 {
+        return 1;
+    }
+}
+
+impl Beta for P {
+    fn k(&self) -> i32 {
+        return self.v;
+    }
+}
+
+export fn run() {
+    let p = P { v: 2 };
+    assert P::k(&p) == 2;
+}
+
+__DATA__
+{"compile_error": "ambiguous method 'k'"}

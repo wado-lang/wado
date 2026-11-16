@@ -2448,6 +2448,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Some(Ordered::AmbiguousTraits(_)) => {
                 self.report_cross_trait_ambiguity(&found_traits, method_name, span);
+                // The call continues on one of them only to recover, so it
+                // continues on one taking the receiver it was written with.
+                let takes_receiver = |m: &TraitMethodMatch| m.method_info.self_kind != ast::SelfKind::None;
+                if found_traits.iter().any(takes_receiver) {
+                    found_traits.retain(takes_receiver);
+                }
             }
             Some(
                 Ordered::One(_)

@@ -187,22 +187,29 @@ constructor (`impl From<Array<T>> for List<T>`) leaves a concrete head to name
 and is kept, and a reference to a slot (`From<&T>`) is the slot, peeled before
 the question is asked.
 
-### The spelling names both kinds, through two resolutions
+### The spelling names both kinds, by what the type answers
 
 `Type::method(recv, …)` reaches an instance method as well as a static, passing
-the receiver first. Statics answer first, so a receiver-less declaration of the
-name still wins.
+the receiver first. The spelled type answers the name once, with declarations
+of both kinds, in the order a method call ranks them: the nearest link of its
+chain, and there the type's own declaration before a trait's. The kind of what
+answers decides the rest. A receiver-taking declaration makes the spelling a
+method call on its first argument, which must be of the spelled type or a
+resource extending it. A receiver-less one is the static this resolution
+selects.
 
-Where none does, the spelling is a method call on its first argument, and that
-argument must be of the spelled type. It once ran through this resolution
-instead, which kept a ladder of its own for instance methods: it collected no
-blanket's instance method, ranked a newtype's trait impl above its base's
-inherent method by link where dot syntax did not, and reported two traits where
-dot syntax ranked them (issue #2650). One resolution for both spellings removes
-the class.
+The call once ran through this resolution alone, which kept a ladder of its own
+for instance methods: it collected no blanket's instance method, ranked a
+newtype's trait impl above its base's inherent method by link where dot syntax
+did not, and reported two traits where dot syntax ranked them (issue #2650).
+Routing that ladder's calls to the method call by name alone came next: a name
+some trait declared with a receiver went there, so an unrelated trait decided
+the call, and a name some trait declared without one kept a blanket's instance
+method out of reach. Asking the type itself removes both classes.
 
-Shadowing holds within a kind, so an inherent method leaves a trait's associated
-function of the same name alone.
+Two traits at one link are ambiguous whichever kind each declares, as they are
+for a method call. One answering with a static and the other with a method is
+reported once, and the call recovers on the method.
 
 ### The owning link is decided before the arguments
 
@@ -406,12 +413,10 @@ picked rather than to pick it.
 
 ## Known gaps
 
-- Which of the two resolutions a `Type::method(recv, …)` belongs to is decided
-  before the receiver's type is known. A receiver-taking method only a blanket
-  supplies is recognized by some trait declaring it, and a bare spelling does
-  not say whether a blanket's receiver-less declaration applies. So where any
-  trait declares the name receiver-less, `Type::method(recv)` reaches no
-  blanket's instance method and is reported as an unknown function.
+- A generic type spelled without its arguments (`Pair::m(&p)`) is no type the
+  order can ask, so there only the trait impls written for a link of its chain
+  answer. A blanket of either kind is out of reach, and a name only a blanket
+  supplies is reported as an unknown function.
 
 - A static call through an associated type is not one of the spellings the
   walk admits. With `T: Has` and `Has` declaring `type Out: Make`,

@@ -742,8 +742,9 @@ unbounded value blanket. The orphan rule still runs over the AST:
 
 ### The call forms do not share one resolution yet
 
-`Type::m(recv, args)` with a receiver-taking `m` is a method call, so it shares
-the order. A receiver-less `Type::m(args)` walks the newtype chain link by link
+`Type::m(…)` asks the order which kind the type answers `m` with, and with a
+receiver-taking `m` is a method call, so it shares the order. A receiver-less
+`Type::m(args)` then walks the newtype chain link by link
 and ranks within a link by its own rules, asking the order only among one
 trait's impls. Operators and indexing filter by operand type and report
 unique-or-error. A bound in a generic body takes the first bound declaring the

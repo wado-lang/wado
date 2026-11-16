@@ -58,19 +58,22 @@ pub fn candidates(
     answered
 }
 
-/// The link of `receiver`'s chain that `candidates` answer at: the nearest any
-/// of them sits on, which is where rank 1 stops. `None` where there are none.
+/// The link of `receiver`'s chain that `candidates` answer at, the nearest any
+/// of them sits on, which is where rank 1 stops, and the indices of those
+/// sitting there. `None` where there are none.
 #[must_use]
 pub fn answering_link(
     program: &Program,
     receiver: &SolverType,
     candidates: &[Candidate],
-) -> Option<u32> {
+) -> Option<(u32, Vec<usize>)> {
     let levels = linked_chain(program, receiver);
-    candidates
-        .iter()
-        .map(|c| levels[c.depth as usize].1)
-        .min()
+    let link_of = |c: &Candidate| levels[c.depth as usize].1;
+    let link = candidates.iter().map(link_of).min()?;
+    let at = (0..candidates.len())
+        .filter(|&i| link_of(&candidates[i]) == link)
+        .collect();
+    Some((link, at))
 }
 
 /// The impls of `trait_` that could answer a bound on `ty` writing `args`, for

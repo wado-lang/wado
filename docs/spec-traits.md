@@ -383,12 +383,13 @@ A qualified call selects the impl the method form would:
 `IntoIterator::into_iter(&list)` takes `impl IntoIterator for &List<T>`, as
 `(&list).into_iter()` does.
 
-`Type::method(recv, args…)`, where no receiver-less declaration answers the
-name, selects what `recv.method(args…)` selects, and `recv` must be of that
-type. A trait impl's method is reached this way as an inherent one is, a
-blanket's included. A receiver-less declaration of the name answers first, so
-`Type::method(x)` is a static's call before it is a receiver's. A trait's
-method that the spelling does not reach is reached as `Trait::method(recv, …)`.
+`Type::method(…)` names what the type answers `method` with, whichever kind it
+is, in the order above: the nearest link of the type's chain, and there the
+type's own declaration before a trait's. Two traits answering at one link are
+ambiguous, whether each declares a static or a method. Where a method answers,
+`Type::method(recv, args…)` selects what `recv.method(args…)` selects, and
+`recv` must be of that type or a resource extending it. A trait's method that
+the spelling does not reach is reached as `Trait::method(recv, …)`.
 
 An associated function with no `self` has no receiver argument to bind `Self`
 from, so the trait-qualified form cannot name it. A reflection trait is the

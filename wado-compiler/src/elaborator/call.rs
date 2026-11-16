@@ -1769,7 +1769,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && callee_kind.case_owner().is_none()
             && let Some(receiver) = call_receiver.clone().or_else(namespaced)
             && let Some((prefix, method_name)) = effective_name.rsplit_once("::")
-            && self.names_instance_method(&receiver, method_name, !call.args.is_empty())
+            && self.names_instance_method(&receiver, method_name)
         {
             if call_receiver.is_some() {
                 self.record_receiver_reference(ident, prefix);
