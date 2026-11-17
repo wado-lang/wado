@@ -81,7 +81,7 @@ wado run-webgpu --dir ../example/gemma3-270m gemma3_270m/profile.wado q4
 
 Wado 2026-11-17 (`-O2`), wasmtime 50.0.1, wgpu-core 29, onnxruntime 1.31.1 on
 CUDA 13.2.2 (cuBLAS 13.4.1.3), onnxruntime-node 1.31.1 on Node 26.13.0,
-llama.cpp b11846, gcc 15.2.0 (`-O2`), AMD Ryzen 7 5700X (8 cores, 16 threads),
+llama.cpp b12464, gcc 15.2.0 (`-O2`), AMD Ryzen 7 5700X (8 cores, 16 threads),
 NVIDIA GeForce RTX 4060 Ti (driver 595.99.02, Vulkan), Linux x86_64. `wado`
 and `wado-run-webgpu` are release builds, as the tasks build them. Each figure
 is the best of three runs.
@@ -100,10 +100,10 @@ writer. I'm a writer. I'm a writer".
 
 | Implementation           |      Throughput |     ms/iter | vs best |
 | ------------------------ | --------------: | ----------: | ------- |
-| onnxruntime CUDA         | 380.56 tokens/s |   84.087 ms | 1.00x   |
-| **Loam** `WebGpuBackend` | 311.91 tokens/s |  102.592 ms | 1.22x   |
-| onnxruntime WebGPU       |  51.60 tokens/s |  620.107 ms | 7.37x   |
-| **Loam** `Cpu`           |   7.58 tokens/s | 4219.954 ms | 50.19x  |
+| onnxruntime CUDA         | 380.94 tokens/s |   84.003 ms | 1.00x   |
+| **Loam** `WebGpuBackend` | 311.19 tokens/s |  102.832 ms | 1.22x   |
+| onnxruntime WebGPU       |  52.07 tokens/s |  614.575 ms | 7.32x   |
+| **Loam** `Cpu`           |   7.55 tokens/s | 4237.188 ms | 50.44x  |
 
 ## Gemma 3 (270M)
 
@@ -123,27 +123,31 @@ Google ships no F16 GGUF and ggml-org only Q8_0, so it is unsloth's conversion.
 The `WebGpuBackend` arm reads a token back at each step. Its `decode` arm picks
 the first token on the host and the rest in one program, with one read back.
 
-Every arm generated "[Your Name] and I am a [Your Profession/Area of Expertise].
-I am passionate about [Mention 1-2 key areas of your passion].", the tokens the
-example's `generate.json` records.
+Every arm but llama.cpp generated "[Your Name] and I am a [Your
+Profession/Area of Expertise]. I am passionate about [Mention 1-2 key areas of
+your passion].", the tokens the example's `generate.json` records. llama.cpp
+picks other tokens from the 19th on.
 
 | Implementation                  |      Throughput |      ms/iter | vs best |
 | ------------------------------- | --------------: | -----------: | ------- |
-| llama.cpp Vulkan                | 286.11 tokens/s |   111.844 ms | 1.00x   |
-| **Loam** `WebGpuBackend` decode | 276.19 tokens/s |   115.862 ms | 1.04x   |
-| **Loam** `WebGpuBackend`        | 222.36 tokens/s |   143.913 ms | 1.29x   |
-| onnxruntime CUDA                | 161.72 tokens/s |   197.877 ms | 1.77x   |
-| onnxruntime WebGPU              | 106.65 tokens/s |   300.059 ms | 2.68x   |
-| **Loam** `Cpu`                  |   2.95 tokens/s | 10839.958 ms | 96.92x  |
+| **Loam** `WebGpuBackend` decode | 295.50 tokens/s |   108.291 ms | 1.00x   |
+| llama.cpp Vulkan                | 264.95 tokens/s |   120.778 ms | 1.12x   |
+| **Loam** `WebGpuBackend`        | 259.84 tokens/s |   123.151 ms | 1.14x   |
+| onnxruntime CUDA                | 155.15 tokens/s |   206.249 ms | 1.90x   |
+| onnxruntime WebGPU              | 107.12 tokens/s |   298.743 ms | 2.76x   |
+| **Loam** `Cpu`                  |   3.04 tokens/s | 10526.001 ms | 97.20x  |
 
 ### The `q4` and `q4f16` exports
 
 `mise run gemma3-270m-quantized` runs the same prompt on the `q4` and `q4f16`
-exports, whose matrices hold 4-bit weights, on WebGPU alone:
+exports, whose matrices hold 4-bit weights, on WebGPU alone. llama.cpp runs
+GGUF quantized by its own `Q4_0` and `Q4_1` schemes, which hold other weights
+than the exports, so its rows are for reference:
 
 | Arm                         | Program                                                |
 | --------------------------- | ------------------------------------------------------ |
 | onnxruntime WebGPU          | `onnxruntime_webgpu.mjs`, `decoderQ4` / `decoderQ4f16` |
+| llama.cpp Vulkan            | `gemma3_270m/llama_cpp.cpp`, `Q4_0` / `Q4_1`           |
 | Loam `WebGpuBackend` decode | `gemma3_270m/q4_webgpu.wado`, `q4f16_webgpu.wado`      |
 
 Loam picks the tokens `generate_q4.json` and `generate_q4f16.json` record.
@@ -152,7 +156,9 @@ both exports.
 
 | Implementation                          |      Throughput |    ms/iter | vs best |
 | --------------------------------------- | --------------: | ---------: | ------- |
-| **Loam** `WebGpuBackend` decode `q4`    | 398.50 tokens/s |  80.301 ms | 1.00x   |
-| **Loam** `WebGpuBackend` decode `q4f16` | 310.41 tokens/s | 103.088 ms | 1.28x   |
-| onnxruntime WebGPU `q4`                 | 172.83 tokens/s | 185.152 ms | 2.31x   |
-| onnxruntime WebGPU `q4f16`              | 138.81 tokens/s | 230.538 ms | 2.87x   |
+| **Loam** `WebGpuBackend` decode `q4`    | 487.80 tokens/s |  65.600 ms | 1.00x   |
+| llama.cpp Vulkan `Q4_0`                 | 363.49 tokens/s |  88.035 ms | 1.34x   |
+| llama.cpp Vulkan `Q4_1`                 | 360.62 tokens/s |  88.735 ms | 1.35x   |
+| **Loam** `WebGpuBackend` decode `q4f16` | 338.58 tokens/s |  94.511 ms | 1.44x   |
+| onnxruntime WebGPU `q4`                 | 174.58 tokens/s | 183.299 ms | 2.79x   |
+| onnxruntime WebGPU `q4f16`              | 139.89 tokens/s | 228.754 ms | 3.49x   |
