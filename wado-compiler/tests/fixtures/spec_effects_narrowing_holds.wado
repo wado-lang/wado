@@ -1,4 +1,5 @@
-// A type pattern narrowing a held handle to resource `R` holds `R` from then on.
+// Holding a resource holds every resource that extends it: a narrowing hands
+// out nothing its holder could not reach.
 
 #[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
 resource Node {}
@@ -11,7 +12,7 @@ resource HtmlInputElement extends Node {
 
 fn describe(n: Node) -> String with Node {
     return match n {
-        input: HtmlInputElement => input.value(), // holds HtmlInputElement
+        input: HtmlInputElement => input.value(), // Node holds HtmlInputElement
         _ => "",
     };
 }

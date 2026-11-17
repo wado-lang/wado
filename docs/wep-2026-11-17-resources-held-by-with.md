@@ -56,3 +56,11 @@ Three bodies hold an effect they do not name:
   `undeclared_effects` warning.
 
 `#[ambient(_)]` admits every effect, as `with _` stands for every row.
+
+A resource implies every resource that extends it. A body used to hold a
+narrowed resource only after a type pattern narrowed a held handle to it. A
+closure holds nothing it captured, so a DOM event listener, typed
+`fn mut(Event) with Dom`, could not call `value()` on an input element it
+captured. The holder of an ancestor can narrow to any descendant, so the wider
+grant adds no reach, and the narrowing rule is gone. In exchange, `with Element`
+no longer says which kinds of element a function touches.

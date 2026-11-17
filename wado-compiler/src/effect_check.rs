@@ -1584,7 +1584,8 @@ fn walk_body_effects(
 
 /// Build the effect / resource propagation closure from `Semantics`: for each
 /// effect or resource declaration, the resources its operations' parameter and
-/// return types reference, transitively closed. Reads the resolved operation
+/// return types reference, and for a resource those that extend it, transitively
+/// closed. Reads the resolved operation
 /// signatures from the `effect_ops` facts; `members` lets resource detection
 /// descend into an operation type's own members.
 fn build_propagation_closure_sem(
@@ -1610,6 +1611,17 @@ fn build_propagation_closure_sem(
                 Item::Resource(decl) => (decl.id, true),
                 _ => continue,
             };
+            let def = resolutions.defs().def_at(decl_id);
+            let key = resolutions
+                .effect_decl(def)
+                .expect("an interface or resource is an effect");
+            if is_resource {
+                // A holder of an ancestor narrows a handle to this resource at
+                // will, so the ancestor implies it.
+                for ancestor in resource_chain_effects(scan.tt, resolutions, def).skip(1) {
+                    direct.entry(ancestor).or_default().insert(key.clone());
+                }
+            }
             let Some(ops) = annotations.effect_ops.get(&decl_id) else {
                 continue;
             };
@@ -1620,9 +1632,6 @@ fn build_propagation_closure_sem(
                 }
                 scan.collect(op.return_type, &mut refs, &mut TypeSet::default());
             }
-            let key = resolutions
-                .effect_decl(resolutions.defs().def_at(decl_id))
-                .expect("an interface or resource is an effect");
             if is_resource {
                 // Holding `with R` already implies `R` — drop the self-reference.
                 refs.shift_remove(&key);
@@ -1693,43 +1702,6 @@ fn expand_through_closure(
     out
 }
 
-/// Union into `held` the resources the body's type patterns narrow to. A
-/// narrowing hands out a held ancestor's handle, as an operation returning it would.
-fn add_narrowed_resources(
-    walk: impl FnOnce(&mut TypePatternSites),
-    annotations: &TypeAnnotations,
-    scan: &ResourceScan<'_>,
-    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
-    held: &mut IndexSet<EffectRef>,
-) {
-    let mut sites = TypePatternSites::default();
-    walk(&mut sites);
-    let mut targets: Vec<DefId> = sites
-        .0
-        .into_iter()
-        .flat_map(|id| annotations.all(|facts| &facts.pattern_ascriptions, id))
-        .filter_map(|&target| scan.tt.resource_def_of(target))
-        .collect();
-    let chain = |target| resource_chain_effects(scan.tt, scan.resolutions, target);
-    // A grant expands through the closure, which may hold another target's ancestor.
-    loop {
-        let pending = targets.len();
-        targets.retain(|&target| {
-            let narrows_held = chain(target)
-                .skip(1)
-                .any(|ancestor| held.contains(&ancestor));
-            if narrows_held {
-                let granted = chain(target).collect();
-                held.extend(expand_through_closure(&granted, closure));
-            }
-            !narrows_held
-        });
-        if targets.len() == pending {
-            return;
-        }
-    }
-}
-
 /// Finds whether a body starts an async call, so it may wait on the call there.
 /// A closure is a body of its own, so the search stops at one.
 struct StartsAsyncCall<'a> {
@@ -1776,8 +1748,7 @@ impl Body<'_> {
 
 /// What `body` holds, given `declared` from its signature: the waits on an
 /// async call it starts, what a held effect needs internally (a function
-/// holding `Stdout` may call operations that need `Stream`), and what its type
-/// patterns narrow to.
+/// holding `Stdout` may call operations that need `Stream`).
 fn held_in_body(
     annotations: Option<&TypeAnnotations>,
     index: &EffectIndex<'_>,
@@ -1788,11 +1759,7 @@ fn held_in_body(
     if starts_async_call(annotations, scan.tt, |v| body.walk(v)) {
         declared.extend(index.waiting.iter().cloned());
     }
-    let mut held = expand_through_closure(&declared, index.closure);
-    if let Some(ann) = annotations {
-        add_narrowed_resources(|v| body.walk(v), ann, scan, index.closure, &mut held);
-    }
-    held
+    expand_through_closure(&declared, index.closure)
 }
 
 /// Whether the body `walk` visits starts an async call.
@@ -1811,36 +1778,6 @@ fn starts_async_call(
     };
     walk(&mut starts);
     starts.found
-}
-
-/// The ids a body's type patterns are recorded under: each `p: T`, and each
-/// `let … else` whose annotation is one. A closure is a body of its own, so the
-/// search stops at one.
-#[derive(Default)]
-struct TypePatternSites(Vec<AstId>);
-
-impl AstVisitor<'_> for TypePatternSites {
-    fn visit_expr(&mut self, expr: &Expr) {
-        if !matches!(expr, Expr::Closure(_)) {
-            ast::walk_expr(self, expr);
-        }
-    }
-
-    fn visit_stmt(&mut self, stmt: &Stmt) {
-        if let Stmt::Let(let_stmt) = stmt
-            && let_stmt.else_block.is_some()
-        {
-            self.0.push(let_stmt.id);
-        }
-        ast::walk_stmt(self, stmt);
-    }
-
-    fn visit_pattern(&mut self, pat: &Pattern) {
-        if let Pattern::Typed { id, .. } = pat {
-            self.0.push(*id);
-        }
-        ast::walk_pattern(self, pat);
-    }
 }
 
 /// The effects an `#[ambient(E, F)]` on `owner`, a function or a global,

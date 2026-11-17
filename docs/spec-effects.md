@@ -350,6 +350,26 @@ with Stdout
 
 So `println` needs only `with Stdout`, though its body creates a stream and drops a future. An effect whose signatures mention no resource implies nothing: `with Environment` holds `Environment` alone.
 
+A resource also implies every resource that [extends](./spec-components.md#resource-inheritance) it. Its holder can [narrow](./spec-patterns.md#type-patterns) a handle to any of them, so the grant adds nothing it could not reach:
+
+<!-- {"fixture":"spec_effects_narrowing_holds.wado"} -->
+
+```wado
+fn describe(n: Node) -> String with Node {
+    return match n {
+        input: HtmlInputElement => input.value(), // Node holds HtmlInputElement
+        _ => "",
+    };
+}
+
+test {
+    with HtmlInputElement => &Typed {} do {
+        assert describe(an_input()) == "typed";
+        assert describe(a_node()) == "";
+    }
+}
+```
+
 Only resources are implied. They are found inside references, containers, tuples, newtypes, struct fields and variant payloads, but a struct, enum, variant or primitive is never granted in its own right. Each effect implies its own resources and no others, so a function without `with` cannot call `Stream::<u8>::new()` just because some other effect would have implied `Stream`.
 
 ### Resources a Function Holds
@@ -407,26 +427,6 @@ Three bodies hold an effect they do not name:
 - A [handler](#handlers) method of `E`. It builds what `E`'s operations hand back, so it holds what `E` implies. `E` itself it declares where it delegates ([Where a Handler Method Runs](#where-a-handler-method-runs)).
 - A drop. A resource's drop is ambient ([Resources as Effects](#resources-as-effects)), and `Drop::drop` is declared `#[ambient(_)]` ([Ambient Functions](#ambient-functions)), so an impl's body performs what its release needs.
 
-A [type pattern](./spec-patterns.md#type-patterns) that narrows a held handle to resource `R` holds `R` from then on, as an operation returning `R` would:
-
-<!-- {"fixture":"spec_effects_narrowing_holds.wado"} -->
-
-```wado
-fn describe(n: Node) -> String with Node {
-    return match n {
-        input: HtmlInputElement => input.value(), // holds HtmlInputElement
-        _ => "",
-    };
-}
-
-test {
-    with HtmlInputElement => &Typed {} do {
-        assert describe(an_input()) == "typed";
-        assert describe(a_node()) == "";
-    }
-}
-```
-
 A closure holds nothing it was handed, as a function does not. A handle it captures is no grant, so its type's row lists each operation it calls on one, narrowed or not:
 
 <!-- {"fixture":"spec_effects_narrowing_captured.wado"} -->
@@ -451,7 +451,7 @@ test {
 }
 ```
 
-Apart from a narrowing, nothing a body does adds to what its function holds.
+Nothing a body does adds to what its function holds.
 
 ### Ambient Functions
 
