@@ -25,10 +25,11 @@ delete globalThis.Float16Array;
  * token from: little-endian f32s, a prompt after another. A prompt's tokens
  * stop at the first of `ends`, the tokens that end a reply: the picks after
  * one are noise two providers part on.
- * A decoder is `{ model, layers, emptyPast, half, feeds }`: `emptyPast` is the
- * shape of a layer's cache before the first token, `half` says the cache and
- * the logits are float16, and `feeds(seen)` any input beyond the ids, the mask
- * and the cache.
+ * A decoder is `{ model, layers, emptyPast, vocab, half, feeds }`: `emptyPast`
+ * is the shape of a layer's cache before the first token, `vocab` the logits'
+ * last extent, `half` says the cache and the logits are float16, and
+ * `feeds(seen, ort)` any input beyond the ids, the mask and the cache, built
+ * with `ort`, onnxruntime-node, so that reading a decoder loads no runtime.
  */
 export async function writeGenerated({ dir, prompts, ends = [], decoder, name = 'generate.json', logits }) {
   const recorded = JSON.parse(readFileSync(join(dir, 'tokenize.json'), 'utf8')).tokenize;
@@ -87,8 +88,7 @@ export async function opened({ model, layers }, provider) {
  * runner-up, the logits the first is picked from, and the milliseconds the
  * steps after the first took.
  */
-export async function continued(session, { layers, emptyPast, half = false, feeds = () => ({}) }, ids, ends = []) {
-  const empty = half ? new ort.Tensor('float16', new Uint16Array(0), emptyPast) : new ort.Tensor('float32', new Float32Array(0), emptyPast);
+export async function continued(session, decoder, ids, ends = []) {
   const generated = [];
   let lead = Infinity;
   let caches = {};
@@ -97,18 +97,7 @@ export async function continued(session, { layers, emptyPast, half = false, feed
   let started;
   let first;
   for (let s = 0; s < STEPS && !ends.includes(generated.at(-1)); s++) {
-    const total = seen + fresh.length;
-    const inputs = {
-      input_ids: new ort.Tensor('int64', BigInt64Array.from(fresh, BigInt), [1, fresh.length]),
-      attention_mask: new ort.Tensor('int64', new BigInt64Array(total).fill(1n), [1, total]),
-      ...feeds(seen),
-    };
-    for (let l = 0; l < layers; l++) {
-      for (const kind of ['key', 'value']) {
-        inputs[`past_key_values.${l}.${kind}`] = caches[`present.${l}.${kind}`] ?? empty;
-      }
-    }
-    const out = await session.run(inputs);
+    const out = await session.run(fed(decoder, fresh, seen, caches));
     const vocab = out.logits.dims[2];
     const last = values(out.logits.data).subarray((fresh.length - 1) * vocab, fresh.length * vocab);
     let best = 0;
@@ -119,7 +108,7 @@ export async function continued(session, { layers, emptyPast, half = false, feed
       first = Float32Array.from(last);
       started = performance.now();
     }
-    seen = total;
+    seen += fresh.length;
     released(caches);
     caches = out;
     generated.push(best);
@@ -130,13 +119,33 @@ export async function continued(session, { layers, emptyPast, half = false, feed
   return { generated, lead, first, ms_after_first: performance.now() - started };
 }
 
+/**
+ * The inputs of a step of `decoder` that feeds `fresh` after `seen` tokens,
+ * whose cache `caches` holds as the step before returned it.
+ */
+export function fed({ layers, emptyPast, half = false, feeds = () => ({}) }, fresh, seen, caches) {
+  const total = seen + fresh.length;
+  const inputs = {
+    input_ids: new ort.Tensor('int64', BigInt64Array.from(fresh, BigInt), [1, fresh.length]),
+    attention_mask: new ort.Tensor('int64', new BigInt64Array(total).fill(1n), [1, total]),
+    ...feeds(seen, ort),
+  };
+  for (let l = 0; l < layers; l++) {
+    for (const kind of ['key', 'value']) {
+      inputs[`past_key_values.${l}.${kind}`] = caches[`present.${l}.${kind}`] ??
+        (half ? new ort.Tensor('float16', new Uint16Array(0), emptyPast) : new ort.Tensor('float32', new Float32Array(0), emptyPast));
+    }
+  }
+  return inputs;
+}
+
 /** A tensor's data as numbers, which float16's bits are not. */
 function values(data) {
   return data instanceof Uint16Array ? new Float16Array(data.buffer, data.byteOffset, data.length) : data;
 }
 
 /** Frees the caches a step returned on the device, which only `dispose` does. */
-function released(caches) {
+export function released(caches) {
   for (const t of Object.values(caches)) {
     if (t.location === 'gpu-buffer') t.dispose();
   }

@@ -17,19 +17,33 @@
 
 #include "harness.hpp"
 
-static void decode(llama_context* ctx, std::vector<llama_token>& tokens) {
-    if (llama_decode(ctx, llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()))) != 0) {
-        std::fprintf(stderr, "llama_decode failed\n");
+// `tokens` at the positions from `past` on, with logits for the last alone.
+static void decode(llama_context* ctx, llama_batch_ext* batch, const std::vector<llama_token>& tokens, llama_pos past) {
+    llama_batch_ext_clear(batch);
+    for (std::size_t i = 0; i < tokens.size(); i++) {
+        const int32_t at = llama_batch_ext_add_token(batch, 0, tokens[i]);
+        const llama_pos pos = past + static_cast<llama_pos>(i);
+        if (at < 0 || !llama_batch_ext_set_pos(batch, at, &pos) ||
+            !llama_batch_ext_set_output_logits(batch, at, i + 1 == tokens.size())) {
+            std::fprintf(stderr, "cannot add a token to the batch\n");
+            std::exit(1);
+        }
+    }
+    if (llama_process(ctx, LLAMA_PROCESS_TYPE_DECODE, batch) != 0) {
+        std::fprintf(stderr, "llama_process failed\n");
         std::exit(1);
     }
 }
 
-static std::vector<llama_token> continued(llama_context* ctx, int32_t vocab, const std::vector<llama_token>& ids) {
+static std::vector<llama_token> continued(llama_context* ctx, llama_batch_ext* batch, int32_t vocab,
+                                          const std::vector<llama_token>& ids) {
     llama_memory_clear(llama_get_memory(ctx), true);
     std::vector<llama_token> fresh = ids;
     std::vector<llama_token> generated;
+    llama_pos past = 0;
     for (int s = 0; s < harness::STEPS; s++) {
-        decode(ctx, fresh);
+        decode(ctx, batch, fresh, past);
+        past += static_cast<llama_pos>(fresh.size());
         const llama_token next = harness::greatest(llama_get_logits_ith(ctx, -1), vocab);
         generated.push_back(next);
         fresh = {next};
@@ -70,8 +84,10 @@ int main(int argc, char** argv) {
         return 1;
     }
     const int32_t vocab = llama_vocab_n_tokens(llama_model_get_vocab(model));
-    harness::time([&] { return continued(ctx, vocab, ids); });
+    llama_batch_ext* batch = llama_batch_ext_init(ctx);
+    harness::time([&] { return continued(ctx, batch, vocab, ids); });
 
+    llama_batch_ext_free(batch);
     llama_free(ctx);
     llama_model_free(model);
     llama_backend_free();

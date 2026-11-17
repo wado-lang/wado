@@ -302,11 +302,14 @@ arithmetic is faster gains nothing from it. No Kiln option chooses arithmetic
 in f16 yet. One would, on a device that offers `shader-f16`, and a graph built
 with it would be held to a tolerance rather than to the f32 path's bits.
 
-Its attention kernel writes f32s alone, so a half graph's attention runs
-decomposed. Its quantized kernels decode Gemma 3's `q4` and `q4f16` exports
-slower than it decodes the f32 export, though they read an eighth of the bytes
-([benchmark](./benchmark/README.md#the-q4-and-q4f16-exports)). A tensor is held in `f32`, `f16`, `bf16`, `u8`, `i64` or `bool`,
-and every other element type stops the build naming it. So does a `CastLike`
+Of its decode of Gemma 3's `q4` export
+([benchmark](./benchmark/README.md#the-q4-and-q4f16-exports)), the quantized
+products take most of the device time (`benchmark/gemma3_270m/profile.wado`).
+A norm runs apart from the product it feeds. The `q4f16` export's products
+are slower still: each weight rounds to f16 through an emulated conversion.
+
+A tensor is held in `f32`, `f16`, `bf16`, `u8`, `i64` or `bool`, and every
+other element type stops the build naming it. So does a `CastLike`
 of a value computed at run, since it converts only a tensor the build knows.
 Arithmetic in `double` and the integer types is a second instantiation of the
 same kernels. Wado has a primitive for nearly every ONNX element type, so what

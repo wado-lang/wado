@@ -20,8 +20,10 @@ cached under `~/.cache/loam`:
   13, and the CUDA libraries its CUDA provider loads (cudart, cuBLAS, cuRAND,
   NVRTC) from NVIDIA's redistributables. A host without an NVIDIA driver skips
   the CUDA arm.
-- `fetch_llama_cpp.sh`: llama.cpp's Vulkan release.
-- `gemma3_270m/fetch_gguf.sh`: Gemma 3 (270M) as GGUF, for llama.cpp.
+- `fetch_llama_cpp.sh`: llama.cpp's Vulkan release, the one `llama_cpp.lock`
+  pins. `mise run update-llama-cpp` pins the newest.
+- `gemma3_270m/fetch_gguf.sh`: Gemma 3 (270M) as GGUF, for llama.cpp: F16,
+  and Q4_0 and Q4_1 for the `q4` table.
 
 The WebGPU arm of onnxruntime runs onnxruntime-node, which
 `mise run loam-oracle-deps` installs as `package-lock.json` pins it. Without
@@ -44,16 +46,42 @@ the first token reads the prompt, and each one after it only itself against
 the cache. The throughput counts generated tokens, and `ms/iter` is one run of
 32. The programs other than Loam's are the timing `generate.wado` does, on each
 runtime's own API, linked against its release as shipped. onnxruntime runs on
-the GPU alone: its CUDA arms share `decoder.hpp`, and its WebGPU one,
-`onnxruntime_webgpu.mjs`, decodes as the examples' oracle does
-(`tools/greedy.mjs`). Each keeps the cache on the device and reads back only
-the logits.
+the GPU alone: its CUDA arms share `decoder.hpp`, and its WebGPU one is
+`onnxruntime_webgpu.mjs`. Each keeps the cache on the device and reads back
+only the next token, which `tools/picking.mjs` appends to the graph, as Loam's
+decode arms pick theirs on the device.
+
+### Tuning onnxruntime
+
+Each step's pick in the graph is what moves onnxruntime: on Gemma 3 it runs
+1.15 times as fast on WebGPU's `q4` and 1.17 times on CUDA as when reading back
+the logits. On WebGPU, none of these moved its `q4` decode past run-to-run
+noise:
+
+- `validationMode: 'disabled'`
+- `freeDimensionOverrides` for `batch_size`
+- `storageBufferCacheMode: 'simple'`
+- `executionMode: 'parallel'`
+- `enableGraphCapture`
+- feeding the picked token back as a device tensor, which ran 1.12 times as
+  long: the graph's shape operators read `input_ids` on the host
+
+## Device time per kernel
+
+`gemma3_270m/profile.wado` prints how much device time each kernel of Gemma
+3's decode took, by `WebGpuBackend::profile`'s timestamps. Without an argument
+it runs the f32 weights; with `q4`, the `q4` export.
+
+```sh
+cd package-loam/benchmark
+wado run-webgpu --dir ../example/gemma3-270m gemma3_270m/profile.wado q4
+```
 
 ## Environment
 
-Wado 2026-11-06 (`-O2`), wasmtime 50.0.1, wgpu-core 29, onnxruntime 1.31.1 on
+Wado 2026-11-17 (`-O2`), wasmtime 50.0.1, wgpu-core 29, onnxruntime 1.31.1 on
 CUDA 13.2.2 (cuBLAS 13.4.1.3), onnxruntime-node 1.31.1 on Node 26.13.0,
-llama.cpp b11846, gcc 15.2.0 (`-O2`), AMD Ryzen 7 5700X (8 cores, 16 threads),
+llama.cpp b12464, gcc 15.2.0 (`-O2`), AMD Ryzen 7 5700X (8 cores, 16 threads),
 NVIDIA GeForce RTX 4060 Ti (driver 595.99.02, Vulkan), Linux x86_64. `wado`
 and `wado-run-webgpu` are release builds, as the tasks build them. Each figure
 is the best of three runs.
@@ -72,10 +100,10 @@ writer. I'm a writer. I'm a writer".
 
 | Implementation           |      Throughput |     ms/iter | vs best |
 | ------------------------ | --------------: | ----------: | ------- |
-| onnxruntime CUDA         | 362.11 tokens/s |   88.370 ms | 1.00x   |
-| **Loam** `WebGpuBackend` | 195.47 tokens/s |  163.707 ms | 1.85x   |
-| onnxruntime WebGPU       |  53.78 tokens/s |  595.003 ms | 6.73x   |
-| **Loam** `Cpu`           |   7.44 tokens/s | 4301.615 ms | 48.68x  |
+| onnxruntime CUDA         | 380.94 tokens/s |   84.003 ms | 1.00x   |
+| **Loam** `WebGpuBackend` | 311.19 tokens/s |  102.832 ms | 1.22x   |
+| onnxruntime WebGPU       |  52.07 tokens/s |  614.575 ms | 7.32x   |
+| **Loam** `Cpu`           |   7.55 tokens/s | 4237.188 ms | 50.44x  |
 
 ## Gemma 3 (270M)
 
@@ -95,37 +123,42 @@ Google ships no F16 GGUF and ggml-org only Q8_0, so it is unsloth's conversion.
 The `WebGpuBackend` arm reads a token back at each step. Its `decode` arm picks
 the first token on the host and the rest in one program, with one read back.
 
-Every arm generated "[Your Name] and I am a [Your Profession/Area of Expertise].
-I am passionate about [Mention 1-2 key areas of your passion].", the tokens the
-example's `generate.json` records.
+Every arm but llama.cpp generated "[Your Name] and I am a [Your
+Profession/Area of Expertise]. I am passionate about [Mention 1-2 key areas of
+your passion].", the tokens the example's `generate.json` records. llama.cpp
+picks other tokens from the 19th on.
 
 | Implementation                  |      Throughput |      ms/iter | vs best |
 | ------------------------------- | --------------: | -----------: | ------- |
-| llama.cpp Vulkan                | 286.19 tokens/s |   111.815 ms | 1.00x   |
-| **Loam** `WebGpuBackend` decode | 269.63 tokens/s |   118.683 ms | 1.06x   |
-| **Loam** `WebGpuBackend`        | 254.06 tokens/s |   125.954 ms | 1.13x   |
-| onnxruntime CUDA                | 142.65 tokens/s |   224.322 ms | 2.01x   |
-| onnxruntime WebGPU              | 100.19 tokens/s |   319.407 ms | 2.86x   |
-| **Loam** `Cpu`                  |   3.01 tokens/s | 10633.566 ms | 95.10x  |
+| **Loam** `WebGpuBackend` decode | 295.50 tokens/s |   108.291 ms | 1.00x   |
+| llama.cpp Vulkan                | 264.95 tokens/s |   120.778 ms | 1.12x   |
+| **Loam** `WebGpuBackend`        | 259.84 tokens/s |   123.151 ms | 1.14x   |
+| onnxruntime CUDA                | 155.15 tokens/s |   206.249 ms | 1.90x   |
+| onnxruntime WebGPU              | 107.12 tokens/s |   298.743 ms | 2.76x   |
+| **Loam** `Cpu`                  |   3.04 tokens/s | 10526.001 ms | 97.20x  |
 
 ### The `q4` and `q4f16` exports
 
 `mise run gemma3-270m-quantized` runs the same prompt on the `q4` and `q4f16`
-exports, whose matrices hold 4-bit weights, on WebGPU alone:
+exports, whose matrices hold 4-bit weights, on WebGPU alone. llama.cpp runs
+GGUF quantized by its own `Q4_0` and `Q4_1` schemes, which hold other weights
+than the exports, so its rows are for reference:
 
 | Arm                         | Program                                                |
 | --------------------------- | ------------------------------------------------------ |
 | onnxruntime WebGPU          | `onnxruntime_webgpu.mjs`, `decoderQ4` / `decoderQ4f16` |
+| llama.cpp Vulkan            | `gemma3_270m/llama_cpp.cpp`, `Q4_0` / `Q4_1`           |
 | Loam `WebGpuBackend` decode | `gemma3_270m/q4_webgpu.wado`, `q4f16_webgpu.wado`      |
 
-Each figure is from one run of the task. Loam picks the tokens
-`generate_q4.json` and `generate_q4f16.json` record.
+Loam picks the tokens `generate_q4.json` and `generate_q4f16.json` record.
 onnxruntime's WebGPU provider picks other tokens from one run to the next on
 both exports.
 
 | Implementation                          |      Throughput |    ms/iter | vs best |
 | --------------------------------------- | --------------: | ---------: | ------- |
-| onnxruntime WebGPU `q4`                 | 151.93 tokens/s | 210.620 ms | 1.00x   |
-| onnxruntime WebGPU `q4f16`              | 124.33 tokens/s | 257.380 ms | 1.22x   |
-| **Loam** `WebGpuBackend` decode `q4`    |  89.54 tokens/s | 357.373 ms | 1.70x   |
-| **Loam** `WebGpuBackend` decode `q4f16` |  50.12 tokens/s | 638.413 ms | 3.03x   |
+| **Loam** `WebGpuBackend` decode `q4`    | 487.80 tokens/s |  65.600 ms | 1.00x   |
+| llama.cpp Vulkan `Q4_0`                 | 363.49 tokens/s |  88.035 ms | 1.34x   |
+| llama.cpp Vulkan `Q4_1`                 | 360.62 tokens/s |  88.735 ms | 1.35x   |
+| **Loam** `WebGpuBackend` decode `q4f16` | 338.58 tokens/s |  94.511 ms | 1.44x   |
+| onnxruntime WebGPU `q4`                 | 174.58 tokens/s | 183.299 ms | 2.79x   |
+| onnxruntime WebGPU `q4f16`              | 139.89 tokens/s | 228.754 ms | 3.49x   |

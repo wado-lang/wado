@@ -1,6 +1,7 @@
 // What the onnxruntime CUDA arms share: a decoder continued greedily, each step
 // feeding the new tokens and the attention cache of the rest, as each
-// example's generate.mjs does through tools/greedy.mjs.
+// example's generate.mjs does through tools/greedy.mjs. The graph is the one
+// tools/picking.mjs writes, which picks the next token itself.
 #pragma once
 
 #include <onnxruntime_cxx_api.h>
@@ -23,16 +24,21 @@ struct Shape {
     bool branched;
 };
 
+// Where the caches start among `Names::outputs`, after the next token and the
+// logits.
+constexpr std::size_t CACHES = 2;
+
 struct Names {
     std::vector<std::string> inputs;
     std::vector<std::string> outputs;
 
     // `past_key_values.l.kind` and `present.l.kind` in one order, so the
-    // outputs after `logits` feed the next step's caches position for position.
+    // outputs from `CACHES` on feed the next step's caches position for
+    // position.
     explicit Names(const Shape& shape) {
         inputs = {"input_ids", "attention_mask"};
         if (shape.branched) inputs.push_back("use_cache_branch");
-        outputs = {"logits"};
+        outputs = {"loam.next", "logits"};
         for (int l = 0; l < shape.layers; l++) {
             for (const char* kind : {"key", "value"}) {
                 inputs.push_back("past_key_values." + std::to_string(l) + "." + kind);
@@ -49,8 +55,8 @@ inline Ort::SessionOptions on_cuda() {
     return options;
 }
 
-// The STEPS tokens greedy decoding picks after `ids`. Only the logits come
-// back to the host; the caches stay on the device.
+// The STEPS tokens greedy decoding picks after `ids`. Only the next token
+// comes back to the host; the logits and the caches stay on the device.
 inline std::vector<int64_t> continued(Ort::Session& session, const Shape& shape, const Names& names,
                                       const std::vector<int64_t>& ids) {
     const Ort::MemoryInfo host = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
@@ -88,11 +94,9 @@ inline std::vector<int64_t> continued(Ort::Session& session, const Shape& shape,
         }
         session.Run(Ort::RunOptions{nullptr}, binding);
         std::vector<Ort::Value> result = binding.GetOutputValues();
-        const int64_t vocab = result[0].GetTensorTypeAndShapeInfo().GetShape()[2];
-        const float* last = result[0].GetTensorData<float>() + (static_cast<int64_t>(fresh.size()) - 1) * vocab;
-        const int64_t best = harness::greatest(last, vocab);
+        const int64_t best = result[0].GetTensorData<int64_t>()[0];
         caches.clear();
-        for (std::size_t i = 1; i < result.size(); i++) caches.push_back(std::move(result[i]));
+        for (std::size_t i = CACHES; i < result.size(); i++) caches.push_back(std::move(result[i]));
         all.push_back(best);
         fresh = {best};
     }
