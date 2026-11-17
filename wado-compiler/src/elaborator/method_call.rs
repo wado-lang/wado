@@ -1732,17 +1732,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// where neither declares the name.
     fn block_takes_receiver(&self, block: DefId, method_name: &str) -> Option<bool> {
         let header = &self.tysys.trait_env.impl_headers[&block];
-        let self_kind = match header.methods.iter().find(|m| m.name == method_name) {
-            Some(method) => self.tysys.signatures.method_sig(method.def)?.self_kind,
-            None => {
-                let trait_decl = self.tysys.signatures.impl_trait(block)?;
-                let declared = self
-                    .tysys
-                    .signatures
-                    .trait_sig(trait_decl)?
-                    .method(method_name)?;
-                declared.sig.self_kind
-            }
+        let self_kind = if let Some(method) = header.methods.iter().find(|m| m.name == method_name)
+        {
+            self.tysys.signatures.method_sig(method.def)?.self_kind
+        } else {
+            let trait_decl = self.tysys.signatures.impl_trait(block)?;
+            let declared = self
+                .tysys
+                .signatures
+                .trait_sig(trait_decl)?
+                .method(method_name)?;
+            declared.sig.self_kind
         };
         Some(self_kind != ast::SelfKind::None)
     }
@@ -2327,7 +2327,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let _ = self.emit(TypeError::SelfBindingOnType {
                 name: head.map_or_else(
                     || self.tysys.type_id_to_string(target_type_id),
-                    |head| head.name.clone(),
+                    |head| head.name,
                 ),
                 span: static_call.span,
             });
