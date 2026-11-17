@@ -20,10 +20,14 @@ use {
     branching_inputs,
     elementwise,
     elementwise_inputs,
+    experts_case,
     halved,
     halved_inputs,
     mixed,
     mixed_inputs,
+    mixing,
+    mixing_arguments,
+    mixing_pass,
     quantized_case,
     quantized_pass,
     quantizing,
@@ -267,6 +271,17 @@ test "a recorded attention composite computes the CPU's, its presents the buffer
         attention_rows([1, 2]),
     ] as List<AttentionCase> {
         recorded_attention(&case);
+    }
+}
+
+test "a recorded mixture of experts computes the CPU's, by its picks and by its experts" {
+    let cpu = &mut Cpu {};
+    for let tokens of [1, 3] {
+        let c = experts_case(tokens);
+        let want = mixing(cpu, &c.x, &c.router, &c.up, &c.down);
+        let mut r = Recorder::new();
+        let recorded = mixing_pass(&mut r, tokens);
+        assert run(cpu, &recorded, &mixing_arguments(cpu, tokens)) == [host_of(&want)] as List<Any<Cpu>>;
     }
 }
 

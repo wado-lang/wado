@@ -151,6 +151,13 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
     note("quantized product", apart(device, &dequantized[0], &want_quantized.0));
     note("quantized gather", apart(device, &dequantized[1], &want_quantized.1));
 
+    for let tokens of [1, 3] as List<i32> {
+        let c = cases::experts_case(tokens);
+        let mixing = device.compiled(|r| cases::mixing_pass(r, tokens), &[], &[]).unwrap();
+        let mixed = device.executed(&mixing, &cases::mixing_arguments(device, tokens), &[]);
+        note(`experts ${tokens}`, apart(device, &mixed[0], &cases::mixing(cpu, &c.x, &c.router, &c.up, &c.down)));
+    }
+
     for let p of [true, false] as List<bool> {
         let [pred, bx] = cases::branching_inputs(p);
         let branching = device.compiled(|r| {

@@ -612,6 +612,59 @@ add('NBitsHalfBias', overHalves({
   domains: { 'com.microsoft': 1 },
 }, ['A', 'W', 'C']));
 
+// QMoE of `tokens` rows of 32 values over 4 experts, `k` to a token, each a
+// SwiGLU of 32 between two products in 4 bits and blocks of 32, its gate and
+// up rows interleaved. `zeros` packs zero points and `bias` adds biases. The
+// router's logits are apart in each row, so the experts a token picks are not
+// left to a tie.
+const qmoe = ({ tokens, k = 2, zeros = false, bias = true, attrs = {} }) => {
+  const [experts, hidden, inter] = [4, 32, 32];
+  const logits = Array.from({ length: tokens * experts }, (_, i) => ((i * 5) % 11) / 2 - 2.5 + i / 64);
+  const inits = {
+    W1: bytes([experts, 2 * inter, hidden / 2], 5),
+    S1: scales([experts, 2 * inter, 1]),
+    W2: bytes([experts, hidden, inter / 2], 6),
+    S2: scales([experts, hidden, 1]),
+  };
+  const operands = ['X', 'R', 'W1', 'S1', '', 'W2', 'S2', ''];
+  if (bias) {
+    inits.B1 = float([experts, 2 * inter], halves(experts * 2 * inter));
+    inits.B2 = float([experts, hidden], halves(experts * hidden).map((v) => v / 2));
+    operands[4] = 'B1';
+    operands[7] = 'B2';
+  }
+  if (zeros) {
+    inits.Z1 = bytes([experts, 2 * inter, 1], 7);
+    inits.Z2 = bytes([experts, hidden, 1], 8);
+    operands.push('', '', '', 'Z1', 'Z2');
+  }
+  return {
+    inputs: { X: float([tokens, hidden]), R: float([tokens, experts], logits) },
+    inits,
+    nodes: [node('com.microsoft.QMoE', operands, 'Y', {
+      k,
+      activation_type: 'swiglu',
+      swiglu_fusion: 1,
+      activation_alpha: f32(1.702),
+      activation_beta: f32(1),
+      swiglu_limit: f32(7),
+      normalize_routing_weights: 1,
+      expert_weight_bits: 4,
+      block_size: 32,
+      ...attrs,
+    })],
+    domains: { 'com.microsoft': 1 },
+  };
+};
+// More picks than experts: each expert's rows, masked.
+add('QMoePrompt', qmoe({ tokens: 3 }));
+// One token picks fewer experts than there are: those experts alone.
+add('QMoeStep', qmoe({ tokens: 1 }));
+add('QMoeUnnormalized', qmoe({ tokens: 3, attrs: { normalize_routing_weights: 0 } }));
+add('QMoeZeroPoints', qmoe({ tokens: 3, zeros: true, bias: false }));
+add('QMoeHalf', overHalves(qmoe({ tokens: 3 }), ['X', 'R', 'S1', 'B1', 'S2', 'B2']));
+add('QMoeHalfStep', overHalves(qmoe({ tokens: 1 }), ['X', 'R', 'S1', 'B1', 'S2', 'B2']));
+
 // GatherBlockQuantized of a table of 5 rows of `width` values in blocks of
 // 32, by indices counting from the end and past it.
 const gatherBlocks = ({ width, zeros = true, attrs = { gather_axis: 0, quantize_axis: 1 } }) => {

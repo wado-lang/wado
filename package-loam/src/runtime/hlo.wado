@@ -641,10 +641,10 @@ pub fn decomposed_gather<affine G: Graph, E: Float, R, P, I, Blocks, Z, Out>(
     let count = element_count(&extents);
     let flat: G::Tensor<i64, [Rows]> = g.reshape(indices, [count]);
     let at = from_end_indices::<G, [Rows]>(g, &flat, &scalar(g, rows as i64));
-    let picked_packed = rows_at::<G, u8, R, P>(g, packed, &at);
-    let picked_scales = rows_at::<G, E, R, Blocks>(g, scales, &at);
+    let picked_packed = rows_at::<G, u8, R, P, Rows>(g, packed, &at);
+    let picked_scales = rows_at::<G, E, R, Blocks, Rows>(g, scales, &at);
     let picked_zeros: Option<G::Tensor<u8, [Rows, Z]>> = match zero_points {
-        Some(z) => Option::Some(rows_at::<G, u8, R, Z>(g, z, &at)),
+        Some(z) => Option::Some(rows_at::<G, u8, R, Z, Rows>(g, z, &at)),
         None => null,
     };
     let width = bytes * (8 / quantized.bits);
@@ -671,11 +671,11 @@ pub fn decomposed_gather<affine G: Graph, E: Float, R, P, I, Blocks, Z, Out>(
 }
 
 /// The rows of the matrix `x` that `at` names, each in range.
-fn rows_at<affine G: Graph, E: Element, R, C>(
+pub fn rows_at<affine G: Graph, E: Element, R, C, I>(
     g: &mut G,
     x: &G::Tensor<E, [R, C]>,
-    at: &G::Tensor<i64, [Rows]>,
-) -> G::Tensor<E, [Rows, C]> with _ {
+    at: &G::Tensor<i64, [I]>,
+) -> G::Tensor<E, [I, C]> with _ {
     let dims = GatherDims {
         offset_dims: [1],
         collapsed_slice_dims: [0],

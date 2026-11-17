@@ -107,7 +107,7 @@ fn an_import_nothing_serves_traps_where_it_is_called() {
 #[ignore = "needs a plugin: run `mise run test-pjrt`"]
 fn loams_programs_compute_what_its_cpu_graph_does() {
     let printed = run("../package-loam/conformance/pjrt_graph.wado");
-    assert_eq!(printed.lines().count(), 72, "{printed}");
+    assert_eq!(printed.lines().count(), 74, "{printed}");
     for line in printed.lines() {
         let deviation: f32 = line
             .rsplit(' ')
@@ -171,7 +171,7 @@ fn loams_programs_compile_for_a_tpu() {
         )
         .env("TPU_SKIP_MDS_QUERY", "1");
     let printed = printed_by(command, "../package-loam/conformance/pjrt_topology.wado");
-    assert_eq!(printed.lines().count(), 77, "{printed}");
+    assert_eq!(printed.lines().count(), 79, "{printed}");
     for line in printed.lines() {
         assert!(line.contains("optimal seconds"), "{line}");
     }

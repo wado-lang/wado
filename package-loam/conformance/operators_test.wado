@@ -778,6 +778,30 @@ test "MatMulNBits of 8 bits holds a value in each byte" {
     assert_agrees(#include_bytes("./operators/NBits8.onnx"), #include_str("./operators/NBits8.txt"));
 }
 
+test "QMoE over more picks than experts weighs each expert's rows" {
+    assert_agrees(#include_bytes("./operators/QMoePrompt.onnx"), #include_str("./operators/QMoePrompt.txt"));
+}
+
+test "QMoE of one token runs the experts it picks" {
+    assert_agrees(#include_bytes("./operators/QMoeStep.onnx"), #include_str("./operators/QMoeStep.txt"));
+}
+
+test "QMoE without normalized routing weighs each pick by its softmax over every expert" {
+    assert_agrees(#include_bytes("./operators/QMoeUnnormalized.onnx"), #include_str("./operators/QMoeUnnormalized.txt"));
+}
+
+test "QMoE reads each block less its packed zero point" {
+    assert_agrees(#include_bytes("./operators/QMoeZeroPoints.onnx"), #include_str("./operators/QMoeZeroPoints.txt"));
+}
+
+test "QMoE of halves over more picks than experts" {
+    assert_agrees(#include_bytes("./operators/QMoeHalf.onnx"), #include_str("./operators/QMoeHalf.txt"));
+}
+
+test "QMoE of one token of halves" {
+    assert_agrees(#include_bytes("./operators/QMoeHalfStep.onnx"), #include_str("./operators/QMoeHalfStep.txt"));
+}
+
 test "GatherBlockQuantized dequantizes the rows it takes, an index past the table reading zeros" {
     assert_agrees(#include_bytes("./operators/GatherBlocks.onnx"), #include_str("./operators/GatherBlocks.txt"));
 }

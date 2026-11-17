@@ -1,0 +1,383 @@
+//! onnxruntime's `QMoE` (its `docs/ContribOperators.md`): each token through
+//! the `k` experts its router's logits rank highest, each expert a SwiGLU
+//! between two block-quantized products, the results weighed by the router's
+//! softmax.
+
+use { Float, element_count, optional } from "./tensor.wado";
+use { Binary, Comparison, Graph, One, Quantized, Unary, full, rows_at, scalar, softmax } from "./hlo.wado";
+use { Any, Untyped, typed } from "./recorded.wado";
+
+/// What a `QMoE` computes beyond its operands, off its attributes.
+pub struct Experts {
+    /// How many experts each token runs.
+    pub k: i32,
+    /// Whether a token's weights are its picks' softmax over the picks alone,
+    /// rather than over every expert.
+    pub normalized: bool,
+    /// The SwiGLU's gate scale, the offset added to its up value, and the bound
+    /// on both.
+    pub alpha: f32,
+    pub beta: f32,
+    pub limit: f32,
+    pub quantized: Quantized,
+}
+
+/// The tokens, the experts, a row of one expert's weights laid flat, the rows
+/// an expert runs, the hidden width, a projection's width, the SwiGLU's width,
+/// a gate and up pair, and a token's picks.
+struct Tokens {
+}
+struct Pool {
+}
+struct Flat {
+}
+struct Picked {
+}
+struct Hidden {
+}
+struct Width {
+}
+struct Inner {
+}
+struct Pair {
+}
+struct Picks {
+}
+
+/// One of an expert's two products, each expert's tensors a row of the flat
+/// ones.
+struct Projection<affine G: Graph> {
+    packed: G::Tensor<u8, [Pool, Flat]>,
+    scales: G::Tensor<f32, [Pool, Flat]>,
+    bias: Option<G::Tensor<f32, [Pool, Flat]>>,
+    zero_points: Option<G::Tensor<u8, [Pool, Flat]>>,
+    /// One expert's weight as `quantized_product` takes it: its rows, its
+    /// blocks, each block's bytes, and the bytes of a row's zero points.
+    rows: i32,
+    blocks: i32,
+    blob: i32,
+    zero_bytes: i32,
+}
+
+/// `QMoE` of `x`, whose last axis is the hidden width and whose other axes
+/// hold the tokens `router` holds a row of logits for, through the experts
+/// `up` and `down` hold: each expert's `up` product, its gate and up values
+/// interleaved, then the SwiGLU of them, then its `down` product. Each product
+/// reads its weight as `Graph::quantized_product` does, and adds its bias.
+/// The experts compute in f32, and the result rounds once to `E`.
+///
+/// Where a token's picks are fewer than the experts, each pick runs its expert
+/// on its token's row, so only the experts the tokens route to are read.
+/// Otherwise each expert runs on every row, and a row it is not picked for adds
+/// nothing, so no temporary grows with the picks.
+pub fn mixture_of_experts<affine G: Graph, E: Float, In, T, X, N, P, Blocks, Z, H, P2, Blocks2, Z2>(
+    g: &mut G,
+    x: &G::Tensor<E, In>,
+    router: &G::Tensor<E, [T, X]>,
+    up: &G::Tensor<u8, [X, N, P]>,
+    up_scales: &G::Tensor<E, [X, N, Blocks]>,
+    up_bias: Option<&G::Tensor<E, [X, N]>>,
+    up_zero_points: Option<&G::Tensor<u8, [X, N, Z]>>,
+    down: &G::Tensor<u8, [X, H, P2]>,
+    down_scales: &G::Tensor<E, [X, H, Blocks2]>,
+    down_bias: Option<&G::Tensor<E, [X, H]>>,
+    down_zero_points: Option<&G::Tensor<u8, [X, H, Z2]>>,
+    experts: &Experts,
+) -> G::Tensor<E, In> with _
+    contract 0 < experts.k
+{
+    let extents = g.extents_of(x);
+    let hidden = extents[extents.len() - 1];
+    let [tokens, pool] = [
+        g.extents_of(router)[0],
+        g.extents_of(router)[1],
+    ];
+    assert experts.k <= pool, "a token picks among the experts";
+    assert tokens * hidden == element_count(&extents), "the router holds a row for each token";
+    let rows: G::Tensor<f32, [Picked, Hidden]> = g.convert(&g.reshape::<E, In, [Picked, Hidden]>(x, [tokens, hidden]));
+    let ffn = [
+        projection_of::<G, E, X, N, P, Blocks, Z>(g, up, up_scales, up_bias, up_zero_points),
+        projection_of::<G, E, X, H, P2, Blocks2, Z2>(g, down, down_scales, down_bias, down_zero_points),
+    ];
+    let [gates, picks, weights] = routed::<G, E, T, X>(g, router, experts);
+    let result = if tokens * experts.k < pool {
+        by_picks(g, &ffn, &rows, &picks, &weights, experts);
+    } else {
+        by_experts(g, &ffn, &rows, &gates, experts);
+    };
+    return g.reshape(&g.convert::<f32, E, [Picked, Hidden]>(&result), extents);
+}
+
+/// Each pick's expert run on its token's row, times its weight.
+fn by_picks<affine G: Graph>(
+    g: &mut G,
+    ffn: &[Projection<G>, Projection<G>],
+    rows: &G::Tensor<f32, [Picked, Hidden]>,
+    picks: &G::Tensor<i64, [Tokens, Picks]>,
+    weights: &G::Tensor<f32, [Tokens, Picks]>,
+    experts: &Experts,
+) -> G::Tensor<f32, [Picked, Hidden]> with _ {
+    let plane = g.extents_of(rows);
+    let count = plane[0] * experts.k;
+    let column = |t: G::Tensor<i64, [Tokens, Picks]>| -> G::Tensor<i64, [Picks, One]> {
+        return g.reshape(&t, [count, 1]);
+    };
+    let experts_picked = column(*picks);
+    let owners = column(g.iota([plane[0], experts.k], 0));
+    let picked_weights: G::Tensor<f32, [Picks, One]> = g.reshape(weights, [count, 1]);
+    let token_rows: G::Tensor<i64, [Picked, Hidden]> = g.iota(plane, 0);
+    let zero = full::<G, f32, [Picked, Hidden]>(g, 0.0, plane);
+    return summed(g, count, &plane, |run| {
+        let of = |t: &G::Tensor<i64, [Picks, One]>| -> G::Tensor<i64, [One]> {
+            return g.reshape(&rows_at::<G, i64, Picks, One, One>(g, t, run), [1]);
+        };
+        let [expert, token] = [
+            of(&experts_picked),
+            of(&owners),
+        ];
+        let row: G::Tensor<f32, [Picked, Hidden]> = g.relabeled(
+            &rows_at::<G, f32, Picked, Hidden, One>(g, rows, &token),
+        );
+        let out: G::Tensor<f32, [Picked, Hidden]> = g.broadcast_in_dim(
+            &expert_output(g, ffn, &expert, &row, experts),
+            plane,
+            [0, 1],
+        );
+        let weight: G::Tensor<f32, [Picked, Hidden]> = g.broadcast_in_dim(
+            &rows_at::<G, f32, Picks, One, One>(g, &picked_weights, run),
+            plane,
+            [0, 1],
+        );
+        let mine = g.compare(Comparison::Eq, &token_rows, &g.broadcast_in_dim::<i64, [One], [Picked, Hidden]>(
+            &token,
+            plane,
+            [0],
+        ));
+        return g.select(&mine, &g.binary(Binary::Multiply, &out, &weight), &zero);
+    });
+}
+
+/// Each expert run on every row, times each row's weight for it.
+fn by_experts<affine G: Graph>(
+    g: &mut G,
+    ffn: &[Projection<G>, Projection<G>],
+    rows: &G::Tensor<f32, [Picked, Hidden]>,
+    gates: &G::Tensor<f32, [Picked, Pool]>,
+    experts: &Experts,
+) -> G::Tensor<f32, [Picked, Hidden]> with _ {
+    let plane = g.extents_of(rows);
+    let columns: G::Tensor<f32, [Pool, Picked]> = g.transpose(gates, [1, 0]);
+    let zero = full::<G, f32, [Picked, Hidden]>(g, 0.0, plane);
+    return summed(g, g.extents_of(gates)[1], &plane, |run| {
+        let out = expert_output(g, ffn, run, rows, experts);
+        let column = rows_at::<G, f32, Pool, Picked, One>(g, &columns, run);
+        let weight: G::Tensor<f32, [Picked, Hidden]> = g.broadcast_in_dim(
+            &g.reshape::<f32, [One, Picked], [Picked]>(&column, [plane[0]]),
+            plane,
+            [0],
+        );
+        // A row the expert was not picked for may hold anything, an infinity
+        // among it.
+        let picked = g.compare(Comparison::Gt, &weight, &zero);
+        return g.select(&picked, &g.binary(Binary::Multiply, &out, &weight), &zero);
+    });
+}
+
+/// The sum over `runs` runs of what `added` gives for each, from 0.
+fn summed<affine G: Graph>(
+    g: &mut G,
+    runs: i32,
+    plane: &List<i32>,
+    added: fn(&G::Tensor<i64, [One]>) -> G::Tensor<f32, [Picked, Hidden]> with _,
+) -> G::Tensor<f32, [Picked, Hidden]> with _ {
+    let zero = full::<G, f32, [Picked, Hidden]>(g, 0.0, *plane);
+    let last = g.repeated(
+        &scalar(g, runs as i64),
+        &([Any::F32(g.relabeled::<f32, [Picked, Hidden], Untyped>(&zero))] as List<Any<G>>),
+        |at, state| {
+            let total = typed::<G, f32, [Picked, Hidden]>(g, &state[0]);
+            let run: G::Tensor<i64, [One]> = g.reshape(at, [1]);
+            return [
+                Any::F32(g.relabeled::<f32, [Picked, Hidden], Untyped>(&g.binary(Binary::Add, &total, &added(&run)))),
+            ];
+        },
+    );
+    return typed::<G, f32, [Picked, Hidden]>(g, &last[0]);
+}
+
+/// Each token's weight for each expert, zero where it does not pick it; the
+/// experts it picks, greatest logit first and the lower index first among
+/// equal ones; and each pick's weight.
+fn routed<affine G: Graph, E: Float, T, X>(
+    g: &mut G,
+    router: &G::Tensor<E, [T, X]>,
+    experts: &Experts,
+) -> [G::Tensor<f32, [Picked, Pool]>, G::Tensor<i64, [Tokens, Picks]>, G::Tensor<f32, [Tokens, Picks]>] with _ {
+    let logits: G::Tensor<f32, [Picked, Pool]> = g.convert(&g.relabeled::<E, [T, X], [Picked, Pool]>(router));
+    let extents = g.extents_of(&logits);
+    let positions: G::Tensor<i64, [Picked, Pool]> = g.iota(extents, 1);
+    let none = full::<G, f32, [Picked, Pool]>(g, 0.0, extents);
+    let mut left = logits;
+    let mut chosen = full::<G, bool, [Picked, Pool]>(g, false, extents);
+    let mut hits: List<G::Tensor<bool, [Picked, Pool]>> = [];
+    let mut picks: Option<G::Tensor<i64, [Tokens, Picks]>> = null;
+    for let _ of 0..<experts.k {
+        let at: G::Tensor<i64, [Picked, Pool]> = g.arg_max(&left, 1);
+        let hit = g.compare(Comparison::Eq, &positions, &g.broadcast_in_dim(&at, extents, [0, 1]));
+        chosen = g.select(&hit, &full::<G, bool, [Picked, Pool]>(g, true, extents), &chosen);
+        left = g.select(&hit, &full::<G, f32, [Picked, Pool]>(g, f32::NEG_INFINITY, extents), &left);
+        let column = g.relabeled::<i64, [Picked, Pool], [Tokens, Picks]>(&at);
+        picks = Option::Some(match &picks {
+            Some(p) => g.concatenate(p, &column, 1),
+            None => column,
+        });
+        hits.push(hit);
+    }
+    let mut gates = g.select(&chosen, &softmax::<G, f32, [Picked, Pool]>(g, &logits, 1), &none);
+    if experts.normalized {
+        let total: G::Tensor<f32, [Picked]> = g.reduce(&gates, Binary::Add, 0.0, [1]);
+        gates = g.binary(Binary::Divide, &gates, &g.broadcast_in_dim(&total, extents, [0]));
+    }
+    let mut weights: Option<G::Tensor<f32, [Tokens, Picks]>> = null;
+    for let hit of hits {
+        let weight: G::Tensor<f32, [Tokens, Picks]> = g.reshape(
+            &g.reduce::<f32, [Picked, Pool], [Picked]>(&g.select(&hit, &gates, &none), Binary::Add, 0.0, [1]),
+            [extents[0], 1],
+        );
+        weights = Option::Some(match &weights {
+            Some(w) => g.concatenate(w, &weight, 1),
+            None => weight,
+        });
+    }
+    return [
+        gates,
+        picks.unwrap(),
+        weights.unwrap(),
+    ];
+}
+
+/// The product `packed`, `scales`, `bias` and `zero_points` hold one expert's
+/// weight of, each expert's tensors laid flat as a row.
+fn projection_of<affine G: Graph, E: Float, X, N, P, Blocks, Z>(
+    g: &mut G,
+    packed: &G::Tensor<u8, [X, N, P]>,
+    scales: &G::Tensor<E, [X, N, Blocks]>,
+    bias: Option<&G::Tensor<E, [X, N]>>,
+    zero_points: Option<&G::Tensor<u8, [X, N, Z]>>,
+) -> Projection<G> with _ {
+    let [pool, rows, bytes] = [
+        g.extents_of(packed)[0],
+        g.extents_of(packed)[1],
+        g.extents_of(packed)[2],
+    ];
+    let blocks = g.extents_of(scales)[2];
+    assert bytes % blocks == 0, "a row's bytes are whole blocks";
+    let flat = |extents: List<i32>| [pool, element_count(&extents) / pool] as List<i32>;
+    let wide = |t: &G::Tensor<E, Untyped>| -> G::Tensor<f32, [Pool, Flat]> {
+        return g.convert(&g.reshape::<E, Untyped, [Pool, Flat]>(t, flat(g.extents_of(t))));
+    };
+    return Projection {
+        packed: g.reshape(packed, [pool, rows * bytes]),
+        scales: wide(&g.relabeled::<E, [X, N, Blocks], Untyped>(scales)),
+        bias: match bias {
+            Some(b) => Option::Some(wide(&g.relabeled::<E, [X, N], Untyped>(b))),
+            None => null,
+        },
+        zero_points: match zero_points {
+            Some(z) => Option::Some(g.reshape(z, flat(g.extents_of(z)))),
+            None => null,
+        },
+        rows,
+        blocks,
+        blob: bytes / blocks,
+        zero_bytes: match zero_points {
+            Some(z) => g.extents_of(z)[2],
+            None => 0,
+        },
+    };
+}
+
+/// `rows` through the expert `at`: its first projection, the SwiGLU, then its
+/// second.
+fn expert_output<affine G: Graph>(
+    g: &mut G,
+    ffn: &[Projection<G>, Projection<G>],
+    at: &G::Tensor<i64, [One]>,
+    rows: &G::Tensor<f32, [Picked, Hidden]>,
+    experts: &Experts,
+) -> G::Tensor<f32, [Picked, Hidden]> with _ {
+    let gated = swiglu(g, &projected::<G, Hidden>(g, &ffn.0, at, rows, &experts.quantized), experts);
+    return g.relabeled(&projected::<G, Inner>(g, &ffn.1, at, &gated, &experts.quantized));
+}
+
+/// `rows` times the transpose of the expert `at`'s weight of `p`, plus its bias.
+fn projected<affine G: Graph, C>(
+    g: &mut G,
+    p: &Projection<G>,
+    at: &G::Tensor<i64, [One]>,
+    rows: &G::Tensor<f32, [Picked, C]>,
+    quantized: &Quantized,
+) -> G::Tensor<f32, [Picked, Width]> with _ {
+    let packed: G::Tensor<u8, [Width, Flat, Pair]> = g.reshape(
+        &rows_at::<G, u8, Pool, Flat, One>(g, &p.packed, at),
+        [p.rows, p.blocks, p.blob],
+    );
+    let scales: G::Tensor<f32, [Width, Flat]> = g.reshape(
+        &rows_at::<G, f32, Pool, Flat, One>(g, &p.scales, at),
+        [p.rows, p.blocks],
+    );
+    let zero_points: Option<G::Tensor<u8, [Width, Pair]>> = match &p.zero_points {
+        Some(z) => Option::Some(g.reshape(&rows_at::<G, u8, Pool, Flat, One>(g, z, at), [p.rows, p.zero_bytes])),
+        None => null,
+    };
+    let product = g.quantized_product::<f32, [Picked, C], Width, Flat, Pair, Pair, [Picked, Width]>(
+        rows,
+        &packed,
+        &scales,
+        optional(&zero_points),
+        quantized,
+    );
+    let Some(b) = &p.bias else {
+        return product;
+    };
+    let extents = g.extents_of(&product);
+    let bias = rows_at::<G, f32, Pool, Flat, One>(g, b, at);
+    return g.binary(Binary::Add, &product, &g.broadcast_in_dim(&bias, extents, [0, 1]));
+}
+
+/// onnxruntime's SwiGLU of each row's interleaved gate and up values:
+/// `min(gate, limit) · σ(alpha · min(gate, limit)) · (clamp(up, ±limit) + beta)`.
+fn swiglu<affine G: Graph>(
+    g: &mut G,
+    h: &G::Tensor<f32, [Picked, Width]>,
+    experts: &Experts,
+) -> G::Tensor<f32, [Picked, Inner]> with _ {
+    let [rows, width] = [
+        g.extents_of(h)[0],
+        g.extents_of(h)[1],
+    ];
+    let inner = width / 2;
+    let pairs: G::Tensor<f32, [Picked, Inner, Pair]> = g.reshape(h, [rows, inner, 2]);
+    let half = |offset: i32| -> G::Tensor<f32, [Picked, Inner]> {
+        return g.reshape(
+            &g.slice::<f32, [Picked, Inner, Pair], [Picked, Inner, One]>(&pairs, [0, 0, offset], [
+                rows, inner, offset + 1,
+            ], [1, 1, 1]),
+            [rows, inner],
+        );
+    };
+    let plane: List<i32> = [rows, inner];
+    let constant = |value: f32| full::<G, f32, [Picked, Inner]>(g, value, plane);
+    let gate = g.binary(Binary::Minimum, &half(0), &constant(experts.limit));
+    let up = g.binary(
+        Binary::Maximum,
+        &g.binary(Binary::Minimum, &half(1), &constant(experts.limit)),
+        &constant(-experts.limit),
+    );
+    let sigmoid = g.unary(Unary::Logistic, &g.binary(Binary::Multiply, &gate, &constant(experts.alpha)));
+    return g.binary(
+        Binary::Multiply,
+        &g.binary(Binary::Multiply, &gate, &sigmoid),
+        &g.binary(Binary::Add, &up, &constant(experts.beta)),
+    );
+}
