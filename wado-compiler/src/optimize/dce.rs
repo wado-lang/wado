@@ -1549,10 +1549,13 @@ fn populate_type_reachability(
         for functor in &project.closure_functors {
             let cm_ptr = Arc::as_ptr(&functor.call_method);
             if surviving_ptrs.contains(&cm_ptr) {
-                analysis.types.insert(functor.struct_type_id);
-                analysis.types.insert(functor.ref_type_id);
-                let canonical = functor.canonical_user_params.iter().map(|&(_, ty)| ty);
-                analysis.types.extend(canonical.chain([functor.canonical_return]));
+                let params = functor.canonical_user_params.iter().map(|&(_, ty)| ty);
+                analysis.types.extend(
+                    [functor.struct_type_id, functor.ref_type_id]
+                        .into_iter()
+                        .chain(params)
+                        .chain([functor.canonical_return]),
+                );
             }
         }
     }
