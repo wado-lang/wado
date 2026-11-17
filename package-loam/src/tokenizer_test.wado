@@ -1,24 +1,35 @@
 use { BpeTokenizer, TokenSpelling, byte_chars, byte_token } from "./runtime/tokenizer.wado";
 use { merges_bytes, order_bytes, tokens_bytes } from "./emit_tokenizer.wado";
 
+/// A tokenizer over `tokens` and `merges`, as a generated module builds one.
+fn built(
+    tokens: &List<String>,
+    merges: List<[i32, i32, i32]>,
+    specials: List<String>,
+    spelling: TokenSpelling,
+    unknown: i32,
+    prefix: List<i32>,
+) -> BpeTokenizer {
+    return BpeTokenizer::new(
+        &tokens_bytes(tokens),
+        &order_bytes(tokens),
+        &merges_bytes(&merges),
+        specials,
+        spelling,
+        unknown,
+        prefix,
+    );
+}
+
 /// A byte-level tokenizer over every byte's character, the merge `a b`, and
 /// `specials`, which take the ids after `ab`.
 fn tokenizer(specials: List<String>) -> BpeTokenizer {
     let mut tokens: List<String> = byte_chars().into_iter().map(|c| String::from(c)).collect();
     tokens.push("ab");
     tokens.extend(&specials);
-    let merges = merges_bytes(&[
+    return built(&tokens, [
         [97, 98, 256],
-    ]);
-    return BpeTokenizer::new(
-        &tokens_bytes(&tokens),
-        &order_bytes(&tokens),
-        &merges,
-        specials,
-        TokenSpelling::ByteLevel,
-        -1,
-        [],
-    );
+    ], specials, TokenSpelling::ByteLevel, -1, []);
 }
 
 /// A SentencePiece tokenizer: `<unk>`, `<bos>`, every byte's `<0xXX>` token,
@@ -30,19 +41,10 @@ fn pieces() -> BpeTokenizer {
         tokens.push(byte_token(b));
     }
     tokens.extend(&(["▁", "a", "b", "▁a", "▁ab", "é"] as List<String>));
-    let merges = merges_bytes(&[
+    return built(&tokens, [
         [258, 259, 261],
         [261, 260, 262],
-    ]);
-    return BpeTokenizer::new(
-        &tokens_bytes(&tokens),
-        &order_bytes(&tokens),
-        &merges,
-        ["<bos>"],
-        TokenSpelling::Pieces,
-        0,
-        [1],
-    );
+    ], ["<bos>"], TokenSpelling::Pieces, 0, [1]);
 }
 
 /// A byte-level tokenizer over every byte's character, then `joined`, which
@@ -50,15 +52,7 @@ fn pieces() -> BpeTokenizer {
 fn merging(joined: List<String>, merges: List<[i32, i32, i32]>) -> BpeTokenizer {
     let mut tokens: List<String> = byte_chars().into_iter().map(|c| String::from(c)).collect();
     tokens.extend(&joined);
-    return BpeTokenizer::new(
-        &tokens_bytes(&tokens),
-        &order_bytes(&tokens),
-        &merges_bytes(&merges),
-        [],
-        TokenSpelling::ByteLevel,
-        -1,
-        [],
-    );
+    return built(&tokens, merges, [], TokenSpelling::ByteLevel, -1, []);
 }
 
 test "every place a pair stands merges in its round, left to right" {
@@ -82,15 +76,7 @@ test "a pair a merge forms merges by its own rank" {
 
 #[expect_trap]
 test "SentencePiece's spelling needs the bytes' tokens or an unknown token" {
-    BpeTokenizer::new(
-        &tokens_bytes(&["a"]),
-        &order_bytes(&["a"]),
-        &merges_bytes(&[]),
-        [],
-        TokenSpelling::Pieces,
-        -1,
-        [],
-    );
+    built(&["a"], [], [], TokenSpelling::Pieces, -1, []);
 }
 
 test "a pair the merges rank merges, and the rest stay bytes" {
@@ -134,29 +120,13 @@ test "SentencePiece's spelling decodes an added token's ▁ as a space" {
         tokens.push(byte_token(b));
     }
     tokens.push("▁▁");
-    let t = BpeTokenizer::new(
-        &tokens_bytes(&tokens),
-        &order_bytes(&tokens),
-        &merges_bytes(&[]),
-        ["▁▁"],
-        TokenSpelling::Pieces,
-        0,
-        [],
-    );
+    let t = built(&tokens, [], ["▁▁"], TokenSpelling::Pieces, 0, []);
     assert t.encode(&"▁▁") == [257] as List<i32>;
     assert t.decode(&[257]) == "  ";
 }
 
 test "a token the vocabulary repeats encodes as its lowest id" {
     let tokens: List<String> = ["<unk>", "b", "a", "c", "a"];
-    let t = BpeTokenizer::new(
-        &tokens_bytes(&tokens),
-        &order_bytes(&tokens),
-        &merges_bytes(&[]),
-        [],
-        TokenSpelling::Pieces,
-        0,
-        [],
-    );
+    let t = built(&tokens, [], [], TokenSpelling::Pieces, 0, []);
     assert t.encode(&"abc") == [2, 1, 3] as List<i32>;
 }
