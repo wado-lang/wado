@@ -134,10 +134,9 @@ impl<'a> Document<'a> {
     }
 
     fn title(&self) -> &str {
-        self.sections
-            .first()
-            .filter(|s| s.level == 1)
-            .map_or(self.name, |s| s.title)
+        let first = &self.sections[0];
+        assert_eq!(first.level, 1, "a document opens with its title");
+        first.title
     }
 
     fn section(&self, slug: &str) -> Option<&Section<'a>> {
@@ -282,7 +281,11 @@ pub fn run(opts: &SpecOptions) -> Result<(), CliExit> {
 }
 
 fn index(docs: &[Document]) -> String {
-    let width = docs.iter().map(|d| d.name.len()).max().unwrap_or(0);
+    let width = docs
+        .iter()
+        .map(|d| d.name.len())
+        .max()
+        .expect("documents are bundled");
     let mut out = String::new();
     for doc in docs {
         writeln!(out, "{:width$}  {}", doc.name, doc.title()).unwrap();
@@ -369,18 +372,25 @@ mod tests {
         }
     }
 
+    /// The targets of the links in `text` to a file beside it.
+    fn relative_links(text: &str) -> impl Iterator<Item = &str> {
+        text.match_indices("](./").map(|(i, link)| {
+            let rest = &text[i + link.len()..];
+            &rest[..rest.find(')').unwrap()]
+        })
+    }
+
+    /// The overview's chapter list names every spec file in reading order
+    /// (`mise run update-docs-index` holds that), so the bundle follows it.
     #[test]
-    fn every_spec_file_is_bundled() {
-        let docs_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../docs");
-        let mut on_disk: Vec<String> = std::fs::read_dir(docs_dir)
-            .unwrap()
-            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-            .filter(|f| f == "cheatsheet.md" || (f.starts_with("spec-") && f.ends_with(".md")))
-            .collect();
-        on_disk.sort();
-        let mut bundled: Vec<String> = DOCUMENTS.iter().map(|(n, _)| file_name(n)).collect();
-        bundled.sort();
-        assert_eq!(bundled, on_disk);
+    fn every_chapter_is_bundled_in_reading_order() {
+        let docs = documents();
+        let overview = docs.iter().find(|d| d.name == "overview").unwrap();
+        let chapters = &overview.section("chapters").unwrap().body;
+        let mut expected = vec!["cheatsheet.md", "spec-overview.md"];
+        expected.extend(relative_links(chapters));
+        let bundled: Vec<String> = DOCUMENTS.iter().map(|(n, _)| file_name(n)).collect();
+        assert_eq!(bundled, expected);
     }
 
     /// A link between bundled documents names a section `wado spec` finds, so
@@ -390,9 +400,7 @@ mod tests {
         let docs = documents();
         let mut broken = Vec::new();
         for (name, text) in DOCUMENTS {
-            for (i, link) in text.match_indices("](./") {
-                let rest = &text[i + link.len()..];
-                let target = &rest[..rest.find(')').unwrap()];
+            for target in relative_links(text) {
                 let Some((file, anchor)) = target.split_once('#') else {
                     continue;
                 };

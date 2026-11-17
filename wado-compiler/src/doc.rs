@@ -8,7 +8,6 @@ use crate::ast::{
 };
 use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
-use crate::lexer::is_ident_continue;
 use crate::module_source::ModuleSource;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
@@ -64,8 +63,7 @@ pub struct DocImplMembers {
 }
 
 impl DocImplMembers {
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.constants.is_empty() && self.methods.is_empty() && self.trait_impls.is_empty()
     }
 
@@ -95,6 +93,7 @@ pub struct DocPrimitiveType {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocTrait {
+    pub name: String,
     pub signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
@@ -134,6 +133,7 @@ pub struct DocField {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocFunction {
+    pub name: String,
     pub signature: String,
     /// The declaration's attributes, rendered as written. Beside the signature
     /// rather than in it: a signature is one line, and a reader wants both.
@@ -170,6 +170,7 @@ pub struct DocGlobal {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocEnum {
+    pub name: String,
     pub signature: String,
     pub cases: Vec<DocEnumCase>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -446,6 +447,7 @@ fn build_doc_trait(t: &TraitDecl) -> DocTrait {
         .collect();
 
     DocTrait {
+        name: t.name.clone(),
         signature: sig,
         doc: t.doc.clone(),
         associated_types,
@@ -532,6 +534,7 @@ fn build_doc_enum(e: &EnumDecl, impls: &[DocImpl], include_private: bool) -> Doc
         })
         .collect();
     DocEnum {
+        name: e.name.clone(),
         signature: unparse_enum_signature(e),
         cases,
         doc: e.doc.clone(),
@@ -637,6 +640,7 @@ fn build_doc_resource(r: &ResourceDecl, impls: &[DocImpl], include_private: bool
 /// lets carry a `contract` clause.
 fn build_doc_operation(m: &Function) -> DocFunction {
     DocFunction {
+        name: m.name.clone(),
         signature: render_interface_method_signature(m),
         attrs: unparse_attributes(&m.attrs),
         contracts: Vec::new(),
@@ -656,6 +660,7 @@ fn own_contracts(f: &Function) -> Vec<String> {
 /// declares.
 fn build_doc_function_with(f: &Function, contracts: Vec<String>) -> DocFunction {
     DocFunction {
+        name: f.name.clone(),
         signature: unparse_function_signature(f),
         attrs: unparse_attributes(&f.attrs),
         contracts,
@@ -1000,16 +1005,16 @@ fn merge_reexported_items(parent: &mut DocModule, child: &DocModule, names: &Ind
             }
         };
     }
-    merge!(traits, it => extract_item_name(&it.signature, "trait "));
-    merge!(structs, it => extract_item_name(&it.signature, "struct "));
-    merge!(types, it => it.name.as_str());
-    merge!(globals, it => it.name.as_str());
-    merge!(enums, it => extract_item_name(&it.signature, "enum "));
-    merge!(variants, it => it.name.as_str());
-    merge!(flags, it => it.name.as_str());
-    merge!(effects, it => it.name.as_str());
-    merge!(resources, it => it.name.as_str());
-    merge!(functions, it => extract_item_name(&it.signature, "fn "));
+    merge!(traits, it => &it.name);
+    merge!(structs, it => &it.name);
+    merge!(types, it => &it.name);
+    merge!(globals, it => &it.name);
+    merge!(enums, it => &it.name);
+    merge!(variants, it => &it.name);
+    merge!(flags, it => &it.name);
+    merge!(effects, it => &it.name);
+    merge!(resources, it => &it.name);
+    merge!(functions, it => &it.name);
 }
 
 /// Merge primitive impl entries, combining methods for the same type name.
@@ -1021,19 +1026,6 @@ fn merge_primitive_types(target: &mut Vec<DocPrimitiveType>, source: Vec<DocPrim
             target.push(src);
         }
     }
-}
-
-/// Extract the item name from a signature string.
-/// e.g., "pub trait Eq" with keyword "trait " → "Eq"
-fn extract_item_name<'a>(sig: &'a str, keyword: &str) -> &'a str {
-    let rest = sig
-        .find(keyword)
-        .map(|i| &sig[i + keyword.len()..])
-        .unwrap_or(sig);
-    let end = rest
-        .find(|c: char| !is_ident_continue(c))
-        .unwrap_or(rest.len());
-    &rest[..end]
 }
 
 fn collect_impl_members(
@@ -1122,6 +1114,7 @@ fn build_doc_const(c: &AssociatedConst) -> DocFunction {
     sig.push_str(": ");
     unparse_type_into(&c.ty, &mut sig);
     DocFunction {
+        name: c.name.clone(),
         signature: sig,
         attrs: Vec::new(),
         contracts: Vec::new(),

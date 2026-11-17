@@ -331,21 +331,13 @@ async fn load_stdlib_docs(include_private: bool) -> Result<Vec<(String, DocModul
 /// One searchable item of a page: what a reader calls it, and what it says.
 struct Item<'a> {
     module: &'a str,
-    /// The item's name, under its owner's where it has one (`Option::map`).
+    name: &'a str,
+    /// The name under its owner's where it has one (`Option::map`).
     path: String,
     signature: &'a str,
     /// A function's attributes: `#[unavailable(…)]` says the name is reserved.
     attrs: &'a [String],
     doc: Option<&'a str>,
-}
-
-impl Item<'_> {
-    fn name(&self) -> &str {
-        self.path
-            .rsplit(['.', ':'])
-            .next()
-            .expect("rsplit yields at least one piece")
-    }
 }
 
 /// Every item of `doc`, in page order.
@@ -355,59 +347,57 @@ fn items<'a>(module: &'a str, doc: &'a DocModule) -> Vec<Item<'a>> {
         items: Vec::new(),
     };
     for g in &doc.globals {
-        out.add(g.name.clone(), &g.signature, &g.doc);
+        out.add(None, &g.name, &g.signature, &g.doc);
     }
     for f in &doc.functions {
-        out.add_function(declared_name(&f.signature).to_string(), f);
+        out.add_function(None, f);
     }
     for t in &doc.traits {
-        let name = declared_name(&t.signature);
-        out.add(name.to_string(), &t.signature, &t.doc);
-        out.add_members(name, &t.methods);
+        out.add(None, &t.name, &t.signature, &t.doc);
+        out.add_members(&t.name, &t.methods);
     }
     for e in &doc.effects {
-        out.add(e.name.clone(), &e.signature, &e.doc);
+        out.add(None, &e.name, &e.signature, &e.doc);
         out.add_members(&e.name, &e.methods);
     }
     for r in &doc.resources {
-        out.add(r.name.clone(), &r.signature, &r.doc);
+        out.add(None, &r.name, &r.signature, &r.doc);
         out.add_members(&r.name, &r.methods);
     }
     for t in &doc.types {
-        out.add(t.name.clone(), &t.signature, &t.doc);
+        out.add(None, &t.name, &t.signature, &t.doc);
         out.add_members(&t.name, t.impls.functions());
     }
     for p in &doc.primitive_types {
-        out.add(p.name.clone(), &p.name, &p.doc);
+        out.add(None, &p.name, &p.name, &p.doc);
         out.add_members(&p.name, p.impls.functions());
     }
     for s in &doc.structs {
-        out.add(s.name.clone(), sig_name_part(&s.signature), &s.doc);
+        out.add(None, &s.name, sig_name_part(&s.signature), &s.doc);
         for f in &s.fields {
-            out.add(format!("{}.{}", s.name, f.name), &f.ty, &f.doc);
+            out.add(Some(&s.name), &f.name, &f.ty, &f.doc);
         }
         out.add_members(&s.name, s.impls.functions());
     }
     for v in &doc.variants {
-        out.add(v.name.clone(), &v.signature, &v.doc);
+        out.add(None, &v.name, &v.signature, &v.doc);
         for c in &v.cases {
-            out.add(format!("{}::{}", v.name, c.name), &v.signature, &c.doc);
+            out.add(Some(&v.name), &c.name, &v.signature, &c.doc);
         }
         out.add_members(&v.name, v.impls.functions());
     }
     for e in &doc.enums {
         let signature = sig_name_part(&e.signature);
-        let name = declared_name(signature);
-        out.add(name.to_string(), signature, &e.doc);
+        out.add(None, &e.name, signature, &e.doc);
         for c in &e.cases {
-            out.add(format!("{name}::{}", c.name), signature, &c.doc);
+            out.add(Some(&e.name), &c.name, signature, &c.doc);
         }
-        out.add_members(name, e.impls.functions());
+        out.add_members(&e.name, e.impls.functions());
     }
     for f in &doc.flags {
-        out.add(f.name.clone(), &f.signature, &f.doc);
+        out.add(None, &f.name, &f.signature, &f.doc);
         for m in &f.members {
-            out.add(format!("{}::{}", f.name, m.name), &f.signature, &m.doc);
+            out.add(Some(&f.name), &m.name, &f.signature, &m.doc);
         }
         out.add_members(&f.name, f.impls.functions());
     }
@@ -420,60 +410,43 @@ struct Items<'a> {
 }
 
 impl<'a> Items<'a> {
-    fn add(&mut self, path: String, signature: &'a str, doc: &'a Option<String>) {
-        self.items.push(Item {
-            module: self.module,
-            path,
-            signature,
-            attrs: &[],
-            doc: doc.as_deref(),
-        });
+    fn add(
+        &mut self,
+        owner: Option<&str>,
+        name: &'a str,
+        signature: &'a str,
+        doc: &'a Option<String>,
+    ) {
+        self.push(owner, name, signature, &[], doc);
     }
 
-    fn add_function(&mut self, path: String, f: &'a DocFunction) {
+    fn add_function(&mut self, owner: Option<&str>, f: &'a DocFunction) {
+        self.push(owner, &f.name, &f.signature, &f.attrs, &f.doc);
+    }
+
+    fn push(
+        &mut self,
+        owner: Option<&str>,
+        name: &'a str,
+        signature: &'a str,
+        attrs: &'a [String],
+        doc: &'a Option<String>,
+    ) {
         self.items.push(Item {
             module: self.module,
-            path,
-            signature: &f.signature,
-            attrs: &f.attrs,
-            doc: f.doc.as_deref(),
+            name,
+            path: owner.map_or_else(|| name.to_string(), |o| format!("{o}::{name}")),
+            signature,
+            attrs,
+            doc: doc.as_deref(),
         });
     }
 
     fn add_members(&mut self, owner: &str, members: impl IntoIterator<Item = &'a DocFunction>) {
         for f in members {
-            self.add_function(format!("{owner}::{}", declared_name(&f.signature)), f);
+            self.add_function(Some(owner), f);
         }
     }
-}
-
-/// The name a declaration's signature declares: the word after its keyword,
-/// up to its type parameters, parameters or type.
-fn declared_name(signature: &str) -> &str {
-    const KEYWORDS: &[&str] = &[
-        "fn",
-        "const",
-        "global",
-        "mut",
-        "trait",
-        "enum",
-        "variant",
-        "flags",
-        "struct",
-        "type",
-        "interface",
-        "resource",
-    ];
-    let mut words = signature.split_whitespace();
-    let after = words
-        .by_ref()
-        .find(|w| KEYWORDS.contains(w))
-        .and_then(|_| words.find(|w| *w != "mut"))
-        .unwrap_or(signature);
-    let end = after
-        .find(|c: char| !(c.is_alphanumeric() || c == '_'))
-        .unwrap_or(after.len());
-    &after[..end]
 }
 
 fn search_docs(docs: &[(String, DocModule)], query: &str) -> Result<String, CliExit> {
@@ -482,13 +455,13 @@ fn search_docs(docs: &[(String, DocModule)], query: &str) -> Result<String, CliE
     for (module, doc) in docs {
         for item in items(module, doc) {
             let fields = [
-                (item.name(), 10),
+                (item.name, 10),
                 (item.path.as_str(), 6),
                 (item.signature, 3),
                 (item.doc.unwrap_or(""), 1),
             ];
             if let Some(score) = query.score(&fields) {
-                let exact = if query.is_exactly(item.name()) { 10 } else { 0 };
+                let exact = if query.is_exactly(item.name) { 10 } else { 0 };
                 hits.push((score + exact, item));
             }
         }
@@ -1035,18 +1008,6 @@ mod format_contract_tests {
         };
         let out = render_combined(&docs, opts.title.as_deref(), "markdown", &opts);
         assert_dprint_stable(&out, "markdown combined");
-    }
-
-    #[test]
-    fn declared_name_reads_the_word_after_the_keyword() {
-        assert_eq!(
-            declared_name("pub fn map<U>(self, f: fn(T) -> U) -> Option<U>"),
-            "map"
-        );
-        assert_eq!(declared_name("pub const MAX: i32"), "MAX");
-        assert_eq!(declared_name("pub global mut COUNT: i32"), "COUNT");
-        assert_eq!(declared_name("export(Command::run) fn main()"), "main");
-        assert_eq!(declared_name("pub trait Add<Rhs = Self> with ()"), "Add");
     }
 
     #[test]
@@ -1778,13 +1739,12 @@ fn render_simple_enums_section(out: &mut String, doc: &DocModule, h2: &str) {
     }
     writeln!(out, "\n{h2} Enums").unwrap();
     for e in &doc.enums {
-        let name = sig_name_part(&e.signature);
-        writeln!(out, "\n```wado\n{name} {{").unwrap();
+        writeln!(out, "\n```wado\n{} {{", sig_name_part(&e.signature)).unwrap();
         for case in &e.cases {
             writeln!(out, "    {},", case.name).unwrap();
         }
         out.push_str("}\n");
-        render_simple_impls(out, declared_name(name), &e.impls);
+        render_simple_impls(out, &e.name, &e.impls);
         out.push_str("```\n");
     }
 }
