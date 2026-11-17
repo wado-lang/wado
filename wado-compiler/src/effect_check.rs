@@ -322,11 +322,7 @@ impl ResourceScan<'_> {
             return;
         }
         if let Some(def) = self.tt.resource_def_of(type_id) {
-            out.insert(
-                self.resolutions
-                    .effect_decl(def)
-                    .expect("a resource is an effect"),
-            );
+            out.insert(resource_effect(self.resolutions, def));
         }
         match self.tt.get(type_id) {
             ResolvedType::Struct { type_args, .. } | ResolvedType::Variant { type_args, .. } => {
@@ -368,17 +364,10 @@ impl ResourceScan<'_> {
     }
 }
 
-/// The effects of resource `def` and every resource it extends, nearest first.
-fn resource_chain_effects<'a>(
-    tt: &'a TypeTable,
-    resolutions: &'a Resolutions,
-    def: DefId,
-) -> impl Iterator<Item = EffectRef> + 'a {
-    tt.resource_chain(def).map(|ancestor| {
-        resolutions
-            .effect_decl(ancestor)
-            .expect("a resource is an effect")
-    })
+fn resource_effect(resolutions: &Resolutions, def: DefId) -> EffectRef {
+    resolutions
+        .effect_decl(def)
+        .expect("a resource is an effect")
 }
 
 // ---------------------------------------------------------------------------
@@ -487,7 +476,7 @@ fn run_effect_checks(
                         .filter(|facts| facts.trait_name.is_none())
                         .and_then(|facts| facts.struct_name.head().def())
                         .filter(|&def| index.resolutions.defs().kind(def) == DefKind::Resource)
-                        .and_then(|def| index.resolutions.effect_decl(def))
+                        .map(|def| resource_effect(index.resolutions, def))
                         .into_iter()
                         .chain(
                             trait_key
@@ -850,16 +839,7 @@ impl OwnedEffectData {
 
         let resolutions = &*state.tysys.resolutions;
         let defs = resolutions.defs();
-        let resources: IndexSet<EffectRef> = sem
-            .modules
-            .values()
-            .flat_map(|module| &module.items)
-            .filter_map(|item| match item {
-                Item::Resource(resource) => resolutions.effect_decl(defs.def_at(resource.id)),
-                _ => None,
-            })
-            .collect();
-        let drop_is_an_operation: IndexSet<DefId> = sem
+        let resource_decls: Vec<_> = sem
             .modules
             .values()
             .flat_map(|module| &module.items)
@@ -867,6 +847,13 @@ impl OwnedEffectData {
                 Item::Resource(resource) => Some(resource),
                 _ => None,
             })
+            .collect();
+        let resources: IndexSet<EffectRef> = resource_decls
+            .iter()
+            .map(|resource| resource_effect(resolutions, defs.def_at(resource.id)))
+            .collect();
+        let drop_is_an_operation: IndexSet<DefId> = resource_decls
+            .iter()
             .filter(|resource| {
                 resource.methods.iter().any(|method| {
                     method.name == RESOURCE_DROP
@@ -1635,8 +1622,11 @@ fn build_propagation_closure_sem(
             if is_resource {
                 // A holder of an ancestor narrows a handle to this resource at
                 // will, so the ancestor implies it.
-                for ancestor in resource_chain_effects(scan.tt, resolutions, def).skip(1) {
-                    direct.entry(ancestor).or_default().insert(key.clone());
+                for ancestor in scan.tt.resource_chain(def).skip(1) {
+                    direct
+                        .entry(resource_effect(resolutions, ancestor))
+                        .or_default()
+                        .insert(key.clone());
                 }
             }
             let Some(ops) = annotations.effect_ops.get(&decl_id) else {
@@ -2026,12 +2016,9 @@ fn dispatch_effects(
 
 /// The resource `receiver` is, behind any references, where every walk agrees.
 fn receiver_resource(sem: &Semantics, receiver: &Expr) -> Option<DefId> {
-    let mut defs = sem.expression_types(receiver.id()).map(|mut type_id| {
-        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = sem.types.get(type_id) {
-            type_id = *inner;
-        }
-        sem.types.resource_def_of(type_id)
-    });
+    let mut defs = sem
+        .expression_types(receiver.id())
+        .map(|type_id| sem.types.resource_def_of(sem.types.peel_refs(type_id)));
     let first = defs.next()??;
     defs.all(|def| def == Some(first)).then_some(first)
 }
