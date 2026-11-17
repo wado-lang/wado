@@ -1550,11 +1550,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether a match's trait arguments, their open slots solved against
     /// `pinned`, are `pinned`. Judged before anything is solved, since a
     /// variable the receiver holds is shared by every match.
-    pub(super) fn trait_args_settle_to(
-        &mut self,
-        trait_args: &[TypeId],
-        pinned: &[TypeId],
-    ) -> bool {
+    fn trait_args_settle_to(&mut self, trait_args: &[TypeId], pinned: &[TypeId]) -> bool {
         if trait_args.len() != pinned.len() {
             return false;
         }
