@@ -250,16 +250,18 @@ pub struct Half {
 }
 
 /// Attention over a past of `past.2` positions in each row of a shared buffer,
-/// turned by `rotation`, biased over the buffer's positions by `bias`.
+/// turned by `rotation`, biased over the buffer's positions by `bias`, each
+/// query head's softmax joined by its of `sinks`.
 pub fn attending<affine G: Graph, E: Float = f32>(
     g: &mut G,
     inputs: &[G::Tensor<E, [Bt, St, Qt]>, G::Tensor<E, [Bt, St, Kt]>, G::Tensor<E, [Bt, St, Kt]>],
     past: &[G::Tensor<E, [Bt, Ht, Pt, Dt]>, G::Tensor<E, [Bt, Ht, Pt, Dt]>, G::Tensor<i64, [Slots]>],
     rotation: &[G::Tensor<E, [Pos, Half]>, G::Tensor<E, [Pos, Half]>],
     bias: &G::Tensor<E, [Bt, Ht, St, Tt]>,
+    sinks: &G::Tensor<E, [Qt]>,
     options: &Attention,
 ) -> [G::Tensor<E, [Bt, St, Qt]>, G::Tensor<E, [Bt, Ht, Tt, Dt]>, G::Tensor<E, [Bt, Ht, Tt, Dt]>] with _ {
-    return g.group_query_attention::<E, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+    return g.group_query_attention::<E, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St, Qt>(
         &inputs.0,
         &inputs.1,
         &inputs.2,
@@ -270,6 +272,7 @@ pub fn attending<affine G: Graph, E: Float = f32>(
         Option::Some(&rotation.0),
         Option::Some(&rotation.1),
         Option::Some(bias),
+        Option::Some(sinks),
         options,
     );
 }
@@ -327,6 +330,7 @@ pub struct AttentionCase {
     pub past: [Tensor<f32, [Bt, Ht, Pt, Dt]>, Tensor<f32, [Bt, Ht, Pt, Dt]>, Tensor<i64, [Slots]>],
     pub rotation: [Tensor<f32, [Pos, Half]>, Tensor<f32, [Pos, Half]>],
     pub bias: Tensor<f32, [Bt, Ht, St, Tt]>,
+    pub sinks: Tensor<f32, [Qt]>,
     pub options: Attention,
 }
 
@@ -365,6 +369,7 @@ pub fn attention_rows(pasts: List<i64>) -> AttentionCase {
             data: [0.25, -0.5, 0.0, 7.0, -0.75, 0.5, 0.3, 7.0],
             extents: [1, 1, s, capacity],
         },
+        sinks: noisy([heads], 8),
         options: Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true },
     };
 }
@@ -637,13 +642,14 @@ pub fn repeating_attention<affine G: Graph>(
             let keys = typed::<G, f32, [Bt, Ht, Pt, Dt]>(g, &state[1]);
             let values = typed::<G, f32, [Bt, Ht, Pt, Dt]>(g, &state[2]);
             let length = g.binary(Binary::Add, &first, step);
-            let [out, present_k, present_v] = g.group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Pt, Dt, Pos, Half, Bt, Ht, St>(
+            let [out, present_k, present_v] = g.group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Pt, Dt, Pos, Half, Bt, Ht, St, Qt>(
                 &attended,
                 k,
                 v,
                 &keys,
                 &values,
                 Option::Some(&shared(g, &length)),
+                null,
                 null,
                 null,
                 null,

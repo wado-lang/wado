@@ -492,9 +492,10 @@ add('ExpandBothWays', expand([2, 1], [1, 3]));
 // GroupQueryAttention over `s` new positions after `past` cached ones, `heads`
 // query heads sharing `kv` key and value heads of `dim` elements. `rotary`
 // feeds cos and sin caches of 8 positions; `bias` an additive mask; `output`
-// names which of the three results the case checks. onnxruntime rotates a head
-// of a multiple of 16 elements only.
-const gqa = ({ s, past, heads, kv, dim, attrs = {}, rotary = false, bias = null, output = 0 }) => {
+// names which of the three results the case checks; `sink` a logit per query
+// head, which joins each softmax's denominator. onnxruntime rotates a head of a
+// multiple of 16 elements only.
+const gqa = ({ s, past, heads, kv, dim, attrs = {}, rotary = false, bias = null, sink = null, output = 0 }) => {
   const total = past + s;
   const cache = (f) => {
     const half = dim / 2;
@@ -515,15 +516,25 @@ const gqa = ({ s, past, heads, kv, dim, attrs = {}, rotary = false, bias = null,
     L: tensor(INT32, [1], [total - 1]),
     T: tensor(INT32, [], [total]),
   };
+  // Each optional operand at its index, an absent one before it named ''.
   const operands = ['Q', 'K', 'V', 'PK', 'PV', 'L', 'T'];
+  const at = (index, name) => {
+    while (operands.length < index) operands.push('');
+    operands.push(name);
+  };
   if (rotary) {
     inits.C = cache(Math.cos);
     inits.N = cache(Math.sin);
-    operands.push('C', 'N');
+    at(7, 'C');
+    at(8, 'N');
   }
   if (bias) {
     inputs.B = float([1, 1, s, total], bias);
-    operands.push(...(rotary ? [] : ['', '']), '', 'B');
+    at(10, 'B');
+  }
+  if (sink) {
+    inits.H = float([heads], sink);
+    at(11, 'H');
   }
   const outputs = ['O', 'PKo', 'PVo'];
   outputs[output] = 'Y';
@@ -550,6 +561,11 @@ add('GqaBias', gqa({ s: 2, past: 1, heads: 2, kv: 1, dim: 16, bias: [0, -3.40282
 add('GqaRotaryBias', gqa({
   s: 2, past: 1, heads: 2, kv: 1, dim: 16, rotary: true, attrs: { do_rotary: 1 }, bias: [0, 0, -2, -3.4028234663852886e38, 0, 0],
 }));
+// A sink above every score takes most of each softmax and one below takes
+// little. Under a window, the sink joins the positions the window keeps.
+add('GqaSink', gqa({ s: 3, past: 1, heads: 2, kv: 1, dim: 16, sink: [4, -2] }));
+add('GqaSinkWindow', gqa({ s: 4, past: 2, heads: 2, kv: 1, dim: 16, attrs: { local_window_size: 2 }, sink: [0.5, 30] }));
+add('GqaHalfSink', overHalves(gqa({ s: 2, past: 2, heads: 2, kv: 1, dim: 16, sink: [1, -1] }), ['Q', 'K', 'V', 'PK', 'PV', 'H']));
 
 // Bytes spread over their range, apart for each `seed`, as packed weights.
 const bytes = (dims, seed) => tensor(

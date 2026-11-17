@@ -746,6 +746,18 @@ test "GroupQueryAttention rotates and adds its bias" {
     assert_agrees(#include_bytes("./operators/GqaRotaryBias.onnx"), #include_str("./operators/GqaRotaryBias.txt"));
 }
 
+test "GroupQueryAttention adds each head's sink to its softmax's denominator" {
+    assert_agrees(#include_bytes("./operators/GqaSink.onnx"), #include_str("./operators/GqaSink.txt"));
+}
+
+test "GroupQueryAttention with a sink over a window" {
+    assert_agrees(#include_bytes("./operators/GqaSinkWindow.onnx"), #include_str("./operators/GqaSinkWindow.txt"));
+}
+
+test "GroupQueryAttention of halves with a sink" {
+    assert_agrees(#include_bytes("./operators/GqaHalfSink.onnx"), #include_str("./operators/GqaHalfSink.txt"));
+}
+
 test "MatMulNBits reads each block less its packed zero point, times its scale, the last block cut short" {
     assert_agrees(#include_bytes("./operators/NBits.onnx"), #include_str("./operators/NBits.txt"));
 }

@@ -1654,11 +1654,13 @@ pub struct AttentionOptions {
 }
 
 /// The operands `GroupQueryAttention` reads past its first seven: the rotary
-/// caches, then the position ids, then the bias.
+/// caches, then the position ids, then the bias, then a logit per query head
+/// that joins each softmax's denominator.
 pub global ROTARY_COS: i32 = 7;
 pub global ROTARY_SIN: i32 = 8;
 global POSITION_IDS: i32 = 9;
 pub global ATTENTION_BIAS: i32 = 10;
+pub global HEAD_SINK: i32 = 11;
 
 /// A `GroupQueryAttention`'s options, refusing an attribute that asks for what
 /// the kernel does not compute.
@@ -1882,7 +1884,8 @@ pub fn named_present(node: &Node) -> Option<String> {
 /// positions after the past ones, a new axis. The query,
 /// key and value are `[batch, sequence, heads × head]`, the past
 /// `[batch, key heads, past, head]`. The sequence lengths it is given must
-/// be the ones its shapes say, as must the rotary caches' and bias's extents.
+/// be the ones its shapes say, as must the rotary caches', the bias's and the
+/// sinks' extents.
 fn attention(
     node: &Node,
     shapes: &HashMap<String, Shape>,
@@ -1896,8 +1899,8 @@ fn attention(
             return Result::Err(refusal(node, `operand ${index} is absent, which only a packed or pastless form leaves`));
         }
     }
-    if node.has_operand(POSITION_IDS) || node.inputs.len() > ATTENTION_BIAS + 1 {
-        return Result::Err(refusal(node, "position ids, sinks, cache scales and norm weights are not supported"));
+    if node.has_operand(POSITION_IDS) || node.inputs.len() > HEAD_SINK + 1 {
+        return Result::Err(refusal(node, "position ids, cache scales and norm weights are not supported"));
     }
     let ranked = |index: i32, rank: i32| -> Result<Shape, InferError> {
         let shape = operand_at(node, shapes, index);
@@ -1994,6 +1997,9 @@ fn attention(
                 "the bias's second extent must be 1 or the heads'",
             )?;
         }
+    }
+    if node.has_operand(HEAD_SINK) {
+        stated(&ranked(HEAD_SINK, 1)?.axes[0], options.heads as i64, owed, classes)?;
     }
     let cache = Shape {
         axes: [past_k.axes[0], past_k.axes[1], positions, past_k.axes[3]],

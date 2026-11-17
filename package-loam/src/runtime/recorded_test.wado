@@ -303,7 +303,7 @@ fn recorded_attention(case: &AttentionCase) {
     let [past_k, past_v, length] = case.past;
     let [cos, sin] = case.rotation;
     let cpu = &mut Cpu {};
-    let want = attending(cpu, &case.inputs, &case.past, &case.rotation, &case.bias, &case.options);
+    let want = attending(cpu, &case.inputs, &case.past, &case.rotation, &case.bias, &case.sinks, &case.options);
     let mut r = Recorder::new();
     let inputs = [
         r.parameter::<f32, [Bt, St, Qt]>(q.extents),
@@ -320,7 +320,8 @@ fn recorded_attention(case: &AttentionCase) {
         r.parameter::<f32, [Pos, Half]>(sin.extents),
     ];
     let bias = r.parameter::<f32, [Bt, Ht, St, Tt]>(case.bias.extents);
-    let got = attending(&mut r, &inputs, &past, &rotation, &bias, &case.options);
+    let sinks = r.parameter::<f32, [Qt]>(case.sinks.extents);
+    let got = attending(&mut r, &inputs, &past, &rotation, &bias, &sinks, &case.options);
     let recorded = r.finished([got.0.id, got.1.id, got.2.id]);
     assert recorded.nodes[got.1.id].extents == want.1.extents;
     let arguments: List<Any<Cpu>> = [
@@ -333,6 +334,7 @@ fn recorded_attention(case: &AttentionCase) {
         host_of(&cos),
         host_of(&sin),
         host_of(&case.bias),
+        host_of(&case.sinks),
     ];
     assert run(cpu, &recorded, &arguments) == [
         host_of(&want.0),
