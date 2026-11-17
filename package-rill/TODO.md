@@ -11,17 +11,11 @@ already measured, not how to close it. Closed work belongs in commit history.
   rerun even when the value came out the same.
 - [ ] A memo owns nothing. Registering a cleanup inside one traps, and so does
   making an effect or another memo there.
-- [ ] Disposing of a scope stops its bindings and takes its rows out of an
-  `each`. It leaves every other node where it is, and its listeners attached.
+- [ ] Disposing of a scope stops its bindings, takes its rows out of an `each`
+  and the text nodes out of a `bind_text`. It leaves every other node where it
+  is, and its listeners attached.
 - [ ] A flush happens when an `on` listener returns or when the program asks.
   Nothing schedules one after the current task, as a microtask would.
-
-## DOM
-
-- [ ] The keyed list `each` puts its rows back in order by appending every one
-  of them, since `SurfaceDom` does not answer `insert_before`.
-- [ ] A text binding owns its element's whole content, since `SurfaceDom` has no
-  `Text` node.
 
 ## Declarative UI
 

@@ -3,13 +3,15 @@
 
 const $CLASSES = [
   ["EventTarget", 0],
-  ["Event", 7],
+  ["Event", 9],
   ["Node", 1],
-  ["Element", 2],
-  ["HTMLElement", 3],
-  ["HTMLInputElement", 4],
-  ["Document", 5],
-  ["Window", 6],
+  ["CharacterData", 2],
+  ["Text", 3],
+  ["Element", 4],
+  ["HTMLElement", 5],
+  ["HTMLInputElement", 6],
+  ["Document", 7],
+  ["Window", 8],
 ];
 const $SLOT_GET = "$cm_extern_slot_get";
 const $SLOT_PUT = "$cm_extern_slot_put";
@@ -309,6 +311,51 @@ export function $glue() {
       },
       "$wado-lang:web/node#remove-child": (p0, p1) => {
         return p0.removeChild(p1);
+      },
+      "$wado-lang:web/character-data#data": (p0, $ret) => {
+        const $value = p0.data;
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/character-data#set-data": (p0, p1, p2) => {
+        p0.data = $string(p1, p2);
+      },
+      "$wado-lang:web/character-data#length": (p0) => {
+        return p0.length;
+      },
+      "$wado-lang:web/character-data#substring-data": (p0, p1, p2, $ret) => {
+        const $value = p0.substringData((p1 >>> 0), (p2 >>> 0));
+        $putString($ret, $value);
+      },
+      "$wado-lang:web/character-data#append-data": (p0, p1, p2) => {
+        p0.appendData($string(p1, p2));
+      },
+      "$wado-lang:web/character-data#insert-data": (p0, p1, p2, p3) => {
+        p0.insertData((p1 >>> 0), $string(p2, p3));
+      },
+      "$wado-lang:web/character-data#delete-data": (p0, p1, p2) => {
+        p0.deleteData((p1 >>> 0), (p2 >>> 0));
+      },
+      "$wado-lang:web/character-data#replace-data": (p0, p1, p2, p3, p4) => {
+        p0.replaceData((p1 >>> 0), (p2 >>> 0), $string(p3, p4));
+      },
+      "$wado-lang:web/character-data#previous-element-sibling": (p0) => {
+        return (p0.previousElementSibling ?? null);
+      },
+      "$wado-lang:web/character-data#next-element-sibling": (p0) => {
+        return (p0.nextElementSibling ?? null);
+      },
+      "$wado-lang:web/character-data#remove": (p0) => {
+        p0.remove();
+      },
+      "$wado-lang:web/text#new": (p0, p1) => {
+        return new globalThis.Text($string(p0, p1));
+      },
+      "$wado-lang:web/text#split-text": (p0, p1) => {
+        return p0.splitText((p1 >>> 0));
+      },
+      "$wado-lang:web/text#whole-text": (p0, $ret) => {
+        const $value = p0.wholeText;
+        $putString($ret, $value);
       },
       "$wado-lang:web/element#get-spatial-navigation-container": (p0) => {
         return p0.getSpatialNavigationContainer();
@@ -1765,6 +1812,9 @@ export function $glue() {
       },
       "$wado-lang:web/document#create-element-ns": (p0, p1, p2, p3, p4, p5, p6, p7, p8) => {
         return p0.createElementNS((p1 === 0 ? undefined : $string(p2, p3)), $string(p4, p5), (p6 === 0 ? undefined : $string(p7, p8)));
+      },
+      "$wado-lang:web/document#create-text-node": (p0, p1, p2) => {
+        return p0.createTextNode($string(p1, p2));
       },
       "$wado-lang:web/document#import-node": (p0, p1, p2) => {
         return p0.importNode(p1, (p2 !== 0));
