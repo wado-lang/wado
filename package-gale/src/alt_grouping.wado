@@ -108,8 +108,9 @@ pub fn decision_partition(classes: &List<AltClass>) -> List<AltBranch> {
         // Tokens outside its first set select an open-ended or unresolved empty
         // alternative too, so no token split can leave it out.
         let whole = group.len() == 1
-            || group.iter_ref().any(|slot: &i32| alt_class_is_open_ended(&classes[*slot])
-                || alt_class_is_nullable(&classes[*slot]));
+            || group
+                .iter_ref()
+                .any(|slot: &i32| alt_class_is_open_ended(&classes[*slot]) || alt_class_is_nullable(&classes[*slot]));
         if whole {
             out.push(AltBranch { alts: *group, admits: group_branch_admits(group, classes) });
             continue;

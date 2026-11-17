@@ -986,8 +986,9 @@ fn lexer_alt_offers_whole(alt: &LexerAlternative, name: &String) -> bool {
     }
     let offers = match &alt.elements[0] {
         RuleRef(n) => n == name,
-        Group(arms) => arms.iter_ref().any(|a| a.elements.len() == 1
-            && a.elements[0] matches { RuleRef(n) && n == *name }),
+        Group(arms) => arms
+            .iter_ref()
+            .any(|a| a.elements.len() == 1 && a.elements[0] matches { RuleRef(n) && n == *name }),
         _ => false,
     };
     let rest_optional = (1..<alt.elements.len()).all(
@@ -4233,10 +4234,12 @@ fn keyword_elem_ends(
             let classes: List<CharClass> = s.chars().map(|c| folded_class(c, c, ci)).collect();
             return starts
                 .iter_ref()
-                .filter(|p| *p + classes.len() <= len
-                    && (0..<classes.len()).all(
-                        |i| keyword_chars_admitted(kw, *p + i, reading, |c| class_holds(&classes[i], c)),
-                    ))
+                .filter(
+                    |p| *p + classes.len() <= len
+                        && (0..<classes.len()).all(
+                            |i| keyword_chars_admitted(kw, *p + i, reading, |c| class_holds(&classes[i], c)),
+                        ),
+                )
                 .map(|p| *p + classes.len())
                 .collect();
         },
@@ -4432,8 +4435,10 @@ fn keyword_carrier_kinds(
         let [first_chars, is_wildcard] = rule_first_chars(rule, lexer_rules, grammar_opts);
         let carries = keywords
             .iter_ref()
-            .any(|kw| keyword_first_char_covered(kw, &first_chars, is_wildcard)
-                && lexer_rule_matches_keyword(rule, lexer_rules, grammar_opts, kw, KeywordReading::Possible));
+            .any(
+                |kw| keyword_first_char_covered(kw, &first_chars, is_wildcard)
+                    && lexer_rule_matches_keyword(rule, lexer_rules, grammar_opts, kw, KeywordReading::Possible),
+            );
         if carries {
             push_unique(&mut kinds, kind);
         }
@@ -4777,9 +4782,13 @@ fn lexer_rule_total_on_first_char(rule: &LexerRule, all_rules: &List<LexerRule>)
 /// its first character does ties the catch-all's one char or beats it.
 fn branch_catch_all_calls(calls: &List<TryCall>, members: &List<i32>) -> List<i32> {
     let last_resort = last_resort_calls(calls);
-    return (0..<calls.len()).filter(|c| calls[c].is_catch_all
-        && !last_resort.contains(&c)
-        && !members.iter_ref().all(|m| calls[*m].total_on_first_char && *m < c)).collect();
+    return (0..<calls.len())
+        .filter(
+            |c| calls[c].is_catch_all
+                && !last_resort.contains(&c)
+                && !members.iter_ref().all(|m| calls[*m].total_on_first_char && *m < c),
+        )
+        .collect();
 }
 
 /// The catch-alls declared after every other candidate: any other match ties

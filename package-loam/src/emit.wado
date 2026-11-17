@@ -142,8 +142,11 @@ pub fn rows_judged(graph: &Graph, checked: &Checked) -> Result<Option<String>, E
 /// The lengths `build` pads to a capacity: each one no node refuses and an
 /// input carries.
 fn padded_symbols(graph: &Graph, checked: &Checked, carriers: &List<Carrier>) -> List<String> {
-    return padding(graph, checked).into_iter().filter(|j| j.refused matches { None }
-        && carriers.into_iter().any(|c| c.solved.symbol == j.symbol)).map(|j| j.symbol).collect();
+    return padding(graph, checked)
+        .into_iter()
+        .filter(|j| j.refused matches { None } && carriers.into_iter().any(|c| c.solved.symbol == j.symbol))
+        .map(|j| j.symbol)
+        .collect();
 }
 
 /// What `emit` writes the module from but `build`: the graph's names, and the
