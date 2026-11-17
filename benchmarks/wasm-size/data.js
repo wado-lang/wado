@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794912274665,
+  "lastUpdate": 1794917831935,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78817,6 +78817,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8ef8767b85393cb871ba85dd2fc08439b93e2e32"
         },
         "date": 1794912273640,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5f28681761b3220cd29c214eba8c7027b63ee9d8",
+          "message": "Merge pull request #2663 from wado-lang/ccr-ab6e1e8d-gpq450\n\nfeat(eddy): review a pull request from a comment",
+          "timestamp": "2026-11-17T20:59:18+09:00",
+          "tree_id": "d954c4091164f8e13338510d598de405613ffcce",
+          "url": "https://github.com/wado-lang/wado/commit/5f28681761b3220cd29c214eba8c7027b63ee9d8"
+        },
+        "date": 1794917831312,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
