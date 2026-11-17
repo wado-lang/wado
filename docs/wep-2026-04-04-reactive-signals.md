@@ -9,10 +9,10 @@ of a tree.
 
 This WEP first proposed signals as a language feature: a `reactive` keyword on
 bindings, `&reactive` references, and a compiler pass that found each
-computation's dependencies statically. Rill (`wado-lang:rill`, in
-`package-rill/`) then built signals as a library in the language as it is:
-`signal`, `memo`, `observe`, `scope` and `flush`, bindings to the DOM, a keyed
-list, and a to-do list on top of them. It needed no language feature. So the question this WEP answers changed from how
+computation's dependencies statically. `example/web-signals` then built signals
+as a library in the language as it is: `signal`, `memo`, `observe`, `scope` and
+`flush`, bindings to the DOM, a keyed list, and a to-do list on top of them. It
+needed no language feature. So the question this WEP answers changed from how
 the compiler tracks dependencies to whether it should.
 
 ### Prior Art
@@ -105,6 +105,8 @@ not to the language.
 
 - A tracked read dispatches an effect operation, and each run of a computation
   installs a handler. What either costs is not measured.
+- The library lives in `example/web-signals`. Nothing publishes it as a
+  package.
 - A memo does not compare its new value with the old one, so its dependents
   rerun even when the value came out the same.
 - A memo owns nothing. Registering a cleanup inside one traps, and so does

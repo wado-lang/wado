@@ -5,7 +5,7 @@ After that, a write to a signal reruns only the bindings that read it: no
 virtual DOM, and no diffing of a tree.
 
 [WEP: Reactive Signals](../docs/wep-2026-04-04-reactive-signals.md) holds the
-design, and what the library leaves out.
+initial design, and [`TODO.md`](./TODO.md) what the library leaves out.
 
 ```wado
 use { bind_text, element, on, signal } from "wado-lang:rill";
