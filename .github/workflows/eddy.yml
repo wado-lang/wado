@@ -4,6 +4,9 @@ name: Eddy
 # one comment. A repository admin starts it, by commenting `@wado-bot review`
 # on the pull request or by dispatching it with the pull request's number.
 on:
+  # TEMPORARY: reviews the pull request that adds this workflow; removed before it merges.
+  pull_request:
+    paths: [.github/workflows/eddy.yml]
   issue_comment:
     types: [created]
   workflow_dispatch:
@@ -21,7 +24,7 @@ jobs:
   gate:
     name: Gate
     if: >-
-      github.event_name == 'workflow_dispatch'
+      github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
       || (github.event.issue.pull_request && startsWith(github.event.comment.body, '@wado-bot review'))
     runs-on: ubuntu-latest
     permissions:
@@ -42,7 +45,7 @@ jobs:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           REPO: ${{ github.repository }}
           ACTOR: ${{ github.event.comment.user.login || github.actor }}
-          PR: ${{ github.event.issue.number || inputs.pr }}
+          PR: ${{ github.event.issue.number || inputs.pr || github.event.pull_request.number }}
           COMMENT_ID: ${{ github.event.comment.id }}
         run: |
           set -euo pipefail
@@ -104,7 +107,8 @@ jobs:
       # Where `build-wado` checked out, since the binary holds its paths.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.gate.outputs.eddy-sha }}
+          # TEMPORARY: the pull request's Eddy, for the review of itself.
+          ref: ${{ github.event.pull_request.head.sha || needs.gate.outputs.eddy-sha }}
           fetch-depth: 0
           persist-credentials: false
       - run: git fetch --quiet --no-tags origin "$SHA"
