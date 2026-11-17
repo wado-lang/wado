@@ -35,6 +35,38 @@ test "a doctype is never an element's child" {
     };
 }
 
+test "a doctype goes back ahead of the document's element" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let doctype = doc.remove_child(doc.first_child().unwrap());
+        let html = doc.document_element().unwrap();
+        doc.insert_before(doctype, Option::Some(html as Node));
+        assert doc.first_child() == Option::Some(doctype);
+        assert doctype.next_sibling() == Option::Some(html as Node);
+    };
+}
+
+#[expect_trap]
+test "an element never goes ahead of the doctype" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        doc.remove_child(doc.document_element().unwrap());
+        doc.insert_before(doc.create_element("html"), doc.first_child());
+    };
+}
+
+#[expect_trap]
+test "a doctype never goes after the document's element" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let doctype = doc.remove_child(doc.first_child().unwrap());
+        doc.insert_before(doctype, null);
+    };
+}
+
 #[expect_trap]
 test "the document holds one doctype" {
     let mut dom = SurfaceDom::new();
@@ -202,6 +234,9 @@ test "a text node's data is its content, and changes in place" {
         assert p.text_content() == Option::Some("c");
         text.set_text_content(Option::Some("d"));
         assert text.data() == "d";
+
+        assert Text::new("e").data() == "e";
+        assert Text::new().data() == "";
     };
 }
 

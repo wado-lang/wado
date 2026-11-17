@@ -22,6 +22,7 @@ each):
 | A union                       | 16      | `append`, `prepend`, `before`, the `inner_html` getter |
 | More than one overload lowers | 8       | `Window.alert`, `scroll_to`                            |
 | `ObservableArray<T>`          | 1       | `adopted_style_sheets`                                 |
+| `[HTMLConstructor]`, a getter | 4       | `HTMLElement.new`, `Document`'s named getter           |
 
 A member returning `Promise<T>` lowers where `T` does, so one whose `T` is
 outside the slice is counted there.
