@@ -24,7 +24,9 @@ global EXCERPT_REACH: i32 = 12;
 /// in a marker a reader does not see, which is all a later run may take from
 /// the comment: anyone can write one, so the rest is read from Eddy's record.
 pub fn comment(f: &Finding, commit: &String, id: &String) -> String {
-    return comment_within(f, commit, id, BODY_LIMIT).expect("SUMMARY_LIMIT and DETAIL_LIMIT keep a comment without its reproduction within BODY_LIMIT");
+    return comment_within(f, commit, id, BODY_LIMIT).expect(
+        "SUMMARY_LIMIT and DETAIL_LIMIT keep a comment without its reproduction within BODY_LIMIT",
+    );
 }
 
 /// The comment for `f` in at most `limit` bytes: whole, or without its
@@ -378,7 +380,13 @@ test "a review's comment with nothing found, or nothing finished, says so" {
 }
 
 test "a review's comment folds what fits within GitHub's limit" {
-    let big = Repro { patch: "+x\n".repeat(20_000), run: ["cargo", "test"], expect: "e", verified: true, output: "e\n" };
+    let big = Repro {
+        patch: "+x\n".repeat(20_000),
+        run: ["cargo", "test"],
+        expect: "e",
+        verified: true,
+        output: "e\n",
+    };
     let findings: List<Finding> = [
         Finding { file: "a", summary: "S", detail: "D", repro: Some(big) },
         Finding { file: "a", summary: "S", detail: "é".repeat(15_000) },
