@@ -227,8 +227,7 @@ or reports that no method answers. Candidates of both kinds at one link leave
 the kind undecided, and the call is reported as ambiguous.
 
 A static answers by the same rule, with the instance found the way any
-inference finds a type: from the expected type (`let d: Duo<i32, bool> =
-Duo::build()`) or an argument (`Duo::weigh(d)`). Where neither says, the
+inference finds a type: from the expected type (`let d: Duo<i32, bool> = Duo::build()`) or an argument (`Duo::weigh(d)`). Where neither says, the
 written impls do. If the blanket answers at exactly one instance an impl is
 written for, that instance is the call's, as a sole written impl
 (`impl Make for Pair<i32, i32>`) already settles `Pair::made()`. More than one

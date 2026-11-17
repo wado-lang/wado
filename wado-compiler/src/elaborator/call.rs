@@ -5675,9 +5675,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
-        // The rules first, since a blanket is a candidate among the rest: two
-        // traits blanketing one receiver supply the name and separate nothing,
-        // which is the ambiguity every other spelling of that shape reports.
         // A generic type spelled without its arguments names no instance, so
         // the call's context settles one before the rules are asked.
         let unapplied = receiver
@@ -5686,7 +5683,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .and_then(|def| self.bare_generic_type_arity(def));
         let instance = match unapplied {
             Some(_) => self.unapplied_static_instance(receiver, method, args, expected_type),
-            None => UnappliedStatic::NoBlanket,
+            None => UnappliedStatic::AsSpelled,
         };
         let settled;
         let receiver = match instance {
@@ -5694,11 +5691,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 settled = receiver.at_type(Some(instance));
                 &settled
             }
-            UnappliedStatic::NoBlanket | UnappliedStatic::Open => receiver,
+            UnappliedStatic::AsSpelled | UnappliedStatic::Open => receiver,
         };
         let receiver_ty = receiver
             .ty()
             .expect("a blanket static is asked at the type the call resolved");
+        // The rules first, since a blanket is a candidate among the rest: two
+        // traits blanketing one receiver supply the name and separate nothing,
+        // which is the ambiguity every other spelling of that shape reports.
         let ranked = self.resolve_static_callee(StaticQuery {
             arg_types: args,
             ..StaticQuery::of(receiver, method)

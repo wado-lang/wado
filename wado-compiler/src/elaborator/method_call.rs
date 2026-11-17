@@ -121,10 +121,12 @@ pub(super) enum Qualifier<'a> {
 /// chain longer than anyone writes is cut here rather than walked for cycles.
 const MAY_HOLD_DEPTH: u32 = 4;
 
-/// What [`Elaborator::unapplied_static_instance`] finds.
+/// The instance a blanket's static call on a generic type spelled without its
+/// arguments means.
 pub(super) enum UnappliedStatic {
-    /// No value blanket declares the static.
-    NoBlanket,
+    /// The spelling stands: the type is not such a generic, or no value
+    /// blanket declares the static.
+    AsSpelled,
     Settled(TypeId),
     /// A blanket declares it, and nothing says which instance the call means.
     Open,
@@ -1780,9 +1782,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         expected_type: Option<TypeId>,
     ) -> UnappliedStatic {
-        let Some(decl) = receiver.key().decl() else {
-            return UnappliedStatic::NoBlanket;
-        };
+        let decl = receiver
+            .key()
+            .decl()
+            .expect("an unapplied generic is a declaration");
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let statics: Vec<(TypeId, &MethodSig)> = trait_env
             .blanket_impls
@@ -1801,9 +1804,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         if statics.is_empty() {
-            return UnappliedStatic::NoBlanket;
+            return UnappliedStatic::AsSpelled;
         }
-        let mut written: IndexSet<TypeId> = IndexSet::default();
+        let mut instances: IndexSet<TypeId> = IndexSet::default();
         {
             let mut table = self.tysys.type_table.borrow_mut();
             for &(slot, sig) in &statics {
@@ -1818,31 +1821,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(&instance) = slots.get(&id)
                     && table.nominal_def(instance) == Some(decl)
                 {
-                    written.insert(instance);
+                    instances.insert(instance);
                 }
             }
         }
-        if written.is_empty() {
-            let targets: IndexSet<TypeId> = self
-                .trait_impls_for_receiver(&receiver.at_type(None), &[])
-                .into_iter()
-                .map(|block| self.tysys.type_table.borrow().impl_target_whole(block))
-                .filter(|&target| self.tysys.type_table.borrow().is_concrete(target))
-                .collect();
-            written = targets
-                .into_iter()
-                .filter(|&target| {
-                    !self
-                        .applicable_blanket_statics(target, method_name, NewtypePeel::Here)
-                        .is_empty()
-                })
-                .collect();
+        if instances.is_empty() {
+            instances = self.written_instances_answering(receiver, method_name);
         }
-        if written.len() == 1 {
-            UnappliedStatic::Settled(written[0])
+        if instances.len() == 1 {
+            UnappliedStatic::Settled(instances[0])
         } else {
             UnappliedStatic::Open
         }
+    }
+
+    /// The instances of `receiver`'s type that a trait impl is written for and
+    /// a value blanket's static `method_name` answers at.
+    fn written_instances_answering(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+    ) -> IndexSet<TypeId> {
+        let targets: IndexSet<TypeId> = {
+            let table = self.tysys.type_table.borrow();
+            self.trait_impls_for_receiver(&receiver.at_type(None), &[])
+                .into_iter()
+                .map(|block| table.impl_target_whole(block))
+                .filter(|&target| table.is_concrete(target))
+                .collect()
+        };
+        targets
+            .into_iter()
+            .filter(|&target| {
+                !self
+                    .applicable_blanket_statics(target, method_name, NewtypePeel::Here)
+                    .is_empty()
+            })
+            .collect()
     }
 
     /// Whether `receiver_type`, behind its references, is the type `spelled`
