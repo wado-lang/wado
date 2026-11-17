@@ -12,7 +12,7 @@ use { Process } from "core:process";
 use { from_value } from "core:value";
 use { Client } from "wasi:http";
 use { Call } from "./agent.wado";
-use { ask_json, json_object, Usage } from "./anthropic.wado";
+use { ask_json, json_object, Credential, Usage } from "./anthropic.wado";
 use { git, try_git } from "./git.wado";
 use { Repro, Reviewed, Submission } from "./review.wado";
 use { checkout_at, reset_snapshot, tree_args, tree_git } from "./snapshot.wado";
@@ -61,7 +61,7 @@ struct Told {
 /// them from what the reviewer did. A reproduction is then tried alone, where
 /// `w` can run one. What `model` took is added to `spent`.
 pub fn report(
-    api_key: &String,
+    credential: &Credential,
     model: String,
     change: &Submission,
     w: &Workspace,
@@ -72,7 +72,7 @@ pub fn report(
     if reviewed.findings.is_empty() {
         return Ok(());
     }
-    let placed = ask_json::<Answer>(api_key, model, REPORT, request(change, reviewed), 16_000, spent)?.findings;
+    let placed = ask_json::<Answer>(credential, model, REPORT, request(change, reviewed), 16_000, spent)?.findings;
     if placed.len() != reviewed.findings.len() {
         return Err(`the reporter answered ${placed.len()} findings of ${reviewed.findings.len()}`);
     }

@@ -10,7 +10,7 @@
 //!     package-eddy/eval/szz.json 0.5 package-eddy/eval/judged.json
 //! ```
 
-use { args, env, eprintln, Stderr, Environment } from "core:cli";
+use { args, eprintln, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Process } from "core:process";
@@ -18,7 +18,7 @@ use { Client } from "wasi:http";
 use { to_bytes_pretty, from_string } from "core:json";
 use { TreeMap } from "core:collections";
 use { changed_paths, source_diff, merge_title, Census, FixResult, Judged, Pair, Verdict } from "./eval.wado";
-use { ask_json, json_object, Usage } from "../src/anthropic.wado";
+use { ask_json, json_object, Credential, Usage } from "../src/anthropic.wado";
 use { cost_summary } from "../src/cost.wado";
 
 #[param(from_env = "CLAUDE_MODEL")]
@@ -60,8 +60,8 @@ ${culprit_diff}
 export fn run() with (Stderr, Environment, Preopens, Process, Client) {
     let arguments = args();
     assert arguments.len() == 3, "usage: judge.wado <szz.json> <min-share> <out.json>";
-    let Some(api_key) = env("CLAUDE_API_KEY") else {
-        panic("CLAUDE_API_KEY is not set");
+    let Some(credential) = Credential::from_env() else {
+        panic("neither CLAUDE_API_KEY_FILE nor CLAUDE_API_KEY is set");
     };
     let census = from_string::<Census, String>(fs::read_to_string(&arguments[0]).unwrap()).unwrap();
     let min_share = f64::from_str(&arguments[1]).unwrap();
@@ -102,7 +102,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
             continue;
         }
         // Thinking spends from the same budget as the answer.
-        match ask_json::<Verdict>(&api_key, CLAUDE_MODEL, SYSTEM, user, 16_000, &mut spent) {
+        match ask_json::<Verdict>(&credential, CLAUDE_MODEL, SYSTEM, user, 16_000, &mut spent) {
             Ok(v) => pair.verdict = Some(v),
             Err(e) => pair.error = Some(e),
         }

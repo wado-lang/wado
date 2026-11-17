@@ -3,9 +3,82 @@
 
 use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Method, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http";
+use { DescriptorFlags, Filesize, OpenFlags, PathFlags } from "wasi:filesystem";
+use { env, Environment } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
 use { to_bytes, from_bytes, from_string } from "core:json";
 use { Serialize, Deserialize } from "core:serde";
 use { Value, to_value, from_value } from "core:value";
+
+/// What a request authenticates with: an API key, or the file a federated
+/// token is kept in. Such a token outlives the identity token it was exchanged
+/// for by little, so whoever minted it writes the next one to the file, and
+/// each request reads the file again.
+pub variant Credential {
+    Key(String),
+    /// A path whose directory is a preopen of its own, not under the first:
+    /// the reviewed code reads everything there.
+    File(String),
+}
+
+impl Credential {
+    /// `CLAUDE_API_KEY_FILE`, or else `CLAUDE_API_KEY`.
+    pub fn from_env() -> Option<Credential> with Environment {
+        if let Some(path) = env("CLAUDE_API_KEY_FILE") {
+            return Some(File(path));
+        }
+        return env("CLAUDE_API_KEY").map(|key| Credential::Key(key));
+    }
+
+    fn current(&self) -> Result<String, String> with Preopens {
+        return match self {
+            Key(key) => Ok(*key),
+            File(path) => read_preopened(path),
+        };
+    }
+}
+
+/// The text of the file at `path`, read in the preopen named by its directory.
+fn read_preopened(path: &String) -> Result<String, String> with Preopens {
+    let [Some(dir), Some(name)] = [fs::parent(path), fs::file_name(path)] else {
+        return Err(`${*path} names no file in a directory`);
+    };
+    for let [preopen, preopen_name] of Preopens::get_directories() {
+        if preopen_name != dir {
+            continue;
+        }
+        let file = match preopen.open_at(PathFlags::none(), name.to_string(), OpenFlags::none(), DescriptorFlags::Read).wait() {
+            Ok(file) => file,
+            Err(e) => {
+                return Err(`${*path}: ${e:?}`);
+            },
+        };
+        let [stream, transfer] = file.read_via_stream(0 as Filesize);
+        let bytes = stream.read_to_end_bytes();
+        stream.drop();
+        if let Some(Err(e)) = transfer.read() {
+            return Err(`${*path}: ${e:?}`);
+        }
+        return Ok(String::from_utf8_lossy(bytes).trim().to_string());
+    }
+    return Err(`no directory ${dir} is granted`);
+}
+
+test "a file credential is read again each time" {
+    fs::write("credential-test", &"one\n").unwrap();
+    let mut root = "";
+    for let [_, name] of Preopens::get_directories() {
+        root = name;
+        break;
+    }
+    let credential = Credential::File(fs::join(&root, "credential-test"));
+    assert credential.current() == Ok("one");
+    fs::write("credential-test", &"two").unwrap();
+    assert credential.current() == Ok("two");
+    fs::remove_file("credential-test").unwrap();
+    assert Credential::File("/nowhere/token").current() == Err("no directory /nowhere is granted");
+}
 
 pub struct Message {
     pub role: String,
@@ -163,13 +236,13 @@ pub fn message<T: Serialize>(value: &T) -> Value {
 /// The text of `model`'s reply to `user` under `system`, or the error the API
 /// returned. What the reply took is added to `spent`.
 pub fn ask(
-    api_key: String,
+    credential: &Credential,
     model: String,
     system: String,
     user: String,
     max_tokens: i32,
     spent: &mut Usage,
-) -> Result<String, String> with Client {
+) -> Result<String, String> with (Client, Preopens) {
     let request = MessagesRequest {
         model,
         max_tokens,
@@ -178,7 +251,7 @@ pub fn ask(
             Message { role: "user", content: user },
         ],
     };
-    let parsed = post::<MessagesResponse>(api_key, to_bytes(&request).unwrap())?;
+    let parsed = post::<MessagesResponse>(credential, to_bytes(&request).unwrap())?;
     spent.add_request(&parsed.usage);
     return Ok(text_of(&parsed.content));
 }
@@ -186,14 +259,14 @@ pub fn ask(
 /// `model`'s reply to `user`, read as the one JSON object it holds. What the
 /// reply took is added to `spent`.
 pub fn ask_json<T: Deserialize>(
-    api_key: &String,
+    credential: &Credential,
     model: String,
     system: String,
     user: String,
     max_tokens: i32,
     spent: &mut Usage,
-) -> Result<T, String> with Client {
-    let text = ask(*api_key, model, system, user, max_tokens, spent)?;
+) -> Result<T, String> with (Client, Preopens) {
+    let text = ask(credential, model, system, user, max_tokens, spent)?;
     return json_object::<T>(&text);
 }
 
@@ -215,7 +288,7 @@ pub fn json_object<T: Deserialize>(text: &String) -> Result<T, String> {
 /// `model`'s next turn in `messages`. With `use_tools` false the model must
 /// answer in text, though the conversation may hold earlier tool calls.
 pub fn converse(
-    api_key: String,
+    credential: &Credential,
     model: String,
     system: String,
     tools: &List<Tool>,
@@ -223,7 +296,7 @@ pub fn converse(
     messages: &List<Value>,
     max_tokens: i32,
     effort: String,
-) -> Result<Turn, String> with Client {
+) -> Result<Turn, String> with (Client, Preopens) {
     let request = ConverseRequest {
         model,
         max_tokens,
@@ -234,24 +307,36 @@ pub fn converse(
         cache_control: Kind { kind: "ephemeral" },
         output_config: OutputConfig { effort },
     };
-    return post::<Turn>(api_key, to_bytes(&request).unwrap());
+    return post::<Turn>(credential, to_bytes(&request).unwrap());
 }
 
-fn post<T: Deserialize>(api_key: String, request: ByteSlice) -> Result<T, String> with Client {
-    let resp = send("api.anthropic.com", "/v1/messages", [
-        ["authorization", `Bearer ${api_key}`],
-        ["anthropic-version", "2023-06-01"],
-        ["content-type", "application/json"],
-    ], request)?;
-    let status = resp.get_status_code() as i32;
-    let body = read_body(resp)?;
-    if status != 200 {
-        return Err(`HTTP ${status}: ${String::from_utf8_lossy(body)}`);
+/// A request refused for its key is sent once more if the credential holds
+/// another key by then: a federated token expires mid-review.
+fn post<T: Deserialize>(credential: &Credential, request: ByteSlice) -> Result<T, String> with (Client, Preopens) {
+    let mut key = credential.current()?;
+    loop {
+        let resp = send("api.anthropic.com", "/v1/messages", [
+            ["authorization", `Bearer ${key}`],
+            ["anthropic-version", "2023-06-01"],
+            ["content-type", "application/json"],
+        ], request)?;
+        let status = resp.get_status_code() as i32;
+        let body = read_body(resp)?;
+        if status == 401 {
+            let next = credential.current()?;
+            if next != key {
+                key = next;
+                continue;
+            }
+        }
+        if status != 200 {
+            return Err(`HTTP ${status}: ${String::from_utf8_lossy(body)}`);
+        }
+        return match from_bytes::<T, ByteList>(body) {
+            Ok(r) => Ok(r),
+            Err(e) => Err(`unparsed response: ${e:?}`),
+        };
     }
-    return match from_bytes::<T, ByteList>(body) {
-        Ok(r) => Ok(r),
-        Err(e) => Err(`unparsed response: ${e:?}`),
-    };
 }
 
 fn send<B: AsByteSlice>(

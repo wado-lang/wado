@@ -7,7 +7,7 @@ use { Preopens } from "core:fs";
 use { Process } from "core:process";
 use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
-use { ask_json, json_object, Usage } from "./anthropic.wado";
+use { ask_json, json_object, Credential, Usage } from "./anthropic.wado";
 use { run_agent, Call, Request } from "./agent.wado";
 use { empty_index } from "./symbols.wado";
 use { Runner, Workspace } from "./tools.wado";
@@ -101,7 +101,7 @@ fn instructions(w: &Workspace) -> String {
 /// `model`'s review of `change`, in one call, or by an agent that reads `ws`
 /// for up to `max_turns` turns at `effort` with every tool `ws` offers.
 pub fn review(
-    api_key: &String,
+    credential: &Credential,
     model: String,
     change: &Submission,
     ws: &Option<Workspace>,
@@ -111,7 +111,7 @@ pub fn review(
     // Thinking spends from the same budget as the answer.
     let Some(w) = ws else {
         let mut usage = Usage {};
-        return match ask_json::<Answer>(api_key, model, REVIEW, change.task(), 32_000, &mut usage) {
+        return match ask_json::<Answer>(credential, model, REVIEW, change.task(), 32_000, &mut usage) {
             Ok(a) => Reviewed { findings: a.findings, usage: Some(usage) },
             Err(e) => Reviewed {
                 error: Some(e),
@@ -119,7 +119,7 @@ pub fn review(
             },
         };
     };
-    let agent = run_agent(api_key, model, instructions(w), change.task(), w, max_turns, 32_000, effort);
+    let agent = run_agent(credential, model, instructions(w), change.task(), w, max_turns, 32_000, effort);
     let mut reviewed = Reviewed {
         turns: agent.turns,
         calls: agent.calls,

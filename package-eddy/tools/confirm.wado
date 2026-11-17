@@ -11,14 +11,14 @@
 //!     package-eddy/eval/run.json out.json
 //! ```
 
-use { args, env, eprintln, Stderr, Environment } from "core:cli";
+use { args, eprintln, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Client } from "wasi:http";
 use { to_bytes_pretty, to_string, from_string } from "core:json";
 use { TreeSet } from "core:collections";
 use { Baseline, Run } from "./eval.wado";
-use { ask_json, Usage } from "../src/anthropic.wado";
+use { ask_json, Credential, Usage } from "../src/anthropic.wado";
 use { cost_summary } from "../src/cost.wado";
 use { Finding } from "../src/review.wado";
 
@@ -59,8 +59,8 @@ struct Confirmed {
 export fn run() with (Stderr, Environment, Preopens, Client) {
     let arguments = args();
     assert arguments.len() == 2, "usage: confirm.wado <reviews.json> <out.json>";
-    let Some(api_key) = env("CLAUDE_API_KEY") else {
-        panic("CLAUDE_API_KEY is not set");
+    let Some(credential) = Credential::from_env() else {
+        panic("neither CLAUDE_API_KEY_FILE nor CLAUDE_API_KEY is set");
     };
     let reviews = from_string::<Baseline, String>(fs::read_to_string(&arguments[0]).unwrap()).unwrap();
     let out_path = arguments[1];
@@ -78,7 +78,7 @@ export fn run() with (Stderr, Environment, Preopens, Client) {
             };
             let mut confirmed = ConfirmedRun { fix: e.fix, run: i, findings: r.findings, hit };
             let prompt = `<findings>\n${to_string(&r.findings).unwrap()}\n</findings>\n${runs}`;
-            match ask_json::<Confirmations>(&api_key, GRADER, CONFIRM, prompt, 16_000, &mut spent) {
+            match ask_json::<Confirmations>(&credential, GRADER, CONFIRM, prompt, 16_000, &mut spent) {
                 Ok(c) && !judges_each_once(&c.findings, r.findings.len()) => confirmed.error = Some(
                     "the grader did not judge each finding exactly once",
                 ),
