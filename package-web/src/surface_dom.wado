@@ -3,6 +3,7 @@
 
 use { TreeMap } from "core:collections";
 use {
+    CharacterData,
     Document,
     Dom,
     Element,
@@ -12,6 +13,7 @@ use {
     HtmlInputElement,
     Node,
     Rejection,
+    Text,
     Window,
 } from "./dom.wado";
 
@@ -388,7 +390,7 @@ impl SurfaceDom {
             document,
             window: Window::backed_by(detached(Content::Window, Option::Some(document))),
         };
-        append(document, dom.new_node(Content::Doctype));
+        append(document, dom.new_doctype());
         let html = dom.new_element("html");
         append(document, html);
         append(html, dom.new_element("head"));
@@ -403,9 +405,13 @@ impl SurfaceDom {
         return html;
     }
 
-    // The slice has neither `DocumentType` nor `Text`, so these carry `Node`'s class.
-    fn new_node(&self, content: Content) -> Node {
-        return Node::backed_by(detached(content, Option::Some(self.document)));
+    // The slice has no `DocumentType`, so a doctype carries `Node`'s class.
+    fn new_doctype(&self) -> Node {
+        return Node::backed_by(detached(Content::Doctype, Option::Some(self.document)));
+    }
+
+    fn new_text(&self, data: String) -> Text {
+        return Text::backed_by(detached(Content::Text(data), Option::Some(self.document)));
     }
 
     fn new_element(&self, local_name: String) -> HtmlElement {
@@ -513,7 +519,7 @@ impl SurfaceDom {
     fn replace_all_text(&self, node: Node, text: String) {
         remove_children(node);
         if !text.is_empty() {
-            append(node, self.new_node(Content::Text(text)));
+            append(node, self.new_text(text));
         }
     }
 
@@ -605,6 +611,11 @@ impl Document for SurfaceDom {
         self.own(*this);
         assert is_valid_element_local_name(&local_name), "InvalidCharacterError: not a valid element name";
         resume self.new_element(local_name.to_ascii_lowercase());
+    }
+
+    fn create_text_node(&mut self, this: &Document, data: String) -> Text {
+        self.own(*this);
+        resume self.new_text(data);
     }
 
     fn document_element(&mut self, this: &Document) -> Option<Element> {
@@ -779,6 +790,22 @@ impl Node for SurfaceDom {
         assert self.own(child).parent == Option::Some(*this), "NotFoundError: the node to remove is a child";
         detach(child);
         resume child;
+    }
+
+    ..trap
+}
+
+impl CharacterData for SurfaceDom {
+    fn data(&mut self, this: &CharacterData) -> String {
+        let Text(data) = self.own(*this).content else {
+            unreachable();
+        };
+        resume data;
+    }
+
+    fn set_data(&mut self, this: &CharacterData, value: String) {
+        self.own(*this).content = Content::Text(value);
+        resume ();
     }
 
     ..trap

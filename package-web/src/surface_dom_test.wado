@@ -1,4 +1,4 @@
-use { Document, Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node, Window } from "./dom.wado";
+use { Document, Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node, Text, Window } from "./dom.wado";
 use { SurfaceDom } from "./surface_dom.wado";
 
 test "a fresh document has a body" {
@@ -59,6 +59,7 @@ test "the handles carry the classes dom.wado numbers" {
         div.set_text_content(Option::Some("hi"));
         let text = div.first_child().unwrap();
         assert !text matches { _: Element };
+        assert text matches { _: Text };
         assert text.node_name() == "#text";
     };
 }
@@ -180,6 +181,27 @@ test "text content concatenates the descendants' text" {
         p.set_text_content(Option::Some("replaced"));
         assert p.text_content() == Option::Some("replaced");
         assert b.parent_node() == null;
+    };
+}
+
+test "a text node's data is its content, and changes in place" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let p = doc.create_element("p");
+        let text = doc.create_text_node("a < b");
+        assert text.data() == "a < b";
+        assert text.node_type() == 3;
+        assert text.text_content() == Option::Some("a < b");
+        p.append_child(doc.create_element("b"));
+        p.insert_before(text, p.first_child());
+        assert p.get_html() == "a &lt; b<b></b>";
+
+        text.set_data("c");
+        assert p.first_child() == Option::Some(text as Node);
+        assert p.text_content() == Option::Some("c");
+        text.set_text_content(Option::Some("d"));
+        assert text.data() == "d";
     };
 }
 
