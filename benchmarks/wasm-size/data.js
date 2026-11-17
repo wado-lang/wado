@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794888497690,
+  "lastUpdate": 1794898701288,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78641,6 +78641,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a436b0aeb249e8d6daa6bfd1602d77327ee02ccd"
         },
         "date": 1794888496839,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6ac4c6b5f210c21d5aba66e890ec9d59437ea23a",
+          "message": "Merge pull request #2658 from wado-lang/gfx/eloquent-edison-06cjpr\n\nrefactor(compiler): mint every compiler name through name.rs",
+          "timestamp": "2026-11-17T15:42:23+09:00",
+          "tree_id": "bf34ba4b8d3c5861abc9790f984f3de243e2c9ff",
+          "url": "https://github.com/wado-lang/wado/commit/6ac4c6b5f210c21d5aba66e890ec9d59437ea23a"
+        },
+        "date": 1794898700066,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
