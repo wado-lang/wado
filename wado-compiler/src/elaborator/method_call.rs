@@ -1660,7 +1660,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let table = self.tysys.type_table.borrow();
         let pointee = table.peel_refs(receiver_type);
         if let (Some(sub), Some(sup)) = (table.nominal_def(pointee), spelled.key().decl()) {
-            return table.is_resource_subtype(sub, sup);
+            // Where the spelling writes the type's arguments, they are the
+            // receiver's too.
+            let instance_agrees = sub != sup
+                || spelled
+                    .ty()
+                    .is_none_or(|ty| table.nominal_type_args(ty).is_none_or(|args| args.is_empty()) || ty == pointee);
+            return table.is_resource_subtype(sub, sup) && instance_agrees;
         }
         drop(table);
         self.receiver_of(pointee).key() == spelled.key()

@@ -1,7 +1,7 @@
 // A static an `impl Tr for &A` declares is reached as every other impl's is:
-// `Self::k()` inside the impl, `Tr::<&A>::k()` from outside, and `Self::k()`
+// `Self::k()` inside the impl, `Tr::<Self =&A>::k()` from outside, and `Self::k()`
 // from a default body or a default argument the `&A` impl takes. A static's
-// `Self` is its target as written, so `Tr::<&A>::s()` fills its default with
+// `Self` is its target as written, so `Tr::<Self =&A>::s()` fills its default with
 // `&A`'s `k`.
 use { println, Stdout } from "core:cli";
 
@@ -69,9 +69,9 @@ fn via<T: Tr>() -> i32 {
 export fn run() with Stdout {
     let a = A {};
     let r = &a;
-    println(`${Tr::<A>::j()} ${Tr::<&A>::j()} ${Tr::<&A>::k()} ${Tr::<&i32>::j()}`);
+    println(`${Tr::<Self =A>::j()} ${Tr::<Self =&A>::j()} ${Tr::<Self =&A>::k()} ${Tr::<Self =&i32>::j()}`);
     println(`${a.m()} ${r.m()} ${a.d()} ${r.d()}`);
-    println(`${Tr::<A>::s()} ${Tr::<&A>::s()} ${via::<&A>()}`);
+    println(`${Tr::<Self =A>::s()} ${Tr::<Self =&A>::s()} ${via::<&A>()}`);
 }
 
 __DATA__
