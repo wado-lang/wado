@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794923841030,
+  "lastUpdate": 1794924891640,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78905,6 +78905,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5aaf3f65db7db2a998c27fd7f21d3257d15df633"
         },
         "date": 1794923839821,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cc0aa9d74499809970ba252a0f9b896f04acfa5b",
+          "message": "Merge pull request #2667 from wado-lang/ccr-627ffee4-jbspgb\n\nfeat(traits): resolve method, type-qualified and Self-bound calls in one order",
+          "timestamp": "2026-11-17T22:40:38+09:00",
+          "tree_id": "54d71df24fc7784d7e23548511a7bdc38592ba01",
+          "url": "https://github.com/wado-lang/wado/commit/cc0aa9d74499809970ba252a0f9b896f04acfa5b"
+        },
+        "date": 1794924891226,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
