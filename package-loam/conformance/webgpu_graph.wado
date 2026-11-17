@@ -19,6 +19,7 @@ use {
     GpuShaderModule,
     GpuComputePipeline,
     GpuComputePassEncoder,
+    GpuQuerySet,
     GpuSupportedFeatures,
     GpuSupportedLimits,
     RecordOptionGpuSize64,
@@ -80,7 +81,7 @@ use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
         },
     };
 
-export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
+export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuQuerySet, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
     let Some(mut gpu) = WebGpuBackend::new() else {
         println("no WebGPU adapter");
         return;
@@ -99,6 +100,15 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let [ex, ey] = cases::elementwise_inputs();
     let every = cases::elementwise(&mut gpu, &gpu.upload(&ex), &gpu.upload(&ey));
     println(`elementwise ${apart(&mut gpu, &every, &cases::elementwise(cpu, &ex, &ey))}`);
+
+    // A profile times every dispatch, and changes nothing computed.
+    let mut timed = WebGpuBackend::new().unwrap();
+    if timed.profile() {
+        let profiled = cases::elementwise(&mut timed, &timed.upload(&ex), &timed.upload(&ey));
+        assert timed.download(&profiled).data == gpu.download(&every).data;
+        let times = timed.profiled();
+        assert times.into_iter().map(|t| t.dispatches).sum() == Option::Some(timed.dispatches());
+    }
 
     // A device without `shader-f16` computes a half as one with it does.
     let mut plain = WebGpuBackend::new().unwrap();

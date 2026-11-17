@@ -49,6 +49,17 @@ the GPU alone: its CUDA arms share `decoder.hpp`, and its WebGPU one,
 (`tools/greedy.mjs`). Each keeps the cache on the device and reads back only
 the logits.
 
+## Device time per kernel
+
+`gemma3_270m/profile.wado` prints how much device time each kernel of Gemma
+3's decode took, by `WebGpuBackend::profile`'s timestamps. Without an argument
+it runs the f32 weights; with `q4`, the `q4` export.
+
+```sh
+cd package-loam/benchmark
+wado run-webgpu --dir ../example/gemma3-270m gemma3_270m/profile.wado q4
+```
+
 ## Environment
 
 Wado 2026-11-06 (`-O2`), wasmtime 50.0.1, wgpu-core 29, onnxruntime 1.31.1 on
