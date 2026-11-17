@@ -65,8 +65,9 @@ pub fn each<T: Eq>(
     let mut render = render;
     let mut rows: List<Row<T>> = [];
     on_cleanup(|| {
-        remove_rows(parent, rows);
+        let removed = rows;
         rows = [];
+        remove_rows(parent, removed);
     });
     observe(|| {
         let mut kept: List<Row<T>> = [];

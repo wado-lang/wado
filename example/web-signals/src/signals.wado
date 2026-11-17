@@ -41,6 +41,7 @@ struct MemoCore {
 struct EffectCore {
     id: i32,
     disposed: bool,
+    running: bool,
     body: fn mut() with (Track, Dom),
     deps: List<Dep>,
     owned: List<fn mut() with Dom>,
@@ -133,8 +134,12 @@ impl Track for Computation {
     }
 }
 
-fn dispose_all(owned: List<fn mut() with Dom>) with Dom {
-    for let mut dispose of owned {
+/// Empties `owned` before disposing of any of it, so a disposer that reaches
+/// the same list finds nothing left to dispose of.
+fn dispose_all(owned: &mut List<fn mut() with Dom>) with Dom {
+    let detached = *owned;
+    *owned = [];
+    for let mut dispose of detached {
         dispose();
     }
 }
@@ -224,26 +229,28 @@ impl<T> Memo<T> {
 
 /// Lets go of what the effect owns and of what it listens to.
 fn release(watcher: &mut EffectCore) with Dom {
-    dispose_all(watcher.owned);
-    watcher.owned = [];
     unsubscribe_all(watcher.deps, watcher.id);
     watcher.deps = [];
+    dispose_all(&mut watcher.owned);
 }
 
 fn run(watcher: &mut EffectCore) with Dom {
+    release(watcher);
+    // A disposer that ran during the release may have disposed of the effect.
     if watcher.disposed {
         return;
     }
-    release(watcher);
     let mut computation = Computation {
         observer: Option::Some(Observer::Effect(watcher)),
         deps: [],
         owns: true,
         owned: [],
     };
+    watcher.running = true;
     with Track => &mut computation do {
         (watcher.body)();
     };
+    watcher.running = false;
     watcher.deps = computation.deps;
     watcher.owned = computation.owned;
     // The body may have disposed of the effect it runs in.
@@ -256,7 +263,14 @@ fn run(watcher: &mut EffectCore) with Dom {
 /// written. What `body` owns is disposed before each rerun, and with the
 /// effect itself.
 pub fn observe(body: fn mut() with (Track, Dom)) with (Track, Dom) {
-    let mut watcher = EffectCore { id: next_observer_id(), disposed: false, body, deps: [], owned: [] };
+    let mut watcher = EffectCore {
+        id: next_observer_id(),
+        disposed: false,
+        running: false,
+        body,
+        deps: [],
+        owned: [],
+    };
     run(&mut watcher);
     Track::own(|| {
         watcher.disposed = true;
@@ -278,10 +292,7 @@ pub fn scope(body: fn mut() with (Track, Dom)) -> fn mut() with Dom with Dom {
         body();
     };
     let mut owned = computation.owned;
-    return || {
-        dispose_all(owned);
-        owned = [];
-    };
+    return || dispose_all(&mut owned);
 }
 
 /// Runs `body` with its reads untracked and what it creates never disposed
@@ -290,13 +301,20 @@ pub fn untracked(body: fn mut() with (Track, Dom)) with Dom {
     let _never_disposed = scope(body);
 }
 
-/// Reruns every effect a write marked, each once, until none is marked.
+/// Reruns every effect a write marked, each once, until none is marked. An
+/// effect whose body is the one flushing stays queued, and reruns once that
+/// run has kept what it read and made.
 pub fn flush() with Dom {
+    let mut running: List<&mut EffectCore> = [];
     while !QUEUE.is_empty() {
         let batch = QUEUE;
         QUEUE = [];
         let mut ran: List<i32> = [];
         for let marked of batch {
+            if marked.running {
+                running.push(marked);
+                continue;
+            }
             if ran.contains(&marked.id) {
                 continue;
             }
@@ -304,4 +322,5 @@ pub fn flush() with Dom {
             run(marked);
         }
     }
+    QUEUE = running;
 }

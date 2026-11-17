@@ -88,10 +88,10 @@ So a write performs no effect, and several writes are one batch. An effect
 never sees half of a batch, and never sees one memo updated beside another that
 is stale, since a memo recomputes on the read that needs it.
 
-A listener bound through the library flushes when it returns. Every entry into
-a program from the browser is a listener, so the page is consistent again
-before the browser gets control back. Code outside a listener calls `flush`
-itself.
+A listener bound with `on` flushes when it returns. Every entry into a program
+from the browser is a listener, so with `on` the page is consistent again
+before the browser gets control back. Any other code that writes, a listener
+added with `add_event_listener` directly included, calls `flush` itself.
 
 ### Templates
 

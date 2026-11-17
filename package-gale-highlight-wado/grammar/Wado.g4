@@ -435,12 +435,12 @@ letCondition
 
 forStatement
     : 'for' forHead block
-    | 'for' '(' ('let' pattern '=' expression)? ';' condition? ';' expression? ')' block
+    | 'for' '(' ('let' pattern '=' expression | expression)? ';' condition? ';' expression? ')' block
     ;
 
 forHead
     : 'let' pattern forTail
-    | ';' condition? ';' exprNoStruct?
+    | exprNoStruct? ';' condition? ';' exprNoStruct?
     ;
 
 forTail
