@@ -1,0 +1,28 @@
+// `Child::inherited(&c)` reaches the handler installed for the ancestor that
+// declares the operation, as `c.inherited()` does, rather than the host.
+#[cm("test:dom/dom#event-target", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
+resource EventTarget {
+    #[cm("test:dom/dom#tag")]
+    fn tag(&self) -> String;
+}
+
+#[cm("test:dom/dom#node", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource Node extends EventTarget {}
+
+fn qualified_by_child(n: &Node) -> String with Node {
+    return Node::tag(n);
+}
+
+test {
+    with EventTarget => &Tagged {} do {
+        assert qualified_by_child(&Node::backed_by(Tagged {})) == "t";
+    }
+}
+
+struct Tagged {}
+
+impl EventTarget for Tagged {
+    fn tag(&self, this: &EventTarget) -> String {
+        resume "t"
+    }
+}

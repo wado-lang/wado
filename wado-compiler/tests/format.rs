@@ -3907,7 +3907,10 @@ fn test_format_attribute_numeric_arg_preserved() {
 #[test]
 fn test_format_keeps_the_ambient_wildcard() {
     let source = "#[ambient(_)]\nfn drop_all() {\n}\n";
-    assert_eq!(wado_compiler::format(source).expect("format failed"), source);
+    assert_eq!(
+        wado_compiler::format(source).expect("format failed"),
+        source
+    );
 }
 
 #[test]

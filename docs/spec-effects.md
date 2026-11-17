@@ -350,7 +350,7 @@ with Stdout
 
 So `println` needs only `with Stdout`, though its body creates a stream and drops a future. An effect whose signatures mention no resource implies nothing: `with Environment` holds `Environment` alone.
 
-A resource also implies every resource that [extends](./spec-components.md#resource-inheritance) it. Its holder can [narrow](./spec-patterns.md#type-patterns) a handle to any of them, so the grant adds nothing it could not reach:
+A resource also implies every resource that [extends](./spec-components.md#resource-inheritance) it, and never one it extends or a sibling. Its holder can [narrow](./spec-patterns.md#type-patterns) a handle to any of them, so the grant adds nothing it could not reach. An inherited method demands the resource of its receiver, however the call is spelled: `n.tag()`, `Node::tag(&n)` and `EventTarget::tag(&n)` on a `Node` all demand `Node`, which `with EventTarget` implies too.
 
 <!-- {"fixture":"spec_effects_narrowing_holds.wado"} -->
 

@@ -64,3 +64,15 @@ closure holds nothing it captured, so a DOM event listener, typed
 captured. The holder of an ancestor can narrow to any descendant, so the wider
 grant adds no reach, and the narrowing rule is gone. In exchange, `with Element`
 no longer says which kinds of element a function touches.
+
+The grant runs downward only. A resource whose operations mention itself used
+to imply its ancestors, so with the downward edge one child granted its whole
+family, siblings included. An inherited method therefore demands the resource
+of its receiver rather than of its declaration: `with Node` covers the methods
+a `Node` inherits, and grants nothing on a sibling of `Node`.
+
+## Known gaps
+
+- An operation of an extern resource that carries no `#[cm(...)]` name has no
+  host import, and a call to one crashes code generation. Whether such an
+  operation is refused or gets an import name is undecided.
