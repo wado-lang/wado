@@ -24,7 +24,9 @@ use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
-use super::method_call::{PreselectedArg, QualifiedAnswer, Qualifier, StaticReceiver};
+use super::method_call::{
+    PreselectedArg, QualifiedAnswer, Qualifier, StaticReceiver, UnappliedStatic,
+};
 use super::scope::{BinderInScope, BoundsOf, ParamRef, Scope, ScopedBound};
 use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
@@ -2342,28 +2344,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if self.report_unresolved_static(&resolved, method_name, &args, call.span) {
                         return TypeTable::ERROR;
                     }
-                    if let Some(blanket) = resolved.blanket()
-                        && let Some(receiver) = ns_receiver_type
-                    {
-                        let arg_sites = arg_sites_of(&call.args, args.len(), call.span);
-                        if let Some(return_type) = self.resolve_blanket_static_method(
-                            receiver,
-                            method_name,
-                            blanket,
-                            call.id,
-                            ident.segments.last().map(|segment| segment.id),
-                            &method_type_args,
-                            &call.args,
-                            &args,
-                            &arg_sites,
-                            expected_type,
-                            call.span,
-                            ctx,
-                        ) {
+                    if !resolved.resolves() {
+                        if typed.ty().is_some()
+                            && let Some(return_type) = self.resolve_named_type_blanket_static(
+                                &typed,
+                                method_name,
+                                call.id,
+                                ident.segments.last().map(|segment| segment.id),
+                                &method_type_args,
+                                &args,
+                                &call.args,
+                                expected_type,
+                                call.span,
+                                ctx,
+                            )
+                        {
                             return return_type;
                         }
-                    }
-                    if !resolved.resolves() {
                         let _ = self.emit(TypeError::UnknownFunction {
                             name: effective_name.to_string(),
                             span: call.span,
@@ -5681,6 +5678,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The rules first, since a blanket is a candidate among the rest: two
         // traits blanketing one receiver supply the name and separate nothing,
         // which is the ambiguity every other spelling of that shape reports.
+        // A generic type spelled without its arguments names no instance, so
+        // the call's context settles one before the rules are asked.
+        let unapplied = receiver
+            .key()
+            .decl()
+            .and_then(|def| self.bare_generic_type_arity(def));
+        let instance = match unapplied {
+            Some(_) => self.unapplied_static_instance(receiver, method, args, expected_type),
+            None => UnappliedStatic::NoBlanket,
+        };
+        let settled;
+        let receiver = match instance {
+            UnappliedStatic::Settled(instance) => {
+                settled = receiver.at_type(Some(instance));
+                &settled
+            }
+            UnappliedStatic::NoBlanket | UnappliedStatic::Open => receiver,
+        };
         let receiver_ty = receiver
             .ty()
             .expect("a blanket static is asked at the type the call resolved");
@@ -5691,14 +5706,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.report_unresolved_static(&ranked, method, args, span) {
             return Some(TypeTable::ERROR);
         }
-        let blanket = ranked.blanket()?;
+        let Some(blanket) = ranked.blanket() else {
+            if !matches!(instance, UnappliedStatic::Open) {
+                return None;
+            }
+            let prefix = receiver.spelled(self.tysys.resolutions.defs()).to_string();
+            let declared = receiver
+                .key()
+                .decl()
+                .and_then(|def| self.declared_self_type(def));
+            let params = declared
+                .and_then(|ty| self.tysys.type_table.borrow().nominal_type_args(ty))
+                .expect("an unapplied generic declares its parameters");
+            let names: Vec<String> = params
+                .iter()
+                .map(|&param| self.tysys.type_id_to_string(param))
+                .collect();
+            let _ = self.emit(TypeError::cannot_infer(
+                &names,
+                &format!("`{prefix}::{method}`"),
+                &format!("`{prefix}::<...>::{method}()`"),
+                span,
+            ));
+            return Some(TypeTable::ERROR);
+        };
         // The blanket would key on the argument-less head, which carries no
         // layout (a generic variant never becomes its own declaration, WEP
         // 2026-02-09) and reaches WIR build unregistered.
-        if let Some(expected) = receiver
-            .key()
-            .decl()
-            .and_then(|def| self.bare_generic_type_arity(def))
+        if let Some(expected) = unapplied
+            && !matches!(instance, UnappliedStatic::Settled(_))
         {
             let _ = self.emit(TypeError::MissingTypeArguments {
                 name: receiver.spelled(self.tysys.resolutions.defs()).to_string(),

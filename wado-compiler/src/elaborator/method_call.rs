@@ -16,7 +16,7 @@ use crate::name::{
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, StructDef, SubstitutionContext, TemplateId,
-    TupleSlot, TypeId, slots_from_impl_args,
+    TupleSlot, TypeArgMap, TypeId, slots_from_impl_args,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -120,6 +120,15 @@ pub(super) enum Qualifier<'a> {
 /// How many blankets deep a bound is followed to see whether it may hold. A
 /// chain longer than anyone writes is cut here rather than walked for cycles.
 const MAY_HOLD_DEPTH: u32 = 4;
+
+/// What [`Elaborator::unapplied_static_instance`] finds.
+pub(super) enum UnappliedStatic {
+    /// No value blanket declares the static.
+    NoBlanket,
+    Settled(TypeId),
+    /// A blanket declares it, and nothing says which instance the call means.
+    Open,
+}
 
 /// What kind of declaration a type answers `Type::method` with.
 pub(super) enum QualifiedAnswer {
@@ -1758,6 +1767,82 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ImplTargetKey::TypeParam { .. }
             | ImplTargetKey::Function { .. } => None,
         })
+    }
+
+    /// Which instance of the generic type `receiver` spells without arguments
+    /// a call of a value blanket's static `method_name` means. The expected
+    /// type or an argument says, where the blanket's signature places `Self`;
+    /// else the one instance an impl is written for that a blanket answers at.
+    pub(super) fn unapplied_static_instance(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+        args: &[TypeId],
+        expected_type: Option<TypeId>,
+    ) -> UnappliedStatic {
+        let Some(decl) = receiver.key().decl() else {
+            return UnappliedStatic::NoBlanket;
+        };
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let statics: Vec<(TypeId, &MethodSig)> = trait_env
+            .blanket_impls
+            .values()
+            .flatten()
+            .filter(|blanket| blanket.receiver == BlanketReceiver::Value)
+            .filter_map(|blanket| {
+                let method = self.tysys.declared_method(blanket.def, method_name)?;
+                let sig = self.tysys.signatures.method_sig(method)?;
+                let slot = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .impl_target_whole(blanket.def);
+                (sig.self_kind == ast::SelfKind::None).then_some((slot, sig))
+            })
+            .collect();
+        if statics.is_empty() {
+            return UnappliedStatic::NoBlanket;
+        }
+        let mut written: IndexSet<TypeId> = IndexSet::default();
+        {
+            let mut table = self.tysys.type_table.borrow_mut();
+            for &(slot, sig) in &statics {
+                let ResolvedType::TypeParam { id } = *table.get(slot) else {
+                    unreachable!("a value blanket targets its own parameter")
+                };
+                let mut slots = TypeArgMap::default();
+                table.bind_each_into(&sig.value_param_types(), args, &mut slots);
+                if let (Some(declared), Some(expected)) = (sig.decl.return_type, expected_type) {
+                    table.bind_each_into(&[declared], &[expected], &mut slots);
+                }
+                if let Some(&instance) = slots.get(&id)
+                    && table.nominal_def(instance) == Some(decl)
+                {
+                    written.insert(instance);
+                }
+            }
+        }
+        if written.is_empty() {
+            let targets: IndexSet<TypeId> = self
+                .trait_impls_for_receiver(&receiver.at_type(None), &[])
+                .into_iter()
+                .map(|block| self.tysys.type_table.borrow().impl_target_whole(block))
+                .filter(|&target| self.tysys.type_table.borrow().is_concrete(target))
+                .collect();
+            written = targets
+                .into_iter()
+                .filter(|&target| {
+                    !self
+                        .applicable_blanket_statics(target, method_name, NewtypePeel::Here)
+                        .is_empty()
+                })
+                .collect();
+        }
+        if written.len() == 1 {
+            UnappliedStatic::Settled(written[0])
+        } else {
+            UnappliedStatic::Open
+        }
     }
 
     /// Whether `receiver_type`, behind its references, is the type `spelled`

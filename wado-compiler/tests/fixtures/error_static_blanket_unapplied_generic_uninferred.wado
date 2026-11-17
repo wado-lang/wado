@@ -1,0 +1,28 @@
+// The blanket's bounds hold of two instances of `Pair`, and nothing in the
+// call says which it means.
+trait Holds with () {}
+
+trait Make with () {
+    fn made() -> i32;
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl Holds for Pair<i32, i32> {}
+impl Holds for Pair<bool, bool> {}
+
+impl<X: Holds> Make for X {
+    fn made() -> i32 {
+        return 7;
+    }
+}
+
+export fn run() {
+    let _ = Pair::made();
+}
+
+__DATA__
+{"compile_error": "cannot infer type parameter `A`, `B` of `Pair::made`; add a turbofish (`Pair::<...>::made()`) or a type annotation"}

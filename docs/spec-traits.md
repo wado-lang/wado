@@ -394,7 +394,11 @@ the spelling does not reach is reached as `Trait::method(recv, …)`.
 A generic type spelled without its arguments names no one instance, so
 `Pair::method(…)` names what some instance of `Pair` may answer with, a blanket
 whose bounds hold of one instance included. The receiver's own type then
-settles whether it answers.
+settles whether it answers. A static has no receiver, so the instance comes
+from the expected type or an argument, as a type parameter's would. Where
+neither says, it is the one instance an impl is written for that the static
+answers at. Two such instances are ambiguous, and none leaves the type's
+arguments to infer.
 
 An associated function with no `self` has no receiver argument to bind `Self`
 from, so the trait's turbofish binds it: `Trait::<Self = T>::method(…)`. The
