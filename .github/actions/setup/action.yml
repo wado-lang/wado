@@ -19,6 +19,10 @@ inputs:
       (the e2e test binary). They hold this checkout's absolute paths, so the
       job must check out where the build job did.
     default: ""
+  prebuilt-run-id:
+    description: >-
+      The workflow run whose artifacts `prebuilt` names, when not this run's.
+    default: ""
   mise:
     description: Install the mise-managed tools.
     default: "true"
@@ -34,16 +38,21 @@ runs:
       with:
         shared-key: ci-${{ hashFiles('.github/workflows/cargo-cache.yml', 'scripts/prebuilt.ts') }}
         save-if: false
+    # Without a token the download reads this run, whatever `run-id` says.
     - if: contains(inputs.prebuilt, 'wado')
       uses: actions/download-artifact@v8
       with:
         name: prebuilt-wado
         path: target/debug
+        run-id: ${{ inputs.prebuilt-run-id }}
+        github-token: ${{ inputs.prebuilt-run-id && inputs.github-token || '' }}
     - if: contains(inputs.prebuilt, 'e2e')
       uses: actions/download-artifact@v8
       with:
         name: prebuilt-e2e
         path: target/debug
+        run-id: ${{ inputs.prebuilt-run-id }}
+        github-token: ${{ inputs.prebuilt-run-id && inputs.github-token || '' }}
     # An artifact does not keep the executable bit.
     - if: inputs.prebuilt != ''
       shell: bash

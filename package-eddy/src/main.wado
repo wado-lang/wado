@@ -189,7 +189,10 @@ ${commits.trim()}`;
 
     let dir = fs::join(&options.out, &head);
     write_findings(&dir, &head, &result.findings);
-    fs::write(fs::join(&dir, "review.md"), &review_comment(&result.findings, &head, &cost, &result.error)).unwrap();
+    fs::write(
+        fs::join(&dir, "review.md"),
+        &review_comment(&result.findings, &head, &cost, &result.error, &report_error),
+    ).unwrap();
     if let Some(e) = &result.error {
         fail(*e);
     }

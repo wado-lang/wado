@@ -41,18 +41,21 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           REPO: ${{ github.repository }}
-          ACTOR: ${{ github.event.comment.user.login || github.actor }}
+          # A re-run keeps the comment and `github.actor` of the run it repeats.
+          ACTORS: ${{ github.event.comment.user.login || github.actor }} ${{ github.triggering_actor }}
           PR: ${{ github.event.issue.number || inputs.pr }}
           COMMENT_ID: ${{ github.event.comment.id }}
         run: |
           set -euo pipefail
           # A review builds and runs the pull request's code, and is paid for,
           # so only an owner starts one.
-          permission="$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission)"
-          if [ "$permission" != admin ]; then
-            echo "::error::Eddy is started by a repository admin; $ACTOR has $permission"
-            exit 1
-          fi
+          for actor in $ACTORS; do
+            permission="$(gh api "repos/$REPO/collaborators/$actor/permission" --jq .permission)"
+            if [ "$permission" != admin ]; then
+              echo "::error::Eddy is started by a repository admin; $actor has $permission"
+              exit 1
+            fi
+          done
           sha="$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)"
           echo "pr=$PR" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
@@ -112,20 +115,12 @@ jobs:
       - run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
           df -h /
-      - uses: actions/download-artifact@v8
-        with:
-          name: prebuilt-wado
-          path: target/debug
-          run-id: ${{ needs.gate.outputs.eddy-run }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      # An artifact does not keep the executable bit.
-      - run: |
-          chmod +x target/debug/*
-          echo "WADO_PREBUILT=1" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           rust-cache: false
+          prebuilt: wado
+          prebuilt-run-id: ${{ needs.gate.outputs.eddy-run }}
       # Eddy reads `rg` and `git` from /usr/bin.
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
       # The reviewer's cargo cannot write the cargo or rustup homes, so the
@@ -162,11 +157,11 @@ jobs:
               organization_id: "b5accdd0-f052-4fe6-88e6-65bc34d1cba9",
               service_account_id: "svac_01WVnWQoBfyRFsf4wyM7EHq7",
               workspace_id: "wrkspc_01Ug39YtMABrbjfon1tEpoXy"
-            }' | curl -sS https://api.anthropic.com/v1/oauth/token -H "content-type: application/json" --data @-)"
-          token="$(jq -r '.access_token // empty' <<< "$response")"
+            }' | curl -sS https://api.anthropic.com/v1/oauth/token -H "content-type: application/json" --data @- 2>&1)" || true
+          token="$(jq -r '.access_token // empty' <<< "$response" 2> /dev/null)" || true
           if [ -z "$token" ]; then
             # The post job reads the reason from the log, as from Eddy's own.
-            echo "eddy: the token exchange failed: $(jq -c .error <<< "$response")" | tee scratchpad/eddy.log
+            echo "eddy: the token exchange failed: $(head -c 500 <<< "$response" | tr '\n' ' ')" | tee scratchpad/eddy.log
             exit 1
           fi
           echo "::add-mask::$token"
