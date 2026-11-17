@@ -28,8 +28,17 @@ pub fn comment(f: &Finding, commit: &String, id: &String) -> String {
     return if whole.len() <= BODY_LIMIT { whole } else { body(f, commit, id, false) };
 }
 
+/// The id of finding `n`, from 1, of a review of `commit`.
+pub fn finding_id(commit: &String, n: i32) -> String {
+    return `${short_sha(commit)}-${n}`;
+}
+
+fn short_sha(commit: &String) -> String {
+    return commit.substr_bytes(0, i32::min(commit.len(), 9));
+}
+
 fn body(f: &Finding, commit: &String, id: &String, with_steps: bool) -> String {
-    let short = commit.substr_bytes(0, i32::min(commit.len(), 9));
+    let short = short_sha(commit);
     let status = match &f.repro {
         Some(r) && r.verified => `reproduced on \`${short}\``,
         Some(r) && r.patch.is_empty() => `not reproduced: the reviewer's test could not be tried alone, since ${shortened(
@@ -51,7 +60,7 @@ fn body(f: &Finding, commit: &String, id: &String, with_steps: bool) -> String {
 /// findings and what the review cost, then each finding's comment folded, as
 /// many as fit in a comment.
 pub fn review_comment(findings: &List<Finding>, commit: &String, cost: &String, error: &Option<String>) -> String {
-    let short = commit.substr_bytes(0, i32::min(commit.len(), 9));
+    let short = short_sha(commit);
     if let Some(e) = error {
         return `## Eddy\n\nThe review of \`${short}\` failed: ${shortened(e, SUMMARY_LIMIT)}\n\n${*cost}\n`;
     }
@@ -68,7 +77,10 @@ pub fn review_comment(findings: &List<Finding>, commit: &String, cost: &String, 
     out.push_str("\n");
     for let [i, f] of findings.into_iter().enumerate() {
         let n = i + 1;
-        let folded = `<details><summary>${n}. ${cell(&f.summary)}</summary>\n\n${comment(f, commit, &`${short}-${n}`)}\n</details>\n\n`;
+        let folded = `<details><summary>${n}. ${cell(&f.summary)}</summary>\n\n${comment(f, commit, &finding_id(
+            commit,
+            n,
+        ))}\n</details>\n\n`;
         let rest = `Finding ${n} on is in the run's artifact.\n`;
         if out.len() + folded.len() + rest.len() > BODY_LIMIT {
             out.push_str(rest);

@@ -42,7 +42,7 @@ use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
 use { git, try_git, paths_between, diff_between } from "./git.wado";
 use { Usage } from "./anthropic.wado";
-use { comment, review_comment } from "./comment.wado";
+use { comment, finding_id, review_comment } from "./comment.wado";
 use { cost_summary } from "./cost.wado";
 use { report } from "./report.wado";
 use { review, Submission, Finding, Reviewed } from "./review.wado";
@@ -226,10 +226,9 @@ fn reviewed_again(w: &Workspace, earlier: &Reviewed) -> Reviewed with (Preopens,
 fn write_findings(dir: &String, head: &String, findings: &List<Finding>) with Preopens {
     fs::remove_dir_all(dir).unwrap();
     fs::create_dir_all(dir).unwrap();
-    let short = head.substr_bytes(0, 9);
     for let [i, f] of findings.into_iter().enumerate() {
         let n = i + 1;
-        fs::write(fs::join(dir, `${n}.md`), &comment(f, head, &`${short}-${n}`)).unwrap();
+        fs::write(fs::join(dir, `${n}.md`), &comment(f, head, &finding_id(head, n))).unwrap();
         if let Some(r) = &f.repro && !r.patch.is_empty() {
             fs::write(fs::join(dir, `${n}.patch`), &r.patch).unwrap();
         }
