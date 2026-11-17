@@ -790,7 +790,7 @@ impl WebGpuBackend {
         return self.dispatches;
     }
 
-    /// Times each dispatch from here on on the device, for `profiled`, where
+    /// Starts timing each later dispatch on the device, for `profiled`, where
     /// the device grants `timestamp-query`; returns whether it does. Each
     /// dispatch then takes a compute pass and a submit of its own, so the
     /// host's time is no longer the one to read.
@@ -803,7 +803,7 @@ impl WebGpuBackend {
             count: (2 * PROFILED_DISPATCHES) as u32 as GpuSize32,
             label: null,
         }) else {
-            return false;
+            panic("loam: a device granting `timestamp-query` made no query set");
         };
         let size = (16 * PROFILED_DISPATCHES) as u64 as GpuSize64;
         let resolved = self.device.create_buffer(GpuBufferDescriptor {
@@ -827,7 +827,6 @@ impl WebGpuBackend {
     pub fn profiled(
         &mut self,
     ) -> List<KernelTime> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroup, GpuComputePassEncoder) {
-        assert self.profiler matches { Some(_) }, "`profile` must have started a profile";
         self.flush();
         self.read_profile();
         let Some(p) = &self.profiler else {
@@ -850,7 +849,7 @@ impl WebGpuBackend {
     /// spent, leaving its query set to write again.
     fn read_profile(&mut self) with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer) {
         let Some(p) = &mut self.profiler else {
-            unreachable();
+            panic("loam: `profile` must have started a profile");
         };
         let count = p.timed.len();
         if count == 0 {
