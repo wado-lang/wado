@@ -48,6 +48,9 @@ pub struct BpeTokenizer {
     /// under `ByteLevel` a character of the byte alphabet, by code point, and
     /// under `Pieces` a `<0xXX>` token, by id.
     bytes_of: List<i32>,
+    /// Under `Pieces`, the id of each character's own token, by code point,
+    /// the lowest where several spell it, so encoding searches no token.
+    char_ids: HashMap<i32, i32>,
     /// What a character no token and no byte spells encodes as, -1 for none.
     unknown: i32,
     /// The ids every encoding starts with.
@@ -68,10 +71,10 @@ impl BpeTokenizer {
     /// `by_token` holds the ids as little-endian `i32`s, ordered by their
     /// tokens, the lowest of a repeated token's first. `merges` holds three
     /// little-endian `i32`s per merge by rank: the two ids it joins, then the
-    /// id they join to. `specials` are matched in the text
-    /// as they stand, before it is split. Under `ByteLevel` every byte's
-    /// character is a token; under `Pieces` the `<0xXX>` tokens spell the
-    /// bytes, and `unknown` names the token a character neither spells.
+    /// id they join to. `specials` are matched in the text as they stand,
+    /// before it is split. Under `ByteLevel` every byte's character is a
+    /// token; under `Pieces` the `<0xXX>` tokens spell the bytes, and
+    /// `unknown` names the token a character neither spells.
     pub fn new(
         tokens: &ByteList,
         by_token: &ByteList,
@@ -106,6 +109,7 @@ impl BpeTokenizer {
             special_ids: List::<bool>::filled(count, false),
             byte_ids: List::<i32>::filled(256, -1),
             bytes_of: [],
+            char_ids: HashMap::new(),
             unknown,
             prefix,
             letters: icu::ranges(GeneralCategoryGroup::Letter),
@@ -126,6 +130,12 @@ impl BpeTokenizer {
             },
             Pieces => {
                 t.bytes_of = List::<i32>::filled(count, -1);
+                for let id of 0..<count {
+                    let token = t.token(id);
+                    if let Some(c) = token.chars().next() && c.len_utf8() == token.len() {
+                        t.char_ids.try_insert(c as i32, id);
+                    }
+                }
                 for let b of 0..<256 {
                     if let Some(id) = t.id_of(byte_token(b)) {
                         t.byte_ids[b] = id;
@@ -261,7 +271,7 @@ impl BpeTokenizer {
     /// `c` as `Pieces` spells it before merging: its own token, else its
     /// bytes', else the unknown token, one for a run of them.
     fn spell_piece(&self, c: char, parts: &mut List<i32>) {
-        if let Some(id) = self.id_of(String::from(c)) {
+        if let Some(id) = self.char_ids.get(c as i32) {
             parts.push(id);
             return;
         }

@@ -87,8 +87,7 @@ export async function opened({ model, layers }, provider) {
  * runner-up, the logits the first is picked from, and the milliseconds the
  * steps after the first took.
  */
-export async function continued(session, { layers, emptyPast, half = false, feeds = () => ({}) }, ids, ends = []) {
-  const empty = half ? new ort.Tensor('float16', new Uint16Array(0), emptyPast) : new ort.Tensor('float32', new Float32Array(0), emptyPast);
+export async function continued(session, decoder, ids, ends = []) {
   const generated = [];
   let lead = Infinity;
   let caches = {};
@@ -97,18 +96,7 @@ export async function continued(session, { layers, emptyPast, half = false, feed
   let started;
   let first;
   for (let s = 0; s < STEPS && !ends.includes(generated.at(-1)); s++) {
-    const total = seen + fresh.length;
-    const inputs = {
-      input_ids: new ort.Tensor('int64', BigInt64Array.from(fresh, BigInt), [1, fresh.length]),
-      attention_mask: new ort.Tensor('int64', new BigInt64Array(total).fill(1n), [1, total]),
-      ...feeds(seen),
-    };
-    for (let l = 0; l < layers; l++) {
-      for (const kind of ['key', 'value']) {
-        inputs[`past_key_values.${l}.${kind}`] = caches[`present.${l}.${kind}`] ?? empty;
-      }
-    }
-    const out = await session.run(inputs);
+    const out = await session.run(fed(decoder, fresh, seen, caches));
     const vocab = out.logits.dims[2];
     const last = values(out.logits.data).subarray((fresh.length - 1) * vocab, fresh.length * vocab);
     let best = 0;
@@ -119,7 +107,7 @@ export async function continued(session, { layers, emptyPast, half = false, feed
       first = Float32Array.from(last);
       started = performance.now();
     }
-    seen = total;
+    seen += fresh.length;
     released(caches);
     caches = out;
     generated.push(best);
@@ -130,13 +118,33 @@ export async function continued(session, { layers, emptyPast, half = false, feed
   return { generated, lead, first, ms_after_first: performance.now() - started };
 }
 
+/**
+ * The inputs of a step of `decoder` that feeds `fresh` after `seen` tokens,
+ * whose cache `caches` holds as the step before returned it.
+ */
+export function fed({ layers, emptyPast, half = false, feeds = () => ({}) }, fresh, seen, caches) {
+  const total = seen + fresh.length;
+  const inputs = {
+    input_ids: new ort.Tensor('int64', BigInt64Array.from(fresh, BigInt), [1, fresh.length]),
+    attention_mask: new ort.Tensor('int64', new BigInt64Array(total).fill(1n), [1, total]),
+    ...feeds(seen),
+  };
+  for (let l = 0; l < layers; l++) {
+    for (const kind of ['key', 'value']) {
+      inputs[`past_key_values.${l}.${kind}`] = caches[`present.${l}.${kind}`] ??
+        (half ? new ort.Tensor('float16', new Uint16Array(0), emptyPast) : new ort.Tensor('float32', new Float32Array(0), emptyPast));
+    }
+  }
+  return inputs;
+}
+
 /** A tensor's data as numbers, which float16's bits are not. */
 function values(data) {
   return data instanceof Uint16Array ? new Float16Array(data.buffer, data.byteOffset, data.length) : data;
 }
 
 /** Frees the caches a step returned on the device, which only `dispose` does. */
-function released(caches) {
+export function released(caches) {
   for (const t of Object.values(caches)) {
     if (t.location === 'gpu-buffer') t.dispose();
   }

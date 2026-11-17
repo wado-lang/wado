@@ -796,10 +796,14 @@ impl WebGpuBackend {
     /// the device grants `timestamp-query`; returns whether it does. Each
     /// dispatch then takes a compute pass and a submit of its own, so the
     /// host's time is no longer the one to read.
-    pub fn profile(&mut self) -> bool with (GpuDevice, GpuQuerySet) {
+    pub fn profile(
+        &mut self,
+    ) -> bool with (GpuDevice, GpuQuerySet, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroup, GpuComputePassEncoder) {
         if !self.timestamps {
             return false;
         }
+        // A dispatch joining a pass begun before would go untimed.
+        self.flush();
         let Ok(queries) = self.device.create_query_set(GpuQuerySetDescriptor {
             type: GpuQueryType::Timestamp,
             count: (2 * PROFILED_DISPATCHES) as u32 as GpuSize32,
@@ -874,6 +878,11 @@ impl WebGpuBackend {
             panic("loam: a profile's timestamps did not unmap");
         };
         for let i of 0..<count {
+            // A device may reset its counter between two stamps, and WebGPU
+            // lets such a pass be ignored.
+            if stamps[2 * i + 1] < stamps[2 * i] {
+                continue;
+            }
             let elapsed = (stamps[2 * i + 1] - stamps[2 * i]) as i64;
             let [nanoseconds, dispatches] = p.spent.get(p.timed[i]).unwrap_or([0 as i64, 0]);
             p.spent[p.timed[i]] = [nanoseconds + elapsed, dispatches + 1];

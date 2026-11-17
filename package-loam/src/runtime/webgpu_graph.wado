@@ -184,8 +184,9 @@ impl Graph for WebGpuBackend {
     ) -> Result<List<Any<WebGpuBackend>>, Er> with _ {
         let recorded = record(&mut Recorder::new());
         let contracted = contracted_axes(&recorded, first, count);
+        let joined = joined_products(&recorded);
         let mut kept = List::<Option<Any<WebGpuBackend>>>::filled(count, null);
-        for let [run, paired] of weight_runs(&recorded, first, count, &contracted) {
+        for let [run, paired] of weight_runs(&recorded, &joined, first, count, &contracted) {
             let axis = contracted[run[0]].unwrap();
             let free = 1 - axis;
             let mut parts: List<HostWeight> = [];
@@ -235,12 +236,12 @@ impl Graph for WebGpuBackend {
                 );
             }
         }
-        for let [run, paired] of weight_rows(&recorded, first, count) {
+        for let [run, paired] of weight_rows(&recorded, &joined, first, count) {
             let mut parts: List<HostWeight> = [];
             for let at of run {
                 parts.push(load(at)?);
             }
-            let whole = self.kept_plain(&rows_laid(&parts, paired));
+            let whole = kept_plain(self, &rows_laid(&parts, paired));
             let d = *on_device(&whole).unwrap();
             let mut start = 0;
             for let [j, at] of run.into_iter().enumerate() {
@@ -269,24 +270,10 @@ impl Graph for WebGpuBackend {
                 let matrix = self.kept_matrix(inner, outer, &one, |ps, r, c| contracted_at(&ps[0], axis, r, c));
                 of_kind(self, kind, Placed::Device(oriented(matrix, axis)));
             } else {
-                self.kept_plain(&w);
+                kept_plain(self, &w);
             });
         }
         return Result::Ok(kept.into_iter().map(|k| k.unwrap()).collect());
-    }
-
-    /// `w` on the device: a float or bool one in f32 words, a `u8` one four
-    /// bytes to a word, and an `i64` one as `keep` keeps it.
-    fn kept_plain(&mut self, w: &HostWeight) -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuBuffer) {
-        if w.kind matches { U8 } {
-            let bytes = self.reserved_bytes(w.extents, true);
-            self.write_bytes(&bytes, |i| w.bytes()[i] as u32);
-            return Any::U8(Placed::Device(bytes));
-        }
-        if w.kind matches { I64 } {
-            return kept_any(self, &w.decoded());
-        }
-        return of_kind(self, w.kind, Placed::Device(self.kept_values(w)));
     }
 
     fn executed(
@@ -891,21 +878,38 @@ internal fn contracted_axes(recorded: &Recorded, first: i32, count: i32) -> List
     return axes;
 }
 
-/// The right matrices of each `Joined` and `Paired` launch `recorded` plans
-/// into, by their places among the `count` weights it takes from its parameter
-/// `first` on, and whether they pair: each run whose weights `contracted` keeps
-/// along one axis, and which share none with a run before it.
-fn weight_runs(recorded: &Recorded, first: i32, count: i32, contracted: &List<Option<i32>>) -> List<[List<i32>, bool]> {
+/// The products of each `Joined` and `Paired` launch `recorded` plans into,
+/// and whether they pair.
+fn joined_products(recorded: &Recorded) -> List<[List<Kernel>, bool]> {
+    let mut joined: List<[List<Kernel>, bool]> = [];
+    for let launch of planned(recorded, &splats_of(&constants(recorded))).flattened() {
+        match launch {
+            Joined(ks) => joined.push([ks, false]),
+            Paired(p) => joined.push([
+                [p.first, p.second],
+                true,
+            ]),
+            _ => {
+            },
+        }
+    }
+    return joined;
+}
+
+/// The right matrices of each of `joined`'s launches, by their places among
+/// the `count` weights `recorded` takes from its parameter `first` on, and
+/// whether they pair: each run whose weights `contracted` keeps along one
+/// axis, and which share none with a run before it.
+fn weight_runs(
+    recorded: &Recorded,
+    joined: &List<[List<Kernel>, bool]>,
+    first: i32,
+    count: i32,
+    contracted: &List<Option<i32>>,
+) -> List<[List<i32>, bool]> {
     let mut taken = HashSet::<i32>::new();
     let mut runs: List<[List<i32>, bool]> = [];
-    for let launch of planned(recorded, &splats_of(&constants(recorded))).flattened() {
-        let [ks, paired] = match launch {
-            Joined(ks) => [ks, false],
-            Paired(p) => [[p.first, p.second] as List<Kernel>, true],
-            _ => {
-                continue;
-            },
-        };
+    for let [ks, paired] of *joined {
         let run: List<i32> = ks.into_iter().map(
             |k| match recorded.nodes[recorded.nodes[k.product.unwrap()].operands[1]].op {
                 Parameter(p) => p - first,
@@ -928,22 +932,20 @@ fn weight_runs(recorded: &Recorded, first: i32, count: i32, contracted: &List<Op
     return runs;
 }
 
-/// The weights of each `Joined` and `Paired` launch of quantized products
-/// `recorded` plans into, by their places among the `count` weights it takes
-/// from its parameter `first` on, and whether they pair: one run for each
-/// weight a product reads, its packed values, scales or zero points, in the
-/// launch's order, each of whose weights no run before it holds.
-fn weight_rows(recorded: &Recorded, first: i32, count: i32) -> List<[List<i32>, bool]> {
+/// The weights of each of `joined`'s launches of quantized products, by their
+/// places among the `count` weights `recorded` takes from its parameter
+/// `first` on, and whether they pair: one run for each weight a product reads,
+/// its packed values, scales or zero points, in the launch's order, each of
+/// whose weights no run before it holds.
+fn weight_rows(
+    recorded: &Recorded,
+    joined: &List<[List<Kernel>, bool]>,
+    first: i32,
+    count: i32,
+) -> List<[List<i32>, bool]> {
     let mut taken = HashSet::<i32>::new();
     let mut runs: List<[List<i32>, bool]> = [];
-    for let launch of planned(recorded, &splats_of(&constants(recorded))).flattened() {
-        let [ks, paired] = match launch {
-            Joined(ks) => [ks, false],
-            Paired(p) => [[p.first, p.second] as List<Kernel>, true],
-            _ => {
-                continue;
-            },
-        };
+    for let [ks, paired] of *joined {
         let products: List<&RecordedNode> = ks.into_iter().map(|k| &recorded.nodes[k.product.unwrap()]).collect();
         if !products[0].op matches { QuantizedProduct(_) } {
             continue;
@@ -968,6 +970,20 @@ fn weight_rows(recorded: &Recorded, first: i32, count: i32) -> List<[List<i32>, 
 /// `parts`, weights of one kind whose extents differ along the first axis
 /// alone, as one: their rows one after another, or alternating between the
 /// two where `paired`.
+/// `w` on the device: a float or bool one in f32 words, a `u8` one four bytes
+/// to a word, and an `i64` one as `kept_any` keeps it.
+fn kept_plain(g: &mut WebGpuBackend, w: &HostWeight) -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuBuffer) {
+    if w.kind matches { U8 } {
+        let bytes = g.reserved_bytes(w.extents, true);
+        g.write_bytes(&bytes, |i| w.bytes()[i] as u32);
+        return Any::U8(Placed::Device(bytes));
+    }
+    if w.kind matches { I64 } {
+        return kept_any(g, &w.decoded());
+    }
+    return of_kind(g, w.kind, Placed::Device(g.kept_values(w)));
+}
+
 fn rows_laid(parts: &List<HostWeight>, paired: bool) -> HostWeight {
     let width = stored_width(parts[0].kind);
     let mut extents = parts[0].extents;

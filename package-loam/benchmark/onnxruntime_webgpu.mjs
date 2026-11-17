@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as ort from 'onnxruntime-node';
-import { STEPS } from '../tools/greedy.mjs';
+import { STEPS, fed, released } from '../tools/greedy.mjs';
 import { NEXT, picking } from '../tools/picking.mjs';
 
 const PROMPT = 'Hello, my name is';
@@ -49,37 +49,20 @@ function opened({ model, layers, vocab }) {
 }
 
 /** The STEPS tokens greedy decoding picks after `ids` from an empty cache. */
-async function continued(session, { layers, emptyPast, half = false, feeds = () => ({}) }, ids) {
-  const empty = half ? new ort.Tensor('float16', new Uint16Array(0), emptyPast) : new ort.Tensor('float32', new Float32Array(0), emptyPast);
+async function continued(session, decoder, ids) {
   const generated = [];
   let caches = {};
   let fresh = ids;
   let seen = 0;
   for (let s = 0; s < STEPS; s++) {
-    const total = seen + fresh.length;
-    const inputs = {
-      input_ids: new ort.Tensor('int64', BigInt64Array.from(fresh, BigInt), [1, fresh.length]),
-      attention_mask: new ort.Tensor('int64', new BigInt64Array(total).fill(1n), [1, total]),
-      ...feeds(seen),
-    };
-    for (let l = 0; l < layers; l++) {
-      for (const kind of ['key', 'value']) inputs[`past_key_values.${l}.${kind}`] = caches[`present.${l}.${kind}`] ?? empty;
-    }
-    const out = await session.run(inputs);
+    const out = await session.run(fed(decoder, fresh, seen, caches));
     released(caches);
     caches = out;
+    seen += fresh.length;
     const next = Number(out[NEXT].data[0]);
     generated.push(next);
     fresh = [next];
-    seen = total;
   }
   released(caches);
   return generated;
-}
-
-/** Frees the caches a step returned on the device, which only `dispose` does. */
-function released(caches) {
-  for (const t of Object.values(caches)) {
-    if (t.location === 'gpu-buffer') t.dispose();
-  }
 }
