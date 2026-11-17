@@ -81,7 +81,7 @@ pub fn review_comment(findings: &List<Finding>, commit: &String, cost: &String, 
             commit,
             n,
         ))}\n</details>\n\n`;
-        let rest = `Finding ${n} on is in the run's artifact.\n`;
+        let rest = `Findings ${n} on are in the run's artifact.\n`;
         if out.len() + folded.len() + rest.len() > BODY_LIMIT {
             out.push_str(rest);
             break;
@@ -328,7 +328,7 @@ test "a review's comment stops listing details at GitHub's limit" {
     ];
     let text = review_comment(&findings, &"0123456789", &"cost: $0", &null);
     assert text.len() <= BODY_LIMIT && text.contains("<!-- eddy 012345678-1 -->");
-    assert !text.contains("<!-- eddy 012345678-2 -->") && text.ends_with("Finding 2 on is in the run's artifact.\n");
+    assert !text.contains("<!-- eddy 012345678-2 -->") && text.ends_with("Findings 2 on are in the run's artifact.\n");
 }
 
 test "a shell word is quoted where the shell would read it otherwise" {

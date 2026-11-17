@@ -46,8 +46,8 @@ jobs:
           COMMENT_ID: ${{ github.event.comment.id }}
         run: |
           set -euo pipefail
-          # A review builds and runs the pull request's code, and spends the
-          # API key, so only an owner starts one.
+          # A review builds and runs the pull request's code, and is paid for,
+          # so only an owner starts one.
           permission="$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission)"
           if [ "$permission" != admin ]; then
             echo "::error::Eddy is started by a repository admin; $ACTOR has $permission"
@@ -82,9 +82,9 @@ jobs:
           echo "::error::no recent CI run on main kept a prebuilt wado"
           exit 1
 
-  # Eddy and everything around it come from main: the pull
-  # request's own scripts, mise.toml or Eddy would run outside the sandbox,
-  # beside the API key. The pull request is only the commit under review, and
+  # Eddy and everything around it come from main: the pull request's own
+  # scripts, mise.toml or Eddy would run outside the sandbox, in a job that can
+  # mint the API token. The pull request is only the commit under review, and
   # its code runs only inside Eddy's confinement. No GitHub token reaches this
   # job past the setup.
   review:
