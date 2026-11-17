@@ -1,5 +1,5 @@
 use { MemberField, MemberMethod, MemberDecls } from "./java2wado/jmembers.wado";
-use { wado_opaque_end, comment_end, skip_ws, word_at, ident_end } from "./g4/scan.wado";
+use { wado_opaque_end, comment_end, skip_ws, word_at, ident_end, text_at } from "./g4/scan.wado";
 
 pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, String> {
     let src = body.as_str_slice();
@@ -102,10 +102,7 @@ fn is_member_start(src: &StrSlice, i: i32, n: i32) -> bool {
     }
     let name_end = ident_end(src, j, n);
     let colon = skip_ws(src, name_end, n);
-    return name_end > j
-        && colon < n
-        && src.byte_at(colon) == b':'
-        && !(colon + 1 < n && src.byte_at(colon + 1) == b':');
+    return name_end > j && text_at(src, colon, n, ":") && !text_at(src, colon, n, "::");
 }
 
 /// Where a method's parts sit: its `(`, just past its `)`, its body's `{`,

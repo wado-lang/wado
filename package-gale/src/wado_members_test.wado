@@ -45,8 +45,7 @@ test "translate_wado_members rejects a field with no initializer" {
 }
 
 test "translate_wado_members refuses an initializer that runs into the next member" {
-    // An initializer ends at `;`. Without one it swallowed the members after it,
-    // and the struct the generator wrote did not compile.
+    // Read to the next `;` instead, it would swallow the members after it.
     let field = translate_wado_members("a: List<i32> = []\nb: i32 = 0");
     assert field matches { Err(e) && e.contains("';' after field 'a'") };
     let method = translate_wado_members("a: i32 = 0\n\nfn get(&self) -> i32 { return self.a; }");
