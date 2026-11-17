@@ -16,13 +16,6 @@ already measured, not how to close it. Closed work belongs in commit history.
 - [ ] A flush happens when an `on` listener returns or when the program asks.
   Nothing schedules one after the current task, as a microtask would.
 
-## DOM
-
-- [ ] The keyed list `each` puts its rows back in order by appending every one
-  of them, since `SurfaceDom` does not answer `insert_before`.
-- [ ] A text binding owns its element's whole content, since `SurfaceDom` has no
-  `Text` node.
-
 ## Declarative UI
 
 - [ ] No template syntax exists. A page is built by calls.

@@ -14,9 +14,13 @@ pub fn text(tag: String, content: String) -> Element with Dom {
     return made;
 }
 
+/// Appends a text node to `target` and keeps its text at what `content`
+/// answers. The element's other children stay where they are.
 pub fn bind_text(target: Element, content: fn mut() -> String with Track) with (Track, Dom) {
     let mut content = content;
-    observe(|| target.set_text_content(Option::Some(content())));
+    let shown = Dom::document().create_text_node("");
+    target.append_child(shown);
+    observe(|| shown.set_data(content()));
 }
 
 /// Keeps the attribute at what `value` answers, absent for `None`.

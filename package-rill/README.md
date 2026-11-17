@@ -56,6 +56,8 @@ with &mut dom do {
   subscriptions when it runs again or is disposed of. So a dependency it no
   longer reads wakes nothing. A memo is disposed of with the computation that
   made it.
+- A binding writes the one place it owns: `bind_text` the data of a text node it
+  appends, and `each` its rows, moving only a row found out of place.
 - `on` flushes when the listener returns, so the page is consistent again
   before the browser gets control back. Any other code that writes, a listener
   added with `add_event_listener` directly included, calls `flush` itself.

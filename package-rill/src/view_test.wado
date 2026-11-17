@@ -1,5 +1,5 @@
 use { Signal, flush, on_cleanup, scope, signal } from "./signals.wado";
-use { each, element, text } from "./view.wado";
+use { bind_text, each, element, text } from "./view.wado";
 use { Dom, Element, Node, SurfaceDom } from "wado-lang:web";
 
 fn children_text(parent: Element) -> String with Dom {
@@ -26,6 +26,23 @@ test "each follows a new order with the nodes it had" {
         assert children_text(list) == "312";
         assert list.first_child().unwrap() == last;
         assert list.first_child().unwrap().next_sibling().unwrap() == first;
+    };
+}
+
+test "bind_text owns one text node, and leaves the element's other children" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let label = element("p");
+        label.append_child(text("b", "Count: "));
+        let count = signal(0);
+        let _dispose = scope(|| bind_text(label, || `${count.get()}`));
+        let shown = label.last_child().unwrap();
+        assert label.get_html() == "<b>Count: </b>0";
+
+        count.set(1);
+        flush();
+        assert label.get_html() == "<b>Count: </b>1";
+        assert label.last_child().unwrap() == shown;
     };
 }
 
