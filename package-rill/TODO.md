@@ -24,7 +24,5 @@ already measured, not how to close it. Closed work belongs in commit history.
   what is decided about one.
 - [ ] A child shown only on a condition has no form: `children` takes a list,
   and a list literal holds no `if`.
-- [ ] `wado format` puts a method chain on one line while it fits in 120
-  columns, so a `View` chain reads as one line rather than one call per line.
 - [ ] No binding shows or swaps a subtree as a signal changes. `each` is the
   only binding that adds and removes children.
