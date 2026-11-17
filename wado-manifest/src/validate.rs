@@ -230,7 +230,7 @@ pub fn validate_for_publish(
             } if !published_member(path) => {
                 errors.push(PublishError::PathDependencyWithoutSource {
                     dep_name: name.clone(),
-                })
+                });
             }
             DependencySource::Workspace => errors.push(PublishError::WorkspaceDependency {
                 dep_name: name.clone(),

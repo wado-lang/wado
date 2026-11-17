@@ -640,7 +640,7 @@ mod tests {
         for dir in ["app", "shared", "local"] {
             std::fs::create_dir(tmp.path().join(dir)).unwrap();
         }
-        let shared = tmp.path().join("shared").canonicalize().unwrap();
+        let published = [tmp.path().join("shared").canonicalize().unwrap()];
         let app = tmp.path().join("app");
         let on = |dep: &str| {
             manifest(&format!(
@@ -648,12 +648,9 @@ mod tests {
             ))
         };
 
+        assert_matches!(classify(&on("shared"), &app, &published), Verdict::Ready(_));
         assert_matches!(
-            classify(&on("shared"), &app, &[shared.clone()]),
-            Verdict::Ready(_)
-        );
-        assert_matches!(
-            classify(&on("local"), &app, &[shared]),
+            classify(&on("local"), &app, &published),
             Verdict::Failed(p) if p == [PublishError::PathDependencyWithoutSource { dep_name: "lib:dep".to_string() }]
         );
     }
