@@ -87,7 +87,9 @@ fn format_strings(text: &String, macro_name: String, takes_writer: bool) -> List
         from = from + at + macro_name.len();
         let mut args = from;
         if takes_writer {
-            let Some(comma) = all.slice(args, all.len()).find(",") else { break; };
+            let Some(comma) = all.slice(args, all.len()).find(",") else {
+                break;
+            };
             args += comma + 1;
         }
         let rest = all.slice(args, all.len());
