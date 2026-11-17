@@ -63,7 +63,7 @@ impl View {
 
     pub fn children(&self, children: List<View>) -> View with Dom {
         for let child of children {
-            self.node.append_child(child.node);
+            self.child(child);
         }
         return *self;
     }
@@ -81,8 +81,7 @@ impl View {
         items: fn mut() -> List<T> with Track,
         render: fn mut(T) -> View with (Track, Dom),
     ) -> View with (Track, Dom) {
-        let mut render = render;
-        each(self.node, items, |item: T| render(item).node);
+        each(self.node, items, render);
         return *self;
     }
 }
@@ -113,7 +112,7 @@ fn remove_rows<T>(parent: Element, rows: List<Row<T>>) with Dom {
 fn each<T: Eq>(
     parent: Element,
     items: fn mut() -> List<T> with Track,
-    render: fn mut(T) -> Element with (Track, Dom),
+    render: fn mut(T) -> View with (Track, Dom),
 ) with (Track, Dom) {
     let mut items = items;
     let mut render = render;
@@ -143,7 +142,7 @@ fn each<T: Eq>(
                 continue;
             }
             let mut node: Option<Element> = null;
-            let dispose = scope(|| node = Option::Some(render(item)));
+            let dispose = scope(|| node = Option::Some(render(item).node));
             kept.push(Row { item, node: node.unwrap(), dispose });
             was.push(-1);
         }

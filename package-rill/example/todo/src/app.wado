@@ -16,22 +16,26 @@ impl Eq for Todo {
     }
 }
 
+fn done_class(todo: &Todo) -> Option<String> with Track {
+    if todo.done.get() {
+        return Option::Some("done");
+    }
+    return null;
+}
+
 fn todo_row(todos: Signal<List<Todo>>, todo: Todo) -> View with (Track, Dom) {
-    return element("li")
-        .attribute("id", `todo-${todo.id}`)
-        .bind_attribute("class", || if todo.done.get() { Option::Some("done") } else { null })
-        .children([
-            element("span").text(todo.title).on("click", |_: Event| todo.done.set(!todo.done.get())),
-            element("button").text("×").on("click", |_: Event| {
-                let mut rest: List<Todo> = [];
-                for let other of todos.get() {
-                    if other != todo {
-                        rest.push(other);
-                    }
-                }
-                todos.set(rest);
-            }),
-        ]);
+    let title = element("span").text(todo.title).on("click", |_: Event| todo.done.set(!todo.done.get()));
+    let remove = element("button").text("×").on("click", |_: Event| {
+        let mut rest: List<Todo> = [];
+        for let other of todos.get() {
+            if other != todo {
+                rest.push(other);
+            }
+        }
+        todos.set(rest);
+    });
+    let row = element("li").attribute("id", `todo-${todo.id}`);
+    return row.bind_attribute("class", || done_class(&todo)).children([title, remove]);
 }
 
 /// Builds the list under `root`, and returns what stops its bindings and takes
@@ -51,12 +55,12 @@ pub fn mount(root: Element) -> fn mut() with Dom with Dom {
             return left;
         });
 
-        let title = element("input").attribute("id", "title");
-        let input: HtmlInputElement = title.node else {
+        let field = element("input").attribute("id", "title");
+        let input: HtmlInputElement = field.node else {
             unreachable();
         };
         View { node: root }.children([
-            title,
+            field,
             element("button").attribute("id", "add").text("Add").on("click", |_: Event| {
                 let title = input.value();
                 if title.is_empty() {
