@@ -136,7 +136,7 @@ both exports.
 
 | Implementation                          |      Throughput |    ms/iter | vs best |
 | --------------------------------------- | --------------: | ---------: | ------- |
-| **Loam** `WebGpuBackend` decode `q4`    | 168.59 tokens/s | 189.809 ms | 1.00x   |
-| onnxruntime WebGPU `q4`                 | 158.46 tokens/s | 201.944 ms | 1.06x   |
-| **Loam** `WebGpuBackend` decode `q4f16` | 155.88 tokens/s | 205.291 ms | 1.08x   |
-| onnxruntime WebGPU `q4f16`              | 128.59 tokens/s | 248.846 ms | 1.31x   |
+| **Loam** `WebGpuBackend` decode `q4f16` | 238.86 tokens/s | 133.968 ms | 1.00x   |
+| **Loam** `WebGpuBackend` decode `q4`    | 215.18 tokens/s | 148.715 ms | 1.11x   |
+| onnxruntime WebGPU `q4`                 | 151.63 tokens/s | 211.040 ms | 1.58x   |
+| onnxruntime WebGPU `q4f16`              | 124.64 tokens/s | 256.729 ms | 1.92x   |

@@ -4534,9 +4534,9 @@ fn quantized_product_shader(op: &Expr, bindings: &List<i32>, shape: &QuantizedSh
     let scale = view_load_wgsl(bindings[2], 14, &(["n", "b"] as List<String>));
     let weights = if zero_points { 4 } else { 3 };
     let zp = if zero_points { bindings[3] } else { 0 };
-    // Written out rather than looped: a WGSL loop is bounded by a counter the
-    // compiler adds to every iteration.
-    // A chunk is staged a segment's value at a time across the lanes, so the
+    // Both the staging and the sums are written out rather than looped: a WGSL
+    // loop is bounded by a counter the compiler adds to every iteration. A
+    // chunk is staged a segment's value at a time across the lanes, so the
     // lanes of a column read neighbouring words, not one bank: Gemma 3
     // (270M)'s `q4` output layer took 0.66 times as long as when each lane's
     // segment lay whole.
