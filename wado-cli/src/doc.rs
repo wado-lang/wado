@@ -363,7 +363,7 @@ fn items<'a>(module: &'a str, doc: &'a DocModule) -> Vec<Item<'a>> {
     }
     for r in &doc.resources {
         out.add(None, &r.name, &r.signature, &r.doc);
-        out.add_members(&r.name, &r.methods);
+        out.add_members(&r.name, r.methods.iter().chain(r.impls.functions()));
     }
     for t in &doc.types {
         out.add(None, &t.name, &t.signature, &t.doc);
@@ -781,6 +781,21 @@ mod format_contract_tests {
         for block in ["impl Shape {", "impl Hue {", "impl Mode {"] {
             assert!(simple.contains(block), "missing {block}:\n{simple}");
         }
+    }
+
+    /// A resource lists its trait impls and constants beside its operations.
+    #[test]
+    fn a_resource_lists_its_impls() {
+        let source = "//! Demo.\n\npub resource Conn {\n    fn close(&self);\n}\n\n\
+                      impl Conn {\n    pub const LIMIT: i32 = 4;\n}\n\n\
+                      pub trait Named with () {\n    fn label(&self) -> i32;\n}\n\n\
+                      impl Named for Conn {\n    fn label(&self) -> i32 { return 0; }\n}\n";
+        let md = markdown_of(source);
+        for heading in ["#### `pub const LIMIT: i32`", "#### `impl Named for Conn`"] {
+            assert!(md.contains(heading), "missing {heading}:\n{md}");
+        }
+        let simple = simple_all_of(source);
+        assert!(simple.contains("impl Named for Conn {"), "{simple}");
     }
 
     /// An associated type is listed as declared: its own parameters and its
@@ -1382,6 +1397,7 @@ fn render_md_resource(out: &mut String, r: &DocResource, h3: &str, h4: &str) {
     for m in &r.methods {
         render_md_function(out, m, h4);
     }
+    render_md_impl_members(out, &r.impls, h4);
 }
 
 fn render_md_entity(out: &mut String, sig: &str, doc: Option<&str>, h: &str) {
@@ -1738,15 +1754,18 @@ fn render_simple_resources_section(out: &mut String, doc: &DocModule, h2: &str) 
     }
     writeln!(out, "\n{h2} Resources").unwrap();
     for r in &doc.resources {
+        out.push_str("\n```wado\n");
         if r.methods.is_empty() {
-            writeln!(out, "\n```wado\n{};\n```", r.signature).unwrap();
+            writeln!(out, "{};", r.signature).unwrap();
         } else {
-            writeln!(out, "\n```wado\n{} {{", r.signature).unwrap();
+            writeln!(out, "{} {{", r.signature).unwrap();
             for m in &r.methods {
                 write_simple_decl(out, m, "    ");
             }
-            out.push_str("}\n```\n");
+            out.push_str("}\n");
         }
+        render_simple_impls(out, &r.name, &r.impls);
+        out.push_str("```\n");
     }
 }
 

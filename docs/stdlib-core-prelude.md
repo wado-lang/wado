@@ -1256,6 +1256,10 @@ Drop a completed subtask. Traps if the subtask has not yet resolved.
 Cancel this in-progress subtask, blocking until it resolves, and return
 the state it resolved in.
 
+#### `impl Waitable for Subtask`
+
+##### `fn wait_on(&self) -> WaitOn`
+
 ### `pub resource ErrorContext`
 
 An error context carrying a debug message across component boundaries.

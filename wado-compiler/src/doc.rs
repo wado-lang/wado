@@ -221,9 +221,12 @@ pub struct DocEffect {
 pub struct DocResource {
     pub name: String,
     pub signature: String,
+    /// The operations the resource declares; its `impl` blocks are `impls`.
     pub methods: Vec<DocFunction>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
+    #[serde(flatten)]
+    pub impls: DocImplMembers,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -632,15 +635,12 @@ fn build_doc_resource(r: &ResourceDecl, impls: &[DocImpl], include_private: bool
     sig.push_str(&r.name);
     sig.push_str(&render_generic_params(&r.type_params));
 
-    let mut methods: Vec<DocFunction> = r.methods.iter().map(build_doc_operation).collect();
-    let (inherent, _) = collect_impl_methods_for_type(&r.name, impls, include_private);
-    methods.extend(inherent);
-
     DocResource {
         name: r.name.clone(),
         signature: sig,
-        methods,
+        methods: r.methods.iter().map(build_doc_operation).collect(),
         doc: r.doc.clone(),
+        impls: collect_impl_members(&r.name, impls, include_private),
     }
 }
 
@@ -1036,27 +1036,14 @@ fn merge_primitive_types(target: &mut Vec<DocPrimitiveType>, source: Vec<DocPrim
     }
 }
 
+/// What the `impl` blocks on `type_name` declare: the inherent blocks' constants
+/// and methods, and each trait impl.
 fn collect_impl_members(
     type_name: &str,
     impls: &[DocImpl],
     include_private: bool,
 ) -> DocImplMembers {
-    let (methods, trait_impls) = collect_impl_methods_for_type(type_name, impls, include_private);
-    DocImplMembers {
-        constants: collect_impl_constants_for_type(type_name, impls, include_private),
-        methods,
-        trait_impls,
-    }
-}
-
-fn collect_impl_methods_for_type(
-    type_name: &str,
-    impls: &[DocImpl],
-    include_private: bool,
-) -> (Vec<DocFunction>, Vec<DocTraitImpl>) {
-    let mut inherent_methods = Vec::new();
-    let mut trait_impls = Vec::new();
-
+    let mut members = DocImplMembers::default();
     for DocImpl {
         block: i,
         method_contracts,
@@ -1074,42 +1061,26 @@ fn collect_impl_methods_for_type(
             if methods.is_empty() {
                 continue;
             }
-            let trait_name = render_type(trait_ty);
-            let type_sig = render_type(&i.ty);
-            trait_impls.push(DocTraitImpl {
-                signature: format!("impl {trait_name} for {type_sig}"),
+            members.trait_impls.push(DocTraitImpl {
+                signature: format!("impl {} for {}", render_type(trait_ty), render_type(&i.ty)),
                 methods,
             });
         } else {
+            for c in &i.constants {
+                if include_private || c.visibility.is_public() {
+                    members.constants.push(build_doc_const(c));
+                }
+            }
             for (m, contracts) in methods {
                 if include_private || m.visibility.is_public() || m.is_export {
-                    inherent_methods.push(build_doc_function_with(m, contracts.clone()));
+                    members
+                        .methods
+                        .push(build_doc_function_with(m, contracts.clone()));
                 }
             }
         }
     }
-
-    (inherent_methods, trait_impls)
-}
-
-/// The associated constants of the inherent `impl` blocks on `type_name`.
-fn collect_impl_constants_for_type(
-    type_name: &str,
-    impls: &[DocImpl],
-    include_private: bool,
-) -> Vec<DocFunction> {
-    let mut constants = Vec::new();
-    for DocImpl { block: i, .. } in impls {
-        if type_head_name(&i.ty) != Some(type_name) || i.trait_type.is_some() {
-            continue;
-        }
-        for c in &i.constants {
-            if include_private || c.visibility.is_public() {
-                constants.push(build_doc_const(c));
-            }
-        }
-    }
-    constants
+    members
 }
 
 fn build_doc_const(c: &AssociatedConst) -> DocFunction {
