@@ -13,12 +13,12 @@ use crate::primitive::PrimitiveType;
 use crate::synthesis::traits::REFLECT_FIELD_INPUTS_ASSOC;
 use crate::tir::{EffectRef, ResolvedType, TypeId, TypeParamId};
 use crate::trait_solver::{
-    ArgDefault, AssocId, Candidate, Candidates, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
-    ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    Source, TraitDeclId, TypeDeclId, TypeDef, answering_link, bound_candidates, candidates,
-    cmp_giving_eq,
-    comparison_row, derive, derive_alongside, holds_with_args, instance_candidates,
-    mark_duplicates, owed, pair_comparisons, rank, sourced, written_comparison, written_over,
+    ArgDefault, AssocId, Candidate, Candidates, Declaration, Env, Fact, ImplDef, ImplId,
+    ImplOrigin, MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule,
+    Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, answering_link,
+    bound_candidates, candidates, cmp_giving_eq, comparison_row, derive, derive_alongside,
+    holds_with_args, instance_candidates, mark_duplicates, owed, pair_comparisons, rank, sourced,
+    written_comparison, written_over,
 };
 use crate::type_table::{AnonStructId, TypeTable};
 

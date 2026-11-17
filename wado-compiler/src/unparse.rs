@@ -2274,7 +2274,10 @@ impl<'a> Unparser<'a> {
                 &n.args
             }
             _ => {
-                assert!(s.self_type.is_none(), "a `Self` binding is parsed on a turbofish head");
+                assert!(
+                    s.self_type.is_none(),
+                    "a `Self` binding is parsed on a turbofish head"
+                );
                 self.unparse_type(&s.target_type);
                 &[]
             }

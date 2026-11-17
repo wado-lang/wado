@@ -5187,9 +5187,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         out
     }
 
-    /// Enforce the visibility ladder on a qualified `Type::method(...)` call.
-    /// `receiver` is the key the neighbouring lookups resolved, not one
-    /// re-derived from the spelling, which a splice can make mean another type.
     /// The receiver `ns::Type` names in `ns::Type::method(…)`.
     fn namespaced_receiver(
         &self,
@@ -5217,6 +5214,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver.map(|receiver| receiver.written_as(&format!("{prefix}::{type_name}")))
     }
 
+    /// Enforce the visibility ladder on a qualified `Type::method(...)` call.
+    /// `receiver` is the key the neighbouring lookups resolved, not one
+    /// re-derived from the spelling, which a splice can make mean another type.
     pub(super) fn check_static_call_visibility(
         &mut self,
         receiver: &ReceiverId,

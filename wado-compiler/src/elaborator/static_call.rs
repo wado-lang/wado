@@ -617,10 +617,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !query.required_args.is_empty() {
                 candidates.retain(|c| {
                     let block = c.supply.as_ref().expect("kept by its trait").impl_def;
-                    let written = match receiver.ty {
-                        Some(ty) => self.tysys.trait_frame_at(block, ty)[1..].to_vec(),
-                        None => self.tysys.signatures.impl_sig(block).trait_type_args.clone(),
-                    };
+                    let written = self.tysys.trait_args_at(block, receiver.ty);
                     self.trait_args_settle_to(&written, query.required_args)
                 });
             }
@@ -1768,6 +1765,15 @@ impl TypeSystem {
                     .map(|&arg| self.at_receiver(impl_def, receiver, arg)),
             )
             .collect()
+    }
+
+    /// The trait arguments block `impl_def` writes, at `receiver`'s own where
+    /// the call settled its type.
+    pub(super) fn trait_args_at(&self, impl_def: DefId, receiver: Option<TypeId>) -> Vec<TypeId> {
+        match receiver {
+            Some(ty) => self.trait_frame_at(impl_def, ty).split_off(1),
+            None => self.signatures.impl_sig(impl_def).trait_type_args.clone(),
+        }
     }
 
     /// `ty`, written in block `impl_def`, with each slot the block's target

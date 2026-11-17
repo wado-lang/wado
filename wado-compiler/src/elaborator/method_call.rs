@@ -569,7 +569,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let trait_answers_nearer = |this: &Self, through_ref: Option<bool>| match &inherent {
             None => true,
-            Some((link, _)) => this.trait_answers_before(base_type_id, through_ref, method_name, *link),
+            Some((link, _)) => {
+                this.trait_answers_before(base_type_id, through_ref, method_name, *link)
+            }
         };
 
         // If receiver is a reference type, try ref-type trait impls first.
@@ -1485,7 +1487,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if Some(ty) == declaring {
                 return link;
             }
-            let ResolvedType::Newtype { base_type, .. } = self.tysys.type_table.borrow().get(ty).clone()
+            let ResolvedType::Newtype { base_type, .. } =
+                self.tysys.type_table.borrow().get(ty).clone()
             else {
                 return link;
             };
@@ -1500,7 +1503,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// declaration before a trait's. The kind of what answers decides whether
     /// the call selects as `recv.method(…)` does or as a static; traits there
     /// answering with both kinds leave nothing to select.
-    pub(super) fn qualified_answer(&mut self, receiver: &ReceiverId, method_name: &str) -> QualifiedAnswer {
+    pub(super) fn qualified_answer(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+    ) -> QualifiedAnswer {
         if self.declares_case_named(receiver.key(), method_name) {
             return QualifiedAnswer::Static;
         }
@@ -1548,7 +1555,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The link of `key`'s newtype chain whose own declaration of
     /// `method_name` takes a receiver, or takes none: an inherent method or a
     /// resource's.
-    fn own_link(&mut self, key: &ImplTargetKey, method_name: &str, takes_receiver: bool) -> Option<u32> {
+    fn own_link(
+        &mut self,
+        key: &ImplTargetKey,
+        method_name: &str,
+        takes_receiver: bool,
+    ) -> Option<u32> {
         let mut key = key.clone();
         for link in 0.. {
             let inherent = self
@@ -1556,9 +1568,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .any(|entry| entry.is_inherent() && entry.has_self == takes_receiver);
             let resource = key.decl().is_some_and(|def| {
                 if takes_receiver {
-                    self.tysys.resource_instance_method(def, method_name).is_some()
+                    self.tysys
+                        .resource_instance_method(def, method_name)
+                        .is_some()
                 } else {
-                    self.tysys.trait_env.resource_static(&key, method_name).is_some()
+                    self.tysys
+                        .trait_env
+                        .resource_static(&key, method_name)
+                        .is_some()
                 }
             });
             if inherent || resource {
@@ -1574,7 +1591,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// value and through each reference, so a blanket answers where its
     /// bounds hold. A generic type spelled without its arguments is no type
     /// the order can ask, and there the blocks written for its head answer.
-    fn trait_answer(&mut self, receiver: &ReceiverId, method_name: &str) -> Option<(u32, Vec<DefId>)> {
+    fn trait_answer(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+    ) -> Option<(u32, Vec<DefId>)> {
         let ordered = self.spelled_type(receiver).and_then(|ty| {
             let bridge = self.tysys.solver.as_ref()?.borrow();
             let module = self.frame_module();
@@ -1599,15 +1620,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect();
             Some((nearest, blocks))
         });
-        match ordered {
-            Some(found) => Some(found),
-            None => self.written_impls(receiver.key(), method_name),
-        }
+        ordered.or_else(|| self.written_impls(receiver.key(), method_name))
     }
 
     /// The trait impls written for a link of `key`'s chain that declare
     /// `method_name`, at the nearest link any does.
-    fn written_impls(&mut self, key: &ImplTargetKey, method_name: &str) -> Option<(u32, Vec<DefId>)> {
+    fn written_impls(
+        &mut self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<(u32, Vec<DefId>)> {
         // A link keyed by no declaration (`&Point`) is told apart by its whole
         // type, which the chain declares.
         let (mut key, mut declared) = (key.clone(), None);
@@ -1643,7 +1665,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .flatten()
             .filter(|blanket| blanket.receiver == BlanketReceiver::Value)
             .filter(|blanket| {
-                self.block_takes_receiver(blanket.def, method_name).is_some()
+                self.block_takes_receiver(blanket.def, method_name)
+                    .is_some()
                     && blanket
                         .bounds
                         .iter()
@@ -1703,16 +1726,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
     }
 
-    /// Whether the declaration impl block `block` answers `method_name` with
-    /// takes a receiver: the body it writes, else its trait's. `None` where
-    /// neither declares the name.
+    /// Whether the declaration that impl block `block` answers `method_name`
+    /// with takes a receiver: the body it writes, else its trait's. `None`
+    /// where neither declares the name.
     fn block_takes_receiver(&self, block: DefId, method_name: &str) -> Option<bool> {
         let header = &self.tysys.trait_env.impl_headers[&block];
         let self_kind = match header.methods.iter().find(|m| m.name == method_name) {
             Some(method) => self.tysys.signatures.method_sig(method.def)?.self_kind,
             None => {
                 let trait_decl = self.tysys.signatures.impl_trait(block)?;
-                let declared = self.tysys.signatures.trait_sig(trait_decl)?.method(method_name)?;
+                let declared = self
+                    .tysys
+                    .signatures
+                    .trait_sig(trait_decl)?
+                    .method(method_name)?;
                 declared.sig.self_kind
             }
         };
@@ -1743,10 +1770,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let (Some(sub), Some(sup)) = (table.nominal_def(pointee), spelled.key().decl()) {
             // Where the spelling writes the type's arguments, they are the
             // receiver's too.
+            let writes_args = |ty| {
+                table
+                    .nominal_type_args(ty)
+                    .is_some_and(|args| !args.is_empty())
+            };
             let instance_agrees = sub != sup
                 || spelled
                     .ty()
-                    .is_none_or(|ty| table.nominal_type_args(ty).is_none_or(|args| args.is_empty()) || ty == pointee);
+                    .is_none_or(|ty| ty == pointee || !writes_args(ty));
             return table.is_resource_subtype(sub, sup) && instance_agrees;
         }
         drop(table);
@@ -1789,7 +1821,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// [`Self::is_trait_instance_method_at`] for the receiver-less kind — what
-    /// `Trait::<T>::method(…)` binds `Self` for, since it has no receiver
+    /// `Trait::<Self = T>::method(…)` binds `Self` for, since it has no receiver
     /// argument to pin it.
     pub(super) fn is_trait_static_method_at(&self, head_site: AstId, method_name: &str) -> bool {
         self.tysys
@@ -1922,11 +1954,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // reference is part of: `Tr::m(r)` passes `r: &P` by value to an
             // `impl Tr for &P`'s `fn m(self)`.
             let as_self = (0..self_layers).fold(receiver_type, |ty, _| {
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .ref_pointee(ty)
-                    .unwrap_or(ty)
+                self.tysys.type_table.borrow().ref_pointee(ty).unwrap_or(ty)
             });
             if !self.receiver_mode_fits(sig.self_kind, as_self) {
                 self.check_trait_qualified_receiver_mode(
@@ -2335,9 +2363,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A default body's `Self::m(self)` names its trait, as `Tr::m(self)` does.
         let qualifier = match required_trait {
             Some(decl)
-                if self.tysys.trait_declares_method(Some(decl), &static_call.method, |kind| {
-                    kind != ast::SelfKind::None
-                }) =>
+                if self
+                    .tysys
+                    .trait_declares_method(Some(decl), &static_call.method, |kind| {
+                        kind != ast::SelfKind::None
+                    }) =>
             {
                 Some(Qualifier::Trait(self.tysys.required_trait(decl), None))
             }
@@ -3903,10 +3933,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             if !recv.required_args.is_empty() {
-                let written = match receiver.ty() {
-                    Some(ty) => self.tysys.trait_frame_at(impl_def, ty)[1..].to_vec(),
-                    None => self.tysys.signatures.impl_sig(impl_def).trait_type_args.clone(),
-                };
+                let written = self.tysys.trait_args_at(impl_def, receiver.ty());
                 if !self.trait_args_settle_to(&written, recv.required_args) {
                     continue;
                 }

@@ -970,7 +970,10 @@ pub enum TypeError {
     },
 
     /// `Type::<Self = T>::method()`: only a trait has a `Self` to bind.
-    SelfBindingOnType { name: String, span: Span },
+    SelfBindingOnType {
+        name: String,
+        span: Span,
+    },
 
     /// A static call whose literal argument admits several impls
     /// (`Wrapper::from(42)` against `From<i32>` beside `From<i64>`). A literal

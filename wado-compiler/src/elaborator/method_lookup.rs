@@ -1550,7 +1550,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether a match's trait arguments, their open slots solved against
     /// `pinned`, are `pinned`. Judged before anything is solved, since a
     /// variable the receiver holds is shared by every match.
-    pub(super) fn trait_args_settle_to(&mut self, trait_args: &[TypeId], pinned: &[TypeId]) -> bool {
+    pub(super) fn trait_args_settle_to(
+        &mut self,
+        trait_args: &[TypeId],
+        pinned: &[TypeId],
+    ) -> bool {
         if trait_args.len() != pinned.len() {
             return false;
         }
@@ -2451,7 +2455,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.report_cross_trait_ambiguity(&found_traits, method_name, span);
                 // The call continues on one of them only to recover, so it
                 // continues on one taking the receiver it was written with.
-                let takes_receiver = |m: &TraitMethodMatch| m.method_info.self_kind != ast::SelfKind::None;
+                let takes_receiver =
+                    |m: &TraitMethodMatch| m.method_info.self_kind != ast::SelfKind::None;
                 if found_traits.iter().any(takes_receiver) {
                     found_traits.retain(takes_receiver);
                 }

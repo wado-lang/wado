@@ -58,15 +58,15 @@ The order governs the trait-impl step of a _method call_ `recv.m(args)`. Method
 lookup reaches it after two steps that are not part of it, and three other
 dispatch paths select without it:
 
-| Step or path                                  | What selects                                                                |
-| --------------------------------------------- | --------------------------------------------------------------------------- |
-| Inherent method (`impl Type { fn m }`)        | Shadows the trait methods of that name at its link and every link past it   |
-| A reference receiver's `&T` impls             | Ranked ahead of the base type's, concrete before blanket                    |
-| Trait impls on the receiver                   | The order below                                                             |
-| A type parameter's bounds (`T: Tr` in a body) | The first bound declaring the method; two or more is an ambiguity error     |
-| `Type::m(recv, args)`, `m` taking a receiver  | What `recv.m(args)` selects                                                 |
-| `Type::m(args)`, `m` receiver-less            | The static-call walk (WEP 2026-09-06)                                       |
-| Operators and indexing                        | The operand's type, unique-or-error (WEP 2026-07-31)                        |
+| Step or path                                  | What selects                                                              |
+| --------------------------------------------- | ------------------------------------------------------------------------- |
+| Inherent method (`impl Type { fn m }`)        | Shadows the trait methods of that name at its link and every link past it |
+| A reference receiver's `&T` impls             | Ranked ahead of the base type's, concrete before blanket                  |
+| Trait impls on the receiver                   | The order below                                                           |
+| A type parameter's bounds (`T: Tr` in a body) | The first bound declaring the method; two or more is an ambiguity error   |
+| `Type::m(recv, args)`, `m` taking a receiver  | What `recv.m(args)` selects                                               |
+| `Type::m(args)`, `m` receiver-less            | The static-call walk (WEP 2026-09-06)                                     |
+| Operators and indexing                        | The operand's type, unique-or-error (WEP 2026-07-31)                      |
 
 These paths do not yet follow this order: see Known gaps.
 
