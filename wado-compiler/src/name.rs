@@ -426,25 +426,6 @@ pub fn multi_value_split_local(base: &str, field_name: &str) -> String {
     format!("{INTERNAL_PREFIX}mv{INTERNAL_PREFIX}{base}{INTERNAL_PREFIX}{field_name}")
 }
 
-/// The name of the synthesized `Case::<V, P>::extract` helper for a variant
-/// and one of its payload types, both identified by their structural mangles
-/// (same identity discipline as [`value_copy_helper_name`]). Lowering rewrites
-/// `builtin::variant_case_extract::<V, P>` calls to it (WEP 2026-06-13 §3e).
-pub fn case_extract_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
-    MarkerBridge::CaseExtract.pair_name(mangled_variant, mangled_payload)
-}
-
-/// [`case_extract_helper_name`]'s twin answering a reference to the payload,
-/// which lowering rewrites `builtin::variant_case_ref::<V, P>` calls to.
-pub fn case_ref_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
-    MarkerBridge::CaseRef.pair_name(mangled_variant, mangled_payload)
-}
-
-/// The `Case::<V, P>::construct` sibling of [`case_extract_helper_name`].
-pub fn case_construct_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
-    MarkerBridge::CaseConstruct.pair_name(mangled_variant, mangled_payload)
-}
-
 /// The `discriminant` of one instantiated generic variant, identified by the
 /// instance's structural mangle. A free helper like the value bridges: the
 /// method-name form cannot spell an instance.
@@ -459,47 +440,10 @@ pub fn widen_helper_name(mangled_from: &str, mangled_to: &str) -> String {
     format!("$widen${mangled_from}${mangled_to}")
 }
 
-/// The name of the synthesized `StructField::<S, F>::get` helper for a struct and one
-/// of its field types, both identified by their structural mangles (same
-/// identity discipline as [`case_extract_helper_name`]). Lowering rewrites
-/// `builtin::struct_field_get::<S, F>` calls to it (WEP 2026-06-13 §2).
-pub fn field_get_helper_name(mangled_struct: &str, mangled_field: &str) -> String {
-    MarkerBridge::FieldGet.pair_name(mangled_struct, mangled_field)
-}
-
-/// [`field_get_helper_name`]'s twin answering a reference to the field, which
-/// lowering rewrites `builtin::struct_field_ref::<S, F>` calls to.
-pub fn field_ref_helper_name(mangled_struct: &str, mangled_field: &str) -> String {
-    MarkerBridge::FieldRef.pair_name(mangled_struct, mangled_field)
-}
-
-/// Name of the synthesized hole-read helper for a template shape and one of
-/// its hole types, both by structural mangle. Lowering rewrites
-/// `builtin::hole_get::<T, V>` calls to it (WEP 2026-01-10).
-pub fn hole_get_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
-    MarkerBridge::HoleGet.pair_name(mangled_shape, mangled_hole)
-}
-
-/// [`hole_get_helper_name`]'s twin answering a reference to the hole, which
-/// lowering rewrites `builtin::hole_ref::<T, V>` calls to.
-pub fn hole_ref_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
-    MarkerBridge::HoleRef.pair_name(mangled_shape, mangled_hole)
-}
-
-/// Name of the synthesized segment-read helper for a template shape. Lowering
-/// rewrites `builtin::template_segment::<T>` calls to it (WEP 2026-01-10).
-pub fn template_segment_helper_name(mangled_shape: &str) -> String {
-    MarkerBridge::TemplateSegment.shape_name(mangled_shape)
-}
-
-/// Name of the synthesized hole-render helper for a template shape. Lowering
-/// rewrites `builtin::hole_fmt::<T>` calls to it (WEP 2026-01-10).
-pub fn hole_fmt_helper_name(mangled_shape: &str) -> String {
-    MarkerBridge::HoleFmt.shape_name(mangled_shape)
-}
-
-/// The kinds of bridge a reflection marker calls ([`case_extract_helper_name`]
-/// and its siblings; [`variant_tag_helper_name`] is not one).
+/// The kinds of bridge a reflection marker calls: a helper synthesized per head
+/// type (and member type), both by structural mangle, that `lower` rewrites
+/// the marker's call to (WEP 2026-06-13 §2 and §3e, WEP 2026-01-10).
+/// [`variant_tag_helper_name`] is not one.
 #[derive(Clone, Copy)]
 pub enum MarkerBridge {
     CaseExtract,
@@ -590,7 +534,7 @@ pub const DROP_GLUE_PREFIX: &str = "$drop$";
 
 /// Whether `name` is a per-type bridge — a helper synthesis mints for a *type*
 /// rather than for a call site: the value-copy pair, the reflect accessors
-/// ([`case_extract_helper_name`] and its siblings), an effect operation's
+/// (each [`MarkerBridge`]), an effect operation's
 /// default. No TIR body names one: lowering rewrites a `builtin::…` call to it,
 /// or the dispatch reaches it, so a reachability walk over TIR bodies must root
 /// them all.
@@ -823,53 +767,47 @@ pub fn cm_wrap_async_func_name(cm_identifier: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_wrap_async__{cm_identifier}")
 }
 
-/// The helper writing a future of the payload type mangled as `payload`.
-pub fn cm_future_write_func_name(payload: &str) -> String {
-    format!("{INTERNAL_PREFIX}cm_future_write_{payload}")
+/// A helper synthesized per payload type of a CM future or stream, named by
+/// [`Self::func_name`] after the payload's mangle (or, for a record stream,
+/// the WASI record's name).
+#[derive(Clone, Copy)]
+pub enum CmChannelHelper {
+    /// Writes a future.
+    FutureWrite,
+    /// Reads a future.
+    FutureRead,
+    /// Starts a read of a future.
+    FutureBeginRead,
+    /// Lifts what a read copied from a future.
+    FutureLift,
+    /// Writes a stream.
+    StreamWrite,
+    /// Reads one value from a stream.
+    StreamReadValue,
+    /// Reads a stream of a WASI record.
+    StreamRead,
+    /// Lifts what a read copied from a stream.
+    StreamLiftValue,
+    /// Lifts what a read copied from a stream of a WASI record.
+    StreamLift,
 }
 
-/// The helper reading a future of the payload type mangled as `payload`.
-pub fn cm_future_read_func_name(payload: &str) -> String {
-    format!("{INTERNAL_PREFIX}cm_future_read_{payload}")
-}
-
-/// The helper starting a read of a future of the payload type mangled as
-/// `payload`.
-pub fn cm_future_begin_read_func_name(payload: &str) -> String {
-    format!("{INTERNAL_PREFIX}cm_future_begin_read_{payload}")
-}
-
-/// The function lifting what a read copied from a future of the payload type
-/// mangled as `payload`.
-pub fn cm_future_lift_func_name(payload: &str) -> String {
-    format!("{INTERNAL_PREFIX}cm_future_lift_{payload}")
-}
-
-/// The helper writing a stream of the element type mangled as `element`.
-pub fn cm_stream_write_func_name(element: &str) -> String {
-    format!("{INTERNAL_PREFIX}cm_stream_write_{element}")
-}
-
-/// The helper reading one value from a stream of the element mangled as `element`.
-pub fn cm_stream_read_value_func_name(element: &str) -> String {
-    format!("{INTERNAL_PREFIX}cm_stream_read_val_{element}")
-}
-
-/// The helper reading a stream of the WASI record `element`.
-pub fn cm_stream_read_func_name(element: &str) -> String {
-    format!("{INTERNAL_PREFIX}cm_stream_read_{element}")
-}
-
-/// The function lifting what a read copied from a stream of the element mangled
-/// as `element`.
-pub fn cm_stream_lift_value_func_name(element: &str) -> String {
-    format!("{INTERNAL_PREFIX}cm_stream_lift_val_{element}")
-}
-
-/// The function lifting what a read copied from a stream of the WASI record
-/// `element`.
-pub fn cm_stream_lift_func_name(element: &str) -> String {
-    format!("{INTERNAL_PREFIX}cm_stream_lift_{element}")
+impl CmChannelHelper {
+    #[must_use]
+    pub fn func_name(self, payload: &str) -> String {
+        let what = match self {
+            Self::FutureWrite => "future_write",
+            Self::FutureRead => "future_read",
+            Self::FutureBeginRead => "future_begin_read",
+            Self::FutureLift => "future_lift",
+            Self::StreamWrite => "stream_write",
+            Self::StreamReadValue => "stream_read_val",
+            Self::StreamRead => "stream_read",
+            Self::StreamLiftValue => "stream_lift_val",
+            Self::StreamLift => "stream_lift",
+        };
+        format!("{INTERNAL_PREFIX}cm_{what}_{payload}")
+    }
 }
 
 /// What a callback export's name calls an extern handle argument.
@@ -1002,17 +940,6 @@ pub fn closure_call_name(module: &ModuleSource, functor_id: u32) -> String {
         &closure_functor_type(module, functor_id),
         None,
         CLOSURE_CALL_METHOD,
-    )
-}
-
-/// The call-graph identity of closure functor `functor_id`'s `$call`.
-#[must_use]
-pub fn closure_call_method_name(module: &ModuleSource, functor_id: u32) -> MethodName {
-    MethodName::new(
-        module.clone(),
-        closure_functor_type(module, functor_id),
-        None,
-        CLOSURE_CALL_METHOD.to_string(),
     )
 }
 
@@ -2155,11 +2082,6 @@ impl fmt::Display for StructName {
     }
 }
 
-/// The `core:rt` function `name`, as `core:rt/{name}`.
-pub fn build_core_rt_name(interner: &mut ModuleSourceInterner, name: &str) -> FreeFunctionName {
-    FreeFunctionName::new(interner.core("rt"), name.to_string())
-}
-
 /// Validate that a string can name a module.
 ///
 /// A module path is a filesystem representation, not a URI, so URI-unsafe
@@ -2491,29 +2413,6 @@ pub fn canonicalize_entry_point(filename: &str) -> String {
         .unwrap_or(filename);
 
     format!("./{name}")
-}
-
-/// Convert an absolute filesystem path to a canonical module path: separators
-/// unified to `/`, the absolute `project_root` prefix stripped, and a leading
-/// `./` ensured. `/home/user/project` + `/home/user/project/src/lib.wado` gives
-/// `./src/lib.wado`.
-pub fn filesystem_to_module_path(project_root: &str, file_path: &str) -> Option<String> {
-    // Normalize separators to forward slashes
-    let root = project_root.replace('\\', "/");
-    let path = file_path.replace('\\', "/");
-
-    // Strip the project root prefix
-    let relative = path.strip_prefix(&root)?;
-
-    // Remove leading slash if present
-    let relative = relative.trim_prefix('/');
-
-    // Ensure it starts with ./
-    if relative.starts_with("./") {
-        Some(relative.to_string())
-    } else {
-        Some(format!("./{relative}"))
-    }
 }
 
 /// Information about a type for name formatting.
@@ -3260,7 +3159,9 @@ mod tests {
     fn type_bridges_are_told_from_plainly_synthesized_functions() {
         assert!(is_type_bridge(&value_copy_helper_name("main.wado/Point")));
         assert!(is_type_bridge(&effect_default_impl_name("Log", "event")));
-        assert!(is_type_bridge(&hole_fmt_helper_name("$tmpl$abc")));
+        assert!(is_type_bridge(
+            &MarkerBridge::HoleFmt.shape_name("$tmpl$abc")
+        ));
         assert!(!is_type_bridge(MODULE_INIT_FUNCTION));
         assert!(!is_type_bridge("$test_0_adds"));
         assert!(!is_type_bridge("run"));
@@ -3379,15 +3280,6 @@ mod tests {
         set.insert(s1);
         assert!(set.contains(&s2));
         assert!(!set.contains(&s3));
-    }
-
-    #[test]
-    fn test_build_core_rt_name() {
-        let mut interner = ModuleSourceInterner::new();
-        let name = build_core_rt_name(&mut interner, "log_stdout");
-        assert_eq!(name.to_string(), "core:rt/log_stdout");
-        assert_eq!(name.module_source, ModuleSource::rt());
-        assert_eq!(name.name, "log_stdout");
     }
 
     #[test]
@@ -3519,29 +3411,6 @@ mod tests {
         assert_eq!(
             canonicalize_entry_point("C:\\Windows\\path\\main.wado"),
             "./main.wado"
-        );
-    }
-
-    #[test]
-    fn test_filesystem_to_module_path() {
-        assert_eq!(
-            filesystem_to_module_path("/home/user/project", "/home/user/project/src/lib.wado"),
-            Some("./src/lib.wado".to_string())
-        );
-        assert_eq!(
-            filesystem_to_module_path("/home/user/project", "/home/user/project/main.wado"),
-            Some("./main.wado".to_string())
-        );
-    }
-
-    #[test]
-    fn test_filesystem_to_module_path_windows() {
-        assert_eq!(
-            filesystem_to_module_path(
-                "C:\\Users\\dev\\project",
-                "C:\\Users\\dev\\project\\src\\lib.wado"
-            ),
-            Some("./src/lib.wado".to_string())
         );
     }
 
