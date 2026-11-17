@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794886734183,
+  "lastUpdate": 1794888497690,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78597,6 +78597,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e8fecb59fe8343324a38ed1eeac450def76f0903"
         },
         "date": 1794886733096,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a436b0aeb249e8d6daa6bfd1602d77327ee02ccd",
+          "message": "Merge pull request #2656 from wado-lang/ccr-fb570e6e-paifwc\n\nfeat(cli): read and search the specification and the API from the `wado` binary",
+          "timestamp": "2026-11-17T12:54:42+09:00",
+          "tree_id": "113a515a400bd80ff4a47d750c8eeb4d76ea4e91",
+          "url": "https://github.com/wado-lang/wado/commit/a436b0aeb249e8d6daa6bfd1602d77327ee02ccd"
+        },
+        "date": 1794888496839,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
