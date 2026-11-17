@@ -134,7 +134,7 @@ impl Graph for WebGpuBackend {
         record: fn(&mut Recorder) -> Recorded with _,
         weights: &List<Any<WebGpuBackend>>,
         earlier: &List<&WebGpuProgram>,
-    ) -> Option<WebGpuProgram> with _ {
+    ) -> Option<WebGpuProgram> with (_, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let recorded = record(&mut Recorder::new());
         let folded = constants(&recorded);
         let splats = splats_of(&folded);
@@ -176,7 +176,7 @@ impl Graph for WebGpuBackend {
         first: i32,
         count: i32,
         load: fn(i32) -> Result<HostWeight, Er> with _,
-    ) -> Result<List<Any<WebGpuBackend>>, Er> with _ {
+    ) -> Result<List<Any<WebGpuBackend>>, Er> with (_, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let recorded = record(&mut Recorder::new());
         let contracted = contracted_axes(&recorded, first, count);
         let mut kept = List::<Option<Any<WebGpuBackend>>>::filled(count, null);
