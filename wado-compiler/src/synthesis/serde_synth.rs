@@ -16,6 +16,7 @@ use crate::compiler_item::CompilerItems;
 use crate::module_source::ModuleSource;
 use crate::name::{
     FqTraitName, FqTypeName, LocalMethodName, MethodName, TypeHead, mangle_local_trait_method,
+    minted_name,
 };
 use crate::package::Package;
 use crate::tir;
@@ -599,7 +600,7 @@ impl LookupTree<'_> {
             return keys.iter().map(|k| self.confirm(k, decided)).collect();
         };
         let groups = group_by_byte(keys, pos);
-        let name = format!("$b{pos}");
+        let name = minted_name("b", pos);
         let local = alloc_named_local(
             &mut self.next_local,
             &mut self.locals,

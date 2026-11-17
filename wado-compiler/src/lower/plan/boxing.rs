@@ -9,6 +9,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
+use crate::name::minted_name;
 use crate::tir::{
     LetStorage, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirPattern, TirStmt,
     TirStmtKind, TirUnaryOp, TypeId,
@@ -88,7 +89,7 @@ fn shadow_one_function(func: &mut TirFunction, type_table: &mut TypeTable) -> In
             func.local_count += 1;
             let name = func.params[local_idx as usize].name.clone();
             func.locals.push(TirLocal {
-                name: format!("$boxed_param_{local_idx}"),
+                name: minted_name("boxed_param", local_idx),
                 type_id: cell,
                 is_mut: false,
                 span: Span::default(),
@@ -134,7 +135,7 @@ fn shadow_one_function(func: &mut TirFunction, type_table: &mut TypeTable) -> In
             );
             prelude_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
-                    name: format!("$boxed_param_{param_idx}"),
+                    name: minted_name("boxed_param", param_idx),
                     local_index: *shadow_idx,
                     is_mut: false,
                     type_id: *original_type_id,

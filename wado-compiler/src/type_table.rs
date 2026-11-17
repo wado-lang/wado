@@ -18,12 +18,12 @@ use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name;
 use crate::name::{
-    ARRAY_TYPE_NAME, FqTraitName, FqTypeName, INTERNAL_PREFIX, NEVER_TYPE_NAME, Receiver, RefKind,
-    TUPLE_TYPE_NAME, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, assoc_type_projection_name,
+    ARRAY_TYPE_NAME, FqTraitName, FqTypeName, NEVER_TYPE_NAME, Receiver, RefKind, TUPLE_TYPE_NAME,
+    TypeHead, TypeNameInfo, UNIT_TYPE_NAME, anonymous_struct_name, assoc_type_projection_name,
     display_assoc_type_projection, display_generic_name, display_tuple_type, format_type_name,
     mangle_builtin_array_type, mangle_declared, mangle_generic_name, mangle_local_item_name,
-    mangle_tuple_type, pack_element_name, ref_type_name, repeated_element, template_shape_name,
-    type_pack_name,
+    mangle_tuple_type, minted_name, pack_element_name, ref_type_name, repeated_element,
+    template_shape_name, type_pack_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
@@ -1406,7 +1406,7 @@ impl TypeTable {
                     .iter()
                     .map(|(n, ty)| format!("{n}:{}", field_type(self, *ty)))
                     .collect();
-                format!("$anon_{{{}}}", parts.join(","))
+                anonymous_struct_name(&parts)
             }
             // A specifier is arbitrary text, so the name is a digest of the
             // shape, its hole types rendered through `field_type`. It names a
@@ -3344,7 +3344,7 @@ impl TypeTable {
         self.next_effect_var += 1;
         EffectRef::Var {
             id,
-            name: format!("{INTERNAL_PREFIX}e{id}"),
+            name: minted_name("e", id),
         }
     }
 

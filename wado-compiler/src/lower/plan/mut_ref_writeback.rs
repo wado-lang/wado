@@ -11,6 +11,7 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::logger::{Bail, ErrorSink};
+use crate::name::minted_name;
 use crate::synthesis::common::{handle_identical, not_expr};
 use crate::tir::{
     LetStorage, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStmtKind,
@@ -151,7 +152,7 @@ impl WriteBack<'_> {
     fn bind(
         &mut self,
         prefix: &mut Vec<TirStmt>,
-        kind: &str,
+        what: &str,
         value: TirExpr,
         is_mut: bool,
         storage: LetStorage,
@@ -164,7 +165,7 @@ impl WriteBack<'_> {
         let index = self.local_count;
         self.local_count += 1;
         self.locals.push(TirLocal::synth(index, type_id, is_mut));
-        let name = format!("$write_back_{kind}{index}");
+        let name = minted_name(what, index);
         prefix.push(TirStmt::new(
             TirStmtKind::Let {
                 name: name.clone(),
@@ -420,7 +421,9 @@ impl WriteBack<'_> {
         }
         let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span);
         let value = std::mem::replace(expr, placeholder);
-        *expr = self.bind(prefix, "place_", value, false, storage).read();
+        *expr = self
+            .bind(prefix, "write_back_place", value, false, storage)
+            .read();
     }
 
     /// `{ let t = place; let b = t; let r = f(&mut t); if t !== b { let m = t; place = m }; r }`
@@ -592,7 +595,13 @@ impl WriteBack<'_> {
             self.hoist_place(&mut place, &mut prefix);
             // The temp aliases the place, so payload mutation through it lands
             // without any store back.
-            let temp = self.bind(&mut prefix, "", place.clone(), true, LetStorage::Aliased);
+            let temp = self.bind(
+                &mut prefix,
+                "write_back",
+                place.clone(),
+                true,
+                LetStorage::Aliased,
+            );
             self.ref_temps.push(temp.index);
             // Store back only what the callee replaced. An unconditional store
             // would also undo a write the callee made through another route to
@@ -674,7 +683,13 @@ impl WriteBack<'_> {
         // The result may be a projection of the temp, which the place is about
         // to take over, so whether it needs a copy is the value-copy analysis'
         // call, as it would be at the call's own use site.
-        let result = self.bind(&mut stmts, "result_", original, false, LetStorage::Planned);
+        let result = self.bind(
+            &mut stmts,
+            "write_back_result",
+            original,
+            false,
+            LetStorage::Planned,
+        );
         stmts.append(&mut write_backs);
         stmts.push(TirStmt::new(TirStmtKind::Expr(result.read()), span));
         *call = TirExpr::new(

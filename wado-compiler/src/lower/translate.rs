@@ -22,7 +22,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::{self, PlaceRef};
 use crate::lower::plan::value_copy::points_to::PointsTo;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
-use crate::name::MethodName;
+use crate::name::{MethodName, minted_name};
 use crate::synthesis::common::builtin_call;
 use cranelift_entity::EntityRef;
 
@@ -1183,8 +1183,8 @@ impl FunctionTranslator<'_, '_> {
         // Translator-synthesized bindings — never a user-visible defensive
         // copy, and the value's copy decision is made above.
         let mut out = vec![
-            self.synthesized_let(ref_idx, "$deref_ref", handle.type_id, ref_nir.into(), span),
-            self.synthesized_let(val_idx, "$deref_val", place_type, val_nir, span),
+            self.synthesized_let(ref_idx, "deref_ref", handle.type_id, ref_nir.into(), span),
+            self.synthesized_let(val_idx, "deref_val", place_type, val_nir, span),
         ];
         self.write_in_place(
             (ref_idx, handle.type_id),
@@ -1398,19 +1398,19 @@ impl FunctionTranslator<'_, '_> {
         let mut out = vec![
             self.synthesized_let(
                 list_idx,
-                "$list",
+                "list",
                 list.type_id,
                 self.convert_expr(list).into(),
                 span,
             ),
             self.synthesized_let(
                 index_idx,
-                "$index",
+                "index",
                 TypeTable::I32,
                 self.convert_operand(index),
                 span,
             ),
-            self.synthesized_let(val_idx, "$deref_val", element, val_nir, span),
+            self.synthesized_let(val_idx, "deref_val", element, val_nir, span),
         ];
 
         let list_field = |field: SeqField, ty: tir::TypeId| {
@@ -1480,7 +1480,7 @@ impl FunctionTranslator<'_, '_> {
         let ref_idx = self.alloc_local(element_ref_type, "$deref_ref".to_string());
         let mut write = vec![self.synthesized_let(
             ref_idx,
-            "$deref_ref",
+            "deref_ref",
             element_ref_type,
             self.convert_expr(&get).into(),
             span,
@@ -1524,14 +1524,14 @@ impl FunctionTranslator<'_, '_> {
     fn synthesized_let(
         &self,
         index: u32,
-        stem: &str,
+        what: &str,
         type_id: tir::TypeId,
         value: Operand,
         span: Span,
     ) -> StmtId {
         self.alloc_stmt(
             StmtKind::Let {
-                name: format!("{stem}_{index}"),
+                name: minted_name(what, index),
                 local_index: index,
                 is_mut: false,
                 type_id,
@@ -1588,11 +1588,11 @@ impl FunctionTranslator<'_, '_> {
                 }
                 let leaf_type = path.last().expect("a leaf path names a field").2;
                 let temp = self.alloc_local(leaf_type, "$leaf".to_string());
-                out.push(self.synthesized_let(temp, "$leaf", leaf_type, read.into(), span));
+                out.push(self.synthesized_let(temp, "leaf", leaf_type, read.into(), span));
                 let local = self.alloc_expr(
                     ExprKind::Local {
                         index: temp,
-                        name: format!("$leaf_{temp}"),
+                        name: minted_name("leaf", temp),
                     },
                     leaf_type,
                     span,
@@ -1728,7 +1728,7 @@ impl FunctionTranslator<'_, '_> {
         ));
         let declare = self.alloc_stmt(
             StmtKind::Let {
-                name: format!("$assigned_{flag}"),
+                name: minted_name("assigned", flag),
                 local_index: flag,
                 is_mut: true,
                 type_id: TypeTable::BOOL,
@@ -1749,7 +1749,7 @@ impl FunctionTranslator<'_, '_> {
             self.alloc_expr(
                 ExprKind::Local {
                     index: flag,
-                    name: format!("$assigned_{flag}"),
+                    name: minted_name("assigned", flag),
                 },
                 TypeTable::BOOL,
                 span,

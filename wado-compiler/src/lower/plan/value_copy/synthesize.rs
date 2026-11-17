@@ -25,7 +25,7 @@ use super::{ValueCopyHelpers, needs_value_copy};
 use crate::ast::Visibility;
 use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::{copied_element_type_arg, copy_value_type_arg};
-use crate::name::value_copy_helper_name;
+use crate::name::{minted_name, value_copy_helper_name};
 use crate::optimize::pass_dump;
 use crate::tir;
 
@@ -291,7 +291,7 @@ fn build_variant_copy_body(
                 // Local 0 is the `v` parameter.
                 let local_index =
                     u32::try_from(extra_locals.len() + 1).expect("local index fits u32");
-                let local_name = format!("$vc_payload_{case_index}");
+                let local_name = minted_name("vc_payload", case_index);
                 extra_locals.push(TirLocal {
                     name: local_name.clone(),
                     type_id: *payload_ty,

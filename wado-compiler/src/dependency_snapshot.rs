@@ -25,7 +25,7 @@ use crate::hashmap::IndexSet;
 use crate::loader::{LoadResult, ModuleLoader};
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
-use crate::name::{INTERNAL_PREFIX, entry_dir_of};
+use crate::name::{entry_dir_of, synthesized_module_path};
 use crate::remote::Integrity;
 use crate::semantics::{Semantics, semantics_with_logger};
 use crate::stdlib_snapshot::reparsed_snapshot_module;
@@ -154,11 +154,7 @@ async fn build<H: CompilerHost>(load: &LoadResult, host: &H, key: &Key) -> Optio
         failed: AtomicBool::new(false),
     };
     let dir = entry_dir_of(Some(&load.entry_module_source));
-    let entry = if dir.is_empty() {
-        format!("{INTERNAL_PREFIX}dependencies.wado")
-    } else {
-        format!("{dir}/{INTERNAL_PREFIX}dependencies.wado")
-    };
+    let entry = synthesized_module_path(&dir, "dependencies");
     let roots = key.iter().map(|(source, ..)| source.clone()).collect();
     let loaded = ModuleLoader::new(&host, LogLevel::Off)
         .with_invocations(load.invocations.clone())

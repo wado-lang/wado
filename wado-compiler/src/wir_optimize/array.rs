@@ -3,6 +3,7 @@
 //! packing encodes smaller than inline operands, and splitting one past the
 //! threshold into `array.new_default` + sets.
 
+use crate::name::minted_name;
 use crate::wir::{WirData, WirInstr, WirPackage, WirType, WirTypeDef};
 use crate::wir_optimize::util::is_same_free_read;
 use crate::wir_visitor::WirMutVisitor;
@@ -295,7 +296,7 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
     };
 
     *counter += 1;
-    let arr_local = format!("$wir_arr_init_{counter}");
+    let arr_local = minted_name("wir_arr_init", counter);
     let len = i32::try_from(elements.len()).expect("array length fits i32");
     let raw_ref_type = WirType::Ref {
         type_id: type_id.clone(),

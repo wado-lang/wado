@@ -17,7 +17,10 @@ use crate::ast::{MAX_GENERIC_PARAMS, NamePolicy, RangeKind, RestClause, Visibili
 use crate::defs::{DefId, DefTable};
 use crate::hashmap;
 use crate::module_source::ModuleSource;
-use crate::name::{DeclaredHead, FunctionId, LocalMethodName, checked_name, unchecked_twin_name};
+use crate::name::{
+    DeclaredHead, FunctionId, LocalMethodName, checked_name, indexed_local_name,
+    unchecked_twin_name,
+};
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
 use crate::token::{Quote, Span};
@@ -3565,7 +3568,7 @@ impl TirLocal {
     /// name is available.
     pub fn synth(index: u32, type_id: TypeId, is_mut: bool) -> Self {
         Self {
-            name: format!("$local_{index}"),
+            name: indexed_local_name(index),
             type_id,
             is_mut,
             span: Span::default(),

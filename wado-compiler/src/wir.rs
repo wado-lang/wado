@@ -13,6 +13,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
+use crate::name::minted_name;
 use crate::rarity::{Mark, Rarity};
 use crate::tir::EffectRef;
 use crate::token::Span;
@@ -224,7 +225,7 @@ impl WasmModuleInfo {
 
         // One func type per function
         for (i, func) in self.functions.iter().enumerate() {
-            let fq: Rc<str> = Rc::from(format!("$wasm_mod_type_{i}"));
+            let fq: Rc<str> = Rc::from(minted_name("wasm_mod_type", i));
             wir.types.push(WirTypeDef::Func(WirFuncType {
                 name: WirName { fq: fq.to_string() },
                 params: func.params.clone(),
@@ -236,7 +237,7 @@ impl WasmModuleInfo {
         for (i, func) in self.functions.iter().enumerate() {
             let type_id = WirTypeId::new(
                 u32::try_from(i).unwrap(),
-                Rc::from(format!("$wasm_mod_type_{i}")),
+                Rc::from(minted_name("wasm_mod_type", i)),
             );
             let mut body = func.body.clone();
             for instr in &mut body {
@@ -272,7 +273,7 @@ impl WasmModuleInfo {
                     desc: WirExportDesc::Func {
                         func_id: WirFuncId::new(
                             u32::try_from(i).unwrap(),
-                            Rc::from(format!("$wasm_mod_func_{i}")),
+                            Rc::from(minted_name("wasm_mod_func", i)),
                         ),
                     },
                 });

@@ -16,7 +16,9 @@ use crate::component_model::{
 };
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{cm_export_func_name, cm_post_return_func_name};
+use crate::name::{
+    cm_export_func_name, cm_post_return_func_name, minted_name, positional_param_name,
+};
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
@@ -360,11 +362,10 @@ fn lower_to_flat_inner(
                 // Allocate locals for inner flat values (initialized to zero)
                 let inner_locals: Vec<(u32, String)> = inner_flat_types
                     .iter()
-                    .enumerate()
-                    .map(|(i, &vt)| {
+                    .map(|&vt| {
                         let tid = cm_val_type_to_type_id(vt);
                         let l = alloc_local(next_local, locals, tid);
-                        let name = format!("$opt_inner_{i}");
+                        let name = minted_name("opt_inner", l);
                         stmts.push(let_mut_stmt(&name, l, tid, cm_zero(vt)));
                         (l, name)
                     })
@@ -493,11 +494,10 @@ fn lower_to_flat_inner(
             if !payload_flats.is_empty() {
                 let slot_locals: Vec<(u32, String)> = payload_flats
                     .iter()
-                    .enumerate()
-                    .map(|(i, &vt)| {
+                    .map(|&vt| {
                         let tid = cm_val_type_to_type_id(vt);
                         let l = alloc_local(next_local, locals, tid);
-                        let name = format!("$res_slot_{i}");
+                        let name = minted_name("res_slot", l);
                         stmts.push(let_mut_stmt(&name, l, tid, cm_zero(vt)));
                         (l, name)
                     })
@@ -575,11 +575,10 @@ fn lower_to_flat_inner(
 
             let slot_locals: Vec<(u32, String)> = flat_types
                 .iter()
-                .enumerate()
-                .map(|(i, &vt)| {
+                .map(|&vt| {
                     let tid = cm_val_type_to_type_id(vt);
                     let l = alloc_local(next_local, locals, tid);
-                    let name = format!("$variant_slot_{i}");
+                    let name = minted_name("variant_slot", l);
                     stmts.push(let_mut_stmt(&name, l, tid, cm_zero(vt)));
                     (l, name)
                 })
@@ -1383,7 +1382,13 @@ fn build_export_adapter_params(
         let flat_params: Vec<TirParam> = flat_param_types
             .iter()
             .enumerate()
-            .map(|(i, &vt)| synth_param(&format!("$p{i}"), i as u32, cm_val_type_to_type_id(vt)))
+            .map(|(i, &vt)| {
+                synth_param(
+                    &positional_param_name(i),
+                    i as u32,
+                    cm_val_type_to_type_id(vt),
+                )
+            })
             .collect();
 
         let flat_count = flat_params.len() as u32;
@@ -1814,11 +1819,10 @@ fn push_result_task_return_epilogue(
     // Mutable flat slots holding the flattened task-return args, zeroed.
     let flat_locals: Vec<(u32, String)> = flat_return_types
         .iter()
-        .enumerate()
-        .map(|(i, &vt)| {
+        .map(|&vt| {
             let type_id = cm_val_type_to_type_id(vt);
             let local = alloc_local(next_local, locals, type_id);
-            let name = format!("$tv_{i}");
+            let name = minted_name("tv", local);
             body_stmts.push(let_mut_stmt(&name, local, type_id, cm_zero(vt)));
             (local, name)
         })
@@ -1828,7 +1832,7 @@ fn push_result_task_return_epilogue(
     // patterns can reference them even when the payload has no flat slots
     // (`Ok(())`-style); a bound-but-unused binding is fine for wir_build.
     let ok_payload_local = alloc_local(next_local, locals, ok_type_id);
-    let ok_payload_name = format!("$ok_val_{ok_payload_local}");
+    let ok_payload_name = minted_name("ok_val", ok_payload_local);
     let ok_stmts = lower_result_arm(
         0,
         ok_payload_local,
@@ -1843,7 +1847,7 @@ fn push_result_task_return_epilogue(
     );
 
     let err_payload_local = alloc_local(next_local, locals, err_type_id);
-    let err_payload_name = format!("$err_val_{err_payload_local}");
+    let err_payload_name = minted_name("err_val", err_payload_local);
     let err_stmts = lower_result_arm(
         1,
         err_payload_local,
@@ -2067,7 +2071,7 @@ pub(super) fn synthesize_variant_lower_to_flat(
             Vec::new()
         } else {
             let payload_local = alloc_local(next_local, locals, case.payload);
-            let payload_name = format!("$case_payload_{payload_local}");
+            let payload_name = minted_name("case_payload", payload_local);
             let lowered = synthesize_lower_to_flat(
                 local_ref(payload_local, &payload_name, case.payload),
                 case.payload,

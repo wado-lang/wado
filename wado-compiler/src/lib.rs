@@ -711,7 +711,7 @@ pub struct PackageSources {
 impl PackageSources {
     /// The name of the module that imports every member.
     fn entry_name(&self) -> String {
-        format!("{}/{}package.wado", self.root, name::INTERNAL_PREFIX)
+        name::synthesized_module_path(&self.root, "package")
     }
 
     fn entry_source(&self) -> String {

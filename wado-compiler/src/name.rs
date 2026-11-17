@@ -1091,8 +1091,65 @@ pub fn minted_name(what: &str, serial: impl fmt::Display) -> String {
 
 /// `what` narrowed by `sub` (a field name, say), for [`minted_name`].
 #[must_use]
-pub fn minted_what(what: &str, sub: &str) -> String {
+pub fn minted_what(what: &str, sub: impl fmt::Display) -> String {
     format!("{what}_{sub}")
+}
+
+/// A local a construct mints once per body, or one named after something
+/// already unique within the body (a parameter name, say), so it needs no
+/// serial.
+#[must_use]
+pub fn internal_name(what: &str) -> String {
+    format!("{INTERNAL_PREFIX}{what}")
+}
+
+/// The name a local that has none of its own goes by: its index, which the
+/// local holds alone.
+#[must_use]
+pub fn indexed_local_name(index: impl fmt::Display) -> String {
+    minted_name("local", index)
+}
+
+/// The path of a module the compiler writes for itself in directory `dir`,
+/// which no source file can share.
+#[must_use]
+pub fn synthesized_module_path(dir: &str, stem: &str) -> String {
+    let file = format!("{INTERNAL_PREFIX}{stem}.wado");
+    if dir.is_empty() {
+        file
+    } else {
+        format!("{dir}/{file}")
+    }
+}
+
+/// The name of an anonymous struct, from its fields each rendered `name:type`.
+#[must_use]
+pub fn anonymous_struct_name(fields: &[String]) -> String {
+    format!("{INTERNAL_PREFIX}anon_{{{}}}", fields.join(","))
+}
+
+/// The `index`th parameter of a synthesized function, which no source names.
+#[must_use]
+pub fn positional_param_name(index: impl fmt::Display) -> String {
+    minted_name("p", index)
+}
+
+/// The local a power-assert binds a captured operand to.
+#[must_use]
+pub fn assert_capture_name(serial: u32) -> String {
+    minted_name("v", serial)
+}
+
+/// The flag recording whether a conditional power-assert capture ran.
+#[must_use]
+pub fn assert_seen_name(capture: &str) -> String {
+    format!("{capture}_seen")
+}
+
+/// The cold-branch local holding a conditional power-assert capture's text.
+#[must_use]
+pub fn assert_text_name(capture: &str) -> String {
+    format!("{capture}_text")
 }
 
 /// What every LICM hoist is minted under, narrowed by [`minted_what`].
@@ -3172,8 +3229,8 @@ mod tests {
             "id<P>"
         );
         assert_eq!(
-            named(&f1, "id<fn(a.wado/P)->i32with($e263)>$$Closure_0"),
-            "id<fn(P)->i32with($e263)>"
+            named(&f1, "id<fn(a.wado/P)->i32with($e_263)>$$Closure_0"),
+            "id<fn(P)->i32with($e_263)>"
         );
         let method = LocalMethodName::with_method_type_args(
             FqTypeName::builtin("Box"),

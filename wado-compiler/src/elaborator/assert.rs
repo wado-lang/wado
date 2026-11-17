@@ -5,6 +5,7 @@
 use crate::ast::{self, AssertStmt, AstId, Expr, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::{assert_capture_name, assert_seen_name, assert_text_name};
 use crate::tir::TypeId;
 use crate::unparse::unparse_expr_source;
 
@@ -22,10 +23,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut scanner = CaptureScanner::new();
         scanner.scan_root(&assert_stmt.condition);
         let CaptureScanner {
-            slots,
+            mut slots,
             ast_id_to_slot,
             ..
         } = scanner;
+        for slot in &mut slots {
+            slot.name = assert_capture_name(ctx.fresh_serial());
+        }
 
         let mut scope = ctx.enter_scope();
         debug_assert!(scope.assert_capture_ctx.is_none());
@@ -52,7 +56,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .slots
             .iter()
             .filter(|c| c.conditional)
-            .map(|c| render_local_name(&c.name))
+            .map(|c| assert_text_name(&c.name))
             .collect();
         let string_type = self
             .tysys
@@ -151,22 +155,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             ctx.add_local(cap_name.clone(), type_id, !hoisted, None);
             if conditional {
-                ctx.add_local(seen_local_name(&cap_name), TypeTable::BOOL, true, None);
+                ctx.add_local(assert_seen_name(&cap_name), TypeTable::BOOL, true, None);
             }
         }
 
         type_id
     }
-}
-
-/// Name of the flag recording whether a conditional slot's capture site ran.
-pub(super) fn seen_local_name(cap_name: &str) -> String {
-    format!("{cap_name}_seen")
-}
-
-/// Name of the cold-branch local holding a conditional slot's rendered text.
-pub(super) fn render_local_name(cap_name: &str) -> String {
-    format!("{cap_name}_text")
 }
 
 /// The text a conditional slot renders when the run never reached it.
@@ -199,7 +193,7 @@ pub(crate) fn render_plans(sem: &ModuleSemantics) -> String {
                 (false, false) => "in-place",
             };
             out.push_str(&format!(
-                "  $v{i}  {reach:<11}  {bind:<8}  {}\n",
+                "  #{i}  {reach:<11}  {bind:<8}  {}\n",
                 slot.capture_label
             ));
         }
@@ -209,7 +203,8 @@ pub(crate) fn render_plans(sem: &ModuleSemantics) -> String {
 
 /// One sub-expression captured during the power-assert scan.
 struct Capture {
-    /// Variable name (`$v0`, `$v1`, …) the rewritten condition refers to.
+    /// The local the rewritten condition refers to, named once the scan is
+    /// done.
     name: String,
     /// Source text of the original sub-expression, used in the failure message.
     source: String,
@@ -347,7 +342,7 @@ impl CaptureScanner {
         } else {
             let idx = self.slots.len();
             self.slots.push(Capture {
-                name: format!("$v{idx}"),
+                name: String::new(),
                 source,
                 conditional,
                 is_place,

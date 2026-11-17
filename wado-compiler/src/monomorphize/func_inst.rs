@@ -11,7 +11,7 @@ use crate::defs::DefId;
 use crate::elaborator::trait_env::{BlanketImpl, BlanketReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind, minted_name, minted_what};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
@@ -3383,7 +3383,7 @@ impl Monomorphizer {
         };
 
         let uid = *unique_id;
-        let temp_name = format!("$tuple_{uid}");
+        let temp_name = minted_name("tuple", uid);
         let binding_local_idx = *binding_local;
         let b_name = binding_name.clone();
         let b_mut = *is_mut;
@@ -3759,7 +3759,7 @@ impl Monomorphizer {
 
             iter_stmts.extend(elem_body.stmts);
 
-            let label = format!("$tuple_iter_{uid}_{i}");
+            let label = minted_name(&minted_what("tuple_iter", uid), i);
             outer_stmts.push(TirStmt::new(
                 TirStmtKind::LabeledBlock {
                     label,
@@ -3769,7 +3769,7 @@ impl Monomorphizer {
             ));
         }
 
-        let outer_label = format!("$tuple_for_of_{uid}");
+        let outer_label = minted_name("tuple_for_of", uid);
         TirStmt {
             source: stmt.source,
             ..TirStmt::new(
@@ -3941,7 +3941,7 @@ impl Monomorphizer {
 
         // Private to this unroll, one reader per field — so each element binding
         // moves its field out (`LetStorage::Taken`) rather than deep-copying it.
-        let temp_name = format!("$comp_{uid}");
+        let temp_name = minted_name("comp", uid);
         let temp_local = *local_count;
         *local_count += 1;
         locals.push(TirLocal {
@@ -3953,7 +3953,7 @@ impl Monomorphizer {
 
         let mut result_elements = Vec::with_capacity(elements.len());
         for (i, &elem_type) in elements.iter().enumerate() {
-            let element_label = format!("$comp_{uid}_{i}");
+            let element_label = minted_name(&minted_what("comp", uid), i);
             let mut stmts = Vec::new();
 
             let field = TirExpr::new(
@@ -4165,7 +4165,7 @@ impl Monomorphizer {
             ));
         }
 
-        let outer_label = format!("$comp_{uid}_result");
+        let outer_label = minted_name(&minted_what("comp", uid), "result");
         let tuple = TirExpr::new(
             TirExprKind::TupleLiteral {
                 elements: result_elements,
