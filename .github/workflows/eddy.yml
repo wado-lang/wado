@@ -1,0 +1,240 @@
+name: Eddy
+
+# Reviews a pull request with Eddy (package-eddy/) and posts the findings as
+# one comment. A repository admin starts it, by commenting `@wado-bot review`
+# on the pull request or by dispatching it with the pull request's number.
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: The number of the pull request to review.
+        required: true
+        type: number
+
+permissions: {}
+
+jobs:
+  # Who asked, and the commit the review is of. The head is fixed here, so a
+  # push during the review does not change what the comment reports on.
+  gate:
+    name: Gate
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.issue.pull_request && startsWith(github.event.comment.body, '@wado-bot review'))
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      pr: ${{ steps.pr.outputs.pr }}
+      sha: ${{ steps.pr.outputs.sha }}
+      eddy-run: ${{ steps.eddy.outputs.run }}
+      eddy-sha: ${{ steps.eddy.outputs.sha }}
+      attempt: ${{ github.run_attempt }}
+    steps:
+      - id: token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: "${{ secrets.GH_APP_ID }}"
+          private-key: "${{ secrets.GH_APP_PRIVATE_KEY }}"
+      - id: pr
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          REPO: ${{ github.repository }}
+          # A re-run keeps the comment and `github.actor` of the run it repeats.
+          ACTORS: ${{ github.event.comment.user.login || github.actor }} ${{ github.triggering_actor }}
+          PR: ${{ github.event.issue.number || inputs.pr }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          set -euo pipefail
+          # A review builds and runs the pull request's code, and is paid for,
+          # so only an owner starts one.
+          for actor in $ACTORS; do
+            permission="$(gh api "repos/$REPO/collaborators/$actor/permission" --jq .permission)"
+            if [ "$permission" != admin ]; then
+              echo "::error::Eddy is started by a repository admin; $actor has $permission"
+              exit 1
+            fi
+          done
+          sha="$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)"
+          echo "pr=$PR" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ -n "$COMMENT_ID" ]; then
+            gh api -X POST "repos/$REPO/issues/comments/$COMMENT_ID/reactions" -f content=eyes > /dev/null
+          fi
+      # The `wado` that runs Eddy is the one main's CI built, so the review
+      # builds no second target directory beside the reviewer's. Eddy is taken
+      # from the commit that run built, so the two match. A docs-only run
+      # builds nothing, so the newest run with the binary is the one taken.
+      - id: eddy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          runs="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=20" \
+            --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')"
+          while read -r run sha; do
+            if [ -n "$(gh api "repos/$REPO/actions/runs/$run/artifacts" \
+              --jq '.artifacts[] | select(.name == "prebuilt-wado" and (.expired | not)) | .id')" ]; then
+              echo "run=$run" >> "$GITHUB_OUTPUT"
+              echo "sha=$sha" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done <<< "$runs"
+          echo "::error::no recent CI run on main kept a prebuilt wado"
+          exit 1
+
+  # Eddy and everything around it come from main: the pull request's own
+  # scripts, mise.toml or Eddy would run outside the sandbox, in a job that can
+  # mint the API token. The pull request is only the commit under review, and
+  # its code runs only inside Eddy's confinement. No GitHub token reaches this
+  # job past the setup.
+  review:
+    name: Review
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    concurrency:
+      group: eddy-${{ needs.gate.outputs.pr }}
+    env:
+      SHA: ${{ needs.gate.outputs.sha }}
+    steps:
+      # A re-run of this job alone keeps the gate of an earlier attempt, so no
+      # one would have checked who re-ran it.
+      - if: needs.gate.outputs.attempt != github.run_attempt
+        run: |
+          echo "::error::Eddy runs only with its gate; re-run the whole workflow"
+          exit 1
+      # Where `build-wado` checked out, since the binary holds its paths.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.gate.outputs.eddy-sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: git fetch --quiet --no-tags origin "$SHA"
+      # The reviewer's builds fill the target directory.
+      - run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+      - uses: ./.github/actions/setup
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          rust-cache: false
+          prebuilt: wado
+          prebuilt-run-id: ${{ needs.gate.outputs.eddy-run }}
+      # Eddy reads `rg` and `git` from /usr/bin.
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      # The reviewer's cargo cannot write the cargo or rustup homes, so the
+      # crates the commit names are fetched first. A fetch builds nothing, but
+      # rustup and cargo also obey the files around the directory they run in:
+      # a `rust-toolchain.toml` naming a `path` toolchain runs the commit's own
+      # `cargo`, and `.cargo/config.toml` can name a credential provider. So
+      # the fetch runs from outside the commit's tree, on main's toolchain.
+      - run: |
+          set -euo pipefail
+          toolchain="$(rustup show active-toolchain | cut -d' ' -f1)"
+          git worktree add --quiet --detach "$RUNNER_TEMP/head" "$SHA"
+          (cd "$RUNNER_TEMP" && cargo "+$toolchain" fetch --locked --manifest-path head/Cargo.toml)
+          git worktree remove --force "$RUNNER_TEMP/head"
+      # Workload Identity Federation, so no API key is stored. The rule accepts
+      # only this workflow on main, which only an admin's comment or dispatch
+      # starts. The token is minted here, in the one step that uses it, and
+      # Eddy does not see the means to mint another.
+      - id: eddy
+        run: |
+          set -euo pipefail
+          mkdir -p scratchpad
+          jwt="$(curl -sSf -G -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            --data-urlencode audience=https://api.anthropic.com "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)"
+          echo "::add-mask::$jwt"
+          # The claims a federation rule matches on, none of them secret: the
+          # exchange answers a mismatch with nothing but "Authentication failed".
+          jq -rR 'split(".")[1] | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson
+            | {iss, aud, sub, ref, event_name, repository_owner_id, repository_id, job_workflow_ref}' <<< "$jwt"
+          response="$(jq -n --arg jwt "$jwt" '{
+              grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+              assertion: $jwt,
+              federation_rule_id: "fdrl_01N2UzGtpPyqSMQz3htMdLce",
+              organization_id: "b5accdd0-f052-4fe6-88e6-65bc34d1cba9",
+              service_account_id: "svac_01WVnWQoBfyRFsf4wyM7EHq7",
+              workspace_id: "wrkspc_01Ug39YtMABrbjfon1tEpoXy"
+            }' | curl -sS https://api.anthropic.com/v1/oauth/token -H "content-type: application/json" --data @- 2>&1)" || true
+          token="$(jq -r '.access_token // empty' <<< "$response" 2> /dev/null)" || true
+          if [ -z "$token" ]; then
+            # The post job reads the reason from the log, as from Eddy's own.
+            echo "eddy: the token exchange failed: $(head -c 500 <<< "$response" | tr '\n' ' ')" | tee scratchpad/eddy.log
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          status=0
+          env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL CLAUDE_API_KEY="$token" \
+            mise run eddy-review --head "$SHA" > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
+          cat scratchpad/eddy.log
+          exit "$status"
+      # The record is what Eddy later learns from; it outlives the run here.
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: eddy-${{ needs.gate.outputs.pr }}-${{ env.SHA }}
+          path: |
+            scratchpad/eddy.json
+            scratchpad/eddy.log
+            scratchpad/eddy/${{ env.SHA }}/
+            package-eddy/reviews/${{ env.SHA }}.json
+          retention-days: 90
+          if-no-files-found: warn
+
+  post:
+    name: Post
+    needs: [gate, review]
+    if: always() && needs.gate.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - id: token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: "${{ secrets.GH_APP_ID }}"
+          private-key: "${{ secrets.GH_APP_PRIVATE_KEY }}"
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: eddy-${{ needs.gate.outputs.pr }}-${{ needs.gate.outputs.sha }}
+          path: eddy
+      - env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ needs.gate.outputs.pr }}
+          SHA: ${{ needs.gate.outputs.sha }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/body.md"
+          comment="eddy/scratchpad/eddy/$SHA/review.md"
+          if [ -f "$comment" ]; then
+            cp "$comment" "$body"
+          else
+            # Eddy stopped before it could write the comment.
+            {
+              echo "## Eddy"
+              echo
+              echo "The review of \`${SHA:0:9}\` did not finish."
+              if [ -f eddy/scratchpad/eddy.log ]; then
+                echo
+                echo '```'
+                grep -E '^(eddy|cost):' eddy/scratchpad/eddy.log || true
+                echo '```'
+              fi
+            } > "$body"
+          fi
+          if [ -d eddy ]; then
+            printf '\n[The run](%s), and its artifact for the patches and the record.\n' "$RUN" >> "$body"
+          else
+            printf '\n[The run](%s)\n' "$RUN" >> "$body"
+          fi
+          gh pr comment "$PR" --repo "$REPO" --body-file "$body"
