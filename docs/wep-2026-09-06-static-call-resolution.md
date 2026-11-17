@@ -216,6 +216,16 @@ some trait declared with a receiver went there, so an unrelated trait decided
 the call, and a name some trait declared without one kept a blanket's instance
 method out of reach. Asking the type itself removes both classes.
 
+A generic type spelled without its arguments (`Pair::span(&p)`) names no one
+instance, so the question is what some instance may answer the name with. The
+impls written for the type's head are candidates whatever instance each names,
+and so is a blanket whose bounds may hold of some instance: of the type as
+declared, through an impl written for one instance, or through another such
+blanket. Whether the bounds do hold is settled once the call has an instance.
+A method call has one in its receiver, whose selection confirms the candidate
+or reports that no method answers. Candidates of both kinds at one link leave
+the kind undecided, and the call is reported as ambiguous.
+
 Two traits at one link are ambiguous whichever kind each declares, as they are
 for a method call. One answering with a static and the other with a method is
 reported once, and the call recovers on the method.
@@ -422,10 +432,10 @@ picked rather than to pick it.
 
 ## Known gaps
 
-- A generic type spelled without its arguments (`Pair::m(&p)`) is no type the
-  order can ask, so there only the trait impls written for a link of its chain
-  answer. A blanket of either kind is out of reach, and a name only a blanket
-  supplies is reported as an unknown function.
+- A static only a blanket supplies is not reached through a generic type
+  spelled without its arguments. `Pair::made()` is reported as an unknown
+  function, where the cause is that nothing in the call says which instance of
+  `Pair` it means. `Pair::<i32, i32>::made()` resolves.
 
 - A static call through an associated type is not one of the spellings the
   walk admits. With `T: Has` and `Has` declaring `type Out: Make`,

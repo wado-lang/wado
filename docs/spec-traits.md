@@ -391,6 +391,11 @@ ambiguous, whether each declares a static or a method. Where a method answers,
 `recv` must be of that type or a resource extending it. A trait's method that
 the spelling does not reach is reached as `Trait::method(recv, …)`.
 
+A generic type spelled without its arguments names no one instance, so
+`Pair::method(…)` names what some instance of `Pair` may answer with, a blanket
+whose bounds hold of one instance included. The receiver's own type then
+settles whether it answers.
+
 An associated function with no `self` has no receiver argument to bind `Self`
 from, so the trait's turbofish binds it: `Trait::<Self = T>::method(…)`. The
 binding closes the list, after the trait's own arguments

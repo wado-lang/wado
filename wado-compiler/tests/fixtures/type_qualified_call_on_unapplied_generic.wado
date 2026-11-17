@@ -1,0 +1,52 @@
+// `Pair::span(&p)` writes no arguments for `Pair`, so the spelling asks what
+// some instance of it may answer `span` with: a blanket whose bound holds of
+// one instance is a candidate, and the receiver's own type then settles it.
+trait Holds with () {}
+
+trait Spanned with () {
+    fn span() -> i32;
+}
+
+trait Measured with () {
+    fn span(&self) -> i32;
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl Holds for Pair<i32, i32> {}
+
+impl<X: Holds> Measured for X {
+    fn span(&self) -> i32 {
+        return 7;
+    }
+}
+
+// Through a second blanket: `Holds` of one instance gives `Marked`, which
+// gives `Counted`.
+trait Marked with () {}
+
+impl<X: Holds> Marked for X {}
+
+trait Counted with () {
+    fn count_marks(&self) -> i32;
+}
+
+impl<X: Marked> Counted for X {
+    fn count_marks(&self) -> i32 {
+        return 3;
+    }
+}
+
+test "a blanket's method answers a generic type spelled without arguments" {
+    let p: Pair<i32, i32> = { a: 1, b: 2 };
+    assert Pair::span(&p) == 7;
+    assert Pair::<i32, i32>::span(&p) == 7;
+}
+
+test "through a chain of blankets" {
+    let p: Pair<i32, i32> = { a: 1, b: 2 };
+    assert Pair::count_marks(&p) == 3;
+}

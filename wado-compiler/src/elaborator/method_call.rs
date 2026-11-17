@@ -117,6 +117,10 @@ pub(super) enum Qualifier<'a> {
     Type(&'a ReceiverId),
 }
 
+/// How many blankets deep a bound is followed to see whether it may hold. A
+/// chain longer than anyone writes is cut here rather than walked for cycles.
+const MAY_HOLD_DEPTH: u32 = 4;
+
 /// What kind of declaration a type answers `Type::method` with.
 pub(super) enum QualifiedAnswer {
     Static,
@@ -1608,11 +1612,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // type, which the chain declares.
         let (mut key, mut declared) = (key.clone(), None);
         for link in 0.. {
-            let blocks: Vec<DefId> = self
+            let mut blocks: Vec<DefId> = self
                 .trait_impls_for_receiver(&ReceiverId::keyed(key.clone(), declared), &[])
                 .into_iter()
                 .filter(|&block| self.block_takes_receiver(block, method_name).is_some())
                 .collect();
+            blocks.extend(self.open_blankets(&key, declared, method_name));
             if !blocks.is_empty() {
                 return Some((link, blocks));
             }
@@ -1620,6 +1625,82 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (key, declared) = (next, Some(ty));
         }
         unreachable!("a chain ends")
+    }
+
+    /// The value blankets declaring `method_name` whose bounds may hold of
+    /// some instance of the link `key` names. Which instance the call means is
+    /// settled later, and the selection there confirms the bounds or reports.
+    fn open_blankets(
+        &mut self,
+        key: &ImplTargetKey,
+        declared: Option<TypeId>,
+        method_name: &str,
+    ) -> Vec<DefId> {
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        trait_env
+            .blanket_impls
+            .values()
+            .flatten()
+            .filter(|blanket| blanket.receiver == BlanketReceiver::Value)
+            .filter(|blanket| {
+                self.block_takes_receiver(blanket.def, method_name).is_some()
+                    && blanket
+                        .bounds
+                        .iter()
+                        .all(|bound| self.bound_may_hold(key, declared, bound, MAY_HOLD_DEPTH))
+            })
+            .map(|blanket| blanket.def)
+            .collect()
+    }
+
+    /// Whether `bound` holds of some instance of the link `key` names: of the
+    /// link as declared, through an impl written for one of its instances, or
+    /// through a blanket whose own bounds may hold, `depth` blankets deep.
+    fn bound_may_hold(
+        &mut self,
+        key: &ImplTargetKey,
+        declared: Option<TypeId>,
+        bound: &BlanketBound,
+        depth: u32,
+    ) -> bool {
+        let Some(trait_) = &bound.trait_ else {
+            return false;
+        };
+        let link = ReceiverId::keyed(key.clone(), declared);
+        if let Some(ty) = self.spelled_type(&link)
+            && self.tysys.type_implements_trait_here(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                ty,
+                trait_,
+            )
+        {
+            return true;
+        }
+        let decl = trait_.canonical();
+        if self
+            .trait_impls_for_receiver(&link, &[])
+            .into_iter()
+            .any(|block| self.tysys.signatures.impl_trait(block) == decl)
+        {
+            return true;
+        }
+        if depth == 0 {
+            return false;
+        }
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        trait_env
+            .blanket_impls
+            .values()
+            .flatten()
+            .filter(|blanket| blanket.receiver == BlanketReceiver::Value)
+            .any(|blanket| {
+                self.tysys.signatures.impl_trait(blanket.def) == decl
+                    && blanket
+                        .bounds
+                        .iter()
+                        .all(|bound| self.bound_may_hold(key, declared, bound, depth - 1))
+            })
     }
 
     /// Whether the declaration impl block `block` answers `method_name` with
