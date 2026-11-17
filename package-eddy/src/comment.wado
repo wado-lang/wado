@@ -95,7 +95,7 @@ pub fn review_comment(
     for let [i, f] of findings.into_iter().enumerate() {
         let place = if f.line > 0 { `${f.file}:${f.line}` } else { f.file };
         let reproduced = if f.repro matches { Some(r) && r.verified } { "yes" } else { "no" };
-        out.push_str(`| ${i + 1} | ${code_span(&place)} | ${cell(&f.summary)} | ${reproduced} |\n`);
+        out.push_str(`| ${i + 1} | ${cell(&code_span(&place))} | ${cell(&f.summary)} | ${reproduced} |\n`);
     }
     out.push_str("\n");
     // Room for the note even if it had to name every finding.
@@ -370,6 +370,8 @@ test "a review's comment tables the findings above each one's comment" {
 test "a table cell escapes what would end the cell or open a tag" {
     assert cell(&"`Option<T>` | x") == "`Option<T>` \\| x";
     assert cell(&"a <b> `c|d`") == "a \\<b> `c\\|d`";
+    let piped = review_comment(&[Finding { file: "a|b", summary: "S", detail: "D" }], &"0123456789", &"cost: $0", &null, &null);
+    assert piped.contains("| 1 | ` a\\|b ` | S | no |\n");
 }
 
 test "a review's comment with nothing found, or nothing finished, says so" {

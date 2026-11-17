@@ -31,6 +31,7 @@ jobs:
       sha: ${{ steps.pr.outputs.sha }}
       eddy-run: ${{ steps.eddy.outputs.run }}
       eddy-sha: ${{ steps.eddy.outputs.sha }}
+      attempt: ${{ github.run_attempt }}
     steps:
       - id: token
         uses: actions/create-github-app-token@v3
@@ -104,6 +105,12 @@ jobs:
     env:
       SHA: ${{ needs.gate.outputs.sha }}
     steps:
+      # A re-run of this job alone keeps the gate of an earlier attempt, so no
+      # one would have checked who re-ran it.
+      - if: needs.gate.outputs.attempt != github.run_attempt
+        run: |
+          echo "::error::Eddy runs only with its gate; re-run the whole workflow"
+          exit 1
       # Where `build-wado` checked out, since the binary holds its paths.
       - uses: actions/checkout@v7
         with:
