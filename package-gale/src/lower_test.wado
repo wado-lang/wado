@@ -4310,6 +4310,7 @@ use { TokenKinds } from "./token_kinds.wado";
 use { atn_decode, AtnSim, ATN_BLOCK_START, ATN_BLOCK_END, ATN_STAR_LOOP_ENTRY, ATN_TR_RULE } from "./runtime/atn.wado";
 use {
     AtnPredictor,
+    ATN_DFA,
     atn_invocation_prec,
     atn_predict_once,
     atn_predict_with_stack,
@@ -4719,6 +4720,47 @@ test "a recorded verdict is keyed by the caller stack" {
     assert alt_target_kind(&atn, d, outer) != ATN_BLOCK_END, "outer ?? must ENTER, not reuse the inner verdict";
     state.stack = [-1, csr[0], csr[1], csr[2], csr[1]];
     assert atn_predict_once(&sim, d, &mut state, &kinds, 0, eof) == inner, "the inner question answers as before";
+}
+
+global NESTED_K2_G4: String = "
+grammar T;
+s : '(' s ')' | a ;
+a : ID '(' ')' | ID '[' ']' ;
+ID : 'a'..'z'+ ;
+WS : ' ' -> skip ;
+";
+
+// A state is found by the frames its closure read, so a stack that differs
+// only below them builds no state of its own. Keyed by the whole stack, every
+// nesting depth of one construct would build the same states again.
+test "caller stacks that differ below the frames read share their states" {
+    let mut g = parse(NESTED_K2_G4).unwrap();
+    assign_atn_call_sites(&mut g);
+    let atn = build_atn(&g);
+    let sim = decode(&atn);
+    let d = rule_block_decision(&atn, 1);
+    let csr = &atn.call_site_returns;
+    // `a` on `ID ( )` (ID=0, '('=4, ')'=5) settles inside `a`, reading no caller.
+    let kinds = to_kinds(&[
+        mk(0),
+        mk(4),
+        mk(5),
+    ]);
+    let nested = |parens: i32| {
+        let mut stack: List<i32> = [-1];
+        for let _i of 0..<parens {
+            stack.push(csr[0]);
+        }
+        stack.push(csr[1]);
+        return stack;
+    };
+    let mut state = AtnPredictor::new();
+    state.stack = nested(3);
+    assert atn_predict_once(&sim, d, &mut state, &kinds, 0, 2) == 0;
+    let built = ATN_DFA.state_verdict.len();
+    state.stack = nested(5);
+    assert atn_predict_once(&sim, d, &mut state, &kinds, 0, 2) == 0;
+    assert ATN_DFA.state_verdict.len() == built;
 }
 
 // A scan whose result is kept for other callers hides the callers it has: a

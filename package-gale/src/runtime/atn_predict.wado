@@ -52,8 +52,12 @@ global ATN_DFA_TOKEN_SLOT: i64 = 65536;
 global ATN_REAL_NODE_CAP: i32 = 1000000;
 global ATN_DFA_BRANCH_OPEN: i32 = 2147483646;
 global ATN_DFA_BRANCH_LEAF: i32 = 2147483647;
+global ATN_ASK_COVERS: i32 = 0;
+global ATN_ASK_SAME: i32 = 1;
+global ATN_ASK_MERGE: i32 = 2;
+global ATN_ASK_KINDS: i64 = 4;
 
-global mut ATN_DFA: AtnDfa = AtnDfa::new();
+internal global mut ATN_DFA: AtnDfa = AtnDfa::new();
 
 internal struct AtnPredictor {
     internal stack: List<i32>,
@@ -311,6 +315,8 @@ struct RealStacks {
     index: AtnKeyMap,
     same_hash_next: List<i32>,
     cover_cache: AtnKeyMap,
+    merge_cache: AtnKeyMap,
+    pending: List<i32>,
 }
 
 impl RealStacks {
@@ -324,6 +330,8 @@ impl RealStacks {
             index: AtnKeyMap::new(),
             same_hash_next: [],
             cover_cache: AtnKeyMap::new(),
+            merge_cache: AtnKeyMap::new(),
+            pending: [],
         };
         let empty = real.push(CTX_BOUNDARY, 0, CTX_EMPTY);
         let unknown = real.push(CTX_UNKNOWN_RETURN, 0, CTX_EMPTY);
@@ -425,6 +433,66 @@ impl RealStacks {
         return covered;
     }
 
+    fn merge(&mut self, a: i32, b: i32) -> i32 {
+        if a == b {
+            return a;
+        }
+        let ck = if a < b { atn_node_pair_key(a, b) } else { atn_node_pair_key(b, a) };
+        let cached = self.merge_cache.get(ck);
+        if cached >= 0 {
+            return cached;
+        }
+        let sa = self.start[a];
+        let na = self.len[a];
+        let sb = self.start[b];
+        let nb = self.len[b];
+        let base = self.pending.len();
+        let mut i = 0;
+        let mut j = 0;
+        while i < na || j < nb {
+            let c = if i >= na {
+                1;
+            } else if j >= nb {
+                -1;
+            } else {
+                self.key_cmp(sa + i, sb + j);
+            };
+            if c < 0 {
+                self.pending.push(self.parent[sa + i]);
+                i += 1;
+            } else if c > 0 {
+                self.pending.push(-1 - self.parent[sb + j]);
+                j += 1;
+            } else {
+                let m = self.merge(self.parent[sa + i], self.parent[sb + j]);
+                self.pending.push(m);
+                i += 1;
+                j += 1;
+            }
+        }
+        let s = self.ret.len();
+        i = 0;
+        j = 0;
+        for let mut k = base; k < self.pending.len(); k += 1 {
+            let below = self.pending[k];
+            if below < 0 {
+                self.append_edge(self.ret[sb + j], self.rpr[sb + j], -1 - below);
+                j += 1;
+            } else if i < na && j < nb && self.key_cmp(sa + i, sb + j) == 0 {
+                self.append_edge(self.ret[sb + j], self.rpr[sb + j], below);
+                i += 1;
+                j += 1;
+            } else {
+                self.append_edge(self.ret[sa + i], self.rpr[sa + i], below);
+                i += 1;
+            }
+        }
+        self.pending.truncate(base);
+        let id = self.intern_from(s);
+        self.merge_cache.set(ck, id);
+        return id;
+    }
+
     fn callers_below(&self, caller: i32) -> List<i32> {
         let mut below: List<i32> = [];
         let mut n = caller;
@@ -467,8 +535,9 @@ struct CtxArena {
     merge_cache: AtnKeyMap,
     walk_merge_cache: AtnKeyMap,
     question_index: AtnKeyMap,
-    question_outer: List<i32>,
-    question_inner: List<i32>,
+    question_first: List<i32>,
+    question_second: List<i32>,
+    question_kind: List<i32>,
     question_asked_in: List<i32>,
     node_slot: List<i32>,
     node_open: List<bool>,
@@ -484,6 +553,8 @@ struct CtxArena {
     epoch: i32,
     real: RealStacks,
     env_real: AtnKeyMap,
+    real_slot: List<i32>,
+    real_slot_in: List<i32>,
     closed_real: AtnKeyMap,
     caller: i32,
     reading: i32,
@@ -531,8 +602,9 @@ impl CtxArena {
             merge_cache: AtnKeyMap::new(),
             walk_merge_cache: AtnKeyMap::new(),
             question_index: AtnKeyMap::new(),
-            question_outer: [],
-            question_inner: [],
+            question_first: [],
+            question_second: [],
+            question_kind: [],
             question_asked_in: [],
             node_slot: [],
             node_open: [],
@@ -548,6 +620,8 @@ impl CtxArena {
             epoch: 0,
             real: RealStacks::new(),
             env_real: AtnKeyMap::new(),
+            real_slot: [],
+            real_slot_in: [],
             closed_real: AtnKeyMap::new(),
             caller: CTX_UNKNOWN,
             reading: 0,
@@ -625,10 +699,9 @@ impl CtxArena {
             self.closed_real.clear();
         }
         self.env.clear();
-        self.env_real.clear();
         self.env_base = 0;
         self.env_len = 0;
-        self.epoch += 1;
+        self.enter_epoch();
         self.caller = CTX_UNKNOWN;
         if !rstk.is_empty() {
             self.caller = if floor > 0 { self.real.push(CTX_HIDDEN_RETURN, 0, CTX_EMPTY) } else { CTX_EMPTY };
@@ -663,14 +736,33 @@ impl CtxArena {
             return real;
         }
         assert self.env.len() == self.env_base + self.env_len, "the walk binds into the environment it is in";
+        if !self.env_holds(real) {
+            self.real_slot[real] = self.env_len;
+            self.real_slot_in[real] = self.epoch;
+            self.env.push(real);
+            self.env_len += 1;
+        }
+        return self.slot(self.real_slot[real]);
+    }
+
+    fn env_holds(&mut self, real: i32) -> bool {
+        while self.real_slot.len() <= real {
+            self.real_slot.push(0);
+            self.real_slot_in.push(0);
+        }
+        return self.real_slot_in[real] == self.epoch;
+    }
+
+    fn enter_epoch(&mut self) {
+        self.epoch += 1;
+        self.env_real.clear();
         for let mut k = 0; k < self.env_len; k += 1 {
-            if self.env[self.env_base + k] == real {
-                return self.slot(k);
+            let real = self.env[self.env_base + k];
+            if real > CTX_ANY_CALLER && !self.env_holds(real) {
+                self.real_slot[real] = k;
+                self.real_slot_in[real] = self.epoch;
             }
         }
-        self.env.push(real);
-        self.env_len += 1;
-        return self.slot(self.env_len - 1);
     }
 
     fn real_of(&mut self, node: i32) -> i32 {
@@ -707,7 +799,6 @@ impl CtxArena {
     }
 
     fn enter_env(&mut self, sources: &List<i32>, from: i32, count: i32) {
-        self.env_real.clear();
         let reals = self.pending.len();
         for let mut i = from; i < from + count; i += 1 {
             let real = self.real_of(sources[i]);
@@ -721,15 +812,14 @@ impl CtxArena {
             self.env.push(self.pending[reals + i]);
         }
         self.pending.truncate(reals);
-        self.epoch += 1;
+        self.enter_epoch();
     }
 
     fn reenter_left_env(&mut self) {
         self.env.truncate(self.env_base);
-        self.env_real.clear();
         self.env_base = self.left_env_base;
         self.env_len = self.left_env_len;
-        self.epoch += 1;
+        self.enter_epoch();
     }
 
     fn reveal(&mut self, k: i32) {
@@ -789,6 +879,9 @@ impl CtxArena {
         if !self.node_open[a] && !self.node_open[b] {
             return false;
         }
+        if self.node_slot[a] >= 0 && self.node_slot[b] >= 0 {
+            return self.ask(ATN_ASK_SAME, i32::min(a, b), i32::max(a, b)) == 1;
+        }
         self.read(a);
         self.read(b);
         if self.node_len[a] != self.node_len[b] {
@@ -802,6 +895,35 @@ impl CtxArena {
             }
         }
         return true;
+    }
+
+    fn ask(&mut self, kind: i32, first: i32, second: i32) -> i32 {
+        let ck = atn_node_pair_key(first, second) * ATN_ASK_KINDS + kind as i64;
+        let mut question = self.question_index.get(ck);
+        if question < 0 {
+            question = self.question_first.len();
+            self.question_kind.push(kind);
+            self.question_first.push(first);
+            self.question_second.push(second);
+            self.question_asked_in.push(0);
+            self.question_index.set(ck, question);
+        }
+        if self.question_asked_in[question] != self.reading {
+            self.question_asked_in[question] = self.reading;
+            self.reads.push(-1 - question);
+        }
+        return self.answer(question);
+    }
+
+    fn answer(&mut self, question: i32) -> i32 {
+        let first = self.real_of(self.question_first[question]);
+        let second = self.real_of(self.question_second[question]);
+        let kind = self.question_kind[question];
+        if kind == ATN_ASK_MERGE {
+            let merged = self.real.merge(first, second);
+            return self.bind(merged);
+        }
+        return (if kind == ATN_ASK_SAME { first == second } else { self.real.covers(first, second) }) as i32;
     }
 
     fn append_edge(&mut self, return_state: i32, restore_pr: i32, parent: i32) {
@@ -890,6 +1012,10 @@ impl CtxArena {
         if cached >= 0 {
             return cached;
         }
+        if self.node_slot[a] >= 0 && self.node_slot[b] >= 0 {
+            self.slot_reads += 1;
+            return self.ask(ATN_ASK_MERGE, i32::min(a, b), i32::max(a, b));
+        }
         let cached_for_walk = self.walk_merge_cache.get(ck);
         if cached_for_walk >= 0 {
             return cached_for_walk;
@@ -957,32 +1083,11 @@ impl CtxArena {
             return true;
         }
         if !self.node_open[outer] && !self.node_open[inner] {
-            return self.real_covers(outer, inner);
+            let real_outer = self.real_of(outer);
+            let real_inner = self.real_of(inner);
+            return self.real.covers(real_outer, real_inner);
         }
-        let ck = atn_node_pair_key(outer, inner);
-        let mut question = self.question_index.get(ck);
-        if question < 0 {
-            question = self.question_outer.len();
-            self.question_outer.push(outer);
-            self.question_inner.push(inner);
-            self.question_asked_in.push(0);
-            self.question_index.set(ck, question);
-        }
-        if self.question_asked_in[question] != self.reading {
-            self.question_asked_in[question] = self.reading;
-            self.reads.push(-1 - question);
-        }
-        return self.real_covers(outer, inner);
-    }
-
-    fn real_covers(&mut self, outer: i32, inner: i32) -> bool {
-        let real_outer = self.real_of(outer);
-        let real_inner = self.real_of(inner);
-        return self.real.covers(real_outer, real_inner);
-    }
-
-    fn answer(&mut self, question: i32) -> bool {
-        return self.real_covers(self.question_outer[question], self.question_inner[question]);
+        return self.ask(ATN_ASK_COVERS, outer, inner) == 1;
     }
 }
 
@@ -1583,11 +1688,11 @@ fn atn_walk(
     }
 }
 
-struct AtnDfa {
+internal struct AtnDfa {
     arena: CtxArena,
     scratch: ClosureScratch,
     state_configs: List<List<AtnConfig>>,
-    state_verdict: List<i32>,
+    internal state_verdict: List<i32>,
     seeds: AtnKeyLists,
     seed_branch: List<i32>,
     branches: AtnKeyLists,
@@ -1753,7 +1858,7 @@ impl AtnDfa {
         let from = self.branches.keys.len();
         if read < 0 {
             self.branches.keys.push(branch);
-            self.branches.keys.push(self.arena.answer(-1 - read) as i32);
+            self.branches.keys.push(self.arena.answer(-1 - read));
             return from;
         }
         self.arena.reveal(read);
