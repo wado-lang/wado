@@ -79,6 +79,7 @@ attrArgs
 
 attrArg
     : identifier ('=' attrValue)?
+    | '_'
     | STRING_LITERAL
     | number
     ;
@@ -88,12 +89,6 @@ attrValue
     : STRING_LITERAL
     | '-'? number
     | identifier
-<<<<<<< HEAD
-    | '_'
-    | '[' (attrValue (',' attrValue)*)? ']'
-||||||| 861f89f6e
-    | '[' (attrValue (',' attrValue)*)? ']'
-=======
     | '[' ']'
     | '[' STRING_LITERAL (',' STRING_LITERAL)* ','? ']'
     | '[' identifier (',' identifier)* ','? ']'
@@ -103,7 +98,6 @@ number
     : INTEGER
     | FLOAT
     | FLOAT_EXP
->>>>>>> origin/main
     ;
 
 useDecl
