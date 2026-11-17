@@ -38,7 +38,7 @@ struct Exchange {
     workspace_id: String,
 }
 
-/// What the exchange answers; an error's body holds no token, so it is shown.
+/// What the exchange answers.
 struct Exchanged {
     access_token: Option<String> = null,
     expires_in: Option<f64> = null,
@@ -102,11 +102,12 @@ impl Federation {
         let [status, body] = fetch(Method::Post, "api.anthropic.com", "/v1/oauth/token", [
             ["content-type", "application/json"],
         ], to_bytes(&exchange).unwrap())?;
+        // A refusal's body holds no token, so it is shown; an answer of 200
+        // never is.
         if status != 200 {
+            let presented = claims(&identity);
             return Err(
-                `the token exchange answered ${status}: ${String::from_utf8_lossy(body)}; the identity token claims ${claims(
-                    &identity,
-                )}`,
+                `the token exchange answered ${status}: ${String::from_utf8_lossy(body)}; the identity token claims ${presented}`,
             );
         }
         let Ok(Exchanged { access_token: Some(token), expires_in: Some(lifetime) }) = from_bytes::<Exchanged, ByteList>(
