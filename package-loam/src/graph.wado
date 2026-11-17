@@ -426,6 +426,12 @@ impl Node {
         return index < self.inputs.len() && self.inputs[index] != "";
     }
 
+    /// Whether the node names output `index`, which ONNX leaves absent as it
+    /// does an operand.
+    pub fn has_output(&self, index: i32) -> bool {
+        return index < self.outputs.len() && self.outputs[index] != "";
+    }
+
     /// The attribute `name`, where the node carries it.
     pub fn attr<S: AsStrSlice>(&self, name: S) -> Option<Attr> {
         for let a of self.attrs {
@@ -692,10 +698,8 @@ fn rms_normalization(node: &Node, body: &mut FunctionBody) -> Result<(), String>
 /// in f32, and the normalization reads it there: onnxruntime normalizes a sum
 /// of halves past a half's range, which the fourth output rounds to infinity.
 fn skip_rms_normalization(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
-    for let unsupported of [1, 2] {
-        if node.outputs.len() > unsupported && node.outputs[unsupported] != "" {
-            return Result::Err(`${node.site()}: names a mean or an inverse deviation, which only training reads`);
-        }
+    if node.has_output(1) || node.has_output(2) {
+        return Result::Err(`${node.site()}: names a mean or an inverse deviation, which only training reads`);
     }
     let given = node.inputs[0];
     let mut sum = body.binary("Add", &body.computed_in(given, 1), &body.computed_in(node.inputs[1], 1));
@@ -703,15 +707,10 @@ fn skip_rms_normalization(node: &Node, body: &mut FunctionBody) -> Result<(), St
         sum = body.binary("Add", &sum, &body.computed_in(node.inputs[3], 1));
     }
     body.x = sum;
-    if node.outputs.len() > 3 && node.outputs[3] != "" {
-        body.nodes.push(Node {
-            op: "CastLike",
-            outputs: [node.outputs[3]],
-            inputs: [sum, given],
-            attrs: [],
-        });
+    if node.has_output(3) {
+        body.output_to("CastLike", [sum, given], node.outputs[3]);
     }
-    if node.outputs[0] == "" {
+    if !node.has_output(0) {
         return Result::Ok(());
     }
     return normalized_rows(node, body, &sum, node.inputs[2]);
@@ -815,7 +814,6 @@ impl FunctionBody {
         self.output(last_op, [reached, last], function);
     }
 
-    /// The body's last node, which computes the function's output.
     /// `given` cast to the element `TensorProto.DataType` numbers `to`, which
     /// the body's constants then take too.
     fn computed_in(&mut self, given: String, to: i64) -> String {
@@ -829,10 +827,16 @@ impl FunctionBody {
         return self.x;
     }
 
+    /// The body's last node, which computes the function's output.
     fn output(&mut self, op: String, inputs: List<String>, function: &Node) {
+        self.output_to(op, inputs, function.outputs[0]);
+    }
+
+    /// A node computing the function's output `name`.
+    fn output_to(&mut self, op: String, inputs: List<String>, name: String) {
         self.nodes.push(Node {
             op,
-            outputs: [function.outputs[0]],
+            outputs: [name],
             inputs,
             attrs: [],
         });

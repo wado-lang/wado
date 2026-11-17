@@ -323,7 +323,7 @@ test "a function short of the operands its body reads stops the read" {
     assert norm == "Y = SimplifiedLayerNormalization: reads 2 operands and was given 1";
 }
 
-test "a skipped normalization naming a training's output stops the read" {
+test "a SkipSimplifiedLayerNormalization naming a training's output stops the read" {
     let e = read(
         `agraph (float[2] X, float[2] S, float[2] G) => (float[2] Y, float[2] M) {
             Y, M = com.microsoft.SkipSimplifiedLayerNormalization(X, S, G)
