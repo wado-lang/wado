@@ -149,11 +149,14 @@ DFA cache would remove (see "What's next").
 A prediction's closures took 95% of a Rust parse once the simulator decided
 every ambiguity. `AtnDfa` in `src/runtime/atn_predict.wado` now keeps them, as
 ANTLR4's DFA does. A state is the closure of the configurations a token moved
-into it, interned by those configurations, with one edge per token. A start
-state is keyed by the decision, the caller context, `min_prec` and the false
-predicates. The cache and its context arena are a global of the generated
-module, so they outlive one parse, and they reset together at
-`ATN_DFA_NODE_CAP` context nodes.
+into it, with one edge per token. A start state is keyed by the decision,
+`min_prec` and the false predicates. The cache and its context arena are a
+global of the generated module, so they outlive one parse, and they reset
+together at `ATN_DFA_NODE_CAP` context nodes.
+
+A state does not hold the stacks its configurations return through. It holds
+slots, and a walk binds each slot to a stack of its own ("A state is keyed by
+the stack frames its closure read" below).
 
 A parse after the first is almost all cache hits. The first pays every closure,
 and that is the open cost:
@@ -188,6 +191,32 @@ whole stack. It doubled the first parse and gained nothing after it: a window
 with no frames returns into every call site of the rule, so its closures are
 the largest. The 586-file Rust corpus took 1.23 times as long with the windows
 as without them.
+
+### A state is keyed by the stack frames its closure read (landed, 2026-11)
+
+A state used to be interned by its configurations, stacks included. A stack
+names every rule entered since the start rule, so the same statement at another
+nesting depth reached states of its own. Parsing
+`wado-compiler/src/elaborator/reify.rs` missed the cache on 46% of its steps,
+and the configurations of those misses took 60 times fewer shapes once their
+stacks were left out.
+
+A closure reads little of a stack: the frames a configuration returns through,
+and whether one alternative's stacks cover another's. So a state now names its
+stacks by slot. A walk binds each slot to a real stack (`RealStacks`), and the
+closure reveals a slot's top frame only where it pops, collapses or merges it.
+The frames it revealed, and each answer to "does this stack cover that one",
+key the state under its seed configurations. Two walks whose stacks agree on
+those reach one state, whatever lies below.
+
+The trees are those of the full-stack cache: `rust_corpus_check.wado --tree-hash` prints the same hash for every `.rs` file in the repository before
+and after. Dev host, `-O2`, one `wado run` of that tool:
+
+| Input                             | Before / after |
+| --------------------------------- | -------------: |
+| `reify.rs`, 430 KB                |            5.1 |
+| The 10 largest `.rs`, 2.8 MB      |            6.5 |
+| Every tracked `.rs`, in 4 shards  |            6.8 |
 
 ### Nesting no longer doubles the scan (landed, 2026-09)
 

@@ -68,3 +68,18 @@ pub fn with_rust_bases<T>(recognize: fn() -> T with (RustLexerBase, RustParserBa
 pub fn parse_rust<S: AsStrSlice>(source: S) -> rust::ParseResult {
     return with_rust_bases(|| rust::parse(source));
 }
+
+/// FNV-1a over every row of the tree: what it is, where it sits, and the
+/// alternative that built it. Two parses of one file agree on it exactly when
+/// they built the same tree.
+pub fn tree_hash(cst: &rust::CstStore) -> u64 {
+    let mut h: u64 = 14695981039346656037;
+    for let mut i = 0; i < cst.row_count(); i += 1 {
+        let shape = if cst.is_node(i) { 1 } else if cst.is_token(i) { 2 } else { 3 };
+        let span = cst.span(i);
+        for let field of [shape, cst.id[i], cst.alt(i), span.start, span.end, cst.is_error(i) as i32] {
+            h = (h ^ field as u32 as u64) * 1099511628211;
+        }
+    }
+    return h;
+}
