@@ -306,8 +306,10 @@ Its quantized kernels decode Gemma 3's `q4` and `q4f16` exports slower than
 it decodes the f32 export, though they read an eighth of the bytes
 ([benchmark](./benchmark/README.md#the-q4-and-q4f16-exports)): products of
 one input, and a gated layer's pair, run a dispatch each, where f32 weights
-laid side by side or interleaved run as one. A tensor is held in `f32`, `f16`, `bf16`, `u8`, `i64` or `bool`,
-and every other element type stops the build naming it. So does a `CastLike`
+laid side by side or interleaved run as one.
+
+A tensor is held in `f32`, `f16`, `bf16`, `u8`, `i64` or `bool`, and every
+other element type stops the build naming it. So does a `CastLike`
 of a value computed at run, since it converts only a tensor the build knows.
 Arithmetic in `double` and the integer types is a second instantiation of the
 same kernels. Wado has a primitive for nearly every ONNX element type, so what

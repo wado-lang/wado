@@ -2382,7 +2382,8 @@ impl WebGpuBackend {
     /// query row over each part of its positions in a workgroup of its own,
     /// and one joins each row's parts. `rotary` is the cosine and sine
     /// tables. Of a `stored` half, the turned keys and queries and the result
-    /// round to it, held as the f32 equal to each, and the scores stay f32. Each batch row's past is the first of its `pasts` positions
+    /// round to it, held as the f32 equal to each, and the scores stay f32.
+    /// Each batch row's past is the first of its `pasts` positions
     /// `past_k` and `past_v` hold, and the cache holds every position they do:
     /// their buffer where they are `shared`, onnxruntime's shared buffer. A
     /// query of a row reads no position at or past the row's of `reaches`.
@@ -2589,7 +2590,13 @@ impl WebGpuBackend {
 
         let result = contiguous(self.allocated(rows * d, false), 0, [batch, s, heads * d]);
         let joined = [contiguous(parts, 0, [attended])] as List<DeviceTensor>;
-        self.dispatch_bound(&joined, fresh(&result), heads_of[2], |bindings| ShaderKey::AttendJoin([bindings, stored]), grids[2]);
+        self.dispatch_bound(
+            &joined,
+            fresh(&result),
+            heads_of[2],
+            |bindings| ShaderKey::AttendJoin([bindings, stored]),
+            grids[2],
+        );
         if let Some(replay) = key {
             let mut lengths: List<i32> = [];
             for let h of &heads_of {
@@ -3799,7 +3806,13 @@ ${indent}}
 /// where its values start, each of the `batch` rows' past length, then the
 /// views of the new keys, new values, cosines and sines. A turned key rounds
 /// once to the `stored` half, as the decomposition stores one.
-fn append_shader(bindings: &List<i32>, rotary: bool, batch: i32, stored: Option<HalfFloat>, words: &List<Words>) -> String {
+fn append_shader(
+    bindings: &List<i32>,
+    rotary: bool,
+    batch: i32,
+    stored: Option<HalfFloat>,
+    words: &List<Words>,
+) -> String {
     let views = 13 + batch;
     let new_at = |k: i32, at: i32, col: String| view_wgsl(bindings, k, at, ["b", "s", col]);
     let key = if rotary {
@@ -4311,9 +4324,9 @@ struct QuantizedShape {
 
 /// The WGSL of `Graph::quantized_product`, one workgroup per
 /// `QUANTIZED_COLUMNS` columns of the output and `rows` of its rows: each of
-/// the `QUANTIZED_LANES / QUANTIZED_COLUMNS` lanes of a column takes every such byte of
-/// the column's packed weight, dequantizes its values and adds each times the
-/// rows' inputs, and the column's lanes sum. A `half` rounds each weight to
+/// the `QUANTIZED_LANES / QUANTIZED_COLUMNS` lanes of a column takes every
+/// such byte of the column's packed weight, dequantizes its values and adds
+/// each times the rows' inputs, and the column's lanes sum. A `half` rounds each weight to
 /// it, as the decomposition stores one. Each lane of a column then writes a
 /// row's element through `op`, whose `operand(0)` is the sum and `operand(i)`
 /// the `i - 1`th epilogue operand. Parameters: the workgroups, the workgroups
@@ -4338,7 +4351,11 @@ fn quantized_product_shader(op: &Expr, bindings: &List<i32>, shape: &QuantizedSh
     let mut epilogue = `        let x0 = sums[lane * ${QUANTIZED_LANES}u + lid - lane];\n`;
     for let i of weights..<bindings.len() {
         let at = 17 + (i - 3) * 3;
-        epilogue.push_str(`        let x${i - weights + 1} = ${view_load_wgsl(bindings[i], at, &(["m", "n"] as List<String>))};\n`);
+        epilogue.push_str(`        let x${i - weights + 1} = ${view_load_wgsl(
+            bindings[i],
+            at,
+            &(["m", "n"] as List<String>),
+        )};\n`);
     }
     epilogue.push_str(&steps_wgsl(op, op.steps.len() - 1, "        "));
     return `${buffers_wgsl(words)}

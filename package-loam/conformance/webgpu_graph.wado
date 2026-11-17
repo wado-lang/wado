@@ -243,7 +243,11 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let then_weights = gpu.kept_weights(cases::quantized_then_pass, 1, 3, cases::quantized_weight).unwrap();
     let then_program = gpu.compiled(cases::quantized_then_pass, &then_weights, &[]).unwrap();
     let then_from = gpu.dispatches();
-    let then_got = gpu.executed(&then_program, &[Any::F32(gpu.relabeled::<f32, [cases::A, cases::B], Untyped>(&held_a))], &then_weights);
+    let then_got = gpu.executed(
+        &then_program,
+        &[Any::F32(gpu.relabeled::<f32, [cases::A, cases::B], Untyped>(&held_a))],
+        &then_weights,
+    );
     assert gpu.dispatches() - then_from == 2, "the row sums, then the product and its epilogue";
     let fused_then = typed::<WebGpuBackend, f32, [cases::A, cases::C]>(&gpu, &then_got[0]);
     println(`quantized product epilogue ${apart(&mut gpu, &fused_then, &then_want)}`);
@@ -709,7 +713,14 @@ fn attention_in<E: Float>(
     ];
     let held_bias = gpu.upload(&bias);
     let from = gpu.dispatches();
-    let got = cases::attending::<WebGpuBackend, E>(gpu, &held_inputs, &held_past, &held_rotation, &held_bias, &case.options);
+    let got = cases::attending::<WebGpuBackend, E>(
+        gpu,
+        &held_inputs,
+        &held_past,
+        &held_rotation,
+        &held_bias,
+        &case.options,
+    );
     assert gpu.dispatches() - from == 5, "a half attention runs in its kernels";
     println(`attending out${name} ${apart(gpu, &got.0, &want.0)}`);
     // What a shared present holds past the valid positions is unspecified.
@@ -720,7 +731,10 @@ fn attention_in<E: Float>(
     ] {
         let read: Tensor<f32, [cases::Bt, cases::Ht, cases::Tt, cases::Dt]> = cpu.convert(&gpu.download(&present));
         let wanted: Tensor<f32, [cases::Bt, cases::Ht, cases::Tt, cases::Dt]> = cpu.convert(&reference);
-        println(`attending ${part}${name} ${deviation(&leading(cpu, &read, valid).data, &leading(cpu, &wanted, valid).data)}`);
+        println(`attending ${part}${name} ${deviation(
+            &leading(cpu, &read, valid).data,
+            &leading(cpu, &wanted, valid).data,
+        )}`);
     }
 }
 

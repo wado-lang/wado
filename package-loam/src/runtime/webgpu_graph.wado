@@ -735,10 +735,8 @@ impl Graph for WebGpuBackend {
         let a = &Placed::<E, In>::Device(self.device_view(a));
         let mut extents = self.extents_of(a);
         let last = extents.len() - 1;
-        let inner = extents[last];
-        let rows = element_count(&extents) / inner;
         let operands = with_zero_points(self, [
-            self.reshaped(&self.device_view(a), &([rows, inner] as List<i32>)),
+            as_rows(self, &self.device_view(a)),
             self.device_view(packed),
             self.device_view(scales),
         ], zero_points);
@@ -791,6 +789,14 @@ impl Graph for WebGpuBackend {
             quantized,
         );
     }
+}
+
+/// `view` as a matrix of its last axis, its other axes one: what a quantized
+/// product multiplies, and computes.
+fn as_rows(g: &mut WebGpuBackend, view: &DeviceTensor) -> DeviceTensor {
+    let last = view.extents.len() - 1;
+    let inner = view.extents[last];
+    return g.reshaped(view, &([element_count(&view.extents) / inner, inner] as List<i32>));
 }
 
 /// A quantized kernel's `operands`, then its zero points where it has them.
@@ -1397,7 +1403,13 @@ fn kernel_result(
                     if k.prologue matches { Some(_) } {
                         left_product(g, values, recorded, k, &right_matrix(g, values, recorded, k), &then);
                     } else {
-                        dotted(g, &view_of(g, values, node.operands[0]), &view_of(g, values, node.operands[1]), &dims, &then);
+                        dotted(
+                            g,
+                            &view_of(g, values, node.operands[0]),
+                            &view_of(g, values, node.operands[1]),
+                            &dims,
+                            &then,
+                        );
                     }
                 },
                 _ => unreachable(),
@@ -1426,11 +1438,7 @@ fn quantized_result<E: Erasable + Float>(
     q: &QuantizedNode,
     then: &Epilogue<PlacedRead<Untyped>>,
 ) -> Placed<f32, Untyped> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-    let input = view_of(g, values, node.operands[0]);
-    let last = input.extents.len() - 1;
-    let inner = input.extents[last];
-    let space = [element_count(&input.extents) / inner, node.extents[last]] as List<i32>;
-    let mut operands = [g.reshaped(&input, &([space[0], inner] as List<i32>))] as List<DeviceTensor>;
+    let mut operands = [as_rows(g, &view_of(g, values, node.operands[0]))] as List<DeviceTensor>;
     for let o of node.operands[1..<node.operands.len()].to_list() {
         operands.push(view_of(g, values, o));
     }
@@ -1439,7 +1447,9 @@ fn quantized_result<E: Erasable + Float>(
         return Placed::Device(out);
     }
     let zero_points = if q.zero_points {
-        Option::Some(g.relabeled::<u8, Untyped, [Untyped, Untyped]>(u8::of_any::<WebGpuBackend>(&values[node.operands[3]])));
+        Option::Some(g.relabeled::<u8, Untyped, [Untyped, Untyped]>(u8::of_any::<WebGpuBackend>(
+            &values[node.operands[3]],
+        )));
     } else {
         null;
     };
@@ -1450,7 +1460,7 @@ fn quantized_result<E: Erasable + Float>(
         optional(&zero_points),
         &q.quantized,
     );
-    let mut computed = [g.reshaped(&g.device_view(&product), &space)] as List<DeviceTensor>;
+    let mut computed = [as_rows(g, &g.device_view(&product))] as List<DeviceTensor>;
     for let o of &then.operands {
         computed.push(o.view);
     }

@@ -318,11 +318,7 @@ test "a quantized product computes what follows it in its epilogue" {
     let recorded = r.finished([y.id]);
     let plan = plan_of(&recorded);
     assert spelled(&plan) == [
-        `node ${x.id}`,
-        `node ${packed.id}`,
-        `node ${scales.id}`,
-        `node ${residual.id}`,
-        `kernel ${y.id}`,
+        `node ${x.id}`, `node ${packed.id}`, `node ${scales.id}`, `node ${residual.id}`, `kernel ${y.id}`,
     ] as List<String>;
     let Kernel(k) = plan.launches[4] else {
         unreachable();

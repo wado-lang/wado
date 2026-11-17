@@ -766,7 +766,9 @@ fn joining(recorded: &Recorded, group: &Group, id: i32, splats: &HashMap<i32, Op
             let x = &recorded.nodes[node.operands[0]].extents;
             step(fits_in(e, &group.space) && (adds_unit_axes(x, e, dims) || spreads_rows(x, e, dims, &group.space)));
         },
-        DotGeneral(_) | QuantizedProduct(_) => if group.product matches { None } && !group.folds && same_space(e, &group.space) {
+        DotGeneral(_) | QuantizedProduct(_) => if group.product matches { None }
+            && !group.folds
+            && same_space(e, &group.space) {
             Option::Some(Join::Product);
         } else {
             null;
