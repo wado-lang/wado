@@ -328,5 +328,5 @@ four experts of `graph_cases.wado`'s `experts_case`, through
 
 | Form, over                   | Temporary bytes |
 | ---------------------------- | --------------- |
-| Each pick, a step of 1 token | 311,296         |
-| Each expert, a prompt of 3   | 229,376         |
+| Each pick, a step of 1 token | 409,600         |
+| Each expert, a prompt of 3   | 262,144         |
