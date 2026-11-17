@@ -73,6 +73,7 @@ use {
     replanned,
     splats_of,
     unary_of,
+    weights_of,
 } from "./fusion.wado";
 use {
     Any,
@@ -773,7 +774,14 @@ impl Graph for WebGpuBackend {
         ], zero_points);
         let half = HalfFloat::of(E::kind());
         let stored = Epilogue::<PlacedRead<Untyped>> { operands: [], op: operand(0).stored_as(E::kind()) };
-        if let Some(out) = self.quantized_product_kernel(&operands, quantized.bits, quantized.block, half, &stored, false) {
+        if let Some(out) = self.quantized_product_kernel(
+            &operands,
+            quantized.bits,
+            quantized.block,
+            half,
+            &stored,
+            false,
+        ) {
             extents[last] = out.extents[1];
             return Placed::Device(self.reshaped(&out, &extents));
         }
@@ -1198,8 +1206,7 @@ fn keyed(g: &mut WebGpuBackend, recorded: &Recorded, serial: i32, plan: &Plan, r
                 let both = [&p.first, &p.second] as List<&Kernel>;
                 let mut reads = left_reads(recorded, &p.first);
                 for let k of both {
-                    let product = &recorded.nodes[k.product.unwrap()];
-                    reads.extend(&product.operands[1..<product.operands.len()].to_list());
+                    reads.extend(&weights_of(&recorded.nodes[k.product.unwrap()]));
                 }
                 for let o of &p.operands {
                     reads.push(o.node);
@@ -1588,11 +1595,16 @@ fn quantized_result(
     q: &QuantizedNode,
     then: &Epilogue<PlacedRead<Untyped>>,
 ) -> Placed<f32, Untyped> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-    let mut operands = [view_of(g, values, node.operands[0])] as List<DeviceTensor>;
-    for let w of node.operands[1..<node.operands.len()].to_list() {
-        operands.push(view_of(g, values, w));
-    }
-    return quantized_on(g, &operands, node.kind, q, then);
+    return quantized_on(g, &operands_of(g, values, node), node.kind, q, then);
+}
+
+/// The views of what `node` reads.
+fn operands_of(
+    g: &mut WebGpuBackend,
+    values: &Values<WebGpuBackend>,
+    node: &RecordedNode,
+) -> List<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    return node.operands.into_iter().map(|o| view_of(g, values, o)).collect();
 }
 
 /// The quantized product of `operands`, the input and the weights `q` reads,
@@ -1711,16 +1723,11 @@ fn paired_quantized(
         &recorded.nodes[p.first.product.unwrap()],
         &recorded.nodes[p.second.product.unwrap()],
     ];
-    let input = view_of(g, values, first.operands[0]);
-    let weights_of = |node: &RecordedNode| {
-        let mut all = [input] as List<DeviceTensor>;
-        for let w of node.operands[1..<node.operands.len()].to_list() {
-            all.push(view_of(g, values, w));
-        }
-        return all;
-    };
-    let [b, c] = [weights_of(first), weights_of(second)];
-    let mut both = [as_rows(g, &input)] as List<DeviceTensor>;
+    let [b, c] = [
+        operands_of(g, values, first),
+        operands_of(g, values, second),
+    ];
+    let mut both = [as_rows(g, &b[0])] as List<DeviceTensor>;
     for let i of 1..<b.len() {
         if let Some(rows) = interleaved_rows(&b[i], &c[i]) {
             both.push(rows);
@@ -1734,7 +1741,9 @@ fn paired_quantized(
     }
     // The first product joins the second's epilogue as its first operand.
     let alone = quantized_on(g, &b, first.kind, q, &Epilogue { operands: [], op: operand(0) });
-    let mut reads = [PlacedRead { view: g.device_view(&alone) }] as List<PlacedRead<Untyped>>;
+    let mut reads = [
+        PlacedRead { view: g.device_view(&alone) },
+    ] as List<PlacedRead<Untyped>>;
     reads.extend(operands);
     let mut to = [1, 0] as List<i32>;
     for let i of 0..<operands.len() {

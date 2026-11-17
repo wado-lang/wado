@@ -302,14 +302,12 @@ arithmetic is faster gains nothing from it. No Kiln option chooses arithmetic
 in f16 yet. One would, on a device that offers `shader-f16`, and a graph built
 with it would be held to a tolerance rather than to the f32 path's bits.
 
-It decodes Gemma 3's `q4` and `q4f16` exports slower than the f32 export
-([benchmark](./benchmark/README.md#the-q4-and-q4f16-exports)), though the
-device spends less time on them (`benchmark/gemma3_270m/profile.wado`). The
-host is what waits: each dispatch costs it a bind group, made again on every
-run, and a quantized step runs more dispatches. Products of one input, and a
-gated layer's pair, run a dispatch each, where f32 weights laid side by side
-or interleaved run as one, and a norm runs apart from the product it feeds.
-A prompt's quantized products also take time in proportion to its rows.
+Of its decode of Gemma 3's `q4` export
+([benchmark](./benchmark/README.md#the-q4-and-q4f16-exports)), the quantized
+products take most of the device time (`benchmark/gemma3_270m/profile.wado`).
+A norm runs apart from the product it feeds, and a prompt's quantized products
+take time in proportion to its rows. The `q4f16` export's products are slower
+still: each weight rounds to f16 through an emulated conversion.
 
 A tensor is held in `f32`, `f16`, `bf16`, `u8`, `i64` or `bool`, and every
 other element type stops the build naming it. So does a `CastLike`

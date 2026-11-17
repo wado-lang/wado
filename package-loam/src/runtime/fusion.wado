@@ -449,22 +449,25 @@ fn pairs_with(recorded: &Recorded, a: &Kernel, b: &Kernel) -> bool {
         a.product.unwrap(),
         b.product.unwrap(),
     ];
-    let pn = &recorded.nodes[p];
-    let weights_alike = weights_alike(recorded, pn, &recorded.nodes[q], 0);
-    let contracted = pn.op matches { QuantizedProduct(_) } || rows_by_matrix(recorded, p);
-    return contracted && pn.op == recorded.nodes[q].op && weights_alike;
+    let [pn, qn] = [&recorded.nodes[p], &recorded.nodes[q]];
+    return (pn.op matches { QuantizedProduct(_) } || rows_by_matrix(recorded, p))
+        && pn.op == qn.op
+        && weights_alike(recorded, pn, qn, 0);
 }
 
 /// The weights a product reads: a `DotGeneral`'s right matrix, and a quantized
 /// product's packed values, scales and any zero points.
-fn weights_of(product: &RecordedNode) -> List<i32> {
+pub fn weights_of(product: &RecordedNode) -> List<i32> {
     return product.operands[1..<product.operands.len()].to_list();
 }
 
 /// Whether the weights of the products `a` and `b`, taken in turn, agree in
 /// their extents from the axis `from` on.
 fn weights_alike(recorded: &Recorded, a: &RecordedNode, b: &RecordedNode, from: i32) -> bool {
-    let [ws, vs] = [weights_of(a), weights_of(b)];
+    let [ws, vs] = [
+        weights_of(a),
+        weights_of(b),
+    ];
     if ws.len() != vs.len() {
         return false;
     }
