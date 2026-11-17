@@ -2,7 +2,9 @@
 // operator Loam lowers, over static shapes and with the attributes and edge
 // values where an implementation's reading is least safe. Beside each goes
 // <case>.txt: the inputs the case fed, and what onnxruntime computed from
-// them, which operators_test.wado holds Loam to.
+// them, which operators_test.wado holds Loam to. A case onnxruntime departs
+// from the operator's definition on names in `exact` a function computing the
+// definition, which writes its output instead.
 //
 //   mise run loam-oracle-deps
 //   node operators.mjs <this directory>
@@ -620,11 +622,21 @@ add('NBitsHalfBias', overHalves({
 const qmoe = ({ tokens, k = 2, zeros = false, bias = true, attrs = {} }) => {
   const [experts, hidden, inter] = [4, 32, 32];
   const logits = Array.from({ length: tokens * experts }, (_, i) => ((i * 5) % 11) / 2 - 2.5 + i / 64);
+  // Zero points of 0 to 3 under values of 0 to 15 leave nearly every value
+  // positive, as the input and the scales are, so no sum cancels to a value
+  // that f32 rounds far from the exact one, and the zero points alone set it.
+  const rowScales = (dims) => zeros
+    ? float(dims, Array.from({ length: dims.reduce((a, b) => a * b, 1) }, (_, i) => ((i % 5) + 1) / 512))
+    : scales(dims);
+  const small = (dims, seed) => {
+    const t = bytes(dims, seed);
+    return { ...t, values: t.values.map((b) => b & 0xf3) };
+  };
   const inits = {
     W1: bytes([experts, 2 * inter, hidden / 2], 5),
-    S1: scales([experts, 2 * inter, 1]),
+    S1: rowScales([experts, 2 * inter, 1]),
     W2: bytes([experts, hidden, inter / 2], 6),
-    S2: scales([experts, hidden, 1]),
+    S2: rowScales([experts, hidden, 1]),
   };
   const operands = ['X', 'R', 'W1', 'S1', '', 'W2', 'S2', ''];
   if (bias) {
@@ -634,12 +646,13 @@ const qmoe = ({ tokens, k = 2, zeros = false, bias = true, attrs = {} }) => {
     operands[7] = 'B2';
   }
   if (zeros) {
-    inits.Z1 = bytes([experts, 2 * inter, 1], 7);
-    inits.Z2 = bytes([experts, hidden, 1], 8);
+    inits.Z1 = small([experts, 2 * inter, 1], 7);
+    inits.Z2 = small([experts, hidden, 1], 8);
     operands.push('', '', '', 'Z1', 'Z2');
   }
+  const x = halves(tokens * hidden).map((v) => (zeros ? Math.abs(v) + 0.5 : v));
   return {
-    inputs: { X: float([tokens, hidden]), R: float([tokens, experts], logits) },
+    inputs: { X: float([tokens, hidden], x), R: float([tokens, experts], logits) },
     inits,
     nodes: [node('com.microsoft.QMoE', operands, 'Y', {
       k,
@@ -656,11 +669,73 @@ const qmoe = ({ tokens, k = 2, zeros = false, bias = true, attrs = {} }) => {
     domains: { 'com.microsoft': 1 },
   };
 };
+// The QMoE node of case `c` computed from its definition in f64, over the
+// tensors `given` names: each token's `k` largest logits pick its experts, and
+// each pick weighs its expert's output by its softmax over every expert,
+// divided by the picks' sum where `normalize_routing_weights` is set. Each
+// expert is a SwiGLU of interleaved gate and up rows between two products of
+// weights packed in blocks.
+const qmoeExact = (c, given) => {
+  const { inputs: ops, attrs } = c.nodes[0];
+  const operand = (i) => (ops[i] ? given[ops[i]] : null);
+  const number = (a, fallback) => (a === undefined ? fallback : (a.f32 ?? a));
+  const [x, router] = [operand(0), operand(1)];
+  const [bits, block, k] = [attrs.expert_weight_bits, attrs.block_size, attrs.k];
+  const [alpha, beta] = [number(attrs.activation_alpha), number(attrs.activation_beta)];
+  const limit = number(attrs.swiglu_limit, Infinity);
+  const [hidden, experts] = [x.dims.at(-1), router.dims.at(-1)];
+  const tokens = x.values.length / hidden;
+  const [per, mask] = [8 / bits, (1 << bits) - 1];
+  const packedAt = (values, at, i) => (values[at + Math.floor(i / per)] >> ((i % per) * bits)) & mask;
+  // `rows` rows of expert `e`'s weight at `w`, each `width` values, by `input`.
+  const product = (w, rows, width, e, input) => {
+    const [weight, scale, bias, zeros] = [operand(w), operand(w + 1), operand(w + 2), operand(w === 2 ? 11 : 12)];
+    const blocks = Math.ceil(width / block);
+    const zeroBytes = Math.ceil(blocks / per);
+    return Array.from({ length: rows }, (_, n) => {
+      const row = e * rows + n;
+      let sum = 0;
+      for (let i = 0; i < width; i++) {
+        const b = Math.floor(i / block);
+        const zero = zeros ? packedAt(zeros.values, row * zeroBytes, b) : 1 << (bits - 1);
+        const q = packedAt(weight.values, row * (width / per), i);
+        sum += input[i] * (q - zero) * scale.values[row * blocks + b];
+      }
+      return sum + (bias ? bias.values[row] : 0);
+    });
+  };
+  const inner = operand(2).dims[1] / 2;
+  const data = [];
+  for (let t = 0; t < tokens; t++) {
+    const logits = router.values.slice(t * experts, (t + 1) * experts);
+    const picks = [...logits.keys()].sort((a, b) => logits[b] - logits[a] || a - b).slice(0, k);
+    const top = Math.max(...logits);
+    const p = logits.map((l) => Math.exp(l - top));
+    const total = attrs.normalize_routing_weights ? picks.reduce((s, e) => s + p[e], 0) : p.reduce((s, v) => s + v);
+    const row = x.values.slice(t * hidden, (t + 1) * hidden);
+    const y = Array(hidden).fill(0);
+    for (const e of picks) {
+      const h = product(2, 2 * inner, hidden, e, row);
+      const a = Array.from({ length: inner }, (_, i) => {
+        const g = Math.min(h[2 * i], limit);
+        const u = Math.max(Math.min(h[2 * i + 1], limit), -limit);
+        return (g / (1 + Math.exp(-alpha * g))) * (u + beta);
+      });
+      product(5, hidden, inner, e, a).forEach((v, n) => {
+        y[n] += (p[e] / total) * v;
+      });
+    }
+    data.push(...y);
+  }
+  return { dims: x.dims, data };
+};
 // More picks than experts: each expert's rows, masked.
 add('QMoePrompt', qmoe({ tokens: 3 }));
 // One token picks fewer experts than there are: those experts alone.
 add('QMoeStep', qmoe({ tokens: 1 }));
-add('QMoeUnnormalized', qmoe({ tokens: 3, attrs: { normalize_routing_weights: 0 } }));
+// onnxruntime weighs the picks as normalized whether or not
+// `normalize_routing_weights` is set, so the definition computes this one.
+add('QMoeUnnormalized', { ...qmoe({ tokens: 3, attrs: { normalize_routing_weights: 0 } }), exact: qmoeExact });
 add('QMoeZeroPoints', qmoe({ tokens: 3, zeros: true, bias: false }));
 add('QMoeHalf', overHalves(qmoe({ tokens: 3 }), ['X', 'R', 'S1', 'B1', 'S2', 'B2']));
 add('QMoeHalfStep', overHalves(qmoe({ tokens: 1 }), ['X', 'R', 'S1', 'B1', 'S2', 'B2']));
@@ -726,14 +801,21 @@ for (const c of cases) {
   writeFileSync(path, model(c));
   const lines = [];
   const feeds = {};
+  const given = { ...c.inits };
   for (const [i, t] of Object.entries(c.inputs)) {
     const count = t.dims.reduce((a, b) => a * b, 1);
     const values = t.values ?? halves(count);
     feeds[i] = feed(t.type, t.dims, values);
+    given[i] = { ...t, values };
     lines.push(line(['input', i, elementName[t.type], list(t.dims), list(spelled(t.type, values))]));
   }
-  const session = await ort.InferenceSession.create(c.oracle ? model({ ...c, ...c.oracle }) : path);
-  const y = (await session.run(feeds, ['Y'])).Y;
+  let y;
+  if (c.exact) {
+    y = c.exact(c, given);
+  } else {
+    const session = await ort.InferenceSession.create(c.oracle ? model({ ...c, ...c.oracle }) : path);
+    y = (await session.run(feeds, ['Y'])).Y;
+  }
   lines.push(line(['output', elementName[c.out], list(y.dims), list(spelled(c.out, y.data))]));
   writeFileSync(join(here, 'operators', `${c.name}.txt`), lines.join(''));
 }

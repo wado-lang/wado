@@ -42,7 +42,10 @@ Two suites take their expectations from onnxruntime.
 static shapes, with the attributes and edge values where a reading can go
 wrong. `semantics_test.wado` covers shape arithmetic over a symbolic length, at
 two lengths. A script beside each, `operators.mjs` or `semantics.mjs`, writes
-one small model per case and what onnxruntime computes from it. The test builds
+one small model per case and what onnxruntime computes from it. Where
+onnxruntime departs from the operator's definition, as `QMoE` does on
+`normalize_routing_weights`, the script computes the definition instead. The
+test builds
 each model as the generator would and runs the result under `core:eval`, so a
 refused build, a trap and a wrong answer each show as a difference from
 onnxruntime.

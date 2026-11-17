@@ -7,7 +7,7 @@
 //! part.
 
 use { read } from "lib:loam/src/onnx_proto.wado";
-use { assert_close, generated, program_over, ran } from "./oracle.wado";
+use { TOLERANCE, assert_close, generated, program_over, ran } from "./oracle.wado";
 use { EvalHost } from "core:eval";
 
 /// One tensor a case's text spells, each part as written: `f32` or `i64`, the
@@ -103,8 +103,8 @@ fn printed<Axes>(got: &Tensor<${element}, Axes>) with Stdout {
 }
 
 /// Loam computes from `model` what onnxruntime did, which `oracle` states: the
-/// same elements, a float within `TOLERANCE` of onnxruntime's.
-fn assert_agrees(model: ByteList, oracle: String) with EvalHost {
+/// same elements, a float within `tolerance` of onnxruntime's.
+fn assert_agrees(model: ByteList, oracle: String, tolerance: f32 = TOLERANCE) with EvalHost {
     let case = Case::of(&oracle);
     let want = case.output;
     let got = computed(model, &case);
@@ -114,7 +114,7 @@ fn assert_agrees(model: ByteList, oracle: String) with EvalHost {
     let found = Spelled::of(&fields);
     assert found.element == want.element && found.extents == want.extents;
     if want.element == "f32" {
-        assert_close(&found.floats(), &want.floats());
+        assert_close(&found.floats(), &want.floats(), tolerance);
     } else {
         assert found.values == want.values;
     }
@@ -778,16 +778,29 @@ test "MatMulNBits of 8 bits holds a value in each byte" {
     assert_agrees(#include_bytes("./operators/NBits8.onnx"), #include_str("./operators/NBits8.txt"));
 }
 
+/// A `QMoE` around a zero point of 8 sums terms of either sign to values far
+/// smaller than the terms, so in f32 onnxruntime's sits up to 2.3e-6 from the
+/// value computed in f64, and Loam's up to 2.6e-6.
+global QMOE_TOLERANCE: f32 = 3e-6;
+
 test "QMoE over more picks than experts weighs each expert's rows" {
-    assert_agrees(#include_bytes("./operators/QMoePrompt.onnx"), #include_str("./operators/QMoePrompt.txt"));
+    assert_agrees(
+        #include_bytes("./operators/QMoePrompt.onnx"),
+        #include_str("./operators/QMoePrompt.txt"),
+        QMOE_TOLERANCE,
+    );
 }
 
 test "QMoE of one token runs the experts it picks" {
-    assert_agrees(#include_bytes("./operators/QMoeStep.onnx"), #include_str("./operators/QMoeStep.txt"));
+    assert_agrees(#include_bytes("./operators/QMoeStep.onnx"), #include_str("./operators/QMoeStep.txt"), QMOE_TOLERANCE);
 }
 
 test "QMoE without normalized routing weighs each pick by its softmax over every expert" {
-    assert_agrees(#include_bytes("./operators/QMoeUnnormalized.onnx"), #include_str("./operators/QMoeUnnormalized.txt"));
+    assert_agrees(
+        #include_bytes("./operators/QMoeUnnormalized.onnx"),
+        #include_str("./operators/QMoeUnnormalized.txt"),
+        QMOE_TOLERANCE,
+    );
 }
 
 test "QMoE reads each block less its packed zero point" {

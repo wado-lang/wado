@@ -28,7 +28,7 @@ Loam lowers, though the build stops before it reaches any of them.
 
 | Operator                                       | Nodes | What Loam lacks |
 | ---------------------------------------------- | ----- | --------------- |
-| `QMoE`, 32 experts of 4 bits, 4 to a token     | 24    | The operator.   |
+| `QMoE`, 32 experts of 4 bits, 4 to a token     | 24    | Nothing.        |
 | `GroupQueryAttention`, a window of 128 or none | 24    | Nothing.        |
 | `SkipSimplifiedLayerNormalization`             | 48    | Nothing.        |
 | `MatMulNBits`, 4 bits in blocks of 32          | 73    | Nothing.        |
@@ -48,13 +48,7 @@ The embedding is a `float16` table a `Gather` reads, so the model has no
 `GatherBlockQuantized`. The inputs and outputs are `int64` and `float16`, and
 the two `Cast`s give `int32`.
 
-1. [ ] The last of gpt-oss-20b's operators, onnxruntime's `QMoE`. It
-   decomposes in two forms. Over a prompt it loops over the experts and masks each one's
-   rows, so its temporaries do not grow with the prompt. Over a step it gathers
-   the experts the token routes to. Finished when `operators_test.wado` holds
-   it to onnxruntime on every device, and `PjrtBackend::analyzing` reports
-   the temporaries of both forms for a prompt and for a step.
-2. [ ] Experts held on demand. An expert is one slice along the first axis of
+1. [ ] Experts held on demand. An expert is one slice along the first axis of
    each `QMoE` input the operator's definition indexes by expert, so no model
    is named. A device holds as many experts as a budget the caller sets: all
    of them on a TPU chip, fewer on a GPU of 8 GB and on `Cpu`. The rest stay
@@ -65,7 +59,7 @@ the two `Cast`s give `int32`.
    them. So the host waits once a layer, which The MVP Is Tier 1 Only says a
    `QMoE` spares it. Finished when `operators_test.wado` holds a `QMoE` to
    onnxruntime with a budget of half its experts on every device.
-3. [ ] gpt-oss-20b, a mixture of experts. Finished when
+2. [ ] gpt-oss-20b, a mixture of experts. Finished when
    `example/gpt-oss-20b/` continues a prompt with the tokens onnxruntime picks
    from onnx-community's `q4f16` export on `Cpu`, under `wado run-webgpu` on a
    device with 8 GB, and under `wado run-pjrt`, with no line that names a
@@ -196,7 +190,7 @@ Work the road to gpt-oss-20b does not pass. It is unordered.
 
 ### Operators
 
-`conformance/operators_test.wado` lists the operators Loam lowers. Four
+`conformance/operators_test.wado` lists the operators Loam lowers. Five
 outside ONNX's default domain are among them, onnxruntime's:
 
 - `GroupQueryAttention`, without position ids, interleaved rotation, a
@@ -208,6 +202,10 @@ outside ONNX's default domain are among them, onnxruntime's:
   quantized along its columns.
 - `SkipSimplifiedLayerNormalization`, without the mean and the inverse
   deviation training reads.
+- `QMoE`, only as a SwiGLU of interleaved gate and up rows over integer
+  weights packed in blocks: without another activation, separate gate
+  weights, a sparse mixer, a prepacked weight, or a bit width apart for each
+  projection.
 
 ONNX's `Attention` is not. Any other operator stops the build naming itself.
 
