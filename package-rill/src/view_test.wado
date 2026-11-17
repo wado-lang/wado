@@ -124,6 +124,24 @@ test "each takes back a row moved out of its parent" {
     };
 }
 
+test "each restores its order after render moved a row" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = element("ul");
+        let items: Signal<List<i32>> = signal([1, 2]);
+        let _dispose = scope(|| each(list, || items.get(), |item: i32| {
+            if item == 0 {
+                list.append_child(list.first_child().unwrap());
+            }
+            return text("li", `${item}`);
+        }));
+
+        items.set([0, 1, 2]);
+        flush();
+        assert children_text(list) == "012";
+    };
+}
+
 test "each restores its order after a row moved within its parent" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
