@@ -146,6 +146,7 @@ jobs:
       - id: eddy
         run: |
           set -euo pipefail
+          mkdir -p scratchpad
           jwt="$(curl -sSf -G -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             --data-urlencode audience=https://api.anthropic.com "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)"
           echo "::add-mask::$jwt"
@@ -159,11 +160,11 @@ jobs:
             }' | curl -sS https://api.anthropic.com/v1/oauth/token -H "content-type: application/json" --data @-)"
           token="$(jq -r '.access_token // empty' <<< "$response")"
           if [ -z "$token" ]; then
-            echo "::error::the token exchange failed: $(jq -c .error <<< "$response")"
+            # The post job reads the reason from the log, as from Eddy's own.
+            echo "eddy: the token exchange failed: $(jq -c .error <<< "$response")" | tee scratchpad/eddy.log
             exit 1
           fi
           echo "::add-mask::$token"
-          mkdir -p scratchpad
           status=0
           env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL CLAUDE_API_KEY="$token" \
             mise run eddy-review --head "$SHA" > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
@@ -224,5 +225,9 @@ jobs:
               fi
             } > "$body"
           fi
-          printf '\n[The run](%s), and its artifact for the patches and the record.\n' "$RUN" >> "$body"
+          if [ -d eddy ]; then
+            printf '\n[The run](%s), and its artifact for the patches and the record.\n' "$RUN" >> "$body"
+          else
+            printf '\n[The run](%s)\n' "$RUN" >> "$body"
+          fi
           gh pr comment "$PR" --repo "$REPO" --body-file "$body"
