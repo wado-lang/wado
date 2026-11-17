@@ -1270,7 +1270,7 @@ test "a build takes a padded past to its attention as a buffer of fixed capacity
     }`;
     let built = build_of(&generate(source).unwrap());
     assert built.contains(
-        "(Q, K, V, PK, PV, Option::Some(&shared::<Bk>(backend, &lengths.dim_P)), null, null, null, null, &Attention {",
+        "(Q, K, V, PK, PV, Option::Some(&shared::<Bk>(backend, &lengths.dim_P)), null, null, null, null, null, &Attention {",
     );
 }
 
@@ -1291,7 +1291,7 @@ test "each row of a batch holds lengths of its own, which compute gives every ro
     let out = generate(ROWS_ATTENTION).unwrap();
     assert out.contains("pub dim_P: Bk::Tensor<i64, [Slots]>,");
     assert build_of(&out).contains(
-        "(Q, K, V, PK, PV, Option::Some(&lengths.dim_P), null, null, null, null, &Attention {",
+        "(Q, K, V, PK, PV, Option::Some(&lengths.dim_P), null, null, null, null, null, &Attention {",
     );
     assert compute_of(&out).contains("dim_P: backend.upload(&Tensor::<i64, [Slots]> { data: [dim_P], extents: [1] })");
 }
