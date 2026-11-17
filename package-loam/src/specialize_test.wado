@@ -172,6 +172,16 @@ test "a cut moves back through a norm and a product's rows" {
     assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) Q=Mul(X/last-2,X/last-2) M=ReduceMean(Q) R=Sqrt(M) D=Div(X/last-2,R) H=Mul(D,G) Y=MatMul(H,W) P=Softmax(X) | Y N,S,W1";
 }
 
+test "a cut moves back through a quantized product's rows, and its weights stay whole" {
+    let mut graph = read(
+        `g (float[N, S, 40] X, float[40] G) => (float[N, S, 3] Y) <uint8[3, 2, 16] B, float[3, 2] W, uint8[3, 1] Z> {
+            H = Mul(X, G)
+            Y = com.microsoft.MatMulNBits<K = 40, N = 3, block_size = 32, bits = 4>(H, B, W, Z)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) H=Mul(X/last-2,G) Y=com.microsoft.MatMulNBits(H,B) | Y N,S,Y2";
+}
+
 test "two outputs cut along one axis share the slices of what both read" {
     let mut graph = read(
         `g (float[N, S, 4] X, float[4] G, float[4, 3] W) => (float[N, S, 3] Y, float[N, S, 4] P) {

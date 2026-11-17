@@ -4,7 +4,7 @@
 
 use { HashMap, HashSet, TreeMap } from "core:collections";
 use { Extent, spelled_poly } from "./extent.wado";
-use { Attr, Dim, Graph, Node, Rank, ValueInfo, is_binary_elementwise, is_float, read_at } from "./graph.wado";
+use { Attr, Dim, Graph, MATMUL_NBITS, Node, Rank, ValueInfo, is_binary_elementwise, is_float, read_at } from "./graph.wado";
 use { Checked, is_reduction, is_unary_elementwise } from "./infer.wado";
 use { Shape } from "./shape.wado";
 
@@ -146,7 +146,8 @@ pub fn keep_outputs(graph: &mut Graph, names: &List<String>) -> Result<(), Optio
 /// token reads only the last position's logits. The cut moves back through the
 /// nodes that compute each position along that axis from the same position of
 /// their operands, so those compute the one position kept: an elementwise
-/// operator, a reduction keeping the axis, and a product along its rows.
+/// operator, a reduction keeping the axis, and a product, quantized or not,
+/// along its rows.
 /// `checked` is what checking the graph as it stands found: each operand's
 /// rank, the axes that broadcast, and the values stage 0 folds.
 pub fn keep_last(graph: &mut Graph, checked: &Checked, output: &String, axis: i32) -> Result<(), OptionConflict> {
@@ -373,6 +374,9 @@ fn positional_reads(node: &Node, checked: &Checked, axis: i32) -> Option<List<bo
     }
     let ranks = |j: i32| shapes.get(node.inputs[j]).unwrap().rank();
     if node.op == "MatMul" && axis == -2 && ranks(0) >= 2 && ranks(1) >= 2 {
+        return Option::Some(first_alone());
+    }
+    if node.op == MATMUL_NBITS && axis == -2 && ranks(0) >= 2 {
         return Option::Some(first_alone());
     }
     return null;
