@@ -90,7 +90,9 @@ example/
 `wado-compiler` owns Wado's syntax; three checks keep this package on it:
 
 - `mise run check-grammar` — the grammar must accept exactly what the
-  compiler's parser accepts, over the stdlib + fixture corpus.
+  compiler's parser accepts, over the stdlib + fixture corpus. It may accept
+  more only where the parser's error is a `ParseErrorKind::Restriction`, a rule
+  no context-free grammar states, such as a nesting limit.
 - `mise run check-highlight` — the two must _colour_ that corpus the same.
   Every class but the identifier kinds is decidable without name resolution
   and fails on disagreement; those are reported as a capability gap instead.

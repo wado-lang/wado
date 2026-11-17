@@ -469,7 +469,7 @@ fn compare_with_gale(corpus: &[String], gale_tsv: &Path, report_path: &Path) {
 /// to — the only view that says which gaps are worth closing.
 ///
 /// A `type` or `typeParameter` sits in a syntactic position the query could
-/// name (`(typeRef (IDENTIFIER) @type)`). A `function` or `parameter` does
+/// name (`(typeAtom (IDENTIFIER) @type)`). A `function` or `parameter` does
 /// not: telling one from a plain variable takes name resolution, which is
 /// exactly what a context-free grammar cannot do. Leaving either uncoloured is
 /// reported, never gated; colouring one as the wrong class is.

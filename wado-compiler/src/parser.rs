@@ -186,8 +186,24 @@ enum EffectHole {
 
 #[derive(Debug)]
 pub struct ParseError {
+    pub kind: ParseErrorKind,
     pub message: String,
     pub span: Span,
+}
+
+/// Which side of the context-free line a parse error falls on. The grammar the
+/// highlighter is generated from must reject every `Syntax` error and may
+/// accept a `Restriction`, which `check-grammar` holds it to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParseErrorKind {
+    /// The tokens break the context-free syntax.
+    Syntax,
+    /// The tokens parse, but break a rule a context-free grammar over the same
+    /// tokens cannot state, or states only by restating the expression or type
+    /// grammar per context: a count or depth limit, what an identifier or a
+    /// string spells, or an expression or type allowed in one context and not
+    /// another.
+    Restriction,
 }
 
 impl ParseError {
@@ -199,6 +215,15 @@ impl ParseError {
             code: Code::InvalidSyntax,
             message: format!("parse error: {}", self.message),
             span: Some(DiagnosticSpan::from_span(&self.span, file)),
+        }
+    }
+
+    /// This error, raised where the rule it breaks is a
+    /// [`ParseErrorKind::Restriction`].
+    fn restricted(self) -> Self {
+        Self {
+            kind: ParseErrorKind::Restriction,
+            ..self
         }
     }
 }
@@ -355,7 +380,7 @@ impl Parser {
     /// Run `parse` one level deeper, refusing past [`MAX_NESTING`] levels.
     fn nested<T>(&mut self, parse: fn(&mut Self) -> ParseResult<T>) -> ParseResult<T> {
         if self.depth == MAX_NESTING {
-            return Err(self.error_at_span(
+            return Err(self.restriction_at_span(
                 self.peek().span,
                 &format!("code may nest at most {MAX_NESTING} levels deep"),
             ));
@@ -909,10 +934,10 @@ impl Parser {
         if self.check(kind) {
             Ok(self.advance())
         } else {
-            Err(ParseError {
-                message: format!("expected {kind}, found {}", self.peek_kind()),
-                span: self.peek().span,
-            })
+            Err(self.error_at_span(
+                self.peek().span,
+                &format!("expected {kind}, found {}", self.peek_kind()),
+            ))
         }
     }
 
@@ -949,17 +974,41 @@ impl Parser {
             return Ok(());
         }
 
-        Err(ParseError {
-            message: format!("expected `>`, found {}", self.peek_kind()),
-            span: self.peek().span,
-        })
+        Err(self.error_at_span(
+            self.peek().span,
+            &format!("expected `>`, found {}", self.peek_kind()),
+        ))
     }
 
-    /// Create an error at a specific span
-    fn error_at_span(&self, span: Span, message: &str) -> ParseError {
+    /// A [`ParseErrorKind::Restriction`] at `span`.
+    fn restriction_at_span(&self, span: Span, message: &str) -> ParseError {
         ParseError {
+            kind: ParseErrorKind::Restriction,
             message: message.to_string(),
             span,
+        }
+    }
+
+    /// A [`ParseErrorKind::Syntax`] at `span`.
+    fn error_at_span(&self, span: Span, message: &str) -> ParseError {
+        ParseError {
+            kind: ParseErrorKind::Syntax,
+            message: message.to_string(),
+            span,
+        }
+    }
+
+    /// Linearity is a property of the handle type, so it has one home: the
+    /// `resource` declaration. Anything else carrying it is rejected.
+    fn reject_resource_linearity(&self, attrs: &[Attribute]) -> ParseResult<()> {
+        // The attribute is any identifier to a grammar.
+        match attrs.iter().find(|a| a.cm_resource_linearity().is_some()) {
+            Some(attr) => Err(self.restriction_at_span(
+                attr.span,
+                "#[cm(..., linearity=...)] declares a resource's linearity; \
+                    it belongs on a `resource` declaration",
+            )),
+            None => Ok(()),
         }
     }
 
@@ -1317,10 +1366,7 @@ impl Parser {
                 (qualifier, case_name, case_span)
             }
             (Some(_), _) => {
-                return Err(ParseError {
-                    message: "invalid qualified case pattern".to_string(),
-                    span: start_span,
-                });
+                return Err(self.error_at_span(start_span, "invalid qualified case pattern"));
             }
         };
 
@@ -1397,26 +1443,23 @@ impl Parser {
         if self.check(&TokenKind::Underscore) {
             return self.wildcard_name_error();
         }
-        ParseError {
-            message: format!("expected {what}, found {}", self.peek_kind()),
-            span: self.peek().span,
-        }
+        self.error_at_span(
+            self.peek().span,
+            &format!("expected {what}, found {}", self.peek_kind()),
+        )
     }
 
     /// `.5` or `5.`: a `.` touching a decimal integer on one side only, which
     /// Wado does not read as a float. `float` is the literal it meant.
-    fn bare_decimal_point_error(float: String, dot: Span) -> ParseError {
-        ParseError {
-            message: format!("a decimal point needs a digit on each side: write `{float}`"),
-            span: dot,
-        }
+    fn bare_decimal_point_error(&self, float: String, dot: Span) -> ParseError {
+        self.error_at_span(
+            dot,
+            &format!("a decimal point needs a digit on each side: write `{float}`"),
+        )
     }
 
     fn wildcard_name_error(&self) -> ParseError {
-        ParseError {
-            message: "`_` is the wildcard, not a name".to_string(),
-            span: self.peek().span,
-        }
+        self.error_at_span(self.peek().span, "`_` is the wildcard, not a name")
     }
 
     /// Consume an identifier or a keyword for use as a field name.
@@ -1500,12 +1543,11 @@ impl Parser {
             (None, Vec::new())
         };
         if has_internal && (has_pub || has_export) {
-            return Err(ParseError {
-                message: "`internal` cannot combine with `pub` or `export` \
-                    (`export` already implies `pub`)"
-                    .to_string(),
-                span: vis_span,
-            });
+            return Err(self.error_at_span(
+                vis_span,
+                "`internal` cannot combine with `pub` or `export` \
+                    (`export` already implies `pub`)",
+            ));
         }
 
         let visibility = if has_pub || has_export {
@@ -1531,24 +1573,23 @@ impl Parser {
                 self.peek_kind(),
                 TokenKind::Struct | TokenKind::Variant | TokenKind::Trait
             ) {
-                return Err(ParseError {
-                    message: "`affine` declares a `struct`, a `variant` or a `trait`".to_string(),
+                return Err(self.error_at_span(
                     span,
-                });
+                    "`affine` declares a `struct`, a `variant` or a `trait`",
+                ));
             }
         }
 
         if !self.check(&TokenKind::Resource) {
-            reject_resource_linearity(&attrs)?;
+            self.reject_resource_linearity(&attrs)?;
         }
 
         if !export_targets.is_empty() && !self.check(&TokenKind::Fn) {
-            return Err(ParseError {
-                message: "`export(…)` names the world export a function provides, \
-                    so a `fn` must follow it"
-                    .to_string(),
-                span: self.peek().span,
-            });
+            return Err(self.error_at_span(
+                self.peek().span,
+                "`export(…)` names the world export a function provides, \
+                    so a `fn` must follow it",
+            ));
         }
 
         // Check for contextual keyword "test" (identifier followed by string or block)
@@ -1601,10 +1642,10 @@ impl Parser {
                 .map(Item::Resource),
             TokenKind::World => self.parse_world_decl(visibility, attrs).map(Item::World),
             TokenKind::Global => self.parse_global_decl(visibility, attrs).map(Item::Global),
-            _ => Err(ParseError {
-                message: format!("expected item, found {}", self.peek_kind()),
-                span: self.peek().span,
-            }),
+            _ => Err(self.error_at_span(
+                self.peek().span,
+                &format!("expected item, found {}", self.peek_kind()),
+            )),
         };
         self.enclosing_packs = outer_packs;
         self.body_packs = outer_body_packs;
@@ -1746,8 +1787,10 @@ impl Parser {
         let TokenKind::StringLit { raw, quote } = token.kind else {
             unreachable!("the caller matched a string literal")
         };
+        // An expression's string is decoded later, so only where a string is
+        // decoded here does a bad escape stop the parse.
         let value = string_value(&raw, quote)
-            .map_err(|message| self.error_at_span(token.span, &message))?;
+            .map_err(|message| self.restriction_at_span(token.span, &message))?;
         Ok(StrLit { value, raw, quote })
     }
 
@@ -1776,12 +1819,14 @@ impl Parser {
             return Ok(());
         }
         let written = quoted.map_or_else(|| name.to_string(), StrLit::as_written);
-        Err(self.error_at_span(
-            span,
-            &format!(
-                "a shorthand field must name a variable, and `{name}` cannot; write `{written}: {rest}`"
-            ),
-        ))
+        let message = format!(
+            "a shorthand field must name a variable, and `{name}` cannot; write `{written}: {rest}`"
+        );
+        // A keyword is a token of its own, but what a quoted name spells is not.
+        Err(match quoted {
+            Some(_) => self.restriction_at_span(span, &message),
+            None => self.error_at_span(span, &message),
+        })
     }
 
     /// Parse a comma-separated list of attribute arguments up to the closing
@@ -1923,17 +1968,15 @@ impl Parser {
 
         // Recorded, not returned: the attribute still parses, so the item does
         // not cascade into recovery errors.
+        // Both rules hang on the attribute's name, which a grammar reads as
+        // any identifier.
         if name == "serde" {
-            self.errors.push(ParseError {
-                message: serde_attr_advice(&args),
-                span: start_span,
-            });
+            self.errors
+                .push(self.restriction_at_span(start_span, &serde_attr_advice(&args)));
         }
 
-        let cm_boundary = parse_cm_boundary(&name, &args).map_err(|message| ParseError {
-            message,
-            span: start_span,
-        })?;
+        let cm_boundary = parse_cm_boundary(&name, &args)
+            .map_err(|message| self.restriction_at_span(start_span, &message))?;
 
         Ok(Attribute {
             name,
@@ -2029,10 +2072,10 @@ impl Parser {
         let items = if self.check(&TokenKind::Underscore) {
             let span = self.advance().span;
             if visibility.reaches_beyond_file() {
-                self.errors.push(ParseError {
-                    message: format!("a wildcard import cannot be re-exported; drop `{modifier}`"),
+                self.errors.push(self.error_at_span(
                     span,
-                });
+                    &format!("a wildcard import cannot be re-exported; drop `{modifier}`"),
+                ));
             }
             vec![UseItem::Wildcard]
         }
@@ -2043,13 +2086,13 @@ impl Parser {
             let name_span = self.peek().span;
             let name = self.consume_ident()?;
             if visibility.reaches_beyond_file() {
-                self.errors.push(ParseError {
-                    message: format!(
+                self.errors.push(self.error_at_span(
+                    name_span,
+                    &format!(
                         "a namespace cannot be re-exported: `{name}`; drop `{modifier}`, or \
                          re-export its members by name with `{modifier} use {{ ... }} from`"
                     ),
-                    span: name_span,
-                });
+                ));
             }
             vec![UseItem::Namespace { name, name_span }]
         } else {
@@ -2134,21 +2177,21 @@ impl Parser {
         let interface =
             CmImport::parse(&name).filter(|cm| cm.function.is_none() && !cm.interface.is_empty());
         let Some(interface) = interface else {
-            return Err(ParseError {
-                message: format!(
+            return Err(self.restriction_at_span(
+                name_span,
+                &format!(
                     "a string-named import names an interface, as `\"ns:pkg/iface\"`; found `\"{name}\"`"
                 ),
-                span: name_span,
-            });
+            ));
         };
         let (alias, local_span) = self.parse_use_alias(name_span)?;
         let Some(alias) = alias else {
-            return Err(ParseError {
-                message: format!(
+            return Err(self.error_at_span(
+                name_span,
+                &format!(
                     "a string-named import takes `as`, as `\"{name}\" as Name`, since a string binds no name"
                 ),
-                span: name_span,
-            });
+            ));
         };
         Ok(UseItem::Simple {
             id: self.alloc_ast_id(),
@@ -2292,44 +2335,32 @@ impl Parser {
         match self.peek_kind().clone() {
             TokenKind::StringLit { .. } => {
                 if negate {
-                    return Err(ParseError {
-                        message: "cannot negate a string literal".to_string(),
-                        span,
-                    });
+                    return Err(self.error_at_span(span, "cannot negate a string literal"));
                 }
                 let s = self.consume_string()?;
                 Ok(AttrValue::String(s))
             }
             TokenKind::NumberLit(repr) => {
                 self.advance();
-                parse_attr_number(&repr, negate, span)
+                parse_attr_number(&repr, negate).map_err(|message| self.error_at_span(span, &message))
             }
             TokenKind::True => {
                 if negate {
-                    return Err(ParseError {
-                        message: "cannot negate a boolean".to_string(),
-                        span,
-                    });
+                    return Err(self.error_at_span(span, "cannot negate a boolean"));
                 }
                 self.advance();
                 Ok(AttrValue::Bool(true))
             }
             TokenKind::False => {
                 if negate {
-                    return Err(ParseError {
-                        message: "cannot negate a boolean".to_string(),
-                        span,
-                    });
+                    return Err(self.error_at_span(span, "cannot negate a boolean"));
                 }
                 self.advance();
                 Ok(AttrValue::Bool(false))
             }
             TokenKind::LBracket => {
                 if negate {
-                    return Err(ParseError {
-                        message: "cannot negate an array".to_string(),
-                        span,
-                    });
+                    return Err(self.error_at_span(span, "cannot negate an array"));
                 }
                 self.advance();
                 let items =
@@ -2339,29 +2370,23 @@ impl Parser {
             }
             TokenKind::LBrace => {
                 if negate {
-                    return Err(ParseError {
-                        message: "cannot negate an object".to_string(),
-                        span,
-                    });
+                    return Err(self.error_at_span(span, "cannot negate an object"));
                 }
                 Ok(AttrValue::Object(self.parse_attr_object()?))
             }
-            other => Err(ParseError {
-                message: format!(
+            other => Err(self.error_at_span(
+                span,
+                &format!(
                     "expected attribute value (string, number, bool, array, or object), found {other}"
                 ),
-                span,
-            }),
+            )),
         }
     }
 
     fn consume_string(&mut self) -> ParseResult<StrLit> {
         match self.peek_kind() {
             TokenKind::StringLit { .. } => self.take_string(),
-            _ => Err(ParseError {
-                message: "expected string literal".to_string(),
-                span: self.peek().span,
-            }),
+            _ => Err(self.error_at_span(self.peek().span, "expected string literal")),
         }
     }
 
@@ -2402,7 +2427,7 @@ impl Parser {
         attrs: Vec<Attribute>,
         is_method: bool,
     ) -> ParseResult<(Function, Vec<Stmt>)> {
-        reject_resource_linearity(&attrs)?;
+        self.reject_resource_linearity(&attrs)?;
         let start_span = self.peek().span;
         self.expect(&TokenKind::Fn)?;
 
@@ -2423,10 +2448,10 @@ impl Parser {
         // spelling `self` is rejected here rather than silently accepted as a
         // value receiver on no receiver type.
         if !is_method && let Some(recv) = params.iter().find(|p| p.self_kind != SelfKind::None) {
-            return Err(ParseError {
-                message: "`self` is only allowed as the receiver of a method".to_string(),
-                span: recv.span,
-            });
+            return Err(self.error_at_span(
+                recv.span,
+                "`self` is only allowed as the receiver of a method",
+            ));
         }
 
         let return_type = self.parse_optional_return_type()?;
@@ -2657,7 +2682,7 @@ impl Parser {
                 "`{jump}` cannot leave {}: it runs apart from the code around it",
                 position.noun()
             );
-            self.errors.push(self.error_at_span(span, &message));
+            self.errors.push(self.restriction_at_span(span, &message));
         }
     }
 
@@ -2702,18 +2727,25 @@ impl Parser {
 
     fn parse_param_list(&mut self) -> ParseResult<Vec<Param>> {
         let params = self.parse_comma_separated(&TokenKind::RParen, Self::parse_param)?;
+        if let Some(recv) = params
+            .iter()
+            .skip(1)
+            .find(|p| p.self_kind != SelfKind::None)
+        {
+            return Err(self.error_at_span(recv.span, "`self` must be a method's first parameter"));
+        }
         let mut seen_default = false;
         for p in &params {
             if p.default.is_some() {
                 seen_default = true;
-            } else if seen_default && !matches!(p.self_kind, SelfKind::Ref | SelfKind::MutRef) {
-                return Err(ParseError {
-                    message: format!(
+            } else if seen_default {
+                return Err(self.error_at_span(
+                    p.span,
+                    &format!(
                         "parameter '{}' has no default — parameters without defaults cannot follow parameters with defaults",
                         p.name
                     ),
-                    span: p.span,
-                });
+                ));
             }
         }
         Ok(params)
@@ -2769,10 +2801,10 @@ impl Parser {
                 });
             }
 
-            return Err(ParseError {
-                message: "expected 'self' after '&' in method parameter".to_string(),
-                span: self.peek().span,
-            });
+            return Err(self.error_at_span(
+                self.peek().span,
+                "expected 'self' after '&' in method parameter",
+            ));
         }
 
         // Bare `self` is a by-value receiver that transfers ownership. It is
@@ -2784,12 +2816,10 @@ impl Parser {
             && name == "self"
         {
             if matches!(self.peek_nth(1).kind, TokenKind::Colon) {
-                return Err(ParseError {
-                    message:
-                        "`self` cannot have a type annotation; write `self`, `&self`, or `&mut self`"
-                            .to_string(),
-                    span: self.peek().span,
-                });
+                return Err(self.error_at_span(
+                    self.peek().span,
+                    "`self` cannot have a type annotation; write `self`, `&self`, or `&mut self`",
+                ));
             }
             let self_span = self.peek().span;
             self.advance();
@@ -3278,13 +3308,10 @@ impl Parser {
         } else {
             // No initializer: type annotation is required
             if ty.is_none() {
-                let span = self.peek().span;
-                return Err(ParseError {
-                    message:
-                        "type annotation required for variable declaration without initializer"
-                            .to_string(),
-                    span,
-                });
+                return Err(self.error_at_span(
+                    self.peek().span,
+                    "type annotation required for variable declaration without initializer",
+                ));
             }
             // Use current position (before the semicolon) as end span
             (None, self.peek().span)
@@ -3292,11 +3319,9 @@ impl Parser {
 
         let (else_block, end_span) = if allow_else && self.check(&TokenKind::Else) {
             if value.is_none() {
-                let span = self.peek().span;
-                return Err(ParseError {
-                    message: "`let ... else` requires an initializer".to_string(),
-                    span,
-                });
+                return Err(
+                    self.error_at_span(self.peek().span, "`let ... else` requires an initializer")
+                );
             }
             self.advance();
             let block = self.parse_block()?;
@@ -3939,19 +3964,19 @@ impl Parser {
                 self.advance();
                 Ok(Pattern::Literal(Literal::Number(format!("-{repr}"))))
             } else {
-                Err(ParseError {
-                    message: format!(
+                Err(self.error_at_span(
+                    self.peek().span,
+                    &format!(
                         "expected numeric literal after `-`, found {}",
                         self.peek_kind()
                     ),
-                    span: self.peek().span,
-                })
+                ))
             }
         } else {
-            Err(ParseError {
-                message: format!("expected pattern, found {}", self.peek_kind()),
-                span: self.peek().span,
-            })
+            Err(self.error_at_span(
+                self.peek().span,
+                &format!("expected pattern, found {}", self.peek_kind()),
+            ))
         }
     }
 
@@ -4056,14 +4081,14 @@ impl Parser {
             return AssignTarget::Place(target);
         };
         if tuple.elements.is_empty() {
-            self.errors.push(self.error_at_span(
+            self.errors.push(self.restriction_at_span(
                 tuple.span,
                 "a destructuring assignment names at least one target",
             ));
         }
         for place in &tuple.elements {
             if let Expr::Spread(_, span) = place {
-                self.errors.push(self.error_at_span(
+                self.errors.push(self.restriction_at_span(
                     *span,
                     "a destructuring assignment takes no rest; name each target",
                 ));
@@ -4550,12 +4575,10 @@ impl Parser {
                         if let Expr::Ident(ident) = &expr
                             && !ident.type_args.is_empty()
                         {
-                            return Err(ParseError {
-                                message:
-                                    "turbofish type arguments already specified on this identifier"
-                                        .to_string(),
-                                span: callee_span,
-                            });
+                            return Err(self.error_at_span(
+                                callee_span,
+                                "turbofish type arguments already specified on this identifier",
+                            ));
                         }
                         let type_args = self.parse_call_type_args()?;
                         if self.check(&TokenKind::LParen) {
@@ -4592,10 +4615,10 @@ impl Parser {
                         } else {
                             // Turbofish on a non-identifier expression with no call
                             // following — there is no expression form for this yet.
-                            return Err(ParseError {
-                                message: "expected '(' after turbofish type arguments".to_string(),
-                                span: self.peek().span,
-                            });
+                            return Err(self.error_at_span(
+                                self.peek().span,
+                                "expected '(' after turbofish type arguments",
+                            ));
                         }
                     } else {
                         // Not turbofish, backtrack
@@ -4627,13 +4650,10 @@ impl Parser {
                                 (first, Some(second))
                             } else {
                                 // Not a valid tuple field sequence
-                                return Err(ParseError {
-                                    message: format!(
-                                        "expected field name, found {}",
-                                        self.peek_kind()
-                                    ),
-                                    span: field_span,
-                                });
+                                return Err(self.error_at_span(
+                                    field_span,
+                                    &format!("expected field name, found {}", self.peek_kind()),
+                                ));
                             }
                         } else {
                             // Simple integer literal for tuple field access
@@ -4650,7 +4670,7 @@ impl Parser {
                             }) if is_decimal_integer(digits)
                                 && receiver_span.end == self.previous().span.start =>
                             {
-                                Self::bare_decimal_point_error(
+                                self.bare_decimal_point_error(
                                     format!("{digits}.0"),
                                     self.previous().span,
                                 )
@@ -4683,10 +4703,9 @@ impl Parser {
                             }));
                         } else {
                             // :: not followed by <, this is an error
-                            return Err(ParseError {
-                                message: "expected '<' after '::'".to_string(),
-                                span: self.peek().span,
-                            });
+                            return Err(
+                                self.error_at_span(self.peek().span, "expected '<' after '::'")
+                            );
                         }
                     } else if self.check(&TokenKind::LParen) {
                         self.advance();
@@ -4904,12 +4923,12 @@ impl Parser {
                 Some((namespace, _)) => format!("{namespace}::{}", head.name),
                 None => head.name.clone(),
             };
-            return Err(ParseError {
-                message: format!(
+            return Err(self.error_at_span(
+                head.span.merge(&method_span),
+                &format!(
                     "type arguments on both `{owner}` and `{method}` need a static method call; a case takes them on one"
                 ),
-                span: head.span.merge(&method_span),
-            });
+            ));
         }
         if !self.check(&TokenKind::LParen)
             && let Some((_, span)) = &self_type
@@ -5159,27 +5178,22 @@ impl Parser {
             TokenKind::Match => self.parse_match_expr(),
             TokenKind::With => self.parse_with_handler_expr(),
             TokenKind::Hash => self.parse_compile_time_literal_expr(start_span),
-            TokenKind::Matches => Err(ParseError {
-                message:
-                    "'matches' is an infix operator — write 'expr matches { pattern }' instead"
-                        .to_owned(),
-                span: start_span,
-            }),
+            TokenKind::Matches => Err(self.error_at_span(
+                start_span,
+                "'matches' is an infix operator — write 'expr matches { pattern }' instead",
+            )),
             TokenKind::Underscore => Err(self.wildcard_name_error()),
             TokenKind::Dot
                 if let TokenKind::NumberLit(digits) = &self.peek_nth(1).kind
                     && is_decimal_integer(digits)
                     && self.peek_nth(1).span.start == start_span.end =>
             {
-                Err(Self::bare_decimal_point_error(
-                    format!("0.{digits}"),
-                    start_span,
-                ))
+                Err(self.bare_decimal_point_error(format!("0.{digits}"), start_span))
             }
-            _ => Err(ParseError {
-                message: format!("expected expression, found {}", self.peek_kind()),
-                span: start_span,
-            }),
+            _ => Err(self.error_at_span(
+                start_span,
+                &format!("expected expression, found {}", self.peek_kind()),
+            )),
         }
     }
 
@@ -5270,10 +5284,10 @@ impl Parser {
             return self.parse_struct_literal(None, start_span);
         }
 
-        Err(ParseError {
-            message: "implicit struct literal requires field syntax: { field: value }".into(),
-            span: start_span,
-        })
+        Err(self.error_at_span(
+            start_span,
+            "implicit struct literal requires field syntax: { field: value }",
+        ))
     }
 
     /// Parse a `#name` compile-time literal: `#file`, `#line`, `#function`,
@@ -5282,28 +5296,34 @@ impl Parser {
     fn parse_compile_time_literal_expr(&mut self, start_span: Span) -> ParseResult<Expr> {
         self.advance(); // consume `#`
         let TokenKind::Ident(raw_name) = self.peek_kind() else {
-            return Err(ParseError {
-                message: "expected identifier after `#` for compile-time literal".into(),
-                span: start_span,
-            });
+            return Err(self.error_at_span(
+                start_span,
+                "expected identifier after `#` for compile-time literal",
+            ));
         };
         let name = raw_name.clone();
         let name_span = self.advance().span;
 
+        // What a literal takes hangs on how its name is spelled, which a
+        // grammar reading the name as any identifier cannot see.
         if name == "include_str" || name == "include_bytes" {
             let is_str = name == "include_str";
-            self.expect(&TokenKind::LParen)?;
+            self.expect(&TokenKind::LParen)
+                .map_err(ParseError::restricted)?;
             let path_span = self.peek().span;
             let path = match self.peek_kind() {
                 TokenKind::StringLit { .. } => self.take_string()?,
                 _ => {
-                    return Err(ParseError {
-                        message: format!("expected string literal path argument for `#{name}`"),
-                        span: self.peek().span,
-                    });
+                    return Err(self.restriction_at_span(
+                        self.peek().span,
+                        &format!("expected string literal path argument for `#{name}`"),
+                    ));
                 }
             };
-            let close_span = self.expect(&TokenKind::RParen)?.span;
+            let close_span = self
+                .expect(&TokenKind::RParen)
+                .map_err(ParseError::restricted)?
+                .span;
             self.include_paths
                 .entry(path.value.clone())
                 .or_insert(path_span);
@@ -5325,12 +5345,12 @@ impl Parser {
             "function" => Literal::LocationFunction,
             "data" => Literal::DataSection,
             _ => {
-                return Err(ParseError {
-                    message: format!(
+                return Err(self.restriction_at_span(
+                    start_span.merge(&name_span),
+                    &format!(
                         "unknown compile-time literal `#{name}`, expected `#file`, `#line`, `#function`, `#data`, `#include_str`, or `#include_bytes`"
                     ),
-                    span: start_span.merge(&name_span),
-                });
+                ));
             }
         };
         Ok(Expr::Literal(LiteralExpr {
@@ -5496,13 +5516,13 @@ impl Parser {
             self.parse_expr()
         };
         match result {
-            Err(err) if err.span.start == value_start.start => Err(ParseError {
-                message: format!(
+            Err(err) if err.span.start == value_start.start => Err(self.error_at_span(
+                start_span,
+                &format!(
                     "`resume` takes a value; {}",
                     statement_keyword_name_message("resume")
                 ),
-                span: start_span,
-            }),
+            )),
             Err(err) if !recovering => Err(err),
             result => Ok(self.recover_expr(before, result)),
         }
@@ -5837,10 +5857,8 @@ impl Parser {
             if let Some(packs) = &self.body_packs
                 && !packs.contains(&name)
             {
-                self.errors.push(ParseError {
-                    message: repeat_outside_signature(&name),
-                    span,
-                });
+                self.errors
+                    .push(self.restriction_at_span(span, &repeat_outside_signature(&name)));
                 return Ok(Type::Error(span));
             }
             let id = self.alloc_ast_id();
@@ -6155,7 +6173,7 @@ impl Parser {
     /// element by its parameter's index (`TypeTable::pack_walk_slot`).
     fn bound_generic_params(&self, params: &[GenericParam], span: Span) -> ParseResult<()> {
         if params.len() > MAX_GENERIC_PARAMS {
-            return Err(self.error_at_span(
+            return Err(self.restriction_at_span(
                 span,
                 &format!("a declaration takes at most {MAX_GENERIC_PARAMS} type parameters"),
             ));
@@ -6331,7 +6349,7 @@ impl Parser {
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let doc = self.doc_comment_here();
             let attrs = self.parse_attributes()?;
-            reject_resource_linearity(&attrs)?;
+            self.reject_resource_linearity(&attrs)?;
             let id = self.alloc_ast_id();
             let start_span = self.peek().span;
             let visibility = if self.check(&TokenKind::Pub) {
@@ -6424,7 +6442,7 @@ impl Parser {
     fn parse_enum_case(&mut self) -> ParseResult<EnumCase> {
         let doc = self.doc_comment_here();
         let attrs = self.parse_attributes()?;
-        reject_resource_linearity(&attrs)?;
+        self.reject_resource_linearity(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -6464,7 +6482,7 @@ impl Parser {
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let flag_doc = self.doc_comment_here();
             let flag_attrs = self.parse_attributes()?;
-            reject_resource_linearity(&flag_attrs)?;
+            self.reject_resource_linearity(&flag_attrs)?;
             let flag_id = self.alloc_ast_id();
             let flag_span = self.peek().span;
             let (flag_name, flag_name_span) = self.consume_ident_with_span()?;
@@ -6549,7 +6567,7 @@ impl Parser {
     fn parse_variant_case(&mut self) -> ParseResult<VariantCase> {
         let doc = self.doc_comment_here();
         let attrs = self.parse_attributes()?;
-        reject_resource_linearity(&attrs)?;
+        self.reject_resource_linearity(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -6568,10 +6586,10 @@ impl Parser {
             let payload_type = self.parse_type()?;
             // Reject implicit tuple expansion: `Name(T, U)` is now invalid
             if self.check(&TokenKind::Comma) {
-                return Err(ParseError {
-                    message: "variant case payload must be a single type; use explicit tuple syntax like `Name([T, U])` for multiple values".to_string(),
-                    span: self.peek().span,
-                });
+                return Err(self.error_at_span(
+                    self.peek().span,
+                    "variant case payload must be a single type; use explicit tuple syntax like `Name([T, U])` for multiple values",
+                ));
             }
             last_end = self.expect(&TokenKind::RParen)?.span;
             Some(payload_type)
@@ -7218,13 +7236,13 @@ impl Parser {
                     exports.push(self.parse_world_export()?);
                 }
                 _ => {
-                    return Err(ParseError {
-                        message: format!(
+                    return Err(self.error_at_span(
+                        self.peek().span,
+                        &format!(
                             "expected `import` or `export` in world declaration, found {}",
                             self.peek_kind()
                         ),
-                        span: self.peek().span,
-                    });
+                    ));
                 }
             }
         }
@@ -7387,10 +7405,12 @@ impl Parser {
             return Ok(());
         };
         let at = origin.advance(&spec[..error.offset]);
-        Err(ParseError {
-            message: format!("{error} in template string"),
-            span: span_of(at, spec[error.offset..].chars().next(), self.ast_id_space),
-        })
+        // A specifier is read by character, out of tokens a grammar reads as
+        // whole identifiers and numbers.
+        Err(self.restriction_at_span(
+            span_of(at, spec[error.offset..].chars().next(), self.ast_id_space),
+            &format!("{error} in template string"),
+        ))
     }
 
     /// Parse an interpolation expression string.
@@ -7410,10 +7430,10 @@ impl Parser {
         origin: Position,
     ) -> ParseResult<Expr> {
         if expr_str.is_empty() {
-            return Err(ParseError {
-                message: "empty interpolation expression in template string".to_string(),
-                span: span_of_open_brace(open, self.ast_id_space),
-            });
+            return Err(self.error_at_span(
+                span_of_open_brace(open, self.ast_id_space),
+                "empty interpolation expression in template string",
+            ));
         }
 
         let lex_result = lex_interpolation(expr_str, origin, self.ast_id_space);
@@ -7421,10 +7441,10 @@ impl Parser {
         // parser's diagnostics, at the offending byte rather than the whole
         // `{…}`.
         for e in &lex_result.errors {
-            self.errors.push(ParseError {
-                message: format!("error parsing template interpolation: {e}"),
-                span: e.span,
-            });
+            self.errors.push(self.error_at_span(
+                e.span,
+                &format!("error parsing template interpolation: {e}"),
+            ));
         }
 
         // Continue the parent's `AstIdSpace` and dense local counter so
@@ -7665,20 +7685,6 @@ fn pack_names(params: &[GenericParam]) -> Vec<String> {
         .collect()
 }
 
-/// Linearity is a property of the handle type, so it has one home: the
-/// `resource` declaration. Anything else carrying it is rejected.
-fn reject_resource_linearity(attrs: &[Attribute]) -> ParseResult<()> {
-    match attrs.iter().find(|a| a.cm_resource_linearity().is_some()) {
-        Some(attr) => Err(ParseError {
-            message: "#[cm(..., linearity=...)] declares a resource's linearity; \
-                it belongs on a `resource` declaration"
-                .to_string(),
-            span: attr.span,
-        }),
-        None => Ok(()),
-    }
-}
-
 /// Populate `Attribute::cm_boundary` from the attribute name:
 /// `#[canonical("namespace", "name")]` gives `Canonical`,
 /// `#[cm("ns:pkg/iface[@v][#fn]")]` gives `Import`, and a `#[cm(…)]` that does
@@ -7783,14 +7789,13 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
     Ok(None)
 }
 
-fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<AttrValue> {
+fn parse_attr_number(repr: &str, negate: bool) -> Result<AttrValue, String> {
     // Strip numeric underscores for parsing; keep them in the original repr for errors.
     let cleaned: String = repr.chars().filter(|c| *c != '_').collect();
     if defaults_to_float(repr) {
-        let f: f64 = cleaned.parse().map_err(|_| ParseError {
-            message: format!("invalid numeric attribute value: {repr}"),
-            span,
-        })?;
+        let f: f64 = cleaned
+            .parse()
+            .map_err(|_| format!("invalid numeric attribute value: {repr}"))?;
         let v = if negate { -f } else { f };
         Ok(AttrValue::Float(v))
     } else {
@@ -7812,10 +7817,7 @@ fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<AttrVa
         } else {
             cleaned.parse()
         }
-        .map_err(|_| ParseError {
-            message: format!("invalid integer attribute value: {repr}"),
-            span,
-        })?;
+        .map_err(|_| format!("invalid integer attribute value: {repr}"))?;
         let v = if negate { -n } else { n };
         Ok(AttrValue::Int(v))
     }
