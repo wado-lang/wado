@@ -225,7 +225,7 @@ pub struct DocResource {
     pub name: String,
     pub signature: String,
     /// The operations the resource declares; its `impl` blocks are `impls`.
-    pub methods: Vec<DocFunction>,
+    pub operations: Vec<DocFunction>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
     #[serde(flatten)]
@@ -641,7 +641,7 @@ fn build_doc_resource(r: &ResourceDecl, impls: &[DocImpl], include_private: bool
     DocResource {
         name: r.name.clone(),
         signature: sig,
-        methods: r.methods.iter().map(build_doc_operation).collect(),
+        operations: r.methods.iter().map(build_doc_operation).collect(),
         doc: r.doc.clone(),
         impls: collect_impl_members(&r.name, impls, include_private),
     }

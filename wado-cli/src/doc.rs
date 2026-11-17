@@ -363,7 +363,7 @@ fn items<'a>(module: &'a str, doc: &'a DocModule) -> Vec<Item<'a>> {
     }
     for r in &doc.resources {
         out.add(None, &r.name, &r.signature, &r.doc);
-        out.add_members(&r.name, r.methods.iter().chain(r.impls.functions()));
+        out.add_members(&r.name, r.operations.iter().chain(r.impls.functions()));
     }
     for t in &doc.types {
         out.add(None, &t.name, &t.signature, &t.doc);
@@ -796,6 +796,19 @@ mod format_contract_tests {
         }
         let simple = simple_all_of(source);
         assert!(simple.contains("impl Named for Conn {"), "{simple}");
+    }
+
+    /// A resource's operations and its `impl` methods are two keys of its JSON
+    /// object: one key holding both would leave a parser one of them.
+    #[test]
+    fn a_resource_json_keeps_operations_and_methods_apart() {
+        let source = "pub resource Conn {\n    fn close(&self);\n}\n\n\
+                      impl Conn {\n    pub fn open() -> i32 { return 0; }\n}\n";
+        let json = serde_json::to_string(&page(source, &[], false)).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let conn = &value["resources"][0];
+        assert_eq!(conn["operations"][0]["name"], "close", "{json}");
+        assert_eq!(conn["methods"][0]["name"], "open", "{json}");
     }
 
     /// An associated type is listed as declared: its own parameters and its
@@ -1394,7 +1407,7 @@ fn render_md_resource(out: &mut String, r: &DocResource, h3: &str, h4: &str) {
         out.push('\n');
         render_md_doc(out, d);
     }
-    for m in &r.methods {
+    for m in &r.operations {
         render_md_function(out, m, h4);
     }
     render_md_impl_members(out, &r.impls, h4);
@@ -1765,11 +1778,11 @@ fn render_simple_resources_section(out: &mut String, doc: &DocModule, h2: &str) 
     writeln!(out, "\n{h2} Resources").unwrap();
     for r in &doc.resources {
         out.push_str("\n```wado\n");
-        if r.methods.is_empty() {
+        if r.operations.is_empty() {
             writeln!(out, "{};", r.signature).unwrap();
         } else {
             writeln!(out, "{} {{", r.signature).unwrap();
-            for m in &r.methods {
+            for m in &r.operations {
                 write_simple_decl(out, m, "    ");
             }
             out.push_str("}\n");
