@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794930641095,
+  "lastUpdate": 1794944862275,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78993,6 +78993,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d93b8274eee5145091444a4a8ce52d160d51ca5c"
         },
         "date": 1794930640055,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9780dba289ab70ba0259084201a89091f043a406",
+          "message": "Merge pull request #2669 from wado-lang/ccr-627ffee4-jbspgb\n\nchore(traits): pin that derived traits meet a blanket's bound",
+          "timestamp": "2026-11-18T04:33:29+09:00",
+          "tree_id": "d50d2e907bc0e09995695f167ee723a3ecfc7ad7",
+          "url": "https://github.com/wado-lang/wado/commit/9780dba289ab70ba0259084201a89091f043a406"
+        },
+        "date": 1794944861538,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
