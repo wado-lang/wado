@@ -266,7 +266,12 @@ async fn publish_workspace(
                 .as_ref()
                 .is_some_and(|pkg| skip_reason(pkg).is_none())
         })
-        .filter_map(|(_, project)| project.root.canonicalize().ok())
+        .map(|(_, project)| {
+            project
+                .root
+                .canonicalize()
+                .expect("a loaded member's root must exist")
+        })
         .collect();
 
     let mut ready: Vec<(String, &ProjectManifest)> = Vec::new();
