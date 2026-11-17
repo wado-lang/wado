@@ -770,7 +770,7 @@ Properties:
 Workspace metadata inheritance and root-only publishing together guarantee that a workspace's packages cannot drift to mismatched public versions, enforced in two places:
 
 - Repository: `version`, `repository`, and `namespace` are declared once in `[workspace.package]` and cannot be overridden, so there is one definition site and drift is impossible by construction, not merely linted.
-- Registry: `wado publish` runs only from the workspace root and publishes every member together at that shared version (see [Publishing](#publishing)), so members can't be pushed piecemeal at different versions.
+- Registry: `wado publish` runs only from the workspace root and publishes every member not marked `publish = false` together at that shared version (see [Publishing](#publishing)), so members can't be pushed piecemeal at different versions.
 
 Membership is the boundary: a package is either inside the workspace (bound) or a standalone project (free). There is deliberately no per-field opt-out to diverge while staying in — and none is planned.
 
