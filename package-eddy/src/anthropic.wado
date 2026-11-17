@@ -12,9 +12,8 @@ use { Serialize, Deserialize } from "core:serde";
 use { Value, to_value, from_value } from "core:value";
 
 /// What a request authenticates with: an API key, or the file a federated
-/// token is kept in. Such a token outlives the identity token it was exchanged
-/// for by little, so whoever minted it writes the next one to the file, and
-/// each request reads the file again.
+/// token is kept in. Such a token expires within a review, so whoever minted
+/// it writes the next one to the file, and each request reads the file again.
 pub variant Credential {
     Key(String),
     /// A path whose directory is a preopen of its own, not under the first:
@@ -24,11 +23,13 @@ pub variant Credential {
 
 impl Credential {
     /// `CLAUDE_API_KEY_FILE`, or else `CLAUDE_API_KEY`.
-    pub fn from_env() -> Option<Credential> with Environment {
+    pub fn from_env() -> Result<Credential, String> with Environment {
         if let Some(path) = env("CLAUDE_API_KEY_FILE") {
-            return Some(File(path));
+            return Ok(File(path));
         }
-        return env("CLAUDE_API_KEY").map(|key| Credential::Key(key));
+        return env("CLAUDE_API_KEY").map(|key| Credential::Key(key)).ok_or(
+            "neither CLAUDE_API_KEY_FILE nor CLAUDE_API_KEY is set",
+        );
     }
 
     fn current(&self) -> Result<String, String> with Preopens {
@@ -41,7 +42,10 @@ impl Credential {
 
 /// The text of the file at `path`, read in the preopen named by its directory.
 fn read_preopened(path: &String) -> Result<String, String> with Preopens {
-    let [Some(dir), Some(name)] = [fs::parent(path), fs::file_name(path)] else {
+    let [Some(dir), Some(name)] = [
+        fs::parent(path),
+        fs::file_name(path),
+    ] else {
         return Err(`${*path} names no file in a directory`);
     };
     for let [preopen, preopen_name] of Preopens::get_directories() {

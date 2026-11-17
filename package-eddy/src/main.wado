@@ -104,8 +104,9 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Clie
     if options.max_turns < 1 {
         fail(`--max-turns must be at least 1\n${USAGE}`);
     }
-    let Some(credential) = Credential::from_env() else {
-        fail("neither CLAUDE_API_KEY_FILE nor CLAUDE_API_KEY is set");
+    let credential = match Credential::from_env() {
+        Ok(credential) => credential,
+        Err(e) => fail(e),
     };
     let Some(head) = try_git(["rev-parse", "--verify", `${options.head}^{commit}`]) else {
         fail(

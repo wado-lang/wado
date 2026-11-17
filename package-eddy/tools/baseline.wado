@@ -100,9 +100,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client, MonotonicC
     assert !SYMBOLS || TOOLS, "the symbol tools read the tree that tools=true checks out";
     assert !RUN || TOOLS, "Run builds the tree that tools=true checks out";
     assert arguments.len() == 4, "usage: baseline.wado <szz.json> <checked.json> <judged.json> <out.json>";
-    let Some(credential) = Credential::from_env() else {
-        panic("neither CLAUDE_API_KEY_FILE nor CLAUDE_API_KEY is set");
-    };
+    let credential = Credential::from_env().unwrap();
     let census = from_string::<Census, String>(fs::read_to_string(&arguments[0]).unwrap()).unwrap();
     let checked = from_string::<Checked, String>(fs::read_to_string(&arguments[1]).unwrap()).unwrap();
     let judged = from_string::<Judged, String>(fs::read_to_string(&arguments[2]).unwrap()).unwrap();

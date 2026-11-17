@@ -60,9 +60,7 @@ ${culprit_diff}
 export fn run() with (Stderr, Environment, Preopens, Process, Client) {
     let arguments = args();
     assert arguments.len() == 3, "usage: judge.wado <szz.json> <min-share> <out.json>";
-    let Some(credential) = Credential::from_env() else {
-        panic("neither CLAUDE_API_KEY_FILE nor CLAUDE_API_KEY is set");
-    };
+    let credential = Credential::from_env().unwrap();
     let census = from_string::<Census, String>(fs::read_to_string(&arguments[0]).unwrap()).unwrap();
     let min_share = f64::from_str(&arguments[1]).unwrap();
     let out_path = arguments[2];

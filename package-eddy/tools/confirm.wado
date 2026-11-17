@@ -59,9 +59,7 @@ struct Confirmed {
 export fn run() with (Stderr, Environment, Preopens, Client) {
     let arguments = args();
     assert arguments.len() == 2, "usage: confirm.wado <reviews.json> <out.json>";
-    let Some(credential) = Credential::from_env() else {
-        panic("neither CLAUDE_API_KEY_FILE nor CLAUDE_API_KEY is set");
-    };
+    let credential = Credential::from_env().unwrap();
     let reviews = from_string::<Baseline, String>(fs::read_to_string(&arguments[0]).unwrap()).unwrap();
     let out_path = arguments[1];
     let mut out = Confirmed { grader: GRADER, runs: [] };
