@@ -2478,9 +2478,9 @@ impl SolverBridge {
     }
 
     /// The impl blocks answering `method_name` on `type_id` at the nearest
-    /// link any does, with that link: those the call site can name, else
-    /// those an import would enable. A block answers whether its declaration
-    /// takes a receiver or not, so the caller reads which kind it names.
+    /// link any does, with that link, among those `reach` names. A block
+    /// answers whether its declaration takes a receiver or not, so the caller
+    /// reads which kind it names.
     pub(super) fn nearest_impls(
         &self,
         tysys: &TypeSystem,
@@ -2489,6 +2489,7 @@ impl SolverBridge {
         type_id: TypeId,
         through_ref: Option<bool>,
         method_name: &str,
+        reach: Reach,
     ) -> Option<(u32, Vec<DefId>)> {
         let (found, receiver) = self.call_candidates(
             tysys,
@@ -2500,10 +2501,9 @@ impl SolverBridge {
             None,
             &[],
         )?;
-        let set = if found.in_scope.is_empty() {
-            &found.out_of_scope
-        } else {
-            &found.in_scope
+        let set = match reach {
+            Reach::InScope => &found.in_scope,
+            Reach::OutOfScope => &found.out_of_scope,
         };
         let (link, at) = answering_link(&self.program, &receiver, set)?;
         let blocks = at
@@ -2740,6 +2740,14 @@ pub(crate) enum InstanceOrder {
 /// What the order answers, naming each candidate by the impl block it came
 /// from — `None` where a derived body answers and no block was written, which
 /// is how a [`TraitMethodMatch`](super::types::TraitMethodMatch) says it too.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Reach {
+    /// Impls of traits the call site can name.
+    InScope,
+    /// Impls an import would enable.
+    OutOfScope,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(super) enum Ordered {
     /// Exactly one impl answers.

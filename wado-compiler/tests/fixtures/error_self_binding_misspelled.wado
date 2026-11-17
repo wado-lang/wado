@@ -1,0 +1,62 @@
+// A binding naming no type, a placeholder, or a trait-argument list of the
+// wrong length is reported where it is written, and the call reports nothing
+// more: what it would name is unknown.
+trait Mk with () {
+    fn tag() -> i32;
+}
+
+trait Tg with () {
+    fn tagged(&self) -> i32;
+}
+
+trait Conv<T> with () {
+    fn tagged(&self) -> T;
+}
+
+struct S {
+    v: i32,
+}
+
+struct U {
+    v: i32,
+}
+
+impl Mk for S {
+    fn tag() -> i32 {
+        return 100;
+    }
+}
+
+impl Tg for S {
+    fn tagged(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Conv<i32> for S {
+    fn tagged(&self) -> i32 {
+        return self.v;
+    }
+}
+
+export fn run() {
+    let s = S { v: 1 };
+    let u = U { v: 2 };
+    let _ = Mk::<Self = Nope>::tag();
+    let _ = Tg::<Self = Nope>::tagged(&s);
+    let _ = Mk::<Self = _>::tag();
+    let _ = Mk::<i32, Self = S>::tag();
+    let _ = Conv::<i32, Self = S>::tagged(&u);
+}
+
+__DATA__
+{
+  "compile_error": ":45:25: analysis error: unknown type 'Nope'",
+  "compile_errors_contains": [
+    "46:25: unknown type 'Nope'",
+    "47:25: `_` type placeholder is only allowed as a turbofish type argument",
+    "48:13: `Mk` takes no type arguments, but 1 was supplied",
+    "49:43: type mismatch: expected 'S', found 'U'"
+  ],
+  "compile_errors_not_contains": ["unknown function", "<unknown>"]
+}

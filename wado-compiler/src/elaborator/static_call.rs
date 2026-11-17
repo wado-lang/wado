@@ -617,8 +617,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !query.required_args.is_empty() {
                 candidates.retain(|c| {
                     let block = c.supply.as_ref().expect("kept by its trait").impl_def;
-                    let written = self.tysys.trait_args_at(block, receiver.ty);
-                    self.trait_args_settle_to(&written, query.required_args)
+                    self.tysys
+                        .impl_answers_trait_args(block, receiver.ty, query.required_args)
                 });
             }
             return (candidates, Vec::new());
@@ -1767,13 +1767,30 @@ impl TypeSystem {
             .collect()
     }
 
-    /// The trait arguments block `impl_def` writes, at `receiver`'s own where
-    /// the call settled its type.
-    pub(super) fn trait_args_at(&self, impl_def: DefId, receiver: Option<TypeId>) -> Vec<TypeId> {
-        match receiver {
-            Some(ty) => self.trait_frame_at(impl_def, ty).split_off(1),
-            None => self.signatures.impl_sig(impl_def).trait_type_args.clone(),
+    /// Whether block `impl_def` implements its trait at `asked` for
+    /// `receiver`: its parameters bound from those arguments and the receiver,
+    /// as a method call's qualified spelling binds them, its trait arguments
+    /// are `asked`.
+    pub(super) fn impl_answers_trait_args(
+        &self,
+        impl_def: DefId,
+        receiver: Option<TypeId>,
+        asked: &[TypeId],
+    ) -> bool {
+        let mut table = self.type_table.borrow_mut();
+        let written = table.impl_trait_args(impl_def).to_vec();
+        if written.len() != asked.len() {
+            return false;
         }
+        let mut slots = TypeArgMap::default();
+        match receiver {
+            Some(receiver) => table.bind_impl_slots_asked(impl_def, asked, receiver, &mut slots),
+            None => table.bind_each_into(&written, asked, &mut slots),
+        }
+        written
+            .iter()
+            .zip(asked)
+            .all(|(&arg, &want)| table.substitute_type_params(arg, &slots) == want)
     }
 
     /// `ty`, written in block `impl_def`, with each slot the block's target

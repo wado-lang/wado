@@ -2671,6 +2671,9 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
                     }
                     other => self.visit_type(other),
                 }
+                if let Some(self_type) = &smc.self_type {
+                    self.visit_type(self_type);
+                }
                 for ty in &smc.type_args {
                     self.visit_turbofish_arg(ty);
                 }

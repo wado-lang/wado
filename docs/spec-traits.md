@@ -386,7 +386,9 @@ A qualified call selects the impl the method form would:
 `Type::method(…)` names what the type answers `method` with, whichever kind it
 is, in the order above: the nearest link of the type's chain, and there the
 type's own declaration before a trait's. Two traits answering at one link are
-ambiguous, whether each declares a static or a method. Where a method answers,
+ambiguous, whether each declares a static or a method. As for a method call, a
+trait the call site has not imported answers only where nothing else does.
+Where a method answers,
 `Type::method(recv, args…)` selects what `recv.method(args…)` selects, and
 `recv` must be of that type or a resource extending it. A trait's method that
 the spelling does not reach is reached as `Trait::method(recv, …)`.

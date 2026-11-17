@@ -47,6 +47,17 @@ impl S {
     }
 }
 
+trait Echo<T> with () {
+    fn echo(x: T) -> T;
+}
+
+// The impl's own parameter is bound by the arguments the turbofish writes.
+impl<T> Echo<T> for S {
+    fn echo(x: T) -> T {
+        return x;
+    }
+}
+
 test "the binding supplies Self to a static" {
     assert Mk::<Self = S>::tag() == 100;
 }
@@ -54,6 +65,7 @@ test "the binding supplies Self to a static" {
 test "beside the trait's arguments, which pick the impl" {
     assert Conv::<i32, Self = S>::make() == 1;
     assert Conv::<String, Self = S>::make() == "one";
+    assert Echo::<i32, Self = S>::echo(3) == 3;
 }
 
 test "a receiver-taking method takes it too" {
