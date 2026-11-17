@@ -2727,7 +2727,11 @@ impl Parser {
 
     fn parse_param_list(&mut self) -> ParseResult<Vec<Param>> {
         let params = self.parse_comma_separated(&TokenKind::RParen, Self::parse_param)?;
-        if let Some(recv) = params.iter().skip(1).find(|p| p.self_kind != SelfKind::None) {
+        if let Some(recv) = params
+            .iter()
+            .skip(1)
+            .find(|p| p.self_kind != SelfKind::None)
+        {
             return Err(self.error_at_span(recv.span, "`self` must be a method's first parameter"));
         }
         let mut seen_default = false;
