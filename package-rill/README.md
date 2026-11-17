@@ -1,16 +1,23 @@
-# web-signals — Fine-Grained Reactivity as a Library
+# Rill — Fine-Grained Reactivity for Wado
 
-A to-do list whose page is built once. After that, a write to a signal reruns
-only the bindings that read it: no virtual DOM, and no diffing of a tree.
+`wado-lang:rill` is signals and the DOM bound to them. A page is built once.
+After that, a write to a signal reruns only the bindings that read it: no
+virtual DOM, and no diffing of a tree.
 
-It is the library
-[WEP: Reactive Signals](../../docs/wep-2026-04-04-reactive-signals.md)
-describes: dependencies are found as the code runs, which needs no language
-feature.
+[WEP: Reactive Signals](../docs/wep-2026-04-04-reactive-signals.md) holds the
+design, and what the library leaves out.
 
-```sh
-wado run     # prints the page after a short session
-wado test    # runs the session against SurfaceDom
+```wado
+use { bind_text, element, on, signal } from "wado-lang:rill";
+use { Dom, Element, Event } from "wado-lang:web";
+
+fn counter(root: Element) with Dom {
+    let count = signal(0);
+    let button = element("button");
+    bind_text(button, || `clicked ${count.get()} times`);
+    on(button, "click", |_event: Event| count.set(count.get() + 1));
+    root.append_child(button);
+}
 ```
 
 ## Layout
@@ -18,7 +25,8 @@ wado test    # runs the session against SurfaceDom
 - `src/signals.wado` — `signal`, `memo`, `observe`, `scope` and `flush`.
 - `src/view.wado` — bindings to the DOM: `bind_text`, `bind_attribute`, `on`
   and the keyed list `each`.
-- `src/app.wado` — the to-do list.
+- `example/todo/` — a to-do list. `wado run` there prints the page after a
+  short session, and `wado test` runs the session against `SurfaceDom`.
 
 ## How it works
 
@@ -39,16 +47,3 @@ wado test    # runs the session against SurfaceDom
   made it.
 - `on` flushes when the listener returns. Every entry into the program from the
   browser is a listener, so no microtask is needed.
-
-## What it leaves out
-
-- A memo does not compare its new value with the old one, so its dependents
-  rerun even when the value came out the same.
-- A memo owns nothing: a cleanup registered inside one traps, and so does
-  making an effect or another memo there.
-- Disposing of a scope stops its bindings and takes its rows out of an `each`.
-  It leaves every other node where it is, and its listeners attached.
-- `each` puts the rows back in order by appending every one of them, since
-  `SurfaceDom` does not answer `insert_before`.
-- A text binding owns its element's whole content, since the slice has no
-  `Text` node.
