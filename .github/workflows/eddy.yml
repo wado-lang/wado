@@ -136,8 +136,8 @@ jobs:
           (cd "$RUNNER_TEMP" && cargo "+$toolchain" fetch --locked --manifest-path head/Cargo.toml)
           git worktree remove --force "$RUNNER_TEMP/head"
       # Workload Identity Federation, so no API key is stored. The rule accepts
-      # this repository's jobs, and only an admin's comment or dispatch starts
-      # this one. The token is minted here, in the one step that uses it, and
+      # only this workflow on main, which only an admin's comment or dispatch
+      # starts. The token is minted here, in the one step that uses it, and
       # Eddy does not see the means to mint another.
       - id: eddy
         run: |
