@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794874199925,
+  "lastUpdate": 1794876554780,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78509,6 +78509,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/148f352b7263f7c9592075122fc5ad2eb258a102"
         },
         "date": 1794874199385,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "915caa8e72a7c2b54321ddb76069b2e611487263",
+          "message": "Merge pull request #2655 from wado-lang/gfx/eloquent-edison-06cjpr\n\nrefactor(compiler): give a value-less `let` its own form in TIR and NIR",
+          "timestamp": "2026-11-17T09:31:01+09:00",
+          "tree_id": "3b3d3311fb9566e48d48aa93a9851d7ad0475959",
+          "url": "https://github.com/wado-lang/wado/commit/915caa8e72a7c2b54321ddb76069b2e611487263"
+        },
+        "date": 1794876553667,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
