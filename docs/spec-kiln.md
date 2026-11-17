@@ -694,7 +694,7 @@ This probe says the first line decides everything:
 <!-- {"source": "wado-cli/tests/integration/kiln_probe.rs"} -->
 
 ```wado
-export fn probe(path: String, mut content: Stream<u8>) -> Result<u64, Error> {
+export fn probe(path: String, mut content: Stream<u8>) -> Result<u64, Error> with Stream {
     let mut n: u64 = 0;
     loop {
         let [end, chunk] = content.start_read(1).finish();
