@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794904410642,
+  "lastUpdate": 1794909189038,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78729,6 +78729,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/28aadd5cd0f2c1dc5311090eb4b291247ba868ae"
         },
         "date": 1794904409750,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cd1d716cc848061d78ea62751ad4b90da0016d4c",
+          "message": "Merge pull request #2661 from wado-lang/ccr-5a053762-2x7vni\n\nfeat(rill): fine-grained reactivity ships as the package wado-lang:rill",
+          "timestamp": "2026-11-17T18:33:35+09:00",
+          "tree_id": "a7de658cff6b282a1a3ba04c1b804a92790e9de7",
+          "url": "https://github.com/wado-lang/wado/commit/cd1d716cc848061d78ea62751ad4b90da0016d4c"
+        },
+        "date": 1794909187837,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
