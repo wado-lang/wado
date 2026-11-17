@@ -19,12 +19,11 @@ options { language = Wado; }
     }
 
     fn close_brace(&mut self) {
-        if self.hole_braces.is_empty() {
+        let Some(depth) = self.hole_braces.last() else {
             return;
-        }
-        let top = self.hole_braces.len() - 1;
-        if self.hole_braces[top] > 0 {
-            self.hole_braces[top] -= 1;
+        };
+        if depth > 0 {
+            self.hole_braces[self.hole_braces.len() - 1] = depth - 1;
         } else {
             self.close_hole();
         }
