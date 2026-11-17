@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794924891640,
+  "lastUpdate": 1794930641095,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78949,6 +78949,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cc0aa9d74499809970ba252a0f9b896f04acfa5b"
         },
         "date": 1794924891226,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d93b8274eee5145091444a4a8ce52d160d51ca5c",
+          "message": "Merge pull request #2668 from wado-lang/ccr-627ffee4-jbspgb\n\nfix(parser): build main again by giving the Self-binding errors a kind",
+          "timestamp": "2026-11-18T00:38:10+09:00",
+          "tree_id": "c03b7b2133af8ce98c3426b7fdd8220b40673054",
+          "url": "https://github.com/wado-lang/wado/commit/d93b8274eee5145091444a4a8ce52d160d51ca5c"
+        },
+        "date": 1794930640055,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
