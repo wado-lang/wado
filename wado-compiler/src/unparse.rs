@@ -321,6 +321,7 @@ struct Mark {
     output: usize,
     emitted: usize,
     per_line_opens: usize,
+    chain_breaks: usize,
 }
 
 #[derive(Default)]
@@ -347,6 +348,12 @@ pub struct Unparser<'a> {
     /// The output positions where a list opened its wrapped form, so a chain
     /// can tell that its own line broke and wrap at its dots instead.
     per_line_opens: Vec<usize>,
+    /// How many blocks enclose what is being written.
+    block_depth: usize,
+    /// The block depth of each operator or method chain that broke across
+    /// lines, so a call can tell that one of its arguments broke outside any
+    /// block and give each argument a line.
+    chain_breaks: Vec<usize>,
     /// `(output position, columns)`: what the caller will append to the line
     /// the construct starting at that position ends on — the ` {` after an
     /// `if` condition. The construct's own width decision counts those
@@ -2159,6 +2166,7 @@ impl<'a> Unparser<'a> {
         render: impl Fn(&mut Self, &T, bool),
         tail_call: impl Fn(&T) -> Option<usize>,
     ) {
+        self.chain_breaks.push(self.block_depth);
         render(self, &parts[0], true);
 
         for (i, part) in parts[1..].iter().enumerate() {
@@ -2293,6 +2301,7 @@ impl<'a> Unparser<'a> {
             }
             self.rollback(snap);
         }
+        self.chain_breaks.push(self.block_depth);
         self.unparse_postfix_base(base);
         self.indent_level += 1;
         for link in &links {
@@ -2378,7 +2387,9 @@ impl<'a> Unparser<'a> {
         if args.is_empty() || (!has_trailing_comma && !forced) {
             let snap = self.snapshot();
             self.emit_inline_call_args(args, span.start);
+            let chain_broke = self.chain_breaks[snap.chain_breaks..].contains(&self.block_depth);
             if (args.is_empty() || !self.exceeds_width_since(snap))
+                && !chain_broke
                 && !self.has_comment_in_range(span.start, span.end)
             {
                 return;
@@ -2460,7 +2471,9 @@ impl<'a> Unparser<'a> {
     /// A block after its `{` line: the statements one level in, and the `}`.
     fn block_rest(&mut self, b: &Block, floor: usize) {
         self.indent_level += 1;
+        self.block_depth += 1;
         self.unparse_block(b, floor);
+        self.block_depth -= 1;
         self.indent_level -= 1;
         self.write_indent();
         self.output.push('}');
@@ -3010,6 +3023,7 @@ impl<'a> Unparser<'a> {
             output: self.output.len(),
             emitted: self.emitted_comments.len(),
             per_line_opens: self.per_line_opens.len(),
+            chain_breaks: self.chain_breaks.len(),
         }
     }
 
@@ -3018,6 +3032,7 @@ impl<'a> Unparser<'a> {
         self.output.truncate(mark.output);
         self.emitted_comments.truncate(mark.emitted);
         self.per_line_opens.truncate(mark.per_line_opens);
+        self.chain_breaks.truncate(mark.chain_breaks);
     }
 
     /// The output written since `mark`.

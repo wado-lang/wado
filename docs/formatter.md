@@ -83,6 +83,17 @@ return element("li")
     .children([title, remove]);
 ```
 
+A call's arguments stay on the call's line unless one of them breaks a `&&` or `||`
+chain or a method chain across lines. Then each argument
+takes a line of its own, where the chain may fit again. A chain that breaks
+inside a block, such as a closure's body, does not count:
+
+```wado
+return starts.filter(
+    |p| *p + width <= len && every_position_is_admitted_by_the_keyword_starting_at(*p, width, len, true),
+);
+```
+
 Blank lines follow the source: none stays none, one stays one, and a larger gap
 collapses to two.
 

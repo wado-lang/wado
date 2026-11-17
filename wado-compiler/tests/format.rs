@@ -5026,6 +5026,40 @@ fn test_format_wraps_a_chain_at_its_dots_before_its_arguments() {
 }
 
 #[test]
+fn test_format_wraps_the_arguments_an_operator_chain_breaks_across() {
+    let source = concat!(
+        "fn ends(starts: List<i32>, len: i32, width: i32) -> List<i32> {\n",
+        "    return starts.filter(|p| *p + width <= len && every_position_is_admitted_by_the_keyword_starting_at(*p, width, len, true));\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn ends(starts: List<i32>, len: i32, width: i32) -> List<i32> {\n",
+        "    return starts.filter(\n",
+        "        |p| *p + width <= len && every_position_is_admitted_by_the_keyword_starting_at(*p, width, len, true),\n",
+        "    );\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+#[test]
+fn test_format_keeps_arguments_on_the_call_line_around_a_block() {
+    let source = concat!(
+        "fn wire(button: View) -> View {\n",
+        "    return button.on(\"click\", |_: Event| {\n",
+        "        if first_condition_that_is_rather_long && second_condition_that_is_rather_long && third_one {\n",
+        "            go();\n",
+        "        }\n",
+        "    });\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+}
+
+#[test]
 fn test_format_keeps_a_comment_between_wrapped_links() {
     let source = concat!(
         "fn row(a: View) -> View {\n",
