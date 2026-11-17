@@ -1,5 +1,6 @@
-// A closure whose parameter DAE drops still dispatches through its canonical
-// signature, so the parameter's type must survive type DCE.
+// At O1 `apply` is specialized to call `$call` directly and DAE drops `q`, so
+// nothing mentions `&Node`; the closure wrapper is still built from the
+// canonical signature, so type DCE must keep it.
 
 struct Node {
     v: i32,

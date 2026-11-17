@@ -1534,8 +1534,9 @@ fn populate_type_reachability(
 
         // A reachable `$call` keeps live every type `register_closure_wrappers`
         // reads: the functor's struct / ref types for the wrapper's `ref.cast`,
-        // and the canonical signature for its external type. DAE can drop every
-        // other NIR-side mention of each by removing `self` or a user parameter.
+        // and the canonical signature for its external type. A pass reshaping
+        // `$call` (DAE, `sroa_param`) can drop every other NIR-side mention of
+        // each, and specialization can leave no `ClosureToCanonical` naming it.
         // Compare by pointer identity — `functor.call_method` and the matching
         // `project.functions[i]` are the same `Arc`.
         let surviving_ptrs: IndexSet<*const _> = project
@@ -1551,9 +1552,7 @@ fn populate_type_reachability(
                 analysis.types.insert(functor.struct_type_id);
                 analysis.types.insert(functor.ref_type_id);
                 let canonical = functor.canonical_user_params.iter().map(|&(_, ty)| ty);
-                for ty in canonical.chain([functor.canonical_return]) {
-                    collect_type_transitive(ty, &type_table, &mut analysis.types);
-                }
+                analysis.types.extend(canonical.chain([functor.canonical_return]));
             }
         }
     }
