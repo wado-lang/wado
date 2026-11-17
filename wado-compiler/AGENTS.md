@@ -21,7 +21,7 @@ The Wado compiler crate. The standard library under `lib/` has its own
   reads (`LexError`, `LoadError`).
 - `src/codegen.rs` emits the `NirPackage` and `WirPackage` as they are; it
   knows nothing of the earlier phases.
-- Only `src/name/` knows a name format. Mangling and monomorphization go
+- Only `src/name.rs` and its submodules know a name format. Mangling and monomorphization go
   through it, and `mise run check-minted-names` refuses a minted name formatted
   elsewhere.
 - Every name the compiler mints for itself starts with one `$`

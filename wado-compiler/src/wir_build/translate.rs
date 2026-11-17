@@ -828,7 +828,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
         // placeholder body; substitute the real one — a vtable indirect call
         // through `CanonicalClosure_K` — rather than translating it. Skipping
         // string-matching post-pass keeps name-format knowledge
-        // confined to `name` and `synthesis::traits`.
+        // confined to `name.rs` and `synthesis::traits`.
         if tir_func.fn_canonical_dispatch().is_some() {
             let names = resolve_param_names(&tir_func.params);
             let param_name = |at: usize, fallback: &str| {

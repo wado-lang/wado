@@ -353,8 +353,8 @@ impl WirPackage {
 /// - `fq`: fully-qualified name for identity, unparse, and error messages
 /// - `fq`: module-qualified name for unique identity
 ///
-/// The `tir_to_wir` phase constructs `WirName`s from `name` objects
-/// (`StructName`, `FunctionId`, etc.). WIR itself does not import `name` types.
+/// The `tir_to_wir` phase constructs `WirName`s from `name.rs` objects
+/// (`StructName`, `FunctionId`, etc.). WIR itself does not import `name.rs` types.
 #[derive(Debug, Clone)]
 pub struct WirName {
     /// Fully-qualified name (e.g., "core:prelude//Point", "./`geometry.wado/Point::sum`").

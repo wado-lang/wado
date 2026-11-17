@@ -1,7 +1,7 @@
 //! Every naming and mangling decision in the compiler. A method mangles as
 //! `{module}/{struct}^{trait}::{method}` (the trait half optional), a struct as
 //! `{module}/{name}`, a WASI name as `wasi:{package}/{interface}::{function}`.
-//! [`function`] holds the function and struct names, [`type_name`] the type
+//! `function.rs` holds the function and struct names, `type_name.rs` the type
 //! names and their mangles.
 
 mod function;
@@ -385,7 +385,7 @@ pub fn reshaped_name(
 /// `name` without the parameters [`reshaped_name`] lists dropped, or `name` itself:
 /// only a `$dae[…]` group ending the name is peeled.
 #[must_use]
-pub fn before_dae(name: &str) -> &str {
+fn before_dae(name: &str) -> &str {
     let opener = format!("{INTERNAL_PREFIX}{DAE_MARKER}[");
     match name.rfind(&opener) {
         Some(at) if name.ends_with(']') && !name[at + opener.len()..].contains('[') => &name[..at],
@@ -907,7 +907,7 @@ pub fn closure_functor_struct_name(functor_id: u32) -> String {
 
 /// The functor struct closure `functor_id` lowers to.
 #[must_use]
-pub fn closure_functor_type(module: &ModuleSource, functor_id: u32) -> FqTypeName {
+fn closure_functor_type(module: &ModuleSource, functor_id: u32) -> FqTypeName {
     FqTypeName::shape(module, &closure_functor_struct_name(functor_id))
 }
 
@@ -1348,7 +1348,7 @@ pub fn dispatch_field_name(op_name: &str) -> String {
 /// alphanumerics survive — Unicode-aware `is_alphanumeric` would let multibyte
 /// letters through and produce an extern name Wasm validation rejects. The
 /// lossless name is kept separately in the test-name custom section.
-pub fn test_name_to_snake(name: &str) -> String {
+fn test_name_to_snake(name: &str) -> String {
     name.chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect::<String>()

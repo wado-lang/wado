@@ -106,7 +106,7 @@ fn split_uri_origin(path: &str) -> (&str, &str) {
 /// spells the same file two ways — so re-anchoring is what lets the loader intern
 /// each file once. Empty `entry_dir` just normalizes.
 #[must_use]
-pub fn canonical_local_path(entry_dir: &str, resolved: &str) -> String {
+fn canonical_local_path(entry_dir: &str, resolved: &str) -> String {
     if entry_dir.is_empty() {
         return normalize_module_path(resolved);
     }

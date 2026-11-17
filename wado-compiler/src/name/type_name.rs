@@ -333,7 +333,7 @@ pub fn is_fn_type_name(name: &str) -> bool {
 ///
 /// Examples:
 /// - `mangle_option_type("i32")` → `"Option<i32>"`
-pub fn mangle_option_type(inner_type: &str) -> String {
+fn mangle_option_type(inner_type: &str) -> String {
     format!("Option<{inner_type}>")
 }
 

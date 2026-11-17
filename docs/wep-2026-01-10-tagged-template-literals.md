@@ -607,7 +607,7 @@ serial advances on read, so a template nested inside a hole mints its own
   threshold refuses.
 - `lower/translate.rs` folds `builtin::hole_get` / `hole_ref` / `hole_fmt` /
   `template_segment` calls to the bridge names beside its `struct_field_get`
-  arm; `name` owns the names.
+  arm; `name.rs` owns the names.
 - An open template shape gets no bridge. Each concrete shape only a
   substitution reaches gets its own: `$hole_fmt` inside the monomorphization
   fixpoint, `$hole_get`, `$hole_ref` and `$template_segment` after
