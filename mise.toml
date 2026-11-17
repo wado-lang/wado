@@ -466,7 +466,7 @@ wado="$(scripts/dev-bin.sh --path wado)"
 dirs=()
 if [ -n "${CLAUDE_API_KEY_FILE:-}" ]; then dirs=(--dir . --dir "$(dirname "$CLAUDE_API_KEY_FILE")"); fi
 case " $* " in
-    *" --no-run "*) set -- "$wado" run "${dirs[@]}" package-eddy/src/main.wado -- "$@" ;;
+    *" --no-run "*) set -- "$wado" run ${dirs[@]+"${dirs[@]}"} package-eddy/src/main.wado -- "$@" ;;
     # The reviewer builds with cargo, which would starve a test run and be
     # starved by it. `wado run` refuses a grant of a path that does not exist,
     # so the homes are granted only to a review that runs cargo or mise, and
@@ -476,7 +476,7 @@ case " $* " in
         for granted in "${MISE_DATA_DIR:-$HOME/.local/share/mise}" "$(command -v mise)"; do
             if [ -e "$granted" ]; then set -- --process-read "$granted" "$@"; fi
         done
-        set -- ./scripts/exclusive.sh test "$wado" run "${dirs[@]}" \
+        set -- ./scripts/exclusive.sh test "$wado" run ${dirs[@]+"${dirs[@]}"} \
             --process-read "${CARGO_HOME:-$HOME/.cargo}" --process-read "${RUSTUP_HOME:-$HOME/.rustup}" "$@"
         ;;
 esac

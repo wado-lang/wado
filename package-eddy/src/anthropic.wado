@@ -22,14 +22,20 @@ pub variant Credential {
 }
 
 impl Credential {
-    /// `CLAUDE_API_KEY_FILE`, or else `CLAUDE_API_KEY`.
+    /// `CLAUDE_API_KEY_FILE`, or else `CLAUDE_API_KEY`; an empty one is unset.
+    /// The file is named by an absolute path in plain form, since its
+    /// directory is granted by that text and looked up by it.
     pub fn from_env() -> Result<Credential, String> with Environment {
-        if let Some(path) = env("CLAUDE_API_KEY_FILE") {
+        if let Some(path) = env("CLAUDE_API_KEY_FILE") && !path.is_empty() {
+            if !grantable(&path) {
+                return Err(`CLAUDE_API_KEY_FILE must be an absolute path in plain form, outside /: ${path}`);
+            }
             return Ok(File(path));
         }
-        return env("CLAUDE_API_KEY").map(|key| Credential::Key(key)).ok_or(
-            "neither CLAUDE_API_KEY_FILE nor CLAUDE_API_KEY is set",
-        );
+        return match env("CLAUDE_API_KEY") {
+            Some(key) && !key.is_empty() => Ok(Key(key)),
+            _ => Err("neither CLAUDE_API_KEY_FILE nor CLAUDE_API_KEY is set"),
+        };
     }
 
     fn current(&self) -> Result<String, String> with Preopens {
@@ -38,6 +44,17 @@ impl Credential {
             File(path) => read_preopened(path),
         };
     }
+}
+
+fn grantable(path: &String) -> bool {
+    return path.starts_with("/") && !path.ends_with("/") && !path.contains("//") && !path.contains("/./")
+        && !path.contains("/../") && path.rfind("/") matches { Some(last) && last > 0 };
+}
+
+test "a key file is named by an absolute path in plain form, outside /" {
+    assert grantable(&"/home/runner/work/_temp/claude-api-key/token");
+    assert !grantable(&"token") && !grantable(&"./token") && !grantable(&"/token");
+    assert !grantable(&"/a//token") && !grantable(&"/a/./token") && !grantable(&"/a/../token") && !grantable(&"/a/");
 }
 
 /// The text of the file at `path`, read in the preopen named by its directory.
@@ -66,7 +83,7 @@ fn read_preopened(path: &String) -> Result<String, String> with Preopens {
         }
         return Ok(String::from_utf8_lossy(bytes).trim().to_string());
     }
-    return Err(`no directory ${dir} is granted`);
+    return Err(`no directory ${dir} is granted; \`wado run --dir . --dir ${dir}\` grants it`);
 }
 
 test "a file credential is read again each time" {
@@ -81,7 +98,7 @@ test "a file credential is read again each time" {
     fs::write("credential-test", &"two").unwrap();
     assert credential.current() == Ok("two");
     fs::remove_file("credential-test").unwrap();
-    assert Credential::File("/nowhere/token").current() == Err("no directory /nowhere is granted");
+    assert Credential::File("/nowhere/token").current() == Err("no directory /nowhere is granted; `wado run --dir . --dir /nowhere` grants it");
 }
 
 pub struct Message {

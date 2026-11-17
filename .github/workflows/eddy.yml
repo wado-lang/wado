@@ -154,9 +154,10 @@ jobs:
           mkdir -p scratchpad
           key_dir="$RUNNER_TEMP/claude-api-key"
           mkdir -m 700 "$key_dir"
-          # Writes the token to $key_dir/token and sets `lifetime`, in seconds.
+          # Writes the token to $key_dir/token, and sets `due` to when the next
+          # is minted: ten minutes on, or half its life if that is sooner.
           mint() {
-            local jwt response token
+            local jwt response token lifetime
             jwt="$(curl -sSf -G -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
               --data-urlencode audience=https://api.anthropic.com "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)"
             echo "::add-mask::$jwt"
@@ -169,32 +170,41 @@ jobs:
                 workspace_id: "wrkspc_01Ug39YtMABrbjfon1tEpoXy"
               }' | curl -sS https://api.anthropic.com/v1/oauth/token -H "content-type: application/json" --data @- 2>&1)" || true
             token="$(jq -r '.access_token // empty' <<< "$response" 2> /dev/null)" || true
-            if [ -z "$token" ]; then
+            lifetime="$(jq -r '.expires_in // 0 | floor' <<< "$response" 2> /dev/null)" || lifetime=0
+            if [ -z "$token" ] || [ "$lifetime" -lt 120 ]; then
               echo "eddy: the token exchange failed: $(head -c 500 <<< "$response" | tr '\n' ' ')" >&2
               # The claims a federation rule matches on, none of them secret:
               # the exchange answers a mismatch with "Authentication failed".
               jq -rR 'split(".")[1] | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson
-                | {sub, ref, event_name, job_workflow_ref}' <<< "$jwt" >&2 || true
+                | {iss, aud, sub, ref, event_name, repository_owner_id, repository_id, job_workflow_ref}' <<< "$jwt" >&2 || true
               return 1
             fi
             echo "::add-mask::$token"
             printf '%s\n' "$token" > "$key_dir/token.next"
             mv "$key_dir/token.next" "$key_dir/token"
-            lifetime="$(jq -r .expires_in <<< "$response")"
+            due=$(($(date +%s) + (lifetime / 2 < 600 ? lifetime / 2 : 600)))
+            echo "minted a token that lives ${lifetime}s"
           }
           # The post job reads the reason from the log, as from Eddy's own.
           if ! mint 2> scratchpad/eddy.log; then
             cat scratchpad/eddy.log
             exit 1
           fi
-          interval=$((lifetime / 2 < 600 ? lifetime / 2 : 600))
-          echo "the token lives ${lifetime}s; minting the next every ${interval}s"
-          (while sleep "$interval"; do mint 2>> scratchpad/mint.log || true; done) &
+          # Checks each minute, so a mint that fails is tried again well before
+          # the token it would have replaced expires.
+          (
+            trap 'kill "$!" 2> /dev/null; exit 0' TERM
+            while :; do
+              sleep 60 &
+              wait "$!"
+              if [ "$(date +%s)" -ge "$due" ]; then mint 2>> scratchpad/mint.log || true; fi
+            done
+          ) &
           minting=$!
           status=0
           env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL CLAUDE_API_KEY_FILE="$key_dir/token" \
             mise run eddy-review --head "$SHA" > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
-          kill "$minting"
+          kill "$minting" 2> /dev/null || true
           cat scratchpad/eddy.log
           exit "$status"
       # The record is what Eddy later learns from; it outlives the run here.
@@ -252,6 +262,11 @@ jobs:
                 echo '```'
               fi
             } > "$body"
+          fi
+          # A token that could not be renewed explains a 401 in either case.
+          if [ -f eddy/scratchpad/mint.log ] && grep -q '^eddy:' eddy/scratchpad/mint.log; then
+            printf '\nRenewing the API token failed during the review:\n\n```\n%s\n```\n' \
+              "$(grep '^eddy:' eddy/scratchpad/mint.log)" >> "$body"
           fi
           if [ -d eddy ]; then
             printf '\n[The run](%s), and its artifact for the patches and the record.\n' "$RUN" >> "$body"
