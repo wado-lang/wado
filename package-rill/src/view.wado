@@ -2,7 +2,7 @@
 //! so a write to a signal touches the nodes that show it and no others.
 
 use { Track, flush, observe, on_cleanup, scope, untracked } from "./signals.wado";
-use { Dom, Element, Event, EventTarget } from "wado-lang:web";
+use { Dom, Element, Event, EventTarget, Node } from "wado-lang:web";
 
 pub fn element(tag: String) -> Element with Dom {
     return Dom::document().create_element(tag);
@@ -92,10 +92,15 @@ pub fn each<T: Eq>(
         }
         remove_rows(parent, rows);
         if moved {
-            // Appending a child already there moves it, so this leaves the
-            // children in the new order.
-            for let row of kept {
-                parent.append_child(row.node);
+            // From the last row back, each row belongs just ahead of the one
+            // after it, so only a row found elsewhere is moved.
+            let mut next: Option<Node> = null;
+            for let mut i = kept.len() - 1; i >= 0; i -= 1 {
+                let node = kept[i].node;
+                if node.parent_node() == null || node.next_sibling() != next {
+                    parent.insert_before(node, next);
+                }
+                next = Option::Some(node);
             }
         }
         rows = kept;

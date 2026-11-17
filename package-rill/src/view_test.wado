@@ -1,6 +1,6 @@
 use { Signal, flush, on_cleanup, scope, signal } from "./signals.wado";
 use { each, element, text } from "./view.wado";
-use { Dom, Element, SurfaceDom } from "wado-lang:web";
+use { Dom, Element, Node, SurfaceDom } from "wado-lang:web";
 
 fn children_text(parent: Element) -> String with Dom {
     let mut out = "";
@@ -26,6 +26,42 @@ test "each follows a new order with the nodes it had" {
         assert children_text(list) == "312";
         assert list.first_child().unwrap() == last;
         assert list.first_child().unwrap().next_sibling().unwrap() == first;
+    };
+}
+
+// Counts the insertions that reach the DOM beneath it.
+struct Insertions {
+    count: i32,
+}
+
+impl Node for Insertions {
+    fn append_child(&mut self, this: &Node, node: Node) -> Node with Node {
+        self.count += 1;
+        resume (*this).append_child(node);
+    }
+
+    fn insert_before(&mut self, this: &Node, node: Node, child: Option<Node>) -> Node with Node {
+        self.count += 1;
+        resume (*this).insert_before(node, child);
+    }
+
+    ..forward
+}
+
+test "each moves only the rows out of place" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = element("ul");
+        let items: Signal<List<i32>> = signal([1, 2, 3, 4, 5]);
+        let _dispose = scope(|| each(list, || items.get(), |item: i32| text("li", `${item}`)));
+
+        let mut insertions = Insertions { count: 0 };
+        with Node => &mut insertions do {
+            items.set([2, 3, 4, 5, 1]);
+            flush();
+        };
+        assert children_text(list) == "23451";
+        assert insertions.count == 1;
     };
 }
 
