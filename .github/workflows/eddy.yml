@@ -158,7 +158,7 @@ jobs:
           # is minted: ten minutes on, or half its life if that is sooner.
           mint() {
             local jwt response token lifetime
-            jwt="$(curl -sSf -G -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            jwt="$(curl -sSf --max-time 60 -G -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
               --data-urlencode audience=https://api.anthropic.com "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)"
             echo "::add-mask::$jwt"
             response="$(jq -n --arg jwt "$jwt" '{
@@ -168,11 +168,13 @@ jobs:
                 organization_id: "b5accdd0-f052-4fe6-88e6-65bc34d1cba9",
                 service_account_id: "svac_01WVnWQoBfyRFsf4wyM7EHq7",
                 workspace_id: "wrkspc_01Ug39YtMABrbjfon1tEpoXy"
-              }' | curl -sS https://api.anthropic.com/v1/oauth/token -H "content-type: application/json" --data @- 2>&1)" || true
+              }' | curl -sS --max-time 60 https://api.anthropic.com/v1/oauth/token -H "content-type: application/json" --data @- 2>&1)" || true
             token="$(jq -r '.access_token // empty' <<< "$response" 2> /dev/null)" || true
             lifetime="$(jq -r '.expires_in // 0 | floor' <<< "$response" 2> /dev/null)" || lifetime=0
             if [ -z "$token" ] || [ "$lifetime" -lt 120 ]; then
-              echo "eddy: the token exchange failed: $(head -c 500 <<< "$response" | tr '\n' ' ')" >&2
+              # A response that parses may hold a token too short-lived to use.
+              echo "eddy: the token exchange failed: $(jq -c 'del(.access_token)' <<< "$response" 2> /dev/null \
+                || head -c 500 <<< "$response" | tr '\n' ' ')" >&2
               # The claims a federation rule matches on, none of them secret:
               # the exchange answers a mismatch with "Authentication failed".
               jq -rR 'split(".")[1] | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson
@@ -180,8 +182,11 @@ jobs:
               return 1
             fi
             echo "::add-mask::$token"
-            printf '%s\n' "$token" > "$key_dir/token.next"
-            mv "$key_dir/token.next" "$key_dir/token"
+            # `set -e` does not reach into a function called as a condition.
+            if ! { printf '%s\n' "$token" > "$key_dir/token.next" && mv "$key_dir/token.next" "$key_dir/token"; }; then
+              echo "eddy: the token could not be written to $key_dir" >&2
+              return 1
+            fi
             due=$(($(date +%s) + (lifetime / 2 < 600 ? lifetime / 2 : 600)))
             echo "minted a token that lives ${lifetime}s"
           }

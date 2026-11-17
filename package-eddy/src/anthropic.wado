@@ -341,6 +341,7 @@ pub fn converse(
 /// another key by then: a federated token expires mid-review.
 fn post<T: Deserialize>(credential: &Credential, request: ByteSlice) -> Result<T, String> with (Client, Preopens) {
     let mut key = credential.current()?;
+    let mut renewed = false;
     loop {
         let resp = send("api.anthropic.com", "/v1/messages", [
             ["authorization", `Bearer ${key}`],
@@ -349,10 +350,11 @@ fn post<T: Deserialize>(credential: &Credential, request: ByteSlice) -> Result<T
         ], request)?;
         let status = resp.get_status_code() as i32;
         let body = read_body(resp)?;
-        if status == 401 {
+        if status == 401 && !renewed {
             let next = credential.current()?;
             if next != key {
                 key = next;
+                renewed = true;
                 continue;
             }
         }
