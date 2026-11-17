@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794909189038,
+  "lastUpdate": 1794912274665,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78773,6 +78773,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cd1d716cc848061d78ea62751ad4b90da0016d4c"
         },
         "date": 1794909187837,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8ef8767b85393cb871ba85dd2fc08439b93e2e32",
+          "message": "Merge pull request #2662 from wado-lang/gfx/eloquent-edison-06cjpr\n\nrefactor(compiler): split name.rs by concern and move module paths out",
+          "timestamp": "2026-11-17T19:28:33+09:00",
+          "tree_id": "a69a9ae3ec74b0d3f052a5d34c6724566347e6f7",
+          "url": "https://github.com/wado-lang/wado/commit/8ef8767b85393cb871ba85dd2fc08439b93e2e32"
+        },
+        "date": 1794912273640,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
