@@ -311,10 +311,13 @@ fn external_weight(entries: List<[String, String]>) -> onnx::TensorProto {
         dims: [2],
         data_type: typed(Float),
         name: Option::Some("W"),
-        external_data: entries.into_iter().map(|kv| onnx::StringStringEntryProto {
-            key: Option::Some(kv.0),
-            value: Option::Some(kv.1),
-        }).collect(),
+        external_data: entries
+            .into_iter()
+            .map(|kv| onnx::StringStringEntryProto {
+                key: Option::Some(kv.0),
+                value: Option::Some(kv.1),
+            })
+            .collect(),
         data_location: Option::Some(onnx::TensorProtoDataLocation::External),
     };
 }

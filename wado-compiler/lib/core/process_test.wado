@@ -249,7 +249,11 @@ test "a granted child writes only where it is granted" {
     }
     let granted = scratch("write-granted");
     let other = scratch("write-other");
-    let write = |path: String| Command::new("sh").args(["-c", "echo x > \"$0\"", path]).grant_write(granted).status().unwrap();
+    let write = |path: String| Command::new("sh")
+        .args(["-c", "echo x > \"$0\"", path])
+        .grant_write(granted)
+        .status()
+        .unwrap();
     assert write(`${granted}/f`) == ExitStatus::Exited(0);
     assert write(`${other}/f`) != ExitStatus::Exited(0);
     assert fs::exists(`${granted}/f`) && !fs::exists(`${other}/f`);

@@ -53,9 +53,11 @@ test "a dim_param spelling arithmetic over names is that polynomial" {
     let total = Extent::param(&"past_sequence_length + sequence_length");
     assert total.agrees(&Extent::Symbolic(past.try_add(&Poly::symbol(&"sequence_length")).unwrap()));
     let product = Extent::param(&"2 * heads - 1");
-    assert product.agrees(&Extent::Symbolic(Poly::symbol(&"heads").try_mul(&Poly::constant(2)).unwrap().try_sub(
-        &Poly::constant(1),
-    ).unwrap()));
+    assert product.agrees(&Extent::Symbolic(Poly::symbol(&"heads")
+        .try_mul(&Poly::constant(2))
+        .unwrap()
+        .try_sub(&Poly::constant(1))
+        .unwrap()));
 }
 
 test "any other dim_param is one symbol of its own" {

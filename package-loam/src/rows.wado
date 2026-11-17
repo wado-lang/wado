@@ -110,9 +110,12 @@ pub fn graph_operands(node: &Node) -> List<i32> {
 
 /// The tensors among `node`'s operands that each row's lengths computed.
 pub fn lifted_operands(node: &Node, lifted: &HashSet<String>) -> List<String> {
-    return graph_operands(node).into_iter().filter(|i| i < node.inputs.len()).map(|i| node.inputs[i]).filter(
-        |t| lifted.contains(t),
-    ).collect();
+    return graph_operands(node)
+        .into_iter()
+        .filter(|i| i < node.inputs.len())
+        .map(|i| node.inputs[i])
+        .filter(|t| lifted.contains(t))
+        .collect();
 }
 
 /// A tensor of `shape` held with the rows ahead, as an elementwise operand

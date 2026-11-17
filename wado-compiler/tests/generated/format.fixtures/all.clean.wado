@@ -491,6 +491,18 @@ fn ref_cast_parens(x: i32) {
 }
 
 /// Deref with postfix: (*p)[i] and (*p).field must keep parens
+/// Method chains: one line while it fits, one call per line once broken
+fn method_chains(a: View, b: View) -> View {
+    let short = element("p").attribute("id", "x").child(a);
+    let broken = element("li")
+        .attribute("id", "x")
+        .children([a, b]);
+    return element("ul")
+        .attribute("id", "a-fairly-long-identifier")
+        .attribute("class", "another-long-value")
+        .children([short, broken]);
+}
+
 fn deref_postfix_parens(data: &List<i32>, p: &List<i32>) {
     let _ = (*data)[0];
     let _ = (*p)[1];

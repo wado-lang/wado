@@ -933,12 +933,13 @@ fn weight_runs(
     let mut taken = HashSet::<i32>::new();
     let mut runs: List<[List<i32>, bool]> = [];
     for let [ks, paired] of *joined {
-        let run: List<i32> = ks.into_iter().map(
-            |k| match recorded.nodes[recorded.nodes[k.product.unwrap()].operands[1]].op {
+        let run: List<i32> = ks
+            .into_iter()
+            .map(|k| match recorded.nodes[recorded.nodes[k.product.unwrap()].operands[1]].op {
                 Parameter(p) => p - first,
                 _ => unreachable(),
-            },
-        ).collect();
+            })
+            .collect();
         if !run.into_iter().all(|w| 0 <= w < count) {
             continue;
         }
@@ -1625,10 +1626,13 @@ fn kernel_result(
             }
         },
         None => {
-            let operands: List<DeviceTensor> = k.operands.into_iter().map(|o| g.reshaped(
-                &view_of(g, values, o.node),
-                &o.extents,
-            )).collect();
+            let operands: List<DeviceTensor> = k.operands
+                .into_iter()
+                .map(|o| g.reshaped(
+                    &view_of(g, values, o.node),
+                    &o.extents,
+                ))
+                .collect();
             g.grouped::<Untyped>(&operands, k.extents, &k.op, k.reduced);
         },
     };
@@ -1958,13 +1962,14 @@ fn reads_over(
 ) -> List<PlacedRead<Untyped>> with (GpuDevice, GpuQueue, GpuBuffer) {
     let mut per_row = space[0..<space.len() - 1].to_list();
     per_row.push(1);
-    return (*operands).into_iter().map(
-        |o| PlacedRead::<Untyped> { view: g.reshaped(&view_of(g, values, o.node), if o.extents == *extents {
+    return (*operands)
+        .into_iter()
+        .map(|o| PlacedRead::<Untyped> { view: g.reshaped(&view_of(g, values, o.node), if o.extents == *extents {
             space;
         } else {
             &per_row;
-        }) },
-    ).collect();
+        }) })
+        .collect();
 }
 
 /// The view of node `id`'s value on the device.

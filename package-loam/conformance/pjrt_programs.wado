@@ -75,12 +75,9 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
     note("mixed i64", apart(device, &got[4], &want.4));
 
     // The same graph over a weight the device holds in bf16.
-    let kept = device.kept_weights(
-        |r| r.finished([]),
-        0,
-        1,
-        |_| Result::<HostWeight, ()>::Ok(HostWeight::of(&x)),
-    ).unwrap();
+    let kept = device
+        .kept_weights(|r| r.finished([]), 0, 1, |_| Result::<HostWeight, ()>::Ok(HostWeight::of(&x)))
+        .unwrap();
     assert device.weight_bytes()[0] == 12, "every element of the weight fits bf16";
     let over_half = device.compiled(|r| {
         let rids = r.parameter::<i64, [cases::C]>(ids.extents);

@@ -23,11 +23,13 @@ test "a view builds its element's attributes, text and children in call order" {
         let mut clicks = 0;
         let card = element("div").attribute("class", "card");
         let _dispose = scope(|| {
-            card.children([
-                element("h2").text("Title"),
-                element("p").text("Count: ").bind_text(|| `${count.get()}`),
-                element("button").text("+").on("click", |_: Event| clicks += 1),
-            ]).child(element("footer").bind_attribute("title", || Option::Some(`${count.get()}`)));
+            card
+                .children([
+                    element("h2").text("Title"),
+                    element("p").text("Count: ").bind_text(|| `${count.get()}`),
+                    element("button").text("+").on("click", |_: Event| clicks += 1),
+                ])
+                .child(element("footer").bind_attribute("title", || Option::Some(`${count.get()}`)));
         });
         assert card.node.get_attribute("class") == Option::Some("card");
         assert card.node.get_html() == "<h2>Title</h2><p>Count: 1</p><button>+</button><footer title=\"1\"></footer>";

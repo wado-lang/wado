@@ -173,7 +173,9 @@ cache (float[1, T, 8] P, float[1, 1, 8] N, int64[1, "T + 1"] M) => (float[1, U, 
 
     assert out.contains("refuse(extents_mismatch(&backend.extents_of(M), \"M\", [\"M0\", \"M1\"], [1, -1]));");
     let bound = out.find("let dim_T = backend.extents_of(P)[1] as i64;").unwrap();
-    let check = out.find("refuse(extent_mismatch(\"M\", \"M1\", backend.extents_of(M)[1], \"T + 1\", dim_T + 1));").unwrap();
+    let check = out
+        .find("refuse(extent_mismatch(\"M\", \"M1\", backend.extents_of(M)[1], \"T + 1\", dim_T + 1));")
+        .unwrap();
     assert bound < check && check < out.find("joined_at::<").unwrap();
 }
 
@@ -1349,9 +1351,11 @@ test "a slice from each row's valid length takes each row's window" {
     let source = `g (float[B, N] X) => (float[B, ?] Y) <int64[1] F = {-1}, int64[1] E = {-4000000000}, int64[1] A = {1}, int64[1] Back = {-1}> {
         Y = Slice(X, F, E, A, Back)
     }`;
-    assert generate(source).unwrap().contains(
-        "let Y = strided_gather::<Bk, f32, [B, N], [B, Y1]>(backend, X, 1, &row_binary::<Bk>(backend, Binary::Add, &lengths.dim_N, &shared::<Bk>(backend, &scalar::<Bk, i64>(backend, -1))), Option::Some(0), to_extent(dim_N), -1);",
-    );
+    assert generate(source)
+        .unwrap()
+        .contains(
+            "let Y = strided_gather::<Bk, f32, [B, N], [B, Y1]>(backend, X, 1, &row_binary::<Bk>(backend, Binary::Add, &lengths.dim_N, &shared::<Bk>(backend, &scalar::<Bk, i64>(backend, -1))), Option::Some(0), to_extent(dim_N), -1);",
+        );
 }
 
 test "the rows share their lengths where a node reads how many rows the batch holds" {
@@ -1872,13 +1876,10 @@ test "rows of their own lengths decode at pasts of their own, which requests in 
 }
 
 test "a past that does not grow keeps rows of their own lengths from taking requests in slots" {
-    let stateful = ROWS_DECODER.replace(
-        "float[B, 1, P, 16] past_value)",
-        "float[B, 1, P, 16] past_value, float[B, 4] past_state)",
-    ).replace("float[B, 1, ?, 16] present_value)", "float[B, 1, ?, 16] present_value, float[B, 4] present_state)").replace(
-        "    logits = Add(raw, tilt)",
-        "    logits = Add(raw, tilt)\n    present_state = Neg(past_state)",
-    );
+    let stateful = ROWS_DECODER
+        .replace("float[B, 1, P, 16] past_value)", "float[B, 1, P, 16] past_value, float[B, 4] past_state)")
+        .replace("float[B, 1, ?, 16] present_value)", "float[B, 1, ?, 16] present_value, float[B, 4] present_state)")
+        .replace("    logits = Add(raw, tilt)", "    logits = Add(raw, tilt)\n    present_state = Neg(past_state)");
     let out = decoded_from(stateful).unwrap();
     assert out.contains("pub fn decode_rows<affine Bk: Graph>(");
     assert !out.contains("Requests");
@@ -1944,18 +1945,19 @@ test "decode refuses one input as both its token and its mask" {
 }
 
 test "decode refuses ids of more than one position" {
-    let two = DECODER.replace("int64[1, S] input_ids", "int64[1, 2] input_ids").replace(
-        "float[1, S, 8] logits",
-        "float[1, 2, 8] logits",
-    );
+    let two = DECODER
+        .replace("int64[1, S] input_ids", "int64[1, 2] input_ids")
+        .replace("float[1, S, 8] logits", "float[1, 2, 8] logits");
     assert refused_for(decoded_from(two), "must take one token");
 }
 
 test "decode refuses logits of rows other than the token's" {
-    let wide = DECODER.replace("float[1, S, 8] logits", "float[2, S, 8] logits").replace(
-        "logits = Add(raw, tilt)",
-        "rows = Constant <value = float[2, 1, 1] { 0.0, 0.0 }> ()\n    logits = Add(raw, rows)",
-    );
+    let wide = DECODER
+        .replace("float[1, S, 8] logits", "float[2, S, 8] logits")
+        .replace(
+            "logits = Add(raw, tilt)",
+            "rows = Constant <value = float[2, 1, 1] { 0.0, 0.0 }> ()\n    logits = Add(raw, rows)",
+        );
     assert refused_for(decoded_from(wide), "as many rows");
 }
 

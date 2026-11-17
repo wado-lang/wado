@@ -528,11 +528,13 @@ pub fn quantized_layer_pass(r: &mut Recorder) -> Recorded {
 /// The weights of `quantized_layer`, each apart from the others.
 pub fn quantized_layer_weights() -> List<[Tensor<u8, [C, Blocks, Blob]>, Tensor<f32, [C, Blocks]>, Tensor<u8, [C, Zeros]>]> {
     let q = quantized_case();
-    return (0..<4).map(|i| [
-        bytes::<[C, Blocks, Blob]>(q.weight.extents, 20 + i),
-        noisy::<[C, Blocks]>(q.scales.extents, (30 + i) as u32),
-        bytes::<[C, Zeros]>(q.zero_points.extents, 40 + i),
-    ]).collect();
+    return (0..<4)
+        .map(|i| [
+            bytes::<[C, Blocks, Blob]>(q.weight.extents, 20 + i),
+            noisy::<[C, Blocks]>(q.scales.extents, (30 + i) as u32),
+            bytes::<[C, Zeros]>(q.zero_points.extents, 40 + i),
+        ])
+        .collect();
 }
 
 /// The weight `at` of `quantized_layer_pass`, as a model's loader hands it over.

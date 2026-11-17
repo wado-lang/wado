@@ -455,8 +455,18 @@ fn built_max_pool(
         dilations.push(d);
         let low = window.pads[i];
         let reach = Poly::constant(((k - 1) * d + 1) as i64);
-        let last_start = window.output[i].try_sub(&Poly::constant(1)).unwrap().try_mul(&Poly::constant(s as i64)).unwrap();
-        let reached = last_start.try_add(&reach).unwrap().try_sub(&x.axes[2 + i].extent.poly()).unwrap().try_sub(&low).unwrap();
+        let last_start = window.output[i]
+            .try_sub(&Poly::constant(1))
+            .unwrap()
+            .try_mul(&Poly::constant(s as i64))
+            .unwrap();
+        let reached = last_start
+            .try_add(&reach)
+            .unwrap()
+            .try_sub(&x.axes[2 + i].extent.poly())
+            .unwrap()
+            .try_sub(&low)
+            .unwrap();
         let high = Poly::max_of(&reached, &Poly::constant(0), &node.site());
         pads.push(symbols.spell_extent(&low)?);
         pads.push(symbols.spell_extent(&high)?);

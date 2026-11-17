@@ -642,12 +642,9 @@ fn open_temp<S: AsStrSlice>(target: S) -> Result<[Descriptor, String], FsError> 
             n => `${base}.${n}`,
         };
         taken += 1;
-        let opened = dir.open_at(
-            PathFlags::none(),
-            candidate,
-            OpenFlags::Create | OpenFlags::Exclusive,
-            DescriptorFlags::Write,
-        ).wait();
+        let opened = dir
+            .open_at(PathFlags::none(), candidate, OpenFlags::Create | OpenFlags::Exclusive, DescriptorFlags::Write)
+            .wait();
         match opened {
             Ok(file) => {
                 return Result::Ok([file, candidate]);

@@ -512,9 +512,9 @@ pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
 }
 
 fn grammar_has_lexer_members(grammar: &Grammar) -> bool {
-    return grammar.named_actions.iter_ref().any(
-        |a: &NamedAction| is_lexer_members(a, &grammar.kind) && !a.body.text.trim().is_empty(),
-    );
+    return grammar.named_actions
+        .iter_ref()
+        .any(|a: &NamedAction| is_lexer_members(a, &grammar.kind) && !a.body.text.trim().is_empty());
 }
 
 /// Why a lexer base cannot be wired, or empty when it can. The message names

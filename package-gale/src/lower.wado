@@ -352,9 +352,10 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut LowerCont
 /// every rule is lowered, and emit asks it at both ends of a call so the
 /// declaration and the arguments cannot disagree.
 fn follow_rule_snakes(grammar: &Grammar, analysis: &GrammarAnalysis, marks: &LowerMarks) -> List<String> {
-    let forwards: List<List<i32>> = marks.follow_forward_edges.iter_ref().map(|targets| targets.iter_ref().map(
-        |t| analysis.snake_rule_index(t),
-    ).collect()).collect();
+    let forwards: List<List<i32>> = marks.follow_forward_edges.iter_ref().map(|targets| targets
+        .iter_ref()
+        .map(|t| analysis.snake_rule_index(t))
+        .collect()).collect();
     let reads = close_over_callers(&forwards, marks.rule_reads_follow);
     let mut snakes: List<String> = [];
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
