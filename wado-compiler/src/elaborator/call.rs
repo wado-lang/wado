@@ -24,7 +24,7 @@ use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
-use super::method_call::{PreselectedArg, Qualifier, StaticReceiver};
+use super::method_call::{PreselectedArg, QualifiedAnswer, Qualifier, StaticReceiver};
 use super::scope::{BinderInScope, BoundsOf, ParamRef, Scope, ScopedBound};
 use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
@@ -1769,23 +1769,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && callee_kind.case_owner().is_none()
             && let Some(receiver) = call_receiver.clone().or_else(namespaced)
             && let Some((prefix, method_name)) = effective_name.rsplit_once("::")
-            && self.names_instance_method(&receiver, method_name)
         {
-            if call_receiver.is_some() {
-                self.record_receiver_reference(ident, prefix);
+            match self.qualified_answer(&receiver, method_name) {
+                QualifiedAnswer::Static => {}
+                QualifiedAnswer::Ambiguous(traits) => {
+                    let _ = self.emit(TypeError::AmbiguousTraitMethod {
+                        method: method_name.to_string(),
+                        traits,
+                        span: call.span,
+                    });
+                    return self.resolve_args_without_callee(&call.args, ctx);
+                }
+                QualifiedAnswer::Method => {
+                    if call_receiver.is_some() {
+                        self.record_receiver_reference(ident, prefix);
+                    }
+                    let type_args = self.resolve_turbofish_args(&call.type_args);
+                    return self.resolve_qualified_call_parts(
+                        Qualifier::Type(&receiver),
+                        method_name,
+                        &call.args,
+                        type_args,
+                        call.id,
+                        ident.segments.last().map(|seg| seg.id),
+                        call.span,
+                        expected_type,
+                        ctx,
+                    );
+                }
             }
-            let type_args = self.resolve_turbofish_args(&call.type_args);
-            return self.resolve_qualified_call_parts(
-                Qualifier::Type(&receiver),
-                method_name,
-                &call.args,
-                type_args,
-                call.id,
-                ident.segments.last().map(|seg| seg.id),
-                call.span,
-                expected_type,
-                ctx,
-            );
         }
         // A case is reachable wherever its type is; only a static method has
         // a visibility of its own to check.

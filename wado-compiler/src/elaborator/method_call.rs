@@ -7,6 +7,7 @@ use super::trait_env::{ImplTargetKey, written_arg_nodes};
 use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
+use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{
     ARRAY_TYPE_NAME, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, UNIT_TYPE_NAME,
@@ -113,6 +114,14 @@ pub(super) enum Qualifier<'a> {
     /// `Type::method(recv, …)`: what `recv.method(…)` selects, `recv` being of
     /// that type.
     Type(&'a ReceiverId),
+}
+
+/// What kind of declaration a type answers `Type::method` with.
+pub(super) enum QualifiedAnswer {
+    Static,
+    Method,
+    /// Traits at one link answer with both kinds: each trait, by name.
+    Ambiguous(Vec<String>),
 }
 
 /// Inputs to [`Elaborator::resolve_method_call_with`], the TIR-level method-call
@@ -1480,28 +1489,55 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether `Type::method(…)` names a receiver-taking method. The spelled
-    /// type answers the name once, with declarations of both kinds, in the
-    /// order a method call ranks them: the nearest link of its newtype chain,
-    /// and there the type's own declaration before a trait's. The kind of what
-    /// answers decides whether the call selects as `recv.method(…)` does or
-    /// as a static.
-    pub(super) fn names_instance_method(&mut self, receiver: &ReceiverId, method_name: &str) -> bool {
+    /// What `Type::method(…)` names. The spelled type answers the name once,
+    /// with declarations of both kinds, in the order a method call ranks them:
+    /// the nearest link of its newtype chain, and there the type's own
+    /// declaration before a trait's. The kind of what answers decides whether
+    /// the call selects as `recv.method(…)` does or as a static; traits there
+    /// answering with both kinds leave nothing to select.
+    pub(super) fn qualified_answer(&mut self, receiver: &ReceiverId, method_name: &str) -> QualifiedAnswer {
         if self.declares_case_named(receiver.key(), method_name) {
-            return false;
+            return QualifiedAnswer::Static;
         }
+        let kind = |takes_receiver: bool| {
+            if takes_receiver {
+                QualifiedAnswer::Method
+            } else {
+                QualifiedAnswer::Static
+            }
+        };
         let own = [true, false].map(|takes_receiver| {
             self.own_link(receiver.key(), method_name, takes_receiver)
-                .map(|link| ((link, false), takes_receiver))
+                .map(|link| ((link, false), Vec::new(), takes_receiver))
         });
         let supplied = self
             .trait_answer(receiver, method_name)
-            .map(|(link, takes_receiver)| ((link, true), takes_receiver));
-        own.into_iter()
+            .map(|(link, blocks)| ((link, true), blocks, false));
+        let Some((_, blocks, takes_receiver)) = own
+            .into_iter()
             .chain([supplied])
             .flatten()
-            .min_by_key(|&(order, _)| order)
-            .is_some_and(|(_, takes_receiver)| takes_receiver)
+            .min_by_key(|(order, _, _)| *order)
+        else {
+            return QualifiedAnswer::Static;
+        };
+        let kinds: IndexSet<bool> = blocks
+            .iter()
+            .filter_map(|&block| self.block_takes_receiver(block, method_name))
+            .collect();
+        match kinds.len() {
+            0 => kind(takes_receiver),
+            1 => kind(kinds[0]),
+            _ => {
+                let defs = self.tysys.resolutions.defs();
+                let traits: IndexSet<String> = blocks
+                    .iter()
+                    .filter_map(|&block| self.tysys.signatures.impl_trait(block))
+                    .map(|decl| defs.name(decl).to_string())
+                    .collect();
+                QualifiedAnswer::Ambiguous(traits.into_iter().collect())
+            }
+        }
     }
 
     /// The link of `key`'s newtype chain whose own declaration of
@@ -1528,16 +1564,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         unreachable!("a chain ends")
     }
 
-    /// The link of the spelled type's chain where a trait impl answers
-    /// `method_name`, and whether one there takes a receiver. The order asks
-    /// the type itself, so a blanket answers where its bounds hold. A generic
-    /// type spelled without its arguments is no type the order can ask, and
-    /// there the blocks written for its head answer.
-    fn trait_answer(&mut self, receiver: &ReceiverId, method_name: &str) -> Option<(u32, bool)> {
+    /// The link of the spelled type's chain where trait impls answer
+    /// `method_name`, and those impls. The order asks the type itself, by
+    /// value and through each reference, so a blanket answers where its
+    /// bounds hold. A generic type spelled without its arguments is no type
+    /// the order can ask, and there the blocks written for its head answer.
+    fn trait_answer(&mut self, receiver: &ReceiverId, method_name: &str) -> Option<(u32, Vec<DefId>)> {
         let ordered = self.spelled_type(receiver).and_then(|ty| {
             let bridge = self.tysys.solver.as_ref()?.borrow();
             let module = self.frame_module();
-            [None, Some(false), Some(true)]
+            let found: Vec<(u32, Vec<DefId>)> = [None, Some(false), Some(true)]
                 .into_iter()
                 .filter_map(|through_ref| {
                     bridge.nearest_impls(
@@ -1549,34 +1585,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     )
                 })
-                .min_by_key(|(link, _)| *link)
-        });
-        let (link, blocks) = match ordered {
-            Some(found) => found,
-            None => self.written_impls(receiver.key(), method_name)?,
-        };
-        Some((
-            link,
-            blocks
+                .collect();
+            let nearest = found.iter().map(|(link, _)| *link).min()?;
+            let blocks = found
                 .into_iter()
-                .any(|block| self.block_takes_receiver(block, method_name) == Some(true)),
-        ))
+                .filter(|(link, _)| *link == nearest)
+                .flat_map(|(_, blocks)| blocks)
+                .collect();
+            Some((nearest, blocks))
+        });
+        match ordered {
+            Some(found) => Some(found),
+            None => self.written_impls(receiver.key(), method_name),
+        }
     }
 
     /// The trait impls written for a link of `key`'s chain that declare
     /// `method_name`, at the nearest link any does.
     fn written_impls(&mut self, key: &ImplTargetKey, method_name: &str) -> Option<(u32, Vec<DefId>)> {
-        let mut key = key.clone();
+        // A link keyed by no declaration (`&Point`) is told apart by its whole
+        // type, which the chain declares.
+        let (mut key, mut declared) = (key.clone(), None);
         for link in 0.. {
             let blocks: Vec<DefId> = self
-                .trait_impls_for_receiver(&ReceiverId::keyed(key.clone(), None), &[])
+                .trait_impls_for_receiver(&ReceiverId::keyed(key.clone(), declared), &[])
                 .into_iter()
                 .filter(|&block| self.block_takes_receiver(block, method_name).is_some())
                 .collect();
             if !blocks.is_empty() {
                 return Some((link, blocks));
             }
-            key = self.newtype_link_target(&key)?.0;
+            let (next, ty) = self.newtype_link_target(&key)?;
+            (key, declared) = (next, Some(ty));
         }
         unreachable!("a chain ends")
     }
@@ -2190,9 +2230,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(Qualifier::Trait(self.tysys.required_trait(decl)))
             }
             Some(_) => None,
-            None => self
-                .names_instance_method(&spelled, &static_call.method)
-                .then_some(Qualifier::Type(&spelled)),
+            None => match self.qualified_answer(&spelled, &static_call.method) {
+                QualifiedAnswer::Static => None,
+                QualifiedAnswer::Method => Some(Qualifier::Type(&spelled)),
+                QualifiedAnswer::Ambiguous(traits) => {
+                    let _ = self.emit(TypeError::AmbiguousTraitMethod {
+                        method: static_call.method.clone(),
+                        traits,
+                        span: static_call.span,
+                    });
+                    return self.resolve_args_without_callee(&static_call.args, ctx);
+                }
+            },
         };
         if let Some(qualifier) = qualifier {
             let method_type_args = self.resolve_turbofish_args(&static_call.type_args);
