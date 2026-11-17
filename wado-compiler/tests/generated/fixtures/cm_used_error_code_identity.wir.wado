@@ -422,15 +422,15 @@ fn "cm_used_error_code_identity.wado/run"() with Stdout, Process {
 }
 
 fn "cm_used_error_code_identity.wado/$cm_binding__core:process/process@0.1.0#spawn"(cmd, cwd) with Process {
-    let $cmd_f0_packed: i64;
+    let $cmd_f_0_packed: i64;
     let $list_val_4: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let $list_i_7: i32;
     let $list_addr_8: i32;
     let $packed_10: i64;
     let $list_val_11: ref "core:prelude/list.wado//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
-    let $cmd_f3_val: ref null "core:process/types.wado//Input";
-    let $cmd_flat8: i32;
-    let $cmd_flat9: i32;
+    let $cmd_f_3_val: ref null "core:process/types.wado//Input";
+    let $cmd_owned_8: i32;
+    let $cmd_owned_9: i32;
     let $outptr: i32;
     let $result_val: ref null "core:prelude/types.wado//Result<core:process/types.wado/Spawned,core:process/types.wado/ErrorCode>";
     let $local_56: ref null "core:prelude//$Resource";
@@ -455,7 +455,7 @@ fn "cm_used_error_code_identity.wado/$cm_binding__core:process/process@0.1.0#spa
     self_82 = local.tee s_78(cmd.program).used;
     ptr_81 = "mem/realloc"(0, 0, 1, self_82);
     "core:rt/gc_array_to_memory$spec0$dae[src_start]"(s_78.repr, ptr_81, self_82);
-    $cmd_f0_packed = builtin::i64_extend_i32_u(ptr_81) | (builtin::i64_extend_i32_s(self_82) << 32_i64);
+    $cmd_f_0_packed = builtin::i64_extend_i32_u(ptr_81) | (builtin::i64_extend_i32_s(self_82) << 32_i64);
     self_82 = local.tee $list_val_4(cmd.args).used;
     if @unlikely(268435455 <u self_82) {
         cold_path;
@@ -573,16 +573,16 @@ fn "cm_used_error_code_identity.wado/$cm_binding__core:process/process@0.1.0#spa
         };
     }
     let $slot_box_17: ref null "core:prelude//$Cell<core:process/types.wado/Input>";
-    $cmd_f3_val = (if ref.is_null(local.tee $slot_box_17(cmd.stdin)) -> ref null "core:process/types.wado//Input" {
+    $cmd_f_3_val = (if ref.is_null(local.tee $slot_box_17(cmd.stdin)) -> ref null "core:process/types.wado//Input" {
         ref.null none;
     } else {
         $slot_box_17.value;
     });
     $list_addr_8 = 0;
-    if local.tee self_100($cmd_f3_val.discriminant) == 0 {
+    if local.tee self_100($cmd_f_3_val.discriminant) == 0 {
     } else if self_100 == 1 {
     } else {
-        $list_addr_8 = ref.cast "core:process/types.wado//Input::Piped"($cmd_f3_val).payload_0.value;
+        $list_addr_8 = ref.cast "core:process/types.wado//Input::Piped"($cmd_f_3_val).payload_0.value;
     }
     ptr_99 = ref.test "core:prelude/types.wado//Option<&wasi:filesystem/types.wado/Descriptor>::Some"(cwd);
     $sroa_$sroa_$list_elem_0_141_used_148 = 0;
@@ -590,12 +590,12 @@ fn "cm_used_error_code_identity.wado/$cm_binding__core:process/process@0.1.0#spa
         $sroa_$sroa_$list_elem_0_141_used_148 = ref.cast "core:prelude/types.wado//Option<&wasi:filesystem/types.wado/Descriptor>::Some"(cwd).payload_0.value;
     } else {
     }
-    $sroa_$sroa_$list_elem_1_142_used_150 = builtin::i32_wrap_i64($cmd_f0_packed);
-    ptr_120 = builtin::i32_wrap_i64($cmd_f0_packed >> 32_i64);
-    $cmd_flat8 = cmd.stdout;
-    $cmd_flat9 = cmd.stderr;
+    $sroa_$sroa_$list_elem_1_142_used_150 = builtin::i32_wrap_i64($cmd_f_0_packed);
+    ptr_120 = builtin::i32_wrap_i64($cmd_f_0_packed >> 32_i64);
+    $cmd_owned_8 = cmd.stdout;
+    $cmd_owned_9 = cmd.stderr;
     $outptr = "mem/realloc"(0, 0, 4, 28);
-    "wasi/$core:process/process@0.1.0#spawn"($sroa_$sroa_$list_elem_1_142_used_150, ptr_120, ptr_81, self_82, $licm_used_143, $list_i_7, self_100, $list_addr_8, $cmd_flat8, $cmd_flat9, ptr_99, $sroa_$sroa_$list_elem_0_141_used_148, $outptr);
+    "wasi/$core:process/process@0.1.0#spawn"($sroa_$sroa_$list_elem_1_142_used_150, ptr_120, ptr_81, self_82, $licm_used_143, $list_i_7, self_100, $list_addr_8, $cmd_owned_8, $cmd_owned_9, ptr_99, $sroa_$sroa_$list_elem_0_141_used_148, $outptr);
     if ptr_120 > 0 {
         drop("mem/realloc"($sroa_$sroa_$list_elem_1_142_used_150, ptr_120, 1, 0));
     }
@@ -1045,8 +1045,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/leading_sign_byte_len<core
     return 0;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -1056,8 +1056,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()

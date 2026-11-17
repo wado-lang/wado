@@ -168,28 +168,28 @@ fn "opt_const_fold_aliased_field.wado/via_call"(a, b) {
 
 fn "opt_const_fold_aliased_field.wado/run"() with Stdout {
     let n: ref "opt_const_fold_aliased_field.wado//Node";
-    let $v0_1: i32;
+    let $v_0: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_1_20: i32;
     let new_repr: ref Array<u8>;
-    if @unlikely(local.tee $v0_1("opt_const_fold_aliased_field.wado/direct"(local.tee n(struct.new "opt_const_fold_aliased_field.wado//Node" { value: 0 }), n)) != 20) {
+    if @unlikely(local.tee $v_0("opt_const_fold_aliased_field.wado/direct"(local.tee n(struct.new "opt_const_fold_aliased_field.wado//Node" { value: 0 }), n)) != 20) {
         cold_path;
-        "opt_const_fold_aliased_field.wado/run$cold1"($v0_1);
+        "opt_const_fold_aliased_field.wado/run$cold1"($v_0);
         unreachable;
     }
-    if @unlikely(local.tee $v0_1("opt_const_fold_aliased_field.wado/via_call"(local.tee n(struct.new "opt_const_fold_aliased_field.wado//Node" { value: 0 }), n)) != 20) {
+    if @unlikely(local.tee $v_0("opt_const_fold_aliased_field.wado/via_call"(local.tee n(struct.new "opt_const_fold_aliased_field.wado//Node" { value: 0 }), n)) != 20) {
         cold_path;
-        "opt_const_fold_aliased_field.wado/run$cold0"($v0_1);
+        "opt_const_fold_aliased_field.wado/run$cold0"($v_0);
         unreachable;
     }
-    $v0_1 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $v_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_20 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $v0_1 = "opt_const_fold_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v0_1);
+    $v_0 = "opt_const_fold_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v_0);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:opt_const_fold_aliased_field.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_20, new_repr);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_20);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v0_1);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v_0);
 }
 
 fn "opt_const_fold_aliased_field.wado/$template_segment$opt_const_fold_aliased_field.wado/$tmpl$ebaa20f4a908b504"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {
@@ -215,9 +215,9 @@ fn "opt_const_fold_aliased_field.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "opt_const_fold_aliased_field.wado/run$cold0"($v0) with Stdout {
+fn "opt_const_fold_aliased_field.wado/run$cold0"($v_3) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_const_fold_aliased_field.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_const_fold_aliased_field.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_const_fold_aliased_field.wado:39
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_const_fold_aliased_field.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_const_fold_aliased_field.wado//$tmpl$ebaa20f4a908b504" { h0: $v_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_const_fold_aliased_field.wado:39
 condition: via_call(&mut m, &mut m) == 20
 via_call(&mut m, &mut m): "), used: 132 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_const_fold_aliased_field.wado:39
 condition: via_call(&mut m, &mut m) == 20
@@ -225,9 +225,9 @@ via_call(&mut m, &mut m): "), used: 132 }, s1: struct.new "core:prelude/string.w
     unreachable;
 }
 
-fn "opt_const_fold_aliased_field.wado/run$cold1"($v0) with Stdout {
+fn "opt_const_fold_aliased_field.wado/run$cold1"($v_0) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_const_fold_aliased_field.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_const_fold_aliased_field.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_const_fold_aliased_field.wado:37
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_const_fold_aliased_field.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_const_fold_aliased_field.wado//$tmpl$ebaa20f4a908b504" { h0: $v_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_const_fold_aliased_field.wado:37
 condition: direct(&mut n, &mut n) == 20
 direct(&mut n, &mut n): "), used: 128 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_const_fold_aliased_field.wado:37
 condition: direct(&mut n, &mut n) == 20

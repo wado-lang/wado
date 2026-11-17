@@ -158,19 +158,19 @@ fn "assert_place_rendered_once.wado/$hole_fmt$assert_place_rendered_once.wado/$t
 
 fn "assert_place_rendered_once.wado/$cm_export__run"() {
     let x: i32;
-    let $v1: i32;
-    let $v2: i32;
-    if @unlikely(local.tee $v2(local.tee $v1(local.tee x(black_box(10)) + x) + x) != 99) {
+    let $v_1: i32;
+    let $v_2: i32;
+    if @unlikely(local.tee $v_2(local.tee $v_1(local.tee x(black_box(10)) + x) + x) != 99) {
         cold_path;
-        "assert_place_rendered_once.wado/run$cold0"(x, $v1, $v2);
+        "assert_place_rendered_once.wado/run$cold0"(x, $v_1, $v_2);
         unreachable;
     }
     "wasi/task-return"(0);
 }
 
-fn "assert_place_rendered_once.wado/run$cold0"(x, $v1, $v2) {
+fn "assert_place_rendered_once.wado/run$cold0"(x, $v_1, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<assert_place_rendered_once.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "assert_place_rendered_once.wado//$tmpl$72a42041a31d7898" { h0: x, h1: $v1, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at assert_place_rendered_once.wado:6
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<assert_place_rendered_once.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "assert_place_rendered_once.wado//$tmpl$72a42041a31d7898" { h0: x, h1: $v_1, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at assert_place_rendered_once.wado:6
 condition: x + x + x == 99
 x: "), used: 91 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at assert_place_rendered_once.wado:6
 condition: x + x + x == 99

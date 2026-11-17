@@ -184,21 +184,21 @@ fn "opt_variant_return_mutual_tail.wado/is_even"(n) {
 }
 
 fn "opt_variant_return_mutual_tail.wado/run"() {
-    let $v0_0: i32;
-    let $v1_1: i32;
-    if @unlikely(local.tee $v1_1("opt_variant_return_mutual_tail.wado/is_even"(local.tee $v0_0(black_box(4)))) != 1) {
+    let $v_0: i32;
+    let $v_1: i32;
+    if @unlikely(local.tee $v_1("opt_variant_return_mutual_tail.wado/is_even"(local.tee $v_0(black_box(4)))) != 1) {
         cold_path;
-        "opt_variant_return_mutual_tail.wado/run$cold2"($v0_0, $v1_1);
+        "opt_variant_return_mutual_tail.wado/run$cold2"($v_0, $v_1);
         unreachable;
     }
-    if @unlikely((local.tee $v1_1("opt_variant_return_mutual_tail.wado/is_even"(local.tee $v0_0(black_box(5)))) == 0) == 0) {
+    if @unlikely((local.tee $v_1("opt_variant_return_mutual_tail.wado/is_even"(local.tee $v_0(black_box(5)))) == 0) == 0) {
         cold_path;
-        "opt_variant_return_mutual_tail.wado/run$cold1"($v0_0, $v1_1);
+        "opt_variant_return_mutual_tail.wado/run$cold1"($v_0, $v_1);
         unreachable;
     }
-    if @unlikely(local.tee $v1_1("opt_variant_return_mutual_tail.wado/is_even"(local.tee $v0_0(black_box(-1)))) != -1) {
+    if @unlikely(local.tee $v_1("opt_variant_return_mutual_tail.wado/is_even"(local.tee $v_0(black_box(-1)))) != -1) {
         cold_path;
-        "opt_variant_return_mutual_tail.wado/run$cold0"($v0_0, $v1_1);
+        "opt_variant_return_mutual_tail.wado/run$cold0"($v_0, $v_1);
         unreachable;
     }
 }
@@ -218,9 +218,9 @@ fn "opt_variant_return_mutual_tail.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "opt_variant_return_mutual_tail.wado/run$cold0"($v0, $v1) {
+fn "opt_variant_return_mutual_tail.wado/run$cold0"($v_8, $v_9) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_variant_return_mutual_tail.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "opt_variant_return_mutual_tail.wado//$tmpl$4432d2d1cbeba55c" { h0: $v0, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_variant_return_mutual_tail.wado:44
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_variant_return_mutual_tail.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "opt_variant_return_mutual_tail.wado//$tmpl$4432d2d1cbeba55c" { h0: $v_8, h1: $v_9, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_variant_return_mutual_tail.wado:44
 condition: is_even(builtin::black_box(-1)) == -1
 builtin::black_box(-1): "), used: 139 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_variant_return_mutual_tail.wado:44
 condition: is_even(builtin::black_box(-1)) == -1
@@ -230,9 +230,9 @@ is_even(builtin::black_box(-1)): "), used: 34 }, s2: struct.new "core:prelude/st
     unreachable;
 }
 
-fn "opt_variant_return_mutual_tail.wado/run$cold1"($v0, $v1) {
+fn "opt_variant_return_mutual_tail.wado/run$cold1"($v_4, $v_5) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_variant_return_mutual_tail.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "opt_variant_return_mutual_tail.wado//$tmpl$4432d2d1cbeba55c" { h0: $v0, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_variant_return_mutual_tail.wado:43
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_variant_return_mutual_tail.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "opt_variant_return_mutual_tail.wado//$tmpl$4432d2d1cbeba55c" { h0: $v_4, h1: $v_5, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_variant_return_mutual_tail.wado:43
 condition: is_even(builtin::black_box(5)) == 0
 builtin::black_box(5): "), used: 136 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_variant_return_mutual_tail.wado:43
 condition: is_even(builtin::black_box(5)) == 0
@@ -242,9 +242,9 @@ is_even(builtin::black_box(5)): "), used: 33 }, s2: struct.new "core:prelude/str
     unreachable;
 }
 
-fn "opt_variant_return_mutual_tail.wado/run$cold2"($v0, $v1) {
+fn "opt_variant_return_mutual_tail.wado/run$cold2"($v_0, $v_1) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_variant_return_mutual_tail.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "opt_variant_return_mutual_tail.wado//$tmpl$4432d2d1cbeba55c" { h0: $v0, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_variant_return_mutual_tail.wado:42
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_variant_return_mutual_tail.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "opt_variant_return_mutual_tail.wado//$tmpl$4432d2d1cbeba55c" { h0: $v_0, h1: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_variant_return_mutual_tail.wado:42
 condition: is_even(builtin::black_box(4)) == 1
 builtin::black_box(4): "), used: 136 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_variant_return_mutual_tail.wado:42
 condition: is_even(builtin::black_box(4)) == 1

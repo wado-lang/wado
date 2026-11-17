@@ -174,18 +174,18 @@ fn "dead_field_cm_lift.wado/$cm_binding__wasi:clocks/system-clock@0.3.0#now"() w
 }
 
 fn "dead_field_cm_lift.wado/$cm_export__run"() {
-    let $v0: u32;
-    if @unlikely(local.tee $v0("dead_field_cm_lift.wado/$cm_binding__wasi:clocks/system-clock@0.3.0#now"().nanoseconds) >=u 1000000000) {
+    let $v_0: u32;
+    if @unlikely(local.tee $v_0("dead_field_cm_lift.wado/$cm_binding__wasi:clocks/system-clock@0.3.0#now"().nanoseconds) >=u 1000000000) {
         cold_path;
-        "dead_field_cm_lift.wado/run$cold0"($v0);
+        "dead_field_cm_lift.wado/run$cold0"($v_0);
         unreachable;
     }
     "wasi/task-return"(0);
 }
 
-fn "dead_field_cm_lift.wado/run$cold0"($v0) with SystemClock {
+fn "dead_field_cm_lift.wado/run$cold0"($v_0) with SystemClock {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<dead_field_cm_lift.wado/$tmpl$96693f35219525e8,[u32]>"(struct.new "dead_field_cm_lift.wado//$tmpl$96693f35219525e8" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at dead_field_cm_lift.wado:10
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<dead_field_cm_lift.wado/$tmpl$96693f35219525e8,[u32]>"(struct.new "dead_field_cm_lift.wado//$tmpl$96693f35219525e8" { h0: $v_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at dead_field_cm_lift.wado:10
 condition: now.nanoseconds < 1_000_000_000 as u32
 now.nanoseconds: "), used: 121 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at dead_field_cm_lift.wado:10
 condition: now.nanoseconds < 1_000_000_000 as u32

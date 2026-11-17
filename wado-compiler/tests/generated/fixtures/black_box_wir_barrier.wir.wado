@@ -176,8 +176,8 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 
 fn "black_box_wir_barrier.wado/run"() {
     let taken: i32;
-    let $v1: i32;
-    let $v2: i32;
+    let $v_10: i32;
+    let $v_11: i32;
     if black_box(0) == 0 {
         taken = 1;
     } else {
@@ -202,9 +202,9 @@ fn "black_box_wir_barrier.wado/run"() {
         "black_box_wir_barrier.wado/run$cold2"(taken);
         unreachable;
     }
-    if @unlikely(local.tee $v2(local.tee $v1(local.tee taken(black_box(300)) << 24) >> 24) != 44) {
+    if @unlikely(local.tee $v_11(local.tee $v_10(local.tee taken(black_box(300)) << 24) >> 24) != 44) {
         cold_path;
-        "black_box_wir_barrier.wado/run$cold1"(taken, $v1, $v2);
+        "black_box_wir_barrier.wado/run$cold1"(taken, $v_10, $v_11);
         unreachable;
     }
     taken = 0;
@@ -259,9 +259,9 @@ emi: "), used: 82 }, s1: struct.new "core:prelude/string.wado//String" { repr: a
     unreachable;
 }
 
-fn "black_box_wir_barrier.wado/run$cold1"($v0, $v1, $v2) {
+fn "black_box_wir_barrier.wado/run$cold1"($v_9, $v_10, $v_11) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<black_box_wir_barrier.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "black_box_wir_barrier.wado//$tmpl$72a42041a31d7898" { h0: $v0, h1: $v1, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at black_box_wir_barrier.wado:33
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<black_box_wir_barrier.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "black_box_wir_barrier.wado//$tmpl$72a42041a31d7898" { h0: $v_9, h1: $v_10, h2: $v_11, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at black_box_wir_barrier.wado:33
 condition: builtin::black_box(300) << 24 >> 24 == 44
 builtin::black_box(300): "), used: 135 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at black_box_wir_barrier.wado:33
 condition: builtin::black_box(300) << 24 >> 24 == 44

@@ -205,7 +205,7 @@ global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/strin
 
 fn "allocator_freelist_align.wado/run"() with Stdout {
     let p: i32;
-    let $v1: i32;
+    let $v_2: i32;
     let item: i32;
     let $cm_pair_7: i64;
     let new_repr: ref Array<u8>;
@@ -216,9 +216,9 @@ fn "allocator_freelist_align.wado/run"() with Stdout {
             break_if b0 $sroa_$iter_0_index_51 >= 7;
             item = builtin::array_get_value<i32>(global:allocator_freelist_align.wado::$const_obj_1, $sroa_$iter_0_index_51);
             $sroa_$iter_0_index_51 = $sroa_$iter_0_index_51 + 1;
-            if @unlikely((local.tee $v1(local.tee p("mem/realloc"(0, 0, 16, item)) & 15) == 0) == 0) {
+            if @unlikely((local.tee $v_2(local.tee p("mem/realloc"(0, 0, 16, item)) & 15) == 0) == 0) {
                 cold_path;
-                "allocator_freelist_align.wado/run$cold0"(item, p, $v1);
+                "allocator_freelist_align.wado/run$cold0"(item, p, $v_2);
                 unreachable;
             }
             continue l1;
@@ -287,9 +287,9 @@ fn "allocator_freelist_align.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "allocator_freelist_align.wado/run$cold0"(s, p, $v1) with Stdout {
+fn "allocator_freelist_align.wado/run$cold0"(s, p, $v_2) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_align.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "allocator_freelist_align.wado//$tmpl$59e16269228f9c88" { h0: "core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_align.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>"(struct.new "allocator_freelist_align.wado//$tmpl$8db8629cb9c7db93" { h0: p, h1: s, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("payload "), used: 8 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("payload "), used: 8 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" for size "), used: 10 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" for size "), used: 10 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" is not 16-aligned"), used: 18 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" is not 16-aligned"), used: 18 } }), h1: p, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_align.wado:10: "), used: 61 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_align.wado:10: "), used: 61 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_align.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "allocator_freelist_align.wado//$tmpl$59e16269228f9c88" { h0: "core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_align.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>"(struct.new "allocator_freelist_align.wado//$tmpl$8db8629cb9c7db93" { h0: p, h1: s, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("payload "), used: 8 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("payload "), used: 8 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" for size "), used: 10 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" for size "), used: 10 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" is not 16-aligned"), used: 18 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" is not 16-aligned"), used: 18 } }), h1: p, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_align.wado:10: "), used: 61 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_align.wado:10: "), used: 61 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: builtin::i32_and(p, 15) == 0
 p: "), used: 44 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: builtin::i32_and(p, 15) == 0

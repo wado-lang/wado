@@ -648,13 +648,13 @@ fn "mut_ref_write_back_variant_field.wado/takes_by_value"(xs, p) {
 fn "mut_ref_write_back_variant_field.wado/hoists_a_by_value_arg"(xs, b) {
     let $load_4: ref null "core:prelude/string.wado//String";
     let $write_back_3: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>";
-    let $write_back_before_4: ref null "core:prelude/string.wado//String";
+    let $before__4: ref null "core:prelude/string.wado//String";
     let $av_8: i32;
     $av_8 = xs.used;
     xs = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = xs.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($av_8)), 0, $array_clone_src_1, 0, $av_8); $array_clone_dst_2, used: $av_8 };
-    $write_back_before_4 = local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: b.item }).value;
+    $before__4 = local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: b.item }).value;
     "mut_ref_write_back_variant_field.wado/takes_by_value"(xs, $write_back_3);
-    if ref.eq(local.tee $load_4($write_back_3.value), $write_back_before_4) == 0 {
+    if ref.eq(local.tee $load_4($write_back_3.value), $before__4) == 0 {
         b.item = $load_4;
     }
 }
@@ -869,15 +869,15 @@ fn "mut_ref_write_back_variant_field.wado/$test_3_a_generic_variant_field_writes
     let $load_1: ref null "core:prelude/string.wado//String";
     let t: ref "core:prelude/string.wado//String";
     let $write_back_3: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Slot<core:prelude/string.wado/String>>";
-    let $write_back_before_4: ref null "core:prelude/string.wado//String";
+    let $before__4: ref null "core:prelude/string.wado//String";
     let a_end: i32;
     let i: i32;
     let $sroa_c_slot_18: ref null "core:prelude/string.wado//String";
     let $licm_repr_19: ref Array<u8>;
     $sroa_c_slot_18 = ref.null none;
-    $write_back_before_4 = local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Slot<core:prelude/string.wado/String>>" { value: ref.null none }).value;
+    $before__4 = local.tee $write_back_3(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Slot<core:prelude/string.wado/String>>" { value: ref.null none }).value;
     "mut_ref_write_back_variant_field.wado/refill"($write_back_3);
-    if ref.eq(local.tee $load_1($write_back_3.value), $write_back_before_4) == 0 {
+    if ref.eq(local.tee $load_1($write_back_3.value), $before__4) == 0 {
         $sroa_c_slot_18 = $load_1;
     }
     if @unlikely((if ref.is_null($sroa_c_slot_18) == 0 -> bool {
@@ -938,7 +938,7 @@ fn "mut_ref_write_back_variant_field.wado/$test_4_the_place_is_evaluated_once"()
     let $contract_arg_0: i32;
     let $write_back_place_16: ref "mut_ref_write_back_variant_field.wado//Bag";
     let $write_back_17: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>";
-    let $write_back_before_18: ref null "core:prelude/string.wado//String";
+    let $before__18: ref null "core:prelude/string.wado//String";
     let elements: ref "Array<mut_ref_write_back_variant_field.wado/Bag>";
     let i: i32;
     let $licm_repr_50: ref Array<u8>;
@@ -948,9 +948,9 @@ fn "mut_ref_write_back_variant_field.wado/$test_4_the_place_is_evaluated_once"()
         "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_write_back_variant_field.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mut_ref_write_back_variant_field.wado:179"), used: 41 });
         unreachable;
     }
-    $write_back_before_18 = local.tee $write_back_17(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: local.tee $write_back_place_16(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(elements, $contract_arg_0)).item }).value;
+    $before__18 = local.tee $write_back_17(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: local.tee $write_back_place_16(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(elements, $contract_arg_0)).item }).value;
     "mut_ref_write_back_variant_field.wado/replace"($write_back_17);
-    if ref.eq(local.tee $load_2($write_back_17.value), $write_back_before_18) == 0 {
+    if ref.eq(local.tee $load_2($write_back_17.value), $before__18) == 0 {
         $write_back_place_16.item = $load_2;
     }
     if @unlikely(local.tee $contract_arg_0(n.n) != 1) {
@@ -958,8 +958,8 @@ fn "mut_ref_write_back_variant_field.wado/$test_4_the_place_is_evaluated_once"()
         "mut_ref_write_back_variant_field.wado/$test_4_the_place_is_evaluated_once$cold1"($contract_arg_0);
         unreachable;
     }
-    if @unlikely((if ref.is_null(local.tee $write_back_before_18(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(elements, 0).item)) == 0 -> bool {
-        t = ref.as_non_null($write_back_before_18);
+    if @unlikely((if ref.is_null(local.tee $before__18(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(elements, 0).item)) == 0 -> bool {
+        t = ref.as_non_null($before__18);
         $inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
             if local.tee $contract_arg_0(t.used) != 3 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
@@ -1080,18 +1080,18 @@ fn "mut_ref_write_back_variant_field.wado/$test_8_an_indirect_callee_runs_before
     let t: ref "core:prelude/string.wado//String";
     let $write_back_place_3: ref "canonical//CanonicalClosure_0";
     let $write_back_4: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>";
-    let $write_back_before_5: ref null "core:prelude/string.wado//String";
+    let $before__5: ref null "core:prelude/string.wado//String";
     let a_end: i32;
     let i: i32;
     let $licm_repr_19: ref Array<u8>;
     $write_back_place_3 = "mut_ref_write_back_variant_field.wado/pick"(local.tee b_0(struct.new "mut_ref_write_back_variant_field.wado//Bag" { item: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 }, tick: 0 }));
-    $write_back_before_5 = local.tee $write_back_4(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: b_0.item }).value;
+    $before__5 = local.tee $write_back_4(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: b_0.item }).value;
     call_ref "functype/$canonical_closure_fn_0"($write_back_place_3.func, $write_back_place_3.env, $write_back_4);
-    if ref.eq(local.tee $load_4($write_back_4.value), $write_back_before_5) == 0 {
+    if ref.eq(local.tee $load_4($write_back_4.value), $before__5) == 0 {
         b_0.item = $load_4;
     }
-    if @unlikely((if ref.is_null(local.tee $write_back_before_5(b_0.item)) == 0 -> bool {
-        t = ref.as_non_null($write_back_before_5);
+    if @unlikely((if ref.is_null(local.tee $before__5(b_0.item)) == 0 -> bool {
+        t = ref.as_non_null($before__5);
         $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
             if local.tee a_end(t.used) != 10 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
@@ -1719,9 +1719,9 @@ condition: bs[0].item matches { Text(t) && t == `xyz` }
     unreachable;
 }
 
-fn "mut_ref_write_back_variant_field.wado/$test_4_the_place_is_evaluated_once$cold1"($v0) {
+fn "mut_ref_write_back_variant_field.wado/$test_4_the_place_is_evaluated_once$cold1"($v_0) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<mut_ref_write_back_variant_field.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "mut_ref_write_back_variant_field.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_the_place_is_evaluated_once at mut_ref_write_back_variant_field.wado:180
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<mut_ref_write_back_variant_field.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "mut_ref_write_back_variant_field.wado//$tmpl$ebaa20f4a908b504" { h0: $v_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_the_place_is_evaluated_once at mut_ref_write_back_variant_field.wado:180
 condition: n.n == 1
 n.n: "), used: 126 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_the_place_is_evaluated_once at mut_ref_write_back_variant_field.wado:180
 condition: n.n == 1
@@ -1736,9 +1736,9 @@ condition: b.item matches { Text(t) && t == `via_b` }
     unreachable;
 }
 
-fn "mut_ref_write_back_variant_field.wado/$test_6_a_hoisted_by_value_argument_is_still_copied$cold0"($v0) {
+fn "mut_ref_write_back_variant_field.wado/$test_6_a_hoisted_by_value_argument_is_still_copied$cold0"($v_0) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<mut_ref_write_back_variant_field.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "mut_ref_write_back_variant_field.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_hoisted_by_value_argument_is_still_copied at mut_ref_write_back_variant_field.wado:200
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<mut_ref_write_back_variant_field.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "mut_ref_write_back_variant_field.wado//$tmpl$ebaa20f4a908b504" { h0: $v_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_hoisted_by_value_argument_is_still_copied at mut_ref_write_back_variant_field.wado:200
 condition: xs.len() == 1
 xs.len(): "), used: 152 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_hoisted_by_value_argument_is_still_copied at mut_ref_write_back_variant_field.wado:200
 condition: xs.len() == 1
@@ -1918,15 +1918,15 @@ fn "mut_ref_write_back_variant_field.wado/reads_a_local_before_the_place$spec0"(
     let $contract_arg_0: i32;
     let $write_back_place_8: ref "mut_ref_write_back_variant_field.wado//Bag";
     let $write_back_9: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>";
-    let $write_back_before_10: ref null "core:prelude/string.wado//String";
+    let $before__10: ref null "core:prelude/string.wado//String";
     if @unlikely(local.tee $contract_arg_0("mut_ref_write_back_variant_field.wado/first"(struct.new "mut_ref_write_back_variant_field.wado//Counter" { n: 0 })) >=u 1) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_write_back_variant_field.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mut_ref_write_back_variant_field.wado:69"), used: 40 });
         unreachable;
     }
-    $write_back_before_10 = local.tee $write_back_9(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: local.tee $write_back_place_8(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(bs.repr, $contract_arg_0)).item }).value;
+    $before__10 = local.tee $write_back_9(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: local.tee $write_back_place_8(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(bs.repr, $contract_arg_0)).item }).value;
     "mut_ref_write_back_variant_field.wado/takes_a_snapshot$sroa[seen.n]"(0, $write_back_9);
-    if ref.eq(local.tee $load_3($write_back_9.value), $write_back_before_10) == 0 {
+    if ref.eq(local.tee $load_3($write_back_9.value), $before__10) == 0 {
         $write_back_place_8.item = $load_3;
     }
 }
@@ -1938,16 +1938,16 @@ fn "mut_ref_write_back_variant_field.wado/reads_the_callee_before_the_place$spec
     let $write_back_place_7: ref "canonical//CanonicalClosure_0";
     let $write_back_place_8: ref "mut_ref_write_back_variant_field.wado//Bag";
     let $write_back_9: ref "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>";
-    let $write_back_before_10: ref null "core:prelude/string.wado//String";
+    let $before__10: ref null "core:prelude/string.wado//String";
     $write_back_place_7 = local.tee via(struct.new "core:prelude//$Cell<fn(&mut mut_ref_write_back_variant_field.wado/Payload)->()>" { value: struct.new "canonical//CanonicalClosure_0" { env: struct.new "mut_ref_write_back_variant_field.wado//$Closure_2" {}, func: ref.func "closure/mut_ref_write_back_variant_field.wado/$closure_wrapper_2" } }).value;
     if @unlikely(local.tee $contract_arg_0("mut_ref_write_back_variant_field.wado/swap_to_appends"(via)) >=u 1) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_write_back_variant_field.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mut_ref_write_back_variant_field.wado:97"), used: 40 });
         unreachable;
     }
-    $write_back_before_10 = local.tee $write_back_9(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: local.tee $write_back_place_8(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(bs.repr, $contract_arg_0)).item }).value;
+    $before__10 = local.tee $write_back_9(struct.new "core:prelude//$Cell<mut_ref_write_back_variant_field.wado/Payload>" { value: local.tee $write_back_place_8(builtin::array_get_value<ref "mut_ref_write_back_variant_field.wado//Bag">(bs.repr, $contract_arg_0)).item }).value;
     call_ref "functype/$canonical_closure_fn_0"($write_back_place_7.func, $write_back_place_7.env, $write_back_9);
-    if ref.eq(local.tee $load_6($write_back_9.value), $write_back_before_10) == 0 {
+    if ref.eq(local.tee $load_6($write_back_9.value), $before__10) == 0 {
         $write_back_place_8.item = $load_6;
     }
 }
@@ -2635,8 +2635,8 @@ value: "), used: 48 }, s2: struct.new "core:prelude/string.wado//String" { repr:
     unreachable;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of String::set_byte_at failed at "), used: 42 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of String::set_byte_at failed at "), used: 42 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of String::set_byte_at failed at "), used: 42 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of String::set_byte_at failed at "), used: 42 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -2646,8 +2646,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -2657,8 +2657,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(start, end, $v2, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$afdf3efc359fee73" { h0: $site, h1: start, h2: end, h3: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(start, end, $v_2, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$afdf3efc359fee73" { h0: $site, h1: start, h2: end, h3: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= start <= end <= self.len()
 start: "), used: 51 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= start <= end <= self.len()
@@ -2670,37 +2670,37 @@ self.len(): "), used: 13 }, s4: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v1, self, end, start, $site) {
-    let $v2: i32;
-    let $v2_seen: bool;
-    let $v3: bool;
-    let $v3_seen: bool;
-    let $v2_text: ref "core:prelude/string.wado//String";
-    let $v3_text: ref "core:prelude/string.wado//String";
-    $v2_seen = 0;
-    $v3_seen = 0;
-    drop((if $v1 -> i32 {
-        $v3 = block -> bool {
-            $v2 = end;
-            $v2_seen = 1;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(self.repr, self.start, self.end, $v2);
+fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v_9, self, end, start, $site) {
+    let $v_10: i32;
+    let $v_10_seen: bool;
+    let $v_11: bool;
+    let $v_11_seen: bool;
+    let $v_10_text: ref "core:prelude/string.wado//String";
+    let $v_11_text: ref "core:prelude/string.wado//String";
+    $v_10_seen = 0;
+    $v_11_seen = 0;
+    drop((if $v_9 -> i32 {
+        $v_11 = block -> bool {
+            $v_10 = end;
+            $v_10_seen = 1;
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(self.repr, self.start, self.end, $v_10);
         };
-        $v3_seen = 1;
-        $v3;
+        $v_11_seen = 1;
+        $v_11;
     } else {
         0;
     }));
-    $v2_text = (if $v2_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:prelude/string.wado//$tmpl$ebaa20f4a908b504" { h0: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_10_text = (if $v_10_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:prelude/string.wado//$tmpl$ebaa20f4a908b504" { h0: $v_10, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    $v3_text = (if $v3_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$ce9bda9252f81986,[bool]>"(struct.new "core:prelude/string.wado//$tmpl$ce9bda9252f81986" { h0: $v3, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_11_text = (if $v_11_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$ce9bda9252f81986,[bool]>"(struct.new "core:prelude/string.wado//$tmpl$ce9bda9252f81986" { h0: $v_11, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$b145b32c9a586330,[core:prelude/string.wado/String,i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "core:prelude/string.wado//$tmpl$b145b32c9a586330" { h0: $site, h1: start, h2: $v1, h3: $v2_text, h4: $v3_text, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$b145b32c9a586330,[core:prelude/string.wado/String,i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "core:prelude/string.wado//$tmpl$b145b32c9a586330" { h0: $site, h1: start, h2: $v_9, h3: $v_10_text, h4: $v_11_text, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: self.is_char_boundary(start) && self.is_char_boundary(end)
 start: "), used: 78 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: self.is_char_boundary(start) && self.is_char_boundary(end)
@@ -2714,8 +2714,8 @@ self.is_char_boundary(end): "), used: 29 }, s5: struct.new "core:prelude/string.
     unreachable;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::$contract$byte_at$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::$contract$byte_at$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -2725,8 +2725,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_write_back_variant_field.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<mut_ref_write_back_variant_field.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -3345,7 +3345,7 @@ fn "core:prelude/traits.wado/mut_ref_write_back_variant_field.wado/Payload^core:
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(self, content) {
-    let $v2_13: i32;
+    let $v_2_13: i32;
     let self_38: ref "core:prelude/string.wado//String";
     let new_used_51: i32;
     let start_52: i32;
@@ -3419,10 +3419,10 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
             break $inline_core_prelude_format_wado_leading_sign_byte_len_core_prelude_string_wado_StrSlice__17: 0;
         };
         self_38 = self.buf;
-        $v2_13 = local.tee start_52(content.end) - local.tee $mv$$local_2$1(content.start);
-        if @unlikely(((0 <= new_used_51) & (new_used_51 <= $v2_13)) == 0) {
+        $v_2_13 = local.tee start_52(content.end) - local.tee $mv$$local_2$1(content.start);
+        if @unlikely(((0 <= new_used_51) & (new_used_51 <= $v_2_13)) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(0, new_used_51, $v2_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:164"), used: 28 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(0, new_used_51, $v_2_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:164"), used: 28 });
             unreachable;
         }
         if @unlikely($inline_boundary_at_36: block -> bool {
@@ -3444,12 +3444,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         start_52 = $mv$$local_2$1 + new_used_51;
         $inline_core_prelude_string_wado_String__internal_push_view_42: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_view_42 local.tee start_52(start_52 - $mv$$local_2$1) == 0;
-            if @unlikely(local.tee $v2_13(self_38.used + start_52) > builtin::array_len(self_38.repr)) {
+            if @unlikely(local.tee $v_2_13(self_38.used + start_52) > builtin::array_len(self_38.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_38, $v2_13);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_38, $v_2_13);
             }
             start_158 = self_38.used;
-            self_38.used = $v2_13;
+            self_38.used = $v_2_13;
             builtin::array_copy<u8>(self_38.repr, start_158, repr_138, $mv$$local_2$1, start_52);
         };
         self_38 = self.buf;
@@ -3465,15 +3465,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
                     repr_138 = self_38.repr;
                 } else {
                 }
-                $v2_13 = self_38.used;
+                $v_2_13 = self_38.used;
                 start_158 = $mv$$local_2$1;
-                if @unlikely(((0 <= $v2_13) & ($v2_13 < start_158)) == 0) {
+                if @unlikely(((0 <= $v_2_13) & ($v_2_13 < start_158)) == 0) {
                     cold_path;
                     self_38.used = $mv$$local_2$1;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"($v2_13, start_158, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
+                    "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"($v_2_13, start_158, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
                     unreachable;
                 }
-                builtin::array_set_u8(repr_138, $v2_13, 48);
+                builtin::array_set_u8(repr_138, $v_2_13, 48);
                 start_52 = start_52 + 1;
                 self_38.used = $mv$$local_2$1;
                 continue l458;
@@ -3481,19 +3481,19 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         };
         self_38 = self.buf;
         $mv$$local_2$1 = local.tee $av_317(content.end) - local.tee start_52(content.start);
-        $v2_13 = $av_317 - start_52;
-        if @unlikely((((0 <= new_used_51) & (new_used_51 <= $mv$$local_2$1)) & ($mv$$local_2$1 <= $v2_13)) == 0) {
+        $v_2_13 = $av_317 - start_52;
+        if @unlikely((((0 <= new_used_51) & (new_used_51 <= $mv$$local_2$1)) & ($mv$$local_2$1 <= $v_2_13)) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(new_used_51, $mv$$local_2$1, $v2_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:166"), used: 28 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(new_used_51, $mv$$local_2$1, $v_2_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:166"), used: 28 });
             unreachable;
         }
-        if @unlikely((if local.tee $v2_13($inline_boundary_at_52: block -> bool {
+        if @unlikely((if local.tee $v_2_13($inline_boundary_at_52: block -> bool {
             repr_138 = content.repr;
-            $v2_13 = $av_317 - start_52;
-            if (new_used_51 == 0) | (new_used_51 == $v2_13) {
+            $v_2_13 = $av_317 - start_52;
+            if (new_used_51 == 0) | (new_used_51 == $v_2_13) {
                 break $inline_boundary_at_52: 1;
             }
-            if (new_used_51 < 0) | (new_used_51 > $v2_13) {
+            if (new_used_51 < 0) | (new_used_51 > $v_2_13) {
                 break $inline_boundary_at_52: 0;
             }
             break $inline_boundary_at_52: (builtin::array_get_value<u8>(repr_138, start_52 + new_used_51) & 192) != 128;
@@ -3513,7 +3513,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
             0;
         }) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v2_13, content, $mv$$local_2$1, new_used_51, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:166"), used: 28 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v_2_13, content, $mv$$local_2$1, new_used_51, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:166"), used: 28 });
             unreachable;
         }
         repr_138 = content.repr;
@@ -4766,16 +4766,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
     builtin::array_copy<u8>(self.repr, start_7, other.repr, 0, 5);
 }
 
-fn "closure/mut_ref_write_back_variant_field.wado/$closure_wrapper_0"($env, $p0) {
-    "mut_ref_write_back_variant_field.wado/mut_ref_write_back_variant_field.wado/$Closure_0::$call$dae[self]"($p0);
+fn "closure/mut_ref_write_back_variant_field.wado/$closure_wrapper_0"($env, $p_0) {
+    "mut_ref_write_back_variant_field.wado/mut_ref_write_back_variant_field.wado/$Closure_0::$call$dae[self]"($p_0);
 }
 
-fn "closure/mut_ref_write_back_variant_field.wado/$closure_wrapper_1"($env, $p0) {
-    "mut_ref_write_back_variant_field.wado/mut_ref_write_back_variant_field.wado/$Closure_1::$call$dae[self]"($p0);
+fn "closure/mut_ref_write_back_variant_field.wado/$closure_wrapper_1"($env, $p_0) {
+    "mut_ref_write_back_variant_field.wado/mut_ref_write_back_variant_field.wado/$Closure_1::$call$dae[self]"($p_0);
 }
 
-fn "closure/mut_ref_write_back_variant_field.wado/$closure_wrapper_2"($env, $p0) {
-    "mut_ref_write_back_variant_field.wado/mut_ref_write_back_variant_field.wado/$Closure_2::$call$dae[self]"($p0);
+fn "closure/mut_ref_write_back_variant_field.wado/$closure_wrapper_2"($env, $p_0) {
+    "mut_ref_write_back_variant_field.wado/mut_ref_write_back_variant_field.wado/$Closure_2::$call$dae[self]"($p_0);
 }
 
 export fn "mut_ref_write_back_variant_field.wado/$cm_export__$test_0_a_whole_value_write_through_a_variant_field_reference_lands" as "$test_0_a_whole_value_write_through_a_variant_field_reference_lands"

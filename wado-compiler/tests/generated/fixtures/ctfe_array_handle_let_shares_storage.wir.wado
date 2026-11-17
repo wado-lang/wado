@@ -244,14 +244,14 @@ fn "ctfe_array_handle_let_shares_storage.wado/$cm_binding__wasi:cli/stdout@0.3.0
 
 fn "ctfe_array_handle_let_shares_storage.wado/$cm_export__run"() {
     let $load_1: i32;
-    let $v0: ref "core:prelude//$Cell<i32>";
-    let $v1: ref "core:prelude/string.wado//String";
+    let $v_0: ref "core:prelude//$Cell<i32>";
+    let $v_1: ref "core:prelude/string.wado//String";
     let buf_8: ref "core:prelude/list.wado//List<u8>";
     let i: i32;
     let $cm_pair_7: i64;
-    $v0 = struct.new "core:prelude//$Cell<i32>" { value: 1000 };
+    $v_0 = struct.new "core:prelude//$Cell<i32>" { value: 1000 };
     "core:cbor/write_head"(local.tee buf_8(struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_new<u8>(64), used: 0 }), 0, 1000_i64);
-    $v1 = block -> ref "core:prelude/string.wado//String" {
+    $v_1 = block -> ref "core:prelude/string.wado//String" {
         let $array_clone_src_1: ref Array<u8>;
         $array_clone_src_1 = buf_8.repr;
         $load_1 = buf_8.used;
@@ -260,13 +260,13 @@ fn "ctfe_array_handle_let_shares_storage.wado/$cm_export__run"() {
         "core:prelude/bytes.wado/core:prelude/bytes.wado/ByteList::to_hex"($array_clone_dst_2, $load_1);
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__12: block -> bool {
-        $load_1 = $v1.used;
+        $load_1 = $v_1.used;
         $array_clone_src_1 = array.new_data<u8>("1903e8");
         if $load_1 != 6 {
             break $inline_core_prelude_array_wado_seq_eq_u8__12: 0;
         }
         i = 0;
-        $array_clone_dst_2 = $v1.repr;
+        $array_clone_dst_2 = $v_1.repr;
         b11: block {
             l12: loop {
                 break_if b11 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($load_1);
@@ -302,13 +302,13 @@ fn "ctfe_array_handle_let_shares_storage.wado/$cm_export__run"() {
         break $inline_core_prelude_array_wado_seq_eq_u8__12: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $v1("core:prelude/string.wado/core:prelude/string.wado/String::format<ctfe_array_handle_let_shares_storage.wado/$tmpl$81f79a7715ea854a,[&i32,core:prelude/string.wado/String]>"(struct.new "ctfe_array_handle_let_shares_storage.wado//$tmpl$81f79a7715ea854a" { h0: $v0, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at ctfe_array_handle_let_shares_storage.wado:18
+        "core:rt/panic"(local.tee $v_1("core:prelude/string.wado/core:prelude/string.wado/String::format<ctfe_array_handle_let_shares_storage.wado/$tmpl$81f79a7715ea854a,[&i32,core:prelude/string.wado/String]>"(struct.new "ctfe_array_handle_let_shares_storage.wado//$tmpl$81f79a7715ea854a" { h0: $v_0, h1: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at ctfe_array_handle_let_shares_storage.wado:18
 condition: enc::<i32>(&1000) == \"1903e8\"
 &1000: "), used: 120 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at ctfe_array_handle_let_shares_storage.wado:18
 condition: enc::<i32>(&1000) == \"1903e8\"
 &1000: "), used: 120 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 enc::<i32>(&1000): "), used: 20 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-enc::<i32>(&1000): "), used: 20 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v1.used);
+enc::<i32>(&1000): "), used: 20 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_1.used);
         unreachable;
     }
     $load_1 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));

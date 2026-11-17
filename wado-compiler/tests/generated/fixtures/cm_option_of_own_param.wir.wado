@@ -107,66 +107,66 @@ global global:core:builtin::$unit_case$core:prelude/types.wado//Option<cm_option
 
 fn "cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(d, label, bytes) with Gfx {
     let $d_disc: i32;
-    let $d_inner0: i32;
+    let $d_inner_0: i32;
     let $label_disc: i32;
-    let $label_inner0: i32;
-    let $label_inner1: i32;
+    let $label_inner_0: i32;
+    let $label_inner_1: i32;
     let $local_11: ref "core:prelude/string.wado//String";
     let $local_12: i64;
     let $bytes_disc: i32;
-    let $bytes_inner0: i32;
-    let $bytes_inner1: i32;
+    let $bytes_inner_0: i32;
+    let $bytes_inner_1: i32;
     let $local_17: ref "core:prelude/list.wado//List<u8>";
     let $local_21: i32;
     let $local_22: i32;
     let $local_23: u8;
     let $licm_repr_58: ref Array<u8>;
     $d_disc = ref.test "core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>::Some"(d);
-    $d_inner0 = 0;
+    $d_inner_0 = 0;
     if ref.test "core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>::Some"(d) {
-        $d_inner0 = ref.cast "core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>::Some"(d).payload_0.value;
+        $d_inner_0 = ref.cast "core:prelude/types.wado//Option<cm_option_of_own_param.wado/Device>::Some"(d).payload_0.value;
     } else {
     }
     $label_disc = ref.is_null(label) == 0;
-    $label_inner0 = 0;
-    $label_inner1 = 0;
+    $label_inner_0 = 0;
+    $label_inner_1 = 0;
     if ref.is_null(label) == 0 {
-        $label_inner0 = local.tee $local_11(ref.as_non_null(label)).used;
-        $label_inner1 = "mem/realloc"(0, 0, 1, $label_inner0);
-        "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_11.repr, $label_inner1, $label_inner0);
-        $label_inner0 = builtin::i32_wrap_i64(local.tee $local_12(builtin::i64_extend_i32_u($label_inner1) | (builtin::i64_extend_i32_s($label_inner0) << 32_i64)));
-        $label_inner1 = builtin::i32_wrap_i64($local_12 >> 32_i64);
+        $label_inner_0 = local.tee $local_11(ref.as_non_null(label)).used;
+        $label_inner_1 = "mem/realloc"(0, 0, 1, $label_inner_0);
+        "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_11.repr, $label_inner_1, $label_inner_0);
+        $label_inner_0 = builtin::i32_wrap_i64(local.tee $local_12(builtin::i64_extend_i32_u($label_inner_1) | (builtin::i64_extend_i32_s($label_inner_0) << 32_i64)));
+        $label_inner_1 = builtin::i32_wrap_i64($local_12 >> 32_i64);
     } else {
     }
     $bytes_disc = ref.is_null(bytes) == 0;
-    $bytes_inner0 = 0;
-    $bytes_inner1 = 0;
+    $bytes_inner_0 = 0;
+    $bytes_inner_1 = 0;
     if ref.is_null(bytes) == 0 {
-        $bytes_inner1 = local.tee $local_17(ref.as_non_null(bytes)).used;
-        if @unlikely(2147483647 <u $bytes_inner1) {
+        $bytes_inner_1 = local.tee $local_17(ref.as_non_null(bytes)).used;
+        if @unlikely(2147483647 <u $bytes_inner_1) {
             cold_path;
             "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
             unreachable;
         }
-        $bytes_inner0 = "mem/realloc"(0, 0, 1, $bytes_inner1);
+        $bytes_inner_0 = "mem/realloc"(0, 0, 1, $bytes_inner_1);
         $local_21 = 0;
         $licm_repr_58 = $local_17.repr;
         b4: block {
             l5: loop {
-                break_if b4 (builtin::i64_extend_i32_s($local_21) + 3_i64) >= builtin::i64_extend_i32_s($bytes_inner1);
-                $local_22 = $bytes_inner0 + $local_21;
+                break_if b4 (builtin::i64_extend_i32_s($local_21) + 3_i64) >= builtin::i64_extend_i32_s($bytes_inner_1);
+                $local_22 = $bytes_inner_0 + $local_21;
                 $local_23 = builtin::array_get_value<u8>($licm_repr_58, $local_21);
                 builtin::store_u8($local_22, $local_23);
                 $local_21 = $local_21 + 1;
-                $local_22 = $bytes_inner0 + $local_21;
+                $local_22 = $bytes_inner_0 + $local_21;
                 $local_23 = builtin::array_get_value<u8>($licm_repr_58, $local_21);
                 builtin::store_u8($local_22, $local_23);
                 $local_21 = $local_21 + 1;
-                $local_22 = $bytes_inner0 + $local_21;
+                $local_22 = $bytes_inner_0 + $local_21;
                 $local_23 = builtin::array_get_value<u8>($licm_repr_58, $local_21);
                 builtin::store_u8($local_22, $local_23);
                 $local_21 = $local_21 + 1;
-                $local_22 = $bytes_inner0 + $local_21;
+                $local_22 = $bytes_inner_0 + $local_21;
                 $local_23 = builtin::array_get_value<u8>($licm_repr_58, $local_21);
                 builtin::store_u8($local_22, $local_23);
                 $local_21 = $local_21 + 1;
@@ -175,8 +175,8 @@ fn "cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(d, label,
         };
         b6: block {
             l7: loop {
-                break_if b6 $local_21 >= $bytes_inner1;
-                $local_22 = $bytes_inner0 + $local_21;
+                break_if b6 $local_21 >= $bytes_inner_1;
+                $local_22 = $bytes_inner_0 + $local_21;
                 $local_23 = builtin::array_get_value<u8>($licm_repr_58, $local_21);
                 builtin::store_u8($local_22, $local_23);
                 $local_21 = $local_21 + 1;
@@ -185,15 +185,15 @@ fn "cm_option_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(d, label,
         };
     } else {
     }
-    $d_disc = "wasi/$wasi:demo/gfx@0.1.0#pick"($d_disc, $d_inner0, $label_disc, $label_inner0, $label_inner1, $bytes_disc, $bytes_inner0, $bytes_inner1);
+    $d_disc = "wasi/$wasi:demo/gfx@0.1.0#pick"($d_disc, $d_inner_0, $label_disc, $label_inner_0, $label_inner_1, $bytes_disc, $bytes_inner_0, $bytes_inner_1);
     if $label_disc == 1 {
-        if $label_inner1 > 0 {
-            drop("mem/realloc"($label_inner0, $label_inner1, 1, 0));
+        if $label_inner_1 > 0 {
+            drop("mem/realloc"($label_inner_0, $label_inner_1, 1, 0));
         }
     }
     if $bytes_disc == 1 {
-        if $bytes_inner1 > 0 {
-            drop("mem/realloc"($bytes_inner0, $bytes_inner1, 1, 0));
+        if $bytes_inner_1 > 0 {
+            drop("mem/realloc"($bytes_inner_0, $bytes_inner_1, 1, 0));
         }
     }
     return $d_disc;
