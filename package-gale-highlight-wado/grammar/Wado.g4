@@ -5,8 +5,57 @@ grammar Wado;
 
 options { language = Wado; }
 
+// A hole's specifier follows its first `:` outside brackets. Each open hole
+// counts its own braces apart from its parentheses and brackets, as the
+// compiler's scanner does: only a `}` closes the hole.
 @lexer::members {
-    raw_hashes: List<i32> = []
+    raw_hashes: List<i32> = [];
+    hole_braces: List<i32> = [];
+    hole_brackets: List<i32> = [];
+
+    fn open_hole(&mut self) {
+        self.hole_braces.push(0);
+        self.hole_brackets.push(0);
+    }
+
+    fn close_brace(&mut self) {
+        if self.hole_braces.is_empty() {
+            return;
+        }
+        let top = self.hole_braces.len() - 1;
+        if self.hole_braces[top] > 0 {
+            self.hole_braces[top] -= 1;
+        } else {
+            self.close_hole();
+        }
+    }
+
+    fn close_hole(&mut self) {
+        self.hole_braces.pop();
+        self.hole_brackets.pop();
+    }
+
+    fn open_brace(&mut self) {
+        if let Some(depth) = self.hole_braces.last() {
+            self.hole_braces[self.hole_braces.len() - 1] = depth + 1;
+        }
+    }
+
+    fn open_bracket(&mut self) {
+        if let Some(depth) = self.hole_brackets.last() {
+            self.hole_brackets[self.hole_brackets.len() - 1] = depth + 1;
+        }
+    }
+
+    fn close_bracket(&mut self) {
+        if let Some(depth) = self.hole_brackets.last() && depth > 0 {
+            self.hole_brackets[self.hole_brackets.len() - 1] = depth - 1;
+        }
+    }
+
+    fn at_hole_top(&self) -> bool {
+        return self.hole_braces.last() == Some(0) && self.hole_brackets.last() == Some(0);
+    }
 }
 
 sourceFile
@@ -1015,16 +1064,7 @@ interpolationEnd
     ;
 
 formatSpec
-    : ':' formatSpecAtom*
-    ;
-
-// The fill is any character the interpolation scanner does not read as
-// structure, so this lists the punctuation the lexer already tokenizes,
-// minus the quotes, braces and `/`. NON_ASCII covers a multi-byte fill.
-formatSpecAtom
-    : IDENTIFIER | INTEGER | FLOAT | NON_ASCII
-    | '.' | '<' | '>' | '^' | '+' | '-' | '#' | '?' | '_' | '*'
-    | '!' | '%' | '&' | '(' | ')' | ',' | ';' | '=' | '[' | ']' | '|' | '~' | '$'
+    : ':' FORMAT_SPEC
     ;
 
 // An `_` stands between two digits. A float with an exponent is its own token,
@@ -1065,11 +1105,32 @@ RAW_BYTES_OPEN
     ;
 
 LBRACE
-    : '{' -> pushMode(DEFAULT_MODE)
+    : '{' { lx.open_brace() } -> pushMode(DEFAULT_MODE)
     ;
 
 RBRACE
-    : '}' -> popMode
+    : '}' { lx.close_brace() } -> popMode
+    ;
+
+LPAREN
+    : '(' { lx.open_bracket() }
+    ;
+
+RPAREN
+    : ')' { lx.close_bracket() }
+    ;
+
+LBRACKET
+    : '[' { lx.open_bracket() }
+    ;
+
+RBRACKET
+    : ']' { lx.close_bracket() }
+    ;
+
+// The specifier replaces the hole's mode, so its `}` returns to the template.
+COLON
+    : ':' { if lx.at_hole_top() { lx.set_mode(MODE_FORMAT); } }
     ;
 
 // A template touching the name before it is tagged. Whitespace never reaches
@@ -1133,14 +1194,6 @@ WS
     : [ \t\r\n\f]+ -> skip
     ;
 
-// A format specifier's fill character when it is not ASCII: `${x:あ>8}`.
-// Every other token is ASCII-only and a bare non-ASCII character is legal
-// nowhere else, so this steals nothing: a string, char literal or comment
-// containing one matches its own rule from an ASCII delimiter.
-NON_ASCII
-    : ~[\u0000-\u007F]
-    ;
-
 mode TEMPLATE;
 
 TEMPLATE_TEXT
@@ -1148,7 +1201,7 @@ TEMPLATE_TEXT
     ;
 
 INTERP_OPEN
-    : '${' -> pushMode(DEFAULT_MODE)
+    : '${' { lx.open_hole() } -> pushMode(DEFAULT_MODE)
     ;
 
 DOLLAR_TEXT
@@ -1171,7 +1224,7 @@ RAW_CLOSE
     ;
 
 RAW_INTERP_OPEN
-    : '${' -> type(INTERP_OPEN), pushMode(DEFAULT_MODE)
+    : '${' { lx.open_hole() } -> type(INTERP_OPEN), pushMode(DEFAULT_MODE)
     ;
 
 RAW_TEXT
@@ -1196,4 +1249,25 @@ RAW_STRING_TEXT
 
 RAW_STRING_QUOTE
     : '"' -> more
+    ;
+
+// `[[fill] align] ['+'] ['#'] ['0'] [width] ['.' precision] [kind]`, read by
+// character and trimmed. A fill is any character but a space, a brace or a
+// quote, which the hole's scanner reads as its own structure.
+mode FORMAT;
+
+FORMAT_SPEC
+    : (FORMAT_FILL [<^>] | [<^>])? '+'? '#'? '0'? [0-9]* ('.' [0-9]+)? [boxXeEf?]?
+    ;
+
+FORMAT_CLOSE
+    : '}' { lx.close_hole() } -> type(RBRACE), popMode
+    ;
+
+FORMAT_WS
+    : [\p{White_Space}]+ -> skip
+    ;
+
+fragment FORMAT_FILL
+    : ~[{}'"`\p{White_Space}]
     ;

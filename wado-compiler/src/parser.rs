@@ -7390,12 +7390,13 @@ impl Parser {
             return Ok(());
         };
         let at = origin.advance(&spec[..error.offset]);
-        // A specifier is read by character, out of tokens a grammar reads as
-        // whole identifiers and numbers.
-        Err(self.restriction_at_span(
-            span_of(at, spec[error.offset..].chars().next(), self.ast_id_space),
-            &format!("{error} in template string"),
-        ))
+        let span = span_of(at, spec[error.offset..].chars().next(), self.ast_id_space);
+        let message = format!("{error} in template string");
+        Err(if error.too_large {
+            self.restriction_at_span(span, &message)
+        } else {
+            self.error_at_span(span, &message)
+        })
     }
 
     /// Parse an interpolation expression string.

@@ -31,17 +31,8 @@
 (tagName) @function
 
 ; A specifier is not code: `${x:>8.2}` must not colour `>` as an operator.
-; A rule-context override outranks the token's default, so listing the atoms
-; that double as operators is enough to mute them.
 (formatSpec ":" @comment)
-(formatSpec (INTEGER) @comment)
-(formatSpec (FLOAT) @comment)
-(formatSpec "<" @comment)
-(formatSpec ">" @comment)
-(formatSpec "^" @comment)
-(formatSpec "+" @comment)
-(formatSpec "-" @comment)
-(formatSpec "*" @comment)
+(FORMAT_SPEC) @comment
 
 ; Constants: `true` / `false` / `null` / `self` are `KeywordCategory::Constant`
 ; in the compiler's registry, not keywords.
@@ -67,7 +58,6 @@
 ; Telling a function from a variable takes name resolution, which no
 ; context-free grammar has. `mise run check-highlight` reports what stays
 ; uncoloured, by the kind the compiler resolved it to.
-(formatSpec (IDENTIFIER) @comment)
 (typeAtom (IDENTIFIER) @type)
 (typeAtom "resume" @type)
 (genericParam (IDENTIFIER) @type)

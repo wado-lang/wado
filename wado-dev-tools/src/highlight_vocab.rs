@@ -112,27 +112,6 @@ fn read(relative: &str) -> String {
     fs::read_to_string(&path).unwrap_or_else(|e| panic!("reading '{}': {e}", path.display()))
 }
 
-/// The grammar with `formatSpecAtom` cut out.
-///
-/// That rule spells `. < > ^ + - # ? _ *` as literals to describe a format
-/// specifier's punctuation, which is not the language using them as operators.
-/// Left in, it satisfies invariant 1 for six of the operators on its own, and
-/// deleting `'+'` from every expression rule would still pass.
-fn grammar_without_format_spec_atoms(grammar: &str) -> String {
-    const TERMINATOR: &str = "\n    ;";
-    let start = grammar
-        .find("\nformatSpecAtom")
-        .unwrap_or_else(|| panic!("Wado.g4 no longer declares `formatSpecAtom`"));
-    let end = grammar[start..]
-        .find(TERMINATOR)
-        .map(|at| start + at + TERMINATOR.len())
-        .expect("a grammar rule ends with `;`");
-    let mut out = String::with_capacity(grammar.len());
-    out.push_str(&grammar[..start]);
-    out.push_str(&grammar[end..]);
-    out
-}
-
 /// Keyword-shaped literal capture rules from the query: `"text" @capture`.
 /// Rules keyed on a lexer or parser rule (`(STRING_LITERAL) @string`) are not
 /// vocabulary and are skipped.
@@ -205,7 +184,7 @@ fn operators_by_highlighting() -> (Vec<&'static str>, Vec<&'static str>) {
 }
 
 pub fn check() -> Vec<Drift> {
-    let grammar = grammar_without_format_spec_atoms(&read(GRAMMAR));
+    let grammar = read(GRAMMAR);
     let captures = literal_captures(&read(QUERY));
     let keywords = registry_keywords();
     let (highlighted, punctuation) = operators_by_highlighting();

@@ -196,6 +196,9 @@ pub struct FormatSpecError {
     /// Byte offset into the spec text as passed to [`parse`], leading
     /// whitespace included, so a caller can anchor it against its own source.
     pub offset: usize,
+    /// A width or precision past `i32`: the spec is well-formed, its number
+    /// out of range.
+    pub too_large: bool,
 }
 
 impl fmt::Display for FormatSpecError {
@@ -260,6 +263,7 @@ impl Parser {
         FormatSpecError {
             message: message.into(),
             offset: self.offsets[self.index.min(self.offsets.len() - 1)],
+            too_large: false,
         }
     }
 
@@ -341,6 +345,7 @@ impl Parser {
             .map_err(|_| FormatSpecError {
                 message: format!("format specifier {what} `{digits}` is too large"),
                 offset: self.offsets[start],
+                too_large: true,
             })
     }
 }
