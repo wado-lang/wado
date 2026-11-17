@@ -123,7 +123,17 @@ fn canonical_local_path(entry_dir: &str, resolved: &str) -> String {
 pub fn entry_dir_of(entry_module: Option<&ModuleSource>) -> String {
     match entry_module {
         Some(ModuleSource::EntryPoint { filename, .. }) => module_parent_dir(filename).to_string(),
-        _ => String::new(),
+        None
+        | Some(
+            ModuleSource::Core { .. }
+            | ModuleSource::Binding { .. }
+            | ModuleSource::Local { .. }
+            | ModuleSource::Dependency { .. }
+            | ModuleSource::Remote { .. }
+            | ModuleSource::Redirected { .. }
+            | ModuleSource::Wasm { .. }
+            | ModuleSource::Effect(_),
+        ) => String::new(),
     }
 }
 
@@ -158,7 +168,10 @@ pub fn decl_file_of(source: &ModuleSource) -> &str {
         ModuleSource::EntryPoint { filename, .. } => filename.as_str(),
         ModuleSource::Redirected { uri, .. } => uri.as_str(),
         ModuleSource::Remote { url, .. } => url.as_str(),
-        _ => "",
+        ModuleSource::Core { .. }
+        | ModuleSource::Binding { .. }
+        | ModuleSource::Wasm { .. }
+        | ModuleSource::Effect(_) => "",
     }
 }
 
@@ -235,7 +248,12 @@ pub fn resolve_import_with_entry(
                 let resolved = resolve_module_path(uri, import_source);
                 return interner.redirected(&resolved, from_module);
             }
-            _ => {}
+            ModuleSource::Core { .. }
+            | ModuleSource::Binding { .. }
+            | ModuleSource::Local { .. }
+            | ModuleSource::EntryPoint { .. }
+            | ModuleSource::Wasm { .. }
+            | ModuleSource::Effect(_) => {}
         }
     }
 
@@ -264,7 +282,14 @@ pub fn resolve_import_with_entry(
     let importer = match from_module {
         ModuleSource::Local { path, .. } if relative => Some(Some(path.as_str())),
         ModuleSource::EntryPoint { .. } => Some(None),
-        _ => None,
+        ModuleSource::Local { .. }
+        | ModuleSource::Core { .. }
+        | ModuleSource::Binding { .. }
+        | ModuleSource::Dependency { .. }
+        | ModuleSource::Remote { .. }
+        | ModuleSource::Redirected { .. }
+        | ModuleSource::Wasm { .. }
+        | ModuleSource::Effect(_) => None,
     };
     if let Some(importer) = importer {
         let resolved = resolve_local_identity(&entry_dir_of(entry_module), importer, import_source);
@@ -273,7 +298,14 @@ pub fn resolve_import_with_entry(
         if let Some(entry) = entry_module {
             let entry_canonical = match entry {
                 ModuleSource::EntryPoint { filename, .. } => canonicalize_entry_point(filename),
-                _ => entry.to_string(),
+                ModuleSource::Core { .. }
+                | ModuleSource::Binding { .. }
+                | ModuleSource::Local { .. }
+                | ModuleSource::Dependency { .. }
+                | ModuleSource::Remote { .. }
+                | ModuleSource::Redirected { .. }
+                | ModuleSource::Wasm { .. }
+                | ModuleSource::Effect(_) => entry.to_string(),
             };
             if resolved == entry_canonical {
                 return entry.clone();
