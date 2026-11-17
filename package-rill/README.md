@@ -7,17 +7,28 @@ virtual DOM, and no diffing of a tree.
 [WEP: Reactive Signals](../docs/wep-2026-04-04-reactive-signals.md) holds the
 initial design, and [`TODO.md`](./TODO.md) what the library leaves out.
 
-```wado
-use { bind_text, element, on, signal } from "wado-lang:rill";
-use { Dom, Element, Event } from "wado-lang:web";
+The synopsis test in `src/lib.wado` holds this sample:
 
-fn counter(root: Element) with Dom {
+```wado
+use { bind_text, element, flush, on, scope, signal } from "wado-lang:rill";
+use { Event, SurfaceDom } from "wado-lang:web";
+
+let mut dom = SurfaceDom::new();
+with &mut dom do {
     let count = signal(0);
     let button = element("button");
-    bind_text(button, || `clicked ${count.get()} times`);
-    on(button, "click", |_event: Event| count.set(count.get() + 1));
-    root.append_child(button);
-}
+    let mut dispose = scope(|| {
+        bind_text(button, || `clicked ${count.get()} times`);
+        on(button, "click", |_event: Event| count.set(count.get() + 1));
+    });
+    assert button.text_content() == Option::Some("clicked 0 times");
+
+    count.set(2);
+    flush();
+    assert button.text_content() == Option::Some("clicked 2 times");
+
+    dispose();
+};
 ```
 
 ## Layout
@@ -45,5 +56,6 @@ fn counter(root: Element) with Dom {
   subscriptions when it runs again or is disposed of. So a dependency it no
   longer reads wakes nothing. A memo is disposed of with the computation that
   made it.
-- `on` flushes when the listener returns. Every entry into the program from the
-  browser is a listener, so no microtask is needed.
+- `on` flushes when the listener returns, so the page is consistent again
+  before the browser gets control back. Any other code that writes, a listener
+  added with `add_event_listener` directly included, calls `flush` itself.
