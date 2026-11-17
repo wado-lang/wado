@@ -20,16 +20,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn desugar_assert(&mut self, assert_stmt: &AssertStmt, ctx: &mut FunctionContext) {
         self.record_desugar(assert_stmt.id, DesugarKind::Assert);
 
-        let mut scanner = CaptureScanner::new();
+        let mut mint = || assert_capture_name(ctx.fresh_serial());
+        let mut scanner = CaptureScanner::new(&mut mint);
         scanner.scan_root(&assert_stmt.condition);
         let CaptureScanner {
-            mut slots,
+            slots,
             ast_id_to_slot,
             ..
         } = scanner;
-        for slot in &mut slots {
-            slot.name = assert_capture_name(ctx.fresh_serial());
-        }
 
         let mut scope = ctx.enter_scope();
         debug_assert!(scope.assert_capture_ctx.is_none());
@@ -203,8 +201,7 @@ pub(crate) fn render_plans(sem: &ModuleSemantics) -> String {
 
 /// One sub-expression captured during the power-assert scan.
 struct Capture {
-    /// The local the rewritten condition refers to, named once the scan is
-    /// done.
+    /// The local the rewritten condition refers to.
     name: String,
     /// Source text of the original sub-expression, used in the failure message.
     source: String,
@@ -288,7 +285,9 @@ impl AssertCaptureContext {
 /// Decides which sub-expressions of an assert condition become capture slots.
 /// No source-text dedup: `f() == f()` gets a slot per occurrence, so each
 /// evaluates as the source wrote it.
-struct CaptureScanner {
+struct CaptureScanner<'a> {
+    /// Names the next slot's local.
+    mint: &'a mut dyn FnMut() -> String,
     slots: Vec<Capture>,
     ast_id_to_slot: IndexMap<AstId, usize>,
     /// The condition itself, which `$cond` already holds.
@@ -307,9 +306,10 @@ struct CaptureScanner {
     writes: Vec<Option<String>>,
 }
 
-impl CaptureScanner {
-    fn new() -> Self {
+impl<'a> CaptureScanner<'a> {
+    fn new(mint: &'a mut dyn FnMut() -> String) -> Self {
         Self {
+            mint,
             slots: Vec::new(),
             ast_id_to_slot: IndexMap::default(),
             is_root: true,
@@ -342,7 +342,7 @@ impl CaptureScanner {
         } else {
             let idx = self.slots.len();
             self.slots.push(Capture {
-                name: String::new(),
+                name: (self.mint)(),
                 source,
                 conditional,
                 is_place,

@@ -910,7 +910,7 @@ impl<'a> AdapterBuilder<'a> {
             let name = if flat_tys.len() == 1 {
                 param_name.to_string()
             } else {
-                format!("{param_name}_flat{j}")
+                minted_name(&minted_what(param_name, "flat"), j)
             };
             self.push_param(name, *flat_ty);
         }
@@ -987,7 +987,7 @@ impl<'a> AdapterBuilder<'a> {
             for index in range.clone() {
                 let arg = self.flat_args[index].clone();
                 let ty = arg.type_id;
-                let name = minted_name(&minted_what(plan.name, "flat"), index - range.start);
+                let name = minted_name(&minted_what(plan.name, "owned"), index - range.start);
                 let local = alloc_local(&mut self.next_local, &mut self.locals, ty);
                 self.body_stmts.push(let_stmt(&name, local, ty, arg));
                 self.flat_args[index] = local_ref(local, &name, ty);

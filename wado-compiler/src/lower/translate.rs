@@ -1384,11 +1384,11 @@ impl FunctionTranslator<'_, '_> {
         let list_idx = self.alloc_local(list.type_id, "$list".to_string());
         let index_idx = self.alloc_local(TypeTable::I32, "$index".to_string());
         let val_idx = self.alloc_local(element, "$deref_val".to_string());
-        let local = |index: u32, stem: &str, ty: tir::TypeId| {
+        let local = |index: u32, what: &str, ty: tir::TypeId| {
             TirExpr::new(
                 TirExprKind::Local {
                     index,
-                    name: format!("{stem}_{index}"),
+                    name: minted_name(what, index),
                 },
                 ty,
                 span,
@@ -1416,7 +1416,7 @@ impl FunctionTranslator<'_, '_> {
         let list_field = |field: SeqField, ty: tir::TypeId| {
             TirExpr::new(
                 TirExprKind::FieldAccess {
-                    expr: Box::new(local(list_idx, "$list", list.type_id)),
+                    expr: Box::new(local(list_idx, "list", list.type_id)),
                     field_index: field.index(),
                     field_name: field.field_name().to_string(),
                 },
@@ -1447,11 +1447,11 @@ impl FunctionTranslator<'_, '_> {
             compare(
                 zero,
                 TirBinaryOp::LtEq,
-                local(index_idx, "$index", TypeTable::I32),
+                local(index_idx, "index", TypeTable::I32),
             ),
             TirBinaryOp::BitAnd,
             compare(
-                local(index_idx, "$index", TypeTable::I32),
+                local(index_idx, "index", TypeTable::I32),
                 TirBinaryOp::Lt,
                 list_field(SeqField::Len, TypeTable::I32),
             ),
@@ -1473,7 +1473,7 @@ impl FunctionTranslator<'_, '_> {
                     array_ref_type,
                     span,
                 ),
-                local(index_idx, "$index", TypeTable::I32),
+                local(index_idx, "index", TypeTable::I32),
             ],
             element_ref_type,
         );
@@ -1497,9 +1497,9 @@ impl FunctionTranslator<'_, '_> {
             unreachable!()
         };
         for (arg, replacement) in locals.iter_mut().zip([
-            local(list_idx, "$list", list.type_id),
-            local(index_idx, "$index", TypeTable::I32),
-            local(val_idx, "$deref_val", element),
+            local(list_idx, "list", list.type_id),
+            local(index_idx, "index", TypeTable::I32),
+            local(val_idx, "deref_val", element),
         ]) {
             arg.expr = replacement;
         }
@@ -1555,11 +1555,11 @@ impl FunctionTranslator<'_, '_> {
         out: &mut Vec<StmtId>,
     ) {
         let chain =
-            |local: u32, stem: &str, ty: tir::TypeId, path: &[(String, u32, tir::TypeId)]| {
+            |local: u32, what: &str, ty: tir::TypeId, path: &[(String, u32, tir::TypeId)]| {
                 let mut expr = self.alloc_expr(
                     ExprKind::Local {
                         index: local,
-                        name: format!("{stem}_{local}"),
+                        name: minted_name(what, local),
                     },
                     ty,
                     span,
@@ -1582,7 +1582,7 @@ impl FunctionTranslator<'_, '_> {
         let values: Vec<Operand> = leaves
             .iter()
             .map(|path| {
-                let read = chain(val, "$deref_val", val_type, path);
+                let read = chain(val, "deref_val", val_type, path);
                 if !nested {
                     return read.into();
                 }
@@ -1603,7 +1603,7 @@ impl FunctionTranslator<'_, '_> {
         for (path, value) in leaves.iter().zip(values) {
             let assign = self.alloc_expr(
                 ExprKind::Assign {
-                    target: chain(handle, "$deref_ref", handle_type, path),
+                    target: chain(handle, "deref_ref", handle_type, path),
                     value,
                 },
                 TypeTable::UNIT,

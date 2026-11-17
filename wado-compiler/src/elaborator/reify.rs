@@ -309,7 +309,7 @@ impl WritePlace {
 /// One reify-side power-assert capture slot. Independent from
 /// [`super::assert::Capture`] so the two walks don't share state.
 pub(super) struct ReifyAssertSlot {
-    /// `$v0`, `$v1`, … — the local the panic template references.
+    /// The local the panic template references.
     pub(super) name: String,
     pub(super) label: String,
     /// `false` when the sub-expression evaporated during reify and no

@@ -7,6 +7,7 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{
     global_name, indexed_local_name, minted_name, minted_what, positional_param_name,
+    serial_suffixed,
 };
 use crate::nir::{CallParamSource, FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
 use crate::optimize::pass_dump;
@@ -200,12 +201,12 @@ fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[NirParam]) -> Inde
 /// is not enough: `e` at index 2 gives `e_2`, which another local may spell.
 fn free_name(name: &str, idx: u32, needs_suffix: bool, used: &mut IndexSet<String>) -> String {
     let mut out = if needs_suffix {
-        format!("{name}_{idx}")
+        serial_suffixed(name, idx)
     } else {
         name.to_string()
     };
     while !used.insert(out.clone()) {
-        out = format!("{out}_{idx}");
+        out = serial_suffixed(&out, idx);
     }
     out
 }

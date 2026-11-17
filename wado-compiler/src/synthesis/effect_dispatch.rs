@@ -1765,7 +1765,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
 
     let is_never = env.type_table.borrow().is_never(result_type);
     let result_slot = (result_type != TypeTable::UNIT && !is_never)
-        .then(|| ExitSlot::new(result_type, "$with_result", &env.type_table, ctx));
+        .then(|| ExitSlot::new(result_type, "with_result", &env.type_table, ctx));
 
     let mut stmts = prelude;
     for slot in result_slot
@@ -1825,7 +1825,7 @@ struct ExitSlot {
 impl ExitSlot {
     fn new(
         payload_type: TypeId,
-        prefix: &str,
+        what: &str,
         type_table: &Rc<RefCell<TypeTable>>,
         ctx: &mut LowerCtx,
     ) -> Self {
@@ -1840,7 +1840,7 @@ impl ExitSlot {
         let local = ctx.alloc_local(option_type);
         Self {
             local,
-            name: format!("{prefix}_{local}"),
+            name: minted_name(what, local),
             option_type,
             payload_type,
             some_index,
@@ -1943,7 +1943,7 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
                 _ => None,
             };
             let payload_type = carried.as_ref().map_or(TypeTable::UNIT, |v| v.type_id);
-            let slot = ExitSlot::new(payload_type, "$exit", self.type_table, self.ctx);
+            let slot = ExitSlot::new(payload_type, "exit", self.type_table, self.ctx);
             let parked = match carried {
                 Some(value) => std::mem::replace(value, slot.take()),
                 None => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),

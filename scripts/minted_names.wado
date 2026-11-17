@@ -44,14 +44,13 @@ export fn run() with (Preopens, Stderr, Exit) {
 /// minted name.
 fn minted_name_lines(text: &String) -> List<i32> {
     let mut lines: List<i32> = [];
+    let all = text.as_str_slice();
     let mut from = 0;
-    while let Some(at) = text.substr_bytes(from, text.len()).find(&FORMAT) {
+    while let Some(at) = all.slice(from, all.len()).find(&FORMAT) {
         let start = from + at;
         from = start + FORMAT.len();
-        let rest = text.substr_bytes(from, text.len()).trim_start();
-        if rest.starts_with("\"{INTERNAL_PREFIX}")
-            || (rest.starts_with("\"$") && !rest.starts_with("\"${{"))
-        {
+        let rest = all.slice(from, all.len()).trim_start();
+        if rest.starts_with("\"{INTERNAL_PREFIX}") || rest.starts_with("\"$") && !rest.starts_with("\"${{") {
             lines.push(line_of(text, start));
         }
     }
@@ -60,7 +59,7 @@ fn minted_name_lines(text: &String) -> List<i32> {
 
 fn line_of(text: &String, offset: i32) -> i32 {
     let mut line = 1;
-    for let b of text.substr_bytes(0, offset).bytes() {
+    for let b of text.as_str_slice().slice(0, offset).bytes() {
         if b == b'\n' {
             line += 1;
         }
