@@ -1819,15 +1819,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: &ReceiverId,
         method_name: &str,
     ) -> IndexSet<TypeId> {
-        let targets: IndexSet<TypeId> = {
-            let table = self.tysys.type_table.borrow();
-            self.trait_impls_for_receiver(&receiver.at_type(None), &[])
-                .into_iter()
-                .map(|block| table.impl_target_whole(block))
-                .filter(|&target| table.is_concrete(target))
-                .collect()
-        };
-        targets
+        self.written_instances(receiver)
             .into_iter()
             .filter(|&target| {
                 !self
