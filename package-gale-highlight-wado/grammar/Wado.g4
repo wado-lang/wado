@@ -675,15 +675,6 @@ stmtPrimary
     | braceLiteral
     ;
 
-bodyPrimary
-    : atom
-    | structLiteral
-    | ifExpr
-    | matchExpr
-    | withExpr
-    | labeledBlock
-    ;
-
 atom
     : literal
     | 'self'
@@ -827,12 +818,13 @@ fieldInitList
 fieldInit
     : (fieldName | STRING_LITERAL) ':' expression
     | shorthandField
+    | STRING_LITERAL
     | '..' expression
     ;
 
+// A field's name and a variable's at once, coloured as the field.
 shorthandField
     : bindingName
-    | STRING_LITERAL
     ;
 
 tupleOrArrayLiteral
@@ -866,6 +858,11 @@ closurePrimary
     | ifExpr
     | matchExpr
     | labeledBlock
+    ;
+
+bodyPrimary
+    : closurePrimary
+    | withExpr
     ;
 
 closureParamList
@@ -940,6 +937,7 @@ patternFieldList
 patternField
     : (fieldName | STRING_LITERAL) ':' pattern
     | shorthandField
+    | STRING_LITERAL
     ;
 
 literal

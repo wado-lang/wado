@@ -78,6 +78,7 @@
 ; capture: the compiler reads every one of those words through its name path.
 (methodName) @function.method
 (fieldName) @property
+(shorthandField) @property
 ; A `::` segment's IDENTIFIER stays uncoloured: `Option::None` and `Foo::new`
 ; are one shape that only name resolution splits. Its keywords are names all
 ; the same, and `Instant::from(x)` is the shape every `From` impl is called
@@ -106,7 +107,7 @@
 ; `identifier`: the language reserves it.)
 ;
 ; Listed word by word rather than as `(identifier) @variable`, which would also
-; claim the IDENTIFIER token and outrank `typeRef` / `pathSegment` from further
+; claim the IDENTIFIER token and outrank `typeAtom` / `pathSegment` from further
 ; in, painting every type name and enum case a variable.
 (identifier "from" @variable)
 (identifier "of" @variable)

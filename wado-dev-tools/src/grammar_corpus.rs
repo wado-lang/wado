@@ -16,7 +16,7 @@
 //! 2. Everything the grammar accepts but the compiler rejects is a fixture
 //!    declaring a `compile_error`, and the compiler's earliest error there is
 //!    a [`ParseErrorKind::Restriction`] — a rule no context-free grammar
-//!    states (a chained `!=`, `internal` beside `pub`). A `Syntax` error there
+//!    states (a nesting limit, `#[serde]`). A `Syntax` error there
 //!    means the grammar accepts what it can refuse; a real source there means
 //!    it accepts what the language does not.
 
@@ -27,8 +27,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use lexopt::Arg::{Long, Value};
-use wado_compiler::ParseErrorKind;
-use wado_compiler::token::Span;
+use wado_compiler::{ParseErrorKind, Span};
 use wado_host::fixture::expects_compile_failure;
 
 /// Corpus roots. `tests/generated` is excluded: its `*.wir.wado` files are IR
@@ -171,8 +170,7 @@ pub fn collect_corpus() -> Vec<String> {
     paths
 }
 
-/// The compiler's syntax verdict for each path, reporting its first error of
-/// the deciding kind.
+/// The compiler's syntax verdict for each path.
 fn verdicts_for(paths: &[String]) -> Vec<CompilerVerdict> {
     paths
         .iter()

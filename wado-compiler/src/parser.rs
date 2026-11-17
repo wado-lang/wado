@@ -193,9 +193,8 @@ pub struct ParseError {
 
 /// Which side of the context-free line a parse error falls on. The grammar the
 /// highlighter is generated from must reject every `Syntax` error and may
-/// accept a `Restriction`, which `check-grammar` holds it to. Ordered so a
-/// file's least kind decides whether the grammar must reject it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/// accept a `Restriction`, which `check-grammar` holds it to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParseErrorKind {
     /// The tokens break the context-free syntax.
     Syntax,
