@@ -304,7 +304,7 @@ async fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
     // Reject a module string that isn't a valid module path now, with a clean
     // error — otherwise `normalize_module_path` (here and in the loader) would
     // panic on it downstream.
-    wado_compiler::name::try_normalize_module_path(&parsed.module)
+    wado_compiler::module_path::try_normalize_module_path(&parsed.module)
         .map_err(|e| CliExit::error(format!("invalid module '{}': {e}", parsed.module)))?;
     let base_dir = fs::canonicalize(base).unwrap_or_else(|_| Path::new(base).to_path_buf());
     // Synthetic entry: never read from disk (opened with explicit text), but
@@ -374,7 +374,7 @@ async fn symbol_invocations(env: &SymbolEnv) -> Result<Option<InvocationIndex>, 
     // module string can't corrupt the generator's relative input resolution.
     // `canonicalize` failing also rules out non-file modules (`core:` /
     // `wasi:` / a dependency name), so the query stays consume-only for them.
-    let module_key = wado_compiler::name::normalize_module_path(&env.parsed.module);
+    let module_key = wado_compiler::module_path::normalize_module_path(&env.parsed.module);
     let Ok(target_abs) = env.base_dir.join(&module_key).canonicalize() else {
         return Ok(None);
     };
