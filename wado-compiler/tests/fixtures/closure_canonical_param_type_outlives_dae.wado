@@ -1,0 +1,31 @@
+// A closure whose parameter DAE drops still dispatches through its canonical
+// signature, so the parameter's type must survive type DCE.
+
+struct Node {
+    v: i32,
+}
+
+struct Owned {
+    v: i32,
+}
+
+fn fresh(n: &Node) -> Owned {
+    return Owned { v: n.v };
+}
+
+fn apply(f: fn(&Node), n: &Node) {
+    while builtin::black_box(false) {}
+    f(n);
+}
+
+export fn run() {
+    let node = Node { v: 7 };
+    apply(|q: &Node| {
+        while builtin::black_box(false) {}
+        let _ = fresh(q);
+    }, &node);
+    assert node.v == 7;
+}
+
+__DATA__
+{"stdout": ""}

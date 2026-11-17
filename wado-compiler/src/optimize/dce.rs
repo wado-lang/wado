@@ -1532,11 +1532,12 @@ fn populate_type_reachability(
             }
         }
 
-        // A reachable `$call` keeps its functor's struct / ref types live:
-        // `register_closure_wrappers` reads `ref_type_id` for the wrapper's
-        // `ref.cast`, and DAE can drop every other NIR-side mention by removing
-        // the env `self`. Compare by pointer identity — `functor.call_method`
-        // and the matching `project.functions[i]` are the same `Arc`.
+        // A reachable `$call` keeps live every type `register_closure_wrappers`
+        // reads: the functor's struct / ref types for the wrapper's `ref.cast`,
+        // and the canonical signature for its external type. DAE can drop every
+        // other NIR-side mention of each by removing `self` or a user parameter.
+        // Compare by pointer identity — `functor.call_method` and the matching
+        // `project.functions[i]` are the same `Arc`.
         let surviving_ptrs: IndexSet<*const _> = project
             .functions
             .iter()
@@ -1549,6 +1550,10 @@ fn populate_type_reachability(
             if surviving_ptrs.contains(&cm_ptr) {
                 analysis.types.insert(functor.struct_type_id);
                 analysis.types.insert(functor.ref_type_id);
+                for &(_, ty) in &functor.canonical_user_params {
+                    collect_type_transitive(ty, &type_table, &mut analysis.types);
+                }
+                collect_type_transitive(functor.canonical_return, &type_table, &mut analysis.types);
             }
         }
     }
