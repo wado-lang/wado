@@ -229,23 +229,23 @@ fn routed<affine G: Graph, E: Float, T, X>(
     let mut hits: List<G::Tensor<bool, [Picked, Pool]>> = [];
     let mut picks: Option<G::Tensor<i64, [Tokens, Picks]>> = null;
     let blocked = full::<G, f32, [Picked, Pool]>(g, f32::NEG_INFINITY, extents);
+    let unblocked = full::<G, f32, [Picked, Pool]>(g, 1.0, extents);
+    let all_chosen = full::<G, bool, [Picked, Pool]>(g, true, extents);
+    let row_blocked = full::<G, f32, [Picked, Pool]>(g, f32::NEG_INFINITY, [extents[0], 1]);
     for let _ of 0..<experts.k {
         // Where every expert left has a logit of -inf, the first of them, so
         // that no expert is picked twice.
         let best: G::Tensor<i64, [Picked, Pool]> = g.arg_max(&left, 1);
-        let first_left: G::Tensor<i64, [Picked, Pool]> = g.arg_max(
-            &g.select(&chosen, &none, &full::<G, f32, [Picked, Pool]>(g, 1.0, extents)),
-            1,
-        );
+        let first_left: G::Tensor<i64, [Picked, Pool]> = g.arg_max(&g.select(&chosen, &none, &unblocked), 1);
         let top: G::Tensor<f32, [Picked]> = g.reduce(&left, Binary::Maximum, f32::NEG_INFINITY, [1]);
         let none_finite = g.compare(
             Comparison::Eq,
             &g.reshape::<f32, [Picked], [Picked, Pool]>(&top, [extents[0], 1]),
-            &full::<G, f32, [Picked, Pool]>(g, f32::NEG_INFINITY, [extents[0], 1]),
+            &row_blocked,
         );
         let at = g.select(&none_finite, &first_left, &best);
         let hit = g.compare(Comparison::Eq, &positions, &g.broadcast_in_dim(&at, extents, [0, 1]));
-        chosen = g.select(&hit, &full::<G, bool, [Picked, Pool]>(g, true, extents), &chosen);
+        chosen = g.select(&hit, &all_chosen, &chosen);
         left = g.select(&hit, &blocked, &left);
         let column = g.relabeled::<i64, [Picked, Pool], [Tokens, Picks]>(&at);
         picks = Option::Some(match &picks {
