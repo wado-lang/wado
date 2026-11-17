@@ -7,7 +7,7 @@ use { MonotonicClock } from "wasi:clocks";
 // epoch deadline cannot reclaim it because no wasm runs while it is parked.
 // Any other path answers at once, so a test can ask whether the worker got
 // the slot back.
-export async fn handle(request: Request) -> Result<Response, ErrorCode> with MonotonicClock {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with (MonotonicClock, Request, Response) {
     if let Some(path) = request.get_path_with_query() {
         if path == "/slow" {
             MonotonicClock::wait_for(200_000_000).wait();

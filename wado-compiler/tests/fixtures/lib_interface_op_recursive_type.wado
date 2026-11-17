@@ -1,0 +1,18 @@
+// A library's interface operation may take a recursive type. Asking whether
+// its signature holds an extern handle walks the type's fields, and a field
+// that leads back to the type must end the walk rather than recurse forever.
+pub interface Track {
+    fn read(node: Node) {
+    }
+}
+
+pub struct Node {
+    next: List<Node>,
+}
+
+pub fn touch() with Track {
+    Track::read(Node { next: [] });
+}
+
+__DATA__
+{"lib_world": "test:recursive/recursive@0.1.0"}

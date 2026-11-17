@@ -1903,6 +1903,11 @@ impl CmInterfaceRegistry {
     /// Whether `ty` is or holds an extern handle, through the fields of a
     /// record and the payloads of a variant too.
     fn mentions_extern_handle(&self, ty: &Type) -> bool {
+        self.mentions_extern_handle_in(ty, &mut IndexSet::default())
+    }
+
+    /// `seen` stops a type that reaches itself through a field or a payload.
+    fn mentions_extern_handle_in(&self, ty: &Type, seen: &mut IndexSet<String>) -> bool {
         ty.any(&mut |ty| {
             if self.extern_handle(ty).is_some() {
                 return true;
@@ -1913,6 +1918,9 @@ impl CmInterfaceRegistry {
             let Some(source) = self.source_interface(named) else {
                 return false;
             };
+            if !seen.insert(format!("{source}#{}", named.name)) {
+                return false;
+            }
             let fields = self
                 .get_struct_fields_by_source(&source, &named.name)
                 .into_iter()
@@ -1925,7 +1933,7 @@ impl CmInterfaceRegistry {
                 .filter_map(|case| case.payload.as_ref());
             fields
                 .chain(payloads)
-                .any(|inner| self.mentions_extern_handle(inner))
+                .any(|inner| self.mentions_extern_handle_in(inner, seen))
         })
     }
 
