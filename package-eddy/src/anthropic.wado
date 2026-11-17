@@ -1,110 +1,69 @@
 //! Anthropic's Messages API: one text reply, or one turn of a conversation
 //! that uses tools.
 
-use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Method, Scheme, Trailers } from "wasi:http";
+use { Method } from "wasi:http";
 use { Client } from "wasi:http";
-use { DescriptorFlags, Filesize, OpenFlags, PathFlags } from "wasi:filesystem";
+use { Mark, MonotonicClock } from "wasi:clocks";
 use { env, Environment } from "core:cli";
-use fs from "core:fs";
-use { Preopens } from "core:fs";
 use { to_bytes, from_bytes, from_string } from "core:json";
 use { Serialize, Deserialize } from "core:serde";
 use { Value, to_value, from_value } from "core:value";
+use { Federation } from "./federation.wado";
+use { fetch } from "./http.wado";
 
-/// What a request authenticates with: an API key, or the file a federated
-/// token is kept in. Such a token expires within a review, so whoever minted
-/// it writes the next one to the file, and each request reads the file again.
-pub variant Credential {
-    Key(String),
-    /// A path whose directory is a preopen of its own, not under the first:
-    /// the reviewed code reads everything there.
-    File(String),
+/// What a request authenticates with: an API key, or a token minted under a
+/// federation, renewed before it expires.
+pub struct Credential {
+    key: String,
+    federation: Option<Federation>,
+    /// The `MonotonicClock` mark the key is renewed at.
+    renew_at: Mark,
+}
+
+/// A minted token is renewed after half its life, and at least every ten
+/// minutes.
+fn renewal_delay(lifetime: i64) -> Mark {
+    return (i64::min(lifetime / 2, 600) * 1_000_000_000) as u64 as Mark;
+}
+
+test "a token is renewed after half its life, and at least every ten minutes" {
+    assert renewal_delay(1_440) == 600_000_000_000;
+    assert renewal_delay(300) == 150_000_000_000;
 }
 
 impl Credential {
-    /// `CLAUDE_API_KEY_FILE`, or else `CLAUDE_API_KEY`; an empty one is unset.
-    /// The file is named by an absolute path in plain form, since its
-    /// directory is granted by that text and looked up by it.
-    pub fn from_env() -> Result<Credential, String> with Environment {
-        if let Some(path) = env("CLAUDE_API_KEY_FILE") && !path.is_empty() {
-            if !grantable(&path) {
-                return Err(`CLAUDE_API_KEY_FILE must be an absolute path in plain form, outside /: ${path}`);
-            }
-            return Ok(File(path));
+    /// A token minted under the federation `ANTHROPIC_FEDERATION_RULE_ID`
+    /// names, or else `CLAUDE_API_KEY`; an empty one is unset.
+    pub fn from_env() -> Result<Credential, String> with (Environment, Client, MonotonicClock) {
+        if let Some(federation) = Federation::from_env()? {
+            let mut credential = Credential { key: "", federation: Some(federation), renew_at: 0 };
+            credential.renew()?;
+            return Ok(credential);
         }
         return match env("CLAUDE_API_KEY") {
-            Some(key) && !key.is_empty() => Ok(Key(key)),
-            _ => Err("neither CLAUDE_API_KEY_FILE nor CLAUDE_API_KEY is set"),
+            Some(key) && !key.is_empty() => Ok(Credential { key, federation: null, renew_at: u64::MAX as Mark }),
+            _ => Err("neither ANTHROPIC_FEDERATION_RULE_ID nor CLAUDE_API_KEY is set"),
         };
     }
 
-    fn current(&self) -> Result<String, String> with Preopens {
-        return match self {
-            Key(key) => Ok(*key),
-            File(path) => read_preopened(path),
-        };
-    }
-}
-
-fn grantable(path: &String) -> bool {
-    return path.starts_with("/")
-        && !path.ends_with("/")
-        && !path.contains("//")
-        && !path.contains("/./")
-        && !path.contains("/../")
-        && path.rfind("/") matches { Some(last) && last > 0 };
-}
-
-test "a key file is named by an absolute path in plain form, outside /" {
-    assert grantable(&"/home/runner/work/_temp/claude-api-key/token");
-    assert !grantable(&"token") && !grantable(&"./token") && !grantable(&"/token");
-    assert !grantable(&"/a//token") && !grantable(&"/a/./token") && !grantable(&"/a/../token") && !grantable(&"/a/");
-}
-
-/// The text of the file at `path`, read in the preopen named by its directory.
-fn read_preopened(path: &String) -> Result<String, String> with Preopens {
-    let [Some(dir), Some(name)] = [
-        fs::parent(path),
-        fs::file_name(path),
-    ] else {
-        return Err(`${*path} names no file in a directory`);
-    };
-    for let [preopen, preopen_name] of Preopens::get_directories() {
-        if preopen_name != dir {
-            continue;
+    /// The key to send, renewed first when it is due.
+    fn key(&mut self) -> Result<String, String> with (Client, MonotonicClock) {
+        if MonotonicClock::now() >= self.renew_at {
+            self.renew()?;
         }
-        let file = match preopen.open_at(PathFlags::none(), name.to_string(), OpenFlags::none(), DescriptorFlags::Read).wait() {
-            Ok(file) => file,
-            Err(e) => {
-                return Err(`${*path}: ${e:?}`);
-            },
-        };
-        let [stream, transfer] = file.read_via_stream(0 as Filesize);
-        let bytes = stream.read_to_end_bytes();
-        stream.drop();
-        if let Some(Err(e)) = transfer.read() {
-            return Err(`${*path}: ${e:?}`);
-        }
-        return Ok(String::from_utf8_lossy(bytes).trim().to_string());
+        return Ok(self.key);
     }
-    return Err(`no directory ${dir} is granted; \`wado run --dir . --dir ${dir}\` grants it`);
-}
 
-test "a file credential is read again each time" {
-    fs::write("credential-test", &"one\n").unwrap();
-    let mut root = "";
-    for let [_, name] of Preopens::get_directories() {
-        root = name;
-        break;
+    /// Mints the next key; false for a key that cannot be renewed.
+    fn renew(&mut self) -> Result<bool, String> with (Client, MonotonicClock) {
+        let Some(federation) = &self.federation else {
+            return Ok(false);
+        };
+        let minted = federation.mint()?;
+        self.key = minted.token;
+        self.renew_at = MonotonicClock::now() + renewal_delay(minted.lifetime);
+        return Ok(true);
     }
-    let credential = Credential::File(fs::join(&root, "credential-test"));
-    assert credential.current() == Ok("one");
-    fs::write("credential-test", &"two").unwrap();
-    assert credential.current() == Ok("two");
-    fs::remove_file("credential-test").unwrap();
-    assert Credential::File("/nowhere/token").current() == Err(
-        "no directory /nowhere is granted; `wado run --dir . --dir /nowhere` grants it",
-    );
 }
 
 pub struct Message {
@@ -263,13 +222,13 @@ pub fn message<T: Serialize>(value: &T) -> Value {
 /// The text of `model`'s reply to `user` under `system`, or the error the API
 /// returned. What the reply took is added to `spent`.
 pub fn ask(
-    credential: &Credential,
+    credential: &mut Credential,
     model: String,
     system: String,
     user: String,
     max_tokens: i32,
     spent: &mut Usage,
-) -> Result<String, String> with (Client, Preopens) {
+) -> Result<String, String> with (Client, MonotonicClock) {
     let request = MessagesRequest {
         model,
         max_tokens,
@@ -286,13 +245,13 @@ pub fn ask(
 /// `model`'s reply to `user`, read as the one JSON object it holds. What the
 /// reply took is added to `spent`.
 pub fn ask_json<T: Deserialize>(
-    credential: &Credential,
+    credential: &mut Credential,
     model: String,
     system: String,
     user: String,
     max_tokens: i32,
     spent: &mut Usage,
-) -> Result<T, String> with (Client, Preopens) {
+) -> Result<T, String> with (Client, MonotonicClock) {
     let text = ask(credential, model, system, user, max_tokens, spent)?;
     return json_object::<T>(&text);
 }
@@ -315,7 +274,7 @@ pub fn json_object<T: Deserialize>(text: &String) -> Result<T, String> {
 /// `model`'s next turn in `messages`. With `use_tools` false the model must
 /// answer in text, though the conversation may hold earlier tool calls.
 pub fn converse(
-    credential: &Credential,
+    credential: &mut Credential,
     model: String,
     system: String,
     tools: &List<Tool>,
@@ -323,7 +282,7 @@ pub fn converse(
     messages: &List<Value>,
     max_tokens: i32,
     effort: String,
-) -> Result<Turn, String> with (Client, Preopens) {
+) -> Result<Turn, String> with (Client, MonotonicClock) {
     let request = ConverseRequest {
         model,
         max_tokens,
@@ -337,26 +296,22 @@ pub fn converse(
     return post::<Turn>(credential, to_bytes(&request).unwrap());
 }
 
-/// A request refused for its key is sent once more if the credential holds
-/// another key by then: a federated token expires mid-review.
-fn post<T: Deserialize>(credential: &Credential, request: ByteSlice) -> Result<T, String> with (Client, Preopens) {
-    let mut key = credential.current()?;
+/// A request refused for its key is sent once more with a renewed one, where
+/// the credential can renew it.
+fn post<T: Deserialize>(
+    credential: &mut Credential,
+    request: ByteSlice,
+) -> Result<T, String> with (Client, MonotonicClock) {
     let mut renewed = false;
     loop {
-        let resp = send("api.anthropic.com", "/v1/messages", [
-            ["authorization", `Bearer ${key}`],
+        let [status, body] = fetch(Method::Post, "api.anthropic.com", "/v1/messages", [
+            ["authorization", `Bearer ${credential.key()?}`],
             ["anthropic-version", "2023-06-01"],
             ["content-type", "application/json"],
         ], request)?;
-        let status = resp.get_status_code() as i32;
-        let body = read_body(resp)?;
-        if status == 401 && !renewed {
-            let next = credential.current()?;
-            if next != key {
-                key = next;
-                renewed = true;
-                continue;
-            }
+        if status == 401 && !renewed && credential.renew()? {
+            renewed = true;
+            continue;
         }
         if status != 200 {
             return Err(`HTTP ${status}: ${String::from_utf8_lossy(body)}`);
@@ -366,58 +321,4 @@ fn post<T: Deserialize>(credential: &Credential, request: ByteSlice) -> Result<T
             Err(e) => Err(`unparsed response: ${e:?}`),
         };
     }
-}
-
-fn send<B: AsByteSlice>(
-    authority: String,
-    path: String,
-    headers: List<[String, String]>,
-    body: B,
-) -> Result<Response, String> with Client {
-    let [body_rx, body_tx] = Stream::<u8>::new();
-    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let fields = Headers::new();
-    for let [name, value] of headers {
-        fields.append(name as FieldName, value.bytes().collect() as FieldValue);
-    }
-    let [req, sent] = Request::new(fields, Option::<Stream<u8>>::Some(body_rx), trailers_rx, null);
-    req.set_method(Method::Post);
-    req.set_scheme(Option::<Scheme>::Some(Scheme::Https));
-    req.set_authority(Option::<String>::Some(authority));
-    req.set_path_with_query(Option::<String>::Some(path));
-
-    // The host consumes the body stream once the send starts, so the writes
-    // below rendezvous with it rather than deadlock.
-    let subtask = Client::send(req);
-    body_tx.write_raw_all(body.as_byte_slice() as Slice<u8>);
-    body_tx.drop();
-    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
-    let resp = match subtask.wait() {
-        Ok(resp) => resp,
-        Err(e) => {
-            return Err(`HTTP request failed: ${e:?}`);
-        },
-    };
-    done(sent, "HTTP request")?;
-    return Ok(resp);
-}
-
-fn read_body(resp: Response) -> Result<ByteList, String> {
-    let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
-    let [body_stream_rx, received] = Response::consume_body(resp, res_rx);
-    let buf = body_stream_rx.read_to_end_bytes();
-    body_stream_rx.drop();
-    res_tx.write(Result::Ok(()));
-    done(received, "HTTP response body")?;
-    return Ok(buf);
-}
-
-/// Whether `transfer`, the future a `wasi:http` transfer resolves once it
-/// ends, reports success.
-fn done<affine T>(transfer: Future<Result<T, ErrorCode>>, what: String) -> Result<(), String> {
-    let outcome = transfer.read();
-    if !outcome matches { Some(Ok(_)) } {
-        return Err(`${what} failed: ${outcome:?}`);
-    }
-    return Ok(());
 }

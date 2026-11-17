@@ -1,0 +1,171 @@
+//! Workload Identity Federation: a workload proves who it is with an identity
+//! token, and the Claude API trades it for a short-lived access token, so no
+//! API key is stored. The identity token comes from GitHub Actions.
+
+use { Method } from "wasi:http";
+use { Client } from "wasi:http";
+use { env, Environment } from "core:cli";
+use base64 from "core:base64";
+use { to_bytes, from_bytes, to_string } from "core:json";
+use { Url } from "core:url";
+use { fetch } from "./http.wado";
+
+/// A federation rule and the service account it mints for, named in the
+/// environment as the Anthropic SDKs name them, and the means to request an
+/// identity token, which GitHub Actions gives a job granted `id-token: write`.
+pub struct Federation {
+    rule_id: String,
+    organization_id: String,
+    service_account_id: String,
+    workspace_id: String,
+    request_url: Url,
+    request_token: String,
+}
+
+/// An access token, and how many seconds it lives from when it was minted.
+pub struct Minted {
+    pub token: String,
+    pub lifetime: i64,
+}
+
+/// What the exchange takes.
+struct Exchange {
+    grant_type: String,
+    assertion: String,
+    federation_rule_id: String,
+    organization_id: String,
+    service_account_id: String,
+    workspace_id: String,
+}
+
+/// What the exchange answers; an error's body holds no token, so it is shown.
+struct Exchanged {
+    access_token: Option<String> = null,
+    expires_in: Option<f64> = null,
+}
+
+struct IdentityToken {
+    value: String,
+}
+
+/// The claims a federation rule matches on, none of them secret: the exchange
+/// answers a mismatch with no more than "Authentication failed".
+struct Claims {
+    iss: Option<String> = null,
+    aud: Option<String> = null,
+    sub: Option<String> = null,
+    ref: Option<String> = null,
+    event_name: Option<String> = null,
+    repository_owner_id: Option<String> = null,
+    repository_id: Option<String> = null,
+    job_workflow_ref: Option<String> = null,
+}
+
+/// The audience the Claude API accepts an identity token for.
+global AUDIENCE: String = "https%3A%2F%2Fapi.anthropic.com";
+
+/// A token too short-lived to finish one request is refused as no token.
+global SHORTEST_LIFETIME: i64 = 120;
+
+impl Federation {
+    /// The federation `ANTHROPIC_FEDERATION_RULE_ID` names, or none when it is
+    /// unset or empty.
+    pub fn from_env() -> Result<Option<Federation>, String> with Environment {
+        let rule_id = match env("ANTHROPIC_FEDERATION_RULE_ID") {
+            Some(id) && !id.is_empty() => id,
+            _ => {
+                return Ok(null);
+            },
+        };
+        let request_url = required("ACTIONS_ID_TOKEN_REQUEST_URL")?;
+        return Ok(Some(Federation {
+            rule_id,
+            organization_id: required("ANTHROPIC_ORGANIZATION_ID")?,
+            service_account_id: required("ANTHROPIC_SERVICE_ACCOUNT_ID")?,
+            workspace_id: required("ANTHROPIC_WORKSPACE_ID")?,
+            request_url: Url::from_str(&request_url).map_err(|e| `ACTIONS_ID_TOKEN_REQUEST_URL: ${e}`)?,
+            request_token: required("ACTIONS_ID_TOKEN_REQUEST_TOKEN")?,
+        }));
+    }
+
+    /// A fresh access token, traded for a fresh identity token.
+    pub fn mint(&self) -> Result<Minted, String> with Client {
+        let identity = self.identity_token()?;
+        let exchange = Exchange {
+            grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            assertion: identity,
+            federation_rule_id: self.rule_id,
+            organization_id: self.organization_id,
+            service_account_id: self.service_account_id,
+            workspace_id: self.workspace_id,
+        };
+        let [status, body] = fetch(Method::Post, "api.anthropic.com", "/v1/oauth/token", [
+            ["content-type", "application/json"],
+        ], to_bytes(&exchange).unwrap())?;
+        if status != 200 {
+            return Err(
+                `the token exchange answered ${status}: ${String::from_utf8_lossy(body)}; the identity token claims ${claims(
+                    &identity,
+                )}`,
+            );
+        }
+        let Ok(Exchanged { access_token: Some(token), expires_in: Some(lifetime) }) = from_bytes::<Exchanged, ByteList>(
+            body,
+        ) else {
+            return Err("the token exchange answered 200 without a token and its lifetime");
+        };
+        if (lifetime as i64) < SHORTEST_LIFETIME {
+            return Err(`the token exchange minted a token that lives ${lifetime}s`);
+        }
+        return Ok(Minted { token, lifetime: lifetime as i64 });
+    }
+
+    fn identity_token(&self) -> Result<String, String> with Client {
+        let url = &self.request_url;
+        let separator = if url.query matches { Some(_) } { "&" } else { "?" };
+        let [status, body] = fetch(
+            Method::Get,
+            url.authority(),
+            `${url.path_with_query()}${separator}audience=${AUDIENCE}`,
+            [
+                ["authorization", `bearer ${self.request_token}`],
+            ],
+            "",
+        )?;
+        if status != 200 {
+            return Err(`GitHub Actions answered ${status} for an identity token`);
+        }
+        return match from_bytes::<IdentityToken, ByteList>(body) {
+            Ok(t) => Ok(t.value),
+            Err(e) => Err(`GitHub Actions answered no identity token: ${e:?}`),
+        };
+    }
+}
+
+fn required(name: String) -> Result<String, String> with Environment {
+    return match env(name) {
+        Some(value) && !value.is_empty() => Ok(value),
+        _ => Err(`ANTHROPIC_FEDERATION_RULE_ID is set, but ${name} is not`),
+    };
+}
+
+/// The claims of `jwt` a federation rule matches on, as JSON.
+fn claims(jwt: &String) -> String {
+    let parts = jwt.split(".").collect();
+    if parts.len() == 3
+        && let Some(payload) = base64::decode(&parts[1])
+        && let Ok(c) = from_bytes::<Claims, ByteList>(payload) {
+        return to_string(&c).unwrap();
+    }
+    return "nothing readable";
+}
+
+test "an identity token shows only the claims a rule matches on" {
+    let payload = base64::encode_url(
+        &`{"sub":"repo:o/r:ref:refs/heads/main","ref":"refs/heads/main","jti":"secret-ish"}`,
+    );
+    let shown = claims(&`header.${payload}.signature`);
+    assert shown.contains("\"sub\":\"repo:o/r:ref:refs/heads/main\"");
+    assert !shown.contains("jti");
+    assert claims(&"not a jwt") == "nothing readable";
+}
