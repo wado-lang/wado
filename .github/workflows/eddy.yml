@@ -150,6 +150,10 @@ jobs:
           jwt="$(curl -sSf -G -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             --data-urlencode audience=https://api.anthropic.com "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)"
           echo "::add-mask::$jwt"
+          # The claims a federation rule matches on, none of them secret: the
+          # exchange answers a mismatch with nothing but "Authentication failed".
+          jq -rR 'split(".")[1] | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson
+            | {iss, aud, sub, ref, event_name, repository_owner_id, repository_id, job_workflow_ref}' <<< "$jwt"
           response="$(jq -n --arg jwt "$jwt" '{
               grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
               assertion: $jwt,
