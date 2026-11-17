@@ -16,10 +16,11 @@
 //! with no new review, to try another reporter on the same findings.
 //!
 //! The record is
-//! `<--reviews>/<head>.json`, one entry per review. Each finding is also
-//! written under `<--out>/<head>/` (`scratchpad/eddy`): `<n>.md`, the body of
-//! a pull request comment that reproduces it from one pasted block, and
-//! `<n>.patch` for `git apply`.
+//! `<--reviews>/<head>.json`, one entry per review. Under `<--out>/<head>/`
+//! (`scratchpad/eddy`) go `review.md`, one pull request comment for the whole
+//! review and its cost, written even when the review fails, and for each
+//! finding `<n>.md`, the body of a comment that reproduces it from one pasted
+//! block, and `<n>.patch` for `git apply`.
 //!
 //! Run it from the repository root, every commit to review made. The reviewer
 //! is a build input: `CLAUDE_MODEL` in the environment, or
@@ -41,7 +42,7 @@ use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
 use { git, try_git, paths_between, diff_between } from "./git.wado";
 use { Usage } from "./anthropic.wado";
-use { comment } from "./comment.wado";
+use { comment, review_comment } from "./comment.wado";
 use { cost_summary } from "./cost.wado";
 use { report } from "./report.wado";
 use { review, Submission, Finding, Reviewed } from "./review.wado";
@@ -180,17 +181,19 @@ ${commits.trim()}`;
     eprintln(`recorded in ${path}: ${result.turns} turns, ${result.calls.len()} tool calls`);
     // Computed here rather than recorded: a price changes, and the tokens a
     // review took do not.
-    eprintln(cost_summary(&[
+    let cost = cost_summary(&[
         [CLAUDE_MODEL, result.usage.unwrap_or(Usage {})],
         [options.reporter, report_usage],
-    ]));
+    ]);
+    eprintln(cost);
 
+    let dir = fs::join(&options.out, &head);
+    write_findings(&dir, &head, &result.findings);
+    fs::write(fs::join(&dir, "review.md"), &review_comment(&result.findings, &head, &cost, &result.error)).unwrap();
     if let Some(e) = &result.error {
         fail(*e);
     }
-    let dir = fs::join(&options.out, &head);
-    write_findings(&dir, &head, &result.findings);
-    eprintln(`each finding's comment, and the patch that reproduces it, in ${dir}`);
+    eprintln(`the review's comment, each finding's, and the patch that reproduces it, in ${dir}`);
     println(String::from_utf8_lossy(to_bytes_pretty(&Report { findings: result.findings }).unwrap()));
 }
 

@@ -13,6 +13,9 @@ global BODY_LIMIT: i32 = 60_000;
 global SUMMARY_LIMIT: i32 = 2_000;
 global DETAIL_LIMIT: i32 = 30_000;
 
+/// The most of a summary one row of the review's table holds, in bytes.
+global CELL_LIMIT: i32 = 200;
+
 /// How many lines of a run's output a comment shows on each side of the text
 /// that was expected.
 global EXCERPT_REACH: i32 = 12;
@@ -42,6 +45,43 @@ fn body(f: &Finding, commit: &String, id: &String, with_steps: bool) -> String {
     }
     out.push_str(`<!-- eddy ${*id} -->\n`);
     return out;
+}
+
+/// The one pull request comment for a review of `commit`: a table of the
+/// findings and what the review cost, then each finding's comment folded, as
+/// many as fit in a comment.
+pub fn review_comment(findings: &List<Finding>, commit: &String, cost: &String, error: &Option<String>) -> String {
+    let short = commit.substr_bytes(0, i32::min(commit.len(), 9));
+    if let Some(e) = error {
+        return `## Eddy\n\nThe review of \`${short}\` failed: ${shortened(e, SUMMARY_LIMIT)}\n\n${*cost}\n`;
+    }
+    if findings.is_empty() {
+        return `## Eddy\n\nReviewed \`${short}\`. No findings; ${*cost}\n`;
+    }
+    let noun = if findings.len() == 1 { "finding" } else { "findings" };
+    let mut out = `## Eddy\n\nReviewed \`${short}\`. ${findings.len()} ${noun}; ${*cost}\n\n| # | Where | Finding | Reproduced |\n| - | - | - | - |\n`;
+    for let [i, f] of findings.into_iter().enumerate() {
+        let place = if f.line > 0 { `${f.file}:${f.line}` } else { f.file };
+        let reproduced = if f.repro matches { Some(r) && r.verified } { "yes" } else { "no" };
+        out.push_str(`| ${i + 1} | ${code_span(&place)} | ${cell(&f.summary)} | ${reproduced} |\n`);
+    }
+    out.push_str("\n");
+    for let [i, f] of findings.into_iter().enumerate() {
+        let n = i + 1;
+        let folded = `<details><summary>${n}. ${cell(&f.summary)}</summary>\n\n${comment(f, commit, &`${short}-${n}`)}\n</details>\n\n`;
+        let rest = `Finding ${n} on is in the run's artifact.\n`;
+        if out.len() + folded.len() + rest.len() > BODY_LIMIT {
+            out.push_str(rest);
+            break;
+        }
+        out.push_str(folded);
+    }
+    return out;
+}
+
+/// `text` as one cell of a Markdown table: on one line, and no `|` ending it.
+fn cell(text: &String) -> String {
+    return shortened(&text.replace("\n", " ").replace("|", "\\|"), CELL_LIMIT);
 }
 
 /// `text`, or its first `limit` bytes and a mark that more followed.
@@ -235,6 +275,48 @@ test "an excerpt is the lines around what was expected" {
     assert excerpt(&output, &"absent").ends_with("line 99\n")
         && excerpt(&output, &"absent").starts_with("…\nline 87\n");
     assert excerpt(&"one\n", &"one") == "one\n";
+}
+
+test "a review's comment tables the findings above each one's comment" {
+    let findings: List<Finding> = [
+        Finding { file: "src/a.rs", line: 7, summary: "a | b\nc", detail: "D" },
+        Finding {
+            file: "src/b.rs",
+            summary: "S",
+            detail: "D",
+            repro: Some(Repro {
+                patch: "p\n",
+                run: ["cargo", "test"],
+                expect: "e",
+                verified: true,
+                output: "e\n",
+            }),
+        },
+    ];
+    let text = review_comment(&findings, &"0123456789abcdef", &"cost: $0.6000 (m $0.6000)", &null);
+    assert text.starts_with("## Eddy\n\nReviewed `012345678`. 2 findings; cost: $0.6000 (m $0.6000)\n\n");
+    assert text.contains(
+        "| # | Where | Finding | Reproduced |\n| - | - | - | - |\n| 1 | ` src/a.rs:7 ` | a \\| b c | no |\n| 2 | ` src/b.rs ` | S | yes |\n",
+    );
+    assert text.contains("<details><summary>1. a \\| b c</summary>\n\n**a | b\nc** — not reproduced");
+    assert text.contains("<!-- eddy 012345678-2 -->\n");
+}
+
+test "a review's comment with nothing found, or nothing finished, says so" {
+    let none = review_comment(&[], &"0123456789", &"cost: $0.1000 (m $0.1000)", &null);
+    assert none == "## Eddy\n\nReviewed `012345678`. No findings; cost: $0.1000 (m $0.1000)\n";
+    let failed = review_comment(&[], &"0123456789", &"cost: $0.1000 (m $0.1000)", &Some("the API refused"));
+    assert failed == "## Eddy\n\nThe review of `012345678` failed: the API refused\n\ncost: $0.1000 (m $0.1000)\n";
+}
+
+test "a review's comment stops listing details at GitHub's limit" {
+    let findings: List<Finding> = [
+        Finding { file: "a", summary: "S", detail: "é".repeat(15_000) },
+        Finding { file: "a", summary: "S", detail: "é".repeat(15_000) },
+    ];
+    let text = review_comment(&findings, &"0123456789", &"cost: $0", &null);
+    assert text.len() <= BODY_LIMIT && text.contains("<!-- eddy 012345678-1 -->");
+    assert !text.contains("<!-- eddy 012345678-2 -->") && text.ends_with("Finding 2 on is in the run's artifact.\n");
 }
 
 test "a shell word is quoted where the shell would read it otherwise" {

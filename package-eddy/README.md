@@ -39,7 +39,10 @@ Each finding is also written under `scratchpad/eddy/<head>/`, numbered from 1:
 - `<n>.md` is the body of a pull request comment for the finding. It says
   whether the finding was reproduced, and holds one shell block that checks
   out the reviewed commit, applies the patch and runs the test, so a reader
-  with the repository alone reproduces it. Nothing posts it yet.
+  with the repository alone reproduces it.
+- `review.md` is one comment for the whole review: a table of the findings and
+  what the review cost, then each finding's comment folded. It is written when
+  the review fails too, with the error.
 
 A finding's `line` is a line the diff shows, which is where a pull request
 takes a comment on a line, or 0.
@@ -73,6 +76,15 @@ named as unpriced, and the total is then a lower bound.
 
 In a Claude Code session the `eddy` skill runs
 the review and hands the findings to `code-review-response`.
+
+## Reviewing a Pull Request
+
+A repository admin comments `@wado-bot review` on a pull request, or
+dispatches the `Eddy` workflow with its number. The workflow reviews the pull
+request's head and posts `review.md` as a comment. Eddy itself, `mise.toml`
+and every script come from the default branch, so the pull request's code runs
+only inside Eddy's confinement. The record and the patches stay in the run's
+artifact for 90 days, as `eddy-<pr>-<head>`.
 
 `src/main.wado` states the options.
 
