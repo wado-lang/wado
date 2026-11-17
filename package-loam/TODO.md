@@ -26,15 +26,15 @@ What the model asks of Loam, as
 holds no function and no branch. An operator below with nothing missing is one
 Loam lowers, though the build stops before it reaches any of them.
 
-| Operator                                       | Nodes | What Loam lacks                         |
-| ---------------------------------------------- | ----- | --------------------------------------- |
-| `GroupQueryAttention`, a window of 128 or none | 24    | The attention sinks, its twelfth input. |
-| `QMoE`, 32 experts of 4 bits, 4 to a token     | 24    | The operator.                           |
-| `SkipSimplifiedLayerNormalization`             | 48    | Nothing.                                |
-| `MatMulNBits`, 4 bits in blocks of 32          | 73    | Nothing.                                |
-| `Add`, `Reshape`, `Cast`, `Constant`, `Gather` | 103   | Nothing.                                |
-| `ReduceSum`, `Shape`, `Sub`                    | 3     | Nothing.                                |
-| `SimplifiedLayerNormalization`                 | 1     | Nothing.                                |
+| Operator                                       | Nodes | What Loam lacks |
+| ---------------------------------------------- | ----- | --------------- |
+| `QMoE`, 32 experts of 4 bits, 4 to a token     | 24    | The operator.   |
+| `GroupQueryAttention`, a window of 128 or none | 24    | Nothing.        |
+| `SkipSimplifiedLayerNormalization`             | 48    | Nothing.        |
+| `MatMulNBits`, 4 bits in blocks of 32          | 73    | Nothing.        |
+| `Add`, `Reshape`, `Cast`, `Constant`, `Gather` | 103   | Nothing.        |
+| `ReduceSum`, `Shape`, `Sub`                    | 3     | Nothing.        |
+| `SimplifiedLayerNormalization`                 | 1     | Nothing.        |
 
 | Weights                    | Tensors | Bytes          |
 | -------------------------- | ------- | -------------- |
@@ -48,12 +48,11 @@ The embedding is a `float16` table a `Gather` reads, so the model has no
 `GatherBlockQuantized`. The inputs and outputs are `int64` and `float16`, and
 the two `Cast`s give `int32`.
 
-1. [ ] The rest of gpt-oss-20b's operators: onnxruntime's `QMoE`, and a
-   `GroupQueryAttention` with attention sinks. A `QMoE` decomposes
-   in two forms. Over a prompt it loops over the experts and masks each one's
+1. [ ] The last of gpt-oss-20b's operators, onnxruntime's `QMoE`. It
+   decomposes in two forms. Over a prompt it loops over the experts and masks each one's
    rows, so its temporaries do not grow with the prompt. Over a step it gathers
    the experts the token routes to. Finished when `operators_test.wado` holds
-   each to onnxruntime on every device, and `PjrtBackend::analyzing` reports
+   it to onnxruntime on every device, and `PjrtBackend::analyzing` reports
    the temporaries of both forms for a prompt and for a step.
 2. [ ] Experts held on demand. An expert is one slice along the first axis of
    each `QMoE` input the operator's definition indexes by expert, so no model
@@ -200,8 +199,9 @@ Work the road to gpt-oss-20b does not pass. It is unordered.
 `conformance/operators_test.wado` lists the operators Loam lowers. Four
 outside ONNX's default domain are among them, onnxruntime's:
 
-- `GroupQueryAttention`, without position ids, interleaved rotation or a
-  quantized cache.
+- `GroupQueryAttention`, without position ids, interleaved rotation, a
+  quantized or windowed cache, a smooth softmax, the scores as an output,
+  query and key norm weights, or query lengths.
 - `MatMulNBits`, without `g_idx`, a prepacked weight, or zero points in the
   input's float.
 - `GatherBlockQuantized`, over a table of rank 2 gathered along its rows and

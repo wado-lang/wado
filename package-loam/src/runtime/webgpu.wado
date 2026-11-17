@@ -2564,7 +2564,8 @@ impl WebGpuBackend {
     /// `past_k` and `past_v` hold, and the cache holds every position they do:
     /// their buffer where they are `shared`, onnxruntime's shared buffer. A
     /// query of a row reads no position at or past the row's of `reaches`.
-    /// The join adds each query head's of `sinks` to its row's denominator.
+    /// The join adds each query head's sink, of `sinks`, to its rows'
+    /// denominators.
     /// `None` where the operands outgrow what a dispatch binds.
     internal fn attended(
         &mut self,
@@ -4229,13 +4230,10 @@ ${ELEMENTWISE_OPERATORS}`;
 /// parts and of the sinks.
 fn attend_join_shader(bindings: &List<i32>, sunk: bool, stored: Option<HalfFloat>, words: &List<Words>) -> String {
     let part = |c: String, at: String| `load${bindings[0]}(p[5] + (row * parts + ${c}) * (d + 2u) + ${at})`;
-    let [most, all] = if sunk {
-        [
-            `let sink = ${view_wgsl(bindings, 1, 7, ["row % p[4]"])};
-    var most = sink;`, "exp(sink - most)",
-        ];
+    let [sink, least, sunk_weight] = if sunk {
+        [`let sink = ${view_wgsl(bindings, 1, 7, ["row % p[4]"])};\n    `, "sink", "exp(sink - most)"];
     } else {
-        ["var most = none;", "0.0"];
+        ["", "none", "0.0"];
     };
     return `${buffers_wgsl(words)}
 @compute @workgroup_size(${LANES})
@@ -4247,11 +4245,11 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     let parts = p[2];
     let d = p[3];
     let none = non_finite(0xff800000u);
-    ${most}
+    ${sink}var most = ${least};
     for (var c = 0u; c < parts; c++) {
         most = max(most, ${part("c", "d")});
     }
-    var all = ${all};
+    var all = ${sunk_weight};
     for (var c = 0u; c < parts; c++) {
         let top = ${part("c", "d")};
         all += select(exp(top - most), 0.0, top == none) * ${part("c", "d + 1u")};
