@@ -1373,9 +1373,9 @@ fn check_function_effects_sem(
     walk_body_effects(sem, module, annotations, index, walk, out, solved);
 }
 
-/// What `func`'s body holds: its declared effects, the resources its signature
-/// names, so a `fn f(s: Stream<u8>)` need not repeat `with Stream`, and
-/// `granted`, all expanded through the propagation closure.
+/// What `func`'s body holds: its declared effects and `granted`, expanded
+/// through the propagation closure. A resource its signature names is not
+/// among them, so a body without `with` calls no host.
 fn held_by(
     sem: &Semantics,
     annotations: Option<&TypeAnnotations>,
@@ -1396,9 +1396,6 @@ fn held_by(
         resolutions: index.resolutions,
         members: index.members,
     };
-    if let Some(ann) = annotations {
-        add_signature_resources(ann, func.id, &scan, &mut current);
-    }
     current.extend(granted);
     held_in_body(annotations, index, &scan, current, Body::Block(body))
 }
@@ -1637,29 +1634,6 @@ fn expand_through_closure(
         }
     }
     out
-}
-
-/// Union into `out` the resources a function's signature exposes, which it
-/// then holds without a `with R`: params, return and async task return.
-fn add_signature_resources(
-    annotations: &TypeAnnotations,
-    fn_key: AstId,
-    scan: &ResourceScan<'_>,
-    out: &mut IndexSet<EffectRef>,
-) {
-    let mut visited = TypeSet::default();
-    let params = annotations
-        .fn_param_types
-        .get(&fn_key)
-        .into_iter()
-        .flatten();
-    let results = [
-        annotations.fn_return_types.get(&fn_key),
-        annotations.function_task_returns.get(&fn_key),
-    ];
-    for &type_id in params.chain(results.into_iter().flatten()) {
-        scan.collect(type_id, out, &mut visited);
-    }
 }
 
 /// Union into `held` the resources the body's type patterns narrow to. A
@@ -2954,11 +2928,9 @@ impl SemEffectWalker<'_> {
     }
 
     /// What a closure literal's body performs, which is its type's row. The
-    /// body holds what a function's would, the resources its signature names
-    /// and what the body grants itself, and the resources the types of its
-    /// captures name: a captured handle is one it was handed, as a parameter
-    /// is. Every other effect it needs is one it performs, a handler it
-    /// installs discharging its own.
+    /// body holds only what it grants itself: a handle it captured or was
+    /// handed is no grant, so every host call on one is performed. A handler
+    /// it installs discharges its own.
     fn closure_performs(&mut self, closure: &ast::ClosureExpr) -> Vec<EffectRef> {
         if let Some(performed) = self.closures.get(&closure.id) {
             return performed.clone();
@@ -2970,31 +2942,11 @@ impl SemEffectWalker<'_> {
             resolutions: self.index.resolutions,
             members: self.index.members,
         };
-        // The body is checked once for every walk, its demands those of them
-        // all, so it holds only what every walk hands it.
-        let handed_in_each_walk = self
-            .annotations
-            .into_iter()
-            .flat_map(TypeAnnotations::walks)
-            .filter_map(|facts| {
-                let closure_type = *facts.expression_types.get(&closure.id)?;
-                let captures = &facts.closure_captures.get(&closure.id)?.captures;
-                let mut handed = IndexSet::default();
-                for type_id in
-                    std::iter::once(closure_type).chain(captures.iter().map(|c| c.type_id))
-                {
-                    scan.collect(type_id, &mut handed, &mut TypeSet::default());
-                }
-                Some(handed)
-            });
-        let handed = handed_in_each_walk
-            .reduce(|every, walk| every.intersection(&walk).cloned().collect())
-            .unwrap_or_default();
         let current = held_in_body(
             self.annotations,
             self.index,
             &scan,
-            handed,
+            IndexSet::default(),
             Body::Expr(&closure.body),
         );
         let mut scratch = Vec::new();

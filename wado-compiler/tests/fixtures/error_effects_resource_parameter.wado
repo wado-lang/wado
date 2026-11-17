@@ -1,0 +1,13 @@
+// A resource parameter is not held: a host call on it needs `with`.
+use { Fields } from "wasi:http";
+
+fn touch(f: &Fields) {
+    let _ = f.set("x", [b"1"]);
+}
+
+test {
+    touch(&Fields::new());
+}
+
+__DATA__
+{"compile_error":"missing resource 'Fields' required by 'Fields::set'"}
