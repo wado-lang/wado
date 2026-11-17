@@ -47,8 +47,12 @@ impl Credential {
 }
 
 fn grantable(path: &String) -> bool {
-    return path.starts_with("/") && !path.ends_with("/") && !path.contains("//") && !path.contains("/./")
-        && !path.contains("/../") && path.rfind("/") matches { Some(last) && last > 0 };
+    return path.starts_with("/")
+        && !path.ends_with("/")
+        && !path.contains("//")
+        && !path.contains("/./")
+        && !path.contains("/../")
+        && path.rfind("/") matches { Some(last) && last > 0 };
 }
 
 test "a key file is named by an absolute path in plain form, outside /" {
@@ -98,7 +102,9 @@ test "a file credential is read again each time" {
     fs::write("credential-test", &"two").unwrap();
     assert credential.current() == Ok("two");
     fs::remove_file("credential-test").unwrap();
-    assert Credential::File("/nowhere/token").current() == Err("no directory /nowhere is granted; `wado run --dir . --dir /nowhere` grants it");
+    assert Credential::File("/nowhere/token").current() == Err(
+        "no directory /nowhere is granted; `wado run --dir . --dir /nowhere` grants it",
+    );
 }
 
 pub struct Message {

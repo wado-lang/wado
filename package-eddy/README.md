@@ -10,7 +10,8 @@ rest of the pipeline below is not implemented yet.
 ## Reviewing a Branch
 
 From the repository root, with the branch committed and `CLAUDE_API_KEY` set,
-or `CLAUDE_API_KEY_FILE` naming a file outside the checkout that holds the key:
+or `CLAUDE_API_KEY_FILE` giving the absolute path of a file outside the
+checkout that holds the key:
 
 ```sh
 mise run eddy-review             # the reviewer reads, writes tests and runs them
