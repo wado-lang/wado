@@ -80,6 +80,7 @@ attrValue
     : literal
     | '-' INTEGER
     | identifier
+    | '_'
     | '[' (attrValue (',' attrValue)*)? ']'
     ;
 

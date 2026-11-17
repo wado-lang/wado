@@ -386,7 +386,7 @@ fn resource_chain_effects<'a>(
 /// Effect checking over [`Semantics`], run after `annotate_bodies` so it sees
 /// every function, dead or live. Covers free-function, method, and static
 /// dispatch with resource injection, the effect / resource propagation closure,
-/// signature-resource inference, effect-parameter resolution, `#[ambient]`,
+/// effect-parameter resolution, `#[ambient]`,
 /// handler-scope grants, and closure calls, over user-authored modules.
 #[must_use]
 pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
@@ -789,6 +789,7 @@ struct OwnedEffectData {
     /// the next handler out.
     forwarding_blocks: IndexSet<DefId>,
     resources: IndexSet<EffectRef>,
+    drop_is_an_operation: IndexSet<DefId>,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
     waiting: IndexSet<EffectRef>,
     /// Each interface and resource declaration's effect and `#[cm]` FQ.
@@ -855,6 +856,25 @@ impl OwnedEffectData {
                 Item::Resource(resource) => resolutions.effect_decl(defs.def_at(resource.id)),
                 _ => None,
             })
+            .collect();
+        let drop_is_an_operation: IndexSet<DefId> = sem
+            .modules
+            .values()
+            .flat_map(|module| &module.items)
+            .filter_map(|item| match item {
+                Item::Resource(resource) => Some(resource),
+                _ => None,
+            })
+            .filter(|resource| {
+                resource.methods.iter().any(|method| {
+                    method.name == RESOURCE_DROP
+                        && !method
+                            .params
+                            .first()
+                            .is_some_and(|p| matches!(p.self_kind, ast::SelfKind::Value))
+                })
+            })
+            .map(|resource| defs.def_at(resource.id))
             .collect();
 
         // Effect / resource propagation closure: holding effect `E` admits the
@@ -1075,6 +1095,7 @@ impl OwnedEffectData {
             block_effects,
             forwarding_blocks,
             resources,
+            drop_is_an_operation,
             closure,
             waiting,
             interfaces,
@@ -1105,6 +1126,7 @@ impl OwnedEffectData {
             block_effects: &self.block_effects,
             forwarding_blocks: &self.forwarding_blocks,
             resources: &self.resources,
+            drop_is_an_operation: &self.drop_is_an_operation,
             closure: &self.closure,
             waiting: &self.waiting,
             interfaces: &self.interfaces,
@@ -1155,6 +1177,9 @@ struct EffectIndex<'a> {
     forwarding_blocks: &'a IndexSet<DefId>,
     /// Declared resources, for classifying a missing effect.
     resources: &'a IndexSet<EffectRef>,
+    /// The resources declaring a `drop` that keeps the handle, an ordinary
+    /// operation rather than the release.
+    drop_is_an_operation: &'a IndexSet<DefId>,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// What waiting on an `AsyncCall` demands, held where the call starts.
@@ -2059,14 +2084,14 @@ impl EffectIndex<'_> {
 
     /// What dispatching `func_ref` demands besides its declaration: for a
     /// direct (non-trait) method on a `resource`, what an operation of the
-    /// resource demands ([`operation_demands`]). Its `drop` is ambient, as an
+    /// resource demands ([`operation_demands`]). The release is ambient, as an
     /// implicit drop is: whoever holds a handle may release it.
     fn resource_demands(&self, sem: &Semantics, func_ref: &FunctionRef) -> OperationDemands {
         if let Some(method_info) = &func_ref.method_info
             && method_info.trait_name.is_none()
-            && method_info.method_name != RESOURCE_DROP
             && let Some(def) = method_info.receiver().def()
             && self.resolutions.defs().kind(def) == DefKind::Resource
+            && (method_info.method_name != RESOURCE_DROP || self.drop_is_an_operation.contains(&def))
         {
             assert!(
                 self.interfaces.contains_key(&def),
@@ -3288,8 +3313,10 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
                     walker.granted = ambient_effect_names(&global.attributes)
                         .filter_map(|(name, _)| effect_named_in(name, src, index))
                         .collect();
+                    walker.grants_every = ambient_admits_every(&global.attributes);
                     walker.check(PureContext::GlobalInitializer, &global.initializer);
                     walker.granted.clear();
+                    walker.grants_every = false;
                 }
                 // No expression a position requires to be pure.
                 Item::Use(_)
@@ -3318,6 +3345,9 @@ struct PurityWalker<'a> {
     /// Effects the enclosing `with … do` installs, which a callee declaring
     /// one may demand of the position.
     granted: IndexSet<EffectRef>,
+    /// Whether an `#[ambient(_)]` on the global being walked admits every
+    /// effect.
+    grants_every: bool,
     /// Names the callee of an indirect call through a function-typed parameter.
     /// Always empty: a global initializer has no enclosing function, and a
     /// default expression cannot name a parameter — the call site evaluates it
@@ -3348,6 +3378,7 @@ impl<'a> PurityWalker<'a> {
             module_source,
             context: PureContext::DefaultValue,
             granted: IndexSet::default(),
+            grants_every: false,
             param_types: IndexMap::default(),
             clause: None,
             clause_closures: Vec::new(),
@@ -3476,9 +3507,10 @@ impl<'a> PurityWalker<'a> {
         // can have installed, so it is unanswered like any other. A variable
         // stands for what a closure written in the expression performs, which
         // the walk reads where the closure is written.
-        effects
-            .iter()
-            .any(|effect| !effect.is_var() && (effect.is_param() || !self.granted.contains(effect)))
+        !self.grants_every
+            && effects.iter().any(|effect| {
+                !effect.is_var() && (effect.is_param() || !self.granted.contains(effect))
+            })
     }
 
     fn flag_if_effectful(
