@@ -2727,11 +2727,14 @@ impl Parser {
 
     fn parse_param_list(&mut self) -> ParseResult<Vec<Param>> {
         let params = self.parse_comma_separated(&TokenKind::RParen, Self::parse_param)?;
+        if let Some(recv) = params.iter().skip(1).find(|p| p.self_kind != SelfKind::None) {
+            return Err(self.error_at_span(recv.span, "`self` must be a method's first parameter"));
+        }
         let mut seen_default = false;
         for p in &params {
             if p.default.is_some() {
                 seen_default = true;
-            } else if seen_default && !matches!(p.self_kind, SelfKind::Ref | SelfKind::MutRef) {
+            } else if seen_default {
                 return Err(self.error_at_span(
                     p.span,
                     &format!(
