@@ -130,7 +130,8 @@ pub enum PublishError {
     MissingMetadata { field: &'static str },
     /// Neither `license` nor `license-file` is set.
     MissingLicense,
-    /// A shipped `path` dependency lacks a registry/git source for publishing.
+    /// A shipped `path` dependency names no workspace member published in the
+    /// same run, and has no registry/git source beside it.
     PathDependencyWithoutSource { dep_name: String },
     /// A shipped `workspace = true` dependency has no concrete source once the
     /// package is extracted from its workspace.
@@ -159,7 +160,7 @@ impl std::fmt::Display for PublishError {
             ),
             PublishError::PathDependencyWithoutSource { dep_name } => write!(
                 f,
-                "path dependency {dep_name:?} needs a registry or git source to publish"
+                "path dependency {dep_name:?} names no workspace member this run publishes, so it needs a registry or git source to publish"
             ),
             PublishError::WorkspaceDependency { dep_name } => write!(
                 f,

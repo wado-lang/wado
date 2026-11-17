@@ -341,6 +341,11 @@ For publishing, `path` can be combined with a registry or git source. When publi
 "lib:shared" = { path = "../shared", git = "https://github.com/org/shared.git", version = "^0.1.0" }
 ```
 
+A path naming another member of the same workspace needs neither. The workspace
+publishes all members in one run at their shared version
+([Lockstep Contract](#lockstep-contract)), so that version is the source, and a
+version written beside the path could only fall behind it.
+
 ### Module Resolution with Dependencies
 
 The specifier grammar and the reserved = bundled rule are defined in

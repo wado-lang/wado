@@ -220,6 +220,10 @@ share ([Workspaces](#workspaces)), so the published package depends on that
 member at exactly that version, and no version written in a manifest can fall
 behind it.
 
+> Not yet implemented: a published package records no dependencies. Its
+> component carries the code of every library it uses, so neither the
+> replacement source nor the member's version is written anywhere.
+
 ### Git Sources
 
 A `git` source names a repository by its URL, on any host.
