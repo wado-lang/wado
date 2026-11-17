@@ -19,6 +19,10 @@ already measured, not how to close it. Closed work belongs in commit history.
 
 ## Declarative UI
 
-- [ ] No template syntax exists. A page is built by calls.
+- [ ] No template syntax exists. A page is built with `View`.
   [WEP: Markup Dialect](../docs/wep-2026-08-29-markup-dialect.md) holds
   what is decided about one.
+- [ ] A child shown only on a condition has no form: `children` takes a list,
+  and a list literal holds no `if`.
+- [ ] No binding shows or swaps a subtree as a signal changes. `each` is the
+  only binding that adds and removes children.

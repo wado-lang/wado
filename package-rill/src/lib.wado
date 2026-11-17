@@ -2,7 +2,7 @@
 //! and a write to a signal reruns only the bindings that read it.
 
 pub use { Memo, Signal, Track, flush, memo, observe, on_cleanup, scope, signal, untracked } from "./signals.wado";
-pub use { bind_attribute, bind_text, each, element, on, text } from "./view.wado";
+pub use { View, element, on } from "./view.wado";
 
 use { Event, SurfaceDom } from "wado-lang:web";
 
@@ -13,14 +13,15 @@ test {
         let count = signal(0);
         let button = element("button");
         let mut dispose = scope(|| {
-            bind_text(button, || `clicked ${count.get()} times`);
-            on(button, "click", |_event: Event| count.set(count.get() + 1));
+            button
+                .bind_text(|| `clicked ${count.get()} times`)
+                .on("click", |_event: Event| count.set(count.get() + 1));
         });
-        assert button.text_content() == Option::Some("clicked 0 times");
+        assert button.node.text_content() == Option::Some("clicked 0 times");
 
         count.set(2);
         flush();
-        assert button.text_content() == Option::Some("clicked 2 times");
+        assert button.node.text_content() == Option::Some("clicked 2 times");
 
         dispose();
     };

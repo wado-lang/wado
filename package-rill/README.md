@@ -10,7 +10,7 @@ initial design, and [`TODO.md`](./TODO.md) what the library leaves out.
 The synopsis test in `src/lib.wado` holds this sample:
 
 ```wado
-use { bind_text, element, flush, on, scope, signal } from "wado-lang:rill";
+use { element, flush, scope, signal } from "wado-lang:rill";
 use { Event, SurfaceDom } from "wado-lang:web";
 
 let mut dom = SurfaceDom::new();
@@ -18,14 +18,15 @@ with &mut dom do {
     let count = signal(0);
     let button = element("button");
     let mut dispose = scope(|| {
-        bind_text(button, || `clicked ${count.get()} times`);
-        on(button, "click", |_event: Event| count.set(count.get() + 1));
+        button
+            .bind_text(|| `clicked ${count.get()} times`)
+            .on("click", |_event: Event| count.set(count.get() + 1));
     });
-    assert button.text_content() == Option::Some("clicked 0 times");
+    assert button.node.text_content() == Option::Some("clicked 0 times");
 
     count.set(2);
     flush();
-    assert button.text_content() == Option::Some("clicked 2 times");
+    assert button.node.text_content() == Option::Some("clicked 2 times");
 
     dispose();
 };
@@ -34,8 +35,9 @@ with &mut dom do {
 ## Layout
 
 - `src/signals.wado` — `signal`, `memo`, `observe`, `scope` and `flush`.
-- `src/view.wado` — bindings to the DOM: `bind_text`, `bind_attribute`, `on`
-  and the keyed list `each`.
+- `src/view.wado` — `View`, which builds an element and binds it: `text`,
+  `attribute`, `child` and `children` set it once, while `bind_text`,
+  `bind_attribute`, `on` and the keyed list `each` keep it current.
 - `example/todo/` — a to-do list. `wado run` there prints the page after a
   short session, and `wado test` runs the session against `SurfaceDom`.
 
