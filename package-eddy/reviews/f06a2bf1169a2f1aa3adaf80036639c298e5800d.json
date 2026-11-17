@@ -1,0 +1,75 @@
+{
+  "head": "f06a2bf1169a2f1aa3adaf80036639c298e5800d",
+  "reviews": [
+    {
+      "base": "a436b0aeb249e8d6daa6bfd1602d77327ee02ccd",
+      "reviewer": "claude-opus-5-5",
+      "reporter": "claude-haiku-5-5",
+      "run": true,
+      "max_turns": 40,
+      "effort": "medium",
+      "result": {
+        "findings": [
+          {
+            "file": ".github/workflows/eddy.yml",
+            "summary": "When the review stops before Eddy writes its record, the Post job looks for the log at the wrong path in the artifact, so the comment about the failed review never says why it failed.",
+            "detail": "Not reproduced: the defect is in how actions/upload-artifact lays out the files it uploads, which cannot run outside GitHub Actions. upload-artifact stores files relative to the deepest directory that all the uploaded files share. Two cases follow. (1) A review that gets far enough writes `package-eddy/reviews/<sha>.json`. The shared directory is then the repository root, and the Post job finds `eddy/scratchpad/eddy.log` and `eddy/scratchpad/eddy/<sha>/review.md` as it expects. (2) When the review stops before Eddy records anything, only `scratchpad/eddy.json` and `scratchpad/eddy.log` exist, or only `scratchpad/eddy.log` when the token exchange fails, since that branch writes nothing else. The shared directory is then `scratchpad/`, so the artifact downloads as `eddy/eddy.log`, not `eddy/scratchpad/eddy.log`. The check `[ -f eddy/scratchpad/eddy.log ]` fails, and the comment only says the review 'did not finish'. The reason is lost: a token-exchange error, a failed build, or an early `fail(...)` in main.wado such as a missing commit or a bad record. That defeats the commits 'say why a token exchange failed' and 'a failed review's comment says why'. Possible fixes: upload with the path to the repository root fixed, or have the Post job also look under `eddy/` (e.g. `eddy/eddy.log`).",
+            "line": 228,
+            "repro": null
+          }
+        ],
+        "turns": 2,
+        "calls": [
+          {
+            "name": "Read",
+            "input": {
+              "file_path": "package-eddy/src/main.wado",
+              "offset": 60,
+              "limit": 170
+            },
+            "is_error": false,
+            "output": null
+          }
+        ],
+        "usage": {
+          "input_tokens": 6,
+          "output_tokens": 3494,
+          "cache_creation_input_tokens": 19266,
+          "cache_read_input_tokens": 13969,
+          "long_prompts": null
+        },
+        "requests": [
+          {
+            "started": 0.000004707,
+            "usage": {
+              "input_tokens": 4,
+              "output_tokens": 2141,
+              "cache_creation_input_tokens": 13969,
+              "cache_read_input_tokens": 0,
+              "long_prompts": null
+            }
+          },
+          {
+            "started": 22.909815539,
+            "usage": {
+              "input_tokens": 2,
+              "output_tokens": 1353,
+              "cache_creation_input_tokens": 5297,
+              "cache_read_input_tokens": 13969,
+              "long_prompts": null
+            }
+          }
+        ],
+        "error": null
+      },
+      "report_usage": {
+        "input_tokens": 6439,
+        "output_tokens": 162,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "long_prompts": null
+      },
+      "report_error": null
+    }
+  ]
+}
