@@ -217,14 +217,18 @@ the call, and a name some trait declared without one kept a blanket's instance
 method out of reach. Asking the type itself removes both classes.
 
 A generic type spelled without its arguments (`Pair::span(&p)`) names no one
-instance, so the question is what some instance may answer the name with. The
-impls written for the type's head are candidates whatever instance each names,
-and so is a blanket whose bounds may hold of some instance: of the type as
-declared, through an impl written for one instance, or through another such
-blanket. Whether the bounds do hold is settled once the call has an instance.
-A method call has one in its receiver, whose selection confirms the candidate
-or reports that no method answers. Candidates of both kinds at one link leave
-the kind undecided, and the call is reported as ambiguous.
+instance, so the question is what its instances answer the name with. The
+impls written for the type's head are candidates whatever instance each names.
+The order is also asked at each instance an impl is written for, so a blanket
+whose bounds hold there answers too, through any chain of blankets the order
+follows. The receiver's own type then settles the call, and its selection
+confirms the candidate or reports that no method answers. Candidates of both
+kinds at one link leave the kind undecided, and the call is reported as
+ambiguous.
+
+The kind is decided before the arguments are resolved, so the receiver's type
+does not take part in it. Resolving the first argument early would resolve
+that expression twice.
 
 A static answers by the same rule, with the instance found the way any
 inference finds a type: from the expected type (`let d: Duo<i32, bool> = Duo::build()`) or an argument (`Duo::weigh(d)`). Where neither says, the

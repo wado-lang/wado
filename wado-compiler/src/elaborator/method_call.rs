@@ -118,9 +118,16 @@ pub(super) enum Qualifier<'a> {
     Type(&'a ReceiverId),
 }
 
-/// How many blankets deep a bound is followed to see whether it may hold. A
-/// chain longer than anyone writes is cut here rather than walked for cycles.
-const MAY_HOLD_DEPTH: u32 = 4;
+/// The nearest link among `found`, with every block answering there.
+fn nearest_link(found: Vec<(u32, Vec<DefId>)>) -> Option<(u32, Vec<DefId>)> {
+    let nearest = found.iter().map(|(link, _)| *link).min()?;
+    let blocks = found
+        .into_iter()
+        .filter(|(link, _)| *link == nearest)
+        .flat_map(|(_, blocks)| blocks)
+        .collect();
+    Some((nearest, blocks))
+}
 
 /// The instance a blanket's static call on a generic type spelled without its
 /// arguments means.
@@ -1611,18 +1618,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The link of the spelled type's chain where trait impls answer
     /// `method_name`, and those impls. The order asks the type itself, by
     /// value and through each reference, so a blanket answers where its
-    /// bounds hold. A generic type spelled without its arguments is no type
-    /// the order can ask, and there the blocks written for its head answer.
+    /// bounds hold. A generic type spelled without its arguments names no one
+    /// instance, so the order is asked at each instance a trait impl is
+    /// written for, and the blocks written for its head answer besides.
     fn trait_answer(
         &mut self,
         receiver: &ReceiverId,
         method_name: &str,
         reach: Reach,
     ) -> Option<(u32, Vec<DefId>)> {
-        let ordered = self.spelled_type(receiver).and_then(|ty| {
-            let bridge = self.tysys.solver.as_ref()?.borrow();
-            let module = self.frame_module();
-            let found: Vec<(u32, Vec<DefId>)> = [None, Some(false), Some(true)]
+        let mut types: IndexSet<TypeId> = self.spelled_type(receiver).into_iter().collect();
+        if receiver.ty().is_none() {
+            types.extend(self.written_instances(receiver));
+        }
+        let mut found: Vec<(u32, Vec<DefId>)> = types
+            .into_iter()
+            .filter_map(|ty| self.ordered_impls(ty, method_name, reach))
+            .collect();
+        found.extend(self.written_impls(receiver.key(), method_name, reach));
+        nearest_link(found)
+    }
+
+    /// [`SolverBridge::nearest_impls`] at `ty`, by value and through each
+    /// reference.
+    fn ordered_impls(
+        &self,
+        ty: TypeId,
+        method_name: &str,
+        reach: Reach,
+    ) -> Option<(u32, Vec<DefId>)> {
+        let bridge = self.tysys.solver.as_ref()?.borrow();
+        let module = self.frame_module();
+        nearest_link(
+            [None, Some(false), Some(true)]
                 .into_iter()
                 .filter_map(|through_ref| {
                     bridge.nearest_impls(
@@ -1635,16 +1663,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         reach,
                     )
                 })
-                .collect();
-            let nearest = found.iter().map(|(link, _)| *link).min()?;
-            let blocks = found
-                .into_iter()
-                .filter(|(link, _)| *link == nearest)
-                .flat_map(|(_, blocks)| blocks)
-                .collect();
-            Some((nearest, blocks))
-        });
-        ordered.or_else(|| self.written_impls(receiver.key(), method_name, reach))
+                .collect(),
+        )
+    }
+
+    /// The concrete instances of `receiver`'s type that a trait impl is
+    /// written for.
+    fn written_instances(&self, receiver: &ReceiverId) -> IndexSet<TypeId> {
+        let blocks = self.trait_impls_for_receiver(&receiver.at_type(None), &[]);
+        let table = self.tysys.type_table.borrow();
+        blocks
+            .into_iter()
+            .map(|block| table.impl_target_whole(block))
+            .filter(|&target| table.is_concrete(target))
+            .collect()
     }
 
     /// The trait impls written for a link of `key`'s chain that declare
@@ -1655,27 +1687,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         reach: Reach,
     ) -> Option<(u32, Vec<DefId>)> {
-        let frame = self.frame_module().clone();
-        let frame = &frame;
         let reached = |this: &Self, block: DefId| {
-            let in_scope = this
-                .tysys
-                .signatures
-                .impl_trait(block)
-                .is_some_and(|decl| this.tysys.resolutions.decl_in_scope(frame, decl));
+            let in_scope = this.tysys.signatures.impl_trait(block).is_some_and(|decl| {
+                this.tysys
+                    .resolutions
+                    .decl_in_scope(this.frame_module(), decl)
+            });
             in_scope == (reach == Reach::InScope)
         };
         // A link keyed by no declaration (`&Point`) is told apart by its whole
         // type, which the chain declares.
         let (mut key, mut declared) = (key.clone(), None);
         for link in 0.. {
-            let mut blocks: Vec<DefId> = self
+            let blocks: Vec<DefId> = self
                 .trait_impls_for_receiver(&ReceiverId::keyed(key.clone(), declared), &[])
                 .into_iter()
-                .filter(|&block| self.block_takes_receiver(block, method_name).is_some())
+                .filter(|&block| {
+                    self.block_takes_receiver(block, method_name).is_some() && reached(self, block)
+                })
                 .collect();
-            blocks.extend(self.open_blankets(&key, declared, method_name));
-            blocks.retain(|&block| reached(self, block));
             if !blocks.is_empty() {
                 return Some((link, blocks));
             }
@@ -1683,83 +1713,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (key, declared) = (next, Some(ty));
         }
         unreachable!("a chain ends")
-    }
-
-    /// The value blankets declaring `method_name` whose bounds may hold of
-    /// some instance of the link `key` names. Which instance the call means is
-    /// settled later, and the selection there confirms the bounds or reports.
-    fn open_blankets(
-        &mut self,
-        key: &ImplTargetKey,
-        declared: Option<TypeId>,
-        method_name: &str,
-    ) -> Vec<DefId> {
-        let trait_env = Arc::clone(&self.tysys.trait_env);
-        trait_env
-            .blanket_impls
-            .values()
-            .flatten()
-            .filter(|blanket| blanket.receiver == BlanketReceiver::Value)
-            .filter(|blanket| {
-                self.block_takes_receiver(blanket.def, method_name)
-                    .is_some()
-                    && blanket
-                        .bounds
-                        .iter()
-                        .all(|bound| self.bound_may_hold(key, declared, bound, MAY_HOLD_DEPTH))
-            })
-            .map(|blanket| blanket.def)
-            .collect()
-    }
-
-    /// Whether `bound` holds of some instance of the link `key` names: of the
-    /// link as declared, through an impl written for one of its instances, or
-    /// through a blanket whose own bounds may hold, `depth` blankets deep.
-    fn bound_may_hold(
-        &mut self,
-        key: &ImplTargetKey,
-        declared: Option<TypeId>,
-        bound: &BlanketBound,
-        depth: u32,
-    ) -> bool {
-        let Some(trait_) = &bound.trait_ else {
-            return false;
-        };
-        let link = ReceiverId::keyed(key.clone(), declared);
-        if let Some(ty) = self.spelled_type(&link)
-            && self.tysys.type_implements_trait_here(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                ty,
-                trait_,
-            )
-        {
-            return true;
-        }
-        let decl = trait_.canonical();
-        if self
-            .trait_impls_for_receiver(&link, &[])
-            .into_iter()
-            .any(|block| self.tysys.signatures.impl_trait(block) == decl)
-        {
-            return true;
-        }
-        if depth == 0 {
-            return false;
-        }
-        let trait_env = Arc::clone(&self.tysys.trait_env);
-        trait_env
-            .blanket_impls
-            .values()
-            .flatten()
-            .filter(|blanket| blanket.receiver == BlanketReceiver::Value)
-            .any(|blanket| {
-                self.tysys.signatures.impl_trait(blanket.def) == decl
-                    && blanket
-                        .bounds
-                        .iter()
-                        .all(|bound| self.bound_may_hold(key, declared, bound, depth - 1))
-            })
     }
 
     /// Whether the declaration that impl block `block` answers `method_name`
