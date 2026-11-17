@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794866195743,
+  "lastUpdate": 1794874199925,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78465,6 +78465,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6f4006b6f9c9fef0b053d667be6f0647ea92b5c6"
         },
         "date": 1794866194650,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "148f352b7263f7c9592075122fc5ad2eb258a102",
+          "message": "Merge pull request #2654 from wado-lang/ccr-ab6e1e8d-gpq450\n\nfeat(eddy): confine the reviewed change's code to its checkout",
+          "timestamp": "2026-11-17T08:56:23+09:00",
+          "tree_id": "0c1eed3b5d4ec9f79fa5e56f1a2c13814c6f1a25",
+          "url": "https://github.com/wado-lang/wado/commit/148f352b7263f7c9592075122fc5ad2eb258a102"
+        },
+        "date": 1794874199385,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
