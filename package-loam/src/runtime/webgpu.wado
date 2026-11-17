@@ -4429,12 +4429,18 @@ ${coords_wgsl("i", 2, 0, rank, "c", "    ")}    put(u32(${index_wgsl(to, 0, rank
 global QUANTIZED_ROWS: i32 = 8;
 
 /// The columns one workgroup of a quantized product sums, each over
-/// `QUANTIZED_LANES / QUANTIZED_COLUMNS` lanes, which write a row each.
-global QUANTIZED_COLUMNS: i32 = 8;
+/// `QUANTIZED_LANES / QUANTIZED_COLUMNS` lanes, which write a row each. On
+/// Gemma 3 (270M)'s `q4` products, 8 lanes a column ran its output layer 1.4
+/// times as fast as 16, and its layers as fast; 8, 16 and 32 columns of 8
+/// lanes ran alike.
+global QUANTIZED_COLUMNS: i32 = 16;
 
-/// The lanes of a quantized product's workgroup. Fewer than `LANES`, so a
-/// product of few columns still spreads over every core.
-global QUANTIZED_LANES: i32 = 64;
+/// The lanes of a quantized product's workgroup.
+global QUANTIZED_LANES: i32 = 128;
+
+/// The most values of a block one lane of a quantized product sums at once,
+/// which bounds the inputs a workgroup stages.
+global SEGMENT: i32 = 32;
 
 /// The WGSL rounding `value` to the nearest `half`, or `value` where there is
 /// none.
@@ -4491,31 +4497,74 @@ struct QuantizedShape {
 }
 
 /// The WGSL of `Graph::quantized_product`, one workgroup per
-/// `QUANTIZED_COLUMNS` columns of the output and `rows` of its rows: each of
-/// the `QUANTIZED_LANES / QUANTIZED_COLUMNS` lanes of a column takes every
-/// such byte of the column's packed weight, dequantizes its values and adds
-/// each times the rows' inputs, and the column's lanes sum. A `half` rounds each weight to
-/// it, as the decomposition stores one. Each lane of a column then writes a
-/// row's element through `op`, whose `operand(0)` is the sum and `operand(i)`
-/// the `i - 1`th epilogue operand. Parameters: the workgroups, the workgroups
-/// per row of the grid, `M`, `K`, `N`, the blocks, the bytes of a block, then
-/// the views of the input `[M, K]`, the packed weight, the scales, any zero
-/// points and the epilogue's operands over `[M, N]`.
+/// `QUANTIZED_COLUMNS` columns of the output and `rows` of its rows. The inner
+/// axis splits into segments of at most `SEGMENT` values within a block, and
+/// a chunk of as many segments as a column has lanes. The workgroup stages a
+/// chunk of the rows' inputs in workgroup memory, which each of its columns
+/// reads, and each lane of a column dequantizes a segment of the column's
+/// packed weight and adds each value times the staged inputs; the column's
+/// lanes then sum. A `half` rounds each weight to it, as the decomposition
+/// stores one. Each lane of a column then writes a row's element through `op`,
+/// whose `operand(0)` is the sum and `operand(i)` the `i - 1`th epilogue
+/// operand. Parameters: the workgroups, the workgroups per row of the grid,
+/// `M`, `K`, `N`, the blocks, the bytes of a block, then the views of the input
+/// `[M, K]`, the packed weight, the scales, any zero points and the epilogue's
+/// operands over `[M, N]`.
 fn quantized_product_shader(op: &Expr, bindings: &List<i32>, shape: &QuantizedShape, words: &List<Words>) -> String {
     let QuantizedShape { bits, block, zero_points, half, rows, aligned } = *shape;
     let lanes = QUANTIZED_LANES / QUANTIZED_COLUMNS;
     assert lanes >= QUANTIZED_ROWS, "a column's lanes write its rows";
-    let input = view_load_wgsl(bindings[0], 7, &(["m0 + r", "k"] as List<String>));
-    // An aligned weight's column starts a word, which holds four bytes of one
-    // block: a lane reads it whole. A weight copied to bind holds a byte a word.
-    let [unit, read] = if aligned && words[bindings[1]] matches { Bytes } {
-        [4, `o${bindings[1]}[(p[10] + n * p[11]) / 4u + t]`];
+    let segment = i32::min(block, SEGMENT);
+    let chunk = lanes * segment;
+    assert block >= 16 && block % segment == 0, "a block is a power of two of at least 16 values";
+    assert rows * chunk % QUANTIZED_LANES == 0, "a chunk's values stage evenly over the lanes";
+    assert 4 * rows * (chunk + QUANTIZED_LANES) <= WORKGROUP_BYTES;
+    let per = 8 / bits;
+    let segment_bytes = segment * bits / 8;
+    // An aligned weight's column starts a word, and so does each segment: a
+    // lane reads its words whole. A weight copied to bind holds a byte a word.
+    let weight = bindings[1];
+    let [unit, read]: [i32, fn(i32) -> String] = if aligned
+        && words[weight] matches { Bytes }
+        && segment_bytes % 4 == 0 {
+        [4, |t| `o${weight}[(p[10] + n * p[11] + b * p[6] + within) / 4u + ${t}u]`];
     } else {
-        [1, `u32(${view_load_wgsl(bindings[1], 10, &(["n", "b", "j % p[6]"] as List<String>))})`];
+        [1, |t| `u32(${view_load_wgsl(weight, 10, &(["n", "b", `within + ${t}u`] as List<String>))})`];
     };
     let scale = view_load_wgsl(bindings[2], 14, &(["n", "b"] as List<String>));
     let weights = if zero_points { 4 } else { 3 };
     let zp = if zero_points { bindings[3] } else { 0 };
+    // Written out rather than looped: a WGSL loop is bounded by a counter the
+    // compiler adds to every iteration.
+    // A chunk is staged a segment's value at a time across the lanes, so the
+    // lanes of a column read neighbouring words, not one bank: Gemma 3
+    // (270M)'s `q4` output layer took 0.66 times as long as when each lane's
+    // segment lay whole.
+    let mut staging = "";
+    for let i of 0..<rows * chunk / QUANTIZED_LANES {
+        staging.push_str(`        {
+            let i = lid + ${i * QUANTIZED_LANES}u;
+            let r = i / ${chunk}u;
+            let k = c * ${chunk}u + i % ${chunk}u;
+            let at = x_at + i32(min(r, rows - 1u)) * row_stride + i32(min(k, p[3] - 1u)) * k_stride;
+            let into = r * ${chunk}u + i % ${segment}u * ${lanes}u + i % ${chunk}u / ${segment}u;
+            xs[into] = select(0.0, load${bindings[0]}(u32(at)), r < rows && k < p[3]);
+        }
+`);
+    }
+    let mut segment_sums = "";
+    for let t of 0..<segment_bytes / unit {
+        segment_sums.push_str(`            let packed${t} = ${read(t)};\n`);
+        for let v of 0..<unit * per {
+            let k = t * unit * per + v;
+            let w = rounded_wgsl(half, `(f32((packed${t} >> ${v * bits}u) & MASK) - center) * scale`);
+            segment_sums.push_str(`            {\n                let w = ${w};\n`);
+            for let r of 0..<rows {
+                segment_sums.push_str(`                acc[${r}] += xs[${r * chunk + k * lanes}u + lane] * w;\n`);
+            }
+            segment_sums.push_str("            }\n");
+        }
+    }
     let mut epilogue = `        let x0 = sums[lane * ${QUANTIZED_LANES}u + lid - lane];\n`;
     for let i of weights..<bindings.len() {
         let at = 17 + (i - 3) * 3;
@@ -4529,6 +4578,7 @@ fn quantized_product_shader(op: &Expr, bindings: &List<i32>, shape: &QuantizedSh
     return `${buffers_wgsl(words)}
 ${dequantizing_wgsl(bits, block, zero_points, zp, 17)}
 var<workgroup> sums: array<f32, ${rows * QUANTIZED_LANES}>;
+var<workgroup> xs: array<f32, ${rows * chunk}>;
 
 @compute @workgroup_size(${QUANTIZED_LANES})
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
@@ -4542,21 +4592,20 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     let m0 = flat / column_groups * ${rows}u;
     let rows = min(${rows}u, p[2] - m0);
     var acc: array<f32, ${rows}>;
-    let reads = p[5] * p[6] / ${unit}u;
-    for (var t = select(reads, lane, n < p[4]); t < reads; t += ${lanes}u) {
-        let j = t * ${unit}u;
-        let b = j / p[6];
-        let packed = ${read};
-        let scale = ${scale};
-        let center = zero(n, b);
-        let k0 = b * BLOCK + j % p[6] * PER;
-        for (var v = 0u; v < ${unit}u * PER && k0 + v < p[3]; v++) {
-            let k = k0 + v;
-            let w = ${rounded_wgsl(half, "(f32((packed >> (v * BITS)) & MASK) - center) * scale")};
-            for (var r = 0u; r < rows; r++) {
-                acc[r] += ${input} * w;
-            }
-        }
+    let row_stride = bitcast<i32>(p[8]);
+    let k_stride = bitcast<i32>(p[9]);
+    let x_at = bitcast<i32>(p[7]) + i32(m0) * row_stride;
+    let segments = p[5] * ${block / segment}u;
+    for (var c = 0u; c * ${lanes}u < segments; c++) {
+${staging}        workgroupBarrier();
+        let s = c * ${lanes}u + lane;
+        if s < segments && n < p[4] {
+            let b = s / ${block / segment}u;
+            let within = s % ${block / segment}u * ${segment_bytes}u;
+            let scale = ${scale};
+            let center = zero(n, b);
+${segment_sums}        }
+        workgroupBarrier();
     }
     for (var r = 0u; r < ${rows}u; r++) {
         sums[r * ${QUANTIZED_LANES}u + lid] = acc[r];
