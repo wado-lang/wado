@@ -8,7 +8,7 @@ pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, Str
     let mut methods: List<MemberMethod> = [];
     let mut i = 0;
     loop {
-        let [start, doc_start] = skip_ws_semi(&src, i, n);
+        let [start, doc_start] = skip_separators(&src, i, n);
         if start >= n {
             break;
         }
@@ -47,14 +47,14 @@ fn method_head(src: &StrSlice, start: i32, paren: i32, n: i32) -> [String, bool]
     return [name, word_at(src, r, n, "self")];
 }
 
-/// Past what separates two members (whitespace, `;` and comments), and where
-/// the `///` run documenting the next one starts: a method keeps its docs.
-fn skip_ws_semi(src: &StrSlice, start: i32, n: i32) -> [i32, i32] {
+/// Past what separates two members (whitespace, `;`, `,` and comments), and
+/// where the `///` run documenting the next one starts: a method keeps its docs.
+fn skip_separators(src: &StrSlice, start: i32, n: i32) -> [i32, i32] {
     let mut i = start;
     let mut doc_start = -1;
     while i < n {
         let b = src.byte_at(i);
-        if b.is_ascii_whitespace() || b == b';' {
+        if b.is_ascii_whitespace() || b matches { b';' | b',' } {
             i += 1;
         } else if let Some(end) = comment_end(src, i, n) {
             if is_doc_comment(src, i, n) {
@@ -185,13 +185,13 @@ fn parse_field(src: &StrSlice, start: i32, n: i32, fields: &mut List<MemberField
         return Result::Err(`gale: Wado @members: field '${name}' has no type`);
     }
     let init_start = ty_end + 1;
-    let init_end = scan_to(src, init_start, n, b';');
+    let init_end = scan_to(src, closure_params_end(src, init_start, n), n, b';');
     let init = src.slice(init_start, init_end).trim();
     if init.is_empty() {
         return Result::Err(`gale: Wado @members: field '${name}' has an empty initializer`);
     }
-    if init_end < n && src.byte_at(init_end) != b';' {
-        return Result::Err(`gale: Wado @members: expected ';' after field '${name}'`);
+    if init_end < n && !src.byte_at(init_end) matches { b';' | b',' } {
+        return Result::Err(`gale: Wado @members: expected ';' or ',' after field '${name}'`);
     }
     fields.push(MemberField {
         name,
@@ -201,14 +201,35 @@ fn parse_field(src: &StrSlice, start: i32, n: i32, fields: &mut List<MemberField
     return Result::Ok(if init_end < n { init_end + 1 } else { n });
 }
 
-/// Where `target` sits outside any bracket, or the line break before the next
-/// member when the text runs into one first.
+/// Whether the `\n` or `,` at `i` ends a member: the next member follows it, or
+/// for a `,`, the end of the block does.
+fn ends_member(src: &StrSlice, i: i32, n: i32) -> bool {
+    let next = skip_separators(src, i + 1, n).0;
+    return if next >= n { src.byte_at(i) == b',' } else { is_member_start(src, next, n) };
+}
+
+/// Just past a closure's parameter list when the text at `start` opens one, so
+/// the commas between the parameters do not end the initializer.
+fn closure_params_end(src: &StrSlice, start: i32, n: i32) -> i32 {
+    let open = skip_ws(src, start, n);
+    if !text_at(src, open, n, "|") {
+        return start;
+    }
+    let mut i = open + 1;
+    while i < n && src.byte_at(i) != b'|' {
+        i = skip_span(src, i, n);
+    }
+    return i32::min(i + 1, n);
+}
+
+/// Where `target` sits outside any bracket, or the separator or line break
+/// before the next member when the text runs into one first.
 fn scan_to(src: &StrSlice, start: i32, n: i32, target: u8) -> i32 {
     let mut i = start;
     let mut depth = 0;
     while i < n {
         let b = src.byte_at(i);
-        if depth == 0 && (b == target || b == b'\n' && is_member_start(src, skip_ws_semi(src, i, n).0, n)) {
+        if depth == 0 && (b == target || b matches { b'\n' | b',' } && ends_member(src, i, n)) {
             return i;
         }
         if b matches { b'(' | b'[' | b'{' } {

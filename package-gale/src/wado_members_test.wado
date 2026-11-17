@@ -47,11 +47,27 @@ test "translate_wado_members rejects a field with no initializer" {
 test "translate_wado_members refuses an initializer that runs into the next member" {
     // Read to the next `;` instead, it would swallow the members after it.
     let field = translate_wado_members("a: List<i32> = []\nb: i32 = 0");
-    assert field matches { Err(e) && e.contains("';' after field 'a'") };
+    assert field matches { Err(e) && e.contains("after field 'a'") };
     let method = translate_wado_members("a: i32 = 0\n\nfn get(&self) -> i32 { return self.a; }");
-    assert method matches { Err(e) && e.contains("';' after field 'a'") };
+    assert method matches { Err(e) && e.contains("after field 'a'") };
     let public = translate_wado_members("a: i32 = 0\npub fn get(&self) {}");
-    assert public matches { Err(e) && e.contains("';' after field 'a'") };
+    assert public matches { Err(e) && e.contains("after field 'a'") };
+}
+
+test "translate_wado_members separates members by ',' as a struct does" {
+    let m = translate_wado_members("a: i32 = 0, b: i32 = 1,\nfn get(&self) -> i32 { return self.a; }").unwrap();
+    assert m.fields.len() == 2 && m.fields[0].init == "0" && m.fields[1].init == "1";
+    assert m.methods.len() == 1;
+}
+
+test "translate_wado_members keeps the commas inside an initializer" {
+    let src = "m: TreeMap<String, i32> = TreeMap::<String, i32>::new(),
+f: fn(i32, i32) -> i32 = |a: i32, b: i32| a + b,
+n: i32 = 0";
+    let m = translate_wado_members(&src).unwrap();
+    assert m.fields.len() == 3;
+    assert m.fields[0].init == "TreeMap::<String, i32>::new()";
+    assert m.fields[1].init == "|a: i32, b: i32| a + b";
 }
 
 test "translate_wado_members reads an initializer spread over lines" {
