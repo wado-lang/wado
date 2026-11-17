@@ -75,16 +75,9 @@ pub fn parse_rust<S: AsStrSlice>(source: S) -> rust::ParseResult {
 pub fn tree_hash(cst: &rust::CstStore) -> u64 {
     let mut h: u64 = 14695981039346656037;
     for let mut i = 0; i < cst.row_count(); i += 1 {
-        let shape = if cst.is_node(i) {
-            1;
-        } else if cst.is_token(i) {
-            2;
-        } else {
-            3;
-        };
         let span = cst.span(i);
         for let field of [
-            shape,
+            ReflectEnum::<rust::EventTag>::discriminant(&cst.tag[i]),
             cst.id[i],
             cst.alt(i),
             span.start,
