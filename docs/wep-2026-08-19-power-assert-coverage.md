@@ -104,12 +104,12 @@ short-circuit can skip each one:
 
 ```
 6: assert i < list.len() && list[i] == 1
-  $v0  always       re-read   i
-  $v1  always       hoisted   list.len()
-  $v2  always       hoisted   i < list.len()
-  $v3  conditional  in-place  i
-  $v4  conditional  in-place  list[i]
-  $v5  conditional  in-place  list[i] == 1
+  #0  always       re-read   i
+  #1  always       hoisted   list.len()
+  #2  always       hoisted   i < list.len()
+  #3  conditional  in-place  i
+  #4  conditional  in-place  list[i]
+  #5  conditional  in-place  list[i] == 1
 ```
 
 `tests/integration/assert_capture_plan.rs` reads that back for one `assert` per

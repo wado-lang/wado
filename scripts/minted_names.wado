@@ -1,6 +1,8 @@
 //! Fails when a compiler source outside `name.rs` formats a minted name: a
-//! `format!` whose text opens with the `$` every minted name starts with, or
-//! with `INTERNAL_PREFIX`. Only `name.rs` knows a name format.
+//! `format!`, `format_args!` or `write!` whose text opens with the `$` every
+//! minted name starts with, or any use of `INTERNAL_PREFIX` in code. Only
+//! `name.rs` knows a name format. A stem that carries the `$` into a
+//! `format!("{stem}_…")` is beyond what the text can show.
 //!
 //! Run from the repository root: `wado run` reaches only the current directory.
 
@@ -10,7 +12,6 @@ use { Preopens } from "core:fs";
 
 global SRC: String = "wado-compiler/src";
 global NAME_RS: String = "wado-compiler/src/name.rs";
-global FORMAT: String = "format!(";
 
 export fn run() with (Preopens, Stderr, Exit) {
     let walk = match fs::walk_dir(&SRC) {
@@ -40,21 +41,59 @@ export fn run() with (Preopens, Stderr, Exit) {
     }
 }
 
-/// The 1-based line of each `format!` in `text` whose format string opens a
-/// minted name.
+/// The 1-based lines of `text` that format a minted name, in order.
 fn minted_name_lines(text: &String) -> List<i32> {
     let mut lines: List<i32> = [];
-    let all = text.as_str_slice();
-    let mut from = 0;
-    while let Some(at) = all.slice(from, all.len()).find(&FORMAT) {
-        let start = from + at;
-        from = start + FORMAT.len();
-        let rest = all.slice(from, all.len()).trim_start();
-        if rest.starts_with("\"{INTERNAL_PREFIX}") || rest.starts_with("\"$") && !rest.starts_with("\"${{") {
-            lines.push(line_of(text, start));
+    for let [macro_name, takes_writer] of MACROS {
+        for let at of format_strings(text, macro_name, takes_writer) {
+            let rest = text.as_str_slice().slice(at, text.len());
+            if rest.starts_with("\"$") && !rest.starts_with("\"${{") {
+                lines.push(line_of(text, at));
+            }
         }
     }
-    return lines;
+    let mut line = 0;
+    for let source_line of text.lines() {
+        line += 1;
+        if !source_line.trim_start().starts_with("//") && source_line.contains("INTERNAL_PREFIX") {
+            lines.push(line);
+        }
+    }
+    lines.sort();
+    let mut unique: List<i32> = [];
+    for let found of lines {
+        if unique.last() != Some(found) {
+            unique.push(found);
+        }
+    }
+    return unique;
+}
+
+/// Each formatting macro, and whether a writer comes before its format string.
+global MACROS: [[String, bool], [String, bool], [String, bool], [String, bool]] = [
+    ["format!(", false],
+    ["format_args!(", false],
+    ["write!(", true],
+    ["writeln!(", true],
+];
+
+/// The byte offset of the format string each `macro_name` call in `text` opens
+/// with.
+fn format_strings(text: &String, macro_name: String, takes_writer: bool) -> List<i32> {
+    let all = text.as_str_slice();
+    let mut found: List<i32> = [];
+    let mut from = 0;
+    while let Some(at) = all.slice(from, all.len()).find(&macro_name) {
+        from = from + at + macro_name.len();
+        let mut args = from;
+        if takes_writer {
+            let Some(comma) = all.slice(args, all.len()).find(",") else { break; };
+            args += comma + 1;
+        }
+        let rest = all.slice(args, all.len());
+        found.push(args + rest.len() - rest.trim_start().len());
+    }
+    return found;
 }
 
 fn line_of(text: &String, offset: i32) -> i32 {
@@ -73,11 +112,16 @@ fn fail(message: String) -> ! with (Stderr, Exit) {
 }
 
 test "a minted name in a format string is found" {
-    let text = "a\nlet x = format!(\"$v{i}\");\nlet y = format!(\n    \"{INTERNAL_PREFIX}e\",\n);";
-    assert minted_name_lines(&text) == [2, 3];
+    let text = "a\nlet x = format!(\"$v{i}\");\nlet y = format!(\n    \"{INTERNAL_PREFIX}e\",\n);\nwrite!(f, \"$w{i}\");";
+    assert minted_name_lines(&text) == [2, 4, 6];
 }
 
-test "a literal `${` and a plain format string pass" {
-    let text = "format!(\"${{{}}}\", t); format!(\"{n}:{t}\"); \"$env\"";
+test "INTERNAL_PREFIX passed as an argument is found" {
+    let text = "x\nformat!(\"{}/{}p.wado\", root, name::INTERNAL_PREFIX)";
+    assert minted_name_lines(&text) == [2];
+}
+
+test "a literal `${`, a plain format string and a comment pass" {
+    let text = "format!(\"${{{}}}\", t); format!(\"{n}:{t}\"); \"$env\"\n/// starts with [`INTERNAL_PREFIX`]";
     assert minted_name_lines(&text).is_empty();
 }

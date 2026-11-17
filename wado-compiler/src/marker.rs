@@ -41,7 +41,6 @@ use crate::compiler_item::{CompilerItem, parse_compiler_item_attrs};
 use crate::defs::DefTable;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::internal_name;
 use crate::resolve::TraitHeads;
 use crate::symbol::SymbolTable;
 use crate::token::Span;
@@ -256,7 +255,7 @@ fn from_method(module: &mut Module, source: &Type, span: Span) -> Function {
     ];
     let return_type = named_type(fresh(), "Self", span);
     let callee = path(&mut fresh, ["builtin", WRAP_IN_CASE], span);
-    let value_name = internal_name("value");
+    let value_name = "$value".to_string();
     let call = Expr::Call(Box::new(CallExpr {
         id: fresh(),
         callee,
@@ -282,7 +281,7 @@ fn from_method(module: &mut Module, source: &Type, span: Span) -> Function {
 /// `fn wait_on(&self) -> WaitOn { return match self { … }; }`.
 fn waitable_method(module: &mut Module, cases: &[(String, bool)], span: Span) -> Function {
     let mut fresh = || module.alloc_ast_id();
-    let member = internal_name("member");
+    let member = "$member".to_string();
     let arms = cases
         .iter()
         .map(|(case, has_payload)| {

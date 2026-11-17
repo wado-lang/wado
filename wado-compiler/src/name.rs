@@ -912,6 +912,13 @@ pub fn to_cm_name(name: &str) -> String {
     name.to_kebab_case()
 }
 
+/// The CM export name of a test function (`$test_0_my_name` as `test-0-my-name`).
+/// The elaborator spells each non-alphanumeric character of the test's string as
+/// `_`, so a name may hold `__` or end in `_`, which the CM name collapses.
+pub fn test_export_name(function_name: &str) -> String {
+    to_cm_name(function_name.trim_start_matches(INTERNAL_PREFIX))
+}
+
 /// What the Component Model compares the CM name `cm_name` by when it requires
 /// names in one scope to be strongly unique: `a-b`, `ab` and `A-B` share one.
 pub fn cm_name_key(cm_name: &str) -> String {
@@ -1095,19 +1102,21 @@ pub fn minted_what(what: &str, sub: impl fmt::Display) -> String {
     format!("{what}_{sub}")
 }
 
-/// A local a construct mints once per body, or one named after something
-/// already unique within the body (a parameter name, say), so it needs no
-/// serial.
-#[must_use]
-pub fn internal_name(what: &str) -> String {
-    format!("{INTERNAL_PREFIX}{what}")
-}
-
 /// The name a local that has none of its own goes by: its index, which the
 /// local holds alone.
 #[must_use]
 pub fn indexed_local_name(index: impl fmt::Display) -> String {
     minted_name("local", index)
+}
+
+/// The suffix a callee specialised over closure functor structs takes: each
+/// functor's mangled name after a `$`.
+#[must_use]
+pub fn functor_specialization_suffix(functors: impl IntoIterator<Item = String>) -> String {
+    functors
+        .into_iter()
+        .map(|functor| format!("{INTERNAL_PREFIX}{functor}"))
+        .collect()
 }
 
 /// The path of a module the compiler writes for itself in directory `dir`,

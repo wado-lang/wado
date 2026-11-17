@@ -7,7 +7,7 @@ use crate::ast::Type;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{CmInterfaceRegistry, cm_primitive_of};
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{INTERNAL_PREFIX, to_cm_name};
+use crate::name::{test_export_name, to_cm_name};
 use crate::package::TestSelection;
 use crate::tir::TirTest;
 use crate::world_registry::{GuestCallback, WorldExportInfo, WorldInfo, WorldRegistry};
@@ -423,13 +423,6 @@ fn resolve_cm_export_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry
         };
     }
     panic!("unsupported world export type shape: {ty:?}");
-}
-
-/// The CM export name of a test function (`$test_0_my_name` as `test-0-my-name`).
-/// The elaborator spells each non-alphanumeric character of the test's string as
-/// `_`, so a name may hold `__` or end in `_`, which the CM name collapses.
-fn test_export_name(function_name: &str) -> String {
-    to_cm_name(function_name.trim_start_matches(INTERNAL_PREFIX))
 }
 
 #[cfg(test)]
