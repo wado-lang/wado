@@ -182,8 +182,15 @@ impl std::error::Error for PublishError {}
 /// (`description`, `repository`, `authors`) and a license; `homepage` and
 /// `documentation` fall back to `repository`, and `repository-directory` /
 /// `wado-version` stay optional.
+///
+/// `published_member` answers whether a path dependency's `path` names a
+/// workspace member published in the same run. Such a dependency needs no other
+/// source: it is published beside the package, at the version they share.
 #[must_use]
-pub fn validate_for_publish(manifest: &Manifest) -> Vec<PublishError> {
+pub fn validate_for_publish(
+    manifest: &Manifest,
+    published_member: impl Fn(&str) -> bool,
+) -> Vec<PublishError> {
     let mut errors = Vec::new();
     let Some(pkg) = &manifest.package else {
         return vec![PublishError::NoPackage];
@@ -217,11 +224,13 @@ pub fn validate_for_publish(manifest: &Manifest) -> Vec<PublishError> {
     {
         match &dep.source {
             DependencySource::Path {
+                path,
                 publish_source: None,
-                ..
-            } => errors.push(PublishError::PathDependencyWithoutSource {
-                dep_name: name.clone(),
-            }),
+            } if !published_member(path) => {
+                errors.push(PublishError::PathDependencyWithoutSource {
+                    dep_name: name.clone(),
+                })
+            }
             DependencySource::Workspace => errors.push(PublishError::WorkspaceDependency {
                 dep_name: name.clone(),
             }),
@@ -460,7 +469,7 @@ license = "MIT"
 authors = ["Alice"]
 "#;
         let m = toml.parse::<Manifest>().unwrap();
-        let errors = validate_for_publish(&m);
+        let errors = validate_for_publish(&m, |_| false);
         assert!(errors.is_empty(), "{errors:?}");
     }
 
@@ -468,7 +477,7 @@ authors = ["Alice"]
     fn publish_collects_all_missing_requirements() {
         let toml = "[package]\nname = \"app\"\nversion = \"0.1.0\"\n";
         let m = toml.parse::<Manifest>().unwrap();
-        let errs = validate_for_publish(&m);
+        let errs = validate_for_publish(&m, |_| false);
         assert!(errs.contains(&PublishError::MissingNamespace), "{errs:?}");
         assert!(errs.contains(&PublishError::MissingLicense), "{errs:?}");
         for field in ["description", "repository", "authors"] {
@@ -493,7 +502,7 @@ authors = ["Alice"]
 publish = false
 "#;
         let m = toml.parse::<Manifest>().unwrap();
-        assert!(validate_for_publish(&m).contains(&PublishError::PublishDisabled));
+        assert!(validate_for_publish(&m, |_| false).contains(&PublishError::PublishDisabled));
     }
 
     #[test]
@@ -509,7 +518,7 @@ license-file = "LICENSE-COMMERCIAL"
 authors = ["Alice"]
 "#;
         let m = toml.parse::<Manifest>().unwrap();
-        let errors = validate_for_publish(&m);
+        let errors = validate_for_publish(&m, |_| false);
         assert!(errors.is_empty(), "{errors:?}");
     }
 
@@ -529,7 +538,7 @@ authors = ["Alice"]
 "ns:shared" = { workspace = true }
 "#;
         let m = toml.parse::<Manifest>().unwrap();
-        let errs = validate_for_publish(&m);
+        let errs = validate_for_publish(&m, |_| false);
         assert!(
             errs.iter().any(|e| matches!(
                 e,
@@ -555,13 +564,39 @@ authors = ["Alice"]
 "lib:shared" = { path = "../shared" }
 "#;
         let m = toml.parse::<Manifest>().unwrap();
-        let errs = validate_for_publish(&m);
+        let errs = validate_for_publish(&m, |_| false);
         assert!(
             errs.iter().any(|e| matches!(
                 e,
                 PublishError::PathDependencyWithoutSource { dep_name } if dep_name == "lib:shared"
             )),
             "{errs:?}"
+        );
+    }
+
+    #[test]
+    fn publish_accepts_a_path_dependency_on_a_published_member() {
+        let toml = r#"
+[package]
+namespace = "myorg"
+name = "app"
+version = "0.1.0"
+description = "An app"
+repository = "https://github.com/myorg/app"
+license = "MIT"
+authors = ["Alice"]
+
+[dependencies]
+"myorg:shared" = { path = "../shared" }
+"lib:other" = { path = "../other" }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let errs = validate_for_publish(&m, |path| path == "../shared");
+        assert_eq!(
+            errs,
+            [PublishError::PathDependencyWithoutSource {
+                dep_name: "lib:other".to_string()
+            }]
         );
     }
 }
