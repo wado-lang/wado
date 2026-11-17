@@ -18,13 +18,11 @@ permissions: {}
 jobs:
   # Who asked, and the commit the review is of. The head is fixed here, so a
   # push during the review does not change what the comment reports on.
-  # A Japanese input method writes the full-width `＠`.
   gate:
     name: Gate
     if: >-
       github.event_name == 'workflow_dispatch'
-      || (github.event.issue.pull_request && (startsWith(github.event.comment.body, '@wado-bot review')
-        || startsWith(github.event.comment.body, '＠wado-bot review')))
+      || (github.event.issue.pull_request && startsWith(github.event.comment.body, '@wado-bot review'))
     runs-on: ubuntu-latest
     permissions:
       actions: read
