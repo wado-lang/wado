@@ -7,7 +7,7 @@
 
 use { eprintln, Stderr, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
-use { Element, FileSource, Graph, LoadError, Sampling, Tensor } from "lib:loam";
+use { FileSource, Graph, LoadError, Sampling, Tensor } from "lib:loam";
 use { deviation, recorded, reported } from "./checks.wado";
 /// The graph alone: its weights are external data in `model_q4.onnx_data`.
 use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resolve/2dbbfdb1b59bd034eb959428c6a7da9dd7ea27f0/onnx/model_q4.onnx"
@@ -75,11 +75,10 @@ impl<affine Bk: Graph> Q4Model<Bk> {
             &mut self.model,
         );
         let first = greedy.first_tokens(&passed.logits, ids.len() as i64)[0];
-        let logits: List<f32> = passed.logits.data.into_iter().map(|v| v.cast_to::<f32>()).collect();
         if steps == 1 {
             return [
                 [first as i32],
-                logits,
+                passed.logits.data,
             ];
         }
         let decoded = gemma::decode(
@@ -93,7 +92,7 @@ impl<affine Bk: Graph> Q4Model<Bk> {
         );
         let mut generated: List<i32> = [first as i32];
         generated.extend(&decoded.tokens.data.into_iter().map(|id| id as i32).collect());
-        return [generated, logits];
+        return [generated, passed.logits.data];
     }
 }
 
