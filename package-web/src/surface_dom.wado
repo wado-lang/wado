@@ -271,12 +271,10 @@ fn assert_insertable(parent: Node, node: Node, child: Option<Node>) {
     if !into_document {
         return;
     }
-    let previous = |n: &SurfaceNode| n.previous_sibling;
-    let next = |n: &SurfaceNode| n.next_sibling;
     if is_element(surface_node(node)) {
         assert child_where(parent, is_element) == null, "HierarchyRequestError: a document holds one element";
         if let Some(reference) = child {
-            assert !any_sibling(Option::Some(reference), next, is_doctype), "HierarchyRequestError: the element follows the doctype";
+            assert !any_sibling(Option::Some(reference), |n| n.next_sibling, is_doctype), "HierarchyRequestError: the element follows the doctype";
         }
     } else {
         assert child_where(parent, is_doctype) == null, "HierarchyRequestError: a document holds one doctype";
@@ -284,7 +282,7 @@ fn assert_insertable(parent: Node, node: Node, child: Option<Node>) {
             Some(reference) => surface_node(reference).previous_sibling,
             None => surface_node(parent).last_child,
         };
-        assert !any_sibling(ahead, previous, is_element), "HierarchyRequestError: the doctype precedes the element";
+        assert !any_sibling(ahead, |n| n.previous_sibling, is_element), "HierarchyRequestError: the doctype precedes the element";
     }
 }
 
