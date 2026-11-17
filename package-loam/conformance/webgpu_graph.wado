@@ -290,6 +290,14 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         );
     }
 
+    for let [words, device] of [
+        ["", &mut gpu],
+        [" in f32 words", &mut plain],
+    ] {
+        attention_in::<f16>(device, ` of f16${words}`);
+        attention_in::<bf16>(device, ` of bf16${words}`);
+    }
+
     // Rows of different pasts in one buffer.
     let ragged = cases::attention_rows([1, 2]);
     let ragged_want = cases::attending(
@@ -659,6 +667,61 @@ fn quantized_in<E: Float>(
     println(`quantized product${name} ${apart(gpu, &got.0, &want.0)}`);
     println(`quantized gather${name} ${apart(gpu, &got.1, &want.1)}`);
     return [held_a, held_ids, want];
+}
+
+/// `cases::attention_case` in `E` on `gpu`, which runs it in its kernels,
+/// against the decomposition on the CPU.
+fn attention_in<E: Float>(
+    gpu: &mut WebGpuBackend,
+    name: String,
+) with (Stdout, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let cpu = &mut Cpu {};
+    let case = cases::attention_case();
+    let inputs: [Tensor<E, [cases::Bt, cases::St, cases::Qt]>, Tensor<E, [cases::Bt, cases::St, cases::Kt]>, Tensor<E, [cases::Bt, cases::St, cases::Kt]>] = [
+        cpu.convert(&case.inputs.0),
+        cpu.convert(&case.inputs.1),
+        cpu.convert(&case.inputs.2),
+    ];
+    let past: [Tensor<E, [cases::Bt, cases::Ht, cases::Pt, cases::Dt]>, Tensor<E, [cases::Bt, cases::Ht, cases::Pt, cases::Dt]>, Tensor<i64, [Slots]>] = [
+        cpu.convert(&case.past.0),
+        cpu.convert(&case.past.1),
+        case.past.2,
+    ];
+    let rotation: [Tensor<E, [cases::Pos, cases::Half]>, Tensor<E, [cases::Pos, cases::Half]>] = [
+        cpu.convert(&case.rotation.0),
+        cpu.convert(&case.rotation.1),
+    ];
+    let bias: Tensor<E, [cases::Bt, cases::Ht, cases::St, cases::Tt]> = cpu.convert(&case.bias);
+    let want = cases::attending::<Cpu, E>(cpu, &inputs, &past, &rotation, &bias, &case.options);
+    let held_inputs = [
+        gpu.upload(&inputs.0),
+        gpu.upload(&inputs.1),
+        gpu.upload(&inputs.2),
+    ];
+    let held_past = [
+        gpu.upload(&past.0),
+        gpu.upload(&past.1),
+        gpu.upload(&past.2),
+    ];
+    let held_rotation = [
+        gpu.upload(&rotation.0),
+        gpu.upload(&rotation.1),
+    ];
+    let held_bias = gpu.upload(&bias);
+    let from = gpu.dispatches();
+    let got = cases::attending::<WebGpuBackend, E>(gpu, &held_inputs, &held_past, &held_rotation, &held_bias, &case.options);
+    assert gpu.dispatches() - from == 5, "a half attention runs in its kernels";
+    println(`attending out${name} ${apart(gpu, &got.0, &want.0)}`);
+    // What a shared present holds past the valid positions is unspecified.
+    let valid = case.past.2.data[0] as i32 + case.inputs.0.extents[1];
+    for let [part, present, reference] of [
+        ["present_k", got.1, want.1],
+        ["present_v", got.2, want.2],
+    ] {
+        let read: Tensor<f32, [cases::Bt, cases::Ht, cases::Tt, cases::Dt]> = cpu.convert(&gpu.download(&present));
+        let wanted: Tensor<f32, [cases::Bt, cases::Ht, cases::Tt, cases::Dt]> = cpu.convert(&reference);
+        println(`attending ${part}${name} ${deviation(&leading(cpu, &read, valid).data, &leading(cpu, &wanted, valid).data)}`);
+    }
 }
 
 /// Passes enough that every launch is idle.

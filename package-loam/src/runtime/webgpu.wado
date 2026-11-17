@@ -2381,7 +2381,8 @@ impl WebGpuBackend {
     /// turned, and values to the attention cache, one attends each
     /// query row over each part of its positions in a workgroup of its own,
     /// and one joins each row's parts. `rotary` is the cosine and sine
-    /// tables. Each batch row's past is the first of its `pasts` positions
+    /// tables. Of a `stored` half, the turned keys and queries and the result
+    /// round to it, held as the f32 equal to each, and the scores stay f32. Each batch row's past is the first of its `pasts` positions
     /// `past_k` and `past_v` hold, and the cache holds every position they do:
     /// their buffer where they are `shared`, onnxruntime's shared buffer. A
     /// query of a row reads no position at or past the row's of `reaches`.
@@ -2399,6 +2400,7 @@ impl WebGpuBackend {
         rotary: &Option<[DeviceTensor, DeviceTensor]>,
         bias: &Option<DeviceTensor>,
         options: &Attention,
+        stored: Option<HalfFloat>,
     ) -> Option<[DeviceTensor, DeviceTensor, DeviceTensor]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder)
         contract pasts.len() == q.extents[0] && reaches.len() == q.extents[0]
         contract q.extents[0] > 0, "a batch holds a row"
@@ -2568,7 +2570,7 @@ impl WebGpuBackend {
             &append_operands,
             Span { slot: cache, first: 0, count: 2 * n },
             heads_of[0],
-            |bindings| ShaderKey::Append([bindings, half > 0, batch]),
+            |bindings| ShaderKey::Append([bindings, half > 0, batch, stored]),
             grids[0],
         );
 
@@ -2581,13 +2583,13 @@ impl WebGpuBackend {
             &attend_operands,
             Span { slot: parts, first: 0, count: attended },
             heads_of[1],
-            |bindings| ShaderKey::Attend([bindings, d, half > 0, biased, part, batch]),
+            |bindings| ShaderKey::Attend([bindings, d, half > 0, biased, part, batch, stored]),
             grids[1],
         );
 
         let result = contiguous(self.allocated(rows * d, false), 0, [batch, s, heads * d]);
         let joined = [contiguous(parts, 0, [attended])] as List<DeviceTensor>;
-        self.dispatch_bound(&joined, fresh(&result), heads_of[2], |bindings| ShaderKey::AttendJoin(bindings), grids[2]);
+        self.dispatch_bound(&joined, fresh(&result), heads_of[2], |bindings| ShaderKey::AttendJoin([bindings, stored]), grids[2]);
         if let Some(replay) = key {
             let mut lengths: List<i32> = [];
             for let h of &heads_of {
@@ -3622,11 +3624,11 @@ variant ShaderKey {
     /// [`gather_shader`]'s arguments.
     Gather([i32, i32, bool]),
     /// [`append_shader`]'s arguments.
-    Append([List<i32>, bool, i32]),
+    Append([List<i32>, bool, i32, Option<HalfFloat>]),
     /// [`attend_shader`]'s arguments.
-    Attend([List<i32>, i32, bool, bool, i32, i32]),
-    /// [`attend_join_shader`]'s argument.
-    AttendJoin(List<i32>),
+    Attend([List<i32>, i32, bool, bool, i32, i32, Option<HalfFloat>]),
+    /// [`attend_join_shader`]'s arguments.
+    AttendJoin([List<i32>, Option<HalfFloat>]),
     /// [`arg_max_shader`]'s arguments.
     ArgMax([List<i32>, i32, ArgMaxStage]),
     /// [`quantized_product_shader`]'s arguments.
@@ -3677,17 +3679,18 @@ impl Shader {
                 }
                 gather_shader(*rank, *axis, *ranked, &bound);
             },
-            Append([bindings, rotary, batch]) => append_shader(bindings, *rotary, *batch, words),
-            Attend([bindings, head, rotary, biased, part, batch]) => attend_shader(
+            Append([bindings, rotary, batch, stored]) => append_shader(bindings, *rotary, *batch, *stored, words),
+            Attend([bindings, head, rotary, biased, part, batch, stored]) => attend_shader(
                 bindings,
                 *head,
                 *rotary,
                 *biased,
                 *part,
                 *batch,
+                *stored,
                 words,
             ),
-            AttendJoin(bindings) => attend_join_shader(bindings, words),
+            AttendJoin([bindings, stored]) => attend_join_shader(bindings, *stored, words),
             ArgMax([bindings, rank, stage]) => arg_max_shader(bindings, *rank, *stage, words),
             QuantizedProduct([op, bindings, shape]) => quantized_product_shader(op, bindings, shape, words),
             QuantizedGather([bindings, bits, block, zero_points, half]) => quantized_gather_shader(
@@ -3794,8 +3797,9 @@ ${indent}}
 /// count, the invocations per row, the extents `[batch, key heads, new
 /// positions, head]`, the turned half's length, the view of the cache's keys,
 /// where its values start, each of the `batch` rows' past length, then the
-/// views of the new keys, new values, cosines and sines.
-fn append_shader(bindings: &List<i32>, rotary: bool, batch: i32, words: &List<Words>) -> String {
+/// views of the new keys, new values, cosines and sines. A turned key rounds
+/// once to the `stored` half, as the decomposition stores one.
+fn append_shader(bindings: &List<i32>, rotary: bool, batch: i32, stored: Option<HalfFloat>, words: &List<Words>) -> String {
     let views = 13 + batch;
     let new_at = |k: i32, at: i32, col: String| view_wgsl(bindings, k, at, ["b", "s", col]);
     let key = if rotary {
@@ -3825,9 +3829,9 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
     let x = ${new_at(0, views, "h * d + e")};
-${key}    out[at] = turned;
+${key}    out[at] = ${rounded_wgsl(stored, "turned")};
 }
-`;
+${ELEMENTWISE_OPERATORS}`;
 }
 
 /// `attend_shader`'s word of what `options` says, a bit each: causal, whether
@@ -3853,7 +3857,8 @@ fn attention_flags(options: &Attention) -> u32 {
 /// and the cap as f32 bits, the window, `attention_flags`, a hidden position's
 /// score as f32 bits, each of the `batch` rows' past length and the positions
 /// it attends, then the views of the queries, the present keys and values, the
-/// cosines and sines, and the bias.
+/// cosines and sines, and the bias. A turned query rounds once to the `stored`
+/// half, and the scores stay f32, as the decomposition's do.
 fn attend_shader(
     bindings: &List<i32>,
     head: i32,
@@ -3861,6 +3866,7 @@ fn attend_shader(
     biased: bool,
     part: i32,
     batch: i32,
+    stored: Option<HalfFloat>,
     words: &List<Words>,
 ) -> String {
     let views = 14 + 2 * batch;
@@ -3913,7 +3919,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     let none = non_finite(0xff800000u);
     for (var e = lid; e < d; e += ${LANES}u) {
         let x = ${query_at("e")};
-${turning}        query[e] = turned;
+${turning}        query[e] = ${rounded_wgsl(stored, "turned")};
     }
     workgroupBarrier();
     // Adjacent lanes split one position's dot, reading adjacent elements.
@@ -3988,14 +3994,15 @@ ${biasing}    }
         out[at + d + 1u] = sum;
     }
 }
-`;
+${ELEMENTWISE_OPERATORS}`;
 }
 
 /// The WGSL joining the parts `attend_shader` wrote of each row, one row per
 /// workgroup: each part's weighed values and weights' sum rescaled from its
-/// greatest score to the row's. Parameters: the rows, the workgroups per row of
-/// the grid, the parts of a row, the head's length, then the view of the parts.
-fn attend_join_shader(bindings: &List<i32>, words: &List<Words>) -> String {
+/// greatest score to the row's, the result rounded once to the `stored` half.
+/// Parameters: the rows, the workgroups per row of the grid, the parts of a
+/// row, the head's length, then the view of the parts.
+fn attend_join_shader(bindings: &List<i32>, stored: Option<HalfFloat>, words: &List<Words>) -> String {
     let part = |c: String, at: String| `load${bindings[0]}(p[4] + (row * parts + ${c}) * (d + 2u) + ${at})`;
     return `${buffers_wgsl(words)}
 @compute @workgroup_size(${LANES})
@@ -4022,10 +4029,10 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
             let top = ${part("c", "d")};
             acc += select(exp(top - most), 0.0, top == none) * ${part("c", "e")};
         }
-        out[row * d + e] = acc / all;
+        out[row * d + e] = ${rounded_wgsl(stored, "acc / all")};
     }
 }
-`;
+${ELEMENTWISE_OPERATORS}`;
 }
 
 /// What one dispatch of [`arg_max_shader`] reduces.

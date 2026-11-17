@@ -656,7 +656,7 @@ impl Graph for WebGpuBackend {
     ) -> [Placed<E, [B, S, Q]>, Placed<E, [B, H, T, D]>, Placed<E, [B, H, T, D]>] with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let shared = past_length matches { Some(_) };
         kernels: {
-            if !E::is_f32() || shared && !options.causal {
+            if shared && !options.causal {
                 break kernels;
             }
             let positions = self.extents_of(past_k)[2];
@@ -695,6 +695,7 @@ impl Graph for WebGpuBackend {
                 &rotary,
                 &biased,
                 options,
+                HalfFloat::of(E::kind()),
             ) {
                 let span = |t: DeviceTensor| if shared { DeviceTensor { ..t, extents: held_k.extents } } else { t };
                 return [

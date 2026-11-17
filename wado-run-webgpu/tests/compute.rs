@@ -361,14 +361,15 @@ fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
 /// and without `shader-f16`, a gather of consecutive rows as a view, a gather of a
 /// mask's rows on the device, and of a run from each row's own start, a branch
 /// either way, attention through a shared
-/// cache, in one row and in rows of different pasts, and a model's `compute`
+/// cache, in one row, in each half and in rows of different pasts, a quantized
+/// product with its epilogue, and a model's `compute`
 /// through the program compiled for each shape class, a second call replaying
 /// what the first recorded, products of one input joined into one, a decoder
 /// branching on an input along its steps, a counted loop, and a decoding
 /// program under each kind of sampler, alone and for requests in slots.
 #[test]
 fn loams_webgpu_graph_computes_what_its_cpu_graph_does() {
-    assert_loam_conformance("webgpu_graph.wado", 100);
+    assert_loam_conformance("webgpu_graph.wado", 112);
 }
 
 /// A whole model's `compute` stays on the device: each sequence length reads

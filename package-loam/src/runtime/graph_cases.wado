@@ -251,15 +251,15 @@ pub struct Half {
 
 /// Attention over a past of `past.2` positions in each row of a shared buffer,
 /// turned by `rotation`, biased over the buffer's positions by `bias`.
-pub fn attending<affine G: Graph>(
+pub fn attending<affine G: Graph, E: Float = f32>(
     g: &mut G,
-    inputs: &[G::Tensor<f32, [Bt, St, Qt]>, G::Tensor<f32, [Bt, St, Kt]>, G::Tensor<f32, [Bt, St, Kt]>],
-    past: &[G::Tensor<f32, [Bt, Ht, Pt, Dt]>, G::Tensor<f32, [Bt, Ht, Pt, Dt]>, G::Tensor<i64, [Slots]>],
-    rotation: &[G::Tensor<f32, [Pos, Half]>, G::Tensor<f32, [Pos, Half]>],
-    bias: &G::Tensor<f32, [Bt, Ht, St, Tt]>,
+    inputs: &[G::Tensor<E, [Bt, St, Qt]>, G::Tensor<E, [Bt, St, Kt]>, G::Tensor<E, [Bt, St, Kt]>],
+    past: &[G::Tensor<E, [Bt, Ht, Pt, Dt]>, G::Tensor<E, [Bt, Ht, Pt, Dt]>, G::Tensor<i64, [Slots]>],
+    rotation: &[G::Tensor<E, [Pos, Half]>, G::Tensor<E, [Pos, Half]>],
+    bias: &G::Tensor<E, [Bt, Ht, St, Tt]>,
     options: &Attention,
-) -> [G::Tensor<f32, [Bt, St, Qt]>, G::Tensor<f32, [Bt, Ht, Tt, Dt]>, G::Tensor<f32, [Bt, Ht, Tt, Dt]>] with _ {
-    return g.group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+) -> [G::Tensor<E, [Bt, St, Qt]>, G::Tensor<E, [Bt, Ht, Tt, Dt]>, G::Tensor<E, [Bt, Ht, Tt, Dt]>] with _ {
+    return g.group_query_attention::<E, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
         &inputs.0,
         &inputs.1,
         &inputs.2,
