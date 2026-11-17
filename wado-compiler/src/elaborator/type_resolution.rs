@@ -13,6 +13,7 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::scope::{BinderInScope, BoundSelf, BoundsOf, FamilySite, ParamRef, ScopedBound};
+use super::static_call::ReceiverId;
 use super::trait_query::SelfBinding;
 use super::types::{ParamSlot, TypeError, TypeLookup, forward_type_param_defaults};
 use crate::ast;
@@ -993,10 +994,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// [`Self::bare_generic_type_arity`] of the declaration `receiver` names.
-    pub(super) fn receiver_generic_arity(
-        &self,
-        receiver: &super::static_call::ReceiverId,
-    ) -> Option<usize> {
+    pub(super) fn receiver_generic_arity(&self, receiver: &ReceiverId) -> Option<usize> {
         self.bare_generic_type_arity(receiver.key().decl()?)
     }
 
