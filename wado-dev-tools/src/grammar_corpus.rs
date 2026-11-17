@@ -6,17 +6,19 @@
 //! Paths, or `--paths-from <file>`, print the compiler's verdict for each
 //! instead, for triage.
 //!
-//! Verdicts come from [`wado_lsp::Engine::parse_diagnostics`], so a fixture
-//! whose imports are deliberately broken still reports its syntax truthfully.
+//! Verdicts come from the lexer and parser alone, so a fixture whose imports
+//! are deliberately broken still reports its syntax truthfully.
 //!
 //! Two invariants, both derived — a committed divergence list rotted between
 //! updates and nothing could verify it:
 //!
 //! 1. Nothing the compiler parses is rejected by the grammar.
 //! 2. Everything the grammar accepts but the compiler rejects is a fixture
-//!    declaring a `compile_error` — the rules no context-free grammar can
-//!    state (a chained `!=`, `internal` beside `pub`). A real source landing
-//!    here means the grammar accepts what the language does not.
+//!    declaring a `compile_error`, and the compiler's earliest error there is
+//!    a [`ParseErrorKind::Restriction`] — a rule no context-free grammar
+//!    states (a chained `!=`, `internal` beside `pub`). A `Syntax` error there
+//!    means the grammar accepts what it can refuse; a real source there means
+//!    it accepts what the language does not.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -25,6 +27,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use lexopt::Arg::{Long, Value};
+use wado_compiler::ParseErrorKind;
+use wado_compiler::token::Span;
 use wado_host::fixture::expects_compile_failure;
 
 /// Corpus roots. `tests/generated` is excluded: its `*.wir.wado` files are IR
@@ -40,8 +44,15 @@ const CORPUS_ROOTS: &[&str] = &[
 struct Verdict {
     path: String,
     ok: bool,
-    line: u32,
+    line: usize,
     message: String,
+}
+
+/// The compiler's verdict, with the kind of its earliest error: `Restriction`
+/// says the grammar may accept the file.
+struct CompilerVerdict {
+    verdict: Verdict,
+    kind: Option<ParseErrorKind>,
 }
 
 pub fn run(mut parser: lexopt::Parser) {
@@ -76,15 +87,16 @@ pub fn run(mut parser: lexopt::Parser) {
 
     assert!(!paths.is_empty(), "the named lists must hold a path");
     let mut bad = 0usize;
-    for verdict in verdicts_for(&paths) {
-        if verdict.ok {
-            println!("ok\t{}", verdict.path);
-        } else {
-            bad += 1;
-            println!(
-                "ng\t{}\t{}\t{}",
-                verdict.path, verdict.line, verdict.message
-            );
+    for CompilerVerdict { verdict, kind } in verdicts_for(&paths) {
+        match kind {
+            None => println!("ok\t{}", verdict.path),
+            Some(kind) => {
+                bad += 1;
+                println!(
+                    "ng\t{}\t{kind:?}\t{}\t{}",
+                    verdict.path, verdict.line, verdict.message
+                );
+            }
         }
     }
     eprintln!("summary: {} files, {bad} with diagnostics", paths.len());
@@ -159,46 +171,45 @@ pub fn collect_corpus() -> Vec<String> {
     paths
 }
 
-/// The compiler's syntax verdict for each path.
-fn verdicts_for(paths: &[String]) -> Vec<Verdict> {
-    let mut engine = wado_lsp::Engine::new();
-    let mut out = Vec::with_capacity(paths.len());
-    for path in paths {
-        let Ok(source) = fs::read_to_string(path) else {
-            out.push(Verdict {
-                path: path.clone(),
-                ok: false,
-                line: 0,
-                message: "unreadable".to_string(),
-            });
-            continue;
-        };
-        let canonical = Path::new(path)
-            .canonicalize()
-            .unwrap_or_else(|_| Path::new(path).to_path_buf());
-        let uri = wado_lsp::Uri::from_file_path(&canonical)
-            .as_str()
-            .to_string();
-        engine.open_document(&uri, source);
-        let diagnostics = engine.parse_diagnostics(&uri);
-        engine.close_document(&uri);
-
-        out.push(match diagnostics.first() {
-            None => Verdict {
-                path: path.clone(),
-                ok: true,
-                line: 0,
-                message: String::new(),
-            },
-            Some(first) => Verdict {
-                path: path.clone(),
-                ok: false,
-                line: first.range.start.line + 1,
-                message: first.message.clone(),
-            },
-        });
-    }
-    out
+/// The compiler's syntax verdict for each path, reporting its first error of
+/// the deciding kind.
+fn verdicts_for(paths: &[String]) -> Vec<CompilerVerdict> {
+    paths
+        .iter()
+        .map(|path| {
+            let source =
+                fs::read_to_string(path).unwrap_or_else(|e| panic!("reading '{path}': {e}"));
+            let mut lexed = wado_compiler::lex(&source);
+            // A lexer error is a token no context-free grammar's lexer forms.
+            let lex_errors: Vec<(ParseErrorKind, Span, String)> = std::mem::take(&mut lexed.errors)
+                .into_iter()
+                .map(|e| (ParseErrorKind::Syntax, e.span, format!("lexer error: {e}")))
+                .collect();
+            let mut parser = wado_compiler::Parser::from_lex_no_trivia(lexed);
+            parser.parse();
+            let parse_errors = parser
+                .take_errors()
+                .into_iter()
+                .map(|e| (e.kind, e.span, format!("parse error: {}", e.message)));
+            // The earliest error decides: what recovery reports after it may
+            // only echo it, as a refused nesting leaves its closers unmatched.
+            let first = lex_errors
+                .into_iter()
+                .chain(parse_errors)
+                .min_by_key(|(_, span, _)| span.start);
+            CompilerVerdict {
+                verdict: Verdict {
+                    path: path.clone(),
+                    ok: first.is_none(),
+                    line: first.as_ref().map_or(0, |(_, span, _)| span.line),
+                    message: first
+                        .as_ref()
+                        .map_or_else(String::new, |(.., message)| message.clone()),
+                },
+                kind: first.map(|(kind, ..)| kind),
+            }
+        })
+        .collect()
 }
 
 /// Read the Gale side's `ok` / `ng <path> <count> <line> <message> <snippet>`
@@ -251,27 +262,30 @@ fn compare_with_gale(corpus: &[String], gale_tsv: &Path, report_path: &Path) {
         gale.iter().map(|v| (v.path.as_str(), v)).collect();
 
     let mut rejects: Vec<&Verdict> = Vec::new();
-    let mut accepts: Vec<(&Verdict, &Verdict)> = Vec::new();
+    let mut accepts: Vec<&CompilerVerdict> = Vec::new();
     for own in &compiler {
-        let Some(theirs) = gale_by_path.get(own.path.as_str()) else {
-            panic!(
-                "the Gale side reported no verdict for '{}' — the two corpora differ",
-                own.path
-            );
+        let path = own.verdict.path.as_str();
+        let Some(theirs) = gale_by_path.get(path) else {
+            panic!("the Gale side reported no verdict for '{path}' — the two corpora differ");
         };
-        if theirs.ok == own.ok {
+        if theirs.ok == own.verdict.ok {
             continue;
         }
         if theirs.ok {
-            accepts.push((own, theirs));
+            accepts.push(own);
         } else {
             rejects.push(theirs);
         }
     }
 
+    let syntax: Vec<&Verdict> = accepts
+        .iter()
+        .filter(|own| own.kind == Some(ParseErrorKind::Syntax))
+        .map(|own| &own.verdict)
+        .collect();
     let unexplained: Vec<&Verdict> = accepts
         .iter()
-        .map(|(own, _)| *own)
+        .map(|own| &own.verdict)
         .filter(|own| !declares_compile_error(&own.path))
         .collect();
 
@@ -310,18 +324,34 @@ fn compare_with_gale(corpus: &[String], gale_tsv: &Path, report_path: &Path) {
         );
         failed = true;
     }
+    if !syntax.is_empty() {
+        eprintln!(
+            "\nerror: Wado.g4 accepts {} file(s) the compiler rejects with a syntax error, which a \
+             context-free grammar can refuse too:",
+            syntax.len()
+        );
+        for verdict in &syntax {
+            eprintln!("  {}:{}: {}", verdict.path, verdict.line, verdict.message);
+        }
+        eprintln!(
+            "\n  Either the grammar should refuse it, or the parser raises a rule no context-free\n  \
+             grammar states and should report it as a `ParseErrorKind::Restriction`."
+        );
+        failed = true;
+    }
     if failed {
         // A check verdict, not a programming error: no backtrace.
         std::process::exit(1);
     }
 }
 
-fn render_report(rejects: &[&Verdict], accepts: &[(&Verdict, &Verdict)]) -> String {
+fn render_report(rejects: &[&Verdict], accepts: &[&CompilerVerdict]) -> String {
     let mut out = String::from(
         "# Where the two Wado parsers disagree. Generated, not committed.\n#\n\
-         #   gap    Wado.g4 rejects what the compiler parses.\n\
-         #   rule   the compiler rejects what Wado.g4 accepts; each is a fixture\n\
-         #          declaring the compile error it expects.\n#\n\
+         #   gap      Wado.g4 rejects what the compiler parses.\n\
+         #   rule     the compiler rejects what Wado.g4 accepts with a restriction no\n\
+         #            context-free grammar states; each is a fixture declaring it.\n\
+         #   syntax   the compiler rejects what Wado.g4 accepts with a syntax error.\n#\n\
          # kind<TAB>path<TAB>line<TAB>message\n",
     );
     for verdict in rejects {
@@ -332,8 +362,18 @@ fn render_report(rejects: &[&Verdict], accepts: &[(&Verdict, &Verdict)]) -> Stri
         )
         .unwrap();
     }
-    for (own, _) in accepts {
-        writeln!(out, "rule\t{}\t{}\t{}", own.path, own.line, own.message).unwrap();
+    for CompilerVerdict { verdict, kind } in accepts {
+        let label = match kind {
+            Some(ParseErrorKind::Restriction) => "rule",
+            Some(ParseErrorKind::Syntax) => "syntax",
+            None => unreachable!("an accepted file is no divergence"),
+        };
+        writeln!(
+            out,
+            "{label}\t{}\t{}\t{}",
+            verdict.path, verdict.line, verdict.message
+        )
+        .unwrap();
     }
     out
 }

@@ -186,8 +186,25 @@ enum EffectHole {
 
 #[derive(Debug)]
 pub struct ParseError {
+    pub kind: ParseErrorKind,
     pub message: String,
     pub span: Span,
+}
+
+/// Which side of the context-free line a parse error falls on. The grammar the
+/// highlighter is generated from must reject every `Syntax` error and may
+/// accept a `Restriction`, which `check-grammar` holds it to. Ordered so a
+/// file's least kind decides whether the grammar must reject it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ParseErrorKind {
+    /// The tokens break the context-free syntax.
+    Syntax,
+    /// The tokens parse, but break a rule a context-free grammar over the same
+    /// tokens cannot state, or states only by restating the expression or type
+    /// grammar per context: a count or depth limit, what an identifier or a
+    /// string spells, or an expression or type allowed in one context and not
+    /// another.
+    Restriction,
 }
 
 impl ParseError {
@@ -355,7 +372,7 @@ impl Parser {
     /// Run `parse` one level deeper, refusing past [`MAX_NESTING`] levels.
     fn nested<T>(&mut self, parse: fn(&mut Self) -> ParseResult<T>) -> ParseResult<T> {
         if self.depth == MAX_NESTING {
-            return Err(self.error_at_span(
+            return Err(self.restriction_at_span(
                 self.peek().span,
                 &format!("code may nest at most {MAX_NESTING} levels deep"),
             ));
@@ -910,6 +927,7 @@ impl Parser {
             Ok(self.advance())
         } else {
             Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("expected {kind}, found {}", self.peek_kind()),
                 span: self.peek().span,
             })
@@ -950,14 +968,25 @@ impl Parser {
         }
 
         Err(ParseError {
+            kind: ParseErrorKind::Syntax,
             message: format!("expected `>`, found {}", self.peek_kind()),
             span: self.peek().span,
         })
     }
 
+    /// A [`ParseErrorKind::Restriction`] at `span`.
+    fn restriction_at_span(&self, span: Span, message: &str) -> ParseError {
+        ParseError {
+            kind: ParseErrorKind::Restriction,
+            message: message.to_string(),
+            span,
+        }
+    }
+
     /// Create an error at a specific span
     fn error_at_span(&self, span: Span, message: &str) -> ParseError {
         ParseError {
+            kind: ParseErrorKind::Syntax,
             message: message.to_string(),
             span,
         }
@@ -1318,6 +1347,7 @@ impl Parser {
             }
             (Some(_), _) => {
                 return Err(ParseError {
+                    kind: ParseErrorKind::Syntax,
                     message: "invalid qualified case pattern".to_string(),
                     span: start_span,
                 });
@@ -1398,6 +1428,7 @@ impl Parser {
             return self.wildcard_name_error();
         }
         ParseError {
+            kind: ParseErrorKind::Syntax,
             message: format!("expected {what}, found {}", self.peek_kind()),
             span: self.peek().span,
         }
@@ -1407,6 +1438,7 @@ impl Parser {
     /// Wado does not read as a float. `float` is the literal it meant.
     fn bare_decimal_point_error(float: String, dot: Span) -> ParseError {
         ParseError {
+            kind: ParseErrorKind::Syntax,
             message: format!("a decimal point needs a digit on each side: write `{float}`"),
             span: dot,
         }
@@ -1414,6 +1446,7 @@ impl Parser {
 
     fn wildcard_name_error(&self) -> ParseError {
         ParseError {
+            kind: ParseErrorKind::Syntax,
             message: "`_` is the wildcard, not a name".to_string(),
             span: self.peek().span,
         }
@@ -1501,6 +1534,7 @@ impl Parser {
         };
         if has_internal && (has_pub || has_export) {
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: "`internal` cannot combine with `pub` or `export` \
                     (`export` already implies `pub`)"
                     .to_string(),
@@ -1532,6 +1566,7 @@ impl Parser {
                 TokenKind::Struct | TokenKind::Variant | TokenKind::Trait
             ) {
                 return Err(ParseError {
+                    kind: ParseErrorKind::Syntax,
                     message: "`affine` declares a `struct`, a `variant` or a `trait`".to_string(),
                     span,
                 });
@@ -1544,6 +1579,7 @@ impl Parser {
 
         if !export_targets.is_empty() && !self.check(&TokenKind::Fn) {
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: "`export(…)` names the world export a function provides, \
                     so a `fn` must follow it"
                     .to_string(),
@@ -1602,6 +1638,7 @@ impl Parser {
             TokenKind::World => self.parse_world_decl(visibility, attrs).map(Item::World),
             TokenKind::Global => self.parse_global_decl(visibility, attrs).map(Item::Global),
             _ => Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("expected item, found {}", self.peek_kind()),
                 span: self.peek().span,
             }),
@@ -1776,12 +1813,14 @@ impl Parser {
             return Ok(());
         }
         let written = quoted.map_or_else(|| name.to_string(), StrLit::as_written);
-        Err(self.error_at_span(
-            span,
-            &format!(
-                "a shorthand field must name a variable, and `{name}` cannot; write `{written}: {rest}`"
-            ),
-        ))
+        let message = format!(
+            "a shorthand field must name a variable, and `{name}` cannot; write `{written}: {rest}`"
+        );
+        // A keyword is a token of its own, but what a quoted name spells is not.
+        Err(match quoted {
+            Some(_) => self.restriction_at_span(span, &message),
+            None => self.error_at_span(span, &message),
+        })
     }
 
     /// Parse a comma-separated list of attribute arguments up to the closing
@@ -1923,17 +1962,15 @@ impl Parser {
 
         // Recorded, not returned: the attribute still parses, so the item does
         // not cascade into recovery errors.
+        // Both rules hang on the attribute's name, which a grammar reads as
+        // any identifier.
         if name == "serde" {
-            self.errors.push(ParseError {
-                message: serde_attr_advice(&args),
-                span: start_span,
-            });
+            self.errors
+                .push(self.restriction_at_span(start_span, &serde_attr_advice(&args)));
         }
 
-        let cm_boundary = parse_cm_boundary(&name, &args).map_err(|message| ParseError {
-            message,
-            span: start_span,
-        })?;
+        let cm_boundary = parse_cm_boundary(&name, &args)
+            .map_err(|message| self.restriction_at_span(start_span, &message))?;
 
         Ok(Attribute {
             name,
@@ -2030,6 +2067,7 @@ impl Parser {
             let span = self.advance().span;
             if visibility.reaches_beyond_file() {
                 self.errors.push(ParseError {
+                    kind: ParseErrorKind::Syntax,
                     message: format!("a wildcard import cannot be re-exported; drop `{modifier}`"),
                     span,
                 });
@@ -2044,6 +2082,7 @@ impl Parser {
             let name = self.consume_ident()?;
             if visibility.reaches_beyond_file() {
                 self.errors.push(ParseError {
+                    kind: ParseErrorKind::Syntax,
                     message: format!(
                         "a namespace cannot be re-exported: `{name}`; drop `{modifier}`, or \
                          re-export its members by name with `{modifier} use {{ ... }} from`"
@@ -2134,16 +2173,17 @@ impl Parser {
         let interface =
             CmImport::parse(&name).filter(|cm| cm.function.is_none() && !cm.interface.is_empty());
         let Some(interface) = interface else {
-            return Err(ParseError {
-                message: format!(
+            return Err(self.restriction_at_span(
+                name_span,
+                &format!(
                     "a string-named import names an interface, as `\"ns:pkg/iface\"`; found `\"{name}\"`"
                 ),
-                span: name_span,
-            });
+            ));
         };
         let (alias, local_span) = self.parse_use_alias(name_span)?;
         let Some(alias) = alias else {
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!(
                     "a string-named import takes `as`, as `\"{name}\" as Name`, since a string binds no name"
                 ),
@@ -2293,6 +2333,7 @@ impl Parser {
             TokenKind::StringLit { .. } => {
                 if negate {
                     return Err(ParseError {
+                        kind: ParseErrorKind::Syntax,
                         message: "cannot negate a string literal".to_string(),
                         span,
                     });
@@ -2307,6 +2348,7 @@ impl Parser {
             TokenKind::True => {
                 if negate {
                     return Err(ParseError {
+                        kind: ParseErrorKind::Syntax,
                         message: "cannot negate a boolean".to_string(),
                         span,
                     });
@@ -2317,6 +2359,7 @@ impl Parser {
             TokenKind::False => {
                 if negate {
                     return Err(ParseError {
+                        kind: ParseErrorKind::Syntax,
                         message: "cannot negate a boolean".to_string(),
                         span,
                     });
@@ -2327,6 +2370,7 @@ impl Parser {
             TokenKind::LBracket => {
                 if negate {
                     return Err(ParseError {
+                        kind: ParseErrorKind::Syntax,
                         message: "cannot negate an array".to_string(),
                         span,
                     });
@@ -2340,6 +2384,7 @@ impl Parser {
             TokenKind::LBrace => {
                 if negate {
                     return Err(ParseError {
+                        kind: ParseErrorKind::Syntax,
                         message: "cannot negate an object".to_string(),
                         span,
                     });
@@ -2347,6 +2392,7 @@ impl Parser {
                 Ok(AttrValue::Object(self.parse_attr_object()?))
             }
             other => Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!(
                     "expected attribute value (string, number, bool, array, or object), found {other}"
                 ),
@@ -2359,6 +2405,7 @@ impl Parser {
         match self.peek_kind() {
             TokenKind::StringLit { .. } => self.take_string(),
             _ => Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: "expected string literal".to_string(),
                 span: self.peek().span,
             }),
@@ -2424,6 +2471,7 @@ impl Parser {
         // value receiver on no receiver type.
         if !is_method && let Some(recv) = params.iter().find(|p| p.self_kind != SelfKind::None) {
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: "`self` is only allowed as the receiver of a method".to_string(),
                 span: recv.span,
             });
@@ -2657,7 +2705,7 @@ impl Parser {
                 "`{jump}` cannot leave {}: it runs apart from the code around it",
                 position.noun()
             );
-            self.errors.push(self.error_at_span(span, &message));
+            self.errors.push(self.restriction_at_span(span, &message));
         }
     }
 
@@ -2708,6 +2756,7 @@ impl Parser {
                 seen_default = true;
             } else if seen_default && !matches!(p.self_kind, SelfKind::Ref | SelfKind::MutRef) {
                 return Err(ParseError {
+                    kind: ParseErrorKind::Syntax,
                     message: format!(
                         "parameter '{}' has no default — parameters without defaults cannot follow parameters with defaults",
                         p.name
@@ -2770,6 +2819,7 @@ impl Parser {
             }
 
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: "expected 'self' after '&' in method parameter".to_string(),
                 span: self.peek().span,
             });
@@ -2785,6 +2835,7 @@ impl Parser {
         {
             if matches!(self.peek_nth(1).kind, TokenKind::Colon) {
                 return Err(ParseError {
+kind: ParseErrorKind::Syntax,
                     message:
                         "`self` cannot have a type annotation; write `self`, `&self`, or `&mut self`"
                             .to_string(),
@@ -3280,6 +3331,7 @@ impl Parser {
             if ty.is_none() {
                 let span = self.peek().span;
                 return Err(ParseError {
+                    kind: ParseErrorKind::Syntax,
                     message:
                         "type annotation required for variable declaration without initializer"
                             .to_string(),
@@ -3294,6 +3346,7 @@ impl Parser {
             if value.is_none() {
                 let span = self.peek().span;
                 return Err(ParseError {
+                    kind: ParseErrorKind::Syntax,
                     message: "`let ... else` requires an initializer".to_string(),
                     span,
                 });
@@ -3940,6 +3993,7 @@ impl Parser {
                 Ok(Pattern::Literal(Literal::Number(format!("-{repr}"))))
             } else {
                 Err(ParseError {
+                    kind: ParseErrorKind::Syntax,
                     message: format!(
                         "expected numeric literal after `-`, found {}",
                         self.peek_kind()
@@ -3949,6 +4003,7 @@ impl Parser {
             }
         } else {
             Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("expected pattern, found {}", self.peek_kind()),
                 span: self.peek().span,
             })
@@ -4056,14 +4111,14 @@ impl Parser {
             return AssignTarget::Place(target);
         };
         if tuple.elements.is_empty() {
-            self.errors.push(self.error_at_span(
+            self.errors.push(self.restriction_at_span(
                 tuple.span,
                 "a destructuring assignment names at least one target",
             ));
         }
         for place in &tuple.elements {
             if let Expr::Spread(_, span) = place {
-                self.errors.push(self.error_at_span(
+                self.errors.push(self.restriction_at_span(
                     *span,
                     "a destructuring assignment takes no rest; name each target",
                 ));
@@ -4551,6 +4606,7 @@ impl Parser {
                             && !ident.type_args.is_empty()
                         {
                             return Err(ParseError {
+                                kind: ParseErrorKind::Syntax,
                                 message:
                                     "turbofish type arguments already specified on this identifier"
                                         .to_string(),
@@ -4593,6 +4649,7 @@ impl Parser {
                             // Turbofish on a non-identifier expression with no call
                             // following — there is no expression form for this yet.
                             return Err(ParseError {
+                                kind: ParseErrorKind::Syntax,
                                 message: "expected '(' after turbofish type arguments".to_string(),
                                 span: self.peek().span,
                             });
@@ -4628,6 +4685,7 @@ impl Parser {
                             } else {
                                 // Not a valid tuple field sequence
                                 return Err(ParseError {
+                                    kind: ParseErrorKind::Syntax,
                                     message: format!(
                                         "expected field name, found {}",
                                         self.peek_kind()
@@ -4684,6 +4742,7 @@ impl Parser {
                         } else {
                             // :: not followed by <, this is an error
                             return Err(ParseError {
+                                kind: ParseErrorKind::Syntax,
                                 message: "expected '<' after '::'".to_string(),
                                 span: self.peek().span,
                             });
@@ -4879,6 +4938,7 @@ impl Parser {
                 None => head.name.clone(),
             };
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!(
                     "type arguments on both `{owner}` and `{method}` need a static method call; a case takes them on one"
                 ),
@@ -5125,6 +5185,7 @@ impl Parser {
             TokenKind::With => self.parse_with_handler_expr(),
             TokenKind::Hash => self.parse_compile_time_literal_expr(start_span),
             TokenKind::Matches => Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message:
                     "'matches' is an infix operator — write 'expr matches { pattern }' instead"
                         .to_owned(),
@@ -5142,6 +5203,7 @@ impl Parser {
                 ))
             }
             _ => Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("expected expression, found {}", self.peek_kind()),
                 span: start_span,
             }),
@@ -5236,6 +5298,7 @@ impl Parser {
         }
 
         Err(ParseError {
+            kind: ParseErrorKind::Syntax,
             message: "implicit struct literal requires field syntax: { field: value }".into(),
             span: start_span,
         })
@@ -5248,6 +5311,7 @@ impl Parser {
         self.advance(); // consume `#`
         let TokenKind::Ident(raw_name) = self.peek_kind() else {
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: "expected identifier after `#` for compile-time literal".into(),
                 span: start_span,
             });
@@ -5255,17 +5319,25 @@ impl Parser {
         let name = raw_name.clone();
         let name_span = self.advance().span;
 
+        // What a literal takes hangs on how its name is spelled, which a
+        // grammar reading the name as any identifier cannot see.
         if name == "include_str" || name == "include_bytes" {
             let is_str = name == "include_str";
-            self.expect(&TokenKind::LParen)?;
+            if !self.check(&TokenKind::LParen) {
+                return Err(self.restriction_at_span(
+                    self.peek().span,
+                    &format!("expected `(`, found {}", self.peek_kind()),
+                ));
+            }
+            self.advance();
             let path_span = self.peek().span;
             let path = match self.peek_kind() {
                 TokenKind::StringLit { .. } => self.take_string()?,
                 _ => {
-                    return Err(ParseError {
-                        message: format!("expected string literal path argument for `#{name}`"),
-                        span: self.peek().span,
-                    });
+                    return Err(self.restriction_at_span(
+                        self.peek().span,
+                        &format!("expected string literal path argument for `#{name}`"),
+                    ));
                 }
             };
             let close_span = self.expect(&TokenKind::RParen)?.span;
@@ -5290,12 +5362,12 @@ impl Parser {
             "function" => Literal::LocationFunction,
             "data" => Literal::DataSection,
             _ => {
-                return Err(ParseError {
-                    message: format!(
+                return Err(self.restriction_at_span(
+                    start_span.merge(&name_span),
+                    &format!(
                         "unknown compile-time literal `#{name}`, expected `#file`, `#line`, `#function`, `#data`, `#include_str`, or `#include_bytes`"
                     ),
-                    span: start_span.merge(&name_span),
-                });
+                ));
             }
         };
         Ok(Expr::Literal(LiteralExpr {
@@ -5462,6 +5534,7 @@ impl Parser {
         };
         match result {
             Err(err) if err.span.start == value_start.start => Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!(
                     "`resume` takes a value; {}",
                     statement_keyword_name_message("resume")
@@ -5802,10 +5875,8 @@ impl Parser {
             if let Some(packs) = &self.body_packs
                 && !packs.contains(&name)
             {
-                self.errors.push(ParseError {
-                    message: repeat_outside_signature(&name),
-                    span,
-                });
+                self.errors
+                    .push(self.restriction_at_span(span, &repeat_outside_signature(&name)));
                 return Ok(Type::Error(span));
             }
             let id = self.alloc_ast_id();
@@ -6120,7 +6191,7 @@ impl Parser {
     /// element by its parameter's index (`TypeTable::pack_walk_slot`).
     fn bound_generic_params(&self, params: &[GenericParam], span: Span) -> ParseResult<()> {
         if params.len() > MAX_GENERIC_PARAMS {
-            return Err(self.error_at_span(
+            return Err(self.restriction_at_span(
                 span,
                 &format!("a declaration takes at most {MAX_GENERIC_PARAMS} type parameters"),
             ));
@@ -6534,6 +6605,7 @@ impl Parser {
             // Reject implicit tuple expansion: `Name(T, U)` is now invalid
             if self.check(&TokenKind::Comma) {
                 return Err(ParseError {
+kind: ParseErrorKind::Syntax,
                     message: "variant case payload must be a single type; use explicit tuple syntax like `Name([T, U])` for multiple values".to_string(),
                     span: self.peek().span,
                 });
@@ -7184,6 +7256,7 @@ impl Parser {
                 }
                 _ => {
                     return Err(ParseError {
+                        kind: ParseErrorKind::Syntax,
                         message: format!(
                             "expected `import` or `export` in world declaration, found {}",
                             self.peek_kind()
@@ -7352,10 +7425,12 @@ impl Parser {
             return Ok(());
         };
         let at = origin.advance(&spec[..error.offset]);
-        Err(ParseError {
-            message: format!("{error} in template string"),
-            span: span_of(at, spec[error.offset..].chars().next(), self.ast_id_space),
-        })
+        // A specifier is read by character, out of tokens a grammar reads as
+        // whole identifiers and numbers.
+        Err(self.restriction_at_span(
+            span_of(at, spec[error.offset..].chars().next(), self.ast_id_space),
+            &format!("{error} in template string"),
+        ))
     }
 
     /// Parse an interpolation expression string.
@@ -7376,6 +7451,7 @@ impl Parser {
     ) -> ParseResult<Expr> {
         if expr_str.is_empty() {
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: "empty interpolation expression in template string".to_string(),
                 span: span_of_open_brace(open, self.ast_id_space),
             });
@@ -7387,6 +7463,7 @@ impl Parser {
         // `{…}`.
         for e in &lex_result.errors {
             self.errors.push(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("error parsing template interpolation: {e}"),
                 span: e.span,
             });
@@ -7635,6 +7712,7 @@ fn pack_names(params: &[GenericParam]) -> Vec<String> {
 fn reject_resource_linearity(attrs: &[Attribute]) -> ParseResult<()> {
     match attrs.iter().find(|a| a.cm_resource_linearity().is_some()) {
         Some(attr) => Err(ParseError {
+            kind: ParseErrorKind::Syntax,
             message: "#[cm(..., linearity=...)] declares a resource's linearity; \
                 it belongs on a `resource` declaration"
                 .to_string(),
@@ -7753,6 +7831,7 @@ fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<AttrVa
     let cleaned: String = repr.chars().filter(|c| *c != '_').collect();
     if defaults_to_float(repr) {
         let f: f64 = cleaned.parse().map_err(|_| ParseError {
+            kind: ParseErrorKind::Syntax,
             message: format!("invalid numeric attribute value: {repr}"),
             span,
         })?;
@@ -7778,6 +7857,7 @@ fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<AttrVa
             cleaned.parse()
         }
         .map_err(|_| ParseError {
+            kind: ParseErrorKind::Syntax,
             message: format!("invalid integer attribute value: {repr}"),
             span,
         })?;

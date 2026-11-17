@@ -10,6 +10,7 @@
 (STRING_LITERAL) @string
 (CHAR_LITERAL) @string
 (FLOAT) @number
+(FLOAT_EXP) @number
 (INTEGER) @number
 
 ; Template strings. Everything that is not code is string — backticks, text
@@ -18,7 +19,9 @@
 ; tail is formatting metadata, so it mutes.
 (TEMPLATE_TEXT) @string
 (BACKTICK) @string
+(TAG_BACKTICK) @string
 (RAW_OPEN) @string
+(TAG_RAW_OPEN) @string
 (RAW_CLOSE) @string
 (INTERP_OPEN) @string
 (interpolationEnd "}" @string)
@@ -57,7 +60,7 @@
 ; a rule nested inside another is listed above it.
 ;
 ; Only a rule whose whole subtree is of one nature can carry an override.
-; `typeRef` and `genericParam` hold nothing but types. For a member name the
+; `typeAtom` and `genericParam` hold nothing but types. For a member name the
 ; subtree is whatever `postfixOp` holds beside it, so `Wado.g4` wraps each use
 ; site in a one-token rule and those carry the captures instead.
 ;
@@ -65,8 +68,8 @@
 ; context-free grammar has. `mise run check-highlight` reports what stays
 ; uncoloured, by the kind the compiler resolved it to.
 (formatSpec (IDENTIFIER) @comment)
-(typeRef (IDENTIFIER) @type)
-(typeRef "resume" @type)
+(typeAtom (IDENTIFIER) @type)
+(typeAtom "resume" @type)
 (genericParam (IDENTIFIER) @type)
 (genericParam "resume" @type)
 ; `.method()`, and `.field` with a field's name wherever it is declared or
