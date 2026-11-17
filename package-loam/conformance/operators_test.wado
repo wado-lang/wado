@@ -780,8 +780,9 @@ test "MatMulNBits of 8 bits holds a value in each byte" {
 
 /// A `QMoE` around a zero point of 8 sums terms of either sign to values far
 /// smaller than the terms, so in f32 onnxruntime's sits up to 2.3e-6 from the
-/// value computed in f64, and Loam's up to 2.6e-6.
-global QMOE_TOLERANCE: f32 = 3e-6;
+/// value computed in f64, and Loam's up to 2.6e-6. Held to onnxruntime, Loam
+/// may part from it by their sum.
+global QMOE_TOLERANCE: f32 = 5e-6;
 
 test "QMoE over more picks than experts weighs each expert's rows" {
     assert_agrees(

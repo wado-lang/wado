@@ -707,7 +707,6 @@ fn skip_rms_normalization(node: &Node, body: &mut FunctionBody) -> Result<(), St
     if node.has_operand(3) {
         sum = body.binary("Add", &sum, &body.computed_in(node.inputs[3], 1));
     }
-    body.x = sum;
     if node.has_output(3) {
         body.output_to("CastLike", [sum, given], node.outputs[3]);
     }

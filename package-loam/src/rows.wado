@@ -8,6 +8,7 @@ use { GROUP_QUERY_ATTENTION, Graph, MATMUL_NBITS, Node, settled } from "./graph.
 use {
     ATTENTION_BIAS,
     Checked,
+    HEAD_SINK,
     ROTARY_COS,
     ROTARY_SIN,
     arg_max_axis,
@@ -99,6 +100,7 @@ pub fn graph_operands(node: &Node) -> List<i32> {
             read.push(ROTARY_SIN);
         }
         read.push(ATTENTION_BIAS);
+        read.push(HEAD_SINK);
         return read;
     }
     return match node.op.as_str_slice() {

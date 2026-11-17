@@ -431,6 +431,13 @@ test "QMoE refuses what onnxruntime leaves open, and weights laid out apart from
     assert k == "Y = com.microsoft.QMoE: attribute k is 5, and there are 4 experts";
     let short = y_axes(experts("uint8[4, 64, 8] W1", SWIGLU)).unwrap_err();
     assert short == "Y = com.microsoft.QMoE: operand 2 is [4, 64, 8], and its packing makes it [4, 64, 16]";
+    let gate = y_axes(
+        experts("uint8[4, 64, 16] W1, uint8[4, 64, 16] W3", SWIGLU).replace(
+            "(X, R, W1, S1, \"\", W2, S2)",
+            "(X, R, W1, S1, \"\", W2, S2, \"\", W3)",
+        ),
+    ).unwrap_err();
+    assert gate == "Y = com.microsoft.QMoE: operand 8 is given, and separate gate weights, router weights and scales of other formats are not supported";
 }
 
 test "MatMulNBits packs 2, 4 or 8 bits in blocks of a power of two from 16" {

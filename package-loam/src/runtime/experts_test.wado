@@ -1,0 +1,28 @@
+//! The two forms a mixture of experts takes compute one result.
+
+use { A, C, experts_case, mixing } from "./graph_cases.wado";
+use { Cpu, Tensor } from "./tensor.wado";
+
+test "a token whose other logits are -inf runs its one expert once, in either form" {
+    let cpu = &mut Cpu {};
+    let c = experts_case(2);
+    let alone = [5.0, -f32::INFINITY, -f32::INFINITY, -f32::INFINITY] as List<f32>;
+    let mut twice = alone;
+    twice.extend(&alone);
+    let mut rows = c.x;
+    rows.data = c.x.data[0..<32].to_list();
+    rows.data.extend(&rows.data);
+    let by_experts = mixing(cpu, &rows, &Tensor::<f32, [A, C]> {
+        data: twice,
+        extents: [2, 4],
+    }, &c.up, &c.down);
+    let mut row = rows;
+    row.data = rows.data[0..<32].to_list();
+    row.extents = [1, 32];
+    // One token's two picks are fewer than the four experts, so it runs each pick.
+    let by_picks = mixing(cpu, &row, &Tensor::<f32, [A, C]> {
+        data: alone,
+        extents: [1, 4],
+    }, &c.up, &c.down);
+    assert by_picks.data == by_experts.data[0..<32].to_list();
+}

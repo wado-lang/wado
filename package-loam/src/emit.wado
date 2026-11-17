@@ -2454,11 +2454,6 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     let k = shapes[node.inputs[1]];
     let past = shapes[node.inputs[3]];
     let total = shapes[named_present(node).unwrap()].axes[2].name;
-    let optional = |index: i32| if node.has_operand(index) {
-        `Option::Some(${exprs.reference(&node.inputs[index])})`;
-    } else {
-        "null";
-    };
     let [pos, half] = if node.has_operand(ROTARY_COS) {
         let cache = shapes[node.inputs[ROTARY_COS]];
         [cache.axes[0].name, cache.axes[1].name];
@@ -2495,10 +2490,10 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     operands.push("null");
     // The caches are read only where the attribute asks for rotation.
     for let index of [ROTARY_COS, ROTARY_SIN] {
-        operands.push(if options.rotary { optional(index) } else { "null" });
+        operands.push(if options.rotary { exprs.optional(node, index) } else { "null" });
     }
-    operands.push(optional(ATTENTION_BIAS));
-    operands.push(optional(HEAD_SINK));
+    operands.push(exprs.optional(node, ATTENTION_BIAS));
+    operands.push(exprs.optional(node, HEAD_SINK));
     operands.push(attention);
     return Result::Ok(`backend.group_query_attention::<${turbofish.join(", ")}>(${operands.join(", ")})`);
 }

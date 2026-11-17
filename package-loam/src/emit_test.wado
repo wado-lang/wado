@@ -1274,6 +1274,24 @@ test "a build takes a padded past to its attention as a buffer of fixed capacity
     );
 }
 
+test "an attention's sinks folded from a constant are kept as a weight" {
+    let source = `g (float[1, S, 8] Q, float[1, S, 8] K, float[1, S, 8] V, float[1, 1, P, 8] PK, float[1, 1, P, 8] PV, int64[1, T] M)
+        => (float[1, S, 8] Y, float[1, 1, T, 8] PY, float[1, 1, T, 8] VY) {
+        Dims = Shape(M)
+        One = Constant<value_ints = [1]>()
+        Total = Gather(Dims, One)
+        Last = Sub(Total, One)
+        L = Cast<to = 6>(Last)
+        TotalScalar = Squeeze(Total)
+        T32 = Cast<to = 6>(TotalScalar)
+        H = Constant<value = float[1] {0.5}>()
+        Y, PY, VY = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1>(Q, K, V, PK, PV, L, T32, "", "", "", "", H)
+    }`;
+    let out = generate(source).unwrap();
+    assert out.contains("Option::Some(&weights.H), &Attention {"), out;
+    assert out.contains("data: [0.5 as f32], extents: [1]");
+}
+
 /// An attention over a batch of `B` rows, each with a past of its own length.
 global ROWS_ATTENTION: String = `g (float[B, S, 8] Q, float[B, S, 8] K, float[B, S, 8] V, float[B, 1, P, 8] PK, float[B, 1, P, 8] PV, int64[B, T] M)
     => (float[B, S, 8] Y, float[B, 1, T, 8] PY, float[B, 1, T, 8] VY) {

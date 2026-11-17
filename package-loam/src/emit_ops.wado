@@ -520,7 +520,7 @@ fn built_quantized(node: &Node, checked: &Checked, exprs: &Operands, symbols: &m
     let q = settled(quantization(node));
     let scales = shapes[node.inputs[2]];
     let zeros = if node.has_operand(3) { shapes[node.inputs[3]].axes[1].name } else { scales.axes[1].name };
-    let zero_points = if node.has_operand(3) { `Option::Some(${exprs.reference(&node.inputs[3])})` } else { "null" };
+    let zero_points = exprs.optional(node, 3);
     let quantized = `&Quantized { bits: ${q.bits}, block: ${q.block} }`;
     let operands: List<String> = (0..<3).map(|i| exprs.reference(&node.inputs[i])).collect();
     if node.op == GATHER_BLOCK_QUANTIZED {
@@ -563,11 +563,6 @@ fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     let element = checked.primitives[node.outputs[0]];
     let options = settled(expert_options(node));
     let q = settled(quantization(node));
-    let optional = |index: i32| if node.has_operand(index) {
-        `Option::Some(${exprs.reference(&node.inputs[index])})`;
-    } else {
-        "null";
-    };
     let mut turbofish: List<String> = [
         BACKEND_PARAM,
         element,
@@ -594,8 +589,8 @@ fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
         operands.extend(&([
             exprs.reference(&node.inputs[at]),
             exprs.reference(&node.inputs[at + 1]),
-            optional(at + 2),
-            optional(zeros),
+            exprs.optional(node, at + 2),
+            exprs.optional(node, zeros),
         ] as List<String>));
     }
     operands.push(

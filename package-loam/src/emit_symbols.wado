@@ -5,7 +5,7 @@
 
 use { HashMap, HashSet } from "core:collections";
 use { Extent, Solved, solved } from "./extent.wado";
-use { Graph } from "./graph.wado";
+use { Graph, Node } from "./graph.wado";
 use { BACKEND_PARAM, is_bound, module_idents } from "./idents.wado";
 use { Lowers, Op, Poly } from "./poly.wado";
 use { RowRefusal, SLOTS } from "./rows.wado";
@@ -248,6 +248,12 @@ impl Operands {
     internal fn reference(&self, tensor: &String) -> String {
         let named = self.values.get(*tensor).unwrap();
         return if self.borrowed.contains(*tensor) { named } else { `&${named}` };
+    }
+
+    /// `node`'s operand `index` as an `Option` argument: `null` where it is
+    /// absent.
+    internal fn optional(&self, node: &Node, index: i32) -> String {
+        return if node.has_operand(index) { `Option::Some(${self.reference(&node.inputs[index])})` } else { "null" };
     }
 
     internal fn value(&self, tensor: &String) -> String {
