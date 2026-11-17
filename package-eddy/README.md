@@ -87,8 +87,8 @@ only inside Eddy's confinement. The record and the patches stay in the run's
 artifact for 90 days, as `eddy-<pr>-<head>`.
 
 The workflow holds no API key. It exchanges the job's GitHub OIDC token for a
-short-lived one under a Workload Identity Federation rule, which accepts only
-`eddy.yml` on main.
+short-lived one under a Workload Identity Federation rule, which accepts this
+repository's jobs.
 
 `src/main.wado` states the options.
 
