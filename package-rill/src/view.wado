@@ -20,6 +20,11 @@ pub fn bind_text(target: Element, content: fn mut() -> String with Track) with (
     let mut content = content;
     let shown = Dom::document().create_text_node("");
     target.append_child(shown);
+    on_cleanup(|| {
+        if let Some(holder) = shown.parent_node() {
+            holder.remove_child(shown);
+        }
+    });
     observe(|| shown.set_data(content()));
 }
 
@@ -75,38 +80,87 @@ pub fn each<T: Eq>(
     });
     observe(|| {
         let mut kept: List<Row<T>> = [];
-        let mut moved = false;
+        // Each kept row's index among the rows before, -1 for a new one.
+        let mut was: List<i32> = [];
+        let mut left: List<i32> = (0..<rows.len()).collect();
         for let item of items() {
-            let mut found: Option<Row<T>> = null;
+            let mut found = false;
             for let i of 0..<rows.len() {
                 if rows[i].item == item {
-                    found = Option::Some(rows.remove(i));
-                    moved = moved || i != 0;
+                    kept.push(rows.remove(i));
+                    was.push(left.remove(i));
+                    found = true;
                     break;
                 }
             }
-            if let Some(row) = found {
-                kept.push(row);
+            if found {
                 continue;
             }
             let mut node: Option<Element> = null;
             let dispose = scope(|| node = Option::Some(render(item)));
             kept.push(Row { item, node: node.unwrap(), dispose });
-            moved = true;
+            was.push(-1);
         }
         remove_rows(parent, rows);
-        if moved {
-            // From the last row back, each row belongs just ahead of the one
-            // after it, so only a row found elsewhere is moved.
-            let mut next: Option<Node> = null;
-            for let mut i = kept.len() - 1; i >= 0; i -= 1 {
-                let node = kept[i].node;
-                if node.parent_node() == null || node.next_sibling() != next {
-                    parent.insert_before(node, next);
-                }
-                next = Option::Some(node);
+        let home = Option::Some(parent as Node);
+        for let i of 0..<kept.len() {
+            if kept[i].node.parent_node() != home {
+                was[i] = -1;
             }
+        }
+        // The rows already in their old order stay; the rest move in among
+        // them, from the last row back.
+        let stay = longest_increasing(&was);
+        let mut next: Option<Node> = null;
+        for let mut i = kept.len() - 1; i >= 0; i -= 1 {
+            let node = kept[i].node;
+            if !stay[i] {
+                parent.insert_before(node, next);
+            }
+            next = Option::Some(node);
         }
         rows = kept;
     });
+}
+
+// Marks a longest strictly increasing subsequence of `values`, skipping the
+// negative ones.
+fn longest_increasing(values: &List<i32>) -> List<bool> {
+    // `tails[k]` ends the increasing run of length k + 1 with the least last value.
+    let mut tails: List<i32> = [];
+    let mut previous: List<i32> = [];
+    for let i of 0..<values.len() {
+        previous.push(-1);
+        if values[i] < 0 {
+            continue;
+        }
+        let mut low = 0;
+        let mut high = tails.len();
+        while low < high {
+            let middle = (low + high) / 2;
+            if values[tails[middle]] < values[i] {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        if low > 0 {
+            previous[i] = tails[low - 1];
+        }
+        if low == tails.len() {
+            tails.push(i);
+        } else {
+            tails[low] = i;
+        }
+    }
+    let mut marked: List<bool> = [];
+    for let _ of 0..<values.len() {
+        marked.push(false);
+    }
+    let mut at = if tails.is_empty() { -1 } else { tails[tails.len() - 1] };
+    while at >= 0 {
+        marked[at] = true;
+        at = previous[at];
+    }
+    return marked;
 }
