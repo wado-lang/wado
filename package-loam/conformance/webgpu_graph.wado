@@ -35,6 +35,7 @@ use {
     Graph,
     Holds,
     Placed,
+    Quantized,
     Slots,
     strided_gather,
     Tensor,
@@ -234,6 +235,28 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         quantized_in::<f16>(device, ` of f16${words}`);
         quantized_in::<bf16>(device, ` of bf16${words}`);
     }
+
+    // A block past the inner extent pads with values the product never reads,
+    // however large they round: 7 times 10000 is past f16's range.
+    let mut padding = List::<u8>::filled(16, 0xff);
+    padding[0] = 0xf8;
+    let padded = gpu.quantized_product::<f16, [cases::A, cases::B], cases::C, cases::Blocks, cases::Blob, cases::Zeros, [cases::A, cases::C]>(
+        &gpu.upload(&Tensor::<f16, [cases::A, cases::B]> {
+            data: [1.0],
+            extents: [1, 1],
+        }),
+        &gpu.upload(&Tensor::<u8, [cases::C, cases::Blocks, cases::Blob]> {
+            data: padding,
+            extents: [1, 1, 16],
+        }),
+        &gpu.upload(&Tensor::<f16, [cases::C, cases::Blocks]> {
+            data: [10000.0],
+            extents: [1, 1],
+        }),
+        null,
+        &Quantized { bits: 4, block: 32 },
+    );
+    assert gpu.download(&padded).data == [0.0] as List<f16>, "a padding value adds nothing";
 
     // The packed weights a model keeps, as it keeps them.
     let packed = gpu.kept_weights(cases::quantized_pass, 2, 5, cases::quantized_weight).unwrap();

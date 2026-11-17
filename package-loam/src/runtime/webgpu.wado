@@ -3221,7 +3221,7 @@ impl WebGpuBackend {
         let weight = &operands[1];
         let blob = packed[2];
         let aligned = blob % 4 == 0 && weight.offset % 4 == 0 && weight.strides == [packed[1] * blob, blob, 1];
-        let shape = QuantizedShape { bits, block, zero_points, half, rows, aligned, paired };
+        let shape = QuantizedShape { bits, block, zero_points, half, rows, aligned, paired, padded: k % block != 0 };
         self.dispatch_bound(
             &all,
             fresh(&out),
@@ -4518,8 +4518,9 @@ fn zero(n: u32, b: u32) -> f32 {
 /// What a quantized product's shader is specialized to beside its epilogue:
 /// the bits of a value and the values of a block, whether zero points are
 /// bound, the half each weight rounds to, the most rows a workgroup sums,
-/// whether the weight's columns each start a word, and whether its columns
-/// pair, as `quantized_product_kernel` says.
+/// whether the weight's columns each start a word, whether its columns pair,
+/// as `quantized_product_kernel` says, and whether its last block pads past
+/// the inner extent.
 struct QuantizedShape {
     bits: i32,
     block: i32,
@@ -4528,6 +4529,7 @@ struct QuantizedShape {
     rows: i32,
     aligned: bool,
     paired: bool,
+    padded: bool,
 }
 
 /// The WGSL of `Graph::quantized_product`, one workgroup per
@@ -4547,7 +4549,7 @@ struct QuantizedShape {
 /// `[M, K]`, the packed weight, the scales, any zero points and the epilogue's
 /// operands over `[M, N]`, or `[M, N / 2]` where `paired`.
 fn quantized_product_shader(op: &Expr, bindings: &List<i32>, shape: &QuantizedShape, words: &List<Words>) -> String {
-    let QuantizedShape { bits, block, zero_points, half, rows, aligned, paired } = *shape;
+    let QuantizedShape { bits, block, zero_points, half, rows, aligned, paired, padded } = *shape;
     let lanes = QUANTIZED_LANES / QUANTIZED_COLUMNS;
     assert lanes >= QUANTIZED_ROWS, "a column's lanes write its rows";
     let segment = i32::min(block, SEGMENT);
@@ -4588,19 +4590,39 @@ fn quantized_product_shader(op: &Expr, bindings: &List<i32>, shape: &QuantizedSh
         }
 `);
     }
-    let mut segment_sums = "";
-    for let t of 0..<segment_bytes / unit {
-        segment_sums.push_str(`            let packed${t} = ${read(t)};\n`);
-        for let v of 0..<unit * per {
-            let k = t * unit * per + v;
-            let w = rounded_wgsl(half, `(f32((packed${t} >> ${v * bits}u) & MASK) - center) * scale`);
-            segment_sums.push_str(`            {\n                let w = ${w};\n`);
-            for let r of 0..<rows {
-                segment_sums.push_str(`                acc[${r}] += xs[${r * chunk + k * lanes}u + lane] * w;\n`);
+    // A segment reaching past the inner extent `K` pads with values the
+    // product never reads: one that rounds to an infinity would make the
+    // staged zero it meets a NaN, so each value past `K` weighs zero. Only a
+    // `padded` weight's last block holds one, so the other segments, and every
+    // segment of a weight whose blocks fill `K`, test nothing.
+    let segment_sums = |past_k: bool| {
+        let mut sums = "";
+        for let t of 0..<segment_bytes / unit {
+            sums.push_str(`                let packed${t} = ${read(t)};\n`);
+            for let v of 0..<unit * per {
+                let k = t * unit * per + v;
+                let mut w = rounded_wgsl(half, `(f32((packed${t} >> ${v * bits}u) & MASK) - center) * scale`);
+                if past_k {
+                    w = `select(0.0, ${w}, start + ${k}u < p[3])`;
+                }
+                sums.push_str(`                {\n                    let w = ${w};\n`);
+                for let r of 0..<rows {
+                    sums.push_str(`                    acc[${r}] += xs[${r * chunk + k * lanes}u + lane] * w;\n`);
+                }
+                sums.push_str("                }\n");
             }
-            segment_sums.push_str("            }\n");
         }
-    }
+        return sums;
+    };
+    let sums = if padded {
+        `            let start = b * ${block}u + s % ${block / segment}u * ${segment}u;
+            if start + ${segment}u <= p[3] {
+${segment_sums(false)}            } else {
+${segment_sums(true)}            }
+`;
+    } else {
+        segment_sums(false);
+    };
     assert !paired || QUANTIZED_COLUMNS % 2 == 0, "a pair's columns sum in one workgroup";
     // Where `paired`, the odd column's lanes follow the even one's.
     let mut epilogue = `        let x0 = sums[lane * ${QUANTIZED_LANES}u + lid - lane];\n`;
@@ -4646,7 +4668,7 @@ ${staging}        workgroupBarrier();
             let within = s % ${block / segment}u * ${segment_bytes}u;
             let scale = ${scale};
             let center = zero(n, b);
-${segment_sums}        }
+${sums}        }
         workgroupBarrier();
     }
     for (var r = 0u; r < ${rows}u; r++) {
