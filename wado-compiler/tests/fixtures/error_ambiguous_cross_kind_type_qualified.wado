@@ -1,6 +1,7 @@
 // `P::k(&p)` names what `P` answers `k` with, whichever kind a declaration is:
 // one trait's static and another trait's method at one link are two traits,
-// which only the level could separate (issue #2650).
+// which only the level could separate (issue #2650). The example spelling
+// names the trait whose method takes the receiver.
 trait Alpha with () {
     fn k() -> i32;
 }
@@ -31,4 +32,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "ambiguous method 'k'"}
+{"compile_error": "ambiguous method 'k': declared by 'Beta' and 'Alpha'; name the trait, e.g. 'Beta::k(&value)'"}

@@ -1569,6 +1569,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             0 => kind(takes_receiver),
             1 => kind(kinds[0]),
             _ => {
+                // A receiver-taking trait first: the diagnostic's example
+                // spelling, `Trait::m(&value)`, is that kind's.
+                let mut blocks = blocks;
+                blocks.sort_by_key(|&block| {
+                    self.block_takes_receiver(block, method_name) != Some(true)
+                });
                 let defs = self.tysys.resolutions.defs();
                 let traits: IndexSet<String> = blocks
                     .iter()
@@ -1628,7 +1634,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         reach: Reach,
     ) -> Option<(u32, Vec<DefId>)> {
         let mut types: IndexSet<TypeId> = self.spelled_type(receiver).into_iter().collect();
-        if receiver.ty().is_none() {
+        let unapplied = receiver.ty().is_none()
+            && receiver
+                .key()
+                .decl()
+                .is_some_and(|def| self.bare_generic_type_arity(def).is_some());
+        if unapplied {
             types.extend(self.written_instances(receiver));
         }
         let mut found: Vec<(u32, Vec<DefId>)> = types
@@ -1803,30 +1814,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         if instances.is_empty() {
-            instances = self.written_instances_answering(receiver, method_name);
+            instances = self
+                .written_instances(receiver)
+                .into_iter()
+                .filter(|&target| {
+                    !self
+                        .applicable_blanket_statics(target, method_name, NewtypePeel::Here)
+                        .is_empty()
+                })
+                .collect();
         }
         if instances.len() == 1 {
             UnappliedStatic::Settled(instances[0])
         } else {
             UnappliedStatic::Open
         }
-    }
-
-    /// The instances of `receiver`'s type that a trait impl is written for and
-    /// a value blanket's static `method_name` answers at.
-    fn written_instances_answering(
-        &mut self,
-        receiver: &ReceiverId,
-        method_name: &str,
-    ) -> IndexSet<TypeId> {
-        self.written_instances(receiver)
-            .into_iter()
-            .filter(|&target| {
-                !self
-                    .applicable_blanket_statics(target, method_name, NewtypePeel::Here)
-                    .is_empty()
-            })
-            .collect()
     }
 
     /// Whether `receiver_type`, behind its references, is the type `spelled`

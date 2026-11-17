@@ -393,14 +393,15 @@ Where a method answers,
 `recv` must be of that type or a resource extending it. A trait's method that
 the spelling does not reach is reached as `Trait::method(recv, …)`.
 
-A generic type spelled without its arguments names no one instance, so
-`Pair::method(…)` names what the instances of `Pair` that an impl is written
-for answer with, a blanket whose bounds hold of one of them included. The
-receiver's own type then settles whether it answers. A static has no receiver, so the instance comes
+A generic type spelled without its arguments names no one instance. So
+`Pair::method(…)` names what an impl written for `Pair`'s head answers with,
+and what the instances of `Pair` an impl is written for answer with, a blanket
+whose bounds hold of one of them included. The receiver's own type then
+settles whether it answers. A static has no receiver, so the instance comes
 from the expected type or an argument, as a type parameter's would. Where
 neither says, it is the one instance an impl is written for that the static
-answers at. Two such instances are ambiguous, and none leaves the type's
-arguments to infer.
+answers at. With two such instances or none, the type's arguments are left to
+infer, and the call reports that.
 
 An associated function with no `self` has no receiver argument to bind `Self`
 from, so the trait's turbofish binds it: `Trait::<Self = T>::method(…)`. The

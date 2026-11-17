@@ -5701,6 +5701,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // which is the ambiguity every other spelling of that shape reports.
         let ranked = self.resolve_static_callee(StaticQuery {
             arg_types: args,
+            expected_return: expected_type,
             ..StaticQuery::of(receiver, method)
         });
         if self.report_unresolved_static(&ranked, method, args, span) {
