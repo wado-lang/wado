@@ -492,20 +492,11 @@ fn write_back(flat: &mut FlatPackage, temp_module: TirModule) {
 /// `T^Trait::method` receiver is substituted.
 fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Option<ModuleSource> {
     match type_table.get(type_id) {
-        ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
-        ResolvedType::Unit | ResolvedType::Never => Some(ModuleSource::primitive()),
-        ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
-        ResolvedType::Struct { .. }
-        | ResolvedType::Tuple(_)
-        | ResolvedType::Enum { .. }
-        | ResolvedType::Flags { .. }
-        | ResolvedType::Resource { .. }
-        | ResolvedType::Variant { .. } => type_table.nominal_head(type_id).map(|(_, m)| m),
         // An inherited instance lives in the base type's module.
         ResolvedType::Newtype { base_type, .. } => {
             module_source_for_trait_impl(type_table, *base_type)
         }
-        _ => None,
+        _ => type_table.impl_home(type_id),
     }
 }
 
