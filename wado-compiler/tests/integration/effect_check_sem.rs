@@ -91,29 +91,6 @@ export fn run() with Stdout {
 }
 
 #[test]
-fn signature_resource_is_not_required_again() {
-    // `use_counter` takes `&Counter` and calls a Counter method. Because the
-    // resource already appears in the signature, no explicit `with Counter` is
-    // needed — `signature_resources` must admit it.
-    let source = r#"
-pub resource Counter {
-    fn bump(&self);
-}
-
-fn use_counter(c: &Counter) {
-    c.bump();
-}
-
-export fn run() {}
-"#;
-    assert!(
-        violations(source).is_empty(),
-        "Counter is in the signature, so the call is covered: {:?}",
-        violations(source)
-    );
-}
-
-#[test]
 fn effect_param_resolves_from_closure_argument() {
     // `wrapper<effect E>(f: fn() with E) with E` is called from an effect-free
     // function with a closure that needs Stdout, so E resolves to Stdout and
@@ -169,15 +146,15 @@ export fn run() with Stdout {
 
 #[test]
 fn stdlib_resource_propagation_is_not_a_false_positive() {
-    // `consume` takes `Stream<u8>` (granting Stream by signature) and uses the
-    // Stream API; `run` has `with Stdout` and uses Stream via propagation
+    // `consume` declares `with Stream` and so holds `StreamWritable`; `run`
+    // has `with Stdout` and uses Stream via propagation
     // (`Stdout → Stream → StreamWritable`). Both must compile clean — this
     // requires the stdlib `effect_ops` to be seeded so the propagation closure
     // is complete. (Regression guard for the snapshot-seeding fix.)
     let source = r#"
 use { println, Stdout } from "core:cli";
 
-pub fn consume(rx: Stream<u8>) {
+pub fn consume(rx: Stream<u8>) with Stream {
     let [rx2, tx2] = Stream::<u8>::new();
     tx2.drop();
     rx2.drop();

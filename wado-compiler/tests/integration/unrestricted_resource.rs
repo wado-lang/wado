@@ -246,7 +246,7 @@ fn chain_with_method(parent_body: &str, rest: &str) -> String {
 fn a_child_calls_an_inherited_method() {
     let source = chain_with_method(
         "    fn tag(&self) -> String;",
-        "fn use_it(n: Node) -> String { return n.tag(); }",
+        "fn use_it(n: Node) -> String with EventTarget { return n.tag(); }",
     );
     let d = diagnostics(&source);
     assert!(d.is_empty(), "an inherited method is callable, got {d:?}");
@@ -266,7 +266,7 @@ fn a_static_method_does_not_inherit() {
 fn self_stays_the_declaring_resource() {
     let source = chain_with_method(
         "    fn me(&self) -> Self;",
-        "fn widen(n: Node) -> EventTarget { return n.me(); }",
+        "fn widen(n: Node) -> EventTarget with EventTarget { return n.me(); }",
     );
     let d = diagnostics(&source);
     assert!(
@@ -412,7 +412,7 @@ fn match_arms_agree_on_the_ancestor() {
 fn probe_the_declaring_resource_qualifies_its_own_method() {
     let source = chain_with_method(
         "    fn tag(&self) -> String;",
-        "fn via_parent(n: Node) -> String { return EventTarget::tag(&n); }",
+        "fn via_parent(n: Node) -> String with EventTarget { return EventTarget::tag(&n); }",
     );
     let d = diagnostics(&source);
     assert!(d.is_empty(), "probe: parent-qualified, got {d:?}");
@@ -422,7 +422,7 @@ fn probe_the_declaring_resource_qualifies_its_own_method() {
 fn probe_a_resource_qualifies_its_own_method() {
     let source = "#[cm(\"test:dom/node\", linearity = \"unrestricted\", repr = \"externref\")]\n\
          resource Node {\n    fn tag(&self) -> String;\n}\n\
-         fn own(n: Node) -> String { return Node::tag(&n); }\n\
+         fn own(n: Node) -> String with Node { return Node::tag(&n); }\n\
          export fn run() {}\n";
     let d = diagnostics(source);
     assert!(d.is_empty(), "probe: own method qualified, got {d:?}");
@@ -432,7 +432,7 @@ fn probe_a_resource_qualifies_its_own_method() {
 fn the_qualified_form_reaches_an_inherited_method() {
     let source = chain_with_method(
         "    fn tag(&self) -> String;",
-        "fn via_child(n: Node) -> String { return Node::tag(&n); }",
+        "fn via_child(n: Node) -> String with EventTarget { return Node::tag(&n); }",
     );
     let d = diagnostics(&source);
     assert!(
@@ -598,17 +598,17 @@ fn the_ambiguity_names_the_resource_declaring_the_instance_method() {
 }
 
 #[test]
-fn an_ancestor_qualified_call_needs_no_extra_resource() {
+fn an_ancestor_qualified_call_passes_every_check() {
     // The ambiguity diagnostic tells the user to write exactly this, so the
     // form it names must pass every check, not only the elaborator's.
     let source = chain_with_method(
         "    fn id(&self) -> String;",
-        "fn follow(n: Node) -> String { return EventTarget::id(&n); }",
+        "fn follow(n: Node) -> String with EventTarget { return EventTarget::id(&n); }",
     );
     let d = diagnostics(&source);
     assert!(
         d.is_empty(),
-        "a child holds its ancestors' capability, got {d:?}"
+        "the ancestor-qualified form passes, got {d:?}"
     );
 }
 
@@ -671,7 +671,7 @@ fn a_child_static_shadows_a_parent_instance_method_name() {
          resource EventTarget {\n    fn make(&self, tag: String) -> EventTarget;\n}\n\
          #[cm(\"test:dom/node\", linearity = \"unrestricted\", repr = \"externref\")]\n\
          resource Node extends EventTarget {\n    fn make() -> Node;\n}\n\
-         fn build() -> Node { return Node::make(); }\n\
+         fn build() -> Node with Node { return Node::make(); }\n\
          export fn run() {}\n";
     let d = diagnostics(source);
     assert!(
