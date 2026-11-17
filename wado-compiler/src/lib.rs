@@ -51,6 +51,7 @@ pub mod loader;
 pub mod logger;
 pub mod lower;
 pub(crate) mod marker;
+pub mod module_path;
 pub mod module_source;
 pub mod monomorphize;
 pub mod name;
@@ -95,7 +96,7 @@ use crate::defs::DefId;
 use crate::elaborator::liveness::{LivenessScope, PackageScope};
 use crate::elaborator::trait_env::TraitEnv;
 use crate::escape::quoted;
-use crate::name::entry_dir_of;
+use crate::module_path::entry_dir_of;
 use crate::resolve::Shadowed;
 use crate::wit_consume::module_host_leaf_imports;
 use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo};
@@ -723,7 +724,7 @@ impl PackageSources {
 
     /// The identity the package's load gives `member`.
     pub fn member_identity(&self, member: &str) -> String {
-        name::resolve_local_identity(&self.root, None, &format!("./{member}"))
+        module_path::resolve_local_identity(&self.root, None, &format!("./{member}"))
     }
 
     /// Fold `index`, what a Kiln pipeline run with `member` as its entry
@@ -743,7 +744,7 @@ impl PackageSources {
             let decl = if decl == run_name {
                 member_identity.clone()
             } else {
-                name::resolve_local_identity(&self.root, Some(&member_identity), decl)
+                module_path::resolve_local_identity(&self.root, Some(&member_identity), decl)
             };
             into.insert(&decl, from, uri);
         }

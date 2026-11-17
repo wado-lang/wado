@@ -1632,7 +1632,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn record_use_specifier_references(&mut self, module: &Module) {
         for item in &module.items {
             let Item::Use(use_decl) = item else { continue };
-            let source = name::resolve_import_with_invocations(
+            let source = crate::module_path::resolve_import_with_invocations(
                 &mut self.interner.borrow_mut(),
                 &self.current_module_source,
                 &use_decl.source,

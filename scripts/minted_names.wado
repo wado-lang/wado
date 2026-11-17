@@ -1,7 +1,7 @@
-//! Fails when a compiler source outside `name.rs` formats a minted name: a
+//! Fails when a compiler source outside `src/name/` formats a minted name: a
 //! `format!`, `format_args!` or `write!` whose text opens with the `$` every
 //! minted name starts with, or any use of `INTERNAL_PREFIX` in code. Only
-//! `name.rs` knows a name format. A stem that carries the `$` into a
+//! `src/name/` knows a name format. A stem that carries the `$` into a
 //! `format!("{stem}_…")` is beyond what the text can show.
 //!
 //! Run from the repository root: `wado run` reaches only the current directory.
@@ -11,7 +11,7 @@ use fs from "core:fs";
 use { Preopens } from "core:fs";
 
 global SRC: String = "wado-compiler/src";
-global NAME_RS: String = "wado-compiler/src/name.rs";
+global NAME_DIR: String = "wado-compiler/src/name/";
 
 export fn run() with (Preopens, Stderr, Exit) {
     let walk = match fs::walk_dir(&SRC) {
@@ -24,7 +24,7 @@ export fn run() with (Preopens, Stderr, Exit) {
             Ok(entry) => entry,
             Err(e) => fail(`${e}`),
         };
-        if !entry.path.ends_with(".rs") || entry.path == NAME_RS {
+        if !entry.path.ends_with(".rs") || entry.path.starts_with(&NAME_DIR) {
             continue;
         }
         let text = match fs::read_to_string(&entry.path) {
@@ -32,7 +32,7 @@ export fn run() with (Preopens, Stderr, Exit) {
             Err(e) => fail(`${e}`),
         };
         for let line of minted_name_lines(&text) {
-            eprintln(`${entry.path}:${line}: a minted name formatted outside name.rs`);
+            eprintln(`${entry.path}:${line}: a minted name formatted outside src/name/`);
             found += 1;
         }
     }

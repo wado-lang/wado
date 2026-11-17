@@ -11,7 +11,7 @@ use crate::ast::{
 };
 use crate::compiler_host::Diagnostic;
 use crate::hashmap::IndexMap;
-use crate::name::{is_package_namespace, resolve_module_path};
+use crate::module_path::{is_package_namespace, resolve_module_path};
 use crate::path::{is_cwd_relative, relative_path};
 use crate::remote::{Integrity, is_remote, pin_of, url_fault};
 
