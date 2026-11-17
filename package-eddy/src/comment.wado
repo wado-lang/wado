@@ -370,7 +370,9 @@ test "a review's comment tables the findings above each one's comment" {
 test "a table cell escapes what would end the cell or open a tag" {
     assert cell(&"`Option<T>` | x") == "`Option<T>` \\| x";
     assert cell(&"a <b> `c|d`") == "a \\<b> `c\\|d`";
-    let piped = review_comment(&[Finding { file: "a|b", summary: "S", detail: "D" }], &"0123456789", &"cost: $0", &null, &null);
+    let piped = review_comment(&[
+        Finding { file: "a|b", summary: "S", detail: "D" },
+    ], &"0123456789", &"cost: $0", &null, &null);
     assert piped.contains("| 1 | ` a\\|b ` | S | no |\n");
 }
 
