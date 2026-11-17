@@ -3,68 +3,14 @@
 
 use { Method } from "wasi:http";
 use { Client } from "wasi:http";
-use { Mark, MonotonicClock } from "wasi:clocks";
-use { env, Environment } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
 use { to_bytes, from_bytes, from_string } from "core:json";
 use { Serialize, Deserialize } from "core:serde";
 use { Value, to_value, from_value } from "core:value";
-use { Federation } from "./federation.wado";
+use { Credential } from "./credential.wado";
 use { fetch } from "./http.wado";
 
-/// What a request authenticates with: an API key, or a token minted under a
-/// federation, renewed before it expires.
-pub struct Credential {
-    key: String,
-    federation: Option<Federation>,
-    /// The `MonotonicClock` mark the key is renewed at.
-    renew_at: Mark,
-}
-
-/// A minted token is renewed after half its life, and at least every ten
-/// minutes.
-fn renewal_delay(lifetime: i64) -> Mark {
-    return (i64::min(lifetime / 2, 600) * 1_000_000_000) as u64 as Mark;
-}
-
-test "a token is renewed after half its life, and at least every ten minutes" {
-    assert renewal_delay(1_440) == 600_000_000_000;
-    assert renewal_delay(300) == 150_000_000_000;
-}
-
-impl Credential {
-    /// A token minted under the federation `ANTHROPIC_FEDERATION_RULE_ID`
-    /// names, or else `CLAUDE_API_KEY`; an empty one is unset.
-    pub fn from_env() -> Result<Credential, String> with (Environment, Client, MonotonicClock) {
-        if let Some(federation) = Federation::from_env()? {
-            let mut credential = Credential { key: "", federation: Some(federation), renew_at: 0 };
-            credential.renew()?;
-            return Ok(credential);
-        }
-        return match env("CLAUDE_API_KEY") {
-            Some(key) && !key.is_empty() => Ok(Credential { key, federation: null, renew_at: u64::MAX as Mark }),
-            _ => Err("neither ANTHROPIC_FEDERATION_RULE_ID nor CLAUDE_API_KEY is set"),
-        };
-    }
-
-    /// The key to send, renewed first when it is due.
-    fn key(&mut self) -> Result<String, String> with (Client, MonotonicClock) {
-        if MonotonicClock::now() >= self.renew_at {
-            self.renew()?;
-        }
-        return Ok(self.key);
-    }
-
-    /// Mints the next key; false for a key that cannot be renewed.
-    fn renew(&mut self) -> Result<bool, String> with (Client, MonotonicClock) {
-        let Some(federation) = &self.federation else {
-            return Ok(false);
-        };
-        let minted = federation.mint()?;
-        self.key = minted.token;
-        self.renew_at = MonotonicClock::now() + renewal_delay(minted.lifetime);
-        return Ok(true);
-    }
-}
+pub use { Credential } from "./credential.wado";
 
 pub struct Message {
     pub role: String,
