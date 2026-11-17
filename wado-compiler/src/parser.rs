@@ -217,15 +217,6 @@ impl ParseError {
             span: Some(DiagnosticSpan::from_span(&self.span, file)),
         }
     }
-
-    /// This error, raised where the rule it breaks is a
-    /// [`ParseErrorKind::Restriction`].
-    fn restricted(self) -> Self {
-        Self {
-            kind: ParseErrorKind::Restriction,
-            ..self
-        }
-    }
 }
 
 impl From<ParseError> for Diagnostic {
@@ -4882,12 +4873,10 @@ impl Parser {
                 && self.check(&TokenKind::ColonColon)
                 && self.peek_nth(1).kind.as_ident_name().is_some())
         {
-            return Err(self
-                .error_at_span(
-                    *span,
-                    "a `Self` binding closes a trait's turbofish, and a method call follows it: `Trait::<Self = T>::method(…)`",
-                )
-                .restricted());
+            return Err(self.error_at_span(
+                *span,
+                "a `Self` binding closes a trait's turbofish, and a method call follows it: `Trait::<Self = T>::method(…)`",
+            ));
         }
 
         // A value, a struct literal's brace and a second turbofish all follow a
@@ -4935,12 +4924,10 @@ impl Parser {
         if !self.check(&TokenKind::LParen)
             && let Some((_, span)) = &self_type
         {
-            return Err(self
-                .error_at_span(
-                    *span,
-                    &format!("`{}::<Self = …>::{method}` needs a call", head.name),
-                )
-                .restricted());
+            return Err(self.error_at_span(
+                *span,
+                &format!("`{}::<Self = …>::{method}` needs a call", head.name),
+            ));
         }
         if !self.check(&TokenKind::LParen) {
             let mut segments = Vec::new();
@@ -5308,26 +5295,20 @@ impl Parser {
         let name = raw_name.clone();
         let name_span = self.advance().span;
 
-        // What a literal takes hangs on how its name is spelled, which a
-        // grammar reading the name as any identifier cannot see.
         if name == "include_str" || name == "include_bytes" {
             let is_str = name == "include_str";
-            self.expect(&TokenKind::LParen)
-                .map_err(ParseError::restricted)?;
+            self.expect(&TokenKind::LParen)?;
             let path_span = self.peek().span;
             let path = match self.peek_kind() {
                 TokenKind::StringLit { .. } => self.take_string()?,
                 _ => {
-                    return Err(self.restriction_at_span(
+                    return Err(self.error_at_span(
                         self.peek().span,
                         &format!("expected string literal path argument for `#{name}`"),
                     ));
                 }
             };
-            let close_span = self
-                .expect(&TokenKind::RParen)
-                .map_err(ParseError::restricted)?
-                .span;
+            let close_span = self.expect(&TokenKind::RParen)?.span;
             self.include_paths
                 .entry(path.value.clone())
                 .or_insert(path_span);
@@ -5349,7 +5330,7 @@ impl Parser {
             "function" => Literal::LocationFunction,
             "data" => Literal::DataSection,
             _ => {
-                return Err(self.restriction_at_span(
+                return Err(self.error_at_span(
                     start_span.merge(&name_span),
                     &format!(
                         "unknown compile-time literal `#{name}`, expected `#file`, `#line`, `#function`, `#data`, `#include_str`, or `#include_bytes`"

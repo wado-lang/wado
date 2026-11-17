@@ -373,7 +373,7 @@ typeArgs
     ;
 
 typeArg
-    : (IDENTIFIER | 'Self') '=' typeRef
+    : IDENTIFIER '=' typeRef
     | IDENTIFIER ':' traitBounds
     | typeRef
     ;
@@ -707,6 +707,7 @@ atom
     | 'self'
     | compileTimeExpr
     | taggedTemplate
+    | selfBoundCall
     | exprPath
     | tupleOrArrayLiteral
     | closure
@@ -730,6 +731,13 @@ braceLiteral
 // spells with its `(`.
 exprPath
     : (identifier | 'Self') ('::' pathSegment)* ('::' typeArgs ('::' pathSegment)*)?
+    ;
+
+// `Trait::<Self = T>::method(…)` binds the receiver of a trait's static
+// method. The binding closes the trait's own arguments, and a call follows.
+selfBoundCall
+    : identifier ('::' pathSegment)* '::' '<' (typeRef ',')* 'Self' '=' typeRef '>'
+      '::' pathSegment ('::' typeArgs)? '(' argumentList? ')'
     ;
 
 // A template literal directly after a path tags it (WEP 2026-01-10). A gap
@@ -760,8 +768,15 @@ pathSegment
     : memberName
     ;
 
+// The name is an identifier read by its spelling, so a predicate checks it. A
+// `(` picks the include before the predicates run, so `#line(…)`, which calls
+// the line number, is refused here and parsed by the compiler. An include's
+// path is a text string, never bytes.
 compileTimeExpr
-    : '#' IDENTIFIER ('(' argumentList? ')')?
+    : '#' ( IDENTIFIER { p.token_text(p.lt(-1)) matches { "file" | "line" | "function" | "data" } }?
+          | IDENTIFIER { p.token_text(p.lt(-1)) matches { "include_str" | "include_bytes" } }?
+            '(' { !p.token_text(p.lt(1)).starts_with("b") }? STRING_LITERAL ')'
+          )
     ;
 
 // `expression`'s levels where a brace opens the block that follows, as in a
