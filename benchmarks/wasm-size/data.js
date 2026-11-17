@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794898701288,
+  "lastUpdate": 1794904410642,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78685,6 +78685,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6ac4c6b5f210c21d5aba66e890ec9d59437ea23a"
         },
         "date": 1794898700066,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "28aadd5cd0f2c1dc5311090eb4b291247ba868ae",
+          "message": "Merge pull request #2660 from wado-lang/ccr-2e241203-aiz6vn\n\nperf(gale): parse Rust 5–7× faster by sharing prediction states across nesting depths",
+          "timestamp": "2026-11-17T17:19:15+09:00",
+          "tree_id": "96c29e372228843dfac63ce3b08409b6b0c891cf",
+          "url": "https://github.com/wado-lang/wado/commit/28aadd5cd0f2c1dc5311090eb4b291247ba868ae"
+        },
+        "date": 1794904409750,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
