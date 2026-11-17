@@ -67,11 +67,14 @@ impl DocImplMembers {
         self.constants.is_empty() && self.methods.is_empty() && self.trait_impls.is_empty()
     }
 
-    /// The constants, the inherent methods, then each trait impl's methods.
+    /// What the inherent blocks declare: the constants, then the methods.
+    pub fn inherent(&self) -> impl Iterator<Item = &DocFunction> {
+        self.constants.iter().chain(&self.methods)
+    }
+
+    /// The inherent members, then each trait impl's methods.
     pub fn functions(&self) -> impl Iterator<Item = &DocFunction> {
-        self.constants
-            .iter()
-            .chain(&self.methods)
+        self.inherent()
             .chain(self.trait_impls.iter().flat_map(|ti| &ti.methods))
     }
 

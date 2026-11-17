@@ -6,7 +6,7 @@ use lexopt::Arg::Value;
 use wado_compiler::LogLevel;
 use wado_compiler::doc::{
     DocEffect, DocEnum, DocFlags, DocFunction, DocImplMembers, DocModule, DocPrimitiveType,
-    DocResource, DocScope, DocStruct, DocTrait, DocVariant, extract_doc_with,
+    DocResource, DocScope, DocStruct, DocTrait, DocTraitImpl, DocVariant, extract_doc_with,
     extract_stdlib_doc_with, stdlib_doc_entry,
 };
 use wado_compiler::kiln::InvocationIndex;
@@ -1182,7 +1182,7 @@ fn render_md_types_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str
 
 /// The constants, methods and trait impls a type's `impl` blocks declare.
 fn render_md_impl_members(out: &mut String, impls: &DocImplMembers, h4: &str) {
-    for m in impls.constants.iter().chain(&impls.methods) {
+    for m in impls.inherent() {
         render_md_function(out, m, h4);
     }
     for ti in &impls.trait_impls {
@@ -1675,20 +1675,30 @@ fn render_simple_types_section(out: &mut String, doc: &DocModule, h2: &str) {
 /// A type's `impl` blocks: the inherent one, where it declares anything, then
 /// each trait impl.
 fn render_simple_impls(out: &mut String, name: &str, impls: &DocImplMembers) {
-    if !impls.constants.is_empty() || !impls.methods.is_empty() {
-        writeln!(out, "\nimpl {name} {{").unwrap();
-        for m in impls.constants.iter().chain(&impls.methods) {
-            write_simple_decl(out, m, "    ");
-        }
-        out.push_str("}\n");
+    if impls.inherent().next().is_some() {
+        out.push('\n');
+        render_simple_impl_block(out, &format!("impl {name}"), impls.inherent());
     }
-    for ti in &impls.trait_impls {
-        writeln!(out, "\n{} {{", ti.signature).unwrap();
-        for m in &ti.methods {
-            write_simple_decl(out, m, "    ");
-        }
-        out.push_str("}\n");
+    render_simple_trait_impls(out, &impls.trait_impls);
+}
+
+fn render_simple_trait_impls(out: &mut String, trait_impls: &[DocTraitImpl]) {
+    for ti in trait_impls {
+        out.push('\n');
+        render_simple_impl_block(out, &ti.signature, &ti.methods);
     }
+}
+
+fn render_simple_impl_block<'a>(
+    out: &mut String,
+    head: &str,
+    members: impl IntoIterator<Item = &'a DocFunction>,
+) {
+    writeln!(out, "{head} {{").unwrap();
+    for m in members {
+        write_simple_decl(out, m, "    ");
+    }
+    out.push_str("}\n");
 }
 
 fn render_simple_globals_section(out: &mut String, doc: &DocModule, h2: &str) {
@@ -1810,21 +1820,8 @@ fn render_simple_primitive_types_section(out: &mut String, doc: &DocModule, h2: 
     writeln!(out, "\n{h2} Primitive Types").unwrap();
     for p in &doc.primitive_types {
         out.push_str("\n```wado\n");
-        writeln!(out, "impl {} {{", p.name).unwrap();
-        for c in &p.impls.constants {
-            writeln!(out, "    {};", c.signature).unwrap();
-        }
-        for m in &p.impls.methods {
-            write_simple_decl(out, m, "    ");
-        }
-        out.push_str("}\n");
-        for ti in &p.impls.trait_impls {
-            writeln!(out, "\n{} {{", ti.signature).unwrap();
-            for m in &ti.methods {
-                write_simple_decl(out, m, "    ");
-            }
-            out.push_str("}\n");
-        }
+        render_simple_impl_block(out, &format!("impl {}", p.name), p.impls.inherent());
+        render_simple_trait_impls(out, &p.impls.trait_impls);
         out.push_str("```\n");
     }
 }
