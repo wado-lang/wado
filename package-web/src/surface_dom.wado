@@ -184,19 +184,32 @@ fn detach(child: Node) {
     node.next_sibling = null;
 }
 
-fn append(parent: Node, child: Node) {
+// Inserts `child` into `parent` ahead of `next`, or last for `None`.
+fn insert(parent: Node, child: Node, next: Option<Node>) {
     detach(child);
     let into = surface_node(parent);
-    let node = surface_node(child);
-    let last = into.last_child;
-    if let Some(before) = last {
+    let previous = match next {
+        Some(after) => surface_node(after).previous_sibling,
+        None => into.last_child,
+    };
+    if let Some(before) = previous {
         surface_node(before).next_sibling = Option::Some(child);
     } else {
         into.first_child = Option::Some(child);
     }
-    node.previous_sibling = last;
-    into.last_child = Option::Some(child);
+    if let Some(after) = next {
+        surface_node(after).previous_sibling = Option::Some(child);
+    } else {
+        into.last_child = Option::Some(child);
+    }
+    let node = surface_node(child);
+    node.previous_sibling = previous;
+    node.next_sibling = next;
     node.parent = Option::Some(parent);
+}
+
+fn append(parent: Node, child: Node) {
+    insert(parent, child, null);
 }
 
 fn remove_children(parent: Node) {
@@ -745,6 +758,19 @@ impl Node for SurfaceDom {
         self.own(node);
         assert_insertable(*this, node);
         append(*this, node);
+        resume node;
+    }
+
+    // The DOM standard's pre-insert.
+    fn insert_before(&mut self, this: &Node, node: Node, child: Option<Node>) -> Node {
+        self.own(*this);
+        self.own(node);
+        if let Some(reference) = child {
+            assert self.own(reference).parent == Option::Some(*this), "NotFoundError: the reference node is a child";
+        }
+        assert_insertable(*this, node);
+        let next = if child == Option::Some(node) { surface_node(node).next_sibling } else { child };
+        insert(*this, node, next);
         resume node;
     }
 

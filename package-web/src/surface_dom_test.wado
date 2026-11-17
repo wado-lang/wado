@@ -112,6 +112,59 @@ test "a tree is built by appending" {
     };
 }
 
+test "insert_before places a node ahead of a child, or last for null" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let list = doc.create_element("ul");
+        let a = doc.create_element("li");
+        let b = doc.create_element("li");
+        let c = doc.create_element("li");
+        list.append_child(c);
+        assert list.insert_before(a, Option::Some(c as Node)) == a as Node;
+        list.insert_before(b, Option::Some(c as Node));
+        assert list.first_child() == Option::Some(a as Node);
+        assert a.next_sibling() == Option::Some(b as Node);
+        assert b.next_sibling() == Option::Some(c as Node);
+        assert c.previous_sibling() == Option::Some(b as Node);
+
+        // A node already in the list moves.
+        list.insert_before(c, Option::Some(a as Node));
+        assert list.first_child() == Option::Some(c as Node);
+        assert list.last_child() == Option::Some(b as Node);
+        list.insert_before(c, null);
+        assert list.last_child() == Option::Some(c as Node);
+        assert b.next_sibling() == Option::Some(c as Node);
+
+        // Before itself, a node stays where it is.
+        list.insert_before(b, Option::Some(b as Node));
+        assert a.next_sibling() == Option::Some(b as Node);
+        assert b.next_sibling() == Option::Some(c as Node);
+    };
+}
+
+#[expect_trap]
+test "insert_before a node that is not a child is a not-found error" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let list = doc.create_element("ul");
+        list.insert_before(doc.create_element("li"), Option::Some(doc.create_element("li") as Node));
+    };
+}
+
+#[expect_trap]
+test "insert_before checks the hierarchy as append_child does" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let outer = doc.create_element("div");
+        let inner = doc.create_element("div");
+        outer.append_child(inner);
+        inner.insert_before(outer, null);
+    };
+}
+
 test "text content concatenates the descendants' text" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
