@@ -1,4 +1,4 @@
-// A type pattern narrowing a handle to resource `R` holds `R` from then on.
+// A type pattern narrowing a held handle to resource `R` holds `R` from then on.
 
 #[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
 resource Node {}
@@ -9,9 +9,9 @@ resource HtmlInputElement extends Node {
     fn value(&self) -> String;
 }
 
-fn describe(n: Node) -> String {                // holds Node
+fn describe(n: Node) -> String with Node {
     return match n {
-        input: HtmlInputElement => input.value(), // holds HtmlInputElement too
+        input: HtmlInputElement => input.value(), // holds HtmlInputElement
         _ => "",
     };
 }

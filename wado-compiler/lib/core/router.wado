@@ -505,7 +505,7 @@ impl<H> Router<H> {
 
     /// Matches a `wasi:http` request: its method, and its path with the query
     /// and fragment stripped. A request without a path matches as `/`.
-    pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>> {
+    pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>> with Request {
         let method = request.get_method();
         let pq = match request.get_path_with_query() {
             Some(s) => s,

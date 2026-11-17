@@ -319,7 +319,7 @@ impl LinearArray<u8> {
     /// in the array's own block, so no byte passes through the GC heap; a
     /// handler's items are copied in. The block takes `expected` bytes up
     /// front and grows only for a stream that runs past them.
-    pub fn read_stream(stream: &Stream<u8>, expected: i32 = 0) -> LinearArray<u8>
+    pub fn read_stream(stream: &Stream<u8>, expected: i32 = 0) -> LinearArray<u8> with Stream
         contract expected >= 0
     {
         let mut array = LinearArray::<u8>::unwritten(expected);
@@ -332,7 +332,7 @@ impl LinearArray<u8> {
     /// The first `len` bytes `stream` delivers, or every byte where it ends
     /// sooner, read as `read_stream` reads them. No copy asks for a byte past
     /// `len`, so the stream may go on for any length after them.
-    pub fn read_stream_prefix(stream: &Stream<u8>, len: i32) -> LinearArray<u8>
+    pub fn read_stream_prefix(stream: &Stream<u8>, len: i32) -> LinearArray<u8> with Stream
         contract len >= 0
     {
         let mut array = LinearArray::<u8>::unwritten(len);
@@ -345,7 +345,7 @@ impl LinearArray<u8> {
     /// One copy of what `stream` delivers next, appended. A host copy lands in
     /// the block's room. A full block reads into memory of the copy's own, so a
     /// stream exactly as long as the block ends without growing it.
-    fn read_more(&mut self, stream: &Stream<u8>) -> CopyResult {
+    fn read_more(&mut self, stream: &Stream<u8>) -> CopyResult with Stream {
         let full = self.len == self.block.bytes;
         let room = if full { STREAM_CHUNK_ELEMENTS } else { self.block.bytes - self.len };
         let mut lending = !full;
@@ -443,7 +443,7 @@ impl LinearBuffer {
 
     /// Read until `n` bytes are not yet consumed, or the stream ends. Answers
     /// whether `n` are.
-    pub fn fill(&mut self, n: i32) -> bool
+    pub fn fill(&mut self, n: i32) -> bool with Stream
         contract n >= 0
     {
         while self.len() < n && let Some(stream) = &self.source {

@@ -673,7 +673,8 @@ fn open_temp<S: AsStrSlice>(target: S) -> Result<[Descriptor, String], FsError> 
 
 /// Write `data` into `file`, which `path` names, and report what the transfer
 /// answered rather than what the first call did.
-fn stream_out<T: AsByteSlice, S: AsStrSlice>(path: S, file: Descriptor, data: &T) -> Result<(), FsError> {
+fn stream_out<T: AsByteSlice, S: AsStrSlice>(path: S, file: Descriptor, data: &T) -> Result<(), FsError>
+with Descriptor {
     let [rx, tx] = Stream::<u8>::new();
     let done = file.write_via_stream(rx, 0 as Filesize);
     tx.write_raw_all(data.as_byte_slice() as Slice<u8>);
@@ -733,7 +734,8 @@ fn open<S: AsStrSlice>(
 
 /// A stream ends on an I/O error the same way it ends on the last byte, so a
 /// transfer that skips this future reports a truncated file as a whole one.
-fn finish<S: AsStrSlice>(path: S, done: Future<Result<(), ErrorCode>>) -> Result<(), FsError> {
+fn finish<S: AsStrSlice>(path: S, done: Future<Result<(), ErrorCode>>) -> Result<(), FsError>
+with Future {
     let finished = done.read();
     if let Some(Err(e)) = finished {
         return Result::Err(failure(path, e));

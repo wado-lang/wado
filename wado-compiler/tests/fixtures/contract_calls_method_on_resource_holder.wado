@@ -1,0 +1,28 @@
+// A contract clause may call a method on a value holding a resource: without
+// `with`, the method performs no host call, so it cannot write the resource.
+use { Fields } from "wasi:http";
+
+affine struct Wrap { f: Fields, n: i32 }
+
+impl Wrap {
+    fn n(&self) -> i32 {
+        return self.n;
+    }
+
+    fn checked(&self, k: i32) -> i32
+        contract k >= self.n()
+    {
+        return k;
+    }
+}
+
+test {
+    let w = Wrap { f: Fields::new(), n: 1 };
+    assert w.checked(2) == 2;
+}
+
+#[expect_trap]
+test "the clause still checks" {
+    let w = Wrap { f: Fields::new(), n: 3 };
+    let _ = w.checked(2);
+}

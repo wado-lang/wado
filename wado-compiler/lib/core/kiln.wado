@@ -90,7 +90,7 @@ global READ_CHUNK: i32 = 65536;
 /// Read an input file's content to the end. A generator that needs the whole
 /// file calls this; one that needs a prefix reads `content` itself and drops
 /// it early.
-pub fn read_all(content: Stream<u8>) -> ByteList {
+pub fn read_all(content: Stream<u8>) -> ByteList with Stream {
     let mut out = List::<u8>::with_capacity(READ_CHUNK);
     loop {
         let chunk = content.begin_read(READ_CHUNK, ReadInto::fresh()).settle(&content);
@@ -103,7 +103,7 @@ pub fn read_all(content: Stream<u8>) -> ByteList {
     return out as ByteList;
 }
 
-fn decode_to_end(content: &Stream<u8>) -> Result<String, Utf8Error> {
+fn decode_to_end(content: &Stream<u8>) -> Result<String, Utf8Error> with Stream {
     let mut out = String::with_capacity(READ_CHUNK);
     let mut pending: List<u8> = [];
     loop {
@@ -125,7 +125,7 @@ fn decode_to_end(content: &Stream<u8>) -> Result<String, Utf8Error> {
 
 /// Read an input file's content to the end as text, decoding as it goes so no
 /// second copy of the file exists. `Err` is a malformed input, not a bug.
-pub fn read_text(content: Stream<u8>) -> Result<String, Utf8Error> {
+pub fn read_text(content: Stream<u8>) -> Result<String, Utf8Error> with Stream {
     // A `Stream` handle is outside the compiler's drop elaboration. The decode
     // takes it by `&`, so no early return can leave this body before the drop.
     let decoded = decode_to_end(&content);

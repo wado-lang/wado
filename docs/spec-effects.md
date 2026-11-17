@@ -352,26 +352,26 @@ So `println` needs only `with Stdout`, though its body creates a stream and drop
 
 Only resources are implied. They are found inside references, containers, tuples, newtypes, struct fields and variant payloads, but a struct, enum, variant or primitive is never granted in its own right. Each effect implies its own resources and no others, so a function without `with` cannot call `Stream::<u8>::new()` just because some other effect would have implied `Stream`.
 
-### Resources in a Signature
+### Resources a Function Holds
 
-A function holds every resource its own signature mentions, without naming it in `with`. They are found in it as in an operation's signature (above), and also inside function types. The return type counts too, including the declared result of an `export async fn`, which the body delivers with `task return`. Resources implied by those are held as well.
+A function holds what its `with` clause declares and what that implies, and nothing else. A resource its signature mentions is not held. A function may take, return, store and drop a handle, but calling one of the handle's operations demands the resource. That holds however the handle was reached: a parameter, a field behind `&self`, or a capture. So a function without `with` calls no host.
 
 <!-- {"fixture":"spec_effects_signature_resources.wado"} -->
 
 ```wado
-fn consume(s: Stream<u8>) {                     // holds Stream, and StreamWritable
+fn consume(s: Stream<u8>) with Stream {         // also holds StreamWritable
     let [rx, tx] = Stream::<u8>::new();
     tx.drop();
     rx.drop();
     s.drop();
 }
 
-fn make_pair() -> [Stream<u8>, StreamWritable<u8>] {
+fn make_pair() -> [Stream<u8>, StreamWritable<u8>] with Stream {
     return Stream::<u8>::new();
 }
 
-// `Headers` is a newtype of the `Fields` resource: no `with Fields` needed.
-fn headers_to_map(headers: &Headers) -> TreeMap<String, String> {
+// `Headers` is a newtype of the `Fields` resource.
+fn headers_to_map(headers: &Headers) -> TreeMap<String, String> with Fields {
     let mut map = TreeMap::<String, String>::new();
     for let [name, value] of headers.copy_all() {
         map[name as String] = String::from_utf8_lossy(&value);
@@ -389,14 +389,32 @@ test {
 }
 ```
 
-A [type pattern](./spec-patterns.md#type-patterns) that narrows a handle to resource `R` holds `R` from then on, as an operation returning `R` would:
+<!-- {"fixture":"error_effects_resource_through_self.wado"} -->
+
+```wado
+affine struct Wrap { f: Fields }
+
+impl Wrap {
+    fn touch(&self) {
+        let _ = self.f.set("x", [b"1"]);  // ERROR: missing resource 'Fields'
+    }
+}
+```
+
+Three bodies hold an effect they do not name:
+
+- A method of a resource's own `impl R` is one of `R`'s operations. Its body holds `R`, and a call of it demands `R`.
+- A [handler](#handlers) method of `E`. It builds what `E`'s operations hand back, so it holds what `E` implies. `E` itself it declares where it delegates ([Where a Handler Method Runs](#where-a-handler-method-runs)).
+- A drop. A resource's drop is ambient ([Resources as Effects](#resources-as-effects)), and `Drop::drop` is declared `#[ambient(_)]` ([Ambient Functions](#ambient-functions)), so an impl's body performs what its release needs.
+
+A [type pattern](./spec-patterns.md#type-patterns) that narrows a held handle to resource `R` holds `R` from then on, as an operation returning `R` would:
 
 <!-- {"fixture":"spec_effects_narrowing_holds.wado"} -->
 
 ```wado
-fn describe(n: Node) -> String {                // holds Node
+fn describe(n: Node) -> String with Node {
     return match n {
-        input: HtmlInputElement => input.value(), // holds HtmlInputElement too
+        input: HtmlInputElement => input.value(), // holds HtmlInputElement
         _ => "",
     };
 }
@@ -409,18 +427,18 @@ test {
 }
 ```
 
-A closure holds the resources the types of its captures mention, as a function holds those its signature mentions. So it uses a handle it captured, and narrows one, without performing anything for it, and its type's row lists only what it reaches some other way:
+A closure holds nothing it was handed, as a function does not. A handle it captures is no grant, so its type's row lists each operation it calls on one, narrowed or not:
 
 <!-- {"fixture":"spec_effects_narrowing_captured.wado"} -->
 
 ```wado
-fn call(f: fn() -> String) -> String {
+fn call(f: fn() -> String with _) -> String with _ {
     return f();
 }
 
-fn describe(n: Node) -> String {
-    return call(|| match n {                       // captures a Node, so holds it
-        input: HtmlInputElement => input.value(),  // and what it narrows to
+fn describe(n: Node) -> String with HtmlInputElement {
+    return call(|| match n {                       // performs HtmlInputElement
+        input: HtmlInputElement => input.value(),
         _ => "",
     });
 }
@@ -433,13 +451,11 @@ test {
 }
 ```
 
-A tuple `for-of` checks its body once for every element. A closure there holds only the resources its captures mention for each of them.
-
 Apart from a narrowing, nothing a body does adds to what its function holds.
 
 ### Ambient Functions
 
-`#[ambient(E, …)]` on a function lets its body perform the listed effects without declaring them. A call demands only what the function's own `with` clause declares. Any other effect the body performs is checked as usual. A function value the body hands on is still bound by the function type it is moved into, which holds none of what the attribute lists. On a global, the attribute admits the listed effects in its initializer ([Global Variables](./spec-expressions.md#global-variables)).
+`#[ambient(E, …)]` on a function lets its body perform the listed effects without declaring them. `#[ambient(_)]` admits every effect. On a trait method, the attribute admits its effects in the body of every impl of that method. A call demands only what the function's own `with` clause declares. Any other effect the body performs is checked as usual. A function value the body hands on is still bound by the function type it is moved into, which holds none of what the attribute lists. On a global, the attribute admits the listed effects in its initializer ([Global Variables](./spec-expressions.md#global-variables)).
 
 An argument names an effect the way a `with` clause does, by the name the function's module gives it, an import alias included. A name that reaches no effect there is an error. An effect of the same name declared in another module is a different effect, and stays required.
 

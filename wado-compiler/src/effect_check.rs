@@ -470,12 +470,42 @@ fn run_effect_checks(
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    check_function_effects_sem(sem, src, func, index, &[], out, solved);
+                    check_function_effects_sem(sem, src, func, index, Held::Only(&[]), out, solved);
                 }
                 Item::Impl(impl_block) => {
                     check_impl_effect_conformance(sem, src, impl_block, index, out);
+                    let facts = impl_facts(sem, src, impl_block);
+                    let trait_key = facts.and_then(|facts| facts.trait_name.as_ref()?.canonical());
+                    // A method of a resource's own `impl` is one of its
+                    // operations, so its body holds the resource. A handler
+                    // builds what its operations hand back, so it holds what
+                    // the effect implies; delegating to the effect itself
+                    // still declares it.
+                    let own_resource: Vec<EffectRef> = facts
+                        .filter(|facts| facts.trait_name.is_none())
+                        .and_then(|facts| facts.struct_name.head().def())
+                        .filter(|&def| index.resolutions.defs().kind(def) == DefKind::Resource)
+                        .and_then(|def| index.resolutions.effect_decl(def))
+                        .into_iter()
+                        .chain(
+                            trait_key
+                                .and_then(|key| index.interfaces.get(&key))
+                                .and_then(|(effect, _)| index.closure.get(effect))
+                                .into_iter()
+                                .flatten()
+                                .cloned(),
+                        )
+                        .collect();
                     for method in &impl_block.methods {
-                        check_function_effects_sem(sem, src, method, index, &[], out, solved);
+                        let inherits_ambient = trait_key.is_some_and(|key| {
+                            index.ambient_trait_methods.contains(&(key, method.name.clone()))
+                        });
+                        let held = if inherits_ambient {
+                            Held::Every
+                        } else {
+                            Held::Only(&own_resource)
+                        };
+                        check_function_effects_sem(sem, src, method, index, held, out, solved);
                     }
                 }
                 // A default body holds what the trait declares for it.
@@ -483,7 +513,8 @@ fn run_effect_checks(
                     let def = index.resolutions.defs().def_at(trait_decl.id);
                     for method in &trait_decl.methods {
                         let declared = &index.trait_method_effects[&(def, method.name.clone())];
-                        check_function_effects_sem(sem, src, method, index, declared, out, solved);
+                        let held = Held::Only(declared);
+                        check_function_effects_sem(sem, src, method, index, held, out, solved);
                     }
                 }
                 // An operation's default body is ordinary code, so what it
@@ -493,7 +524,7 @@ fn run_effect_checks(
                     let def = index.resolutions.defs().def_at(interface_decl.id);
                     let own = index.interfaces.get(&def).map(|(effect, _)| effect);
                     for method in &interface_decl.methods {
-                        let held = own.map_or(&[][..], std::slice::from_ref);
+                        let held = Held::Only(own.map_or(&[][..], std::slice::from_ref));
                         check_function_effects_sem(sem, src, method, index, held, out, solved);
                     }
                 }
@@ -727,6 +758,8 @@ struct OwnedEffectData {
     mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>>,
     trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>>,
+    /// The trait methods whose `#[ambient(_)]` every impl inherits.
+    ambient_trait_methods: IndexSet<TraitMethodKey>,
     /// The traits that leave their effects to the impl — a `with _` head, or a
     /// bare one, which reads as the same.
     open_traits: IndexSet<DefId>,
@@ -839,6 +872,7 @@ impl OwnedEffectData {
         // effects are theirs. An impl of one of these alone brings what the
         // head resolves to; a method's own clause overrides the head.
         let mut head_methods: IndexSet<TraitMethodKey> = IndexSet::default();
+        let mut ambient_trait_methods: IndexSet<TraitMethodKey> = IndexSet::default();
         for (src, module) in &sem.modules {
             for item in &module.items {
                 let Item::Trait(trait_decl) = item else {
@@ -853,6 +887,9 @@ impl OwnedEffectData {
                     supertraits.insert(def, supers);
                 }
                 for method in &trait_decl.methods {
+                    if ambient_admits_every(&method.attrs) {
+                        ambient_trait_methods.insert((def, method.name.clone()));
+                    }
                     let effects = method
                         .effects
                         .iter()
@@ -1028,6 +1065,7 @@ impl OwnedEffectData {
             mangled_index,
             mangled_params,
             trait_method_effects,
+            ambient_trait_methods,
             open_traits,
             supertraits,
             fn_bound_traits,
@@ -1058,6 +1096,7 @@ impl OwnedEffectData {
             mangled_index: &self.mangled_index,
             mangled_params: &self.mangled_params,
             trait_method_effects: &self.trait_method_effects,
+            ambient_trait_methods: &self.ambient_trait_methods,
             open_traits: &self.open_traits,
             supertraits: &self.supertraits,
             fn_bound_traits: &self.fn_bound_traits,
@@ -1098,6 +1137,7 @@ struct EffectIndex<'a> {
     /// Trait method → the effects it declares. A call through a type
     /// parameter's bound selects no impl, so this is what it can demand.
     trait_method_effects: &'a IndexMap<TraitMethodKey, Vec<EffectRef>>,
+    ambient_trait_methods: &'a IndexSet<TraitMethodKey>,
     /// The traits that leave their effects to the impl.
     open_traits: &'a IndexSet<DefId>,
     /// Each trait's transitive supertraits.
@@ -1330,12 +1370,20 @@ fn check_impl_effect_conformance(
     }
 }
 
+/// What a body holds beyond its own declaration: the effects listed, or every
+/// effect, for one an `#[ambient(_)]` on it or on its trait method waives.
+#[derive(Clone, Copy)]
+enum Held<'a> {
+    Only(&'a [EffectRef]),
+    Every,
+}
+
 fn check_function_effects_sem(
     sem: &Semantics,
     module: &ModuleSource,
     func: &Function,
     index: &EffectIndex,
-    held: &[EffectRef],
+    held: Held<'_>,
     out: &mut Vec<EffectError>,
     solved: &mut EffectRows,
 ) {
@@ -1343,15 +1391,24 @@ fn check_function_effects_sem(
     let Some(body) = &func.body else {
         return;
     };
+    let held = if ambient_admits_every(&func.attrs) {
+        Held::Every
+    } else {
+        held
+    };
     let caller_key = func.id;
     let annotations = module_annotations(sem, module);
+    let listed = match held {
+        Held::Only(listed) => listed,
+        Held::Every => &[],
+    };
     let current = held_by(
         sem,
         annotations,
         index,
         func,
         body,
-        admitted.into_iter().chain(held.iter().cloned()),
+        admitted.into_iter().chain(listed.iter().cloned()),
     );
 
     // Parameter name → type id (aligned with the recorded signature types),
@@ -1368,7 +1425,7 @@ fn check_function_effects_sem(
         current,
         param_types,
         body,
-        holds_every_effect: false,
+        holds_every_effect: matches!(held, Held::Every),
     };
     walk_body_effects(sem, module, annotations, index, walk, out, solved);
 }
@@ -1796,7 +1853,7 @@ fn admitted_effects(
     out: &mut Vec<EffectError>,
 ) -> Vec<EffectRef> {
     let mut admitted = Vec::new();
-    for (name, span) in ambient_effect_names(attrs) {
+    for (name, span) in ambient_effect_names(attrs).filter(|(name, _)| *name != AMBIENT_EVERY) {
         match effect_named_in(name, module, index) {
             Some(effect) => admitted.push(effect),
             None => out.push(EffectError {
@@ -1818,6 +1875,17 @@ fn ambient_effect_names(attrs: &[Attribute]) -> impl Iterator<Item = (&str, Span
         .iter()
         .filter(|attr| attr.name == AMBIENT)
         .flat_map(|attr| attr.args.iter().map(|arg| (arg.as_str(), attr.span)))
+}
+
+/// The `#[ambient]` argument admitting every effect.
+const AMBIENT_EVERY: &str = "_";
+
+/// The operation releasing a resource's handle.
+const RESOURCE_DROP: &str = "drop";
+
+/// Whether `#[ambient(_)]` waives every effect the item performs.
+fn ambient_admits_every(attrs: &[Attribute]) -> bool {
+    ambient_effect_names(attrs).any(|(name, _)| name == AMBIENT_EVERY)
 }
 
 /// Best-effort display name for a call's callee, for the diagnostic message.
@@ -2064,10 +2132,12 @@ impl EffectIndex<'_> {
 
     /// What dispatching `func_ref` demands besides its declaration: for a
     /// direct (non-trait) method on a `resource`, what an operation of the
-    /// resource demands ([`operation_demands`]).
+    /// resource demands ([`operation_demands`]). Its `drop` is ambient, as an
+    /// implicit drop is: whoever holds a handle may release it.
     fn resource_demands(&self, sem: &Semantics, func_ref: &FunctionRef) -> OperationDemands {
         if let Some(method_info) = &func_ref.method_info
             && method_info.trait_name.is_none()
+            && method_info.method_name != RESOURCE_DROP
             && let Some(def) = method_info.receiver().def()
             && self.resolutions.defs().kind(def) == DefKind::Resource
         {

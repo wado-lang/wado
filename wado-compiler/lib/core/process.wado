@@ -340,7 +340,8 @@ affine variant Exit {
     Ended(Result<ExitStatus, ErrorCode>),
 }
 
-fn exit_of(read: FutureReadCopy<Result<ExitStatus, ErrorCode>>) -> Result<ExitStatus, ErrorCode> {
+fn exit_of(read: FutureReadCopy<Result<ExitStatus, ErrorCode>>) -> Result<ExitStatus, ErrorCode>
+with Future {
     return read.finish().expect("a host reports how every child ended");
 }
 
@@ -355,7 +356,7 @@ impl Child {
     /// Wait for the child to end. Nothing can reach a stream still left in the
     /// `Child` once it is waited on, so `wait` closes each first: take a piped
     /// stream out to use it.
-    pub fn wait(self) -> Result<ExitStatus, ProcessError> {
+    pub fn wait(self) -> Result<ExitStatus, ProcessError> with Process {
         let mut child = self;
         builtin::drop(child.stdin.take());
         builtin::drop(child.stdout.take());
@@ -370,7 +371,8 @@ impl Child {
     /// Wait at most `how_long` for the child to end: `None` where it has not.
     /// The streams stay open, so a child blocked on a pipe nobody reads waits
     /// out the time.
-    pub fn wait_timeout(&mut self, how_long: Duration) -> Result<Option<ExitStatus>, ProcessError> with MonotonicClock {
+    pub fn wait_timeout(&mut self, how_long: Duration) -> Result<Option<ExitStatus>, ProcessError>
+    with (Process, MonotonicClock) {
         let ended = match self.exit.take().unwrap() {
             Ended(ended) => ended,
             Running(read) => {
@@ -394,17 +396,18 @@ impl Child {
 
     /// Ask the child and every process it started to end. A child may ignore
     /// it, so [`Child::stop`] follows it with a kill.
-    pub fn terminate(&self) {
+    pub fn terminate(&self) with Process {
         self.resource.terminate();
     }
 
     /// End the child and every process it started, now.
-    pub fn kill(&self) {
+    pub fn kill(&self) with Process {
         self.resource.kill();
     }
 
     /// Ask the child to end, and end it if it has not after `grace`.
-    pub fn stop(self, grace: Duration) -> Result<ExitStatus, ProcessError> with MonotonicClock {
+    pub fn stop(self, grace: Duration) -> Result<ExitStatus, ProcessError>
+    with (Process, MonotonicClock) {
         let mut child = self;
         child.terminate();
         if let Some(status) = child.wait_timeout(grace)? {
@@ -444,7 +447,7 @@ impl Waitable for Pipe;
 
 /// Read `child`'s stdout and stderr, both piped, together until both end, so a child
 /// filling one pipe never blocks against a parent reading the other.
-fn capture(child: &mut Child, limit: i32) -> Captured {
+fn capture(child: &mut Child, limit: i32) -> Captured with Process {
     let mut captured = Captured { stdout: [], stderr: [], too_large: false };
     let mut set = WaitableSet::<Pipe>::new();
     set.insert(Pipe::Out(child.stdout.take().unwrap().start_read(CAPTURE_CHUNK)));
