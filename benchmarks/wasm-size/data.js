@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794876554780,
+  "lastUpdate": 1794886734183,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78553,6 +78553,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/915caa8e72a7c2b54321ddb76069b2e611487263"
         },
         "date": 1794876553667,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e8fecb59fe8343324a38ed1eeac450def76f0903",
+          "message": "Merge pull request #2657 from wado-lang/ccr-5a053762-2x7vni\n\nfeat(compiler)!: signals are a library, and `reactive` is an ordinary identifier",
+          "timestamp": "2026-11-17T12:24:05+09:00",
+          "tree_id": "6adadb3871117f3f7a391ace098607c5790de454",
+          "url": "https://github.com/wado-lang/wado/commit/e8fecb59fe8343324a38ed1eeac450def76f0903"
+        },
+        "date": 1794886733096,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
