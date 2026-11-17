@@ -55,7 +55,7 @@ global ATN_DFA_BRANCH_LEAF: i32 = 2147483647;
 global ATN_ASK_COVERS: i32 = 0;
 global ATN_ASK_SAME: i32 = 1;
 global ATN_ASK_MERGE: i32 = 2;
-global ATN_ASK_KINDS: i64 = 4;
+global ATN_ASK_KINDS: i64 = 3;
 
 internal global mut ATN_DFA: AtnDfa = AtnDfa::new();
 
@@ -354,17 +354,11 @@ impl RealStacks {
 
     fn intern_from(&mut self, s: i32) -> i32 {
         let n = self.ret.len() - s;
-        let mut h: i64 = 1469598103934665603;
-        for let mut e = s; e < s + n; e += 1 {
-            h = (h ^ self.ret[e] as i64 + 1) * 1099511628211;
-            h = (h ^ self.rpr[e] as i64 + 1) * 1099511628211;
-            h = (h ^ self.parent[e] as i64 + 1) * 1099511628211;
-        }
-        h = h & 4611686018427387903;
+        let h = atn_edges_hash(&self.ret, &self.rpr, &self.parent, s, n);
         let head = self.index.get(h);
         let mut known = head;
         while known >= 0 {
-            if self.holds(known, s, n) {
+            if self.len[known] == n && atn_edges_eq(&self.ret, &self.rpr, &self.parent, self.start[known], s, n) {
                 self.ret.truncate(s);
                 self.rpr.truncate(s);
                 self.parent.truncate(s);
@@ -379,29 +373,8 @@ impl RealStacks {
         return self.start.len() - 1;
     }
 
-    fn holds(&self, stack: i32, s: i32, n: i32) -> bool {
-        if self.len[stack] != n {
-            return false;
-        }
-        let t = self.start[stack];
-        for let mut i = 0; i < n; i += 1 {
-            if self.ret[t + i] != self.ret[s + i]
-                || self.rpr[t + i] != self.rpr[s + i]
-                || self.parent[t + i] != self.parent[s + i] {
-                return false;
-            }
-        }
-        return true;
-    }
-
     fn key_cmp(&self, x: i32, y: i32) -> i32 {
-        if self.ret[x] != self.ret[y] {
-            return if self.ret[x] < self.ret[y] { -1 } else { 1 };
-        }
-        if self.rpr[x] != self.rpr[y] {
-            return if self.rpr[x] < self.rpr[y] { -1 } else { 1 };
-        }
-        return 0;
+        return atn_edge_key_cmp(&self.ret, &self.rpr, x, y);
     }
 
     fn covers(&mut self, outer: i32, inner: i32) -> bool {
@@ -773,7 +746,11 @@ impl CtxArena {
         if node <= CTX_ANY_CALLER {
             return node;
         }
-        let known = if self.node_open[node] { self.env_real.get(node as i64) } else { self.closed_real.get(node as i64) };
+        let known = if self.node_open[node] {
+            self.env_real.get(node as i64);
+        } else {
+            self.closed_real.get(node as i64);
+        };
         if known >= 0 {
             return known;
         }
@@ -932,39 +909,16 @@ impl CtxArena {
         self.parent.push(parent);
     }
 
-    fn hash_edges(&self, s: i32, n: i32) -> i64 {
-        let mut h: i64 = 1469598103934665603;
-        for let mut e = s; e < s + n; e += 1 {
-            h = (h ^ self.ret[e] as i64 + 1) * 1099511628211;
-            h = (h ^ self.rpr[e] as i64 + 1) * 1099511628211;
-            h = (h ^ self.parent[e] as i64 + 1) * 1099511628211;
-        }
-        return h & 4611686018427387903;
-    }
-
-    fn edges_eq(&self, node: i32, s: i32, n: i32) -> bool {
-        if self.node_len[node] != n {
-            return false;
-        }
-        let t = self.node_start[node];
-        for let mut i = 0; i < n; i += 1 {
-            if self.ret[t + i] != self.ret[s + i]
-                || self.rpr[t + i] != self.rpr[s + i]
-                || self.parent[t + i] != self.parent[s + i] {
-                return false;
-            }
-        }
-        return true;
-    }
 
     fn intern_from(&mut self, s: i32) -> i32 {
         let n = self.ret.len() - s;
         assert n > 0, "a context has at least one edge";
-        let h = self.hash_edges(s, n);
+        let h = atn_edges_hash(&self.ret, &self.rpr, &self.parent, s, n);
         let head = self.intern_head.get(h);
         let mut cand = head;
         while cand >= 0 {
-            if self.edges_eq(cand, s, n) {
+            if self.node_len[cand] == n
+                && atn_edges_eq(&self.ret, &self.rpr, &self.parent, self.node_start[cand], s, n) {
                 self.ret.truncate(s);
                 self.rpr.truncate(s);
                 self.parent.truncate(s);
@@ -994,13 +948,7 @@ impl CtxArena {
     }
 
     fn key_cmp(&self, x: i32, y: i32) -> i32 {
-        if self.ret[x] != self.ret[y] {
-            return if self.ret[x] < self.ret[y] { -1 } else { 1 };
-        }
-        if self.rpr[x] != self.rpr[y] {
-            return if self.rpr[x] < self.rpr[y] { -1 } else { 1 };
-        }
-        return 0;
+        return atn_edge_key_cmp(&self.ret, &self.rpr, x, y);
     }
 
     fn merge(&mut self, a: i32, b: i32) -> i32 {
@@ -1089,6 +1037,35 @@ impl CtxArena {
         }
         return self.ask(ATN_ASK_COVERS, outer, inner) == 1;
     }
+}
+
+fn atn_edges_hash(ret: &List<i32>, rpr: &List<i32>, parent: &List<i32>, s: i32, n: i32) -> i64 {
+    let mut h: i64 = 1469598103934665603;
+    for let mut e = s; e < s + n; e += 1 {
+        h = (h ^ ret[e] as i64 + 1) * 1099511628211;
+        h = (h ^ rpr[e] as i64 + 1) * 1099511628211;
+        h = (h ^ parent[e] as i64 + 1) * 1099511628211;
+    }
+    return h & 4611686018427387903;
+}
+
+fn atn_edges_eq(ret: &List<i32>, rpr: &List<i32>, parent: &List<i32>, t: i32, s: i32, n: i32) -> bool {
+    for let mut i = 0; i < n; i += 1 {
+        if ret[t + i] != ret[s + i] || rpr[t + i] != rpr[s + i] || parent[t + i] != parent[s + i] {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn atn_edge_key_cmp(ret: &List<i32>, rpr: &List<i32>, x: i32, y: i32) -> i32 {
+    if ret[x] != ret[y] {
+        return if ret[x] < ret[y] { -1 } else { 1 };
+    }
+    if rpr[x] != rpr[y] {
+        return if rpr[x] < rpr[y] { -1 } else { 1 };
+    }
+    return 0;
 }
 
 fn atn_node_pair_key(a: i32, b: i32) -> i64 {
@@ -1807,7 +1784,11 @@ impl AtnDfa {
             self.edges.set(edge, taken);
         }
         let sources_from = self.edge_sources_from[taken];
-        let sources_end = if taken + 1 < self.edge_seed.len() { self.edge_sources_from[taken + 1] } else { self.edge_sources.len() };
+        let sources_end = if taken + 1 < self.edge_seed.len() {
+            self.edge_sources_from[taken + 1];
+        } else {
+            self.edge_sources.len();
+        };
         self.arena.enter_env(&self.edge_sources, sources_from, sources_end - sources_from);
         let seed = self.edge_seed[taken];
         let known = self.known_state(seed);

@@ -209,14 +209,19 @@ The frames it revealed, and each answer to "does this stack cover that one",
 key the state under its seed configurations. Two walks whose stacks agree on
 those reach one state, whatever lies below.
 
+Two slots are compared, merged and covered as questions answered on the real
+stacks, never frame by frame. Comparing frames re-read every frame below the
+top with no memo, so `Performance/DropLoopEntryBranchInLRRule_4` grew
+exponentially with its nested `between … and` lines.
+
 The trees are those of the full-stack cache: `rust_corpus_check.wado --tree-hash` prints the same hash for every `.rs` file in the repository before
 and after. Dev host, `-O2`, one `wado run` of that tool:
 
-| Input                             | Before / after |
-| --------------------------------- | -------------: |
-| `reify.rs`, 430 KB                |            5.1 |
-| The 10 largest `.rs`, 2.8 MB      |            6.5 |
-| Every tracked `.rs`, in 4 shards  |            6.8 |
+| Input                            | Before / after |
+| -------------------------------- | -------------: |
+| `reify.rs`, 430 KB               |            5.1 |
+| The 10 largest `.rs`, 2.8 MB     |            6.5 |
+| Every tracked `.rs`, in 4 shards |            6.8 |
 
 ### Nesting no longer doubles the scan (landed, 2026-09)
 
