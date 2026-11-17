@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794917831935,
+  "lastUpdate": 1794923841030,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -78861,6 +78861,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5f28681761b3220cd29c214eba8c7027b63ee9d8"
         },
         "date": 1794917831312,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5aaf3f65db7db2a998c27fd7f21d3257d15df633",
+          "message": "Merge pull request #2664 from wado-lang/ccr-5a053762-2x7vni\n\nfeat(rill): bindings touch only the DOM nodes they own",
+          "timestamp": "2026-11-17T22:40:21+09:00",
+          "tree_id": "d6f352a407dcfdbdc1f63b0e57ff086b6b246bc8",
+          "url": "https://github.com/wado-lang/wado/commit/5aaf3f65db7db2a998c27fd7f21d3257d15df633"
+        },
+        "date": 1794923839821,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
