@@ -81,7 +81,7 @@ wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
 
 if [ -x build/onnxruntime_gpt2_124m ]; then
     echo "=== onnxruntime (CUDA) ==="
-    build/onnxruntime_gpt2_124m
+    build/onnxruntime_gpt2_124m "$(node ../tools/picking.mjs $model decoder topk)"
 fi
 
 ./onnxruntime_webgpu.sh $model
@@ -108,7 +108,7 @@ wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
 
 if [ -x build/onnxruntime_gemma3_270m ]; then
     echo "=== onnxruntime (CUDA) ==="
-    build/onnxruntime_gemma3_270m
+    build/onnxruntime_gemma3_270m "$(node ../tools/picking.mjs $model decoder topk)"
 fi
 
 ./onnxruntime_webgpu.sh $model

@@ -25,10 +25,10 @@ delete globalThis.Float16Array;
  * token from: little-endian f32s, a prompt after another. A prompt's tokens
  * stop at the first of `ends`, the tokens that end a reply: the picks after
  * one are noise two providers part on.
- * A decoder is `{ model, layers, emptyPast, half, feeds }`: `emptyPast` is the
- * shape of a layer's cache before the first token, `half` says the cache and
- * the logits are float16, and `feeds(seen)` any input beyond the ids, the mask
- * and the cache.
+ * A decoder is `{ model, layers, emptyPast, vocab, half, feeds }`: `emptyPast`
+ * is the shape of a layer's cache before the first token, `vocab` the logits'
+ * last extent, `half` says the cache and the logits are float16, and
+ * `feeds(seen)` any input beyond the ids, the mask and the cache.
  */
 export async function writeGenerated({ dir, prompts, ends = [], decoder, name = 'generate.json', logits }) {
   const recorded = JSON.parse(readFileSync(join(dir, 'tokenize.json'), 'utf8')).tokenize;
