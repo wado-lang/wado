@@ -200,8 +200,9 @@ test "with both inherited the argument still picks the block" {
     assert M::both(5) == 5;
 }
 
-test "the static answers, and the trait names the instance one" {
+// `S::go` is ambiguous between the two traits, so each call names its trait.
+test "the trait names the static, and the instance one" {
     let s = S {};
-    assert S::go(5) == 1;
+    assert Alpha::<S>::go(5) == 1;
     assert Beta::go(&s, 5) == 2;
 }
