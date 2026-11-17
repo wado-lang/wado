@@ -512,7 +512,12 @@ impl Graph for PjrtBackend {
         return Located::Host(self.cpu.unary(op, &self.host(x)));
     }
 
-    fn binary<E: Element, Axes>(&mut self, op: Binary, a: &Located<E, Axes>, b: &Located<E, Axes>) -> Located<E, Axes> with PjrtHost {
+    fn binary<E: Element, Axes>(
+        &mut self,
+        op: Binary,
+        a: &Located<E, Axes>,
+        b: &Located<E, Axes>,
+    ) -> Located<E, Axes> with PjrtHost {
         return Located::Host(self.cpu.binary(op, &self.host(a), &self.host(b)));
     }
 

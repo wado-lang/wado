@@ -464,7 +464,11 @@ fn read_file_to_string<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<Strin
     };
 }
 
-fn write_file_string<S: AsStrSlice, S1: AsStrSlice>(dir: &Descriptor, path: S, content: S1) -> Result<(), ErrorCode> with Descriptor {
+fn write_file_string<S: AsStrSlice, S1: AsStrSlice>(
+    dir: &Descriptor,
+    path: S,
+    content: S1,
+) -> Result<(), ErrorCode> with Descriptor {
     let file = match dir.open_at(
         PathFlags::none(),
         path.to_string(),

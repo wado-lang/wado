@@ -498,7 +498,9 @@ fn run_effect_checks(
                         .collect();
                     for method in &impl_block.methods {
                         let inherits_ambient = trait_key.is_some_and(|key| {
-                            index.ambient_trait_methods.contains(&(key, method.name.clone()))
+                            index
+                                .ambient_trait_methods
+                                .contains(&(key, method.name.clone()))
                         });
                         let held = if inherits_ambient {
                             Held::Every
@@ -787,7 +789,6 @@ struct OwnedEffectData {
     /// the next handler out.
     forwarding_blocks: IndexSet<DefId>,
     resources: IndexSet<EffectRef>,
-    members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
     waiting: IndexSet<EffectRef>,
     /// Each interface and resource declaration's effect and `#[cm]` FQ.
@@ -856,11 +857,9 @@ impl OwnedEffectData {
             })
             .collect();
 
-        let members = MemberTables::collect(sem, state);
-
         // Effect / resource propagation closure: holding effect `E` admits the
         // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
-        let closure = build_propagation_closure_sem(sem, state, &members);
+        let closure = build_propagation_closure_sem(sem, state, &MemberTables::collect(sem, state));
 
         // An empty entry is meaningful: the method exists and grants nothing.
         // A declaration has no body, so `fn_effects` holds nothing for it.
@@ -1076,7 +1075,6 @@ impl OwnedEffectData {
             block_effects,
             forwarding_blocks,
             resources,
-            members,
             closure,
             waiting,
             interfaces,
@@ -1107,7 +1105,6 @@ impl OwnedEffectData {
             block_effects: &self.block_effects,
             forwarding_blocks: &self.forwarding_blocks,
             resources: &self.resources,
-            members: &self.members,
             closure: &self.closure,
             waiting: &self.waiting,
             interfaces: &self.interfaces,
@@ -1158,8 +1155,6 @@ struct EffectIndex<'a> {
     forwarding_blocks: &'a IndexSet<DefId>,
     /// Declared resources, for classifying a missing effect.
     resources: &'a IndexSet<EffectRef>,
-    /// Declared members, for nested-resource detection.
-    members: &'a MemberTables,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// What waiting on an `AsyncCall` demands, held where the call starts.
@@ -1448,13 +1443,8 @@ fn held_by(
         .unwrap_or_default()
         .into_iter()
         .collect();
-    let scan = ResourceScan {
-        tt: &sem.types,
-        resolutions: index.resolutions,
-        members: index.members,
-    };
     current.extend(granted);
-    held_in_body(annotations, index, &scan, current, Body::Block(body))
+    held_in_body(annotations, index, &sem.types, current, Body::Block(body))
 }
 
 /// The `wasi:*` interfaces some function of `exports` holds by what it
@@ -1752,11 +1742,11 @@ impl Body<'_> {
 fn held_in_body(
     annotations: Option<&TypeAnnotations>,
     index: &EffectIndex<'_>,
-    scan: &ResourceScan<'_>,
+    tt: &TypeTable,
     mut declared: IndexSet<EffectRef>,
     body: Body<'_>,
 ) -> IndexSet<EffectRef> {
-    if starts_async_call(annotations, scan.tt, |v| body.walk(v)) {
+    if starts_async_call(annotations, tt, |v| body.walk(v)) {
         declared.extend(index.waiting.iter().cloned());
     }
     expand_through_closure(&declared, index.closure)
@@ -2944,15 +2934,10 @@ impl SemEffectWalker<'_> {
         }
         // One type per walk that reached the literal, each with its own row.
         let closure_types: Vec<TypeId> = self.sem.expression_types(closure.id).collect();
-        let scan = ResourceScan {
-            tt: &self.sem.types,
-            resolutions: self.index.resolutions,
-            members: self.index.members,
-        };
         let current = held_in_body(
             self.annotations,
             self.index,
-            &scan,
+            &self.sem.types,
             IndexSet::default(),
             Body::Expr(&closure.body),
         );

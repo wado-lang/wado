@@ -340,8 +340,7 @@ affine variant Exit {
     Ended(Result<ExitStatus, ErrorCode>),
 }
 
-fn exit_of(read: FutureReadCopy<Result<ExitStatus, ErrorCode>>) -> Result<ExitStatus, ErrorCode>
-with Future {
+fn exit_of(read: FutureReadCopy<Result<ExitStatus, ErrorCode>>) -> Result<ExitStatus, ErrorCode> with Future {
     return read.finish().expect("a host reports how every child ended");
 }
 
@@ -371,8 +370,10 @@ impl Child {
     /// Wait at most `how_long` for the child to end: `None` where it has not.
     /// The streams stay open, so a child blocked on a pipe nobody reads waits
     /// out the time.
-    pub fn wait_timeout(&mut self, how_long: Duration) -> Result<Option<ExitStatus>, ProcessError>
-    with (Process, MonotonicClock) {
+    pub fn wait_timeout(
+        &mut self,
+        how_long: Duration,
+    ) -> Result<Option<ExitStatus>, ProcessError> with (Process, MonotonicClock) {
         let ended = match self.exit.take().unwrap() {
             Ended(ended) => ended,
             Running(read) => {
@@ -406,8 +407,7 @@ impl Child {
     }
 
     /// Ask the child to end, and end it if it has not after `grace`.
-    pub fn stop(self, grace: Duration) -> Result<ExitStatus, ProcessError>
-    with (Process, MonotonicClock) {
+    pub fn stop(self, grace: Duration) -> Result<ExitStatus, ProcessError> with (Process, MonotonicClock) {
         let mut child = self;
         child.terminate();
         if let Some(status) = child.wait_timeout(grace)? {

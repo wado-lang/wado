@@ -827,63 +827,20 @@ impl CmFunctionInfo {
         {
             return true;
         }
-        let mut seen = IndexSet::default();
-        if let Some(rt) = &self.return_type
-            && Self::cm_type_requires_memory(rt, registry, &mut seen)
-        {
-            return true;
-        }
-        self.params
-            .iter()
-            .any(|(_, _, ty)| Self::cm_type_requires_memory(ty, registry, &mut seen))
-    }
-
-    /// Whether lowering `ty` needs the `memory` canonical option, counting the
-    /// CM records and variants the registry knows, at any depth. A record
-    /// reached through an `Option` needs memory exactly as one at the top does.
-    fn cm_type_requires_memory(
-        ty: &Type,
-        registry: &CmInterfaceRegistry,
-        seen: &mut IndexSet<String>,
-    ) -> bool {
-        ty.any(&mut |ty| {
-            type_itself_requires_memory(ty, registry.type_decls())
+        // A CM record has several fields and exceeds MAX_FLAT_RESULTS (1) in
+        // canon lower, so it always goes through memory, at any depth: one
+        // reached through an `Option` needs memory exactly as one at the top does.
+        let requires_memory = |ty: &Type| {
+            type_itself_requires_memory(ty, decls)
                 || matches!(ty, Type::Named(named)
-                    if Self::cm_named_requires_memory(named, registry, seen))
-        })
-    }
-
-    /// Whether the CM record or variant `named` refers to needs memory. Uses
-    /// the reference's own `source_interface` when present (stdlib-populated),
-    /// otherwise falls back to the unique `wasi:*` source. `seen` stops a
-    /// variant that reaches itself through a payload.
-    fn cm_named_requires_memory(
-        named: &NamedType,
-        registry: &CmInterfaceRegistry,
-        seen: &mut IndexSet<String>,
-    ) -> bool {
-        let Some(source) = registry.source_interface(named) else {
-            return false;
+                    if registry.source_interface(named).is_some_and(|source| registry
+                        .get_struct_fields_by_source(&source, &named.name)
+                        .is_some()))
         };
-        // A record has several fields and exceeds MAX_FLAT_RESULTS (1) in canon
-        // lower, so it always goes through memory.
-        if registry
-            .get_struct_fields_by_source(&source, &named.name)
-            .is_some()
-        {
-            return true;
-        }
-        let Some(cases) = registry.get_variant_cases_by_source(&source, &named.name) else {
-            return false;
-        };
-        if !seen.insert(format!("{source}#{}", named.name)) {
-            return false;
-        }
-        cases.iter().any(|case| {
-            case.payload
-                .as_ref()
-                .is_some_and(|payload| Self::cm_type_requires_memory(payload, registry, seen))
-        })
+        self.return_type
+            .iter()
+            .chain(self.params.iter().map(|(_, _, ty)| ty))
+            .any(|ty| registry.reaches(ty, &requires_memory))
     }
 }
 
@@ -1900,16 +1857,26 @@ impl CmInterfaceRegistry {
         .then_some(ExternRef::Optional)
     }
 
-    /// Whether `ty` is or holds an extern handle, through the fields of a
-    /// record and the payloads of a variant too.
+    /// Whether `ty` is or holds an extern handle.
     fn mentions_extern_handle(&self, ty: &Type) -> bool {
-        self.mentions_extern_handle_in(ty, &mut IndexSet::default())
+        self.reaches(ty, &|ty| self.extern_handle(ty).is_some())
+    }
+
+    /// Whether `matches` holds for `ty` or a type it holds, through the fields
+    /// of a CM record and the payloads of a CM variant too.
+    fn reaches(&self, ty: &Type, matches: &impl Fn(&Type) -> bool) -> bool {
+        self.reaches_unseen(ty, matches, &mut IndexSet::default())
     }
 
     /// `seen` stops a type that reaches itself through a field or a payload.
-    fn mentions_extern_handle_in(&self, ty: &Type, seen: &mut IndexSet<String>) -> bool {
+    fn reaches_unseen(
+        &self,
+        ty: &Type,
+        matches: &impl Fn(&Type) -> bool,
+        seen: &mut IndexSet<String>,
+    ) -> bool {
         ty.any(&mut |ty| {
-            if self.extern_handle(ty).is_some() {
+            if matches(ty) {
                 return true;
             }
             let Type::Named(named) = ty else {
@@ -1933,7 +1900,7 @@ impl CmInterfaceRegistry {
                 .filter_map(|case| case.payload.as_ref());
             fields
                 .chain(payloads)
-                .any(|inner| self.mentions_extern_handle_in(inner, seen))
+                .any(|inner| self.reaches_unseen(inner, matches, seen))
         })
     }
 

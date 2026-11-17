@@ -183,8 +183,8 @@ call and returns an `AsyncCall<T>` at once. The caller decides when to wait:
 A function or closure that starts an async call also holds the effects these
 methods declare, so it may later wait on that call without declaring them. A
 closure is a body of its own: a call it starts grants nothing to the function
-around it. A call owns its `Subtask`, so a function handed one through its
-signature holds them too
+around it. A function handed a call declares what waiting on it performs, as
+for any resource it is handed
 ([Resources as Effects](./spec-effects.md#resources-as-effects)).
 
 <!-- {"fixture":"spec_components_async_import.wado"} -->

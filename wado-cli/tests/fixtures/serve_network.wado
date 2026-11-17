@@ -41,7 +41,9 @@ fn resolve_localhost() -> String with IpNameLookup {
     };
 }
 
-export async fn handle(_request: Request) -> Result<Response, ErrorCode> with (TcpSocket, UdpSocket, IpNameLookup, Response) {
+export async fn handle(
+    _request: Request,
+) -> Result<Response, ErrorCode> with (TcpSocket, UdpSocket, IpNameLookup, Response) {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();
     let headers = Headers::new();

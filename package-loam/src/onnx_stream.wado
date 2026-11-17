@@ -54,7 +54,11 @@ fn walk_model(c: &mut Cursor) -> Result<Slim, String> with Stream {
     return Result::Ok(Slim { model, ranges, len: len as i32 });
 }
 
-fn walk_graph(c: &mut Cursor, end: i64, ranges: &mut TreeMap<String, [i32, i32]>) -> Result<ByteList, String> with Stream {
+fn walk_graph(
+    c: &mut Cursor,
+    end: i64,
+    ranges: &mut TreeMap<String, [i32, i32]>,
+) -> Result<ByteList, String> with Stream {
     let mut graph: ByteList = [];
     while c.pos() < end {
         let tag = c.varint()?;
@@ -71,7 +75,11 @@ fn walk_graph(c: &mut Cursor, end: i64, ranges: &mut TreeMap<String, [i32, i32]>
 /// A `TensorProto` up to `end`, its `raw_data` left in the file where its
 /// `data_type` is a weight's. A `raw_data` ahead of the `data_type` saying so
 /// is copied, as a constant's must be.
-fn walk_tensor(c: &mut Cursor, end: i64, ranges: &mut TreeMap<String, [i32, i32]>) -> Result<ByteList, String> with Stream {
+fn walk_tensor(
+    c: &mut Cursor,
+    end: i64,
+    ranges: &mut TreeMap<String, [i32, i32]>,
+) -> Result<ByteList, String> with Stream {
     let mut tensor: ByteList = [];
     let mut weight = false;
     let mut name = "";

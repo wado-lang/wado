@@ -307,7 +307,13 @@ fn varint_end(input: &mut LinearBuffer, at: i32) -> i32 with Stream {
 /// Read until the value behind a tag of `number` and `wire_type`, from `at` on,
 /// is held: its end, or `None` where the stream ends first or the value is
 /// malformed. A group `depth` groups deep holds its fields to its end-group tag.
-fn hold_value(input: &mut LinearBuffer, number: i32, wire_type: WireType, at: i32, depth: i32) -> Option<i32> with Stream {
+fn hold_value(
+    input: &mut LinearBuffer,
+    number: i32,
+    wire_type: WireType,
+    at: i32,
+    depth: i32,
+) -> Option<i32> with Stream {
     return match wire_type {
         Varint => {
             let [_, end] = varint_held(input, at)?;
