@@ -1,16 +1,19 @@
 //! Parse every `.rs` path given on the command line with the Gale-generated
 //! Rust parser and print one `ok` / `ng` line each, with the first
-//! diagnostic. Paths open relative to the first preopen, so run it from the
-//! repository root.
+//! diagnostic. `--tree-hash` appends a hash of the tree to each line, so two
+//! runs can be diffed for a prediction change that moved a tree. Paths open
+//! relative to the first preopen, so run it from the repository root.
 
-use { parse_rust } from "./rust_corpus.wado";
+use { parse_rust, tree_hash } from "./rust_corpus.wado";
 use { collect_paths, line_of } from "../src/corpus.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
-    let paths = collect_paths(&args(), ".rs", []);
+    let argv = args();
+    let paths = collect_paths(&argv, ".rs", ["--tree-hash"]);
+    let with_hash = argv.contains_str("--tree-hash");
 
     let mut bad = 0;
     for let path of &paths {
@@ -24,8 +27,9 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
             },
         };
         let result = parse_rust(&source);
+        let hash = if with_hash { `\t${tree_hash(&result.cst):016x}` } else { "" };
         if result.diagnostics.len() == 0 {
-            println(`ok\t${*path}`);
+            println(`ok\t${*path}${hash}`);
         } else {
             bad += 1;
             let first = result.diagnostics[0];
@@ -34,7 +38,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
             // "expected 'extern'" and the stack is what names the rule.
             let stack = first.rule_path();
             println(
-                `ng\t${*path}\t${result.diagnostics.len()}\t${line_of(&source, first.span.start)}\t${first.message}\t${stack}`,
+                `ng\t${*path}\t${result.diagnostics.len()}\t${line_of(&source, first.span.start)}\t${first.message}\t${stack}${hash}`,
             );
         }
     }
