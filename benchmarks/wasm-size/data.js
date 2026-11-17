@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794944862275,
+  "lastUpdate": 1794957762903,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79037,6 +79037,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9780dba289ab70ba0259084201a89091f043a406"
         },
         "date": 1794944861538,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1db3ce45197717e16dda69ee08a6a1d8e1090695",
+          "message": "Merge pull request #2670 from wado-lang/claude/emi-fix-20261118\n\nfix(EMI): a live closure keeps the types its wrapper is built from",
+          "timestamp": "2026-11-18T08:04:33+09:00",
+          "tree_id": "d303ab300d4623fad417ab714f19bdc98467506b",
+          "url": "https://github.com/wado-lang/wado/commit/1db3ce45197717e16dda69ee08a6a1d8e1090695"
+        },
+        "date": 1794957762291,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
