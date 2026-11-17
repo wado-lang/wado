@@ -856,3 +856,99 @@ impl fmt::Display for StructName {
         write!(f, "{}/{}", self.module_source, self.name)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hashmap::IndexSet;
+    use crate::module_source::ModuleSourceInterner;
+
+    #[test]
+    fn a_function_is_qualified_by_its_module_name() {
+        let mut interner = ModuleSourceInterner::new();
+        let func = FreeFunctionName::new(interner.core("cli"), "println".to_string());
+        assert_eq!(func.to_string(), "core:cli/println");
+
+        let entry = FreeFunctionName::from_module_source(
+            &interner.entry_point("/abs/pkg/src/main.wado"),
+            "main",
+        );
+        assert_eq!(entry.to_string(), "main.wado/main");
+    }
+
+    #[test]
+    fn test_struct_name_to_string() {
+        let mut interner = ModuleSourceInterner::new();
+        let struct_name = StructName::new(interner.local("./geometry.wado"), "Point".to_string());
+        assert_eq!(struct_name.to_string(), "geometry.wado/Point");
+    }
+
+    #[test]
+    fn test_struct_name_hash_eq() {
+        let mut interner = ModuleSourceInterner::new();
+        let mut point_in = |path: &str| StructName::new(interner.local(path), "Point".to_string());
+        let s1 = point_in("./geometry.wado");
+        let s2 = point_in("./geometry.wado");
+        let s3 = point_in("./other.wado");
+
+        let mut set = IndexSet::default();
+        set.insert(s1);
+        assert!(set.contains(&s2));
+        assert!(!set.contains(&s3));
+    }
+
+    #[test]
+    fn test_receiver_mangle() {
+        let shared = Receiver::Ref(RefKind::Shared);
+        assert_eq!(shared.mangle(&["i32".into()]), "&i32");
+        assert_eq!(shared.mangle(&["List<i32>".into()]), "&List<i32>");
+        let mutable = Receiver::Ref(RefKind::Mut);
+        assert_eq!(mutable.mangle(&["String".into()]), "&mut String");
+        assert_eq!(mutable.mangle(&["List<i32>".into()]), "&mut List<i32>");
+        // Named receivers fall through to mangle_generic_name.
+        assert_eq!(
+            Receiver::Type(FqTypeName::builtin("List")).mangle(&["i32".into()]),
+            "List<i32>"
+        );
+        // A reference to a named head keeps the head, its arguments applied.
+        let list = FqTypeName::builtin("List");
+        let shared_list = Receiver::RefTo(RefKind::Shared, list.clone());
+        assert_eq!(shared_list.mangle(&["i32".into()]), "&List<i32>");
+        assert_eq!(shared_list.head_key().as_mangled_str(), "&List");
+        let mut_list = Receiver::RefTo(RefKind::Mut, list);
+        assert_eq!(mut_list.mangle(&["i32".into()]), "&mut List<i32>");
+        assert_eq!(mut_list.mangle(&[]), "&mut List");
+    }
+
+    #[test]
+    fn test_ref_impl_receiver_names_its_referent() {
+        let item = FqTypeName::builtin("Item");
+        let template = LocalMethodName::of(
+            Receiver::of_ref_impl(
+                RefKind::Shared,
+                &item.clone().with_reference(RefKind::Shared),
+            ),
+            None,
+            "eq".into(),
+        );
+        assert_eq!(template.to_mangled_name(), "&Item::eq");
+        let instance = template.with_struct_type_args(&[FqTypeName::builtin("i32")]);
+        assert_eq!(instance.to_mangled_name(), "&Item<i32>::eq");
+        assert_eq!(instance.fq_struct_name().to_mangled(), "&Item<i32>");
+        // A type parameter behind the reference leaves the bare kind.
+        let blanket = Receiver::of_ref_impl(
+            RefKind::Mut,
+            &FqTypeName::binder("T").with_reference(RefKind::Mut),
+        );
+        assert_eq!(blanket, Receiver::Ref(RefKind::Mut));
+        let at_owner = template.at_owner(
+            &item
+                .with_args(vec![FqTypeName::builtin("bool")])
+                .with_reference(RefKind::Shared),
+        );
+        assert_eq!(
+            at_owner,
+            instance.with_struct_type_args(&[FqTypeName::builtin("bool")])
+        );
+    }
+}

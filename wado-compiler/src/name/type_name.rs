@@ -1541,3 +1541,23 @@ impl std::fmt::Display for FqTraitName {
         f.write_str(&self.to_mangled())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_function_type_name_spells_as_its_mangle() {
+        let inner = FqTypeName::function(false, vec![], FqTypeName::builtin("()"), vec![]);
+        let f = FqTypeName::function(
+            true,
+            vec![FqTypeName::binder("T"), FqTypeName::builtin("i32")],
+            inner,
+            vec![tir::EffectRef::Param { name: "E".into() }],
+        );
+        assert_eq!(f.to_mangled(), "fn mut(T,i32)->(fn()->())with(E)");
+        assert_eq!(f.to_display(), "fn mut(T, i32) -> (fn() -> ()) with E");
+        assert!(f.mentions_binder());
+        assert_eq!(f.head_only(), f);
+    }
+}
