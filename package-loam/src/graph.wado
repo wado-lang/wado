@@ -619,6 +619,8 @@ pub global GATHER_BLOCK_QUANTIZED: String = "com.microsoft.GatherBlockQuantized"
 /// - `SimplifiedLayerNormalization` is onnxruntime's RMS normalization over the
 ///   last axis: `x / √(mean(x²) + epsilon) · scale`, the function ONNX's
 ///   `RMSNormalization` (opset 23) defines.
+/// - `com.microsoft.SkipSimplifiedLayerNormalization` is that normalization
+///   of a sum, which it also gives.
 /// - `Max` and `Min` take any number of operands, two at a time.
 /// - `Clip` is `Min(Max(x, min), max)`, as ONNX defines it, each bound an
 ///   optional operand, or before opset 11 an optional attribute.
@@ -626,6 +628,7 @@ fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
     let [needed, write]: [i32, fn(&Node, &mut FunctionBody) -> Result<(), String>] = match node.op.as_str_slice() {
         "Gelu" => [1, gelu],
         "SimplifiedLayerNormalization" => [2, rms_normalization],
+        "com.microsoft.SkipSimplifiedLayerNormalization" => [3, skip_rms_normalization],
         "Max" | "Min" => [1, pairwise],
         "Clip" => [1, clip],
         _ => {
@@ -636,7 +639,8 @@ fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
     if given < needed {
         return Result::Err(`${node.site()}: ${operands_short(needed, given)}`);
     }
-    let mut body = FunctionBody { prefix: node.outputs.first().unwrap_or(node.op), x: node.inputs[0], nodes: [] };
+    let named = node.outputs.into_iter().find(|o| o != "");
+    let mut body = FunctionBody { prefix: named.unwrap_or(node.op), x: node.inputs[0], nodes: [] };
     write(node, &mut body)?;
     return Result::Ok(Option::Some(body.nodes));
 }
@@ -678,11 +682,46 @@ fn rms_normalization(node: &Node, body: &mut FunctionBody) -> Result<(), String>
     if node.int_attr("axis", -1).map_err(|e| at_node(node, e))? != -1 {
         return Result::Err(`${node.site()}: only the last axis normalizes`);
     }
-    let [given, scale] = [node.inputs[0], node.inputs[1]];
-    let epsilon = node.float_attr("epsilon", 1e-5).map_err(|e| at_node(node, e))?;
     let stash = node.int_attr("stash_type", 1).map_err(|e| at_node(node, e))?;
-    let x = body.computed_in(given, stash);
-    let square = body.binary("Mul", &x, &x);
+    let x = body.computed_in(node.inputs[0], stash);
+    return normalized_rows(node, body, &x, node.inputs[1]);
+}
+
+/// onnxruntime's `SkipSimplifiedLayerNormalization`: the RMS normalization of
+/// `input + skip + bias`, and that sum as its fourth output. The sum is computed
+/// in f32, and the normalization reads it there: onnxruntime normalizes a sum
+/// of halves past a half's range, which the fourth output rounds to infinity.
+fn skip_rms_normalization(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
+    for let unsupported of [1, 2] {
+        if node.outputs.len() > unsupported && node.outputs[unsupported] != "" {
+            return Result::Err(`${node.site()}: names a mean or an inverse deviation, which only training reads`);
+        }
+    }
+    let given = node.inputs[0];
+    let mut sum = body.binary("Add", &body.computed_in(given, 1), &body.computed_in(node.inputs[1], 1));
+    if node.has_operand(3) {
+        sum = body.binary("Add", &sum, &body.computed_in(node.inputs[3], 1));
+    }
+    body.x = sum;
+    if node.outputs.len() > 3 && node.outputs[3] != "" {
+        body.nodes.push(Node {
+            op: "CastLike",
+            outputs: [node.outputs[3]],
+            inputs: [sum, given],
+            attrs: [],
+        });
+    }
+    if node.outputs[0] == "" {
+        return Result::Ok(());
+    }
+    return normalized_rows(node, body, &sum, node.inputs[2]);
+}
+
+/// `x` normalized by the root of each last-axis row's mean square, then scaled
+/// by `scale`, whose element the result takes.
+fn normalized_rows(node: &Node, body: &mut FunctionBody, x: &String, scale: String) -> Result<(), String> {
+    let epsilon = node.float_attr("epsilon", 1e-5).map_err(|e| at_node(node, e))?;
+    let square = body.binary("Mul", x, x);
     let mean = body.node("ReduceMean", [square], [
         Attr {
             name: "axes",
@@ -692,7 +731,7 @@ fn rms_normalization(node: &Node, body: &mut FunctionBody) -> Result<(), String>
     ]);
     let root = body.unary("Sqrt", &body.binary("Add", &mean, &body.constant(epsilon)));
     // The result takes the scale's element, which may differ from the input's.
-    let normalized = body.node("CastLike", [body.binary("Div", &x, &root), scale], []);
+    let normalized = body.node("CastLike", [body.binary("Div", x, &root), scale], []);
     body.output("Mul", [normalized, scale], node);
     return Result::Ok(());
 }

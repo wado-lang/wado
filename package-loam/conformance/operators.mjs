@@ -443,6 +443,35 @@ const halfNorm = (floats) => overHalves({
 add('SimplifiedLayerNormalizationHalf', halfNorm(['A', 'C']));
 // The output takes the scale's element type, which may differ from the input's.
 add('SimplifiedLayerNormalizationMixed', halfNorm(['C']));
+
+// SkipSimplifiedLayerNormalization of A and its skip B, scaled by C and with a
+// bias D where `bias`. `output` names which result the case checks: the
+// normalization, 0, or the sum it normalizes, 3.
+const skipNorm = ({ a, b, bias = false, output = 0 }) => {
+  const inits = { C: float([3], [1, -0.5, 2]) };
+  const operands = ['A', 'B', 'C'];
+  if (bias) {
+    inits.D = float([3], [0.5, -1, 0.25]);
+    operands.push('D');
+  }
+  const outputs = ['O', '', '', 'Sum'];
+  outputs[output] = 'Y';
+  return {
+    inputs: { A: float([2, 3], a), B: float([2, 3], b) },
+    inits,
+    nodes: [node('com.microsoft.SkipSimplifiedLayerNormalization', operands, outputs, { epsilon: f32(1e-5) })],
+    opset: 17,
+    domains: { 'com.microsoft': 1 },
+  };
+};
+add('SkipNorm', skipNorm({}));
+add('SkipNormBias', skipNorm({ bias: true }));
+add('SkipNormSum', skipNorm({ bias: true, output: 3 }));
+// Sums past a half's range: whether the normalization reads the sum rounded to
+// a half or the one computed in f32.
+const pastHalf = { a: [60000, 1, 2, 3, -60000, 1], b: [60000, 0, 0, 0, -60000, 0] };
+add('SkipNormHalf', overHalves(skipNorm(pastHalf), ['A', 'B', 'C']));
+add('SkipNormHalfSum', overHalves(skipNorm({ ...pastHalf, output: 3 }), ['A', 'B', 'C']));
 add('GeluTanh', {
   inputs: { A: float([2, 3]) },
   nodes: [node('Gelu', ['A'], 'Y', { approximate: 'tanh' })],

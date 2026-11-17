@@ -26,15 +26,15 @@ What the model asks of Loam, as
 holds no function and no branch. An operator below with nothing missing is one
 Loam lowers, though the build stops before it reaches any of them.
 
-| Operator                                       | Nodes | What Loam lacks                               |
-| ---------------------------------------------- | ----- | --------------------------------------------- |
-| `SkipSimplifiedLayerNormalization`             | 48    | The operator, which names up to four outputs. |
-| `GroupQueryAttention`, a window of 128 or none | 24    | The attention sinks, its twelfth input.       |
-| `QMoE`, 32 experts of 4 bits, 4 to a token     | 24    | The operator.                                 |
-| `MatMulNBits`, 4 bits in blocks of 32          | 73    | Nothing.                                      |
-| `Add`, `Reshape`, `Cast`, `Constant`, `Gather` | 103   | Nothing.                                      |
-| `ReduceSum`, `Shape`, `Sub`                    | 3     | Nothing.                                      |
-| `SimplifiedLayerNormalization`                 | 1     | Nothing.                                      |
+| Operator                                       | Nodes | What Loam lacks                         |
+| ---------------------------------------------- | ----- | --------------------------------------- |
+| `GroupQueryAttention`, a window of 128 or none | 24    | The attention sinks, its twelfth input. |
+| `QMoE`, 32 experts of 4 bits, 4 to a token     | 24    | The operator.                           |
+| `SkipSimplifiedLayerNormalization`             | 48    | Nothing.                                |
+| `MatMulNBits`, 4 bits in blocks of 32          | 73    | Nothing.                                |
+| `Add`, `Reshape`, `Cast`, `Constant`, `Gather` | 103   | Nothing.                                |
+| `ReduceSum`, `Shape`, `Sub`                    | 3     | Nothing.                                |
+| `SimplifiedLayerNormalization`                 | 1     | Nothing.                                |
 
 | Weights                    | Tensors | Bytes          |
 | -------------------------- | ------- | -------------- |
@@ -48,10 +48,8 @@ The embedding is a `float16` table a `Gather` reads, so the model has no
 `GatherBlockQuantized`. The inputs and outputs are `int64` and `float16`, and
 the two `Cast`s give `int32`.
 
-1. [ ] The rest of gpt-oss-20b's operators: onnxruntime's `QMoE` and
-   `SkipSimplifiedLayerNormalization`, and a `GroupQueryAttention` with
-   attention sinks. Stage 0 gives every node a shape per output, as it does
-   `Split`'s, which the normalization's four outputs need. A `QMoE` decomposes
+1. [ ] The rest of gpt-oss-20b's operators: onnxruntime's `QMoE`, and a
+   `GroupQueryAttention` with attention sinks. A `QMoE` decomposes
    in two forms. Over a prompt it loops over the experts and masks each one's
    rows, so its temporaries do not grow with the prompt. Over a step it gathers
    the experts the token routes to. Finished when `operators_test.wado` holds
@@ -199,7 +197,7 @@ Work the road to gpt-oss-20b does not pass. It is unordered.
 
 ### Operators
 
-`conformance/operators_test.wado` lists the operators Loam lowers. Three
+`conformance/operators_test.wado` lists the operators Loam lowers. Four
 outside ONNX's default domain are among them, onnxruntime's:
 
 - `GroupQueryAttention`, without position ids, interleaved rotation or a
@@ -208,6 +206,8 @@ outside ONNX's default domain are among them, onnxruntime's:
   input's float.
 - `GatherBlockQuantized`, over a table of rank 2 gathered along its rows and
   quantized along its columns.
+- `SkipSimplifiedLayerNormalization`, without the mean and the inverse
+  deviation training reads.
 
 ONNX's `Attention` is not. Any other operator stops the build naming itself.
 
