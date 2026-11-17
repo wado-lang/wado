@@ -940,7 +940,7 @@ patternPrimary
     : '_'
     | 'mut'? bindingName
     | literal
-    | '-' (INTEGER | FLOAT | FLOAT_EXP)
+    | '-' number
     | 'mut'? patternPath ('(' (pattern (',' pattern)*)? ')')?
     | 'mut'? path? '{' patternFieldList? '}'
     | 'mut'? '(' (pattern (',' pattern)*)? ')'
@@ -968,9 +968,7 @@ patternField
     ;
 
 literal
-    : INTEGER
-    | FLOAT
-    | FLOAT_EXP
+    : number
     | STRING_LITERAL
     | templateString
     | CHAR_LITERAL
