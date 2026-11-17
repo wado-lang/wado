@@ -218,6 +218,7 @@
 - [Re — Linear-Time Regular Expressions for Wado](./wep-2026-11-02-re.md)
 - [URIs and URI References as Identifiers (`core:uri`)](./wep-2026-11-07-core-uri.md)
 - [Extern Handles — Resources the Collector Reclaims (`externref`)](./wep-2026-11-14-extern-handles.md)
+- [The `spec` Command and Reference Search](./wep-2026-11-17-spec-command.md)
 
 ## Standard Library
 

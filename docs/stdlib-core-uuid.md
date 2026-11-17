@@ -122,3 +122,7 @@ Not 32, 36, 38 (braced) or 45 (URN) characters long.
 Hyphens, braces or the `urn:uuid:` prefix are not where they belong.
 
 #### `InvalidCharacter`
+
+#### `impl Display for ParseError`
+
+##### `fn fmt(&self, f: &mut Formatter)`

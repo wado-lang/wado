@@ -1256,6 +1256,10 @@ Drop a completed subtask. Traps if the subtask has not yet resolved.
 Cancel this in-progress subtask, blocking until it resolves, and return
 the state it resolved in.
 
+#### `impl Waitable for Subtask`
+
+##### `fn wait_on(&self) -> WaitOn`
+
 ### `pub resource ErrorContext`
 
 An error context carrying a debug message across component boundaries.
@@ -5997,6 +6001,54 @@ as Rust's does.
 
 #### `Some(T)`
 
+#### `pub fn take(&mut self) -> Option<T>`
+
+Takes the value out, leaving None in its place.
+
+#### `pub fn replace(&mut self, value: T) -> Option<T>`
+
+Puts `value` in, returning what was there.
+
+#### `pub fn unwrap(self) -> T`
+
+Returns the contained value, panicking if None.
+
+#### `pub fn expect(self, msg: String) -> T`
+
+Returns the contained value, panicking with `msg` if None.
+
+#### `pub fn unwrap_or(self, default: T) -> T`
+
+Returns the contained value, or `default` if None.
+
+#### `pub fn map<affine U>(self, mut f: fn mut(T) -> U with _) -> Option<U> with _`
+
+Applies `f` to the contained value, leaving None untouched.
+
+#### `pub fn ok_or<affine E>(self, err: E) -> Result<T, E>`
+
+Converts to a Result, mapping None to `Err(err)`.
+
+#### `pub fn unwrap_or_else(&self)`
+
+``#[unavailable("a closure hides its cost at the call site; write `match` when the fallback must not be evaluated")]``
+
+#### `pub fn ok_or_else(&self)`
+
+``#[unavailable("a closure hides its cost at the call site; write `match` when the error must not be built")]``
+
+#### `pub fn map_or(&self)`
+
+``#[unavailable("the name reads as map-then-fallback while the signature takes the fallback first; write `map(f).unwrap_or(v)`")]``
+
+#### `pub fn map_or_else(&self)`
+
+``#[unavailable("the argument order traps the same way `map_or` does; write `map(f)` and match on the result")]``
+
+#### `impl Default for Option<T>`
+
+##### `pub fn default() -> Option<T>`
+
 ### `pub variant Result<T, E>`
 
 Result type - either Ok(T) or Err(E)
@@ -6004,6 +6056,46 @@ Result type - either Ok(T) or Err(E)
 #### `Ok(T)`
 
 #### `Err(E)`
+
+#### `pub fn unwrap(self) -> T`
+
+Returns the contained Ok value, panicking (with the Err value) if Err.
+
+#### `pub fn is_ok(&self) -> bool`
+
+Returns true if this is an Ok value.
+
+#### `pub fn is_err(&self) -> bool`
+
+Returns true if this is an Err value.
+
+#### `pub fn expect(self, msg: String) -> T`
+
+Returns the contained Ok value, panicking with `msg` (and the Err value) if Err.
+
+#### `pub fn unwrap_err(self) -> E`
+
+Returns the contained Err value, panicking (with the Ok value) if Ok.
+
+#### `pub fn expect_err(self, msg: String) -> E`
+
+Returns the contained Err value, panicking with `msg` (and the Ok value) if Ok.
+
+#### `pub fn unwrap_or(self, default: T) -> T`
+
+Returns the contained Ok value, or `default` if Err.
+
+#### `pub fn map<affine U>(self, mut f: fn mut(T) -> U with _) -> Result<U, E> with _`
+
+Applies `f` to the contained Ok value, leaving an Err untouched.
+
+#### `pub fn map_err<affine F>(self, mut f: fn mut(E) -> F with _) -> Result<T, F> with _`
+
+Applies `f` to the contained Err value, leaving an Ok untouched.
+
+#### `pub fn unwrap_or_else(&self)`
+
+``#[unavailable("a closure hides its cost at the call site; write `match` to read the `Err` value or to skip building a fallback")]``
 
 ### `pub variant WaitOn`
 
@@ -6132,6 +6224,11 @@ The state an async call moved to (`CanonicalABI.md`, `Subtask.State`).
 #### `CancelledBeforeStarted`
 
 #### `CancelledBeforeReturned`
+
+#### `pub fn is_resolved(&self) -> bool`
+
+Whether the call resolved, by returning or by a cancel. Only a resolved
+call's subtask may drop: the Component Model traps on one in flight.
 
 ### `pub enum IntErrorKind`
 

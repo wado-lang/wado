@@ -245,6 +245,20 @@ names.
 
 #### `WordBreak(WordBreak)`
 
+#### `impl CodePointSet for Property`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for Property`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<Property, PropertyNameError>`
+
+#### `impl LenientFromStr for Property`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Property, PropertyNameError>`
+
 ## Enums
 
 ### `pub enum BinaryProperty`
@@ -377,6 +391,20 @@ The binary properties, each the set of code points that have it.
 
 #### `XidStart`
 
+#### `impl CodePointSet for BinaryProperty`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for BinaryProperty`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<BinaryProperty, PropertyNameError>`
+
+#### `impl LenientFromStr for BinaryProperty`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<BinaryProperty, PropertyNameError>`
+
 ### `pub enum GeneralCategoryGroup`
 
 The values of General_Category (`gc`): the categories, and the groups UAX #44 names
@@ -458,6 +486,20 @@ over them (`Letter` is `L`).
 
 #### `Other`
 
+#### `impl CodePointSet for GeneralCategoryGroup`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for GeneralCategoryGroup`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<GeneralCategoryGroup, PropertyNameError>`
+
+#### `impl LenientFromStr for GeneralCategoryGroup`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<GeneralCategoryGroup, PropertyNameError>`
+
 ### `pub enum BidiClass`
 
 The values of Bidi_Class (`bc`).
@@ -507,6 +549,20 @@ The values of Bidi_Class (`bc`).
 #### `RightToLeftIsolate`
 
 #### `PopDirectionalIsolate`
+
+#### `impl CodePointSet for BidiClass`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for BidiClass`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<BidiClass, PropertyNameError>`
+
+#### `impl LenientFromStr for BidiClass`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<BidiClass, PropertyNameError>`
 
 ### `pub enum CanonicalCombiningClass`
 
@@ -628,6 +684,20 @@ The values of Canonical_Combining_Class (`ccc`).
 
 #### `IotaSubscript`
 
+#### `impl CodePointSet for CanonicalCombiningClass`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for CanonicalCombiningClass`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<CanonicalCombiningClass, PropertyNameError>`
+
+#### `impl LenientFromStr for CanonicalCombiningClass`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<CanonicalCombiningClass, PropertyNameError>`
+
 ### `pub enum EastAsianWidth`
 
 The values of East_Asian_Width (`ea`).
@@ -643,6 +713,20 @@ The values of East_Asian_Width (`ea`).
 #### `Narrow`
 
 #### `Wide`
+
+#### `impl CodePointSet for EastAsianWidth`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for EastAsianWidth`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<EastAsianWidth, PropertyNameError>`
+
+#### `impl LenientFromStr for EastAsianWidth`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<EastAsianWidth, PropertyNameError>`
 
 ### `pub enum GraphemeClusterBreak`
 
@@ -684,6 +768,20 @@ The values of Grapheme_Cluster_Break (`GCB`).
 
 #### `Zwj`
 
+#### `impl CodePointSet for GraphemeClusterBreak`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for GraphemeClusterBreak`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<GraphemeClusterBreak, PropertyNameError>`
+
+#### `impl LenientFromStr for GraphemeClusterBreak`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<GraphemeClusterBreak, PropertyNameError>`
+
 ### `pub enum HangulSyllableType`
 
 The values of Hangul_Syllable_Type (`hst`).
@@ -700,6 +798,20 @@ The values of Hangul_Syllable_Type (`hst`).
 
 #### `LvtSyllable`
 
+#### `impl CodePointSet for HangulSyllableType`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for HangulSyllableType`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<HangulSyllableType, PropertyNameError>`
+
+#### `impl LenientFromStr for HangulSyllableType`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<HangulSyllableType, PropertyNameError>`
+
 ### `pub enum IndicConjunctBreak`
 
 The values of Indic_Conjunct_Break (`InCB`).
@@ -711,6 +823,20 @@ The values of Indic_Conjunct_Break (`InCB`).
 #### `Extend`
 
 #### `Linker`
+
+#### `impl CodePointSet for IndicConjunctBreak`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for IndicConjunctBreak`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<IndicConjunctBreak, PropertyNameError>`
+
+#### `impl LenientFromStr for IndicConjunctBreak`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<IndicConjunctBreak, PropertyNameError>`
 
 ### `pub enum IndicSyllabicCategory`
 
@@ -789,6 +915,20 @@ The values of Indic_Syllabic_Category (`InSC`).
 #### `VowelIndependent`
 
 #### `ReorderingKiller`
+
+#### `impl CodePointSet for IndicSyllabicCategory`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for IndicSyllabicCategory`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<IndicSyllabicCategory, PropertyNameError>`
+
+#### `impl LenientFromStr for IndicSyllabicCategory`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<IndicSyllabicCategory, PropertyNameError>`
 
 ### `pub enum JoiningGroup`
 
@@ -1006,6 +1146,20 @@ The values of Joining_Group (`jg`).
 
 #### `ThinNoon`
 
+#### `impl CodePointSet for JoiningGroup`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for JoiningGroup`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<JoiningGroup, PropertyNameError>`
+
+#### `impl LenientFromStr for JoiningGroup`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<JoiningGroup, PropertyNameError>`
+
 ### `pub enum JoiningType`
 
 The values of Joining_Type (`jt`).
@@ -1021,6 +1175,20 @@ The values of Joining_Type (`jt`).
 #### `RightJoining`
 
 #### `Transparent`
+
+#### `impl CodePointSet for JoiningType`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for JoiningType`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<JoiningType, PropertyNameError>`
+
+#### `impl LenientFromStr for JoiningType`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<JoiningType, PropertyNameError>`
 
 ### `pub enum LineBreak`
 
@@ -1124,6 +1292,20 @@ The values of Line_Break (`lb`).
 
 #### `UnambiguousHyphen`
 
+#### `impl CodePointSet for LineBreak`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for LineBreak`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<LineBreak, PropertyNameError>`
+
+#### `impl LenientFromStr for LineBreak`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<LineBreak, PropertyNameError>`
+
 ### `pub enum NumericType`
 
 The values of Numeric_Type (`nt`).
@@ -1135,6 +1317,20 @@ The values of Numeric_Type (`nt`).
 #### `Digit`
 
 #### `Numeric`
+
+#### `impl CodePointSet for NumericType`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for NumericType`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<NumericType, PropertyNameError>`
+
+#### `impl LenientFromStr for NumericType`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<NumericType, PropertyNameError>`
 
 ### `pub enum Script`
 
@@ -1566,6 +1762,20 @@ The values of Script (`sc`).
 
 #### `Hntl`
 
+#### `impl CodePointSet for Script`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for Script`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<Script, PropertyNameError>`
+
+#### `impl LenientFromStr for Script`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Script, PropertyNameError>`
+
 ### `pub enum SentenceBreak`
 
 The values of Sentence_Break (`SB`).
@@ -1600,6 +1810,20 @@ The values of Sentence_Break (`SB`).
 
 #### `SContinue`
 
+#### `impl CodePointSet for SentenceBreak`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for SentenceBreak`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<SentenceBreak, PropertyNameError>`
+
+#### `impl LenientFromStr for SentenceBreak`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<SentenceBreak, PropertyNameError>`
+
 ### `pub enum VerticalOrientation`
 
 The values of Vertical_Orientation (`vo`).
@@ -1611,6 +1835,20 @@ The values of Vertical_Orientation (`vo`).
 #### `TransformedUpright`
 
 #### `Upright`
+
+#### `impl CodePointSet for VerticalOrientation`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for VerticalOrientation`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<VerticalOrientation, PropertyNameError>`
+
+#### `impl LenientFromStr for VerticalOrientation`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<VerticalOrientation, PropertyNameError>`
 
 ### `pub enum WordBreak`
 
@@ -1661,3 +1899,17 @@ The values of Word_Break (`WB`).
 #### `Zwj`
 
 #### `WSegSpace`
+
+#### `impl CodePointSet for WordBreak`
+
+##### `fn ranges(&self) -> List<[u32, u32]>`
+
+##### `fn contains(&self, ch: char) -> bool`
+
+#### `impl FromStr for WordBreak`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<WordBreak, PropertyNameError>`
+
+#### `impl LenientFromStr for WordBreak`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<WordBreak, PropertyNameError>`

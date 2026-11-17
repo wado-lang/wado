@@ -5,9 +5,9 @@ use std::path::Path;
 use lexopt::Arg::Value;
 use wado_compiler::LogLevel;
 use wado_compiler::doc::{
-    DocEffect, DocEnum, DocFlags, DocFunction, DocModule, DocPrimitiveType, DocResource, DocScope,
-    DocStruct, DocTrait, DocTraitImpl, DocVariant, extract_doc_with, extract_stdlib_doc_with,
-    stdlib_doc_entry,
+    DocEffect, DocEnum, DocFlags, DocFunction, DocImplMembers, DocModule, DocPrimitiveType,
+    DocResource, DocScope, DocStruct, DocTrait, DocTraitImpl, DocVariant, extract_doc_with,
+    extract_stdlib_doc_with, stdlib_doc_entry,
 };
 use wado_compiler::kiln::InvocationIndex;
 use wado_compiler::semantics::{Semantics, semantics_for_world};
@@ -16,6 +16,8 @@ use wado_lsp::host::discovery::Disk;
 use crate::args::{self, CliExit};
 use crate::compile::{Settled, build_load, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::markdown::{FenceMarker, fence_open, matches_fence_close};
+use crate::search::{self, Query};
 
 const MODULE_PLACEHOLDER: &str = "{module}";
 
@@ -35,6 +37,8 @@ pub struct DocOptions {
     pub output: Option<String>,
     /// Document private items, fields, and inherent methods too.
     pub all: bool,
+    /// List the items matching this query instead of rendering pages.
+    pub search: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -43,6 +47,7 @@ enum Opt {
     Title,
     Output,
     All,
+    Search,
     Help,
 }
 
@@ -52,6 +57,7 @@ impl Opt {
         Self::Title,
         Self::Output,
         Self::All,
+        Self::Search,
         Self::Help,
     ];
 
@@ -82,6 +88,13 @@ impl Opt {
                 short: None,
                 value: None,
                 desc: "Document private items, fields, and inherent methods too",
+            },
+            Self::Search => args::OptSpec {
+                long: Some("search"),
+                short: Some('s'),
+                value: Some("<query>"),
+                desc: "List the items holding every term of the query, in the inputs \
+                       or, with none, in every stdlib module",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -138,11 +151,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
     let mut title: Option<String> = None;
     let mut output: Option<String> = None;
     let mut all = false;
+    let mut search: Option<String> = None;
+    let mut format_given = false;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Format => {
+                    format_given = true;
                     let fmt_str = args::require_string(&mut parser)?;
                     format = match fmt_str.as_str() {
                         "markdown" | "md" => OutputFormat::Markdown,
@@ -162,6 +178,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
                     output = Some(args::require_string(&mut parser)?);
                 }
                 Opt::All => all = true,
+                Opt::Search => search = Some(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -169,6 +186,22 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
         } else {
             return Err(args::unexpected_arg(arg, &usage));
         }
+    }
+
+    if search.is_some() {
+        if format_given || title.is_some() || output.is_some() {
+            return Err(CliExit::error(
+                "--search prints a list of hits; it takes no --format, --title or --output",
+            ));
+        }
+        return Ok(DocOptions {
+            inputs,
+            format,
+            title,
+            output,
+            all,
+            search,
+        });
     }
 
     let inputs = args::require_inputs(inputs, &usage)?;
@@ -196,6 +229,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DocOptions, CliExit> {
         title,
         output,
         all,
+        search,
     })
 }
 
@@ -204,6 +238,20 @@ fn is_stdlib_module(input: &str) -> bool {
 }
 
 pub async fn run(opts: DocOptions) -> Result<(), CliExit> {
+    if let Some(query) = &opts.search {
+        let docs = if opts.inputs.is_empty() {
+            load_stdlib_docs(opts.all).await?
+        } else {
+            let mut docs = Vec::with_capacity(opts.inputs.len());
+            for input in &opts.inputs {
+                docs.push((input.clone(), load_doc(input, opts.all).await?));
+            }
+            docs
+        };
+        print!("{}", search_docs(&docs, query)?);
+        return Ok(());
+    }
+
     let mut docs: Vec<(String, DocModule)> = Vec::with_capacity(opts.inputs.len());
     for input in &opts.inputs {
         docs.push((input.clone(), load_doc(input, opts.all).await?));
@@ -262,6 +310,181 @@ async fn analyze(
         "an analysis that reports no error completes"
     );
     Ok(sem)
+}
+
+/// The page of every documented stdlib module, from one analysis that loads
+/// them all.
+async fn load_stdlib_docs(include_private: bool) -> Result<Vec<(String, DocModule)>, CliExit> {
+    let modules: Vec<&str> = wado_compiler::stdlib::documented_modules().collect();
+    let entry: String = modules.iter().map(|m| stdlib_doc_entry(m)).collect();
+    let host = doc_host(Path::new("."));
+    let sem = analyze(&entry, &host, "doc.wado", InvocationIndex::new()).await?;
+    Ok(modules
+        .into_iter()
+        .map(|m| {
+            let doc = extract_stdlib_doc_with(m, include_private, &sem)
+                .expect("an analyzed stdlib module is bundled");
+            (m.to_string(), doc)
+        })
+        .collect())
+}
+
+/// One searchable item of a page: what a reader calls it, and what it says.
+struct Item<'a> {
+    module: &'a str,
+    name: &'a str,
+    /// The name under its owner's where it has one (`Option::map`).
+    path: String,
+    signature: &'a str,
+    /// A function's attributes: `#[unavailable(…)]` says the name is reserved.
+    attrs: &'a [String],
+    doc: Option<&'a str>,
+}
+
+/// Every item of `doc`, in page order.
+fn items<'a>(module: &'a str, doc: &'a DocModule) -> Vec<Item<'a>> {
+    let mut out = Items {
+        module,
+        items: Vec::new(),
+    };
+    for g in &doc.globals {
+        out.add(None, &g.name, &g.signature, &g.doc);
+    }
+    for f in &doc.functions {
+        out.add_function(None, f);
+    }
+    for t in &doc.traits {
+        out.add(None, &t.name, &t.signature, &t.doc);
+        out.add_members(&t.name, &t.methods);
+    }
+    for e in &doc.effects {
+        out.add(None, &e.name, &e.signature, &e.doc);
+        out.add_members(&e.name, &e.methods);
+    }
+    for r in &doc.resources {
+        out.add(None, &r.name, &r.signature, &r.doc);
+        out.add_members(&r.name, r.operations.iter().chain(r.impls.functions()));
+    }
+    for t in &doc.types {
+        out.add(None, &t.name, &t.signature, &t.doc);
+        out.add_members(&t.name, t.impls.functions());
+    }
+    for p in &doc.primitive_types {
+        out.add(None, &p.name, &p.name, &p.doc);
+        out.add_members(&p.name, p.impls.functions());
+    }
+    for s in &doc.structs {
+        out.add(None, &s.name, sig_name_part(&s.signature), &s.doc);
+        for f in &s.fields {
+            out.add(Some(&s.name), &f.name, &f.ty, &f.doc);
+        }
+        out.add_members(&s.name, s.impls.functions());
+    }
+    for v in &doc.variants {
+        out.add(None, &v.name, &v.signature, &v.doc);
+        for c in &v.cases {
+            out.add(Some(&v.name), &c.name, &c.signature, &c.doc);
+        }
+        out.add_members(&v.name, v.impls.functions());
+    }
+    for e in &doc.enums {
+        let signature = sig_name_part(&e.signature);
+        out.add(None, &e.name, signature, &e.doc);
+        for c in &e.cases {
+            out.add(Some(&e.name), &c.name, signature, &c.doc);
+        }
+        out.add_members(&e.name, e.impls.functions());
+    }
+    for f in &doc.flags {
+        out.add(None, &f.name, &f.signature, &f.doc);
+        for m in &f.members {
+            out.add(Some(&f.name), &m.name, &f.signature, &m.doc);
+        }
+        out.add_members(&f.name, f.impls.functions());
+    }
+    out.items
+}
+
+struct Items<'a> {
+    module: &'a str,
+    items: Vec<Item<'a>>,
+}
+
+impl<'a> Items<'a> {
+    fn add(
+        &mut self,
+        owner: Option<&str>,
+        name: &'a str,
+        signature: &'a str,
+        doc: &'a Option<String>,
+    ) {
+        self.push(owner, name, signature, &[], doc);
+    }
+
+    fn add_function(&mut self, owner: Option<&str>, f: &'a DocFunction) {
+        self.push(owner, &f.name, &f.signature, &f.attrs, &f.doc);
+    }
+
+    fn push(
+        &mut self,
+        owner: Option<&str>,
+        name: &'a str,
+        signature: &'a str,
+        attrs: &'a [String],
+        doc: &'a Option<String>,
+    ) {
+        self.items.push(Item {
+            module: self.module,
+            name,
+            path: owner.map_or_else(|| name.to_string(), |o| format!("{o}::{name}")),
+            signature,
+            attrs,
+            doc: doc.as_deref(),
+        });
+    }
+
+    fn add_members(&mut self, owner: &str, members: impl IntoIterator<Item = &'a DocFunction>) {
+        for f in members {
+            self.add_function(Some(owner), f);
+        }
+    }
+}
+
+fn search_docs(docs: &[(String, DocModule)], query: &str) -> Result<String, CliExit> {
+    let query = Query::parse(query).ok_or_else(|| CliExit::error("the query is empty"))?;
+    let mut hits = Vec::new();
+    for (module, doc) in docs {
+        for item in items(module, doc) {
+            let fields = [
+                (item.name, 10),
+                (item.path.as_str(), 6),
+                (item.signature, 3),
+                (item.doc.unwrap_or(""), 1),
+            ];
+            if let Some(score) = query.score(&fields) {
+                let exact = if query.is_exactly(item.name) { 10 } else { 0 };
+                hits.push((score + exact, item));
+            }
+        }
+    }
+    let hits = search::rank(hits);
+    if hits.is_empty() {
+        return Err(CliExit::error(
+            "no item matches; `wado spec --search` searches the language specification",
+        ));
+    }
+    let mut out = String::new();
+    for item in hits.iter().take(search::SHOWN_HITS) {
+        writeln!(out, "{}  {}", item.module, item.path).unwrap();
+        for attr in item.attrs {
+            writeln!(out, "    {attr}").unwrap();
+        }
+        writeln!(out, "    {}", item.signature).unwrap();
+    }
+    if let Some(rest) = search::rest_line(hits.len()) {
+        writeln!(out, "{rest}").unwrap();
+    }
+    Ok(out)
 }
 
 async fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliExit> {
@@ -536,6 +759,58 @@ mod format_contract_tests {
         assert!(simple.contains("impl Sized2 for Bytes {"), "got:\n{simple}");
     }
 
+    /// Every kind of type lists the impls written for it, as a struct does.
+    #[test]
+    fn a_variant_an_enum_and_flags_list_their_impls() {
+        let source = "//! Demo.\n\n\
+                      pub variant Shape {\n    Dot,\n    Disc(f64),\n}\n\n\
+                      impl Shape {\n    /// The area.\n    pub fn area(&self) -> f64 { return 0.0; }\n}\n\n\
+                      pub enum Hue {\n    Red,\n}\n\n\
+                      impl Hue {\n    pub const FIRST: Hue = Hue::Red;\n}\n\n\
+                      pub flags Mode {\n    Read,\n}\n\n\
+                      impl Mode {\n    pub fn readable(&self) -> bool { return true; }\n}\n";
+        let md = markdown_of(source);
+        for heading in [
+            "#### `pub fn area(&self) -> f64`",
+            "#### `pub const FIRST: Hue`",
+            "#### `pub fn readable(&self) -> bool`",
+        ] {
+            assert!(md.contains(heading), "missing {heading}:\n{md}");
+        }
+        let simple = simple_all_of(source);
+        for block in ["impl Shape {", "impl Hue {", "impl Mode {"] {
+            assert!(simple.contains(block), "missing {block}:\n{simple}");
+        }
+    }
+
+    /// A resource lists its trait impls and constants beside its operations.
+    #[test]
+    fn a_resource_lists_its_impls() {
+        let source = "//! Demo.\n\npub resource Conn {\n    fn close(&self);\n}\n\n\
+                      impl Conn {\n    pub const LIMIT: i32 = 4;\n}\n\n\
+                      pub trait Named with () {\n    fn label(&self) -> i32;\n}\n\n\
+                      impl Named for Conn {\n    fn label(&self) -> i32 { return 0; }\n}\n";
+        let md = markdown_of(source);
+        for heading in ["#### `pub const LIMIT: i32`", "#### `impl Named for Conn`"] {
+            assert!(md.contains(heading), "missing {heading}:\n{md}");
+        }
+        let simple = simple_all_of(source);
+        assert!(simple.contains("impl Named for Conn {"), "{simple}");
+    }
+
+    /// A resource's operations and its `impl` methods are two keys of its JSON
+    /// object: one key holding both would leave a parser one of them.
+    #[test]
+    fn a_resource_json_keeps_operations_and_methods_apart() {
+        let source = "pub resource Conn {\n    fn close(&self);\n}\n\n\
+                      impl Conn {\n    pub fn open() -> i32 { return 0; }\n}\n";
+        let json = serde_json::to_string(&page(source, &[], false)).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let conn = &value["resources"][0];
+        assert_eq!(conn["operations"][0]["name"], "close", "{json}");
+        assert_eq!(conn["methods"][0]["name"], "open", "{json}");
+    }
+
     /// An associated type is listed as declared: its own parameters and its
     /// bounds are part of what an impl owes.
     #[test]
@@ -758,9 +1033,75 @@ mod format_contract_tests {
             title: Some("Test".to_string()),
             output: None,
             all: false,
+            search: None,
         };
         let out = render_combined(&docs, opts.title.as_deref(), "markdown", &opts);
         assert_dprint_stable(&out, "markdown combined");
+    }
+
+    #[test]
+    fn search_puts_the_exact_name_first() {
+        let docs = vec![("core:prelude".to_string(), stdlib_doc("core:prelude"))];
+        let out = search_docs(&docs, "unwrap_or").unwrap();
+        let first = out.lines().next().unwrap();
+        assert!(
+            first.starts_with("core:prelude  ") && first.ends_with("::unwrap_or"),
+            "{out}"
+        );
+        assert!(
+            out.contains("::unwrap_or_else\n    #[unavailable("),
+            "a reserved name must say so:\n{out}"
+        );
+    }
+
+    #[test]
+    fn search_with_no_input_reaches_every_documented_module() {
+        install_dev_stdlib();
+        let docs = block_on(load_stdlib_docs(false)).unwrap();
+        let names: Vec<&str> = docs.iter().map(|(m, _)| m.as_str()).collect();
+        assert!(
+            names.contains(&"core:json") && names.contains(&"wasi:http"),
+            "{names:?}"
+        );
+        let out = search_docs(&docs, "from_string").unwrap();
+        assert!(out.starts_with("core:json  from_string\n"), "{out}");
+    }
+
+    #[test]
+    fn a_variant_case_hit_shows_its_payload() {
+        let doc = page("pub variant Shape {\n    Disc(f64),\n}\n", &[], false);
+        let out = search_docs(&[("demo.wado".to_string(), doc)], "disc").unwrap();
+        assert_eq!(out, "demo.wado  Shape::Disc\n    Disc(f64)\n");
+    }
+
+    #[test]
+    fn a_miss_points_at_spec_search() {
+        let docs = vec![("core:cli".to_string(), stdlib_doc("core:cli"))];
+        let err = search_docs(&docs, "zzzz").unwrap_err();
+        assert!(
+            err.message.contains("wado spec --search"),
+            "{}",
+            err.message
+        );
+    }
+
+    /// `mise run doc-stdlib` names its modules by hand; each documented core
+    /// module must have the page that task writes, and no page outlive one.
+    #[test]
+    fn every_documented_core_module_has_its_page() {
+        let docs_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../docs");
+        let mut pages: Vec<String> = fs::read_dir(docs_dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|f| f.starts_with("stdlib-core-"))
+            .collect();
+        pages.sort();
+        let mut expected: Vec<String> = wado_compiler::stdlib::documented_modules()
+            .filter(|m| m.starts_with("core:"))
+            .map(|m| format!("stdlib-{}.md", module_filename_stem(m)))
+            .collect();
+        expected.sort();
+        assert_eq!(expected, pages);
     }
 }
 
@@ -848,22 +1189,16 @@ fn render_md_types_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str
             out.push('\n');
             render_md_doc(out, d);
         }
-        render_md_impl_members(out, &t.constants, &t.methods, &t.trait_impls, h4);
+        render_md_impl_members(out, &t.impls, h4);
     }
 }
 
 /// The constants, methods and trait impls a type's `impl` blocks declare.
-fn render_md_impl_members(
-    out: &mut String,
-    constants: &[DocFunction],
-    methods: &[DocFunction],
-    trait_impls: &[DocTraitImpl],
-    h4: &str,
-) {
-    for m in constants.iter().chain(methods) {
+fn render_md_impl_members(out: &mut String, impls: &DocImplMembers, h4: &str) {
+    for m in impls.inherent() {
         render_md_function(out, m, h4);
     }
-    for ti in trait_impls {
+    for ti in &impls.trait_impls {
         writeln!(out, "\n{h4} `{}`", ti.signature).unwrap();
         let h5 = h(heading_level(h4) + 1);
         for m in &ti.methods {
@@ -968,7 +1303,7 @@ fn render_md_primitive_impl(out: &mut String, p: &DocPrimitiveType, h3: &str, h4
         out.push('\n');
         render_md_doc(out, d);
     }
-    render_md_impl_members(out, &p.constants, &p.methods, &p.trait_impls, h4);
+    render_md_impl_members(out, &p.impls, h4);
 }
 
 fn render_md_variants_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str, h4: &str) {
@@ -1015,7 +1350,7 @@ fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
     for f in &s.fields {
         render_md_entity(out, &format!("{}: {}", f.name, f.ty), f.doc.as_deref(), h4);
     }
-    render_md_impl_members(out, &s.constants, &s.methods, &s.trait_impls, h4);
+    render_md_impl_members(out, &s.impls, h4);
 }
 
 fn render_md_enum(out: &mut String, e: &DocEnum, h3: &str, h4: &str) {
@@ -1028,6 +1363,7 @@ fn render_md_enum(out: &mut String, e: &DocEnum, h3: &str, h4: &str) {
     for case in &e.cases {
         render_md_entity(out, &case.name, case.doc.as_deref(), h4);
     }
+    render_md_impl_members(out, &e.impls, h4);
 }
 
 fn render_md_variant(out: &mut String, v: &DocVariant, h3: &str, h4: &str) {
@@ -1037,13 +1373,9 @@ fn render_md_variant(out: &mut String, v: &DocVariant, h3: &str, h4: &str) {
         render_md_doc(out, d);
     }
     for case in &v.cases {
-        let case_repr = if let Some(ref p) = case.payload {
-            format!("{}({p})", case.name)
-        } else {
-            case.name.clone()
-        };
-        render_md_entity(out, &case_repr, case.doc.as_deref(), h4);
+        render_md_entity(out, &case.signature, case.doc.as_deref(), h4);
     }
+    render_md_impl_members(out, &v.impls, h4);
 }
 
 fn render_md_flags(out: &mut String, f: &DocFlags, h3: &str, h4: &str) {
@@ -1055,6 +1387,7 @@ fn render_md_flags(out: &mut String, f: &DocFlags, h3: &str, h4: &str) {
     for member in &f.members {
         render_md_entity(out, &member.name, member.doc.as_deref(), h4);
     }
+    render_md_impl_members(out, &f.impls, h4);
 }
 
 fn render_md_effect(out: &mut String, e: &DocEffect, h3: &str, h4: &str) {
@@ -1074,9 +1407,10 @@ fn render_md_resource(out: &mut String, r: &DocResource, h3: &str, h4: &str) {
         out.push('\n');
         render_md_doc(out, d);
     }
-    for m in &r.methods {
+    for m in &r.operations {
         render_md_function(out, m, h4);
     }
+    render_md_impl_members(out, &r.impls, h4);
 }
 
 fn render_md_entity(out: &mut String, sig: &str, doc: Option<&str>, h: &str) {
@@ -1244,40 +1578,6 @@ fn render_md_doc(out: &mut String, doc: &str) {
     }
 }
 
-/// `CommonMark` fenced code block delimiter — three or more `` ` `` or `~`.
-#[derive(Clone, Copy)]
-struct FenceMarker {
-    /// Fence character (`` ` `` or `~`).
-    ch: char,
-    /// Number of fence characters in the opening run.
-    len: usize,
-}
-
-fn fence_open(s: &str) -> Option<FenceMarker> {
-    let ch = s.chars().next()?;
-    if ch != '`' && ch != '~' {
-        return None;
-    }
-    let len = s.chars().take_while(|&c| c == ch).count();
-    if len < 3 {
-        return None;
-    }
-    // Backtick fences forbid backticks in the info string per CommonMark; the
-    // remaining content after a tilde fence has no such restriction.
-    if ch == '`' && s[len..].contains('`') {
-        return None;
-    }
-    Some(FenceMarker { ch, len })
-}
-
-fn matches_fence_close(s: &str, open: &FenceMarker) -> bool {
-    let count = s.chars().take_while(|&c| c == open.ch).count();
-    if count < open.len {
-        return false;
-    }
-    s[count..].chars().all(|c| c == ' ' || c == '\t')
-}
-
 fn normalize_md_line(line: &str) -> String {
     let stripped = line.trim_start();
     let collapsed = collapse_md_spaces(stripped);
@@ -1380,34 +1680,38 @@ fn render_simple_types_section(out: &mut String, doc: &DocModule, h2: &str) {
     writeln!(out, "\n{h2} Types\n\n```wado").unwrap();
     for t in &doc.types {
         writeln!(out, "{};", t.signature).unwrap();
-        render_simple_impls(out, &t.name, &t.constants, &t.methods, &t.trait_impls);
+        render_simple_impls(out, &t.name, &t.impls);
     }
     out.push_str("```\n");
 }
 
 /// A type's `impl` blocks: the inherent one, where it declares anything, then
 /// each trait impl.
-fn render_simple_impls(
-    out: &mut String,
-    name: &str,
-    constants: &[DocFunction],
-    methods: &[DocFunction],
-    trait_impls: &[DocTraitImpl],
-) {
-    if !constants.is_empty() || !methods.is_empty() {
-        writeln!(out, "\nimpl {name} {{").unwrap();
-        for m in constants.iter().chain(methods) {
-            write_simple_decl(out, m, "    ");
-        }
-        out.push_str("}\n");
+fn render_simple_impls(out: &mut String, name: &str, impls: &DocImplMembers) {
+    if impls.inherent().next().is_some() {
+        out.push('\n');
+        render_simple_impl_block(out, &format!("impl {name}"), impls.inherent());
     }
+    render_simple_trait_impls(out, &impls.trait_impls);
+}
+
+fn render_simple_trait_impls(out: &mut String, trait_impls: &[DocTraitImpl]) {
     for ti in trait_impls {
-        writeln!(out, "\n{} {{", ti.signature).unwrap();
-        for m in &ti.methods {
-            write_simple_decl(out, m, "    ");
-        }
-        out.push_str("}\n");
+        out.push('\n');
+        render_simple_impl_block(out, &ti.signature, &ti.methods);
     }
+}
+
+fn render_simple_impl_block<'a>(
+    out: &mut String,
+    head: &str,
+    members: impl IntoIterator<Item = &'a DocFunction>,
+) {
+    writeln!(out, "{head} {{").unwrap();
+    for m in members {
+        write_simple_decl(out, m, "    ");
+    }
+    out.push_str("}\n");
 }
 
 fn render_simple_globals_section(out: &mut String, doc: &DocModule, h2: &str) {
@@ -1431,7 +1735,9 @@ fn render_simple_flags_section(out: &mut String, doc: &DocModule, h2: &str) {
         for member in &f.members {
             writeln!(out, "    {},", member.name).unwrap();
         }
-        out.push_str("}\n```\n");
+        out.push_str("}\n");
+        render_simple_impls(out, &f.name, &f.impls);
+        out.push_str("```\n");
     }
 }
 
@@ -1441,12 +1747,13 @@ fn render_simple_enums_section(out: &mut String, doc: &DocModule, h2: &str) {
     }
     writeln!(out, "\n{h2} Enums").unwrap();
     for e in &doc.enums {
-        let name = sig_name_part(&e.signature);
-        writeln!(out, "\n```wado\n{name} {{").unwrap();
+        writeln!(out, "\n```wado\n{} {{", sig_name_part(&e.signature)).unwrap();
         for case in &e.cases {
             writeln!(out, "    {},", case.name).unwrap();
         }
-        out.push_str("}\n```\n");
+        out.push_str("}\n");
+        render_simple_impls(out, &e.name, &e.impls);
+        out.push_str("```\n");
     }
 }
 
@@ -1470,15 +1777,18 @@ fn render_simple_resources_section(out: &mut String, doc: &DocModule, h2: &str) 
     }
     writeln!(out, "\n{h2} Resources").unwrap();
     for r in &doc.resources {
-        if r.methods.is_empty() {
-            writeln!(out, "\n```wado\n{};\n```", r.signature).unwrap();
+        out.push_str("\n```wado\n");
+        if r.operations.is_empty() {
+            writeln!(out, "{};", r.signature).unwrap();
         } else {
-            writeln!(out, "\n```wado\n{} {{", r.signature).unwrap();
-            for m in &r.methods {
+            writeln!(out, "{} {{", r.signature).unwrap();
+            for m in &r.operations {
                 write_simple_decl(out, m, "    ");
             }
-            out.push_str("}\n```\n");
+            out.push_str("}\n");
         }
+        render_simple_impls(out, &r.name, &r.impls);
+        out.push_str("```\n");
     }
 }
 
@@ -1511,7 +1821,7 @@ fn render_simple_structs_section(out: &mut String, doc: &DocModule, h2: &str) {
     for s in &doc.structs {
         out.push_str("\n```wado\n");
         render_simple_struct(out, s);
-        render_simple_impls(out, &s.name, &s.constants, &s.methods, &s.trait_impls);
+        render_simple_impls(out, &s.name, &s.impls);
         out.push_str("```\n");
     }
 }
@@ -1523,21 +1833,8 @@ fn render_simple_primitive_types_section(out: &mut String, doc: &DocModule, h2: 
     writeln!(out, "\n{h2} Primitive Types").unwrap();
     for p in &doc.primitive_types {
         out.push_str("\n```wado\n");
-        writeln!(out, "impl {} {{", p.name).unwrap();
-        for c in &p.constants {
-            writeln!(out, "    {};", c.signature).unwrap();
-        }
-        for m in &p.methods {
-            write_simple_decl(out, m, "    ");
-        }
-        out.push_str("}\n");
-        for ti in &p.trait_impls {
-            writeln!(out, "\n{} {{", ti.signature).unwrap();
-            for m in &ti.methods {
-                write_simple_decl(out, m, "    ");
-            }
-            out.push_str("}\n");
-        }
+        render_simple_impl_block(out, &format!("impl {}", p.name), p.impls.inherent());
+        render_simple_trait_impls(out, &p.impls.trait_impls);
         out.push_str("```\n");
     }
 }
@@ -1550,13 +1847,11 @@ fn render_simple_variants_section(out: &mut String, doc: &DocModule, h2: &str) {
     for v in &doc.variants {
         writeln!(out, "\n```wado\n{} {{", v.signature).unwrap();
         for case in &v.cases {
-            if let Some(ref p) = case.payload {
-                writeln!(out, "    {}({p}),", case.name).unwrap();
-            } else {
-                writeln!(out, "    {},", case.name).unwrap();
-            }
+            writeln!(out, "    {},", case.signature).unwrap();
         }
-        out.push_str("}\n```\n");
+        out.push_str("}\n");
+        render_simple_impls(out, &v.name, &v.impls);
+        out.push_str("```\n");
     }
 }
 

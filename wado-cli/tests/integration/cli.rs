@@ -280,6 +280,53 @@ fn test_doc_reports_an_error_and_fails() {
         .stderr(predicate::str::contains("error"));
 }
 
+/// `wado spec` prints a bundled section by its anchor, and a hit of its search
+/// is that same argument.
+#[test]
+fn test_spec_prints_and_searches_the_bundled_specification() {
+    wado()
+        .args(["spec", "control-flow#let-else"])
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("### Let Else\n"));
+    wado()
+        .args(["spec", "--search", "let else"])
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("control-flow#let-else  "));
+    wado()
+        .args(["spec", "no-such-document"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("`wado spec` lists them"));
+}
+
+/// `wado doc --search` searches the files it is given, as it documents them.
+#[test]
+fn test_doc_search_searches_its_inputs() {
+    let tmp = tempfile::tempdir().unwrap();
+    let file = tmp.path().join("lib.wado");
+    std::fs::write(
+        &file,
+        "/// Doubles a number.\npub fn twice(n: i32) -> i32 { return n * 2; }\n",
+    )
+    .unwrap();
+
+    wado()
+        .args(["doc", "--search", "doubles"])
+        .arg(&file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "  twice\n    pub fn twice(n: i32) -> i32\n",
+        ));
+    wado()
+        .args(["doc", "--search", "x", "--format", "json"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("takes no --format"));
+}
+
 /// Write a minimal manifest-driven CLI package under `dir` and return the
 /// output path to compile to.
 fn write_metadata_project(dir: &std::path::Path) {
@@ -613,9 +660,10 @@ fn test_help_summarizes_check_as_verifying_a_source_file() {
         .arg("--help")
         .assert()
         .success()
-        .stderr(predicate::str::contains(
-            "check [options] [file.wado | dir]   Verify a source file and its Kiln generators",
-        ));
+        .stderr(predicate::str::is_match(
+            r"check \[options\] \[file\.wado \| dir\] +Verify a source file and its Kiln generators",
+        )
+        .unwrap());
 }
 
 /// `--help` must print usage rather than start the language server on stdio.
