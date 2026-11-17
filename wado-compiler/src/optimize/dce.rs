@@ -1550,10 +1550,10 @@ fn populate_type_reachability(
             if surviving_ptrs.contains(&cm_ptr) {
                 analysis.types.insert(functor.struct_type_id);
                 analysis.types.insert(functor.ref_type_id);
-                for &(_, ty) in &functor.canonical_user_params {
+                let canonical = functor.canonical_user_params.iter().map(|&(_, ty)| ty);
+                for ty in canonical.chain([functor.canonical_return]) {
                     collect_type_transitive(ty, &type_table, &mut analysis.types);
                 }
-                collect_type_transitive(functor.canonical_return, &type_table, &mut analysis.types);
             }
         }
     }
