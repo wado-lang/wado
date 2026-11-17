@@ -4882,10 +4882,12 @@ impl Parser {
                 && self.check(&TokenKind::ColonColon)
                 && self.peek_nth(1).kind.as_ident_name().is_some())
         {
-            return Err(ParseError {
-                message: "a `Self` binding closes a trait's turbofish, and a method call follows it: `Trait::<Self = T>::method(…)`".to_string(),
-                span: *span,
-            });
+            return Err(self
+                .error_at_span(
+                    *span,
+                    "a `Self` binding closes a trait's turbofish, and a method call follows it: `Trait::<Self = T>::method(…)`",
+                )
+                .restricted());
         }
 
         // A value, a struct literal's brace and a second turbofish all follow a
@@ -4933,10 +4935,12 @@ impl Parser {
         if !self.check(&TokenKind::LParen)
             && let Some((_, span)) = &self_type
         {
-            return Err(ParseError {
-                message: format!("`{}::<Self = …>::{method}` needs a call", head.name),
-                span: *span,
-            });
+            return Err(self
+                .error_at_span(
+                    *span,
+                    &format!("`{}::<Self = …>::{method}` needs a call", head.name),
+                )
+                .restricted());
         }
         if !self.check(&TokenKind::LParen) {
             let mut segments = Vec::new();
