@@ -199,8 +199,7 @@ only through the bound a tag already writes.
 
 A type parameter, an inference variable, a pack and an associated-type
 projection carry no case, since none survives monomorphization, which is where a
-`Reflect` subject is concrete. Nor does `Reactive<T>`: a reactive binding is
-typed with its underlying value type, so the wrapper never reaches monomorphize.
+`Reflect` subject is concrete.
 
 `Primitive` is named for what it holds and carries the kind at the granularity
 the type system already has, so a consumer branches on `PrimitiveKind` rather

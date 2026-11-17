@@ -544,8 +544,7 @@ and never feeds back into how they are typed.
 
 `<Type as Trait<Args>>::method(args…)` as the qualified form. Not a
 cost-benefit call — the syntactic position is taken. A leading `<` in expression
-position belongs to JSX, reserved by
-[Reactive Signals](./wep-2026-04-04-reactive-signals.md#jsx-integration)
+position is reserved for markup
 (`return <button onclick={…}>`), so Rust's spelling is unavailable to Wado at
 any price. It would also pin the receiver type, which is redundant wherever a
 receiver argument exists. Only the trailing turbofish position (`::<`, after
