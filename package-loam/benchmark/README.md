@@ -20,8 +20,10 @@ cached under `~/.cache/loam`:
   13, and the CUDA libraries its CUDA provider loads (cudart, cuBLAS, cuRAND,
   NVRTC) from NVIDIA's redistributables. A host without an NVIDIA driver skips
   the CUDA arm.
-- `fetch_llama_cpp.sh`: llama.cpp's Vulkan release.
-- `gemma3_270m/fetch_gguf.sh`: Gemma 3 (270M) as GGUF, for llama.cpp.
+- `fetch_llama_cpp.sh`: llama.cpp's Vulkan release, the one `llama_cpp.lock`
+  pins. `mise run update-llama-cpp` pins the newest.
+- `gemma3_270m/fetch_gguf.sh`: Gemma 3 (270M) as GGUF, for llama.cpp: F16,
+  and Q4_0 and Q4_1 for the `q4` table.
 
 The WebGPU arm of onnxruntime runs onnxruntime-node, which
 `mise run loam-oracle-deps` installs as `package-lock.json` pins it. Without
