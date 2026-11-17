@@ -33,11 +33,7 @@ pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, Str
 /// predicate cannot reach, since it holds `&Lexer`. A Wado member writes its own
 /// receiver, so the source says which those are.
 fn method_head(src: &StrSlice, start: i32, paren: i32, n: i32) -> [String, bool] {
-    let mut i = skip_ws(src, start, n);
-    if word_at(src, i, n, "pub") {
-        i = skip_ws(src, i + 3, n);
-    }
-    i = skip_ws(src, i + 2, n);
+    let i = skip_ws(src, after_pub(src, start, n) + 2, n);
     let name = src.slice(i, ident_end(src, i, n)).to_string();
     let mut r = skip_ws(src, paren + 1, n);
     if !word_at(src, r, n, "&mut") {
@@ -80,15 +76,14 @@ fn is_doc_comment(src: &StrSlice, i: i32, n: i32) -> bool {
         && !(i + 3 < n && src.byte_at(i + 3) == b'/');
 }
 
+/// Where a member's own text starts, past whitespace and a `pub`.
+fn after_pub(src: &StrSlice, start: i32, n: i32) -> i32 {
+    let i = skip_ws(src, start, n);
+    return if word_at(src, i, n, "pub") { skip_ws(src, i + 3, n) } else { i };
+}
+
 fn is_method_start(src: &StrSlice, i: i32, n: i32) -> bool {
-    if word_at(src, i, n, "fn") {
-        return true;
-    }
-    if word_at(src, i, n, "pub") {
-        let j = skip_ws(src, i + 3, n);
-        return word_at(src, j, n, "fn");
-    }
-    return false;
+    return word_at(src, after_pub(src, i, n), n, "fn");
 }
 
 /// A method, or a field's `name:` (not a path's `name::`).
@@ -96,10 +91,7 @@ fn is_member_start(src: &StrSlice, i: i32, n: i32) -> bool {
     if is_method_start(src, i, n) {
         return true;
     }
-    let mut j = i;
-    if word_at(src, j, n, "pub") {
-        j = skip_ws(src, j + 3, n);
-    }
+    let j = after_pub(src, i, n);
     let name_end = ident_end(src, j, n);
     let colon = skip_ws(src, name_end, n);
     return name_end > j && text_at(src, colon, n, ":") && !text_at(src, colon, n, "::");
@@ -161,11 +153,8 @@ fn skip_balanced(src: &StrSlice, open_idx: i32, n: i32, open: u8, close: u8) -> 
 }
 
 fn parse_field(src: &StrSlice, start: i32, n: i32, fields: &mut List<MemberField>) -> Result<i32, String> {
-    let mut i = skip_ws(src, start, n);
-    if word_at(src, i, n, "pub") {
-        i = skip_ws(src, i + 3, n);
-    }
-    let name_start = i;
+    let name_start = after_pub(src, start, n);
+    let mut i = name_start;
     i = ident_end(src, i, n);
     if i == name_start {
         return Result::Err("gale: Wado @members: expected a field name");
