@@ -16,7 +16,7 @@ use {
     scalar,
     shared,
 } from "./hlo.wado";
-use { Any, Recorded, Recorder, Untyped, typed } from "./recorded.wado";
+use { Any, Recorded, Recorder, Untyped, Value, typed } from "./recorded.wado";
 use { HostWeight } from "./weight.wado";
 use { Attention, Float, Tensor, element_count } from "./tensor.wado";
 use { noise } from "../../example/webgpu/compare.wado";
@@ -484,6 +484,65 @@ pub fn quantized_then_pass(r: &mut Recorder) -> Recorded {
         r.parameter::<u8, [C, Zeros]>(q.zero_points.extents),
     ];
     return r.finished([quantized_then(r, &a, &weight).id]);
+}
+
+/// What a decoder layer asks of products by `a` and four weights with zero
+/// points: two that end its outputs, and the SiLU of one gating another.
+pub fn quantized_layer<affine G: Graph>(
+    g: &mut G,
+    a: &G::Tensor<f32, [A, B]>,
+    weights: &List<[G::Tensor<u8, [C, Blocks, Blob]>, G::Tensor<f32, [C, Blocks]>, G::Tensor<u8, [C, Zeros]>]>,
+) -> [G::Tensor<f32, [A, C]>, G::Tensor<f32, [A, C]>, G::Tensor<f32, [A, C]>] with _ {
+    assert weights.len() == 4;
+    let quantized = Quantized { bits: 4, block: 32 };
+    let mut products: List<G::Tensor<f32, [A, C]>> = [];
+    for let w of weights {
+        products.push(g.quantized_product::<f32, [A, B], C, Blocks, Blob, Zeros, [A, C]>(
+            a,
+            &w.0,
+            &w.1,
+            Option::Some(&w.2),
+            &quantized,
+        ));
+    }
+    let gate = g.binary(Binary::Multiply, &products[2], &g.unary(Unary::Logistic, &products[2]));
+    return [products[0], products[1], g.binary(Binary::Multiply, &gate, &products[3])];
+}
+
+/// `quantized_layer` recorded, its input then each weight's three parts.
+pub fn quantized_layer_pass(r: &mut Recorder) -> Recorded {
+    let q = quantized_case();
+    let a = r.parameter::<f32, [A, B]>(q.a.extents);
+    let mut weights: List<[Value<u8, [C, Blocks, Blob]>, Value<f32, [C, Blocks]>, Value<u8, [C, Zeros]>]> = [];
+    for let _ of 0..<4 {
+        weights.push([
+            r.parameter::<u8, [C, Blocks, Blob]>(q.weight.extents),
+            r.parameter::<f32, [C, Blocks]>(q.scales.extents),
+            r.parameter::<u8, [C, Zeros]>(q.zero_points.extents),
+        ]);
+    }
+    let got = quantized_layer(r, &a, &weights);
+    return r.finished([got.0.id, got.1.id, got.2.id]);
+}
+
+/// The weights of `quantized_layer`, each apart from the others.
+pub fn quantized_layer_weights() -> List<[Tensor<u8, [C, Blocks, Blob]>, Tensor<f32, [C, Blocks]>, Tensor<u8, [C, Zeros]>]> {
+    let q = quantized_case();
+    return (0..<4).map(|i| [
+        bytes::<[C, Blocks, Blob]>(q.weight.extents, 20 + i),
+        noisy::<[C, Blocks]>(q.scales.extents, (30 + i) as u32),
+        bytes::<[C, Zeros]>(q.zero_points.extents, 40 + i),
+    ]).collect();
+}
+
+/// The weight `at` of `quantized_layer_pass`, as a model's loader hands it over.
+pub fn quantized_layer_weight(at: i32) -> Result<HostWeight, ()> {
+    let w = quantized_layer_weights()[at / 3];
+    return Result::Ok(match at % 3 {
+        0 => HostWeight::of(&w.0),
+        1 => HostWeight::of(&w.1),
+        _ => HostWeight::of(&w.2),
+    });
 }
 
 /// The weight `at` of `quantized_pass`, as a model's loader hands it over.

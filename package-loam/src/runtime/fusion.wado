@@ -442,17 +442,39 @@ fn paired_products(
     return out;
 }
 
-/// Whether the products of `a` and `b` contract alike, as `rows_by_matrix`
-/// says, by right matrices of one shape.
+/// Whether the products of `a` and `b` contract alike by weights of one
+/// shape: as `rows_by_matrix` says, or quantized alike.
 fn pairs_with(recorded: &Recorded, a: &Kernel, b: &Kernel) -> bool {
     let [p, q] = [
         a.product.unwrap(),
         b.product.unwrap(),
     ];
-    let [pn, qn] = [&recorded.nodes[p], &recorded.nodes[q]];
-    return rows_by_matrix(recorded, p)
-        && pn.op == qn.op
-        && recorded.nodes[pn.operands[1]].extents == recorded.nodes[qn.operands[1]].extents;
+    let pn = &recorded.nodes[p];
+    let weights_alike = weights_alike(recorded, pn, &recorded.nodes[q], 0);
+    let contracted = pn.op matches { QuantizedProduct(_) } || rows_by_matrix(recorded, p);
+    return contracted && pn.op == recorded.nodes[q].op && weights_alike;
+}
+
+/// The weights a product reads: a `DotGeneral`'s right matrix, and a quantized
+/// product's packed values, scales and any zero points.
+fn weights_of(product: &RecordedNode) -> List<i32> {
+    return product.operands[1..<product.operands.len()].to_list();
+}
+
+/// Whether the weights of the products `a` and `b`, taken in turn, agree in
+/// their extents from the axis `from` on.
+fn weights_alike(recorded: &Recorded, a: &RecordedNode, b: &RecordedNode, from: i32) -> bool {
+    let [ws, vs] = [weights_of(a), weights_of(b)];
+    if ws.len() != vs.len() {
+        return false;
+    }
+    for let i of 0..<ws.len() {
+        let [we, ve] = [&recorded.nodes[ws[i]].extents, &recorded.nodes[vs[i]].extents];
+        if we[from..<we.len()].to_list() != ve[from..<ve.len()].to_list() {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// `first` and `second` as a `Pair`.
@@ -601,41 +623,44 @@ fn joinable(recorded: &Recorded, k: &Kernel) -> Option<i32> {
     return if k.operands.is_empty() && k.op == stored { Option::Some(lhs) } else { null };
 }
 
-/// The left matrix of `k`'s product, where it is a `DotGeneral` whose right
-/// matrix is a parameter, a matrix with one axis contracted, and `k` writes a
-/// value per element.
+/// The left matrix of `k`'s product, where its weights are parameters, `k`
+/// writes a value per element, and the product is a quantized one or a
+/// `DotGeneral` by a matrix with one axis contracted.
 fn by_weight(recorded: &Recorded, k: &Kernel) -> Option<i32> {
     let Some(p) = k.product else {
         return null;
     };
     let node = &recorded.nodes[p];
-    let DotGeneral(dims) = node.op else {
-        return null;
+    let by_matrix = match node.op {
+        DotGeneral(dims) => recorded.nodes[node.operands[1]].extents.len() == 2
+            && dims.rhs_batch.is_empty()
+            && dims.rhs_contracting.len() == 1,
+        QuantizedProduct(_) => true,
+        _ => false,
     };
-    let rhs = &recorded.nodes[node.operands[1]];
-    if k.reduced
-        || !rhs.op matches { Parameter(_) }
-        || rhs.extents.len() != 2
-        || !dims.rhs_batch.is_empty()
-        || dims.rhs_contracting.len() != 1 {
-        return null;
-    }
-    return Option::Some(node.operands[0]);
+    let parameters = weights_of(node).into_iter().all(|w| recorded.nodes[w].op matches { Parameter(_) });
+    return if by_matrix && parameters && !k.reduced { Option::Some(node.operands[0]) } else { null };
 }
 
 /// Whether the products of `launch`, a kernel or a joined run, and of `k`
-/// contract alike, and are stored in one element.
+/// contract alike, and are stored in one element. Quantized products must
+/// differ in their columns alone.
 fn same_dims(recorded: &Recorded, launch: &Launch, k: &Kernel) -> bool {
     let first = match launch {
         Kernel(f) => f,
         Joined(ks) => &ks[0],
         _ => unreachable(),
     };
-    let dims_of = |kernel: &Kernel| match recorded.nodes[kernel.product.unwrap()].op {
-        DotGeneral(dims) => dims,
+    let [a, b] = [
+        &recorded.nodes[first.product.unwrap()],
+        &recorded.nodes[k.product.unwrap()],
+    ];
+    let alike = match a.op {
+        DotGeneral(_) => true,
+        QuantizedProduct(_) => weights_alike(recorded, a, b, 1),
         _ => unreachable(),
     };
-    return dims_of(first) == dims_of(k) && first.op == k.op;
+    return a.op == b.op && first.op == k.op && alike;
 }
 
 fn read_by(readers: &mut HashMap<i32, List<i32>>, of: i32, by: i32) {

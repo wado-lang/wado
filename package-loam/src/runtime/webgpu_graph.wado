@@ -76,7 +76,6 @@ use {
 } from "./fusion.wado";
 use {
     Any,
-    Erasable,
     Operation,
     QuantizedNode,
     Recorded,
@@ -91,7 +90,8 @@ use {
     kept_any,
 } from "./recorded.wado";
 use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, permuted, reads_as, sliced } from "./webgpu.wado";
-use { HostWeight } from "./weight.wado";
+use { HostWeight, stored_width } from "./weight.wado";
+use { LinearArray } from "core:linear";
 
 /// A pass recorded once per shape class and planned into kernels, which each
 /// call launches, and the values of the nodes that read no argument, kept on
@@ -171,9 +171,9 @@ impl Graph for WebGpuBackend {
     /// kept as `kept_matrix` keeps one, read from its stored bytes along the
     /// axis the products contract. The weights of a `Joined` launch are kept
     /// so as one matrix, side by side, and those of a `Paired` one as one
-    /// matrix whose columns alternate between theirs, each a view of it. Any
-    /// other float or bool weight is kept in f32 words, a `u8` one four bytes
-    /// to a word, and an `i64` one as `keep` keeps it.
+    /// matrix whose columns alternate between theirs, each a view of it. The
+    /// weights of quantized products, each one per column, are laid so too
+    /// along their rows. Any other weight is kept as `kept_plain` keeps it.
     fn kept_weights<Er>(
         &mut self,
         record: fn(&mut Recorder) -> Recorded with _,
@@ -234,6 +234,29 @@ impl Graph for WebGpuBackend {
                 );
             }
         }
+        for let [run, paired] of weight_rows(&recorded, first, count) {
+            let mut parts: List<HostWeight> = [];
+            for let at of run {
+                parts.push(load(at)?);
+            }
+            let whole = self.kept_plain(&rows_laid(&parts, paired));
+            let d = *on_device(&whole).unwrap();
+            let mut start = 0;
+            for let [j, at] of run.into_iter().enumerate() {
+                let rows = parts[j].extents[0];
+                let mut extents = d.extents;
+                extents[0] = rows;
+                let mut strides = d.strides;
+                let offset = if paired {
+                    strides[0] = 2 * d.strides[0];
+                    d.offset + j * d.strides[0];
+                } else {
+                    d.offset + start * d.strides[0];
+                };
+                kept[at] = Option::Some(viewing(&whole, DeviceTensor { ..d, offset, extents, strides }));
+                start += rows;
+            }
+        }
         for let at of 0..<count {
             if kept[at] matches { Some(_) } {
                 continue;
@@ -244,17 +267,25 @@ impl Graph for WebGpuBackend {
                 let one: List<HostWeight> = [w];
                 let matrix = self.kept_matrix(inner, outer, &one, |ps, r, c| contracted_at(&ps[0], axis, r, c));
                 of_kind(self, kind, Placed::Device(oriented(matrix, axis)));
-            } else if w.kind matches { U8 } {
-                let bytes = self.reserved_bytes(w.extents, true);
-                self.write_bytes(&bytes, |i| w.bytes()[i] as u32);
-                Any::U8(Placed::Device(bytes));
-            } else if w.kind matches { I64 } {
-                kept_any(self, &w.decoded());
             } else {
-                of_kind(self, w.kind, Placed::Device(self.kept_values(&w)));
+                self.kept_plain(&w);
             });
         }
         return Result::Ok(kept.into_iter().map(|k| k.unwrap()).collect());
+    }
+
+    /// `w` on the device: a float or bool one in f32 words, a `u8` one four
+    /// bytes to a word, and an `i64` one as `keep` keeps it.
+    fn kept_plain(&mut self, w: &HostWeight) -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuBuffer) {
+        if w.kind matches { U8 } {
+            let bytes = self.reserved_bytes(w.extents, true);
+            self.write_bytes(&bytes, |i| w.bytes()[i] as u32);
+            return Any::U8(Placed::Device(bytes));
+        }
+        if w.kind matches { I64 } {
+            return kept_any(self, &w.decoded());
+        }
+        return of_kind(self, w.kind, Placed::Device(self.kept_values(w)));
     }
 
     fn executed(
@@ -742,7 +773,7 @@ impl Graph for WebGpuBackend {
         ], zero_points);
         let half = HalfFloat::of(E::kind());
         let stored = Epilogue::<PlacedRead<Untyped>> { operands: [], op: operand(0).stored_as(E::kind()) };
-        if let Some(out) = self.quantized_product_kernel(&operands, quantized.bits, quantized.block, half, &stored) {
+        if let Some(out) = self.quantized_product_kernel(&operands, quantized.bits, quantized.block, half, &stored, false) {
             extents[last] = out.extents[1];
             return Placed::Device(self.reshaped(&out, &extents));
         }
@@ -887,6 +918,70 @@ fn weight_runs(recorded: &Recorded, first: i32, count: i32, contracted: &List<Op
         }
     }
     return runs;
+}
+
+/// The weights of each `Joined` and `Paired` launch of quantized products
+/// `recorded` plans into, by their places among the `count` weights it takes
+/// from its parameter `first` on, and whether they pair: one run for each
+/// weight a product reads, its packed values, scales or zero points, in the
+/// launch's order, each of whose weights no run before it holds.
+fn weight_rows(recorded: &Recorded, first: i32, count: i32) -> List<[List<i32>, bool]> {
+    let mut taken = HashSet::<i32>::new();
+    let mut runs: List<[List<i32>, bool]> = [];
+    for let launch of planned(recorded, &splats_of(&constants(recorded))).flattened() {
+        let [ks, paired] = match launch {
+            Joined(ks) => [ks, false],
+            Paired(p) => [[p.first, p.second] as List<Kernel>, true],
+            _ => {
+                continue;
+            },
+        };
+        let products: List<&RecordedNode> = ks.into_iter().map(|k| &recorded.nodes[k.product.unwrap()]).collect();
+        if !products[0].op matches { QuantizedProduct(_) } {
+            continue;
+        }
+        for let i of 1..<products[0].operands.len() {
+            let run: List<i32> = products.into_iter().map(|p| match recorded.nodes[p.operands[i]].op {
+                Parameter(at) => at - first,
+                _ => unreachable(),
+            }).collect();
+            let mut own = HashSet::<i32>::new();
+            if run.into_iter().all(|w| 0 <= w < count && !taken.contains(w) && own.insert(w)) {
+                for let w of run {
+                    taken.insert(w);
+                }
+                runs.push([run, paired]);
+            }
+        }
+    }
+    return runs;
+}
+
+/// `parts`, weights of one kind whose extents differ along the first axis
+/// alone, as one: their rows one after another, or alternating between the
+/// two where `paired`.
+fn rows_laid(parts: &List<HostWeight>, paired: bool) -> HostWeight {
+    let width = stored_width(parts[0].kind);
+    let mut extents = parts[0].extents;
+    extents[0] = parts.into_iter().map(|p| p.extents[0]).sum().unwrap();
+    let row = width * element_count(&extents[1..<extents.len()].to_list());
+    let mut bytes = LinearArray::<u8>::filled(row * extents[0], 0);
+    let mut at = 0;
+    if paired {
+        assert parts.len() == 2 && parts[0].extents == parts[1].extents, "a pair's weights are of one shape";
+        for let r of 0..<parts[0].extents[0] {
+            for let p of parts {
+                bytes.copy_from(at, p.bytes(), r * row, row);
+                at += row;
+            }
+        }
+    } else {
+        for let p of parts {
+            bytes.copy_from(at, p.bytes(), 0, p.bytes().len());
+            at += p.bytes().len();
+        }
+    }
+    return HostWeight::stored(parts[0].kind, extents, bytes);
 }
 
 fn contracted_axis(recorded: &Recorded, weight: i32) -> Option<i32> {
@@ -1103,7 +1198,8 @@ fn keyed(g: &mut WebGpuBackend, recorded: &Recorded, serial: i32, plan: &Plan, r
                 let both = [&p.first, &p.second] as List<&Kernel>;
                 let mut reads = left_reads(recorded, &p.first);
                 for let k of both {
-                    reads.push(recorded.nodes[k.product.unwrap()].operands[1]);
+                    let product = &recorded.nodes[k.product.unwrap()];
+                    reads.extend(&product.operands[1..<product.operands.len()].to_list());
                 }
                 for let o of &p.operands {
                     reads.push(o.node);
@@ -1298,6 +1394,9 @@ fn joined_replayed(
     let recorded = &program.recorded;
     let head = &ks[0];
     let first = &recorded.nodes[head.product.unwrap()];
+    if let QuantizedProduct(q) = first.op {
+        return joined_quantized(g, values, program, ks, &q);
+    }
     let dims = product_dims(recorded, head);
     let free = 1 - dims.rhs_contracting[0];
     let mut rights: List<DeviceTensor> = [];
@@ -1349,6 +1448,62 @@ fn joined_replayed(
     return Option::Some(out);
 }
 
+/// What `joined_replayed` yields of `ks`, quantized products as `q` says: one
+/// product by each of their weights as one, where those lie row after row on
+/// the device, each root a slice of its columns.
+fn joined_quantized(
+    g: &mut WebGpuBackend,
+    values: &Values<WebGpuBackend>,
+    program: &WebGpuProgram,
+    ks: &List<Kernel>,
+    q: &QuantizedNode,
+) -> Option<List<Any<WebGpuBackend>>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let recorded = &program.recorded;
+    let head = &ks[0];
+    let node = &recorded.nodes[head.product.unwrap()];
+    let mut weights: List<DeviceTensor> = [];
+    for let i of 1..<node.operands.len() {
+        let mut parts: List<DeviceTensor> = [];
+        for let k of ks {
+            parts.push(*on_device(&values[recorded.nodes[k.product.unwrap()].operands[i]])?);
+        }
+        weights.push(side_by_side(&parts, 0)?);
+    }
+    let replay = &program.replays[head.root];
+    let left = device_reads(values, &replay.reads)?;
+    let mut views = left;
+    for let w of &weights {
+        views.push(w);
+    }
+    let product = match g.replayed(replay.key, &views) {
+        Some(out) => Placed::<f32, Untyped>::Device(out),
+        None => {
+            g.tape();
+            let mut operands = [*left[0]] as List<DeviceTensor>;
+            operands.extend(&weights);
+            // Every product of the run is stored as the head's is.
+            let computed = quantized_on(g, &operands, node.kind, q, &Epilogue { operands: [], op: head.op });
+            g.taped(replay.key, &views, if let Device(d) = &computed {
+                Option::Some(d);
+            } else {
+                null;
+            }, []);
+            computed;
+        },
+    };
+    let extents = g.extents_of(&product);
+    let mut start = 0;
+    let mut out: List<Any<WebGpuBackend>> = [];
+    for let k of ks {
+        let columns = recorded.nodes[recorded.nodes[k.product.unwrap()].operands[1]].extents[0];
+        let part = g.slice::<f32, Untyped, Untyped>(&product, [0, start], [extents[0], start + columns], [1, 1]);
+        let root = &recorded.nodes[k.root];
+        out.push(of_kind(g, root.kind, g.reshape::<f32, Untyped, Untyped>(&part, root.extents)));
+        start += columns;
+    }
+    return Option::Some(out);
+}
+
 /// The matrices `parts` as one, side by side along the axis `along`, where
 /// each starts in its buffer where the one before ends.
 fn side_by_side(parts: &List<DeviceTensor>, along: i32) -> Option<DeviceTensor> {
@@ -1392,12 +1547,7 @@ fn kernel_result(
                 op: k.op,
             };
             match node.op {
-                QuantizedProduct(q) => match node.kind {
-                    F32 => quantized_result::<f32>(g, values, node, &q, &then),
-                    F16 => quantized_result::<f16>(g, values, node, &q, &then),
-                    BF16 => quantized_result::<bf16>(g, values, node, &q, &then),
-                    U8 | I64 | Bool => unreachable(),
-                },
+                QuantizedProduct(q) => quantized_result(g, values, node, &q, &then),
                 DotGeneral(dims) => {
                     let then = Option::Some(then);
                     if k.prologue matches { Some(_) } {
@@ -1431,40 +1581,71 @@ fn kernel_result(
 /// over its `product_space`: in one dispatch where the backend's kernel binds
 /// them, and as `Graph::quantized_product` computes it, then `then` on its
 /// own, otherwise.
-fn quantized_result<E: Erasable + Float>(
+fn quantized_result(
     g: &mut WebGpuBackend,
     values: &Values<WebGpuBackend>,
     node: &RecordedNode,
     q: &QuantizedNode,
     then: &Epilogue<PlacedRead<Untyped>>,
 ) -> Placed<f32, Untyped> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-    let mut operands = [as_rows(g, &view_of(g, values, node.operands[0]))] as List<DeviceTensor>;
-    for let o of node.operands[1..<node.operands.len()].to_list() {
-        operands.push(view_of(g, values, o));
+    let mut operands = [view_of(g, values, node.operands[0])] as List<DeviceTensor>;
+    for let w of node.operands[1..<node.operands.len()].to_list() {
+        operands.push(view_of(g, values, w));
     }
-    let half = HalfFloat::of(node.kind);
-    if let Some(out) = g.quantized_product_kernel(&operands, q.quantized.bits, q.quantized.block, half, then) {
+    return quantized_on(g, &operands, node.kind, q, then);
+}
+
+/// The quantized product of `operands`, the input and the weights `q` reads,
+/// of the element `kind`, then `then` over its `[rows, columns]`: in one
+/// dispatch where the backend's kernel binds them, and as
+/// `Graph::quantized_product` computes it, then `then` on its own, otherwise.
+fn quantized_on(
+    g: &mut WebGpuBackend,
+    operands: &List<DeviceTensor>,
+    kind: ElementKind,
+    q: &QuantizedNode,
+    then: &Epilogue<PlacedRead<Untyped>>,
+) -> Placed<f32, Untyped> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let mut rows = *operands;
+    rows[0] = as_rows(g, &operands[0]);
+    let half = HalfFloat::of(kind);
+    let [bits, block] = [q.quantized.bits, q.quantized.block];
+    if let Some(out) = g.quantized_product_kernel(&rows, bits, block, half, then, false) {
         return Placed::Device(out);
     }
-    let zero_points = if q.zero_points {
-        Option::Some(g.relabeled::<u8, Untyped, [Untyped, Untyped]>(u8::of_any::<WebGpuBackend>(
-            &values[node.operands[3]],
-        )));
-    } else {
-        null;
+    let product = match kind {
+        F32 => quantized_apart::<f32>(g, &rows, q),
+        F16 => quantized_apart::<f16>(g, &rows, q),
+        BF16 => quantized_apart::<bf16>(g, &rows, q),
+        U8 | I64 | Bool => unreachable(),
     };
-    let product = g.quantized_product::<E, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
-        E::of_any::<WebGpuBackend>(&values[node.operands[0]]),
-        &g.relabeled::<u8, Untyped, [Untyped, Untyped, Untyped]>(u8::of_any::<WebGpuBackend>(&values[node.operands[1]])),
-        &g.relabeled::<E, Untyped, [Untyped, Untyped]>(E::of_any::<WebGpuBackend>(&values[node.operands[2]])),
-        optional(&zero_points),
-        &q.quantized,
-    );
-    let mut computed = [as_rows(g, &g.device_view(&product))] as List<DeviceTensor>;
+    let mut computed = [as_rows(g, &product)] as List<DeviceTensor>;
     for let o of &then.operands {
         computed.push(o.view);
     }
     return g.fused_on(&computed, &then.op);
+}
+
+/// `Graph::quantized_product` of `operands`, the input as `[M, K]` and the
+/// weights, of the element `E`.
+fn quantized_apart<E: Float>(
+    g: &mut WebGpuBackend,
+    operands: &List<DeviceTensor>,
+    q: &QuantizedNode,
+) -> DeviceTensor with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let zero_points = if q.zero_points {
+        Option::Some(Placed::<u8, [Untyped, Untyped]>::Device(operands[3]));
+    } else {
+        null;
+    };
+    let product = g.quantized_product::<E, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
+        &Placed::<E, Untyped>::Device(operands[0]),
+        &Placed::<u8, [Untyped, Untyped, Untyped]>::Device(operands[1]),
+        &Placed::<E, [Untyped, Untyped]>::Device(operands[2]),
+        optional(&zero_points),
+        &q.quantized,
+    );
+    return g.device_view(&product);
 }
 
 /// The value of `p`'s second root: one product by both right matrices, where
@@ -1476,6 +1657,11 @@ fn paired_result(
     p: &Pair,
 ) -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let operands = epilogue_reads(g, values, recorded, p.second.product.unwrap(), &p.operands, &p.second.extents);
+    if let QuantizedProduct(q) = recorded.nodes[p.first.product.unwrap()].op {
+        let computed = paired_quantized(g, values, recorded, p, &q, &operands);
+        let root = &recorded.nodes[p.second.root];
+        return of_kind(g, root.kind, g.reshape::<f32, Untyped, Untyped>(&computed, root.extents));
+    }
     let then = Option::Some(Epilogue { operands, op: p.op });
     let [b, c] = [
         right_matrix(g, values, recorded, &p.first),
@@ -1508,6 +1694,71 @@ fn paired_result(
     };
     let root = &recorded.nodes[p.second.root];
     return of_kind(g, root.kind, g.reshape::<f32, Untyped, Untyped>(&computed, root.extents));
+}
+
+/// What `paired_result` computes of `p`, quantized products as `q` says, with
+/// `operands` its epilogue's: one product by both weights, where their rows
+/// lie interleaved and the device runs it so, and one by each otherwise.
+fn paired_quantized(
+    g: &mut WebGpuBackend,
+    values: &Values<WebGpuBackend>,
+    recorded: &Recorded,
+    p: &Pair,
+    q: &QuantizedNode,
+    operands: &List<PlacedRead<Untyped>>,
+) -> Placed<f32, Untyped> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let [first, second] = [
+        &recorded.nodes[p.first.product.unwrap()],
+        &recorded.nodes[p.second.product.unwrap()],
+    ];
+    let input = view_of(g, values, first.operands[0]);
+    let weights_of = |node: &RecordedNode| {
+        let mut all = [input] as List<DeviceTensor>;
+        for let w of node.operands[1..<node.operands.len()].to_list() {
+            all.push(view_of(g, values, w));
+        }
+        return all;
+    };
+    let [b, c] = [weights_of(first), weights_of(second)];
+    let mut both = [as_rows(g, &input)] as List<DeviceTensor>;
+    for let i of 1..<b.len() {
+        if let Some(rows) = interleaved_rows(&b[i], &c[i]) {
+            both.push(rows);
+        }
+    }
+    let half = HalfFloat::of(first.kind);
+    let then = Epilogue { operands: *operands, op: p.op };
+    if both.len() == b.len()
+        && let Some(out) = g.quantized_product_kernel(&both, q.quantized.bits, q.quantized.block, half, &then, true) {
+        return Placed::Device(out);
+    }
+    // The first product joins the second's epilogue as its first operand.
+    let alone = quantized_on(g, &b, first.kind, q, &Epilogue { operands: [], op: operand(0) });
+    let mut reads = [PlacedRead { view: g.device_view(&alone) }] as List<PlacedRead<Untyped>>;
+    reads.extend(operands);
+    let mut to = [1, 0] as List<i32>;
+    for let i of 0..<operands.len() {
+        to.push(i + 2);
+    }
+    return quantized_on(g, &c, second.kind, q, &Epilogue { operands: reads, op: p.op.renumbered(&to) });
+}
+
+/// The weights `a` and `b`, of one shape, as one whose rows alternate between
+/// theirs, where they lie so in one buffer.
+fn interleaved_rows(a: &DeviceTensor, b: &DeviceTensor) -> Option<DeviceTensor> {
+    let step = a.strides[0];
+    if a.slot != b.slot
+        || a.packed != b.packed
+        || a.extents != b.extents
+        || step % 2 != 0
+        || !reads_as(b, a.offset + step / 2, &a.strides) {
+        return null;
+    }
+    let mut extents = a.extents;
+    extents[0] = 2 * extents[0];
+    let mut strides = a.strides;
+    strides[0] = step / 2;
+    return Option::Some(DeviceTensor { ..*a, extents, strides });
 }
 
 /// The product of `k`'s left matrix, `[rows, inner]`, by `r`, `[inner,

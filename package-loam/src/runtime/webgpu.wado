@@ -3166,8 +3166,10 @@ impl WebGpuBackend {
     /// packed weight, its scales and any zero points, then `then` over a
     /// `[M, N]` product: one workgroup per `QUANTIZED_COLUMNS` columns and at
     /// most `QUANTIZED_ROWS` rows, each weight rounded to any `half`, and the
-    /// result held as `new_tensor` holds what `then` stores. `None` where they
-    /// do not bind.
+    /// result held as `new_tensor` holds what `then` stores. Where `paired`,
+    /// the weights' rows alternate between two products', and `then` reads
+    /// both over `[M, N / 2]`: `operand(0)` the even column's sum and
+    /// `operand(1)` the odd one's. `None` where they do not bind.
     internal fn quantized_product_kernel<Out>(
         &mut self,
         operands: &List<DeviceTensor>,
@@ -3175,11 +3177,13 @@ impl WebGpuBackend {
         block: i32,
         half: Option<HalfFloat>,
         then: &Epilogue<PlacedRead<Out>>,
+        paired: bool,
     ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let [m, k] = [operands[0].extents[0], operands[0].extents[1]];
         let packed = &operands[1].extents;
         let n = packed[0];
-        let product = [m, n] as List<i32>;
+        assert !paired || n % 2 == 0, "a pair's weights hold two products' rows";
+        let product = [m, if paired { n / 2 } else { n }] as List<i32>;
         let mut all = *operands;
         for let o of &then.operands {
             all.push(DeviceTensor { ..o.view, extents: product, strides: stretched(&o.view, &product) });
@@ -3196,7 +3200,7 @@ impl WebGpuBackend {
         let weight = &operands[1];
         let blob = packed[2];
         let aligned = blob % 4 == 0 && weight.offset % 4 == 0 && weight.strides == [packed[1] * blob, blob, 1];
-        let shape = QuantizedShape { bits, block, zero_points, half, rows, aligned };
+        let shape = QuantizedShape { bits, block, zero_points, half, rows, aligned, paired };
         self.dispatch_bound(
             &all,
             fresh(&out),
@@ -4492,8 +4496,9 @@ fn zero(n: u32, b: u32) -> f32 {
 
 /// What a quantized product's shader is specialized to beside its epilogue:
 /// the bits of a value and the values of a block, whether zero points are
-/// bound, the half each weight rounds to, the most rows a workgroup sums, and
-/// whether the weight's columns each start a word.
+/// bound, the half each weight rounds to, the most rows a workgroup sums,
+/// whether the weight's columns each start a word, and whether its columns
+/// pair, as `quantized_product_kernel` says.
 struct QuantizedShape {
     bits: i32,
     block: i32,
@@ -4501,6 +4506,7 @@ struct QuantizedShape {
     half: Option<HalfFloat>,
     rows: i32,
     aligned: bool,
+    paired: bool,
 }
 
 /// The WGSL of `Graph::quantized_product`, one workgroup per
@@ -4513,12 +4519,14 @@ struct QuantizedShape {
 /// lanes then sum. A `half` rounds each weight to it, as the decomposition
 /// stores one. Each lane of a column then writes a row's element through `op`,
 /// whose `operand(0)` is the sum and `operand(i)` the `i - 1`th epilogue
-/// operand. Parameters: the workgroups, the workgroups per row of the grid,
-/// `M`, `K`, `N`, the blocks, the bytes of a block, then the views of the input
+/// operand; where `paired`, only an even column's lanes write, with `operand(1)`
+/// the odd column's sum and the epilogue's operands from `operand(2)`.
+/// Parameters: the workgroups, the workgroups per row of the grid, `M`, `K`,
+/// `N`, the blocks, the bytes of a block, then the views of the input
 /// `[M, K]`, the packed weight, the scales, any zero points and the epilogue's
-/// operands over `[M, N]`.
+/// operands over `[M, N]`, or `[M, N / 2]` where `paired`.
 fn quantized_product_shader(op: &Expr, bindings: &List<i32>, shape: &QuantizedShape, words: &List<Words>) -> String {
-    let QuantizedShape { bits, block, zero_points, half, rows, aligned } = *shape;
+    let QuantizedShape { bits, block, zero_points, half, rows, aligned, paired } = *shape;
     let lanes = QUANTIZED_LANES / QUANTIZED_COLUMNS;
     assert lanes >= QUANTIZED_ROWS, "a column's lanes write its rows";
     let segment = i32::min(block, SEGMENT);
@@ -4572,13 +4580,19 @@ fn quantized_product_shader(op: &Expr, bindings: &List<i32>, shape: &QuantizedSh
             segment_sums.push_str("            }\n");
         }
     }
+    assert !paired || QUANTIZED_COLUMNS % 2 == 0, "a pair's columns sum in one workgroup";
+    // Where `paired`, the odd column's lanes follow the even one's.
     let mut epilogue = `        let x0 = sums[lane * ${QUANTIZED_LANES}u + lid - lane];\n`;
+    if paired {
+        epilogue.push_str(`        let x1 = sums[lane * ${QUANTIZED_LANES}u + lid - lane + ${lanes}u];\n`);
+    }
+    let [sums_read, column, columns] = if paired { [2, "n / 2u", "p[4] / 2u"] } else { [1, "n", "p[4]"] };
     for let i of weights..<bindings.len() {
         let at = 17 + (i - 3) * 3;
-        epilogue.push_str(`        let x${i - weights + 1} = ${view_load_wgsl(
+        epilogue.push_str(`        let x${i - weights + sums_read} = ${view_load_wgsl(
             bindings[i],
             at,
-            &(["m", "n"] as List<String>),
+            &(["m", column] as List<String>),
         )};\n`);
     }
     epilogue.push_str(&steps_wgsl(op, op.steps.len() - 1, "        "));
@@ -4626,9 +4640,9 @@ ${segment_sums}        }
         }
         workgroupBarrier();
     }
-    if lane < rows && n < p[4] {
+    if lane < rows && n < p[4]${if paired { " && n % 2u == 0u" } else { "" }} {
         let m = m0 + lane;
-${epilogue}        put(m * p[4] + n, s${op.steps.len() - 1});
+${epilogue}        put(m * ${columns} + ${column}, s${op.steps.len() - 1});
     }
 }
 ${ELEMENTWISE_OPERATORS}`;

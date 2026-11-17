@@ -57,6 +57,10 @@ impl<affine Bk: Graph> Q4f16Model<Bk> {
         return Ok(Q4f16Model { on, model });
     }
 
+    pub fn backend_mut(&mut self) -> &mut Bk {
+        return &mut self.on;
+    }
+
     /// The `steps` tokens greedy decoding picks after `ids` from an empty
     /// cache, and the logits it picks the first from: the prompt in one pass,
     /// then every token after its first in one call.
