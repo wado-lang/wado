@@ -45,21 +45,30 @@ does.
 
 ### A qualified spelling names a trait
 
-`Tagged::<V>::tag(5)` asks for `Tagged`'s declaration, so only its impls are
-candidates. The receiver's own declaration of the name is a different method,
-and a case or flags member `V` declares builds a value rather than answering the
-trait. The shadowing rule below applies to a bare `V::tag`, which is what the
-turbofish rewrites to once it has supplied `Self`.
+`Tagged::<Self = V>::tag(5)` asks for `Tagged`'s declaration, so only its impls
+are candidates. The receiver's own declaration of the name is a different
+method, and a case or flags member `V` declares builds a value rather than
+answering the trait. The shadowing rule below applies to a bare `V::tag`, which
+is what the spelling rewrites to once the binding has supplied `Self`.
 
-Only where the trait declares no parameters of its own. On one that does, the
-turbofish is already that trait's argument list: `Take::<i64>::take(&f, 42)`
-pins the list and the receiver argument supplies `Self`. A static has no such
-argument, and the specification's answer for it is not a second turbofish. The
-receiver type is written out and the call's arguments select the impl:
-`M::make(A {})` against `impl Enc<A> for M` beside `impl Enc<B> for M`
-(`docs/spec-traits.md`, "A trait's associated function"). So
-`Take::<i64>::take()` names no receiver at all, and is reported as that rather
-than as an unknown function.
+A trait's turbofish is its argument list: `Take::<i64>::take(&f, 42)` pins the
+list and the receiver argument supplies `Self`. A static has no such argument,
+so `Self = T` binds it, closing the list after the trait's own arguments:
+`Take::<i64, Self = V>::take()`. Only the impls of the trait at those arguments
+are candidates. `Take::<i64>::take()` names no receiver at all, and is reported
+as that rather than as an unknown function.
+
+The binding is the spelling Rust writes `<V as Tagged>::tag(5)`. An expression
+opening with `<` is left free for markup, and the binding reuses the form a
+bound already writes for an associated type (`T: Parts<Items = …>`). `Self` is
+the trait frame's first parameter, so binding it by name states what the
+resolution already does.
+
+On a trait declaring no parameters a lone argument once stood for `Self`
+(`Tagged::<V>::tag(5)`). It read as a trait argument, and a trait that did
+declare parameters had nowhere left to write `Self`, so a static of such a
+trait was unreachable once another declaration shadowed it or tied with it
+(issue #2650). One form for every trait replaces it.
 
 A namespace qualifies the head, not the argument list.
 `ns::Take::<i64>::take(…)` asks the same questions of the same declaration as

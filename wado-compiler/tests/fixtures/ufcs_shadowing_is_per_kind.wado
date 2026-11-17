@@ -1,8 +1,7 @@
 // An inherent declaration shadows a trait impl's of either kind: `S::tag` is
 // what `S` answers `tag` with, its own method, and `S::tag()` asks it for a
 // receiver. The trait's associated function stays reachable through the trait,
-// which `Mk::<S>::tag()` names with `S` as `Self`. `label` is the same-kind
-// case.
+// which `Mk::<Self = S>::tag()` names. `label` is the same-kind case.
 
 use { println, Stdout } from "core:cli";
 
@@ -43,7 +42,7 @@ impl S {
 
 export fn run() with Stdout {
     let s = S { v: 9 };
-    println(`${Mk::<S>::tag()}`);
+    println(`${Mk::<Self = S>::tag()}`);
     println(`${S::tag(&s)}`);
     println(`${s.tag()}`);
     println(`${S::label(&s)}`);

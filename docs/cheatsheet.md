@@ -1126,6 +1126,11 @@ let x = identity::<i32>(42);
 let y = container.transform::<i32, i64>(10, 20);
 let arr = List::<i32>::with_capacity(10);  // turbofish for generic statics
 
+// `Self = T` closes a trait's turbofish and binds the receiver, where no
+// argument does: Rust's `<S as Conv<i32>>::make()`
+let made = Conv::<i32, Self = S>::make();
+let tag = Mk::<Self = S>::tag();
+
 // Variadic type packs: operate on tuples of any arity
 fn variadic_identity<..T>(x: [..T]) -> [..T] {
     return x;

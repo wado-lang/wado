@@ -1,0 +1,20 @@
+// A `Self` binding names the receiver of a call, so the path it closes is
+// called: it is no value.
+trait Mk with () {
+    fn tag() -> i32;
+}
+
+struct S {}
+
+impl Mk for S {
+    fn tag() -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let f = Mk::<Self = S>::tag;
+}
+
+__DATA__
+{"compile_error": ":16:18: parse error: `Mk::<Self = …>::tag` needs a call"}

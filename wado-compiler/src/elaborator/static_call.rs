@@ -117,6 +117,10 @@ pub(super) struct StaticQuery<'a> {
     /// impls answer: the receiver's own declaration of the name is a different
     /// method, and a case it declares shadows nothing the trait supplies.
     pub(super) required_trait: Option<DefId>,
+    /// The arguments that spelling writes on its trait
+    /// (`Conv::<i32, Self = S>::make()`), which only an impl of the trait at
+    /// those arguments answers. Empty where it writes none.
+    pub(super) required_args: &'a [TypeId],
     /// What the call's context expects of its result, which selects among the
     /// impls the arguments leave as an annotated argument does.
     pub(super) expected_return: Option<TypeId>,
@@ -133,6 +137,7 @@ impl<'a> StaticQuery<'a> {
             receiver_args: &[],
             method_args: &[],
             required_trait: None,
+            required_args: &[],
             expected_return: None,
         }
     }
@@ -609,6 +614,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // names its trait, which is what scope asks of a call.
         if let Some(required) = query.required_trait {
             candidates.retain(|c| c.supply.as_ref().is_some_and(|s| s.trait_decl == required));
+            if !query.required_args.is_empty() {
+                candidates.retain(|c| {
+                    let block = c.supply.as_ref().expect("kept by its trait").impl_def;
+                    let written = match receiver.ty {
+                        Some(ty) => self.tysys.trait_frame_at(block, ty)[1..].to_vec(),
+                        None => self.tysys.signatures.impl_sig(block).trait_type_args.clone(),
+                    };
+                    self.trait_args_settle_to(&written, query.required_args)
+                });
+            }
             return (candidates, Vec::new());
         }
         let frame = self.frame_module();

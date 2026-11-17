@@ -109,8 +109,9 @@ fn primitive_receiver(prim: PrimitiveType) -> QualifiedReceiver {
 
 /// What a call passing its receiver first names before the method.
 pub(super) enum Qualifier<'a> {
-    /// `Trait::method(recv, …)`: only that trait's impls answer.
-    Trait(RequiredTrait),
+    /// `Trait::method(recv, …)`: only that trait's impls answer. With
+    /// `Trait::<Self = T>::method(recv, …)`, `recv` is of the bound type too.
+    Trait(RequiredTrait, Option<&'a ReceiverId>),
     /// `Type::method(recv, …)`: what `recv.method(…)` selects, `recv` being of
     /// that type.
     Type(&'a ReceiverId),
@@ -1740,7 +1741,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => None,
         };
         self.resolve_qualified_call_parts(
-            Qualifier::Trait(required),
+            Qualifier::Trait(required, None),
             method_name,
             &call.args,
             type_args,
@@ -1771,9 +1772,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let (required_trait, spelled, qualifier_display) = match qualifier {
-            Qualifier::Trait(required) => {
+            Qualifier::Trait(required, bound) => {
                 let display = required.display.clone();
-                (Some(required), None, display)
+                (Some(required), bound, display)
             }
             Qualifier::Type(receiver) => (None, Some(receiver), self.receiver_display(receiver)),
         };
@@ -2042,7 +2043,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        self.resolve_static_method_call_of_trait(static_call, None, ctx, expected_type)
+        self.resolve_static_method_call_of_trait(static_call, (None, &[]), ctx, expected_type)
     }
 
     /// [`Self::resolve_static_method_call`] restricted to one trait's impls,
@@ -2050,7 +2051,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_static_method_call_of_trait(
         &mut self,
         static_call: &ast::StaticMethodCallExpr,
-        required_trait: Option<DefId>,
+        // The trait a qualified spelling names, and the arguments it writes
+        // on it.
+        (required_trait, required_args): (Option<DefId>, &[TypeId]),
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
@@ -2120,10 +2123,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .and_then(|key| self.tysys.trait_decl_type_params_of(&key))
                 .unwrap_or_default();
             let trait_arity = ast::written_params(&trait_params).count();
-            if self.is_trait_instance_method_at(head.site, &static_call.method)
-                && trait_arity != 0
-                && trait_arity == head.args.len()
-            {
+            // The turbofish is the trait's argument list, all of it or none;
+            // `Self = T` beside it binds the receiver.
+            let writes_trait_args = trait_arity != 0 && trait_arity == head.args.len();
+            let takes_receiver = self.is_trait_instance_method_at(head.site, &static_call.method);
+            let self_type = static_call
+                .self_type
+                .as_ref()
+                .filter(|_| head.args.is_empty() || writes_trait_args);
+            if takes_receiver && (writes_trait_args || self_type.is_some()) {
                 let declared_head = self.declared_trait_name(Some(head.site), &head.name);
                 let trait_args: Vec<TypeId> =
                     head.args.iter().map(|a| self.resolve_type(a)).collect();
@@ -2134,13 +2142,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect();
                 let required = RequiredTrait {
                     decl: self.tysys.resolutions.get(head.site),
-                    args: Some(trait_args),
+                    args: writes_trait_args.then_some(trait_args),
                     display: display_generic_name(&declared_head, &args_spelled),
                 };
+                let bound = self_type.map(|ty| {
+                    let self_ty = self.resolve_type(ty);
+                    self.receiver_of(self_ty)
+                });
                 let method_type_args: Vec<TypeId> =
                     self.resolve_turbofish_args(&static_call.type_args);
                 return self.resolve_qualified_call_parts(
-                    Qualifier::Trait(required),
+                    Qualifier::Trait(required, bound.as_ref()),
                     &static_call.method.clone(),
                     &static_call.args,
                     method_type_args,
@@ -2151,34 +2163,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ctx,
                 );
             }
-            // `Tagged::<V>::tag(…)` — the static counterpart. A receiver-less
-            // declaration has no receiver argument to pin `Self`, so the
-            // turbofish supplies it and the call reads as `V::tag(…)`. Only
-            // where the trait declares no parameters of its own: the branch
-            // above claims the turbofish for a trait that does, and there is
-            // then nowhere left to write `Self`.
-            if let [self_ty_ast] = head.args
+            // `Tagged::<Self = V>::tag(…)` — the static counterpart. A
+            // receiver-less declaration has no receiver argument to pin
+            // `Self`, so the binding supplies it and the call reads as
+            // `V::tag(…)`.
+            if let Some(self_ty_ast) = self_type
                 && self.is_trait_static_method_at(head.site, &static_call.method)
-                && trait_arity == 0
                 && self.resolve_type(self_ty_ast) != TypeTable::UNKNOWN
             {
+                let trait_args: Vec<TypeId> =
+                    head.args.iter().map(|a| self.resolve_type(a)).collect();
                 let mut on_self = static_call.clone();
                 on_self.target_type = self_ty_ast.clone();
+                on_self.self_type = None;
                 // Restricted to the named trait: the rewritten spelling reads
                 // as `V::tag(…)`, and without it a case or an inherent static
                 // `V` declares of that name answers in the trait's place.
                 let required = self.tysys.resolutions.declared(head.site);
                 return self.resolve_static_method_call_of_trait(
                     &on_self,
-                    required,
+                    (required, &trait_args),
                     ctx,
                     expected_type,
                 );
             }
-            // The same spelling on a trait that does declare parameters: the
-            // turbofish is already spoken for, so say that rather than let the
-            // call read as an unknown function.
-            if self.is_trait_static_method_at(head.site, &static_call.method) && trait_arity != 0 {
+            // A receiver-less declaration named with no binding: the turbofish
+            // is the trait's, so say that rather than let the call read as an
+            // unknown function.
+            if self.is_trait_static_method_at(head.site, &static_call.method)
+                && static_call.self_type.is_none()
+            {
                 let _ = self.emit(TypeError::StaticNeedsWrittenReceiver {
                     trait_name: self.declared_trait_name(Some(head.site), &head.name),
                     method: static_call.method.clone(),
@@ -2191,6 +2205,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: static_call.span,
             });
             return TypeTable::ERROR;
+        }
+
+        if static_call.self_type.is_some() {
+            let _ = self.emit(TypeError::SelfBindingOnType {
+                name: head.map_or_else(
+                    || self.tysys.type_id_to_string(target_type_id),
+                    |head| head.name.clone(),
+                ),
+                span: static_call.span,
+            });
+            return self.resolve_args_without_callee(&static_call.args, ctx);
         }
 
         // The name and canonical decl key the parameter types are looked up
@@ -2227,7 +2252,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     kind != ast::SelfKind::None
                 }) =>
             {
-                Some(Qualifier::Trait(self.tysys.required_trait(decl)))
+                Some(Qualifier::Trait(self.tysys.required_trait(decl), None))
             }
             Some(_) => None,
             None => match self.qualified_answer(&spelled, &static_call.method) {
@@ -2329,6 +2354,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(receiver) => self.preselect_static_args(
                 StaticReceiver {
                     required_trait,
+                    required_args,
                     expected_return: expected_type,
                     ..StaticReceiver::of(receiver)
                 },
@@ -2353,7 +2379,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver,
                 &static_call.method,
                 &arg_types,
-                required_trait,
+                (required_trait, required_args),
                 expected_type,
             ),
             None => StaticLookup::NotStatic,
@@ -2768,6 +2794,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 arg_types: &args,
                 method_args: &method_type_args,
                 required_trait,
+                required_args,
                 expected_return: expected_type,
                 ..StaticQuery::of(&receiver, &static_call.method)
             },
@@ -3765,7 +3792,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// It walks the impls directly rather than reading the resolution, because
     /// its consumers need every candidate and the resolution keeps one.
     pub(super) fn static_arg_survey(
-        &self,
+        &mut self,
         recv: StaticReceiver<'_>,
         method_name: &str,
     ) -> StaticArgSurvey {
@@ -3787,6 +3814,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .is_some_and(|required| required != trait_decl)
             {
                 continue;
+            }
+            if !recv.required_args.is_empty() {
+                let written = match receiver.ty() {
+                    Some(ty) => self.tysys.trait_frame_at(impl_def, ty)[1..].to_vec(),
+                    None => self.tysys.signatures.impl_sig(impl_def).trait_type_args.clone(),
+                };
+                if !self.trait_args_settle_to(&written, recv.required_args) {
+                    continue;
+                }
             }
             let header = &self.tysys.trait_env.impl_headers[&impl_def];
             // The same walk the rules read, so a body the block inherits is a
@@ -4408,6 +4444,9 @@ pub(super) struct StaticReceiver<'a> {
     pub(super) args: &'a [TypeId],
     /// The trait a qualified spelling names; only its impls answer.
     pub(super) required_trait: Option<DefId>,
+    /// The arguments that spelling writes on its trait; only an impl of the
+    /// trait at those arguments answers.
+    pub(super) required_args: &'a [TypeId],
     /// What the call's context expects of its result, which selects among
     /// the impls the arguments leave as an annotated argument does.
     pub(super) expected_return: Option<TypeId>,
@@ -4420,6 +4459,7 @@ impl<'a> StaticReceiver<'a> {
             receiver,
             args: &[],
             required_trait: None,
+            required_args: &[],
             expected_return: None,
         }
     }

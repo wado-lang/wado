@@ -392,8 +392,21 @@ ambiguous, whether each declares a static or a method. Where a method answers,
 the spelling does not reach is reached as `Trait::method(recv, …)`.
 
 An associated function with no `self` has no receiver argument to bind `Self`
-from, so the trait-qualified form cannot name it. A reflection trait is the
-exception: its one type argument is the subject
+from, so the trait's turbofish binds it: `Trait::<Self = T>::method(…)`. The
+binding closes the list, after the trait's own arguments
+(`Conv::<i32, Self = S>::make()`), and only the impls of the trait at those
+arguments answer. A receiver-taking method takes the binding too, and its
+receiver must then be of the bound type. The binding names the receiver of a
+call, so the path is always called, and only a trait's turbofish takes one.
+
+<!-- {"fixture": "trait_self_binding.wado"} -->
+
+```wado
+assert Conv::<i32, Self = S>::make() == 1;
+assert Conv::<String, Self = S>::make() == "one";
+```
+
+A reflection trait's one type argument is its subject, with no binding
 ([Trait-Qualified Calls](./spec-reflection.md#trait-qualified-calls)).
 
 Rationale: [WEP: Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md).

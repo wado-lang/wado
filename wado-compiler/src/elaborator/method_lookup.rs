@@ -1550,7 +1550,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether a match's trait arguments, their open slots solved against
     /// `pinned`, are `pinned`. Judged before anything is solved, since a
     /// variable the receiver holds is shared by every match.
-    fn trait_args_settle_to(&mut self, trait_args: &[TypeId], pinned: &[TypeId]) -> bool {
+    pub(super) fn trait_args_settle_to(&mut self, trait_args: &[TypeId], pinned: &[TypeId]) -> bool {
         if trait_args.len() != pinned.len() {
             return false;
         }
@@ -2347,12 +2347,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: &ReceiverId,
         method_name: &str,
         arg_types: &[TypeId],
-        required_trait: Option<DefId>,
+        (required_trait, required_args): (Option<DefId>, &[TypeId]),
         expected_return: Option<TypeId>,
     ) -> StaticLookup {
         self.resolve_static_callee(StaticQuery {
             arg_types,
             required_trait,
+            required_args,
             expected_return,
             ..StaticQuery::of(receiver, method_name)
         })

@@ -2262,18 +2262,35 @@ impl<'a> Unparser<'a> {
         // The target is a path here, not an annotation, so its arguments are a
         // turbofish: an annotation's `Name<Args>::m()` re-parses as a chain of
         // comparisons. Both spellings a path can carry one on are written out.
-        match &s.target_type {
+        let args: &[Type] = match &s.target_type {
             Type::Generic(g) => {
                 self.output.push_str(&g.name);
-                self.unparse_turbofish(&g.args);
+                &g.args
             }
             Type::NamespacedGeneric(n) => {
                 self.output.push_str(&n.namespace);
                 self.output.push_str("::");
                 self.output.push_str(&n.name);
-                self.unparse_turbofish(&n.args);
+                &n.args
             }
-            _ => self.unparse_type(&s.target_type),
+            _ => {
+                assert!(s.self_type.is_none(), "a `Self` binding is parsed on a turbofish head");
+                self.unparse_type(&s.target_type);
+                &[]
+            }
+        };
+        match &s.self_type {
+            None => self.unparse_turbofish(args),
+            Some(self_type) => {
+                self.output.push_str("::<");
+                for arg in args {
+                    self.unparse_type(arg);
+                    self.output.push_str(", ");
+                }
+                self.output.push_str("Self = ");
+                self.unparse_type(self_type);
+                self.output.push('>');
+            }
         }
         self.output.push_str("::");
         self.output.push_str(&s.method);

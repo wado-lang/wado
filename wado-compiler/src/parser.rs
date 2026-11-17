@@ -4836,20 +4836,46 @@ impl Parser {
         self.advance(); // consume <
 
         let mut type_args = Vec::new();
+        // `Self = T`, which binds the receiver of a trait head. It closes the
+        // list: the trait's own arguments are positional and come first.
+        let mut self_type: Option<(Type, Span)> = None;
         let mut spec_ok = true;
 
-        match self.parse_type() {
-            Ok(t) => type_args.push(t),
-            Err(_) => spec_ok = false,
-        }
-        while spec_ok && self.eat_angle_list_comma() {
+        loop {
+            let binds_self = self.peek().kind.as_ident_name() == Some("Self")
+                && self.peek_nth(1).kind == TokenKind::Eq;
+            if binds_self {
+                let start = self.peek().span;
+                self.advance(); // consume Self
+                self.advance(); // consume =
+                match self.parse_type() {
+                    Ok(t) => self_type = Some((t, start)),
+                    Err(_) => spec_ok = false,
+                }
+                break;
+            }
             match self.parse_type() {
                 Ok(t) => type_args.push(t),
                 Err(_) => spec_ok = false,
             }
+            if !(spec_ok && self.eat_angle_list_comma()) {
+                break;
+            }
         }
         if spec_ok {
             spec_ok = self.expect_gt().is_ok();
+        }
+        // The binding says the list is a turbofish, so nothing else it could
+        // be is left to backtrack into.
+        if let Some((_, span)) = &self_type
+            && !(spec_ok
+                && self.check(&TokenKind::ColonColon)
+                && self.peek_nth(1).kind.as_ident_name().is_some())
+        {
+            return Err(ParseError {
+                message: "a `Self` binding closes a trait's turbofish, and a method call follows it: `Trait::<Self = T>::method(…)`".to_string(),
+                span: *span,
+            });
         }
 
         // A value, a struct literal's brace and a second turbofish all follow a
@@ -4892,6 +4918,14 @@ impl Parser {
                     "type arguments on both `{owner}` and `{method}` need a static method call; a case takes them on one"
                 ),
                 span: head.span.merge(&method_span),
+            });
+        }
+        if !self.check(&TokenKind::LParen)
+            && let Some((_, span)) = &self_type
+        {
+            return Err(ParseError {
+                message: format!("`{}::<Self = …>::{method}` needs a call", head.name),
+                span: *span,
             });
         }
         if !self.check(&TokenKind::LParen) {
@@ -4937,6 +4971,7 @@ impl Parser {
             StaticMethodCallExpr {
                 id: self.alloc_ast_id(),
                 target_type,
+                self_type: self_type.map(|(ty, _)| ty),
                 method,
                 method_id: self.alloc_ast_id(),
                 method_span,

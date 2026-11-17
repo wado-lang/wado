@@ -236,6 +236,7 @@ fn static_call_on_head(
     ast::StaticMethodCallExpr {
         id: call.id,
         target_type: ast::Type::Named(ast::NamedType::new(head.id, head.name.clone(), head.span)),
+        self_type: None,
         method: method.name.clone(),
         method_id: method.id,
         method_span: method.span,
@@ -1659,7 +1660,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return self.resolve_static_method_call_of_trait(
                 &static_call_on_head(call, head, method),
-                Some(required),
+                (Some(required), &[]),
                 ctx,
                 expected_type,
             );
@@ -1675,7 +1676,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return self.resolve_static_method_call_of_trait(
                 &static_call_on_head(call, head, method),
-                None,
+                (None, &[]),
                 ctx,
                 expected_type,
             );
@@ -2085,7 +2086,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // mangled to.
                 let typed = receiver.at_type(Some(receiver_type));
                 let resolved =
-                    self.static_callee_params(&typed, suffix, &args, None, expected_type);
+                    self.static_callee_params(&typed, suffix, &args, (None, &[]), expected_type);
                 if self.report_unresolved_static(&resolved, suffix, &args, call.span) {
                     return TypeTable::ERROR;
                 }
