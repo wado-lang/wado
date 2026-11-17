@@ -320,6 +320,7 @@ enum Spacing {
 struct Mark {
     output: usize,
     emitted: usize,
+    per_line_opens: usize,
 }
 
 #[derive(Default)]
@@ -343,6 +344,9 @@ pub struct Unparser<'a> {
     /// call that *ends* the line, and a flag any nested rendering may consume
     /// lands on whichever call the recursion reaches first instead.
     force_wrap: Option<usize>,
+    /// The output positions where a list opened its wrapped form, so a chain
+    /// can tell that its own line broke and wrap at its dots instead.
+    per_line_opens: Vec<usize>,
     /// `(output position, columns)`: what the caller will append to the line
     /// the construct starting at that position ends on — the ` {` after an
     /// `if` condition. The construct's own width decision counts those
@@ -553,6 +557,7 @@ impl<'a> Unparser<'a> {
         A: Fn(&T) -> (Span, Trailing),
         E: FnMut(&mut Self, &T),
     {
+        self.per_line_opens.push(self.output.len());
         self.output.push_str(open_delim);
         self.output.push('\n');
         self.indent_level += 1;
@@ -2034,6 +2039,7 @@ impl<'a> Unparser<'a> {
     /// Emit elements in `[\n … \n]` block form, packing as many per line as fit
     /// within `MAX_LINE_WIDTH`. The last element carries a trailing comma.
     fn emit_fill_bracketed(&mut self, elements: &[Expr]) {
+        self.per_line_opens.push(self.output.len());
         self.output.push_str("[\n");
         self.indent_level += 1;
         self.write_indent();
@@ -2250,8 +2256,55 @@ impl<'a> Unparser<'a> {
         self.unparse_call_args(&c.args, c.has_trailing_comma, c.span);
     }
 
+    /// A chain of two or more calls stays on one line while it fits and the
+    /// source wrote it on one. Otherwise each call takes a line of its own,
+    /// before any call's arguments wrap: a chain that builds a tree then
+    /// reads one call per line.
     fn unparse_method_call(&mut self, m: &MethodCallExpr) {
-        self.unparse_postfix_base(&m.receiver);
+        let mut links = vec![m];
+        while let Expr::MethodCall(inner) = &links[links.len() - 1].receiver {
+            links.push(inner);
+        }
+        links.reverse();
+        let base = &links[0].receiver;
+        if links.len() == 1 {
+            self.unparse_postfix_base(base);
+            self.unparse_chain_link(m);
+            return;
+        }
+        let source_broke = links
+            .iter()
+            .any(|link| link.receiver.span().end_line() < link.method_span.line);
+        if !source_broke {
+            let snap = self.snapshot();
+            self.unparse_postfix_base(base);
+            for link in &links {
+                self.unparse_chain_link(link);
+            }
+            let first_line_end = self
+                .added_since(snap)
+                .find('\n')
+                .map_or(self.output.len(), |nl| snap.output + nl);
+            let first_line_broke = self.per_line_opens[snap.per_line_opens..]
+                .iter()
+                .any(|&open| open < first_line_end);
+            if !first_line_broke && !self.exceeds_width_since(snap) {
+                return;
+            }
+            self.rollback(snap);
+        }
+        self.unparse_postfix_base(base);
+        self.indent_level += 1;
+        for link in &links {
+            self.output.push('\n');
+            self.open_entry_line(link.receiver.span().end, link.method_span.start);
+            self.unparse_chain_link(link);
+        }
+        self.indent_level -= 1;
+    }
+
+    /// `.method::<T>(args)`, one link of a chain.
+    fn unparse_chain_link(&mut self, m: &MethodCallExpr) {
         self.output.push('.');
         self.output.push_str(&m.method);
         self.unparse_turbofish(&m.type_args);
@@ -2956,6 +3009,7 @@ impl<'a> Unparser<'a> {
         Mark {
             output: self.output.len(),
             emitted: self.emitted_comments.len(),
+            per_line_opens: self.per_line_opens.len(),
         }
     }
 
@@ -2963,6 +3017,7 @@ impl<'a> Unparser<'a> {
     fn rollback(&mut self, mark: Mark) {
         self.output.truncate(mark.output);
         self.emitted_comments.truncate(mark.emitted);
+        self.per_line_opens.truncate(mark.per_line_opens);
     }
 
     /// The output written since `mark`.

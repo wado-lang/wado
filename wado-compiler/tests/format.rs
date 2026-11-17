@@ -4973,3 +4973,69 @@ fn test_format_unchecked_operator() {
     assert_eq!(formatted, source);
     assert_format_preserves_ast(source);
 }
+
+#[test]
+fn test_format_keeps_a_method_chain_on_one_line_while_it_fits() {
+    let source = concat!(
+        "fn row(a: View, b: View) -> View {\n",
+        "    return element(\"li\").attribute(\"id\", \"x\").children([a, b]);\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+}
+
+#[test]
+fn test_format_wraps_every_link_of_a_chain_the_source_broke() {
+    let source = concat!(
+        "fn row(a: View, b: View) -> View {\n",
+        "    return element(\"li\").attribute(\"id\", \"x\")\n",
+        "        .children([a, b]);\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn row(a: View, b: View) -> View {\n",
+        "    return element(\"li\")\n",
+        "        .attribute(\"id\", \"x\")\n",
+        "        .children([a, b]);\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+#[test]
+fn test_format_wraps_a_chain_at_its_dots_before_its_arguments() {
+    let source = concat!(
+        "fn row(a: View, b: View) -> View {\n",
+        "    return element(\"li\").attribute(\"id\", \"a-fairly-long-identifier\").attribute(\"class\", \"another-long-value\").children([a, b]);\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn row(a: View, b: View) -> View {\n",
+        "    return element(\"li\")\n",
+        "        .attribute(\"id\", \"a-fairly-long-identifier\")\n",
+        "        .attribute(\"class\", \"another-long-value\")\n",
+        "        .children([a, b]);\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+#[test]
+fn test_format_keeps_a_comment_between_wrapped_links() {
+    let source = concat!(
+        "fn row(a: View) -> View {\n",
+        "    return element(\"li\")\n",
+        "        // the row's own id\n",
+        "        .attribute(\"id\", \"x\")\n",
+        "        .child(a);\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
