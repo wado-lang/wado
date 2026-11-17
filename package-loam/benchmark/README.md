@@ -44,10 +44,25 @@ the first token reads the prompt, and each one after it only itself against
 the cache. The throughput counts generated tokens, and `ms/iter` is one run of
 32. The programs other than Loam's are the timing `generate.wado` does, on each
 runtime's own API, linked against its release as shipped. onnxruntime runs on
-the GPU alone: its CUDA arms share `decoder.hpp`, and its WebGPU one,
-`onnxruntime_webgpu.mjs`, decodes as the examples' oracle does
-(`tools/greedy.mjs`). Each keeps the cache on the device and reads back only
-the logits.
+the GPU alone: its CUDA arms share `decoder.hpp`, and its WebGPU one is
+`onnxruntime_webgpu.mjs`. Each keeps the cache on the device and reads back
+only the next token, which `tools/picking.mjs` appends to the graph, as Loam's
+decode arms pick theirs on the device.
+
+### Tuning onnxruntime
+
+Each step's pick in the graph is what moves onnxruntime: on Gemma 3 it runs
+1.10 times as fast on WebGPU's `q4` and 1.16 times on CUDA as when reading back
+the logits. On WebGPU, none of these moved its `q4` decode past run-to-run
+noise:
+
+- `validationMode: 'disabled'`
+- `freeDimensionOverrides` for `batch_size`
+- `storageBufferCacheMode: 'simple'`
+- `executionMode: 'parallel'`
+- `enableGraphCapture`
+- feeding the picked token back as a device tensor, which ran 1.12 times as
+  long: the graph's shape operators read `input_ids` on the host
 
 ## Device time per kernel
 

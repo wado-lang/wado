@@ -17,6 +17,7 @@
 // its path, for the benchmark's C++ arms:
 //
 //   node tools/picking.mjs example/gemma3-270m decoder topk
+import assert from 'node:assert';
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -31,6 +32,7 @@ export const NEXT = 'loam.next';
  */
 export function picking(model, vocab, form) {
   const nodes = { blocks: blockNodes, topk: topkNodes }[form];
+  assert(nodes, `form must be blocks or topk, not ${form}`);
   const out = model.replace(/\.onnx$/, `.picking-${form}.onnx`);
   const written = existsSync(out) ? statSync(out).mtimeMs : 0;
   if (written < statSync(model).mtimeMs || written < statSync(fileURLToPath(import.meta.url)).mtimeMs) {
@@ -140,8 +142,8 @@ function blockNodes(vocab, version) {
   ];
 }
 
-function largestDivisorUpTo(n, bound) {
-  for (let d = bound; d > 1; d--) if (n % d === 0) return d;
+function largestDivisorUpTo(value, bound) {
+  for (let d = bound; d > 1; d--) if (value % d === 0) return d;
   return 1;
 }
 
@@ -167,9 +169,9 @@ function intsAttr(name, values) {
   return message(5, Buffer.concat([text(1, name), ...values.map((v) => varintField(8, v)), varintField(20, INTS)]));
 }
 
-/** `n` as a protobuf varint, a negative one in 64-bit two's complement. */
-function varint(n) {
-  let v = BigInt.asUintN(64, BigInt(n));
+/** `value` as a protobuf varint, a negative one in 64-bit two's complement. */
+function varint(value) {
+  let v = BigInt.asUintN(64, BigInt(value));
   const out = [];
   while (v > 127n) {
     out.push(Number(v & 127n) | 128);
@@ -180,13 +182,13 @@ function varint(n) {
 }
 
 function readVarint(bytes, at) {
-  let n = 0;
+  let value = 0;
   let scale = 1;
   for (;;) {
     const b = bytes[at++];
-    n += (b & 127) * scale;
+    value += (b & 127) * scale;
     scale *= 128;
-    if (b < 128) return [n, at];
+    if (b < 128) return [value, at];
   }
 }
 
