@@ -916,7 +916,7 @@ fn fits_together(recorded: &Recorded, ks: &List<Kernel>, words: i32) -> bool {
 /// one any other element.
 fn kept_words(weight: &RecordedNode) -> i64 {
     let count = element_count(&weight.extents) as i64;
-    return if weight.kind matches { U8 } { (count + 3) / 4 } else { count };
+    return if weight.kind matches { U8 } { count.div_ceil(4) } else { count };
 }
 
 /// The right matrices of each of `joined`'s launches, by their places among
@@ -1016,11 +1016,9 @@ fn rows_laid<Er>(
     paired: bool,
     load: fn(i32) -> Result<HostWeight, Er> with _,
 ) -> Result<[HostWeight, List<i32>], Er> with _ {
-    let mut head = Option::Some(load(run[0])?);
-    let [kind, mut extents, size] = match &head {
-        Some(h) => [h.kind, h.extents, h.bytes().len()],
-        None => unreachable(),
-    };
+    let first = load(run[0])?;
+    let [kind, mut extents, size] = [first.kind, first.extents, first.bytes().len()];
+    let mut head = Option::Some(first);
     assert !paired || run.len() == 2, "a pair is of two weights";
     let row = stored_width(kind) * element_count(&extents[1..<extents.len()].to_list());
     let mut bytes = LinearArray::<u8>::filled(if paired { 2 * size } else { 0 }, 0);

@@ -494,7 +494,7 @@ fn loads_weights(graph: &Graph) -> bool {
 /// `Params::load` reading the rest a tensor at a time from a `WeightSource`
 /// where `placement` says where they are. Each tensor is kept as it is read, so
 /// the host copy of one weight at a time is all that lives beside the kept
-/// ones.
+/// ones, or of the weights a backend lays as one matrix.
 fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placement: &Placement) {
     let loads = loads_weights(graph);
     if loads && placement matches { Unplaced } {
