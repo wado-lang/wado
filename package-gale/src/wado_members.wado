@@ -91,6 +91,23 @@ fn is_method_start(src: &StrSlice, i: i32, n: i32) -> bool {
     return false;
 }
 
+/// A method, or a field's `name:` (not a path's `name::`).
+fn is_member_start(src: &StrSlice, i: i32, n: i32) -> bool {
+    if is_method_start(src, i, n) {
+        return true;
+    }
+    let mut j = i;
+    if word_at(src, j, n, "pub") {
+        j = skip_ws(src, j + 3, n);
+    }
+    let name_end = ident_end(src, j, n);
+    let colon = skip_ws(src, name_end, n);
+    return name_end > j
+        && colon < n
+        && src.byte_at(colon) == b':'
+        && !(colon + 1 < n && src.byte_at(colon + 1) == b':');
+}
+
 /// Where a method's parts sit: its `(`, just past its `)`, its body's `{`,
 /// and just past that body's `}`.
 struct FnSpans {
@@ -163,7 +180,7 @@ fn parse_field(src: &StrSlice, start: i32, n: i32, fields: &mut List<MemberField
     }
     i += 1;
     let ty_end = scan_to(src, i, n, b'=');
-    if ty_end >= n {
+    if ty_end >= n || src.byte_at(ty_end) != b'=' {
         return Result::Err(`gale: Wado @members: field '${name}' needs an initializer ('= ...')`);
     }
     let ty = src.slice(i, ty_end).trim();
@@ -176,6 +193,9 @@ fn parse_field(src: &StrSlice, start: i32, n: i32, fields: &mut List<MemberField
     if init.is_empty() {
         return Result::Err(`gale: Wado @members: field '${name}' has an empty initializer`);
     }
+    if init_end < n && src.byte_at(init_end) != b';' {
+        return Result::Err(`gale: Wado @members: expected ';' after field '${name}'`);
+    }
     fields.push(MemberField {
         name,
         ty: ty.to_string(),
@@ -184,12 +204,14 @@ fn parse_field(src: &StrSlice, start: i32, n: i32, fields: &mut List<MemberField
     return Result::Ok(if init_end < n { init_end + 1 } else { n });
 }
 
+/// Where `target` sits outside any bracket, or the line break before the next
+/// member when the text runs into one first.
 fn scan_to(src: &StrSlice, start: i32, n: i32, target: u8) -> i32 {
     let mut i = start;
     let mut depth = 0;
     while i < n {
         let b = src.byte_at(i);
-        if b == target && depth == 0 {
+        if depth == 0 && (b == target || b == b'\n' && is_member_start(src, skip_ws_semi(src, i, n).0, n)) {
             return i;
         }
         if b matches { b'(' | b'[' | b'{' } {
