@@ -508,7 +508,7 @@ struct CtxArena {
     closed_real: AtnKeyMap,
     caller: i32,
     reading: i32,
-    slot_reads: i32,
+    slot_merges: i32,
     reads: List<i32>,
     node_limit: i32,
     closure_cut_short: bool,
@@ -575,7 +575,7 @@ impl CtxArena {
             closed_real: AtnKeyMap::new(),
             caller: CTX_UNKNOWN,
             reading: 0,
-            slot_reads: 0,
+            slot_merges: 0,
             reads: [],
             node_limit: ATN_ARENA_CAP,
             closure_cut_short: false,
@@ -813,7 +813,6 @@ impl CtxArena {
             return;
         }
         self.reveal(k);
-        self.slot_reads += 1;
         if self.slot_read_in[k] != self.reading {
             self.slot_read_in[k] = self.reading;
             self.reads.push(k);
@@ -836,8 +835,6 @@ impl CtxArena {
         if self.node_slot[a] >= 0 || self.node_slot[b] >= 0 {
             return self.ask(ATN_ASK_SAME, i32::min(a, b), i32::max(a, b)) == 1;
         }
-        self.read(a);
-        self.read(b);
         if self.node_len[a] != self.node_len[b] {
             return false;
         }
@@ -938,16 +935,14 @@ impl CtxArena {
             return cached;
         }
         if self.node_slot[a] >= 0 || self.node_slot[b] >= 0 {
-            self.slot_reads += 1;
+            self.slot_merges += 1;
             return self.ask(ATN_ASK_MERGE, i32::min(a, b), i32::max(a, b));
         }
         let cached_for_walk = self.walk_merge_cache.get(ck);
         if cached_for_walk >= 0 {
             return cached_for_walk;
         }
-        let reads_before = self.slot_reads;
-        self.read(a);
-        self.read(b);
+        let slot_merges_before = self.slot_merges;
         let sa = self.node_start[a];
         let na = self.node_len[a];
         let sb = self.node_start[b];
@@ -972,7 +967,7 @@ impl CtxArena {
         atn_append_merged(&mut self.ret, &mut self.rpr, &mut self.parent, sa, na, sb, nb, &self.pending, base);
         self.pending.truncate(base);
         let id = self.intern_from(s);
-        if self.slot_reads == reads_before {
+        if self.slot_merges == slot_merges_before {
             self.merge_cache.set(ck, id);
         } else {
             self.walk_merge_cache.set(ck, id);
