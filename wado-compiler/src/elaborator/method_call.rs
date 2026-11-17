@@ -1566,17 +1566,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let inherent = self
                 .impl_method_entries(&key, method_name)
                 .any(|entry| entry.is_inherent() && entry.has_self == takes_receiver);
+            // The nearest resource of the `extends` chain declaring the name
+            // answers, so a child's static shadows its parent's method.
             let resource = key.decl().is_some_and(|def| {
-                if takes_receiver {
-                    self.tysys
-                        .resource_instance_method(def, method_name)
-                        .is_some()
-                } else {
-                    self.tysys
-                        .trait_env
-                        .resource_static(&key, method_name)
-                        .is_some()
-                }
+                self.tysys
+                    .resource_chain_of(def)
+                    .into_iter()
+                    .find_map(|resource| {
+                        self.tysys
+                            .signatures
+                            .resource_method_sig(resource, method_name)
+                    })
+                    .is_some_and(|sig| (sig.self_kind != ast::SelfKind::None) == takes_receiver)
             });
             if inherent || resource {
                 return Some(link);

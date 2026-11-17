@@ -4499,7 +4499,7 @@ impl TypeSystem {
 
     /// `def` and every resource it extends. Collected, so the walk's own
     /// lookups can borrow the type table again.
-    fn resource_chain_of(&self, def: DefId) -> Vec<DefId> {
+    pub(super) fn resource_chain_of(&self, def: DefId) -> Vec<DefId> {
         self.type_table.borrow().resource_chain(def).collect()
     }
 
