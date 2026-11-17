@@ -1641,7 +1641,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter_map(|ty| self.ordered_impls(ty, method_name, reach))
             .collect();
-        found.extend(self.written_impls(receiver.key(), method_name, reach));
+        found.extend(self.written_impls(receiver, method_name, reach));
         nearest_link(found)
     }
 
@@ -1685,11 +1685,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// The trait impls written for a link of `key`'s chain that declare
+    /// The trait impls written for a link of `receiver`'s chain that declare
     /// `method_name`, among those `reach` names, at the nearest link any does.
     fn written_impls(
         &mut self,
-        key: &ImplTargetKey,
+        receiver: &ReceiverId,
         method_name: &str,
         reach: Reach,
     ) -> Option<(u32, Vec<DefId>)> {
@@ -1703,7 +1703,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // A link keyed by no declaration (`&Point`) is told apart by its whole
         // type, which the chain declares.
-        let (mut key, mut declared) = (key.clone(), None);
+        let (mut key, mut declared) = (receiver.key().clone(), receiver.ty());
         for link in 0.. {
             let blocks: Vec<DefId> = self
                 .trait_impls_for_receiver(&ReceiverId::keyed(key.clone(), declared), &[])
