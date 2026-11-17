@@ -21,8 +21,10 @@ item
     | attribute* wholeModuleUse
     ;
 
+// Only an export runs asynchronously.
 itemModifiers
-    : ('internal' | 'pub'? 'export'?) 'async'?
+    : 'internal'
+    | 'pub'? ('export' 'async'?)?
     ;
 
 exportTargets
@@ -72,19 +74,29 @@ innerAttribute
     ;
 
 attrArgs
-    : '(' (attrArg (',' attrArg)*)? ')'
+    : '(' (attrArg (',' attrArg)* ','?)? ')'
     ;
 
 attrArg
     : identifier ('=' attrValue)?
-    | attrValue
+    | STRING_LITERAL
+    | number
     ;
 
+// An array holds strings or names, never both.
 attrValue
-    : literal
-    | '-' INTEGER
+    : STRING_LITERAL
+    | '-'? number
     | identifier
-    | '[' (attrValue (',' attrValue)*)? ']'
+    | '[' ']'
+    | '[' STRING_LITERAL (',' STRING_LITERAL)* ','? ']'
+    | '[' identifier (',' identifier)* ','? ']'
+    ;
+
+number
+    : INTEGER
+    | FLOAT
+    | FLOAT_EXP
     ;
 
 useDecl
@@ -97,7 +109,29 @@ wholeModuleUse
     ;
 
 useSource
-    : 'from' STRING_LITERAL ('with' braceLiteral)? ';'
+    : 'from' STRING_LITERAL ('with' importAttributes)? ';'
+    ;
+
+// A tree of plain values: what the keys mean is the analyzer's and Kiln's.
+importAttributes
+    : '{' (importAttribute (',' importAttribute)* ','?)? '}'
+    ;
+
+importAttribute
+    : importKey ':' importValue
+    ;
+
+importKey
+    : identifier
+    ;
+
+importValue
+    : STRING_LITERAL
+    | '-'? number
+    | 'true'
+    | 'false'
+    | '[' (importValue (',' importValue)* ','?)? ']'
+    | importAttributes
     ;
 
 importList
@@ -110,12 +144,6 @@ importItem
     | STRING_LITERAL 'as' bindingName
     ;
 
-// A trait, interface or resource member, whose contract binds every
-// implementation and so needs no body of its own.
-functionDecl
-    : itemModifiers 'fn' methodHead returnType? withClause? contractClause* (block | ';')
-    ;
-
 funcSig
     : bindingName genericParams? '(' paramList? ')' sigTail
     ;
@@ -124,7 +152,7 @@ methodSig
     : methodHead sigTail
     ;
 
-// Only a function in an `impl`, trait, interface or resource takes `self`.
+// Only a function in an `impl`, a trait, an interface or a resource takes `self`.
 methodHead
     : bindingName genericParams? '(' (selfParam (',' paramList?)? | paramList)? ')'
     ;
@@ -248,7 +276,7 @@ traitDecl
     ;
 
 interfaceDecl
-    : 'interface' typeName genericParams? '{' traitMember* '}'
+    : 'interface' typeName '{' operation* '}'
     ;
 
 worldDecl
@@ -261,20 +289,19 @@ worldItem
     ;
 
 resourceDecl
-    : 'resource' typeName genericParams? ('extends' typeRef)? ('{' resourceMember* '}' | ';')
+    : 'resource' typeName genericParams? ('extends' typeRef)? ('{' operation* '}' | ';')
     ;
 
-resourceMember
-    : attribute* functionDecl
-    ;
-
+// A trait method's contract binds every implementation, so it needs no body.
 traitMember
-    : attribute* traitMemberBody
+    : attribute* 'affine'? 'type' name genericParams? (':' traitBounds)? ';'
+    | attribute* 'fn' methodHead returnType? withClause? contractClause* (block | ';')
     ;
 
-traitMemberBody
-    : 'affine'? 'type' name genericParams? (':' traitBounds)? ';'
-    | functionDecl
+// An interface operation or a resource method: modifiers come from the
+// declaration, and a contract is not supported yet.
+operation
+    : attribute* 'async'? 'fn' methodHead returnType? withClause? (block | ';')
     ;
 
 implBlock

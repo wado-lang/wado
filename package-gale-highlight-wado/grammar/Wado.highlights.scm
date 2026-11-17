@@ -79,6 +79,7 @@
 (methodName) @function.method
 (fieldName) @property
 (shorthandField) @property
+(importKey) @property
 ; A `::` segment's IDENTIFIER stays uncoloured: `Option::None` and `Foo::new`
 ; are one shape that only name resolution splits. Its keywords are names all
 ; the same, and `Instant::from(x)` is the shape every `From` impl is called

@@ -39,7 +39,7 @@ const CORPUS_ROOTS: &[&str] = &[
     "example",
 ];
 
-/// One file's verdict, from either parser.
+/// The Gale side's verdict on one file.
 struct Verdict {
     path: String,
     ok: bool,
@@ -47,12 +47,15 @@ struct Verdict {
     message: String,
 }
 
-/// The compiler's verdict, with the kind of its earliest error: `Restriction`
-/// says the grammar may accept the file.
+/// The compiler's verdict on one file: its earliest error, if any. A
+/// `Restriction` there says the grammar may accept the file.
 struct CompilerVerdict {
-    verdict: Verdict,
-    kind: Option<ParseErrorKind>,
+    path: String,
+    error: Option<(ParseErrorKind, Span, String)>,
 }
+
+/// A file the compiler refuses and Wado.g4 accepts, with the refusal.
+type Accepted<'a> = (&'a str, &'a (ParseErrorKind, Span, String));
 
 pub fn run(mut parser: lexopt::Parser) {
     let mut paths: Vec<String> = Vec::new();
@@ -86,15 +89,12 @@ pub fn run(mut parser: lexopt::Parser) {
 
     assert!(!paths.is_empty(), "the named lists must hold a path");
     let mut bad = 0usize;
-    for CompilerVerdict { verdict, kind } in verdicts_for(&paths) {
-        match kind {
-            None => println!("ok\t{}", verdict.path),
-            Some(kind) => {
+    for CompilerVerdict { path, error } in verdicts_for(&paths) {
+        match error {
+            None => println!("ok\t{path}"),
+            Some((kind, span, message)) => {
                 bad += 1;
-                println!(
-                    "ng\t{}\t{kind:?}\t{}\t{}",
-                    verdict.path, verdict.line, verdict.message
-                );
+                println!("ng\t{path}\t{kind:?}\t{}\t{message}", span.line);
             }
         }
     }
@@ -196,15 +196,8 @@ fn verdicts_for(paths: &[String]) -> Vec<CompilerVerdict> {
                 .chain(parse_errors)
                 .min_by_key(|(_, span, _)| span.start);
             CompilerVerdict {
-                verdict: Verdict {
-                    path: path.clone(),
-                    ok: first.is_none(),
-                    line: first.as_ref().map_or(0, |(_, span, _)| span.line),
-                    message: first
-                        .as_ref()
-                        .map_or_else(String::new, |(.., message)| message.clone()),
-                },
-                kind: first.map(|(kind, ..)| kind),
+                path: path.clone(),
+                error: first,
             }
         })
         .collect()
@@ -260,31 +253,25 @@ fn compare_with_gale(corpus: &[String], gale_tsv: &Path, report_path: &Path) {
         gale.iter().map(|v| (v.path.as_str(), v)).collect();
 
     let mut rejects: Vec<&Verdict> = Vec::new();
-    let mut accepts: Vec<&CompilerVerdict> = Vec::new();
-    for own in &compiler {
-        let path = own.verdict.path.as_str();
-        let Some(theirs) = gale_by_path.get(path) else {
+    let mut accepts: Vec<Accepted> = Vec::new();
+    for CompilerVerdict { path, error } in &compiler {
+        let Some(theirs) = gale_by_path.get(path.as_str()) else {
             panic!("the Gale side reported no verdict for '{path}' — the two corpora differ");
         };
-        if theirs.ok == own.verdict.ok {
-            continue;
-        }
-        if theirs.ok {
-            accepts.push(own);
-        } else {
-            rejects.push(theirs);
+        match (error, theirs.ok) {
+            (None, false) => rejects.push(theirs),
+            (Some(error), true) => accepts.push((path, error)),
+            (None, true) | (Some(_), false) => {}
         }
     }
 
-    let syntax: Vec<&Verdict> = accepts
+    let syntax: Vec<&Accepted> = accepts
         .iter()
-        .filter(|own| own.kind == Some(ParseErrorKind::Syntax))
-        .map(|own| &own.verdict)
+        .filter(|(_, (kind, ..))| *kind == ParseErrorKind::Syntax)
         .collect();
-    let unexplained: Vec<&Verdict> = accepts
+    let unexplained: Vec<&Accepted> = accepts
         .iter()
-        .map(|own| &own.verdict)
-        .filter(|own| !declares_compile_error(&own.path))
+        .filter(|(path, _)| !declares_compile_error(path))
         .collect();
 
     fs::write(report_path, render_report(&rejects, &accepts))
@@ -313,8 +300,8 @@ fn compare_with_gale(corpus: &[String], gale_tsv: &Path, report_path: &Path) {
              fixtures that expect a compile error:",
             unexplained.len()
         );
-        for verdict in &unexplained {
-            eprintln!("  {}:{}: {}", verdict.path, verdict.line, verdict.message);
+        for (path, (_, span, message)) in &unexplained {
+            eprintln!("  {path}:{}: {message}", span.line);
         }
         eprintln!(
             "\n  Either the grammar accepts something the language does not, or the file needs a\n  \
@@ -328,8 +315,8 @@ fn compare_with_gale(corpus: &[String], gale_tsv: &Path, report_path: &Path) {
              context-free grammar can refuse too:",
             syntax.len()
         );
-        for verdict in &syntax {
-            eprintln!("  {}:{}: {}", verdict.path, verdict.line, verdict.message);
+        for (path, (_, span, message)) in &syntax {
+            eprintln!("  {path}:{}: {message}", span.line);
         }
         eprintln!(
             "\n  Either the grammar should refuse it, or the parser raises a rule no context-free\n  \
@@ -343,7 +330,7 @@ fn compare_with_gale(corpus: &[String], gale_tsv: &Path, report_path: &Path) {
     }
 }
 
-fn render_report(rejects: &[&Verdict], accepts: &[&CompilerVerdict]) -> String {
+fn render_report(rejects: &[&Verdict], accepts: &[Accepted]) -> String {
     let mut out = String::from(
         "# Where the two Wado parsers disagree. Generated, not committed.\n#\n\
          #   gap      Wado.g4 rejects what the compiler parses.\n\
@@ -360,18 +347,12 @@ fn render_report(rejects: &[&Verdict], accepts: &[&CompilerVerdict]) -> String {
         )
         .unwrap();
     }
-    for CompilerVerdict { verdict, kind } in accepts {
+    for (path, (kind, span, message)) in accepts {
         let label = match kind {
-            Some(ParseErrorKind::Restriction) => "rule",
-            Some(ParseErrorKind::Syntax) => "syntax",
-            None => unreachable!("an accepted file is no divergence"),
+            ParseErrorKind::Restriction => "rule",
+            ParseErrorKind::Syntax => "syntax",
         };
-        writeln!(
-            out,
-            "{label}\t{}\t{}\t{}",
-            verdict.path, verdict.line, verdict.message
-        )
-        .unwrap();
+        writeln!(out, "{label}\t{path}\t{}\t{message}", span.line).unwrap();
     }
     out
 }

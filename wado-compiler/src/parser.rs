@@ -217,6 +217,15 @@ impl ParseError {
             span: Some(DiagnosticSpan::from_span(&self.span, file)),
         }
     }
+
+    /// This error, raised where the rule it breaks is a
+    /// [`ParseErrorKind::Restriction`].
+    fn restricted(self) -> Self {
+        Self {
+            kind: ParseErrorKind::Restriction,
+            ..self
+        }
+    }
 }
 
 impl From<ParseError> for Diagnostic {
@@ -992,8 +1001,9 @@ impl Parser {
     /// Linearity is a property of the handle type, so it has one home: the
     /// `resource` declaration. Anything else carrying it is rejected.
     fn reject_resource_linearity(&self, attrs: &[Attribute]) -> ParseResult<()> {
+        // The attribute is any identifier to a grammar.
         match attrs.iter().find(|a| a.cm_resource_linearity().is_some()) {
-            Some(attr) => Err(self.error_at_span(
+            Some(attr) => Err(self.restriction_at_span(
                 attr.span,
                 "#[cm(..., linearity=...)] declares a resource's linearity; \
                     it belongs on a `resource` declaration",
@@ -1777,8 +1787,10 @@ impl Parser {
         let TokenKind::StringLit { raw, quote } = token.kind else {
             unreachable!("the caller matched a string literal")
         };
+        // An expression's string is decoded later, so only where a string is
+        // decoded here does a bad escape stop the parse.
         let value = string_value(&raw, quote)
-            .map_err(|message| self.error_at_span(token.span, &message))?;
+            .map_err(|message| self.restriction_at_span(token.span, &message))?;
         Ok(StrLit { value, raw, quote })
     }
 
@@ -5254,13 +5266,8 @@ impl Parser {
         // grammar reading the name as any identifier cannot see.
         if name == "include_str" || name == "include_bytes" {
             let is_str = name == "include_str";
-            if !self.check(&TokenKind::LParen) {
-                return Err(self.restriction_at_span(
-                    self.peek().span,
-                    &format!("expected `(`, found {}", self.peek_kind()),
-                ));
-            }
-            self.advance();
+            self.expect(&TokenKind::LParen)
+                .map_err(ParseError::restricted)?;
             let path_span = self.peek().span;
             let path = match self.peek_kind() {
                 TokenKind::StringLit { .. } => self.take_string()?,
@@ -5271,7 +5278,10 @@ impl Parser {
                     ));
                 }
             };
-            let close_span = self.expect(&TokenKind::RParen)?.span;
+            let close_span = self
+                .expect(&TokenKind::RParen)
+                .map_err(ParseError::restricted)?
+                .span;
             self.include_paths
                 .entry(path.value.clone())
                 .or_insert(path_span);
