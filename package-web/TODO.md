@@ -11,9 +11,8 @@ The pipeline works end to end: WebIDL snapshot, generated bindings and glue,
 covers ten interfaces: `EventTarget`, `Event`, `Node`, `CharacterData`, `Text`,
 `Element`, `HTMLElement`, `HTMLInputElement`, `Document` and `Window`.
 
-`wado-from-idl` skips every member it cannot lower and names it on stderr. On
-the current snapshot it skips 546 members (`mise run update-package-web` prints
-each):
+`wado-from-idl` skips every member it cannot lower and names it on stderr.
+`mise run update-package-web` prints each one the current snapshot skips:
 
 | Reason                        | Members | Examples                                               |
 | ----------------------------- | ------- | ------------------------------------------------------ |
@@ -23,6 +22,7 @@ each):
 | More than one overload lowers | 8       | `Window.alert`, `scroll_to`                            |
 | `ObservableArray<T>`          | 1       | `adopted_style_sheets`                                 |
 | `[HTMLConstructor]`, a getter | 4       | `HTMLElement.new`, `Document`'s named getter           |
+| Total                         | 546     |                                                        |
 
 A member returning `Promise<T>` lowers where `T` does, so one whose `T` is
 outside the slice is counted there.

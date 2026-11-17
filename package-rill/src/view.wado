@@ -80,9 +80,11 @@ pub fn each<T: Eq>(
     });
     observe(|| {
         let mut kept: List<Row<T>> = [];
-        // Each kept row's index among the rows before, -1 for a new one.
+        // Each kept row's index among the rows before, -1 for a new one, or for
+        // every row once the DOM no longer holds them in that order.
         let mut was: List<i32> = [];
-        let mut left: List<i32> = (0..<rows.len()).collect();
+        let in_order = holds_in_order(parent, &rows);
+        let mut left: List<i32> = (0..<rows.len()).map(|i| if in_order { i } else { -1 }).collect();
         for let item of items() {
             let mut found = false;
             for let i of 0..<rows.len() {
@@ -102,12 +104,6 @@ pub fn each<T: Eq>(
             was.push(-1);
         }
         remove_rows(parent, rows);
-        let home = Option::Some(parent as Node);
-        for let i of 0..<kept.len() {
-            if kept[i].node.parent_node() != home {
-                was[i] = -1;
-            }
-        }
         // The rows already in their old order stay; the rest move in among
         // them, from the last row back.
         let stay = longest_increasing(&was);
@@ -121,6 +117,22 @@ pub fn each<T: Eq>(
         }
         rows = kept;
     });
+}
+
+// Whether `parent`'s children are still the rows' nodes, in the rows' order:
+// other code may have moved one.
+fn holds_in_order<T>(parent: Element, rows: &List<Row<T>>) -> bool with Dom {
+    let mut child = parent.first_child();
+    for let row of rows {
+        let Some(node) = child else {
+            return false;
+        };
+        if node != row.node {
+            return false;
+        }
+        child = node.next_sibling();
+    }
+    return child == null;
 }
 
 // Marks a longest strictly increasing subsequence of `values`, skipping the
