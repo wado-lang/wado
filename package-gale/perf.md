@@ -209,10 +209,11 @@ The frames it revealed, and each answer to "does this stack cover that one",
 key the state under its seed configurations. Two walks whose stacks agree on
 those reach one state, whatever lies below.
 
-Two slots are compared, merged and covered as questions answered on the real
-stacks, never frame by frame. Comparing frames re-read every frame below the
-top with no memo, so `Performance/DropLoopEntryBranchInLRRule_4` grew
-exponentially with its nested `between … and` lines.
+A comparison or merge that reaches a slot on either side is a question answered
+on the real stacks, and so is a cover test between open stacks. Comparing
+frames instead re-read every frame below the top with no memo, so
+`Performance/DropLoopEntryBranchInLRRule_4` grew exponentially with its nested
+`between … and` lines.
 
 The trees are those of the full-stack cache: `rust_corpus_check.wado --tree-hash` prints the same hash for every `.rs` file in the repository before
 and after. Dev host, `-O2`, one `wado run` of that tool:

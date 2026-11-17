@@ -422,19 +422,11 @@ impl RealStacks {
         let base = self.pending.len();
         let mut i = 0;
         let mut j = 0;
-        while i < na || j < nb {
-            let c = if i >= na {
-                1;
-            } else if j >= nb {
-                -1;
-            } else {
-                self.key_cmp(sa + i, sb + j);
-            };
+        while i < na && j < nb {
+            let c = self.key_cmp(sa + i, sb + j);
             if c < 0 {
-                self.pending.push(self.parent[sa + i]);
                 i += 1;
             } else if c > 0 {
-                self.pending.push(-1 - self.parent[sb + j]);
                 j += 1;
             } else {
                 let m = self.merge(self.parent[sa + i], self.parent[sb + j]);
@@ -444,22 +436,7 @@ impl RealStacks {
             }
         }
         let s = self.ret.len();
-        i = 0;
-        j = 0;
-        for let mut k = base; k < self.pending.len(); k += 1 {
-            let below = self.pending[k];
-            if below < 0 {
-                self.append_edge(self.ret[sb + j], self.rpr[sb + j], -1 - below);
-                j += 1;
-            } else if i < na && j < nb && self.key_cmp(sa + i, sb + j) == 0 {
-                self.append_edge(self.ret[sb + j], self.rpr[sb + j], below);
-                i += 1;
-                j += 1;
-            } else {
-                self.append_edge(self.ret[sa + i], self.rpr[sa + i], below);
-                i += 1;
-            }
-        }
+        atn_append_merged(&mut self.ret, &mut self.rpr, &mut self.parent, sa, na, sb, nb, &self.pending, base);
         self.pending.truncate(base);
         let id = self.intern_from(s);
         self.merge_cache.set(ck, id);
@@ -856,7 +833,7 @@ impl CtxArena {
         if !self.node_open[a] && !self.node_open[b] {
             return false;
         }
-        if self.node_slot[a] >= 0 && self.node_slot[b] >= 0 {
+        if self.node_slot[a] >= 0 || self.node_slot[b] >= 0 {
             return self.ask(ATN_ASK_SAME, i32::min(a, b), i32::max(a, b)) == 1;
         }
         self.read(a);
@@ -960,7 +937,7 @@ impl CtxArena {
         if cached >= 0 {
             return cached;
         }
-        if self.node_slot[a] >= 0 && self.node_slot[b] >= 0 {
+        if self.node_slot[a] >= 0 || self.node_slot[b] >= 0 {
             self.slot_reads += 1;
             return self.ask(ATN_ASK_MERGE, i32::min(a, b), i32::max(a, b));
         }
@@ -992,30 +969,7 @@ impl CtxArena {
             }
         }
         let s = self.ret.len();
-        let mut k = base;
-        i = 0;
-        j = 0;
-        while i < na || j < nb {
-            let c = if i >= na {
-                1;
-            } else if j >= nb {
-                -1;
-            } else {
-                self.key_cmp(sa + i, sb + j);
-            };
-            if c < 0 {
-                self.append_edge(self.ret[sa + i], self.rpr[sa + i], self.parent[sa + i]);
-                i += 1;
-            } else if c > 0 {
-                self.append_edge(self.ret[sb + j], self.rpr[sb + j], self.parent[sb + j]);
-                j += 1;
-            } else {
-                self.append_edge(self.ret[sa + i], self.rpr[sa + i], self.pending[k]);
-                k += 1;
-                i += 1;
-                j += 1;
-            }
-        }
+        atn_append_merged(&mut self.ret, &mut self.rpr, &mut self.parent, sa, na, sb, nb, &self.pending, base);
         self.pending.truncate(base);
         let id = self.intern_from(s);
         if self.slot_reads == reads_before {
@@ -1056,6 +1010,45 @@ fn atn_edges_eq(ret: &List<i32>, rpr: &List<i32>, parent: &List<i32>, t: i32, s:
         }
     }
     return true;
+}
+
+fn atn_append_merged(
+    ret: &mut List<i32>,
+    rpr: &mut List<i32>,
+    parent: &mut List<i32>,
+    sa: i32,
+    na: i32,
+    sb: i32,
+    nb: i32,
+    merged_below: &List<i32>,
+    from: i32,
+) {
+    let mut k = from;
+    let mut i = 0;
+    let mut j = 0;
+    while i < na || j < nb {
+        let c = if i >= na {
+            1;
+        } else if j >= nb {
+            -1;
+        } else {
+            atn_edge_key_cmp(ret, rpr, sa + i, sb + j);
+        };
+        let e = if c > 0 { sb + j } else { sa + i };
+        let below = if c == 0 { merged_below[k] } else { parent[e] };
+        ret.push(ret[e]);
+        rpr.push(rpr[e]);
+        parent.push(below);
+        if c <= 0 {
+            i += 1;
+        }
+        if c >= 0 {
+            j += 1;
+        }
+        if c == 0 {
+            k += 1;
+        }
+    }
 }
 
 fn atn_edge_key_cmp(ret: &List<i32>, rpr: &List<i32>, x: i32, y: i32) -> i32 {
