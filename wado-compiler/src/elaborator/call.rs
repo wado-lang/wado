@@ -24,7 +24,9 @@ use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
-use super::method_call::{PreselectedArg, StaticReceiver};
+use super::method_call::{
+    PreselectedArg, QualifiedAnswer, Qualifier, StaticReceiver, UnappliedStatic,
+};
 use super::scope::{BinderInScope, BoundsOf, ParamRef, Scope, ScopedBound};
 use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
@@ -236,6 +238,7 @@ fn static_call_on_head(
     ast::StaticMethodCallExpr {
         id: call.id,
         target_type: ast::Type::Named(ast::NamedType::new(head.id, head.name.clone(), head.span)),
+        self_type: None,
         method: method.name.clone(),
         method_id: method.id,
         method_span: method.span,
@@ -1659,7 +1662,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return self.resolve_static_method_call_of_trait(
                 &static_call_on_head(call, head, method),
-                Some(required),
+                (Some(required), &[]),
                 ctx,
                 expected_type,
             );
@@ -1675,7 +1678,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return self.resolve_static_method_call_of_trait(
                 &static_call_on_head(call, head, method),
-                None,
+                (None, &[]),
                 ctx,
                 expected_type,
             );
@@ -1759,6 +1762,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some((written, _)) => receiver.written_as(written),
             None => receiver,
         });
+        let namespaced = || {
+            let (ns, rest) = effective_name.split_once("::")?;
+            let (type_name, _) = rest.split_once("::")?;
+            self.namespace_alias_source(ns, call.callee.id())?;
+            self.namespaced_receiver(ns, type_name, ident)
+        };
+        if given_args.is_none()
+            && callee_kind.case_owner().is_none()
+            && let Some(receiver) = call_receiver.clone().or_else(namespaced)
+            && let Some((prefix, method_name)) = effective_name.rsplit_once("::")
+        {
+            match self.qualified_answer(&receiver, method_name) {
+                QualifiedAnswer::Static => {}
+                QualifiedAnswer::Ambiguous(traits) => {
+                    let _ = self.emit(TypeError::AmbiguousTraitMethod {
+                        method: method_name.to_string(),
+                        traits,
+                        span: call.span,
+                    });
+                    return self.resolve_args_without_callee(&call.args, ctx);
+                }
+                QualifiedAnswer::Method => {
+                    if call_receiver.is_some() {
+                        self.record_receiver_reference(ident, prefix);
+                    }
+                    let type_args = self.resolve_turbofish_args(&call.type_args);
+                    return self.resolve_qualified_call_parts(
+                        Qualifier::Type(&receiver),
+                        method_name,
+                        &call.args,
+                        type_args,
+                        call.id,
+                        ident.segments.last().map(|seg| seg.id),
+                        call.span,
+                        expected_type,
+                        ctx,
+                    );
+                }
+            }
+        }
         // A case is reachable wherever its type is; only a static method has
         // a visibility of its own to check.
         if callee_kind.case_owner().is_none()
@@ -2045,7 +2088,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // mangled to.
                 let typed = receiver.at_type(Some(receiver_type));
                 let resolved =
-                    self.static_callee_params(&typed, suffix, &args, None, expected_type);
+                    self.static_callee_params(&typed, suffix, &args, (None, &[]), expected_type);
                 if self.report_unresolved_static(&resolved, suffix, &args, call.span) {
                     return TypeTable::ERROR;
                 }
@@ -2233,33 +2276,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(inner_pos) = suffix.find("::") {
                     let type_name = &suffix[..inner_pos];
                     let method_name = &suffix[inner_pos + 2..];
-
-                    // The importing module never names `Type` on its own, so a
-                    // bare-name search reaches no impl on it: the callee then
-                    // loses its trait segment and names a body nothing
-                    // declares, which WIR build reports as an unresolved call.
-                    #[expect(
-                        clippy::disallowed_methods,
-                        reason = "the walk answers for `ns::Type` under the import's `ns$Type` alias"
-                    )]
-                    let ns_member = self.namespace_member(prefix, type_name);
-                    let receiver_segment = ident.owner_segment();
-                    let receiver = match ns_member {
-                        Some(def) => Some(ReceiverId::of_decl(
-                            self.tysys.resolutions.defs(),
-                            def,
-                            None,
-                        )),
-                        None => receiver_segment.and_then(|seg| self.receiver_at(seg)),
-                    };
                     // The branch below reads the middle segment as a type, so a
                     // segment naming none is reported where it is written.
-                    let Some(receiver) = receiver
-                        .map(|receiver| receiver.written_as(&format!("{prefix}::{type_name}")))
-                    else {
+                    let Some(receiver) = self.namespaced_receiver(prefix, type_name, ident) else {
                         let _ = self.emit(TypeError::UnknownType {
                             name: format!("{prefix}::{type_name}"),
-                            span: receiver_segment.map_or(call.span, |seg| seg.span),
+                            span: ident.owner_segment().map_or(call.span, |seg| seg.span),
                         });
                         return TypeTable::ERROR;
                     };
@@ -2322,28 +2344,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if self.report_unresolved_static(&resolved, method_name, &args, call.span) {
                         return TypeTable::ERROR;
                     }
-                    if let Some(blanket) = resolved.blanket()
-                        && let Some(receiver) = ns_receiver_type
-                    {
-                        let arg_sites = arg_sites_of(&call.args, args.len(), call.span);
-                        if let Some(return_type) = self.resolve_blanket_static_method(
-                            receiver,
-                            method_name,
-                            blanket,
-                            call.id,
-                            ident.segments.last().map(|segment| segment.id),
-                            &method_type_args,
-                            &call.args,
-                            &args,
-                            &arg_sites,
-                            expected_type,
-                            call.span,
-                            ctx,
-                        ) {
+                    if !resolved.resolves() {
+                        if typed.ty().is_some()
+                            && let Some(return_type) = self.resolve_named_type_blanket_static(
+                                &typed,
+                                method_name,
+                                call.id,
+                                ident.segments.last().map(|segment| segment.id),
+                                &method_type_args,
+                                &args,
+                                &call.args,
+                                expected_type,
+                                call.span,
+                                ctx,
+                            )
+                        {
                             return return_type;
                         }
-                    }
-                    if !resolved.resolves() {
                         let _ = self.emit(TypeError::UnknownFunction {
                             name: effective_name.to_string(),
                             span: call.span,
@@ -5167,6 +5184,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         out
     }
 
+    /// The receiver `ns::Type` names in `ns::Type::method(…)`.
+    fn namespaced_receiver(
+        &self,
+        prefix: &str,
+        type_name: &str,
+        ident: &ast::IdentExpr,
+    ) -> Option<ReceiverId> {
+        // The importing module never names `Type` on its own, so a bare-name
+        // search reaches no impl on it: the callee then loses its trait
+        // segment and names a body nothing declares, which WIR build reports
+        // as an unresolved call.
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "the walk answers for `ns::Type` under the import's `ns$Type` alias"
+        )]
+        let ns_member = self.namespace_member(prefix, type_name);
+        let receiver = match ns_member {
+            Some(def) => Some(ReceiverId::of_decl(
+                self.tysys.resolutions.defs(),
+                def,
+                None,
+            )),
+            None => ident.owner_segment().and_then(|seg| self.receiver_at(seg)),
+        };
+        receiver.map(|receiver| receiver.written_as(&format!("{prefix}::{type_name}")))
+    }
+
     /// Enforce the visibility ladder on a qualified `Type::method(...)` call.
     /// `receiver` is the key the neighbouring lookups resolved, not one
     /// re-derived from the spelling, which a splice can make mean another type.
@@ -5631,27 +5675,64 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
-        // The rules first, since a blanket is a candidate among the rest: two
-        // traits blanketing one receiver supply the name and separate nothing,
-        // which is the ambiguity every other spelling of that shape reports.
+        // A generic type spelled without its arguments names no instance, so
+        // the call's context settles one before the rules are asked.
+        let unapplied = self.receiver_generic_arity(receiver);
+        let instance = match unapplied {
+            Some(_) => self.unapplied_static_instance(receiver, method, args, expected_type),
+            None => UnappliedStatic::AsSpelled,
+        };
+        let settled;
+        let receiver = match instance {
+            UnappliedStatic::Settled(instance) => {
+                settled = receiver.at_type(Some(instance));
+                &settled
+            }
+            UnappliedStatic::AsSpelled | UnappliedStatic::Open => receiver,
+        };
         let receiver_ty = receiver
             .ty()
             .expect("a blanket static is asked at the type the call resolved");
+        // The rules first, since a blanket is a candidate among the rest: two
+        // traits blanketing one receiver supply the name and separate nothing,
+        // which is the ambiguity every other spelling of that shape reports.
         let ranked = self.resolve_static_callee(StaticQuery {
             arg_types: args,
+            expected_return: expected_type,
             ..StaticQuery::of(receiver, method)
         });
         if self.report_unresolved_static(&ranked, method, args, span) {
             return Some(TypeTable::ERROR);
         }
-        let blanket = ranked.blanket()?;
+        let Some(blanket) = ranked.blanket() else {
+            if !matches!(instance, UnappliedStatic::Open) {
+                return None;
+            }
+            let prefix = receiver.spelled(self.tysys.resolutions.defs()).to_string();
+            let declared = receiver
+                .key()
+                .decl()
+                .and_then(|def| self.declared_self_type(def));
+            let params = declared
+                .and_then(|ty| self.tysys.type_table.borrow().nominal_type_args(ty))
+                .expect("an unapplied generic declares its parameters");
+            let names: Vec<String> = params
+                .iter()
+                .map(|&param| self.tysys.type_id_to_string(param))
+                .collect();
+            let _ = self.emit(TypeError::cannot_infer(
+                &names,
+                &format!("`{prefix}::{method}`"),
+                &format!("`{prefix}::<...>::{method}()`"),
+                span,
+            ));
+            return Some(TypeTable::ERROR);
+        };
         // The blanket would key on the argument-less head, which carries no
         // layout (a generic variant never becomes its own declaration, WEP
         // 2026-02-09) and reaches WIR build unregistered.
-        if let Some(expected) = receiver
-            .key()
-            .decl()
-            .and_then(|def| self.bare_generic_type_arity(def))
+        if let Some(expected) = unapplied
+            && !matches!(instance, UnappliedStatic::Settled(_))
         {
             let _ = self.emit(TypeError::MissingTypeArguments {
                 name: receiver.spelled(self.tysys.resolutions.defs()).to_string(),

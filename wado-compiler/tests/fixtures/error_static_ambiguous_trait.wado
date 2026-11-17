@@ -28,8 +28,8 @@ impl Beta for M {
     }
 }
 
-// `s.go()` reports the ambiguity; `S::go(&s)` names the same two declarations
-// and must report it too.
+// `s.go()` reports the ambiguity; `S::go(&s)` is the same method call and
+// reports it the same way.
 struct S {}
 
 trait Gamma with () {
@@ -153,7 +153,7 @@ __DATA__
   "compile_error": "ambiguous method 'make': declared by 'Alpha' and 'Beta'",
   "compile_errors_contains": [
     "ambiguous method 'make': declared by 'Alpha' and 'Beta'",
-    "ambiguous method 'go': declared by 'Gamma' and 'Delta'",
+    "ambiguous method 'go': declared by 'Delta' and 'Gamma'",
     "ambiguous method 'ranked': declared by 'Ranked' and 'Between';",
     "ambiguous method 'defaulted': declared by 'DefA' and 'DefB'",
     "ambiguous method 'built': declared by 'BlanketA' and 'BlanketB'",

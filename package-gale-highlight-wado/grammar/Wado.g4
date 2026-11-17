@@ -307,7 +307,7 @@ typeArgs
     ;
 
 typeArg
-    : IDENTIFIER '=' typeRef
+    : (IDENTIFIER | 'Self') '=' typeRef
     | IDENTIFIER ':' traitBounds
     | typeRef
     ;

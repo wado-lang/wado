@@ -45,21 +45,30 @@ does.
 
 ### A qualified spelling names a trait
 
-`Tagged::<V>::tag(5)` asks for `Tagged`'s declaration, so only its impls are
-candidates. The receiver's own declaration of the name is a different method,
-and a case or flags member `V` declares builds a value rather than answering the
-trait. The shadowing rule below applies to a bare `V::tag`, which is what the
-turbofish rewrites to once it has supplied `Self`.
+`Tagged::<Self = V>::tag(5)` asks for `Tagged`'s declaration, so only its impls
+are candidates. The receiver's own declaration of the name is a different
+method, and a case or flags member `V` declares builds a value rather than
+answering the trait. The shadowing rule below applies to a bare `V::tag`, which
+is what the spelling rewrites to once the binding has supplied `Self`.
 
-Only where the trait declares no parameters of its own. On one that does, the
-turbofish is already that trait's argument list: `Take::<i64>::take(&f, 42)`
-pins the list and the receiver argument supplies `Self`. A static has no such
-argument, and the specification's answer for it is not a second turbofish. The
-receiver type is written out and the call's arguments select the impl:
-`M::make(A {})` against `impl Enc<A> for M` beside `impl Enc<B> for M`
-(`docs/spec-traits.md`, "A trait's associated function"). So
-`Take::<i64>::take()` names no receiver at all, and is reported as that rather
-than as an unknown function.
+A trait's turbofish is its argument list: `Take::<i64>::take(&f, 42)` pins the
+list and the receiver argument supplies `Self`. A static has no such argument,
+so `Self = T` binds it, closing the list after the trait's own arguments:
+`Take::<i64, Self = V>::take()`. Only the impls of the trait at those arguments
+are candidates. `Take::<i64>::take()` names no receiver at all, and is reported
+as that rather than as an unknown function.
+
+The binding is the spelling Rust writes `<V as Tagged>::tag(5)`. An expression
+opening with `<` is left free for markup, and the binding reuses the form a
+bound already writes for an associated type (`T: Parts<Items = …>`). `Self` is
+the trait frame's first parameter, so binding it by name states what the
+resolution already does.
+
+On a trait declaring no parameters a lone argument once stood for `Self`
+(`Tagged::<V>::tag(5)`). It read as a trait argument, and a trait that did
+declare parameters had nowhere left to write `Self`, so a static of such a
+trait was unreachable once another declaration shadowed it or tied with it
+(issue #2650). One form for every trait replaces it.
 
 A namespace qualifies the head, not the argument list.
 `ns::Take::<i64>::take(…)` asks the same questions of the same declaration as
@@ -108,24 +117,27 @@ statics a `resource` declares, and one it inherits along that chain.
 
 The rules run in this order, and the order is the design:
 
-1. The receiver's own declaration shadows the inherited candidates of its kind.
-2. A receiver-less declaration answers before a receiver-taking one, so
-   `Type::method(x)` is a static's call before it is a UFCS receiver.
-3. Where several traits supply the name, the spelling names none of them, and
+1. The receiver's own declaration shadows the inherited candidates.
+2. Where several traits supply the name, the spelling names none of them, and
    that is reported.
-4. The arguments pick among what is left.
-5. The earlier origin outranks: the receiver's own, then a written body, then an
+3. The arguments pick among what is left.
+4. The earlier origin outranks: the receiver's own, then a written body, then an
    inherited one, among what the arguments admit.
+
+Every candidate is receiver-less. A receiver-taking declaration is the method
+call's: where no receiver-less one answers, `Type::method(recv, …)` selects what
+`recv.method(…)` does (issue #2650). So `Type::method(x)` is a static's call
+before it is a receiver's.
 
 What remains is one declaration, or several of one trait that no argument
 separated: the overload.
 
-Steps 4 and 5 are in that order because a written body the argument rejects is
+Steps 3 and 4 are in that order because a written body the argument rejects is
 not an answer. `impl Conv<i32> for M {}` beside
 `impl Conv<String> for M { fn make(…) }` answers `M::make(5)` from the inherited
 default, though a block wrote a body for the other argument.
 
-An own candidate is exempt from step 4. The arguments choose among _impls_, and
+An own candidate is exempt from step 3. The arguments choose among _impls_, and
 a declaration the receiver makes itself has none to be chosen against. The call
 site reports an argument mismatch against the one declaration the spelling
 names.
@@ -184,21 +196,50 @@ constructor (`impl From<Array<T>> for List<T>`) leaves a concrete head to name
 and is kept, and a reference to a slot (`From<&T>`) is the slot, peeled before
 the question is asked.
 
-### The spelling names both kinds
+### The spelling names both kinds, by what the type answers
 
-`Type::method(recv, …)` reaches a trait's instance method as well as its static,
-passing the receiver first. Statics answer first, so a receiver-less declaration
-of the name still wins.
+`Type::method(recv, …)` reaches an instance method as well as a static, passing
+the receiver first. The spelled type answers the name once, with declarations
+of both kinds, in the order a method call ranks them: the nearest link of its
+chain, and there the type's own declaration before a trait's. The kind of what
+answers decides the rest. A receiver-taking declaration makes the spelling a
+method call on its first argument, which must be of the spelled type or a
+resource extending it. A receiver-less one is the static this resolution
+selects.
 
-An inherent method shadows a trait's for this spelling, as it does for dot
-syntax: `Q::tag(&q)` names `impl Q`'s and the trait's is spelled `Tag::tag(&q)`.
-Shadowing holds within a kind, so an inherent method leaves a trait's associated
-function of the same name alone.
+The call once ran through this resolution alone, which kept a ladder of its own
+for instance methods: it collected no blanket's instance method, ranked a
+newtype's trait impl above its base's inherent method by link where dot syntax
+did not, and reported two traits where dot syntax ranked them (issue #2650).
+Routing that ladder's calls to the method call by name alone came next: a name
+some trait declared with a receiver went there, so an unrelated trait decided
+the call, and a name some trait declared without one kept a blanket's instance
+method out of reach. Asking the type itself removes both classes.
 
-A receiver-taking declaration has the receiver at argument zero, so its own
-parameters begin at argument one. Reading from argument zero for both kinds
-compares a receiver against the parameter two impls differ on, which separates
-nothing and admits nothing.
+A generic type spelled without its arguments (`Pair::span(&p)`) names no one
+instance, so the question is what its instances answer the name with. The
+impls written for the type's head are candidates whatever instance each names.
+The order is also asked at each instance an impl is written for, so a blanket
+whose bounds hold there answers too, through any chain of blankets the order
+follows. The receiver's own type then settles the call, and its selection
+confirms the candidate or reports that no method answers. Candidates of both
+kinds at one link leave the kind undecided, and the call is reported as
+ambiguous.
+
+The kind is decided before the arguments are resolved, so the receiver's type
+does not take part in it. Resolving the first argument early would resolve
+that expression twice.
+
+A static answers by the same rule, with the instance found the way any
+inference finds a type: from the expected type (`let d: Duo<i32, bool> = Duo::build()`) or an argument (`Duo::weigh(d)`). Where neither says, the
+written impls do. If the blanket answers at exactly one instance an impl is
+written for, that instance is the call's, as a sole written impl
+(`impl Make for Pair<i32, i32>`) already settles `Pair::made()`. More than one
+leaves the type's arguments uninferred, and the call reports that.
+
+Two traits at one link are ambiguous whichever kind each declares, as they are
+for a method call. One answering with a static and the other with a method is
+reported once, and the call recovers on the method.
 
 ### The owning link is decided before the arguments
 

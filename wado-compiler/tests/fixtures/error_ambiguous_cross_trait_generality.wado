@@ -1,0 +1,35 @@
+// Two traits share no contract, so how much of the receiver each impl names
+// does not choose between them: an exact impl of one beside a head impl of
+// the other is ambiguous (issue #2650).
+trait Alpha with () {
+    fn m(&self) -> String;
+}
+
+trait Beta with () {
+    fn m(&self) -> String;
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl Alpha for Pair<i32, i32> {
+    fn m(&self) -> String {
+        return "Alpha exact";
+    }
+}
+
+impl<X> Beta for Pair<X, i32> {
+    fn m(&self) -> String {
+        return "Beta head";
+    }
+}
+
+export fn run() {
+    let x: Pair<i32, i32> = { a: 1, b: 2 };
+    assert x.m() == "Alpha exact";
+}
+
+__DATA__
+{"compile_error": "ambiguous method 'm': declared by 'Alpha' and 'Beta'; name the trait", "compile_error_codes": ["AMBIGUOUS_CANDIDATE"]}

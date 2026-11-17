@@ -1,0 +1,29 @@
+// A reference shares its pointee's link, so an inherent method on `P` shadows
+// a trait impl written for `&P` (issue #2650).
+trait Tr with () {
+    fn m(self) -> String;
+}
+
+struct P {
+    v: i32,
+}
+
+impl P {
+    fn m(&self) -> String {
+        return "inherent";
+    }
+}
+
+impl Tr for &P {
+    fn m(self) -> String {
+        return "ref impl";
+    }
+}
+
+test {
+    let p = P { v: 1 };
+    let r = &p;
+    assert r.m() == "inherent";
+    assert p.m() == "inherent";
+    assert Tr::m(r) == "ref impl";
+}

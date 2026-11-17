@@ -1,7 +1,8 @@
-// Argument-directed selection among one trait's argument lists still works
-// when an unrelated blanket impl contributes a same-named candidate: the
-// blanket is the general case and does not break the overload set formed by
-// the concrete impls. WEP 2026-07-31.
+// One trait's argument lists form an overload set the call's arguments choose
+// from (WEP 2026-07-31), but another trait's blanket declaring the same name
+// at the same level is no general case beside them: two traits share no
+// contract, so the call is ambiguous however general the blanket is
+// (issue #2650).
 struct AKey {}
 
 struct BKey {}
@@ -36,10 +37,10 @@ impl Take<BKey> for Locker {
     }
 }
 
-test "a blanket rival does not defeat argument selection" {
+export fn run() {
     let l = Locker { id: 1 };
     assert l.take(BKey {}) == "took B";
 }
 
 __DATA__
-{"test": {}}
+{"compile_error": "ambiguous method 'take': declared by 'Loud' and 'Take'; name the trait", "compile_error_codes": ["AMBIGUOUS_CANDIDATE"]}

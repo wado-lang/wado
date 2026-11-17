@@ -960,13 +960,18 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// `Trait::<T>::method()` on a trait declaring parameters of its own. The
-    /// turbofish is that trait's argument list, so it names no receiver; a
-    /// static's receiver is written out instead (`docs/spec-traits.md`, "A trait's
-    /// associated function").
+    /// `Trait::<…>::method()` on a receiver-less declaration, with no `Self`
+    /// binding. The turbofish is the trait's argument list, so it names no
+    /// receiver (`docs/spec-traits.md`, "Qualified Calls").
     StaticNeedsWrittenReceiver {
         trait_name: String,
         method: String,
+        span: Span,
+    },
+
+    /// `Type::<Self = T>::method()`: only a trait has a `Self` to bind.
+    SelfBindingOnType {
+        name: String,
         span: Span,
     },
 
@@ -2425,8 +2430,13 @@ impl TypeError {
             } => (
                 Code::NeedsTypeAnnotation,
                 format!(
-                    "'{trait_name}' declares type parameters of its own, so the turbofish of '{trait_name}::<…>::{method}' is its argument list and names no receiver; write the receiver out ('Receiver::{method}(…)'), where the arguments select the impl"
+                    "'{trait_name}::{method}' takes no receiver, and the turbofish of '{trait_name}' is its argument list; bind the receiver as 'Self', e.g. '{trait_name}::<Self = Receiver>::{method}(…)'"
                 ),
+                *span,
+            ),
+            TypeError::SelfBindingOnType { name, span } => (
+                Code::TypeMismatch,
+                format!("'{name}' is not a trait, and only a trait's turbofish binds 'Self'"),
                 *span,
             ),
             TypeError::NoMatchingTraitArgument {
