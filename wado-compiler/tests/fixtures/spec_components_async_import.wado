@@ -24,21 +24,21 @@ affine struct MockClient {
 }
 
 impl MockClient {
-    fn new_request(&mut self) -> Request {
+    fn new_request(&mut self) -> Request with Request {
         let [trailers, end] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
         self.ends.push(end);
         let [req, _done] = Request::new(Headers::new(), null, trailers, null);
         return req;
     }
 
-    fn canned_response(&mut self) -> Response {
+    fn canned_response(&mut self) -> Response with Response {
         let [trailers, end] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
         self.ends.push(end);
         let [resp, _done] = Response::new(Headers::new(), null, trailers);
         return resp;
     }
 
-    fn end_writes(&mut self) {
+    fn end_writes(&mut self) with FutureWritable {
         while let Some(end) = self.ends.pop() {
             end.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
         }

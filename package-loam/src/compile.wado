@@ -115,7 +115,7 @@ pub fn check_in_place(
     spelling: Spelling,
     content: Stream<u8>,
     options: &Options,
-) -> Result<Model, String> {
+) -> Result<Model, String> with Stream {
     if spelling matches { Text } {
         content.drop();
         return Result::Err(
@@ -253,7 +253,7 @@ pub fn opened(module: &ModuleSpec, body: String) -> String {
 
 /// A checkpoint's leading bytes, through the end of its header, of the file, or
 /// of a length no module can address. The payloads are the loader's to read.
-pub fn read_header(mut content: Stream<u8>) -> ByteList {
+pub fn read_header(mut content: Stream<u8>) -> ByteList with Stream {
     let mut prefix = ByteList::with_capacity(HEADER_CHUNK);
     loop {
         let [end, chunk] = content.start_read(HEADER_CHUNK).finish();
@@ -286,7 +286,7 @@ global HEADER_CHUNK: i32 = 65536;
 /// declare a header no module can address, which the check then refuses, and
 /// all of a file that ends inside them. Reads the eight bytes and no more, so a
 /// build reads none of the payloads.
-pub fn header_extent(mut content: Stream<u8>) -> u64 {
+pub fn header_extent(mut content: Stream<u8>) -> u64 with Stream {
     let mut length = ByteList::with_capacity(8);
     loop {
         let [end, chunk] = content.start_read(8 - length.len()).finish();

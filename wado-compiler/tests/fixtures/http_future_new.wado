@@ -8,7 +8,7 @@
 
 use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     // Create a trailers future pair
     let [future_rx, future_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
 

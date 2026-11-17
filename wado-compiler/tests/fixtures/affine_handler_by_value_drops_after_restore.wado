@@ -42,20 +42,20 @@ impl Stream<u8> for Outer {
     ..forward
 }
 
-fn falls_through(rx: Stream<u8>) {
+fn falls_through(rx: Stream<u8>) with Stream {
     with Holder { rx } do {
         let _ = Ask::ask();
     }
 }
 
-fn returns_early(rx: Stream<u8>) {
+fn returns_early(rx: Stream<u8>) with Stream {
     with Holder { rx } do {
         let _ = Ask::ask();
         return;
     }
 }
 
-fn breaks_out(rx: Stream<u8>) {
+fn breaks_out(rx: Stream<u8>) with Stream {
     out: {
         with Holder { rx } do {
             let _ = Ask::ask();
@@ -64,7 +64,7 @@ fn breaks_out(rx: Stream<u8>) {
     }
 }
 
-fn generic<T>(rx: Stream<u8>, _: T) {
+fn generic<T>(rx: Stream<u8>, _: T) with Stream {
     with Holder { rx } do {
         let _ = Ask::ask();
         return;
@@ -73,7 +73,7 @@ fn generic<T>(rx: Stream<u8>, _: T) {
 
 // The body's own locals drop while `Holder` is installed, the ones outside it
 // after the restore.
-fn scoped_locals(outer: Stream<u8>, inner: Stream<u8>) {
+fn scoped_locals(outer: Stream<u8>, inner: Stream<u8>) with Stream {
     let kept = outer;
     with Holder { rx: closed_stream() } do {
         let local = inner;
@@ -81,7 +81,7 @@ fn scoped_locals(outer: Stream<u8>, inner: Stream<u8>) {
     }
 }
 
-fn scoped_locals_returning(outer: Stream<u8>, inner: Stream<u8>) {
+fn scoped_locals_returning(outer: Stream<u8>, inner: Stream<u8>) with Stream {
     let kept = outer;
     with Holder { rx: closed_stream() } do {
         let local = inner;
@@ -90,7 +90,7 @@ fn scoped_locals_returning(outer: Stream<u8>, inner: Stream<u8>) {
     }
 }
 
-fn closed_stream() -> Stream<u8> {
+fn closed_stream() -> Stream<u8> with Stream {
     let [rx, tx] = Stream::<u8>::new();
     tx.drop();
     return rx;

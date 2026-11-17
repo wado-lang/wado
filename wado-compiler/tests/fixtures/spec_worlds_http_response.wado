@@ -3,7 +3,7 @@
 // the body and resolves the trailers.
 use { Request, Response, ErrorCode, Headers, Trailers, FieldName } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     let headers = Headers::new();
     assert headers.append("content-type" as FieldName, b"text/plain") matches { Ok(_) };
 

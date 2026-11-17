@@ -537,7 +537,7 @@ resource Widget extends Target {
     fn label(&self) -> Option<String>;
 }
 
-fn use_it(w: Widget) {
+fn use_it(w: Widget) with Widget {
     w.add_listener("click");   // inherited, no cast
     let t: Target = w;         // upcast is implicit
 }

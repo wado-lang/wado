@@ -198,7 +198,7 @@ pub affine struct Messages<M> {
 impl<M: Message + Default> Iterator for Messages<M> {
     type Item = Result<M, DecodeError>;
 
-    fn next(&mut self) -> Option<Result<M, DecodeError>> {
+    fn next(&mut self) -> Option<Result<M, DecodeError>> with Stream {
         if self.done {
             return null;
         }
@@ -225,7 +225,7 @@ impl<M: Message + Default> Iterator for Messages<M> {
 // time, and a value is held only once its end is known. A fill may move the
 // bytes, so a reader is made after the last one.
 impl<M: Message + Default> Messages<M> {
-    fn next_value(&mut self, number: i32, wire_type: WireType) -> Result<Option<M>, DecodeError> {
+    fn next_value(&mut self, number: i32, wire_type: WireType) -> Result<Option<M>, DecodeError> with Stream {
         let input = &mut self.input;
         while input.fill(1) {
             let tag_end = varint_end(input, 0);
@@ -250,7 +250,7 @@ impl<M: Message + Default> Messages<M> {
         return Result::Ok(null);
     }
 
-    fn next_delimited(&mut self) -> Result<Option<M>, DecodeError> {
+    fn next_delimited(&mut self) -> Result<Option<M>, DecodeError> with Stream {
         let input = &mut self.input;
         if !input.fill(1) {
             return Result::Ok(null);
@@ -279,7 +279,7 @@ fn reader_of(input: &LinearBuffer, n: i32) -> Reader<&LinearArray<u8>> {
 /// The varint `input` holds from `at` on, and the offset past it; `None` where
 /// the stream ends first or the varint is malformed, which a reader over what is
 /// held then reports.
-fn varint_held(input: &mut LinearBuffer, at: i32) -> Option<[u64, i32]> {
+fn varint_held(input: &mut LinearBuffer, at: i32) -> Option<[u64, i32]> with Stream {
     let mut decoder = VarintDecoder::new();
     let mut end = at;
     while input.fill(end + 1) {
@@ -297,7 +297,7 @@ fn varint_held(input: &mut LinearBuffer, at: i32) -> Option<[u64, i32]> {
 
 /// The end of the varint `input` holds from `at` on, or of all that is held
 /// where it holds none: a reader over that much reports what went wrong.
-fn varint_end(input: &mut LinearBuffer, at: i32) -> i32 {
+fn varint_end(input: &mut LinearBuffer, at: i32) -> i32 with Stream {
     return match varint_held(input, at) {
         Some([_, end]) => end,
         None => input.len(),
@@ -307,7 +307,7 @@ fn varint_end(input: &mut LinearBuffer, at: i32) -> i32 {
 /// Read until the value behind a tag of `number` and `wire_type`, from `at` on,
 /// is held: its end, or `None` where the stream ends first or the value is
 /// malformed. A group `depth` groups deep holds its fields to its end-group tag.
-fn hold_value(input: &mut LinearBuffer, number: i32, wire_type: WireType, at: i32, depth: i32) -> Option<i32> {
+fn hold_value(input: &mut LinearBuffer, number: i32, wire_type: WireType, at: i32, depth: i32) -> Option<i32> with Stream {
     return match wire_type {
         Varint => {
             let [_, end] = varint_held(input, at)?;
@@ -329,7 +329,7 @@ fn hold_value(input: &mut LinearBuffer, number: i32, wire_type: WireType, at: i3
 
 /// Read until the fields of the group numbered `number`, `depth` groups deep,
 /// from `at` on, are held through its end-group tag.
-fn group_held(input: &mut LinearBuffer, at: i32, number: i32, depth: i32) -> Option<i32> {
+fn group_held(input: &mut LinearBuffer, at: i32, number: i32, depth: i32) -> Option<i32> with Stream {
     // Past the limit a reader refuses the group at its tag.
     if depth == DEPTH_LIMIT {
         return null;
@@ -346,14 +346,14 @@ fn group_held(input: &mut LinearBuffer, at: i32, number: i32, depth: i32) -> Opt
     }
 }
 
-fn held_to(input: &mut LinearBuffer, end: i32) -> Option<i32> {
+fn held_to(input: &mut LinearBuffer, end: i32) -> Option<i32> with Stream {
     return if input.fill(end) { Option::Some(end) } else { null };
 }
 
 /// Drop the field `input` starts with, `depth` groups deep, a part at a time: a
 /// value no caller decodes is never held whole. What is malformed or cut short
 /// is refused where a decode refuses it.
-fn drop_field(input: &mut LinearBuffer, depth: i32) -> Result<(), DecodeError> {
+fn drop_field(input: &mut LinearBuffer, depth: i32) -> Result<(), DecodeError> with Stream {
     let tag_end = varint_end(input, 0);
     let mut header = reader_of(input, tag_end);
     header.next_field(0)?;
@@ -379,7 +379,7 @@ fn drop_field(input: &mut LinearBuffer, depth: i32) -> Result<(), DecodeError> {
 
 /// Drop the fields of the group numbered `number`, `depth` groups deep, through
 /// its end-group tag.
-fn drop_group(input: &mut LinearBuffer, number: i32, depth: i32) -> Result<(), DecodeError> {
+fn drop_group(input: &mut LinearBuffer, number: i32, depth: i32) -> Result<(), DecodeError> with Stream {
     loop {
         let mut r = reader_of(input, varint_end(input, 0));
         if !r.next_field(number)? {
@@ -392,7 +392,7 @@ fn drop_group(input: &mut LinearBuffer, number: i32, depth: i32) -> Result<(), D
 
 /// Drop the length-delimited field `input` starts with, its tag held to
 /// `tag_end`.
-fn drop_length_delimited(input: &mut LinearBuffer, tag_end: i32) -> Result<(), DecodeError> {
+fn drop_length_delimited(input: &mut LinearBuffer, tag_end: i32) -> Result<(), DecodeError> with Stream {
     let mut r = reader_of(input, varint_end(input, tag_end));
     r.next_field(0)?;
     let mut left = r.size_through_length_prefixed(r.tag_start)?;

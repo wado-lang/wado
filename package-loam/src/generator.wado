@@ -51,7 +51,7 @@ fn entry(path: String, module: &ModuleSpec, body: String) -> Response {
 /// How many leading bytes of a file the module depends on: a checkpoint's
 /// header, and the whole of a graph or a tokenizer, every byte of which is
 /// schema. An extent past the end of the file is the whole file.
-export fn probe(content: Stream<u8>, type: Option<String>) -> Result<u64, KilnError> {
+export fn probe(content: Stream<u8>, type: Option<String>) -> Result<u64, KilnError> with Stream {
     if type matches { Some("safetensors") } {
         return Result::Ok(header_extent(content));
     }
@@ -61,7 +61,7 @@ export fn probe(content: Stream<u8>, type: Option<String>) -> Result<u64, KilnEr
 
 // A stream is outside drop elaboration, so every one is consumed or dropped
 // before the first return that could leave it open.
-export fn generate(req: Request<Options>) -> Result<Response, KilnError> {
+export fn generate(req: Request<Options>) -> Result<Response, KilnError> with Stream {
     let module = ModuleSpec::from_origin(&req.origin());
     let Some(runtime) = package_of(&req.module) else {
         let reason = `loam: invoked by the path ${req.module}; name it by the package spec its runtime is a dependency under`;
@@ -92,7 +92,7 @@ fn generate_graph(
     module: &ModuleSpec,
     spelling: Spelling,
     runtime: &String,
-) -> Result<Response, KilnError> {
+) -> Result<Response, KilnError> with Stream {
     if let Some(input) = req.inputs.iter_ref().find(
         |input| !input.type matches { Some("safetensors") | Some("safetensors-index") },
     ) {

@@ -24,7 +24,7 @@ fn hold(which: i32) with Fields {
     let boxed: Boxed<Fields> = if which == 0 { Boxed::Full(Fields::new()) } else { Boxed::Hollow };
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     hold(0);
     hold(1);
     hold(2);

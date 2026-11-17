@@ -2,7 +2,7 @@
 use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
 use { decode } from "core:base64";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     let result = decode(&"YWJj");
     assert result matches { Some(bytes) && bytes.len() == 3 };
 

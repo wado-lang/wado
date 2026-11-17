@@ -9,7 +9,7 @@ affine struct Holder {
     n: i32,
 }
 
-fn holder() -> Holder {
+fn holder() -> Holder with Fields {
     return Holder { headers: Fields::new(), n: 7 };
 }
 
@@ -18,19 +18,19 @@ affine struct Pair {
     b: Fields,
 }
 
-fn pair() -> Pair {
+fn pair() -> Pair with Fields {
     return Pair { a: Fields::new(), b: Fields::new() };
 }
 
-fn has_greeting(f: &Fields) -> bool {
+fn has_greeting(f: &Fields) -> bool with Fields {
     return f.has("x-greeting" as FieldName);
 }
 
-fn greeting_count(request: &Request) -> i32 {
+fn greeting_count(request: &Request) -> i32 with Request {
     return request.get_headers().get("x-greeting" as FieldName).len();
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Request, Response) {
     // A method receiver.
     let n = request.get_headers().get("x-greeting" as FieldName).len();
     assert n == 1;

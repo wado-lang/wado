@@ -2,14 +2,14 @@
 // so the arm may call that resource's own methods with no `with` naming it.
 use { Dom, Element, HtmlInputElement, Node } from "wado-lang:web";
 
-fn from_param(n: Node) -> String {
+fn from_param(n: Node) -> String with Node {
     return match n {
         input: HtmlInputElement => input.value(),
         _ => "",
     };
 }
 
-fn from_let_else(el: Element) -> String {
+fn from_let_else(el: Element) -> String with Element {
     let input: HtmlInputElement = el else {
         return "";
     };

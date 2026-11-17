@@ -9,7 +9,7 @@ fn parse(text: String) -> Result<i32, String> {
     return Result::Ok(1);
 }
 
-fn produce(text: String) -> Result<Future<i32>, String> {
+fn produce(text: String) -> Result<Future<i32>, String> with Future {
     let [rx, tx] = Future::<i32>::new();
     let value = parse(text)?;
     tx.write(value);

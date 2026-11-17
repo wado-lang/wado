@@ -396,7 +396,7 @@ affine struct Wrap { f: Fields }
 
 impl Wrap {
     fn touch(&self) {
-        let _ = self.f.set("x", [b"1"]);  // ERROR: missing resource 'Fields'
+        let _ = self.f.set("x", [b"1"]);
     }
 }
 ```
@@ -767,11 +767,11 @@ impl Stdin for MockStdin {
 }
 
 impl Fields for CountingFields {
-    fn new(&mut self) -> Fields {                                 // answers `Fields::new()`
+    fn new(&mut self) -> Fields with Fields {                     // answers `Fields::new()`
         self.calls += 1;
         resume Fields::new()
     }
-    fn has(&mut self, this: &Fields, name: FieldName) -> bool {   // answers `f.has(name)`
+    fn has(&mut self, this: &Fields, name: FieldName) -> bool with Fields {  // answers `f.has(name)`
         self.calls += 1;
         resume this.has(name)
     }
@@ -995,7 +995,7 @@ impl Log for Filter {                      // a layer: decorate one operation
 }
 
 impl TcpSocket for MinimalTcp {            // a mock: anything unexpected traps
-    fn create(&self, family: IpAddressFamily) -> Result<TcpSocket, ErrorCode> {
+    fn create(&self, family: IpAddressFamily) -> Result<TcpSocket, ErrorCode> with TcpSocket {
         resume Result::Ok(mock_socket())
     }
     fn drop(&self, this: TcpSocket) {      // a drop is an operation too
