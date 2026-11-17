@@ -6,6 +6,7 @@ use std::fmt::Write as _;
 use lexopt::Arg::Value;
 
 use crate::args::{self, CliExit};
+use crate::markdown::{fence_open, matches_fence_close};
 use crate::search::{self, Query};
 
 /// Every bundled document, by the name `wado spec` takes, in reading order.
@@ -78,19 +79,17 @@ impl<'a> Document<'a> {
     fn parse(name: &'static str, text: &'a str) -> Self {
         let lines: Vec<&str> = text.lines().collect();
         let mut headings: Vec<(usize, usize, &str)> = Vec::new();
-        let mut fence: Option<(char, usize)> = None;
+        let mut fence = None;
         for (i, line) in lines.iter().enumerate() {
             let trimmed = line.trim_start();
             if let Some(open) = fence {
-                if fence_run(trimmed).is_some_and(|(c, n)| {
-                    c == open.0 && n >= open.1 && trimmed[n..].trim().is_empty()
-                }) {
+                if matches_fence_close(trimmed, &open) {
                     fence = None;
                 }
                 continue;
             }
-            if let Some(run) = fence_run(trimmed) {
-                fence = Some(run);
+            if let Some(open) = fence_open(trimmed) {
+                fence = Some(open);
                 continue;
             }
             if let Some((level, title)) = heading(line) {
@@ -159,14 +158,6 @@ impl<'a> Document<'a> {
     }
 }
 
-/// The fence character and the length of its run, if `line` opens or closes
-/// a fenced code block.
-fn fence_run(line: &str) -> Option<(char, usize)> {
-    let c = line.chars().next().filter(|c| *c == '`' || *c == '~')?;
-    let n = line.chars().take_while(|x| *x == c).count();
-    (n >= 3).then_some((c, n))
-}
-
 /// The level and text of an ATX heading.
 fn heading(line: &str) -> Option<(usize, &str)> {
     let level = line.chars().take_while(|c| *c == '#').count();
@@ -216,7 +207,7 @@ impl Opt {
                 short: Some('s'),
                 value: Some("<query>"),
                 desc: "List the sections holding every term of the query, \
-                       within <name> if one is given",
+                       within the document or section given",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -266,18 +257,77 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<SpecOptions, CliExit> {
 
 pub fn run(opts: &SpecOptions) -> Result<(), CliExit> {
     let docs = documents();
-    match (&opts.search, &opts.target) {
-        (Some(query), target) => {
-            let scope = match target {
-                Some(name) => vec![find_document(&docs, name)?],
-                None => docs.iter().collect(),
-            };
-            print!("{}", search_documents(&scope, query)?);
+    let target = opts
+        .target
+        .as_deref()
+        .map(|target| resolve(&docs, target))
+        .transpose()?;
+    match (&opts.search, target) {
+        (Some(query), Some(target)) => print!("{}", search(target.sections(), query)?),
+        (Some(query), None) => {
+            let sections = docs.iter().flat_map(|doc| Target::whole(doc).sections());
+            print!("{}", search(sections, query)?);
         }
-        (None, Some(target)) => print!("{}", print_target(&docs, target)?),
+        (None, Some(target)) => print!("{}", target.text()),
         (None, None) => print!("{}", index(&docs)),
     }
     Ok(())
+}
+
+/// What an argument of `wado spec` names: a document, or one section of it.
+#[derive(Clone, Copy)]
+struct Target<'d> {
+    doc: &'d Document<'d>,
+    section: Option<&'d Section<'d>>,
+}
+
+impl<'d> Target<'d> {
+    fn whole(doc: &'d Document<'d>) -> Self {
+        Self { doc, section: None }
+    }
+
+    fn text(&self) -> String {
+        match self.section {
+            Some(section) => self.doc.text_of(section),
+            None => self.doc.text.to_string(),
+        }
+    }
+
+    /// The sections the target spans, each with its document.
+    fn sections(self) -> impl Iterator<Item = (&'d Document<'d>, &'d Section<'d>)> {
+        let span = self
+            .section
+            .map_or(0..self.doc.lines.len(), |s| s.start..s.end);
+        self.doc
+            .sections
+            .iter()
+            .filter(move |s| span.contains(&s.start))
+            .map(move |s| (self.doc, s))
+    }
+}
+
+fn resolve<'d>(docs: &'d [Document<'d>], target: &str) -> Result<Target<'d>, CliExit> {
+    let (name, anchor) = match target.split_once('#') {
+        Some((name, anchor)) => (name, Some(anchor)),
+        None => (target, None),
+    };
+    let doc = docs.iter().find(|d| d.name == name).ok_or_else(|| {
+        CliExit::error(format!(
+            "no document named `{name}`; `wado spec` lists them"
+        ))
+    })?;
+    let Some(anchor) = anchor else {
+        return Ok(Target::whole(doc));
+    };
+    let section = doc.section(anchor).ok_or_else(|| {
+        CliExit::error(format!(
+            "no section `{anchor}` in `{name}`; `wado spec --search` finds one"
+        ))
+    })?;
+    Ok(Target {
+        doc,
+        section: Some(section),
+    })
 }
 
 fn index(docs: &[Document]) -> String {
@@ -299,41 +349,17 @@ fn index(docs: &[Document]) -> String {
     out
 }
 
-fn find_document<'d>(docs: &'d [Document<'d>], name: &str) -> Result<&'d Document<'d>, CliExit> {
-    docs.iter().find(|d| d.name == name).ok_or_else(|| {
-        CliExit::error(format!(
-            "no document named `{name}`; `wado spec` lists them"
-        ))
-    })
-}
-
-fn print_target(docs: &[Document], target: &str) -> Result<String, CliExit> {
-    let (name, anchor) = match target.split_once('#') {
-        Some((name, anchor)) => (name, Some(anchor)),
-        None => (target, None),
-    };
-    let doc = find_document(docs, name)?;
-    let Some(anchor) = anchor else {
-        return Ok(doc.text.to_string());
-    };
-    let section = doc.section(anchor).ok_or_else(|| {
-        CliExit::error(format!(
-            "no section `{anchor}` in `{name}`; `wado spec --search` finds one"
-        ))
-    })?;
-    Ok(doc.text_of(section))
-}
-
-fn search_documents(docs: &[&Document], query: &str) -> Result<String, CliExit> {
+fn search<'d>(
+    sections: impl Iterator<Item = (&'d Document<'d>, &'d Section<'d>)>,
+    query: &str,
+) -> Result<String, CliExit> {
     let query = Query::parse(query).ok_or_else(|| CliExit::error("the query is empty"))?;
-    let mut hits = Vec::new();
-    for doc in docs {
-        for section in &doc.sections {
-            if let Some(score) = query.score(&[(section.title, 10), (&section.body, 1)]) {
-                hits.push((score, (*doc, section)));
-            }
-        }
-    }
+    let hits = sections
+        .filter_map(|(doc, section)| {
+            let score = query.score(&[(section.title, 10), (&section.body, 1)])?;
+            Some((score, (doc, section)))
+        })
+        .collect();
     let hits = search::rank(hits);
     if hits.is_empty() {
         return Err(CliExit::error(
@@ -441,6 +467,14 @@ mod tests {
         assert_eq!(slugs, ["title", "usage", "detail", "usage-1"]);
     }
 
+    /// A backtick fence's info string holds no backtick, so a line opening
+    /// with an inline span opens no fence.
+    #[test]
+    fn an_inline_span_opens_no_fence() {
+        let doc = Document::parse("sample", "# Title\n\n```a``` is code.\n\n## After\n");
+        assert!(doc.section("after").is_some());
+    }
+
     #[test]
     fn a_section_holds_its_subsections() {
         let doc = Document::parse("sample", SAMPLE);
@@ -455,15 +489,28 @@ mod tests {
     #[test]
     fn search_ranks_a_heading_over_the_body() {
         let doc = Document::parse("sample", SAMPLE);
-        let out = search_documents(&[&doc], "detail").unwrap();
+        let out = search(Target::whole(&doc).sections(), "detail").unwrap();
         assert!(out.starts_with("sample#detail  Title › Detail\n"), "{out}");
+    }
+
+    /// A target narrows the search to its section and the subsections under it.
+    #[test]
+    fn search_within_a_section_spans_its_subsections() {
+        let docs = [Document::parse("sample", SAMPLE)];
+        let usage = resolve(&docs, "sample#usage").unwrap();
+        assert!(
+            search(usage.sections(), "more")
+                .unwrap()
+                .starts_with("sample#detail ")
+        );
+        assert!(search(usage.sections(), "again").is_err());
     }
 
     #[test]
     fn search_finds_let_else_in_the_bundle() {
         let docs = documents();
-        let all: Vec<&Document> = docs.iter().collect();
-        let out = search_documents(&all, "let else").unwrap();
+        let all = docs.iter().flat_map(|doc| Target::whole(doc).sections());
+        let out = search(all, "let else").unwrap();
         assert!(
             out.lines()
                 .next()
@@ -476,15 +523,15 @@ mod tests {
     #[test]
     fn a_miss_points_at_doc_search() {
         let doc = Document::parse("sample", SAMPLE);
-        let err = search_documents(&[&doc], "zzz").unwrap_err();
+        let err = search(Target::whole(&doc).sections(), "zzz").unwrap_err();
         assert!(err.message.contains("wado doc --search"), "{}", err.message);
     }
 
     #[test]
     fn an_unknown_section_is_an_error() {
         let docs = documents();
-        assert!(print_target(&docs, "effects#nope").is_err());
-        assert!(print_target(&docs, "nope").is_err());
-        assert!(print_target(&docs, "effects").unwrap().starts_with("# "));
+        assert!(resolve(&docs, "effects#nope").is_err());
+        assert!(resolve(&docs, "nope").is_err());
+        assert!(resolve(&docs, "effects").unwrap().text().starts_with("# "));
     }
 }

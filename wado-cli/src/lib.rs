@@ -34,6 +34,7 @@ pub mod kiln_wit;
 pub mod knobs;
 pub mod lsp;
 pub mod manifest;
+mod markdown;
 pub mod metadata_embed;
 pub mod oci;
 pub mod publish;

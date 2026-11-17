@@ -51,16 +51,17 @@ keep each argument one kind of thing.
 ### `--search` on both
 
 `wado spec --search <query>` searches the specification and the cheatsheet, or
-the one document named beside it. `wado doc --search <query>` searches the API
+the document or section named beside it. `wado doc --search <query>` searches the API
 of every documented stdlib module, or of the modules and files named beside it.
 Each searches only what it prints. A search that finds nothing in one points at
 the other.
 
 A query is split on whitespace into terms, compared without regard to case. An
 entry matches when it holds every term. Ranking favours a term in a heading or
-a name over one in the body, and keeps document order among equals. A hit is
-printed as the argument that prints it in full, so the next command is a copy
-of the hit:
+a name over one in the body, and keeps document order among equals. A hit
+starts with the argument that prints it: a `spec` hit names the section, and a
+`doc` hit names the module whose page holds the item, then the item and its
+signature.
 
 ```text
 $ wado spec --search "let else"

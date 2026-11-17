@@ -16,6 +16,7 @@ use wado_lsp::host::discovery::Disk;
 use crate::args::{self, CliExit};
 use crate::compile::{Settled, build_load, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::markdown::{FenceMarker, fence_open, matches_fence_close};
 use crate::search::{self, Query};
 
 const MODULE_PLACEHOLDER: &str = "{module}";
@@ -382,7 +383,7 @@ fn items<'a>(module: &'a str, doc: &'a DocModule) -> Vec<Item<'a>> {
     for v in &doc.variants {
         out.add(None, &v.name, &v.signature, &v.doc);
         for c in &v.cases {
-            out.add(Some(&v.name), &c.name, &v.signature, &c.doc);
+            out.add(Some(&v.name), &c.name, &c.signature, &c.doc);
         }
         out.add_members(&v.name, v.impls.functions());
     }
@@ -1039,6 +1040,13 @@ mod format_contract_tests {
     }
 
     #[test]
+    fn a_variant_case_hit_shows_its_payload() {
+        let doc = page("pub variant Shape {\n    Disc(f64),\n}\n", &[], false);
+        let out = search_docs(&[("demo.wado".to_string(), doc)], "disc").unwrap();
+        assert_eq!(out, "demo.wado  Shape::Disc\n    Disc(f64)\n");
+    }
+
+    #[test]
     fn a_miss_points_at_spec_search() {
         let docs = vec![("core:cli".to_string(), stdlib_doc("core:cli"))];
         let err = search_docs(&docs, "zzzz").unwrap_err();
@@ -1337,12 +1345,7 @@ fn render_md_variant(out: &mut String, v: &DocVariant, h3: &str, h4: &str) {
         render_md_doc(out, d);
     }
     for case in &v.cases {
-        let case_repr = if let Some(ref p) = case.payload {
-            format!("{}({p})", case.name)
-        } else {
-            case.name.clone()
-        };
-        render_md_entity(out, &case_repr, case.doc.as_deref(), h4);
+        render_md_entity(out, &case.signature, case.doc.as_deref(), h4);
     }
     render_md_impl_members(out, &v.impls, h4);
 }
@@ -1544,40 +1547,6 @@ fn render_md_doc(out: &mut String, doc: &str) {
             in_blockquote = false;
         }
     }
-}
-
-/// `CommonMark` fenced code block delimiter — three or more `` ` `` or `~`.
-#[derive(Clone, Copy)]
-struct FenceMarker {
-    /// Fence character (`` ` `` or `~`).
-    ch: char,
-    /// Number of fence characters in the opening run.
-    len: usize,
-}
-
-fn fence_open(s: &str) -> Option<FenceMarker> {
-    let ch = s.chars().next()?;
-    if ch != '`' && ch != '~' {
-        return None;
-    }
-    let len = s.chars().take_while(|&c| c == ch).count();
-    if len < 3 {
-        return None;
-    }
-    // Backtick fences forbid backticks in the info string per CommonMark; the
-    // remaining content after a tilde fence has no such restriction.
-    if ch == '`' && s[len..].contains('`') {
-        return None;
-    }
-    Some(FenceMarker { ch, len })
-}
-
-fn matches_fence_close(s: &str, open: &FenceMarker) -> bool {
-    let count = s.chars().take_while(|&c| c == open.ch).count();
-    if count < open.len {
-        return false;
-    }
-    s[count..].chars().all(|c| c == ' ' || c == '\t')
 }
 
 fn normalize_md_line(line: &str) -> String {
@@ -1849,11 +1818,7 @@ fn render_simple_variants_section(out: &mut String, doc: &DocModule, h2: &str) {
     for v in &doc.variants {
         writeln!(out, "\n```wado\n{} {{", v.signature).unwrap();
         for case in &v.cases {
-            if let Some(ref p) = case.payload {
-                writeln!(out, "    {}({p}),", case.name).unwrap();
-            } else {
-                writeln!(out, "    {},", case.name).unwrap();
-            }
+            writeln!(out, "    {},", case.signature).unwrap();
         }
         out.push_str("}\n");
         render_simple_impls(out, &v.name, &v.impls);

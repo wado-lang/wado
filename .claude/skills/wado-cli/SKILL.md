@@ -52,7 +52,8 @@ takes exactly one source file; `dump`, `doc`, and `format` take several.
 
 `wado spec` prints the specification and the cheatsheet bundled into the
 binary, so they match the compiler in use. `wado doc` prints a module's API.
-Each takes `--search <query>`, and each hit is the argument that prints it.
+Each takes `--search <query>`. A hit starts with the argument that prints it: a
+section for `spec`, the module whose page holds the item for `doc`.
 
 ```sh
 wado spec                          # the documents

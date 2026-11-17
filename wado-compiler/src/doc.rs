@@ -200,6 +200,8 @@ pub struct DocVariant {
 #[derive(Debug, Clone, Serialize)]
 pub struct DocVariantCase {
     pub name: String,
+    /// The case as declared: `Some(T)`, or `None` with no payload.
+    pub signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub payload: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -554,10 +556,16 @@ fn build_doc_variant(v: &VariantDecl, impls: &[DocImpl], include_private: bool) 
     let cases: Vec<DocVariantCase> = v
         .cases
         .iter()
-        .map(|c| DocVariantCase {
-            name: c.name.clone(),
-            payload: c.payload.as_ref().map(render_type),
-            doc: c.doc.clone(),
+        .map(|c| {
+            let payload = c.payload.as_ref().map(render_type);
+            DocVariantCase {
+                name: c.name.clone(),
+                signature: payload
+                    .as_ref()
+                    .map_or_else(|| c.name.clone(), |p| format!("{}({p})", c.name)),
+                payload,
+                doc: c.doc.clone(),
+            }
         })
         .collect();
 
