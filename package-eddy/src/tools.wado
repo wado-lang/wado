@@ -27,6 +27,8 @@ global PATHS: String = "Paths are relative to the repository root; a leading `/`
 /// tool takes resolves inside it.
 pub struct Workspace {
     pub root: String,
+    /// The repository `root` is a worktree of. Eddy runs from its root.
+    pub repo: String = ".",
     pub symbols: Option<SymbolIndex> = null,
     pub runner: Option<Runner> = null,
 }
@@ -53,6 +55,14 @@ pub struct Runner {
 /// `HOME` records no trust; it would also read the configuration of every
 /// directory above, and a snapshot sits inside the developer's checkout.
 pub global ENTER_TREE: String = #"cd "$0" && export MISE_TRUSTED_CONFIG_PATHS="$PWD" MISE_CEILING_PATHS="$(dirname "$PWD")""#;
+
+/// `command`, which runs the reviewed change's code, writing nothing but
+/// `tree` and `output`: the developer's checkout and its `.git` least. It
+/// reads the checkout it starts in, since cargo stops at a
+/// `.cargo/config.toml` above the tree that it cannot read.
+pub fn running_reviewed(command: Command, tree: &String, output: &String) -> Command {
+    return command.grant_read(".").grant_write(*tree).grant_write(*output);
+}
 
 /// One run of a program: whether it exited 0, and how it ended with the end of
 /// its stderr and stdout, as Run reports it.
@@ -374,7 +384,10 @@ impl Workspace {
             runner.target_dir, runner.tool_path,
         ] as List<String>;
         args.extend(command);
-        let run = Command::new("timeout").args(args).env("CARGO_HOME", runner.cargo_home).env(
+        let run = running_reviewed(Command::new("timeout").args(args), &self.root, &runner.target_dir).env(
+            "CARGO_HOME",
+            runner.cargo_home,
+        ).env(
             "RUSTUP_HOME",
             runner.rustup_home,
         ).env("MISE_DATA_DIR", runner.mise_data_dir).env("MISE_YES", "1").env("CARGO_TERM_COLOR", "never").env(
@@ -511,7 +524,7 @@ ${tail(String::from_utf8_lossy(out.stdout))}</stdout>` });
     fn rg(&self, args: List<String>) -> Result<List<String>, String> with Process {
         let mut full = ["--hidden", "--glob", "!.git", "--sort", "path"] as List<String>;
         full.extend(&args);
-        let out = match Command::new("rg").args(full).output() {
+        let out = match Command::new("rg").args(full).grant_read(self.root).output() {
             Ok(out) => out,
             Err(e) => {
                 return Err(if e.kind matches { OutputTooLarge } {
@@ -541,6 +554,8 @@ ${tail(String::from_utf8_lossy(out.stdout))}</stdout>` });
 
     /// `path` inside the root, or an error when it leaves the root.
     pub fn resolve(&self, path: &String) -> Result<String, String> {
+        // Or no path would compare as inside it.
+        assert fs::normalize(self.root).unwrap() == self.root, "a workspace's root must be normalized";
         let full = fs::normalize(fs::join(self.root, unrooted(path))).map_err(|e| `${e}`)?;
         if full != self.root && !full.starts_with(`${self.root}/`) {
             return Err(`${*path} is outside the repository`);

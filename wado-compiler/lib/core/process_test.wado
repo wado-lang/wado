@@ -8,6 +8,8 @@ use {
     ProcessError,
     ProcessErrorKind,
 } from "core:process";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
 
 test "cmd splits literal text and keeps each hole one argument" {
     let msg = "fix the bug";
@@ -230,6 +232,74 @@ test "the child sees only the guest's grants" {
         return;
     }
     assert cmd`ls /tmp`.status().unwrap() != ExitStatus::Exited(0);
+}
+
+// `wado test` preopens the package root, so each test owns a directory under
+// the gitignored `target/`, emptied first.
+fn scratch<S: AsStrSlice>(case: S) -> String with Preopens {
+    let dir = `target/core-process-test/${case}`;
+    fs::remove_dir_all(&dir).unwrap();
+    fs::create_dir_all(&dir).unwrap();
+    return dir;
+}
+
+test "a granted child writes only where it is granted" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let granted = scratch("write-granted");
+    let other = scratch("write-other");
+    let write = |path: String| Command::new("sh").args(["-c", "echo x > \"$0\"", path]).grant_write(granted).status().unwrap();
+    assert write(`${granted}/f`) == ExitStatus::Exited(0);
+    assert write(`${other}/f`) != ExitStatus::Exited(0);
+    assert fs::exists(`${granted}/f`) && !fs::exists(`${other}/f`);
+}
+
+test "a granted child reads only what it is granted" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let granted = scratch("read-granted");
+    let other = scratch("read-other");
+    for let dir of [granted, other] {
+        fs::write(`${dir}/f`, &"x").unwrap();
+    }
+    let read = |path: String| Command::new("cat").arg(path).grant_read(granted).status().unwrap();
+    assert read(`${granted}/f`) == ExitStatus::Exited(0);
+    assert read(`${other}/f`) != ExitStatus::Exited(0);
+    let write = Command::new("sh").args(["-c", "echo y > \"$0\"", `${granted}/f`]).grant_read(granted);
+    assert write.status().unwrap() != ExitStatus::Exited(0);
+    assert fs::read_to_string(`${granted}/f`).unwrap() == "x";
+}
+
+test "a grant the guest does not hold is NotPermitted" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let refused = |command: Command| command.status().unwrap_err().kind matches { Spawn(NotPermitted) };
+    assert refused(Command::new("true").grant_write("/tmp"));
+    assert refused(Command::new("true").grant_read("/tmp"));
+    // The baseline lets a child read `/usr`, never write it.
+    assert refused(Command::new("true").grant_write("/usr"));
+    assert Command::new("true").grant_read("/usr").status().unwrap() == ExitStatus::Exited(0);
+}
+
+test "a grant of a FIFO no one writes to starts the child" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let fifo = `${scratch("fifo")}/f`;
+    assert Command::new("mkfifo").arg(fifo).status().unwrap() == ExitStatus::Exited(0);
+    assert Command::new("true").grant_read(fifo).status().unwrap() == ExitStatus::Exited(0);
+}
+
+test "a grant of a missing path is NotFound" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let dir = scratch("missing");
+    let err = Command::new("true").grant_write(`${dir}/absent`).status().unwrap_err();
+    assert err.kind matches { Spawn(NotFound) };
 }
 
 test "the child reads the system configuration" {

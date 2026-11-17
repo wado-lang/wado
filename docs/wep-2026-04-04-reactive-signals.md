@@ -1,350 +1,121 @@
 # WEP: Reactive Signals
 
-**Status: Not yet implemented**
-
 ## Context
 
-Modern UI frameworks (SolidJS, Svelte 5, Preact Signals, Vue, Angular) have converged on fine-grained reactivity via signals — a push-pull reactive primitive that tracks dependencies and propagates changes efficiently. Wado integrates this pattern as a first-class language feature with compile-time dependency analysis, eliminating the need for runtime auto-tracking.
+UI frameworks have converged on fine-grained reactivity. A signal holds a
+value, a computation that reads it becomes its dependent, and a write reruns
+only the dependents. The page is built once, with no virtual DOM and no diffing
+of a tree.
+
+This WEP first proposed signals as a language feature: a `reactive` keyword on
+bindings, `&reactive` references, and a compiler pass that found each
+computation's dependencies statically. `example/web-signals` then built signals
+as a library in the language as it is: `signal`, `memo`, `observe`, `scope` and
+`flush`, bindings to the DOM, a keyed list, and a to-do list on top of them. It
+needed no language feature. So the question this WEP answers changed from how
+the compiler tracks dependencies to whether it should.
 
 ### Prior Art
 
-Most signal implementations use **runtime auto-tracking**: a global stack records which computed/effect is currently executing, and signals register themselves as dependencies when read. This enables dynamic dependencies (dependencies that change based on control flow) but has costs:
+Solid, Preact Signals, Vue and Svelte 5 find dependencies as the code runs. A
+computation records itself as the one running, and a signal that is read
+subscribes it. Dependencies follow control flow, and a signal is a value like
+any other: it crosses function and module boundaries, and lives in a list or a
+field.
 
-- Runtime overhead for stack management and subscription bookkeeping
-- Memory allocation for dynamic subscriber sets
-- Complexity in cleanup of stale subscriptions
+Svelte 3 and 4 found dependencies at compile time. What their users complained
+about is the useful half:
 
-Wado takes a different approach: **static dependency analysis** at compile-time, trading dynamic dependency precision for zero-cost dependency tracking and compiler optimization opportunities.
+- Reactivity stopped at the boundary the compiler could see. Code moved out of
+  a component into a function or another module was no longer reactive.
+- State shared between components needed a second mechanism, stores, with its
+  own rules.
+- What made a statement reactive was a syntactic matter, and hard to predict.
+
+Svelte 5 moved to signals tracked at run time. Solid's compiler never tracked
+dependencies. It compiles templates, which is where its speed comes from.
 
 ## Decision
 
-### The `reactive` Keyword
-
-**Source** values are mutable reactive state:
-
-```wado
-let reactive mut count = 0;
-
-count = 5;          // Mutation triggers updates
-count += 1;         // Also triggers updates
-```
-
-**Derived** values are computed from other reactive values:
-
-```wado
-let reactive doubled = || count * 2;
-let reactive quadrupled = || doubled * 2;
-
-// Reading derived values
-let x = doubled;    // Returns current computed value
-```
-
-Derived values are lazily recomputed when their dependencies change and the derived value is read. The compiler statically analyzes dependencies and builds a dependency graph at compile-time.
-
-### The `observe` Function
-
-The `observe` function (from `core:reactive`) executes side effects when reactive dependencies change. Dependencies are automatically tracked — any reactive value read within the closure becomes a dependency.
-
-```wado
-use {observe} from "core:reactive";
-
-let reactive mut count = 0;
-let reactive doubled = || count * 2;
-
-observe(|| {
-    println(`Count is now: ${count}`);
-    // Dependencies: count
-});
-
-observe(|| {
-    println(`Doubled is now: ${doubled}`);
-    // Dependencies: doubled (and transitively, count)
-});
-```
-
-#### Cleanup
-
-Return a cleanup function to run when the observation is disposed or before re-running:
-
-```wado
-observe(|| {
-    let subscription = external_api.subscribe(`event-${count}`);
-    println(`Subscribed to event-${count}`);
-
-    return || {
-        subscription.unsubscribe();
-        println(`Cleaned up subscription for event-${count}`);
-    };
-});
-```
-
-The cleanup function runs:
-
-- Before the effect re-runs (when dependencies change)
-- When the enclosing scope ends
-- When the component unmounts (in UI contexts)
-
-#### Manual Disposal
-
-```wado
-let dispose = observe(|| {
-    println(`Count: ${count}`);
-});
-
-// Later, stop observing
-dispose();
-```
-
-### Reactive References
-
-Reactive values can be passed by reference to functions:
-
-```wado
-fn increment(counter: &reactive mut i32) {
-    *counter += 1;  // Triggers updates in caller's scope
-}
-
-let reactive mut count = 0;
-let reactive doubled = || count * 2;
-
-increment(&reactive count);  // count becomes 1, doubled becomes 2
-```
-
-### Execution Semantics
-
-Reactive behavior differs between execution contexts:
-
-#### CLI World (Synchronous)
-
-In CLI programs, reactive updates are **synchronous and immediate**:
-
-```wado
-use {observe} from "core:reactive";
-
-let reactive mut count = 0;
-let reactive doubled = || count * 2;
-
-observe(|| {
-    println(`doubled = ${doubled}`);
-});
-
-count = 5;
-// observe() callback runs immediately here, before next line
-// Output: "doubled = 10"
-
-println("after mutation");
-// Output: "after mutation"
-```
-
-- Updates propagate immediately when a source is mutated
-- observe() callbacks run synchronously before execution continues
-- Observations live for the duration of their enclosing scope
-
-#### Event-Looped World (Browser/GUI)
-
-In event-driven contexts, reactive updates are triggered by **external events**:
-
-```wado
-use {observe} from "core:reactive";
-
-fn Counter() -> Element with Dom {
-    let reactive mut count = 0;
-    let reactive doubled = || count * 2;
-
-    observe(|| {
-        println(`Count changed to ${count}`);
-    });
-
-    return <div>
-        <p>{doubled}</p>
-        <button onclick={|_| count += 1}>+1</button>
-    </div>;
-}
-```
-
-- Updates are triggered by events (clicks, timers, network responses)
-- Multiple mutations within a single event handler are **batched** (see Batching below)
-- observe() callbacks and UI bindings persist for the component's lifetime
-- The event loop keeps the program alive to receive future events
-
-#### Comparison
-
-| Aspect             | CLI                       | Event-looped                    |
-| ------------------ | ------------------------- | ------------------------------- |
-| Trigger            | Direct assignment in code | External events                 |
-| Propagation        | Synchronous, immediate    | May be batched per event        |
-| observe() lifetime | Enclosing scope duration  | Component/subscription lifetime |
-| Primary use case   | Computed dependencies     | UI binding, subscriptions       |
-
-### JSX Integration
-
-Reactive values integrate seamlessly with JSX:
-
-```wado
-fn Counter() -> Element with Dom {
-    let reactive mut count = 0;
-
-    return <button onclick={|_| count += 1}>
-        {count}
-    </button>;
-}
-```
-
-The compiler tracks that `{count}` depends on the reactive value and generates code to update only that text node when `count` changes — no virtual DOM diffing required.
-
-`Reactive` is built into the language; no `with` declaration required.
-
-### Internal Algorithm: Push-Pull with Static Dependencies
-
-Wado's reactive system uses a **push-pull** algorithm with **compile-time dependency analysis**.
-
-#### Two-Phase Update
-
-When a source value is mutated, the update proceeds in two phases:
-
-1. **Push phase (invalidation):** The mutation immediately marks all direct and transitive dependents as **dirty**. This propagation is synchronous and traverses the entire downstream dependency graph. No derived values are recomputed during this phase — only dirty flags are set.
-2. **Pull phase (lazy re-evaluation):** Derived values are recomputed **only when read**. When a dirty derived value is accessed (by an `observe` callback, a JSX binding, or user code), it re-executes its computation function, caches the result, and clears its dirty flag. If a derived value is never read after being invalidated, it is never recomputed.
-
-```wado
-let reactive mut a = 1;
-let reactive b = || a * 2;        // derived, depends on a
-let reactive c = || a * 3;        // derived, depends on a
-let reactive sum = || b + c;      // derived, depends on b and c
-
-a = 10;
-// Push phase: b, c, sum are all marked dirty (no recomputation yet)
-
-let x = sum;
-// Pull phase: sum is dirty → reads b (dirty → recomputes to 20) and c (dirty → recomputes to 30) → sum recomputes to 50
-// If c were never read by anyone, it would not be recomputed
-```
-
-#### Static Dependency Analysis
-
-Dependencies are resolved entirely at **compile-time**. The compiler analyzes which reactive values appear in each derived expression and `observe` body, and generates the dependency graph statically. There is no runtime dependency tracking (no global stack, no auto-tracking).
-
-This means dependencies are **conservative**: if a derived expression references a reactive value inside a conditional branch, the dependency is always registered regardless of which branch executes at runtime.
-
-```wado
-let reactive mut flag = true;
-let reactive mut a = 1;
-let reactive mut b = 2;
-
-let reactive derived = || {
-    if flag { return a * 2; }
-    return b + 1;
-};
-// Static dependencies: flag, a, b (all three, always)
-// Mutating b marks derived as dirty even when flag is true
-```
-
-This over-subscription is acceptable because:
-
-- The push phase only sets dirty flags (cheap).
-- The pull phase skips recomputation if the result is unchanged (see equality check below).
-- Static analysis enables compiler optimizations impossible with dynamic tracking (inlining, dead-code elimination of unused derived values, allocation-free dependency graphs).
-
-#### Glitch-Free Guarantee
-
-A **glitch** is an inconsistent intermediate state observed by an effect. Wado guarantees glitch-free execution: `observe` callbacks and JSX bindings never see a partially-updated dependency graph.
-
-This is achieved by separating push and pull phases:
-
-1. The push phase completes first, marking **all** transitive dependents as dirty.
-2. The pull phase runs only within `observe` callbacks (or JSX re-renders), which are scheduled **after** the push phase completes.
-3. During the pull phase, each derived value reads its dependencies, which themselves pull from their dependencies recursively. Because all dirty flags were set in step 1, the pull always traverses to the true sources and recomputes in a bottom-up (topological) order.
-
-Diamond dependency example:
-
-```wado
-let reactive mut count = 0;
-let reactive doubled = || count * 2;
-let reactive tripled = || count * 3;
-let reactive sum = || doubled + tripled;
-
-observe(|| {
-    println(`sum = ${sum}`);
-    // Never sees doubled-updated + tripled-stale:
-    // Pull reads sum → pulls doubled (recomputes) → pulls tripled (recomputes) → sum recomputes
-});
-
-count = 10;
-// Push: doubled, tripled, sum all marked dirty
-// Pull (in observe): sum → doubled (20) + tripled (30) = 50 ✓
-```
-
-Because the dependency graph is static and known at compile-time, the compiler can verify at compile-time that a valid topological ordering exists (no cycles).
-
-#### Equality Check (Change Propagation Cut-Off)
-
-When a derived value is recomputed during the pull phase, the new value is compared to the cached previous value using `Eq`. If they are equal, the derived value's downstream dependents are **not** pulled — their dirty flags remain but will be cleared without recomputation when eventually read.
-
-This prevents unnecessary cascading recomputation:
-
-```wado
-let reactive mut x = 5;
-let reactive clamped = || i32::min(x, 10);  // clamps to max 10
-let reactive display = || `value: ${clamped}`;
-
-observe(|| { println(display); });
-
-x = 7;     // clamped: 5 → 7, display recomputes → "value: 7"
-x = 100;   // clamped: 7 → 10, display recomputes → "value: 10"
-x = 200;   // clamped: 10 → 10 (equal!), display is NOT recomputed
-```
-
-Equality check requires the derived type to implement `Eq`. For types without `Eq`, the derived value always propagates (no cut-off).
-
-#### Batching
-
-In the **CLI world**, each mutation triggers the push-pull cycle immediately and synchronously: the push phase runs, then all active `observe` callbacks are pulled.
-
-In the **event-looped world** (browser/GUI), mutations within a single event handler are **batched**:
-
-1. All mutations within the event handler run the push phase (dirty propagation) immediately.
-2. The pull phase (re-evaluation of `observe` callbacks and JSX bindings) is deferred until the event handler returns.
-3. This means multiple mutations to different sources result in a single pull pass, avoiding redundant recomputations.
-
-```wado
-fn handle_click() with Dom {
-    // Event handler — mutations are batched
-    count = count + 1;   // push: marks dependents dirty
-    name = "Alice";      // push: marks dependents dirty
-    // pull phase runs here, after handler returns
-    // All observe callbacks and JSX bindings update once
-}
-```
-
-In CLI world, explicit batching is available via `batch` from `core:reactive`:
-
-```wado
-use {batch} from "core:reactive";
-
-batch(|| {
-    count = 10;      // push only (dirty flags)
-    other = 20;      // push only (dirty flags)
-});
-// pull phase runs here, after batch returns
-```
-
-## Consequences
-
-- The `reactive` keyword, `observe`, and `batch` are new language/library primitives.
-- Static dependency analysis means the compiler must perform a dataflow pass over reactive closures to determine which reactive values are referenced.
-- Over-subscription from static analysis is mitigated by cheap dirty-flag propagation and equality-based cut-off.
-- The push-pull model enables lazy evaluation — unused derived values are never recomputed.
-- Glitch-free guarantee comes from phase separation, not topological sorting at runtime.
-- `Eq` is leveraged for change propagation cut-off; types without `Eq` always propagate.
-- JSX integration relies on the same push-pull mechanism — the compiler generates `observe`-like subscriptions for each reactive expression in JSX templates.
-
-### TODO
-
-- [ ] Implement `reactive` keyword in the parser and type checker
-- [ ] Implement static dependency analysis pass
-- [ ] Implement push-pull codegen (dirty flags, lazy re-evaluation)
-- [ ] Implement equality-based propagation cut-off
-- [ ] Implement `observe` in `core:reactive`
-- [ ] Implement `batch` in `core:reactive`
-- [ ] Implement reactive references (`&reactive mut T`)
-- [ ] Integrate with JSX codegen
-- [ ] Determine batching strategy for event-looped world
+### Signals Are a Library
+
+Signals are a library that finds dependencies as the code runs. The language
+gains no `reactive` keyword, no `&reactive` reference, and no static dependency
+analysis. `reactive` is an identifier like any other.
+
+Static analysis sees a graph only where it is closed within one function. The
+to-do list already leaves that: each item carries a signal of its own, created
+as items arrive, kept in a list, and read by a row built in another function.
+That part needs a graph at run time whatever the compiler does. A compile-time
+graph would then be a second mechanism beside it, for the one case that is
+cheap already. It would also subscribe a computation to every signal its text
+mentions, on whichever branch.
+
+The language stays smaller, and what the library needs from it is general:
+closures, effect handlers, and resources.
+
+### Model
+
+- A signal is a value that tells its readers when it is written. It holds its
+  state behind a reference, so a copy of a signal is the same signal, and
+  reading or writing one calls no function value.
+- A memo is a value computed from others. It recomputes only when one of them
+  was written and someone then reads it.
+- An effect, made by `observe`, runs once and again whenever something it read
+  was written. `effect` is a keyword, which is why the function has another
+  name.
+- A computation owns what it creates while it runs: the effects, the memos and
+  the cleanups it registered. They are disposed of before it reruns, and with
+  it. `scope` runs a body that owns what it creates, and returns what disposes
+  of it all.
+- A computation subscribes to what it reads when it reads it, and drops its
+  subscriptions when it runs again or is disposed of. So a dependency it no
+  longer reads wakes nothing.
+
+Reading reports to the running computation through an effect interface, whose
+operations have default bodies. A computation installs a handler while it runs.
+Outside one the default body runs, so a read is untracked, and the function
+that reads needs no handler above it.
+
+### Updates
+
+A write only marks. A memo that is marked forgets its value and marks its own
+dependents, and an effect that is marked joins a queue. `flush` then reruns each
+queued effect once, until none is marked, and a memo recomputes when one of
+them reads it.
+
+So a write performs no effect, and several writes are one batch. An effect
+never sees half of a batch, and never sees one memo updated beside another that
+is stale, since a memo recomputes on the read that needs it.
+
+A listener bound with `on` flushes when it returns. Every entry into a program
+from the browser is a listener, so with `on` the page is consistent again
+before the browser gets control back. Any other code that writes, a listener
+added with `add_event_listener` directly included, calls `flush` itself.
+
+### Templates
+
+Turning markup into the calls that build a page once and bind its holes is
+where a compiler helps a signals library most. That belongs to the markup
+dialect
+([WEP: Markup Dialect](./wep-2026-08-29-markup-dialect.md)), a generator, and
+not to the language.
+
+## Known gaps
+
+- A tracked read dispatches an effect operation, and each run of a computation
+  installs a handler. What either costs is not measured.
+- The library lives in `example/web-signals`. Nothing publishes it as a
+  package.
+- A memo does not compare its new value with the old one, so its dependents
+  rerun even when the value came out the same.
+- A memo owns nothing. Registering a cleanup inside one traps, and so does
+  making an effect or another memo there.
+- Disposing of a scope leaves its listeners attached.
+- A flush happens when a listener returns or when the program asks. Nothing
+  schedules one after the current task, as a microtask would.
+- The keyed list puts its rows back in order by appending every one of them,
+  since `SurfaceDom` does not answer `insert_before`.
+- A text binding owns its element's whole content, since `SurfaceDom` has no
+  `Text` node.
+- No template syntax exists. A page is built by calls.

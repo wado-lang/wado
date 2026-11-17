@@ -1,5 +1,5 @@
 use { flush, memo, observe, on_cleanup, scope, signal } from "./signals.wado";
-use { SurfaceDom } from "wado-lang:web";
+use { Dom, SurfaceDom } from "wado-lang:web";
 
 test "an effect reruns once for a batch of writes" {
     let mut dom = SurfaceDom::new();
@@ -154,5 +154,79 @@ test "an effect made by an effect is disposed when its maker reruns" {
         inner.set(1);
         flush();
         assert inner_runs == 3;
+    };
+}
+
+test "an effect disposed while it runs keeps nothing it made" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(0);
+        let mut inner_runs = 0;
+        let mut dispose: fn mut() with Dom = || {
+        };
+        dispose = scope(|| {
+            observe(|| {
+                if count.get() == 1 {
+                    dispose();
+                }
+                observe(|| {
+                    count.get();
+                    inner_runs += 1;
+                });
+            });
+        });
+        count.set(1);
+        flush();
+        let after = inner_runs;
+
+        count.set(2);
+        flush();
+        assert inner_runs == after;
+    };
+}
+
+test "a cleanup that disposes of its own scope runs once" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(0);
+        let mut runs = 0;
+        let mut cleaned = 0;
+        let mut dispose: fn mut() with Dom = || {
+        };
+        dispose = scope(|| {
+            observe(|| {
+                count.get();
+                runs += 1;
+                on_cleanup(|| {
+                    cleaned += 1;
+                    dispose();
+                });
+            });
+        });
+        count.set(1);
+        flush();
+        assert cleaned == 1;
+        assert runs == 1;
+    };
+}
+
+test "an effect that flushes inside its own run keeps every cleanup" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(0);
+        let mut cleaned = 0;
+        let mut dispose = scope(|| {
+            observe(|| {
+                if count.get() == 1 {
+                    count.set(2);
+                    flush();
+                }
+                on_cleanup(|| cleaned += 1);
+            });
+        });
+        count.set(1);
+        flush();
+        dispose();
+        assert cleaned == 3;
     };
 }

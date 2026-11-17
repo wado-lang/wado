@@ -118,7 +118,7 @@ contractClause
 identifier
     : IDENTIFIER
     | 'from' | 'of' | 'type' | 'matches' | 'world'
-    | 'interface' | 'resource' | 'import' | 'export' | 'reactive'
+    | 'interface' | 'resource' | 'import' | 'export'
     | 'forward' | 'trap' | 'effect' | 'flags' | 'variant'
     | 'test' | 'do' | 'task' | 'extends' | 'contract'
     ;
@@ -336,7 +336,7 @@ memberName
     | 'use' | 'from' | 'as' | 'fn' | 'with' | 'let' | 'mut' | 'return'
     | 'if' | 'else' | 'match' | 'for' | 'while' | 'loop' | 'break'
     | 'continue' | 'in' | 'of' | 'pub' | 'effect' | 'interface'
-    | 'reactive' | 'struct' | 'enum' | 'variant' | 'flags'
+    | 'struct' | 'enum' | 'variant' | 'flags'
     | 'type' | 'impl' | 'trait' | 'resource' | 'world' | 'async'
     | 'import' | 'export' | 'assert' | 'global' | 'const' | 'matches'
     | 'true' | 'false' | 'null' | 'trap' | 'forward' | 'Self'
@@ -435,12 +435,12 @@ letCondition
 
 forStatement
     : 'for' forHead block
-    | 'for' '(' ('let' pattern '=' expression)? ';' condition? ';' expression? ')' block
+    | 'for' '(' ('let' pattern '=' expression | expression)? ';' condition? ';' expression? ')' block
     ;
 
 forHead
     : 'let' pattern forTail
-    | ';' condition? ';' exprNoStruct?
+    | exprNoStruct? ';' condition? ';' exprNoStruct?
     ;
 
 forTail

@@ -72,6 +72,11 @@ test "highlight contextual keyword used as a value binder" {
     assert parse(&src).ok(), "parse failed";
 }
 
+test "a for loop's initializer may be an expression" {
+    assert_highlights("fn f() { let mut i = 9; for i = 0; i < 3; i += 1 { } }\n");
+    assert_highlights("fn f() { let mut i = 9; for (i = 0; i < 3; i += 1) { } }\n");
+}
+
 test "a struct pattern may hold the rest marker alone" {
     assert_highlights("fn f(p: Point) -> bool { return p matches { Point { .. } }; }\n");
 }

@@ -40,6 +40,10 @@
 //!   granted, plus a fixed system baseline: the loader, shared libraries,
 //!   installed programs and the system configuration. It reaches the network
 //!   only where the guest does.
+//! - [`Command::grant_read`] and [`Command::grant_write`] put the paths they
+//!   name in place of the guest's directories. The host opens each once and
+//!   confines the child through that descriptor, so a link swapped in later
+//!   reaches nothing more.
 //! - `--process-read <path>` lets a child read and execute `path` as well, and
 //!   so does `read` under `[process]` in the user config. The guest itself
 //!   gains nothing.
@@ -103,6 +107,7 @@ pub struct Command {
     stdout: Stdio,
     stderr: Stdio,
     capture_limit: i32,
+    grants: Option<types::Grants>,
 }
 
 impl Command {
@@ -115,7 +120,31 @@ impl Command {
             stdout: Stdio::Null,
             stderr: Stdio::Null,
             capture_limit: DEFAULT_CAPTURE_LIMIT,
+            grants: null,
         };
+    }
+
+    /// Let the child read and execute beneath `path`. The first `grant_*`
+    /// takes away every directory the guest holds, so the child reaches only
+    /// what is granted, and the host's own additions. `path` is relative to
+    /// where the child starts, and must name what the guest may read, or the
+    /// spawn fails with `NotPermitted`.
+    pub fn grant_read(&self, path: String) -> Command {
+        return self.granted([path], []);
+    }
+
+    /// Let the child read, write, create and remove beneath `path`, as
+    /// [`Command::grant_read`] lets it read. The guest must be able to write
+    /// `path`.
+    pub fn grant_write(&self, path: String) -> Command {
+        return self.granted([], [path]);
+    }
+
+    fn granted(&self, read: List<String>, write: List<String>) -> Command {
+        let mut grants = self.grants.unwrap_or(types::Grants { read: [], write: [] });
+        grants.read.extend(&read);
+        grants.write.extend(&write);
+        return Command { ..*self, grants: Option::Some(grants) };
     }
 
     pub fn arg(&self, arg: String) -> Command {
@@ -250,6 +279,7 @@ impl Command {
             stdin: input,
             stdout: output_mode(out),
             stderr: output_mode(err),
+            grants: self.grants,
         };
         let Spawned { child, stdout, stderr, exit } = match Process::spawn(spec, null) {
             Ok(spawned) => spawned,

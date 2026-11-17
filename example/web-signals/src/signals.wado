@@ -16,65 +16,97 @@ pub interface Track {
     }
 }
 
+/// Who reads a signal or a memo.
+struct Readers {
+    observers: List<Observer>,
+}
+
 pub struct Dep {
-    /// Whether the observer was not subscribed yet.
-    subscribe: fn mut(Observer) -> bool,
-    unsubscribe: fn mut(i32),
+    readers: &mut Readers,
 }
 
-struct Observer {
-    id: i32,
-    invalidate: fn mut(),
+variant Observer {
+    Memo(&mut MemoCore),
+    Effect(&mut EffectCore),
 }
 
-struct Effect {
+/// The part of a memo that does not depend on its value's type.
+struct MemoCore {
     id: i32,
-    run: fn mut() with Dom,
+    fresh: bool,
+    dep: Dep,
+    deps: List<Dep>,
+}
+
+struct EffectCore {
+    id: i32,
+    disposed: bool,
+    running: bool,
+    body: fn mut() with (Track, Dom),
+    deps: List<Dep>,
+    owned: List<fn mut() with Dom>,
 }
 
 global mut NEXT_OBSERVER_ID: i32 = 0;
-global mut QUEUE: List<Effect> = [];
+global mut QUEUE: List<&mut EffectCore> = [];
 
 fn next_observer_id() -> i32 {
     NEXT_OBSERVER_ID += 1;
     return NEXT_OBSERVER_ID;
 }
 
-struct Subscribers {
-    dep: Dep,
-    notify: fn mut(),
+fn new_dep() -> Dep {
+    let mut readers = Readers { observers: [] };
+    return Dep { readers: &mut readers };
 }
 
-fn subscribers() -> Subscribers {
-    let mut observers: List<Observer> = [];
-    return Subscribers {
-        dep: Dep {
-            subscribe: |observer: Observer| {
-                for let subscribed of observers {
-                    if subscribed.id == observer.id {
-                        return false;
-                    }
-                }
-                observers.push(observer);
-                return true;
-            },
-            unsubscribe: |id: i32| {
-                let mut rest: List<Observer> = [];
-                for let subscribed of observers {
-                    if subscribed.id != id {
-                        rest.push(subscribed);
-                    }
-                }
-                observers = rest;
-            },
-        },
-        notify: || {
-            for let observer of observers {
-                let mut invalidate = observer.invalidate;
-                invalidate();
-            }
-        },
+fn id_of(observer: &Observer) -> i32 {
+    return match observer {
+        Memo(core) => core.id,
+        Effect(watcher) => watcher.id,
     };
+}
+
+/// Whether the observer was not subscribed yet.
+fn subscribe(dep: Dep, observer: Observer) -> bool {
+    let id = id_of(&observer);
+    for let subscribed of dep.readers.observers {
+        if id_of(&subscribed) == id {
+            return false;
+        }
+    }
+    dep.readers.observers.push(observer);
+    return true;
+}
+
+fn unsubscribe_all(deps: List<Dep>, id: i32) {
+    for let dep of deps {
+        let mut rest: List<Observer> = [];
+        for let subscribed of dep.readers.observers {
+            if id_of(&subscribed) != id {
+                rest.push(subscribed);
+            }
+        }
+        dep.readers.observers = rest;
+    }
+}
+
+fn notify(dep: Dep) {
+    for let observer of dep.readers.observers {
+        match observer {
+            Memo(core) => {
+                if core.fresh {
+                    core.fresh = false;
+                    notify(core.dep);
+                }
+            },
+            Effect(watcher) => {
+                if !watcher.disposed {
+                    QUEUE.push(watcher);
+                }
+            },
+        }
+    }
 }
 
 struct Computation {
@@ -89,11 +121,8 @@ impl Track for Computation {
     // Subscribing here and not once the run ends, so a write the run itself
     // makes to what it already read marks it.
     fn read(&mut self, dep: Dep) {
-        if let Some(observer) = self.observer {
-            let mut subscribe = dep.subscribe;
-            if subscribe(observer) {
-                self.deps.push(dep);
-            }
+        if let Some(observer) = self.observer && subscribe(dep, observer) {
+            self.deps.push(dep);
         }
         resume ();
     }
@@ -105,106 +134,128 @@ impl Track for Computation {
     }
 }
 
-fn unsubscribe_all(deps: List<Dep>, id: i32) {
-    for let dep of deps {
-        let mut unsubscribe = dep.unsubscribe;
-        unsubscribe(id);
-    }
-}
-
-fn dispose_all(owned: List<fn mut() with Dom>) with Dom {
-    for let mut dispose of owned {
+/// Empties `owned` before disposing of any of it, so a disposer that reaches
+/// the same list finds nothing left to dispose of.
+fn dispose_all(owned: &mut List<fn mut() with Dom>) with Dom {
+    let detached = *owned;
+    *owned = [];
+    for let mut dispose of detached {
         dispose();
     }
 }
 
-/// A value that tells its readers when it is written.
+struct Cell<T> {
+    value: T,
+    dep: Dep,
+}
+
+/// A value that tells its readers when it is written. A copy is the same
+/// signal.
 pub struct Signal<T> {
-    read: fn() -> T with Track,
-    write: fn mut(T),
+    cell: &mut Cell<T>,
 }
 
 pub fn signal<T>(initial: T) -> Signal<T> {
-    let mut value = initial;
-    let readers = subscribers();
-    return Signal {
-        read: || {
-            Track::read(readers.dep);
-            return value;
-        },
-        write: |next: T| {
-            value = next;
-            let mut notify = readers.notify;
-            notify();
-        },
-    };
+    let mut cell = Cell { value: initial, dep: new_dep() };
+    return Signal { cell: &mut cell };
 }
 
 impl<T> Signal<T> {
     pub fn get(&self) -> T with Track {
-        let read = self.read;
-        return read();
+        Track::read(self.cell.dep);
+        return self.cell.value;
     }
 
     pub fn set(&self, value: T) {
-        let mut write = self.write;
-        write(value);
+        self.cell.value = value;
+        notify(self.cell.dep);
     }
+}
+
+struct MemoState<T> {
+    core: &mut MemoCore,
+    cached: Option<T>,
+    compute: fn mut() -> T with Track,
 }
 
 /// A value computed from others, again only when one of them changed and
 /// someone asks. It stops listening when the computation that made it is
 /// disposed of, and listens again if it is read after that.
 pub struct Memo<T> {
-    read: fn mut() -> T with Track,
+    state: &mut MemoState<T>,
 }
 
 pub fn memo<T>(compute: fn mut() -> T with Track) -> Memo<T> with Track {
-    let id = next_observer_id();
-    let mut compute = compute;
-    let mut cached: Option<T> = null;
-    let mut fresh = false;
-    let mut deps: List<Dep> = [];
-    let readers = subscribers();
-    let observer = Observer {
-        id,
-        invalidate: || {
-            if fresh {
-                fresh = false;
-                let mut notify = readers.notify;
-                notify();
-            }
-        },
+    let mut core = MemoCore {
+        id: next_observer_id(),
+        fresh: false,
+        dep: new_dep(),
+        deps: [],
     };
+    let mut state = MemoState { core: &mut core, cached: null, compute };
     Track::own(|| {
-        fresh = false;
-        unsubscribe_all(deps, id);
-        deps = [];
+        core.fresh = false;
+        unsubscribe_all(core.deps, core.id);
+        core.deps = [];
     });
-    return Memo {
-        read: || {
-            Track::read(readers.dep);
-            if fresh && let Some(value) = cached {
-                return value;
-            }
-            unsubscribe_all(deps, id);
-            // Before the run, so a write during it leaves the value stale.
-            fresh = true;
-            let mut computation = Computation { observer: Option::Some(observer), deps: [], owns: false, owned: [] };
-            let value = with Track => &mut computation do {
-                compute();
-            };
-            deps = computation.deps;
-            cached = Option::Some(value);
-            return value;
-        },
-    };
+    return Memo { state: &mut state };
 }
 
 impl<T> Memo<T> {
     pub fn get(&self) -> T with Track {
-        let mut read = self.read;
-        return read();
+        let core = self.state.core;
+        Track::read(core.dep);
+        if core.fresh && let Some(value) = self.state.cached {
+            return value;
+        }
+        unsubscribe_all(core.deps, core.id);
+        // Before the run, so a write during it leaves the value stale.
+        core.fresh = true;
+        let mut computation = Computation {
+            observer: Option::Some(Observer::Memo(core)),
+            deps: [],
+            owns: false,
+            owned: [],
+        };
+        let mut compute = self.state.compute;
+        let value = with Track => &mut computation do {
+            compute();
+        };
+        core.deps = computation.deps;
+        self.state.cached = Option::Some(value);
+        return value;
+    }
+}
+
+/// Lets go of what the effect owns and of what it listens to.
+fn release(watcher: &mut EffectCore) with Dom {
+    unsubscribe_all(watcher.deps, watcher.id);
+    watcher.deps = [];
+    dispose_all(&mut watcher.owned);
+}
+
+fn run(watcher: &mut EffectCore) with Dom {
+    release(watcher);
+    // A disposer that ran during the release may have disposed of the effect.
+    if watcher.disposed {
+        return;
+    }
+    let mut computation = Computation {
+        observer: Option::Some(Observer::Effect(watcher)),
+        deps: [],
+        owns: true,
+        owned: [],
+    };
+    watcher.running = true;
+    with Track => &mut computation do {
+        (watcher.body)();
+    };
+    watcher.running = false;
+    watcher.deps = computation.deps;
+    watcher.owned = computation.owned;
+    // The body may have disposed of the effect it runs in.
+    if watcher.disposed {
+        release(watcher);
     }
 }
 
@@ -212,41 +263,18 @@ impl<T> Memo<T> {
 /// written. What `body` owns is disposed before each rerun, and with the
 /// effect itself.
 pub fn observe(body: fn mut() with (Track, Dom)) with (Track, Dom) {
-    let id = next_observer_id();
-    let mut body = body;
-    let mut deps: List<Dep> = [];
-    let mut owned: List<fn mut() with Dom> = [];
-    let mut disposed = false;
-    let mut run: fn mut() with Dom = || {
+    let mut watcher = EffectCore {
+        id: next_observer_id(),
+        disposed: false,
+        running: false,
+        body,
+        deps: [],
+        owned: [],
     };
-    let observer = Observer {
-        id,
-        invalidate: || {
-            if !disposed {
-                QUEUE.push(Effect { id, run });
-            }
-        },
-    };
-    run = || {
-        if disposed {
-            return;
-        }
-        dispose_all(owned);
-        unsubscribe_all(deps, id);
-        let mut computation = Computation { observer: Option::Some(observer), deps: [], owns: true, owned: [] };
-        with Track => &mut computation do {
-            body();
-        };
-        deps = computation.deps;
-        owned = computation.owned;
-    };
-    run();
+    run(&mut watcher);
     Track::own(|| {
-        disposed = true;
-        dispose_all(owned);
-        owned = [];
-        unsubscribe_all(deps, id);
-        deps = [];
+        watcher.disposed = true;
+        release(&mut watcher);
     });
 }
 
@@ -264,10 +292,7 @@ pub fn scope(body: fn mut() with (Track, Dom)) -> fn mut() with Dom with Dom {
         body();
     };
     let mut owned = computation.owned;
-    return || {
-        dispose_all(owned);
-        owned = [];
-    };
+    return || dispose_all(&mut owned);
 }
 
 /// Runs `body` with its reads untracked and what it creates never disposed
@@ -276,19 +301,26 @@ pub fn untracked(body: fn mut() with (Track, Dom)) with Dom {
     let _never_disposed = scope(body);
 }
 
-/// Reruns every effect a write marked, each once, until none is marked.
+/// Reruns every effect a write marked, each once, until none is marked. An
+/// effect whose body is the one flushing stays queued, and reruns once that
+/// run has kept what it read and made.
 pub fn flush() with Dom {
+    let mut running: List<&mut EffectCore> = [];
     while !QUEUE.is_empty() {
         let batch = QUEUE;
         QUEUE = [];
         let mut ran: List<i32> = [];
         for let marked of batch {
+            if marked.running {
+                running.push(marked);
+                continue;
+            }
             if ran.contains(&marked.id) {
                 continue;
             }
             ran.push(marked.id);
-            let mut run = marked.run;
-            run();
+            run(marked);
         }
     }
+    QUEUE = running;
 }

@@ -114,7 +114,6 @@
 (identifier "resource" @variable)
 (identifier "import" @variable)
 (identifier "export" @variable)
-(identifier "reactive" @variable)
 (identifier "forward" @variable)
 (identifier "trap" @variable)
 (identifier "effect" @variable)
@@ -208,7 +207,6 @@
 "mut" @keyword
 "of" @keyword
 "pub" @keyword
-"reactive" @keyword
 "resource" @keyword
 "resume" @keyword
 "return" @keyword
