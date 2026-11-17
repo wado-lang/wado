@@ -88,27 +88,16 @@ fn marker_type_args<const N: usize>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::name::{
-        case_construct_helper_name, case_extract_helper_name, case_ref_helper_name,
-        field_get_helper_name, field_ref_helper_name, hole_fmt_helper_name, hole_get_helper_name,
-        hole_ref_helper_name, is_type_bridge, template_segment_helper_name,
-        variant_tag_helper_name,
-    };
+    use crate::name::{is_type_bridge, variant_tag_helper_name};
 
     #[test]
     fn every_reflect_bridge_is_reached_through_its_marker() {
-        let names = [
-            field_get_helper_name("S", "F"),
-            field_ref_helper_name("S", "F"),
-            hole_get_helper_name("T", "V"),
-            hole_ref_helper_name("T", "V"),
-            case_extract_helper_name("V", "P"),
-            case_ref_helper_name("V", "P"),
-            case_construct_helper_name("V", "P"),
-            hole_fmt_helper_name("T"),
-            template_segment_helper_name("T"),
-        ];
-        for name in names {
+        for bridge in MarkerBridge::ALL {
+            let name = if bridge.names_member() {
+                bridge.pair_name("H", "M")
+            } else {
+                bridge.shape_name("T")
+            };
             assert!(is_type_bridge(&name), "{name}");
             assert!(is_marker_bridge(&name), "{name}");
         }

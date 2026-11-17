@@ -104,6 +104,10 @@ The compile ran past the host's time limit.
 The program imports an interface the host does not link; the payload
 names it.
 
+#### `impl Display for EvalError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
 ### `pub variant Status`
 
 How a program that ran came to stop.

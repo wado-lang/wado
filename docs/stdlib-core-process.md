@@ -45,6 +45,10 @@ child so that spawning never extends the guest's authority.
   granted, plus a fixed system baseline: the loader, shared libraries,
   installed programs and the system configuration. It reaches the network
   only where the guest does.
+- [`Command::grant_read`] and [`Command::grant_write`] put the paths they
+  name in place of the guest's directories. The host opens each once and
+  confines the child through that descriptor, so a link swapped in later
+  reaches nothing more.
 - `--process-read <path>` lets a child read and execute `path` as well, and
   so does `read` under `[process]` in the user config. The guest itself
   gains nothing.
@@ -140,6 +144,20 @@ A program to run and how: its arguments, environment and streams.
 _Fields are private._
 
 #### `pub fn new(program: String) -> Command`
+
+#### `pub fn grant_read(&self, path: String) -> Command`
+
+Let the child read and execute beneath `path`. The first `grant_*`
+takes away every directory the guest holds, so the child reaches only
+what is granted, and the host's own additions. `path` is relative to
+where the child starts, and must name what the guest may read, or the
+spawn fails with `NotPermitted`.
+
+#### `pub fn grant_write(&self, path: String) -> Command`
+
+Let the child read, write, create and remove beneath `path`, as
+[`Command::grant_read`] lets it read. The guest must be able to write
+`path`.
 
 #### `pub fn arg(&self, arg: String) -> Command`
 

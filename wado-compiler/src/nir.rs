@@ -18,7 +18,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
     self, FunctionId, LocalMethodName, closure_call_method_info, closure_call_name,
-    diagnostic_function_name, minted_name,
+    diagnostic_function_name, indexed_local_name, minted_name,
 };
 use crate::nir_arena::{
     Body, ExprBody, ExprId, ExprKind, ExprNode, Operand, StmtId, StmtKind, StmtNode, Tracked,
@@ -954,7 +954,7 @@ impl NirLocal {
     /// name is available.
     pub fn synth(index: u32, type_id: TypeId, is_mut: bool) -> Self {
         Self {
-            name: minted_name("local", index),
+            name: indexed_local_name(index),
             type_id,
             is_mut,
         }
@@ -991,7 +991,7 @@ impl NirLocal {
                 local_index,
                 is_mut: false,
                 type_id,
-                value,
+                value: Some(value),
                 skip_value_copy,
             },
             span,

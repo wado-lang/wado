@@ -45,9 +45,21 @@ struct Live {
     local: u32,
     name: String,
     type_id: TypeId,
+    origin: Origin,
+}
+
+/// What put an affine local in its scope.
+#[derive(Clone, Copy, PartialEq)]
+enum Origin {
+    /// A binding, a parameter, or a temporary its scope owns.
+    Bound,
+    /// A `let t: T;`. It writes nothing, so a loop entering its scope again
+    /// finds the slot holding what the last turn left, which an assignment
+    /// drops: its own drop empties the slot.
+    Declared,
     /// A temporary spilled by [`spill_temporary`] that a statement owns, which
     /// drops as that statement ends rather than with its scope.
-    temporary: bool,
+    Temporary,
 }
 
 impl Live {
@@ -457,7 +469,7 @@ impl TirRefVisitor for PatternBindings<'_> {
                         local: *local_index,
                         name: name.clone(),
                         type_id: *type_id,
-                        temporary: false,
+                        origin: Origin::Bound,
                     });
                 }
             }
@@ -714,7 +726,7 @@ fn elaborate_function(func: &mut TirFunction, affine_types: AffineTypes, glue: &
             local: param.local_index,
             name: param.name.clone(),
             type_id: param.type_id,
-            temporary: false,
+            origin: Origin::Bound,
         })
         .collect();
     if owned.is_empty() && !body_has_affine(body, affine_types) {
@@ -855,7 +867,11 @@ fn drop_lives(lives: &[Live], cx: &mut Cx) -> Vec<TirStmt> {
         .iter()
         .flat_map(|live| {
             if cx.drop_self != Some(live.local) {
-                return drop_if_held(live.place(), live.type_id, cx);
+                let mut drops = drop_value(live.place(), live.type_id, cx);
+                if live.origin == Origin::Declared && !drops.is_empty() {
+                    drops.push(empty_place(live.place()));
+                }
+                return unless_moved(live.place(), drops);
             }
             let Layout::Holder { parts, .. } = cx.affine_types.layout(live.type_id) else {
                 unreachable!("only a holder implements `Drop`");
@@ -1300,8 +1316,10 @@ fn elab_scope(block: &mut TirBlock, declared: Vec<Live>, kind: ScopeKind, tail: 
 /// innermost first.
 fn take_temporaries(cx: &mut Cx, first: usize) -> Vec<Live> {
     let scope = cx.scopes.last_mut().expect("a scope is open");
-    let (temporaries, kept): (Vec<Live>, Vec<Live>) =
-        scope.lives.drain(first..).partition(|live| live.temporary);
+    let (temporaries, kept): (Vec<Live>, Vec<Live>) = scope
+        .lives
+        .drain(first..)
+        .partition(|live| live.origin == Origin::Temporary);
     scope.lives.extend(kept);
     temporaries.into_iter().rev().collect()
 }
@@ -1384,13 +1402,17 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) {
             value,
             storage,
         } => {
-            let value = elab_value_expr(value, cx);
+            let value = value.map(|value| elab_value_expr(value, cx));
             if cx.carries_affine(type_id) {
                 cx.declare(Live {
                     local: local_index,
                     name: name.clone(),
                     type_id,
-                    temporary: false,
+                    origin: if value.is_some() {
+                        Origin::Bound
+                    } else {
+                        Origin::Declared
+                    },
                 });
             }
             out.push(TirStmt::new(
@@ -2077,7 +2099,7 @@ fn elab_closure(
             local: index as u32,
             name: name.clone(),
             type_id: *type_id,
-            temporary: false,
+            origin: Origin::Bound,
         })
         .collect();
     let mut probe = AffineProbe {
@@ -2312,16 +2334,16 @@ fn spill_as_local(expr: &TirExpr, lifetime: Lifetime, cx: &mut Cx) -> (u32, Stri
         .owners
         .last()
         .expect("a temporary is spilled inside a statement");
-    let (scope, temporary) = match (owner, lifetime) {
-        (Owner::Statement { scope, .. }, Lifetime::Owner) => (scope, true),
+    let (scope, origin) = match (owner, lifetime) {
+        (Owner::Statement { scope, .. }, Lifetime::Owner) => (scope, Origin::Temporary),
         (
             Owner::Statement {
                 scope,
                 stmt: SourceStmt::Let,
             },
             Lifetime::LetScope,
-        ) => (scope, false),
-        (Owner::Scope(scope), Lifetime::Owner) => (scope, false),
+        ) => (scope, Origin::Bound),
+        (Owner::Scope(scope), Lifetime::Owner) => (scope, Origin::Bound),
         (
             Owner::Statement {
                 stmt: SourceStmt::Plain,
@@ -2335,7 +2357,7 @@ fn spill_as_local(expr: &TirExpr, lifetime: Lifetime, cx: &mut Cx) -> (u32, Stri
         local,
         name: name.clone(),
         type_id,
-        temporary,
+        origin,
     });
     (local, name)
 }

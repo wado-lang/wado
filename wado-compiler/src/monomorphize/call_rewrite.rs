@@ -170,7 +170,11 @@ impl TirMutVisitor for CallRewriter<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) {
         self.walk_stmt(stmt);
         // Update the Let's type_id if it was a type parameter that got substituted
-        if let TirStmtKind::Let { value, type_id, .. } = &mut stmt.kind
+        if let TirStmtKind::Let {
+            value: Some(value),
+            type_id,
+            ..
+        } = &mut stmt.kind
             && self.type_table.contains_type_param(*type_id)
             && !self.type_table.contains_type_param(value.type_id)
         {

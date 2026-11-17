@@ -19,7 +19,7 @@ use crate::elaborator::{InstanceBody, InstanceImpl, InstanceOrder, SolverBridge}
 use crate::format_spec;
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, LocalMethodName, RefKind, hole_fmt_helper_name};
+use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MarkerBridge, RefKind};
 use crate::synthesis::common::{
     field_access, int_literal, locals_from_params, make_synthetic_free_function, mut_ref_expr,
     ref_expr,
@@ -195,7 +195,7 @@ fn build_hole_fmt_helper(
             formatter_type,
             table.make_mut_ref(formatter_type),
             table.make_mut_ref(string_type),
-            hole_fmt_helper_name(&table.mangle_type_arg_for_generic(struct_type)),
+            MarkerBridge::HoleFmt.shape_name(&table.mangle_type_arg_for_generic(struct_type)),
         )
     };
     let local = |index: u32, name: &str, type_id: TypeId| {

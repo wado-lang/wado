@@ -94,13 +94,10 @@ impl StringCollector {
 
     fn collect_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
-            TirStmtKind::Let { value, .. } => {
-                self.collect_expr(value);
-            }
             TirStmtKind::Expr(expr) => {
                 self.collect_expr(expr);
             }
-            TirStmtKind::Return { value } => {
+            TirStmtKind::Let { value, .. } | TirStmtKind::Return { value } => {
                 if let Some(expr) = value {
                     self.collect_expr(expr);
                 }

@@ -240,7 +240,7 @@ fn "ctfe_view_of_mutable_global.wado/run"() with Stdout {
     let r: ref "core:prelude/list.wado//List<i32>";
     let before: i32;
     let self_24: ref "core:prelude/list.wado//List<i32>";
-    let $v1_29: i32;
+    let $v_1_29: i32;
     let used: i32;
     let message_49: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
@@ -256,21 +256,21 @@ fn "ctfe_view_of_mutable_global.wado/run"() with Stdout {
         unreachable;
     }
     before = builtin::array_get_value<i32>(local.tee $load_1(r.repr), 0);
-    $v1_29 = local.tee self_24(global:ctfe_view_of_mutable_global.wado::G.items).used;
-    if @unlikely(0 >= $v1_29) {
+    $v_1_29 = local.tee self_24(global:ctfe_view_of_mutable_global.wado::G.items).used;
+    if @unlikely(0 >= $v_1_29) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,index,value]"($v1_29);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,index,value]"($v_1_29);
         unreachable;
     }
     builtin::array_set<i32>(self_24.repr, 0, 9);
-    $v1_29 = builtin::array_get_value<i32>($load_1, 0);
+    $v_1_29 = builtin::array_get_value<i32>($load_1, 0);
     if @unlikely(local.tee used(local.tee self_24(global:ctfe_view_of_mutable_global.wado::G.items).used) >= builtin::array_len(self_24.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_24);
     }
     builtin::array_set<i32>(self_24.repr, used, 4);
     self_24.used = used + 1;
-    message_49 = "core:prelude/string.wado/core:prelude/string.wado/String::format<ctfe_view_of_mutable_global.wado/$tmpl$746b3bd30636aac0,[i32,i32,i32,i32]>"(struct.new "ctfe_view_of_mutable_global.wado//$tmpl$746b3bd30636aac0" { h0: before, h1: $v1_29, h2: $load_0, h3: r.used, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s4: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r4: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    message_49 = "core:prelude/string.wado/core:prelude/string.wado/String::format<ctfe_view_of_mutable_global.wado/$tmpl$746b3bd30636aac0,[i32,i32,i32,i32]>"(struct.new "ctfe_view_of_mutable_global.wado//$tmpl$746b3bd30636aac0" { h0: before, h1: $v_1_29, h2: $load_0, h3: r.used, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s4: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r4: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     before = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $load_0 = "ctfe_view_of_mutable_global.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0);
@@ -632,8 +632,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/leading_sign_byte_len<core
     return 0;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -648,9 +648,9 @@ fn "core:rt/panic$cold0"($mv$message$repr, $mv$message$used) {
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,index,value]"($v1) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,index,value]"($v_1) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c" { h0: 0, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c" { h0: 0, h1: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
 condition: 0 <= index < self.used
 index: "), used: 110 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
 condition: 0 <= index < self.used

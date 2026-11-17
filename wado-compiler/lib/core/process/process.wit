@@ -55,6 +55,17 @@ interface types {
         piped,
     }
 
+    /// The paths a child may reach in place of every directory the guest
+    /// holds, each relative to where the child starts. A path must exist, or
+    /// the spawn fails with `not-found`, and the guest must hold the access
+    /// asked of it, or with `not-permitted`.
+    record grants {
+        /// Read and execute beneath each.
+        read: list<string>,
+        /// Read, write, create, remove and execute beneath each.
+        write: list<string>,
+    }
+
     record command {
         /// A path when it holds a `/`; otherwise a name the host looks up.
         program: string,
@@ -65,6 +76,8 @@ interface types {
         stdin: input,
         stdout: output,
         stderr: output,
+        /// `none` passes on every directory the guest holds.
+        grants: option<grants>,
     }
 
     /// A running child. Dropping it ends the child and every process it

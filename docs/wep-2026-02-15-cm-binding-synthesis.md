@@ -55,7 +55,7 @@ Some types have no CM representation in any world:
 - an empty record, and the empty tuple `[]`
 - `i128`, `u128`, `v128`, `f16` and `bf16`
 - a recursive type, since WIT has none
-- a function type, a reactive cell, and an unresolved type parameter
+- a function type and an unresolved type parameter
 - a generic instance other than the CM shapes (`Option`, `Result`, `List`,
   `TreeMap`, a tuple, `Future`, `Stream`)
 

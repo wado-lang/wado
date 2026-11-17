@@ -416,7 +416,7 @@ fn collect_candidates(body: &Body) -> Vec<SroaCandidate> {
                 value,
                 ..
             } = &body.stmts[s].kind
-            && let Some(read) = value.as_expr()
+            && let Some(read) = value.and_then(Operand::as_expr)
             && let Some(src) = bare_local(body, read)
             && let Some(&i) = sources.get(&src)
         {
@@ -552,7 +552,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
     };
     let (name, local_index, is_mut, value) = (name.clone(), *local_index, *is_mut, *value);
     // A promoted constant binding is not an aggregate to scalarize.
-    let Some(bound) = value.as_expr() else {
+    let Some(bound) = value.and_then(Operand::as_expr) else {
         return;
     };
     let (value_e, referenced, is_mut) = match referenced_projected_literal(body, bound) {
@@ -764,7 +764,7 @@ fn collect_array_aliases(body: &Body, arrays: &IndexSet<u32>) -> IndexMap<u32, u
             return;
         };
         let target = value
-            .as_expr()
+            .and_then(Operand::as_expr)
             .and_then(|ve| ref_to_candidate_local(body, ve, arrays))
             .map(|(idx, _)| idx);
         match target {
@@ -1272,7 +1272,11 @@ fn write_back_sites(
     let mut sites: IndexMap<StmtId, Vec<WriteBack>> = IndexMap::default();
     body.for_each_reachable_node(|node| {
         let NodeRef::Stmt(stmt) = node else { return };
-        let (StmtKind::Expr(op) | StmtKind::Let { value: op, .. }) = &body.stmts[stmt].kind else {
+        let (StmtKind::Expr(op)
+        | StmtKind::Let {
+            value: Some(op), ..
+        }) = &body.stmts[stmt].kind
+        else {
             return;
         };
         let Some(call) = op.as_expr().filter(|e| cold.contains(e)) else {
@@ -1490,7 +1494,7 @@ fn hand_rebuilt_literal(
             local_index,
             is_mut: true,
             type_id,
-            value: literal.into(),
+            value: Some(literal.into()),
             skip_value_copy: true,
         },
         span,
@@ -1624,7 +1628,7 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
                         local_index: temp,
                         is_mut: false,
                         type_id: slot.type_id,
-                        value,
+                        value: Some(value),
                         skip_value_copy: true,
                     },
                     span,
@@ -1723,7 +1727,7 @@ fn expand_struct_let(
                 local_index: slot.local_index,
                 is_mut: false,
                 type_id: slot.type_id,
-                value,
+                value: Some(value),
                 skip_value_copy: true,
             },
             span,
@@ -1764,7 +1768,7 @@ fn push_field_let(
             // candidate, says whether it is assigned.
             is_mut: engine.locals()[slot.local_index as usize].is_mut,
             type_id: slot.type_id,
-            value,
+            value: Some(value),
             // The original literal was a fresh value, so its fields don't need
             // value_copy — see the original pass comment.
             skip_value_copy: true,

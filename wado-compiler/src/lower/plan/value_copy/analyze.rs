@@ -430,7 +430,9 @@ fn block_tail_is_owned(
     };
     for stmt in init {
         if let TirStmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value: Some(value),
+            ..
         } = &stmt.kind
             && is_owned_value(value, &fresh_locals, oracle, type_table)
         {
@@ -501,7 +503,9 @@ fn scan_stmt_for_breaks(
             ..
         } => {
             if *storage == LetStorage::Taken
-                || is_owned_value(value, fresh_locals, oracle, type_table)
+                || value
+                    .as_ref()
+                    .is_some_and(|value| is_owned_value(value, fresh_locals, oracle, type_table))
             {
                 fresh_locals.insert(*local_index);
             }

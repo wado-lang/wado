@@ -2815,7 +2815,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // rebuilds the `$tuple_N` binding; we reserve its local slot here so
         // the walk-order local indices stay in sync with reify).
         let tuple_type_id = iterable;
-        let temp_name = format!("$tuple_{unique_id}");
+        let temp_name = minted_name("tuple", unique_id);
         ctx.add_local(temp_name, tuple_type_id, false, None);
 
         // Capture each unrolled element's body facts separately. The
@@ -2891,8 +2891,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let span = for_of.span;
         let unique_id = ctx.fresh_serial();
-        let iter_var = format!("$iter_{unique_id}");
-        let label = format!("$for_of_{unique_id}");
+        let iter_var = minted_name("iter", unique_id);
+        let label = minted_name("for_of", unique_id);
 
         // An affine value moves into the loop through `ForOf::start`, so the
         // loop owns what it walks. A copyable one walks its `IntoIterator`,

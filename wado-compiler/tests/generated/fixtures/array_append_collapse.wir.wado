@@ -208,28 +208,28 @@ global global:array_append_collapse.wado::$const_obj_1: ref Array<i32> = array.n
 global global:core:prelude/primitive.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "array_append_collapse.wado/run"() with Stdout {
-    let $v0_12: i32;
-    let $v1_13: i32;
+    let $v_15: i32;
+    let $v_16: i32;
     let $cm_pair_7: i64;
     let new_repr: ref Array<u8>;
-    if @unlikely(local.tee $v0_12(black_box(0)) >=u 2) {
+    if @unlikely(local.tee $v_15(black_box(0)) >=u 2) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($v0_12, 2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_append_collapse.wado:18"), used: 29 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($v_15, 2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_append_collapse.wado:18"), used: 29 });
         unreachable;
     }
-    if @unlikely(local.tee $v1_13(builtin::array_get_value<i32>(global:array_append_collapse.wado::$const_obj_1, $v0_12)) != 100) {
+    if @unlikely(local.tee $v_16(builtin::array_get_value<i32>(global:array_append_collapse.wado::$const_obj_1, $v_15)) != 100) {
         cold_path;
-        "array_append_collapse.wado/run$cold11"($v0_12, $v1_13);
+        "array_append_collapse.wado/run$cold11"($v_15, $v_16);
         unreachable;
     }
-    $v0_12 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $v1_13 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $v0_12 = "array_append_collapse.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v0_12);
+    $v_15 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $v_16 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $v_15 = "array_append_collapse.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v_15);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:array_append_collapse.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($v1_13, new_repr);
-    "wasi/stream-drop-writable"($v1_13);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v0_12);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($v_16, new_repr);
+    "wasi/stream-drop-writable"($v_16);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v_15);
 }
 
 fn "array_append_collapse.wado/$hole_fmt$array_append_collapse.wado/$tmpl$4432d2d1cbeba55c"($mv$t$h0, $mv$t$h1, index, f) {
@@ -251,9 +251,9 @@ fn "array_append_collapse.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "array_append_collapse.wado/run$cold11"($v0, $v1) with Stdout {
+fn "array_append_collapse.wado/run$cold11"($v_15, $v_16) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<array_append_collapse.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "array_append_collapse.wado//$tmpl$4432d2d1cbeba55c" { h0: $v0, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at array_append_collapse.wado:18
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<array_append_collapse.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "array_append_collapse.wado//$tmpl$4432d2d1cbeba55c" { h0: $v_15, h1: $v_16, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at array_append_collapse.wado:18
 condition: b[builtin::black_box(0)] == 100
 builtin::black_box(0): "), used: 123 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at array_append_collapse.wado:18
 condition: b[builtin::black_box(0)] == 100
@@ -607,8 +607,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/leading_sign_byte_len<core
     return 0;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()

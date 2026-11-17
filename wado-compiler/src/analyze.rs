@@ -17,10 +17,9 @@ use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::loader::{resolve_use_decl_source, wasm_asset_kind_from_attrs};
 use crate::logger::{Bail, Logger};
+use crate::module_path::validate_module_path;
 use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageId};
-use crate::name::{
-    interface_basename, mangle_local_method, namespace_member_alias, validate_module_path,
-};
+use crate::name::{interface_basename, mangle_local_method, namespace_member_alias};
 use crate::path::is_cwd_relative;
 use crate::remote::is_remote;
 use crate::symbol::{

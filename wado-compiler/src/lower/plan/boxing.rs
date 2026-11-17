@@ -9,6 +9,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
+use crate::name::minted_name;
 use crate::tir::{
     LetStorage, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirPattern, TirStmt,
     TirStmtKind, TirUnaryOp, TypeId,
@@ -88,7 +89,7 @@ fn shadow_one_function(func: &mut TirFunction, type_table: &mut TypeTable) -> In
             func.local_count += 1;
             let name = func.params[local_idx as usize].name.clone();
             func.locals.push(TirLocal {
-                name: format!("$boxed_param_{local_idx}"),
+                name: minted_name("boxed_param", local_idx),
                 type_id: cell,
                 is_mut: false,
                 span: Span::default(),
@@ -134,11 +135,11 @@ fn shadow_one_function(func: &mut TirFunction, type_table: &mut TypeTable) -> In
             );
             prelude_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
-                    name: format!("$boxed_param_{param_idx}"),
+                    name: minted_name("boxed_param", param_idx),
                     local_index: *shadow_idx,
                     is_mut: false,
                     type_id: *original_type_id,
-                    value: param_read,
+                    value: Some(param_read),
                     storage: LetStorage::Aliased,
                 },
                 span,
@@ -223,10 +224,11 @@ fn remap_locals_in_block(block: &mut TirBlock, remap: &IndexMap<u32, u32>) {
 
 fn remap_locals_in_stmt(stmt: &mut TirStmt, remap: &IndexMap<u32, u32>) {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => remap_locals_in_expr(value, remap),
         TirStmtKind::Expr(expr) => remap_locals_in_expr(expr, remap),
-        TirStmtKind::Return { value: Some(v) } => remap_locals_in_expr(v, remap),
-        TirStmtKind::Return { value: None } => {}
+        TirStmtKind::Let { value: Some(v), .. } | TirStmtKind::Return { value: Some(v) } => {
+            remap_locals_in_expr(v, remap);
+        }
+        TirStmtKind::Let { value: None, .. } | TirStmtKind::Return { value: None } => {}
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }

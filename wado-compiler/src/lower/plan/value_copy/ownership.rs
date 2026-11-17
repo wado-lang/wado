@@ -658,7 +658,9 @@ impl BindingCollector {
 impl TirRefVisitor for BindingCollector {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if let TirStmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value: Some(value),
+            ..
         } = &stmt.kind
             && *local_index >= self.n_params
         {

@@ -362,6 +362,17 @@ pub fn get_stdlib_wasm_asset(import_path: &str) -> Option<&'static [u8]> {
         .map(|(_, bytes)| *bytes)
 }
 
+/// The stdlib modules a program imports by name, the ones `wado doc`
+/// documents: every top-level module but those only the compiler loads.
+pub fn documented_modules() -> impl Iterator<Item = &'static str> {
+    const COMPILER_ONLY: &[&str] = &["core:allocator", "core:builtin", "core:rt"];
+    CORE_MODULE_PATHS
+        .iter()
+        .chain(BINDING_MODULE_PATHS)
+        .copied()
+        .filter(|path| !path.contains('/') && !COMPILER_ONLY.contains(path))
+}
+
 /// The source of a stdlib module by import path — `"core:cli"`,
 /// `"wasi:filesystem/types.wado"` — or None for anything else.
 #[must_use]

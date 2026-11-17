@@ -75,7 +75,6 @@ Responsibilities:
 - Compound assignment expansion (`x += 1` → `x = x + 1`)
 - Comparison chain expansion (`a < b < c` tests `(a < b) & (b < c)`, each operand evaluated once)
 - JSX syntax transformation (structure only, types resolved later)
-- Reactive signal syntax transformation (markers only, graph built later)
 - Template string expansion
 - Other syntactic sugar removal
 
@@ -106,7 +105,6 @@ Type-driven transformations. Uses full type information to perform semantic lowe
 
 Responsibilities:
 
-- Reactive signal dependency graph construction
 - Method call resolution (direct vs. effect operation)
 - Generic instantiation / monomorphization
 - Closure capture analysis

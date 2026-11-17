@@ -168,7 +168,7 @@ pub(super) fn copy_edge(body: &Body, node: NodeRef) -> Option<(u32, Operand)> {
         NodeRef::Stmt(s) => match &body.stmts[s].kind {
             StmtKind::Let {
                 local_index, value, ..
-            } => Some((*local_index, *value)),
+            } => Some((*local_index, (*value)?)),
             _ => None,
         },
         NodeRef::Expr(e) => match &body.exprs[e].kind {
@@ -723,7 +723,9 @@ fn self_derived_locals(body: &Body, p0: u32, type_table: &TypeTable) -> IndexSet
             &mut |body, node| match node {
                 NodeRef::Stmt(s) => {
                     if let StmtKind::Let {
-                        local_index, value, ..
+                        local_index,
+                        value: Some(value),
+                        ..
                     } = &body.stmts[s].kind
                         && !set.contains(local_index)
                         && let Some(ve) = value.as_expr()
@@ -1114,7 +1116,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, type_table: &TypeTable, out:
             StmtKind::Let {
                 local_index, value, ..
             } => {
-                if let Some(src) = value.as_expr().and_then(shared_local) {
+                if let Some(src) = value.and_then(Operand::as_expr).and_then(shared_local) {
                     out.insert(*local_index);
                     out.insert(src);
                 }

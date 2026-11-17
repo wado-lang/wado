@@ -5,6 +5,7 @@
 //! given.
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::minted_name;
 use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 
 use super::util::{CalleeWrites, Footprint, arm_callees};
@@ -314,7 +315,7 @@ impl Reuser<'_> {
     /// Make `chain` available as a fresh temp `value` sets.
     fn supply(&mut self, chain: usize, value: &mut WirInstr, ty: WirType) {
         let id = self.temps.len();
-        let name = format!("$load_{id}");
+        let name = minted_name("load", id);
         assert!(
             !self.taken.contains(&name),
             "only this pass mints `$load_` locals, once per function"

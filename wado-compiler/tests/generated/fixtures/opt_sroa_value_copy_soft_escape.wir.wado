@@ -170,31 +170,31 @@ fn "opt_sroa_value_copy_soft_escape.wado/$cm_binding__wasi:cli/stdout@0.3.0#writ
 }
 
 fn "opt_sroa_value_copy_soft_escape.wado/$cm_export__run"() {
-    let $v0: i32;
-    let $v1: i32;
+    let $v_0: i32;
+    let $v_1: i32;
     let $cm_pair_7: i64;
     let new_repr: ref Array<u8>;
     let $sroa_message_repr_32: ref Array<u8>;
-    if @unlikely(local.tee $v1("opt_sroa_value_copy_soft_escape.wado/f"(local.tee $v0(black_box(5)))) != 714) {
+    if @unlikely(local.tee $v_1("opt_sroa_value_copy_soft_escape.wado/f"(local.tee $v_0(black_box(5)))) != 714) {
         cold_path;
-        "opt_sroa_value_copy_soft_escape.wado/run$cold0"($v0, $v1);
+        "opt_sroa_value_copy_soft_escape.wado/run$cold0"($v_0, $v_1);
         unreachable;
     }
-    $v0 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $v1 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $v0 = "opt_sroa_value_copy_soft_escape.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v0);
+    $v_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $v_1 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $v_0 = "opt_sroa_value_copy_soft_escape.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v_0);
     $sroa_message_repr_32 = array.new_fixed<u8>(111, 107);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, $sroa_message_repr_32, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($v1, new_repr);
-    "wasi/stream-drop-writable"($v1);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v0);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($v_1, new_repr);
+    "wasi/stream-drop-writable"($v_1);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v_0);
     "wasi/task-return"(0);
 }
 
-fn "opt_sroa_value_copy_soft_escape.wado/run$cold0"($v0, $v1) with Stdout {
+fn "opt_sroa_value_copy_soft_escape.wado/run$cold0"($v_0, $v_1) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_sroa_value_copy_soft_escape.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "opt_sroa_value_copy_soft_escape.wado//$tmpl$4432d2d1cbeba55c" { h0: $v0, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_sroa_value_copy_soft_escape.wado:35
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_sroa_value_copy_soft_escape.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "opt_sroa_value_copy_soft_escape.wado//$tmpl$4432d2d1cbeba55c" { h0: $v_0, h1: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_sroa_value_copy_soft_escape.wado:35
 condition: f(builtin::black_box(5)) == 714
 builtin::black_box(5): "), used: 133 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_sroa_value_copy_soft_escape.wado:35
 condition: f(builtin::black_box(5)) == 714

@@ -22,7 +22,7 @@
 //! from a member directory is an error pointing at the workspace.
 
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use unicode_normalization::UnicodeNormalization;
@@ -155,18 +155,32 @@ enum Verdict {
     Failed(Vec<PublishError>),
 }
 
+/// The reason a package with a `[package]` is not published, if it is not.
+fn skip_reason(pkg: &Package) -> Option<&'static str> {
+    if !pkg.publish {
+        return Some("publish = false");
+    }
+    if pkg.namespace.is_none() {
+        return Some("no namespace");
+    }
+    None
+}
+
 /// The verdict on the package whose `wado.toml` in `root` parsed to `manifest`.
-fn classify(manifest: &Manifest, root: &Path) -> Verdict {
+/// `published_members` holds the directories of the workspace members this run
+/// publishes, canonicalized; a path dependency on one needs no other source.
+fn classify(manifest: &Manifest, root: &Path, published_members: &[PathBuf]) -> Verdict {
     let Some(pkg) = manifest.package.as_ref() else {
         return Verdict::NotAPackage;
     };
-    if !pkg.publish {
-        return Verdict::Skipped("publish = false".to_string());
+    if let Some(reason) = skip_reason(pkg) {
+        return Verdict::Skipped(reason.to_string());
     }
-    if pkg.namespace.is_none() {
-        return Verdict::Skipped("no namespace".to_string());
-    }
-    let mut problems = validate_for_publish(manifest);
+    let mut problems = validate_for_publish(manifest, |path| {
+        root.join(path)
+            .canonicalize()
+            .is_ok_and(|dir| published_members.contains(&dir))
+    });
     problems.extend(
         pkg.exports
             .iter()
@@ -207,7 +221,7 @@ fn carries_file(root: &Path, entry: &str) -> bool {
 }
 
 async fn publish_single(project: &ProjectManifest, dry_run: bool) -> Result<(), CliExit> {
-    match classify(&project.manifest, &project.root) {
+    match classify(&project.manifest, &project.root, &[]) {
         Verdict::Ready(coord) => {
             publish_ready(&[(coord, project)], &project.manifest.registries, dry_run).await
         }
@@ -243,11 +257,28 @@ async fn publish_workspace(
         candidates.push((label, project));
     }
 
+    let published_members: Vec<PathBuf> = candidates
+        .iter()
+        .filter(|(_, project)| {
+            project
+                .manifest
+                .package
+                .as_ref()
+                .is_some_and(|pkg| skip_reason(pkg).is_none())
+        })
+        .map(|(_, project)| {
+            project
+                .root
+                .canonicalize()
+                .expect("a loaded member's root must exist")
+        })
+        .collect();
+
     let mut ready: Vec<(String, &ProjectManifest)> = Vec::new();
     let mut skipped: Vec<(String, String)> = Vec::new();
     let mut failed: Vec<(String, Vec<PublishError>)> = Vec::new();
     for (label, project) in &candidates {
-        match classify(&project.manifest, &project.root) {
+        match classify(&project.manifest, &project.root, &published_members) {
             Verdict::NotAPackage => {}
             Verdict::Skipped(reason) => skipped.push((label.clone(), reason)),
             Verdict::Ready(coord) => ready.push((coord, project)),
@@ -565,7 +596,7 @@ mod tests {
     #[test]
     fn classify_ready_package() {
         let m = manifest(READY);
-        assert_matches!(classify(&m, Path::new(".")), Verdict::Ready(c) if c == "org:app@0.1.0");
+        assert_matches!(classify(&m, Path::new("."), &[]), Verdict::Ready(c) if c == "org:app@0.1.0");
     }
 
     #[test]
@@ -577,11 +608,11 @@ mod tests {
         let with = |exports: &str| manifest(&format!("{READY}exports = [{exports}]\n"));
 
         let carried = with("\"grammar/Wado.g4\", \"caf\u{e9}.txt\"");
-        assert_matches!(classify(&carried, tmp.path()), Verdict::Ready(_));
+        assert_matches!(classify(&carried, tmp.path(), &[]), Verdict::Ready(_));
         for missing in ["grammar/wado.g4", "grammar/Other.g4", "Grammar/Wado.g4"] {
             let m = with(&format!("\"{missing}\""));
             assert_matches!(
-                classify(&m, tmp.path()),
+                classify(&m, tmp.path(), &[]),
                 Verdict::Failed(p) if p == [PublishError::MissingExport { entry: missing.to_string() }]
             );
         }
@@ -590,23 +621,44 @@ mod tests {
     #[test]
     fn classify_skips_publish_false_and_no_namespace() {
         let no_ns = manifest("[package]\nname = \"app\"\nversion = \"0.1.0\"\n");
-        assert_matches!(classify(&no_ns, Path::new(".")), Verdict::Skipped(r) if r == "no namespace");
+        assert_matches!(classify(&no_ns, Path::new("."), &[]), Verdict::Skipped(r) if r == "no namespace");
         let opted_out = manifest(
             "[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\npublish = false\n",
         );
-        assert_matches!(classify(&opted_out, Path::new(".")), Verdict::Skipped(r) if r == "publish = false");
+        assert_matches!(classify(&opted_out, Path::new("."), &[]), Verdict::Skipped(r) if r == "publish = false");
     }
 
     #[test]
     fn classify_failed_when_metadata_missing() {
         let m = manifest("[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\n");
-        assert_matches!(classify(&m, Path::new(".")), Verdict::Failed(p) if !p.is_empty());
+        assert_matches!(classify(&m, Path::new("."), &[]), Verdict::Failed(p) if !p.is_empty());
+    }
+
+    #[test]
+    fn classify_ready_with_a_path_dependency_on_a_published_member() {
+        let tmp = tempfile::tempdir().unwrap();
+        for dir in ["app", "shared", "local"] {
+            std::fs::create_dir(tmp.path().join(dir)).unwrap();
+        }
+        let published = [tmp.path().join("shared").canonicalize().unwrap()];
+        let app = tmp.path().join("app");
+        let on = |dep: &str| {
+            manifest(&format!(
+                "{READY}[dependencies]\n\"lib:dep\" = {{ path = \"../{dep}\" }}\n"
+            ))
+        };
+
+        assert_matches!(classify(&on("shared"), &app, &published), Verdict::Ready(_));
+        assert_matches!(
+            classify(&on("local"), &app, &published),
+            Verdict::Failed(p) if p == [PublishError::PathDependencyWithoutSource { dep_name: "lib:dep".to_string() }]
+        );
     }
 
     #[test]
     fn classify_not_a_package_without_a_package_table() {
         let m = manifest("[registries]\ndefault = \"oci://ghcr.io\"\n");
-        assert_matches!(classify(&m, Path::new(".")), Verdict::NotAPackage);
+        assert_matches!(classify(&m, Path::new("."), &[]), Verdict::NotAPackage);
     }
 
     fn ready_manifest_with_registry(registry: &str) -> Manifest {

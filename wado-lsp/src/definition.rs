@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 use wado_compiler::ast::{self, AstVisitor, Item, Literal, Module, UseItem};
-use wado_compiler::name::resolve_import_with_entry;
+use wado_compiler::module_path::resolve_import_with_entry;
 use wado_compiler::token::Span;
 
 use crate::ast_search::{self, FirstMatch};

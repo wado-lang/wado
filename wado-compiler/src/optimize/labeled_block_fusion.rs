@@ -131,7 +131,7 @@ impl Rule for LabeledBlockFusionRule {
 fn thread_bound_block(engine: &mut Engine, block: BlockId, stmts: &[StmtId], i: usize) -> bool {
     let StmtKind::Let {
         local_index: temp,
-        value: Operand::Expr(lb),
+        value: Some(Operand::Expr(lb)),
         ..
     } = engine.body.stmts[stmts[i]].kind
     else {
@@ -176,7 +176,7 @@ fn yields_match_value(body: &Body, consumer: StmtId) -> bool {
 fn consumer_match(body: &Body, consumer: StmtId) -> Option<ExprId> {
     let (StmtKind::Expr(Operand::Expr(e))
     | StmtKind::Let {
-        value: Operand::Expr(e),
+        value: Some(Operand::Expr(e)),
         ..
     }) = body.stmts[consumer].kind
     else {
@@ -242,7 +242,7 @@ fn check_fusion_preconditions_if_variant_test(
     // --- Stmt 1: Let { value: LabeledBlock { label, block } } ---
     let StmtKind::Let {
         local_index: temp_local,
-        value: let_value,
+        value: Some(let_value),
         ..
     } = &body.stmts[let_s].kind
     else {
@@ -345,7 +345,7 @@ fn check_fusion_preconditions_match(
     // --- Stmt 1: Let { value: LabeledBlock { label, block } } ---
     let StmtKind::Let {
         local_index: temp_local,
-        value: let_value,
+        value: Some(let_value),
         ..
     } = &body.stmts[let_s].kind
     else {
@@ -465,7 +465,7 @@ fn check_fusion_preconditions_slot_match(
 ) -> Option<FusionInfo> {
     let StmtKind::Let {
         local_index: temp_local,
-        value: let_value,
+        value: Some(let_value),
         ..
     } = &body.stmts[let_s].kind
     else {
@@ -1359,7 +1359,8 @@ fn perform_fusion(
 
     // Extract the LabeledBlock body from the Let statement.
     let StmtKind::Let {
-        value: let_value, ..
+        value: Some(let_value),
+        ..
     } = &engine.body.stmts[let_s].kind
     else {
         unreachable!("guarded by check_fusion_preconditions")
@@ -1488,7 +1489,7 @@ fn perform_fusion(
                 local_index: *local_index,
                 is_mut: *is_mut,
                 type_id: *type_id,
-                value: Operand::Expr(fused),
+                value: Some(Operand::Expr(fused)),
                 skip_value_copy: *skip_value_copy,
             },
             _ => StmtKind::Expr(Operand::Expr(fused)),
@@ -1597,7 +1598,7 @@ fn let_stmt(
             local_index: local,
             is_mut: false,
             type_id,
-            value,
+            value: Some(value),
             skip_value_copy: false,
         },
         span,
@@ -1795,15 +1796,13 @@ fn subst_temp_reads_in_stmt(engine: &mut Engine, s: StmtId, f: &TempReads) {
         None,
     }
     let shape = match &engine.body.stmts[s].kind {
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            // A promoted-constant value mentions no local — nothing to rewrite.
+        // A promoted-constant value mentions no local — nothing to rewrite.
+        StmtKind::LetDestructure { value, .. } | StmtKind::Expr(value) => {
             value.as_expr().map_or(Shape::None, Shape::Expr)
         }
-        StmtKind::Expr(expr) => expr.as_expr().map_or(Shape::None, Shape::Expr),
-        StmtKind::Return { value } => match value {
-            Some(v) => v.as_expr().map_or(Shape::None, Shape::Expr),
-            None => Shape::None,
-        },
+        StmtKind::Let { value, .. } | StmtKind::Return { value } => value
+            .and_then(Operand::as_expr)
+            .map_or(Shape::None, Shape::Expr),
         StmtKind::If {
             condition,
             then_block,
@@ -2273,8 +2272,9 @@ struct SlotTempSroa {
     /// The name each slot is read under, for a materializing exit's projection.
     names: IndexMap<u32, String>,
     /// The declaring `let mut slot = <init>` each one needs ahead of the block:
-    /// its type's zero, or `()`, declaring it without a value, where it has none.
-    inits: Vec<(u32, TypeId, Operand)>,
+    /// its type's zero, or `None`, a declaration without a value, where the
+    /// type has no zero.
+    inits: Vec<(u32, TypeId, Option<Operand>)>,
     span: Span,
 }
 
@@ -2333,11 +2333,11 @@ impl Rule for SlotTempSroaRule {
 
 fn plan_slot_temp_sroa(engine: &mut Engine, let_s: StmtId) -> Option<SlotTempSroa> {
     let type_table = engine.type_table();
-    let mut inits: Vec<(u32, TypeId, Operand)> = Vec::new();
+    let mut inits: Vec<(u32, TypeId, Option<Operand>)> = Vec::new();
     let body = &*engine.body;
     let StmtKind::Let {
         local_index: temp_local,
-        value: let_value,
+        value: Some(let_value),
         is_mut: false,
         ..
     } = &body.stmts[let_s].kind
@@ -2433,10 +2433,10 @@ fn plan_slot_temp_sroa(engine: &mut Engine, let_s: StmtId) -> Option<SlotTempSro
     let option = OptionCases::of(type_table);
     let mut slots = Vec::with_capacity(fields.len());
     for ((field_index, type_id), pad) in fields.into_iter().zip(pads) {
-        let (kind, init_type) = pad.map_or((ValueKind::Unit, TypeTable::UNIT), |pad| {
-            pad.constant(&option)
+        let init = pad.map(|pad| {
+            let (kind, init_type) = pad.constant(&option);
+            engine.const_operand(kind, init_type)
         });
-        let init = engine.const_operand(kind, init_type);
         let local_index = engine.alloc_minted_local(SROA_SLOT, type_id, /* is_mut */ true);
         slots.push(BoundSlot {
             field_index,
@@ -2836,7 +2836,7 @@ fn scalarize_materialized_exit(
             local_index: index,
             is_mut: false,
             type_id: agg_type,
-            value: Operand::Expr(exit),
+            value: Some(Operand::Expr(exit)),
             skip_value_copy: true,
         },
         span,

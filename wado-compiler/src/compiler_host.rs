@@ -14,7 +14,7 @@ use std::sync::Arc;
 use crate::ast::AstIdSpace;
 use crate::hashmap;
 use crate::kiln::options_check::CanonicalOptions;
-use crate::name::module_parent_dir;
+use crate::module_path::module_parent_dir;
 use crate::remote::{Integrity, PinMismatch, PinnedBy, held_to_use, is_remote};
 use crate::token::Span;
 

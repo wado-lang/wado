@@ -488,7 +488,7 @@ impl FunctionTranslator<'_, '_> {
                 if matches!(operand, WirInstr::F32Const(_) | WirInstr::F64Const(_)) {
                     return operand;
                 }
-                let (set, read) = self.spill(operand, ty.clone(), "$float_cmp");
+                let (set, read) = self.spill(operand, ty.clone(), "float_cmp");
                 prelude.extend(set);
                 read
             })

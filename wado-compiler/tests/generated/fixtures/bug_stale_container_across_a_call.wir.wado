@@ -194,31 +194,31 @@ fn "bug_stale_container_across_a_call.wado/$cm_binding__wasi:cli/stdout@0.3.0#wr
 }
 
 fn "bug_stale_container_across_a_call.wado/$cm_export__run"() {
-    let $v0: i32;
+    let $v_0: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_1_14: i32;
     let new_repr: ref Array<u8>;
     let $sroa_message_repr_31: ref Array<u8>;
-    if @unlikely(local.tee $v0("bug_stale_container_across_a_call.wado/pushed_then_indexed"()) != 22) {
+    if @unlikely(local.tee $v_0("bug_stale_container_across_a_call.wado/pushed_then_indexed"()) != 22) {
         cold_path;
-        "bug_stale_container_across_a_call.wado/run$cold0"($v0);
+        "bug_stale_container_across_a_call.wado/run$cold0"($v_0);
         unreachable;
     }
-    $v0 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $v_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $v0 = "bug_stale_container_across_a_call.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v0);
+    $v_0 = "bug_stale_container_across_a_call.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v_0);
     $sroa_message_repr_31 = array.new_fixed<u8>(111, 107);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, $sroa_message_repr_31, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14, new_repr);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v0);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v_0);
     "wasi/task-return"(0);
 }
 
-fn "bug_stale_container_across_a_call.wado/run$cold0"($v0) with Stdout {
+fn "bug_stale_container_across_a_call.wado/run$cold0"($v_0) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<bug_stale_container_across_a_call.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "bug_stale_container_across_a_call.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at bug_stale_container_across_a_call.wado:22
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<bug_stale_container_across_a_call.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "bug_stale_container_across_a_call.wado//$tmpl$ebaa20f4a908b504" { h0: $v_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at bug_stale_container_across_a_call.wado:22
 condition: pushed_then_indexed() == 22
 pushed_then_indexed(): "), used: 131 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at bug_stale_container_across_a_call.wado:22
 condition: pushed_then_indexed() == 22

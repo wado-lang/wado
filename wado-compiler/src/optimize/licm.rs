@@ -403,7 +403,7 @@ fn licm_block(
             } => {
                 // Track outer-scope aliases so a subsequent loop's LICM can
                 // see them.
-                if let Some(ve) = value.as_expr()
+                if let Some(ve) = value.and_then(Operand::as_expr)
                     && let Some(src_idx) = extract_alias_source(engine.body, ve)
                     && is_gc_heap_type(engine.body.exprs[ve].type_id, ctx.type_table)
                 {
@@ -589,7 +589,7 @@ fn licm_loop(
                     local_index: new_local_index,
                     is_mut: false,
                     type_id: candidate.type_id,
-                    value: field_access_expr.into(),
+                    value: Some(field_access_expr.into()),
                     skip_value_copy: true,
                 },
                 Span::new(0, 0, 0, 0),
@@ -640,7 +640,7 @@ fn preheader_field_hoists(body: &Body, ahead: &[StmtId]) -> Vec<HoistedField> {
             name,
             local_index,
             is_mut,
-            value,
+            value: Some(value),
             ..
         } = &body.stmts[s].kind
         else {
@@ -826,7 +826,7 @@ fn hoist_reloadable_field_loads(
                 local_index: new_local_index,
                 is_mut: true,
                 type_id: candidate.type_id,
-                value: hoist_value.into(),
+                value: Some(hoist_value.into()),
                 skip_value_copy: true,
             },
             Span::new(0, 0, 0, 0),
@@ -1714,7 +1714,7 @@ fn collect_modified_vars_in_stmt(
             // source's fields stay hoistable while anything rooted at the
             // rebound local (or written through it) is still blocked. Any
             // other `let` fully modifies the bound local.
-            if let Some(ve) = value.as_expr()
+            if let Some(ve) = value.and_then(Operand::as_expr)
                 && let Some(src_idx) = extract_alias_source(body, ve)
                 && is_gc_heap_type(body.exprs[ve].type_id, type_table)
             {
@@ -1723,7 +1723,9 @@ fn collect_modified_vars_in_stmt(
             } else {
                 modified.insert_full(local_index);
             }
-            collect_modified_vars_in_operand(body, value, modified, type_table);
+            if let Some(value) = value {
+                collect_modified_vars_in_operand(body, value, modified, type_table);
+            }
         }
         StmtKind::Expr(expr) => {
             collect_modified_vars_in_operand(body, *expr, modified, type_table);
@@ -2041,7 +2043,7 @@ fn collect_licm_ref_bindings(
     {
         *let_counts.entry(*local_index).or_insert(0) += 1;
         if matches!(type_table.get(*type_id), ResolvedType::Ref(_))
-            && let Some(ve) = value.as_expr()
+            && let Some(ve) = value.and_then(Operand::as_expr)
             && let ExprKind::Unary {
                 op: NirUnaryOp::Ref,
                 expr: source,
@@ -2477,7 +2479,7 @@ fn hoist_invariant_arith(
                 local_index: new_idx,
                 is_mut: false,
                 type_id,
-                value: value.into(),
+                value: Some(value.into()),
                 skip_value_copy: true,
             },
             Span::new(0, 0, 0, 0),
@@ -2706,7 +2708,7 @@ fn cse_loop_body(
                     local_index: temp,
                     is_mut: false,
                     type_id: ty,
-                    value: Operand::Expr(cloned),
+                    value: Some(Operand::Expr(cloned)),
                     skip_value_copy: true,
                 },
                 span,
@@ -2900,7 +2902,7 @@ fn hoist_invariant_value_operands(
                 local_index: temp,
                 is_mut: false,
                 type_id: ty,
-                value: Operand::Value(rep),
+                value: Some(Operand::Value(rep)),
                 skip_value_copy: true,
             },
             Span::new(0, 0, 0, 0),

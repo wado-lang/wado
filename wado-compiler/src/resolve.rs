@@ -1614,11 +1614,12 @@ impl AstVisitor<'_> for Resolver<'_> {
         {
             self.record_name(head.id, &head.name);
             if let Some(owner) = ident.owner_index().filter(|i| *i > 0) {
-                let qualified = ident.segments[..=owner]
+                let namespace = ident.segments[..owner]
                     .iter()
                     .map(|segment| segment.name.as_str())
                     .collect::<Vec<_>>()
-                    .join(&NAMESPACE_MEMBER_SEP.to_string());
+                    .join("::");
+                let qualified = namespace_member_alias(&namespace, &ident.segments[owner].name);
                 self.record_name(ident.segments[owner].id, &qualified);
             }
         }

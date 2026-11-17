@@ -104,13 +104,15 @@ fn classify(engine: &mut Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) 
             let (idx, value) = (*local_index, *value);
             if is_kept(engine, idx) {
                 Action::Keep
-            } else if deletable(engine, value, rule) {
+            } else if value.is_none_or(|value| deletable(engine, value, rule)) {
                 Action::Drop
             } else {
                 // Effectful or trap-capable. A skeleton expr demotes to a bare
                 // `Expr(value)`, which still runs it; a promoted value has no
                 // `ExprId` to demote to, so its binding is what runs it.
-                value.as_expr().map_or(Action::Keep, Action::Demote)
+                value
+                    .and_then(Operand::as_expr)
+                    .map_or(Action::Keep, Action::Demote)
             }
         }
         StmtKind::Expr(operand @ Operand::Value(_)) => {
@@ -179,7 +181,14 @@ fn is_dead_store(engine: &mut Engine, store: StmtId, local: u32) -> bool {
     if engine.reads_promoted_local(local) || engine.body_address_taken().contains(&local) {
         return false;
     }
-    let def = engine.local_def(local);
+    // A `let` without a value writes nothing, so a store before it reaches a
+    // read after it.
+    let def = engine.local_def(local).filter(|&def| {
+        matches!(
+            engine.body.stmts[def].kind,
+            StmtKind::Let { value: Some(_), .. } | StmtKind::LetDestructure { .. }
+        )
+    });
     let store_chain: IndexSet<NodeRef> = ancestors(engine, NodeRef::Stmt(store)).collect();
     assert_eq!(
         store_chain.last(),
@@ -286,7 +295,7 @@ mod tests {
                 local_index: 0,
                 is_mut: false,
                 type_id: TypeTable::I32,
-                value: Operand::Value(one),
+                value: Some(Operand::Value(one)),
                 skip_value_copy: false,
             },
             span: Span::default(),
@@ -339,7 +348,7 @@ mod tests {
                 local_index: 0,
                 is_mut: false,
                 type_id: TypeTable::I32,
-                value: Operand::Expr(call),
+                value: Some(Operand::Expr(call)),
                 skip_value_copy: false,
             },
             span: Span::default(),

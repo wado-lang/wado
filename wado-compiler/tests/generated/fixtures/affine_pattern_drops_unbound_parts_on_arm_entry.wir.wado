@@ -515,31 +515,31 @@ global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/strin
 
 fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_0_a_wildcard_arm_drops_the_whole_scrutinee"() {
     let d: i32;
-    let $v2_2: i32;
+    let $v_2: i32;
     d = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS;
     global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
-    if @unlikely(local.tee $v2_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_0_a_wildcard_arm_drops_the_whole_scrutinee$cold1"(d, $v2_2);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_0_a_wildcard_arm_drops_the_whole_scrutinee$cold1"(d, $v_2);
         unreachable;
     }
-    if @unlikely(local.tee $v2_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_0_a_wildcard_arm_drops_the_whole_scrutinee$cold0"(d, $v2_2);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_0_a_wildcard_arm_drops_the_whole_scrutinee$cold0"(d, $v_2);
         unreachable;
     }
 }
 
 fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_1_a_field_pattern_keeps_no_part_of_what_it_binds_nothing_of"() {
     let d: i32;
-    let $v2: i32;
+    let $v_5: i32;
     d = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS;
     global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
     block {
     };
-    if @unlikely(local.tee $v2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
+    if @unlikely(local.tee $v_5(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_1_a_field_pattern_keeps_no_part_of_what_it_binds_nothing_of$cold0"(d, $v2);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_1_a_field_pattern_keeps_no_part_of_what_it_binds_nothing_of$cold0"(d, $v_5);
         unreachable;
     }
 }
@@ -548,26 +548,26 @@ fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_2_a_struct_patter
     let d: i32;
     let p: ref null "affine_pattern_drops_unbound_parts_on_arm_entry.wado//P";
     let a: ref null "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok";
-    let $v2_3: i32;
+    let $v_2: i32;
     d = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS;
     p = struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//P" { a: struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok" { id: 1 }, b: struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok" { id: 2 } };
     a = p.a;
     if ref.is_null(p.b) == 0 {
         global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
     }
-    if @unlikely(local.tee $v2_3(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_2_a_struct_pattern_drops_the_fields_it_leaves_out$cold2"(d, $v2_3);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_2_a_struct_pattern_drops_the_fields_it_leaves_out$cold2"(d, $v_2);
         unreachable;
     }
-    $v2_3 = a.id;
+    $v_2 = a.id;
     if ref.is_null(a) == 0 {
         global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
     }
-    if @unlikely($v2_3 != 1) {
+    if @unlikely($v_2 != 1) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: $v2_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_struct_pattern_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:64
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_struct_pattern_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:64
 condition: eat(a) == 1
 a: "), used: 161 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_struct_pattern_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:64
 condition: eat(a) == 1
@@ -576,14 +576,14 @@ eat(a): "), used: 9 }, r1: struct.new "core:prelude/string.wado//String" { repr:
 eat(a): "), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
-    if @unlikely(local.tee $v2_3(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_2_a_struct_pattern_drops_the_fields_it_leaves_out$cold1"(d, $v2_3);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_2_a_struct_pattern_drops_the_fields_it_leaves_out$cold1"(d, $v_2);
         unreachable;
     }
-    if @unlikely(local.tee $v2_3(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_2_a_struct_pattern_drops_the_fields_it_leaves_out$cold0"(d, $v2_3);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_2_a_struct_pattern_drops_the_fields_it_leaves_out$cold0"(d, $v_2);
         unreachable;
     }
 }
@@ -591,7 +591,7 @@ eat(a): "), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr:
 fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_3_a_temporary_s_unbound_element_drops_on_entry"() {
     let d: i32;
     let b: ref null "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok";
-    let $v2_2: i32;
+    let $v_2: i32;
     let $temp_8: ref null "tuple//[affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok, affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok]";
     d = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS;
     b = local.tee $temp_8(struct.new "tuple//[affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok, affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok]" { 0: struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok" { id: 1 }, 1: struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok" { id: 2 } }).1;
@@ -599,19 +599,19 @@ fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_3_a_temporary_s_u
         global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
     }
     $temp_8 = ref.null none;
-    if @unlikely(local.tee $v2_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_3_a_temporary_s_unbound_element_drops_on_entry$cold1"(d, $v2_2);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_3_a_temporary_s_unbound_element_drops_on_entry$cold1"(d, $v_2);
         unreachable;
     }
-    $v2_2 = b.id;
+    $v_2 = b.id;
     if ref.is_null(b) == 0 {
         global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
     }
-    if @unlikely($v2_2 != 2) {
+    if @unlikely($v_2 != 2) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: $v2_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_temporary_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:76
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_temporary_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:76
 condition: eat(b) == 2
 b: "), used: 158 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_temporary_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:76
 condition: eat(b) == 2
@@ -630,9 +630,9 @@ eat(b): "), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr:
         }
         $temp_8.1 = ref.null none;
     }
-    if @unlikely(local.tee $v2_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_3_a_temporary_s_unbound_element_drops_on_entry$cold0"(d, $v2_2);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_3_a_temporary_s_unbound_element_drops_on_entry$cold0"(d, $v_2);
         unreachable;
     }
 }
@@ -641,7 +641,7 @@ fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_4_a_payload_s_unb
     let d: i32;
     let s: ref null "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Slot";
     let a: ref null "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok";
-    let $v2_3: i32;
+    let $v_2: i32;
     let $drop_v_11: ref null "tuple//[affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok, affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok]";
     d = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS;
     if ref.test "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Slot::Two"(local.tee s(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Slot::Two" { discriminant: 2, payload_0: struct.new "tuple//[affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok, affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok]" { 0: struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok" { id: 1 }, 1: struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok" { id: 2 } } })) {
@@ -651,19 +651,19 @@ fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_4_a_payload_s_unb
             global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
         }
         s = ref.null none;
-        if @unlikely(local.tee $v2_3(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
+        if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
             cold_path;
-            "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_4_a_payload_s_unbound_element_drops_on_entry$cold1"(d, $v2_3);
+            "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_4_a_payload_s_unbound_element_drops_on_entry$cold1"(d, $v_2);
             unreachable;
         }
-        $v2_3 = a.id;
+        $v_2 = a.id;
         if ref.is_null(a) == 0 {
             global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
         }
-        if @unlikely($v2_3 != 1) {
+        if @unlikely($v_2 != 1) {
             cold_path;
             let $mv_arg_2: ref "core:prelude/string.wado//String";
-            "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: $v2_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_a_payload_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:88
+            "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_a_payload_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:88
 condition: eat(a) == 1
 a: "), used: 156 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_a_payload_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:88
 condition: eat(a) == 1
@@ -692,9 +692,9 @@ eat(a): "), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr:
         }
         s = ref.null none;
     }
-    if @unlikely(local.tee $v2_3(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_4_a_payload_s_unbound_element_drops_on_entry$cold0"(d, $v2_3);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_4_a_payload_s_unbound_element_drops_on_entry$cold0"(d, $v_2);
         unreachable;
     }
     if ref.is_null(s) == 0 {
@@ -719,7 +719,7 @@ fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_d
     let d: i32;
     let s: ref null "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Slot";
     let t_2: ref null "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok";
-    let $v2_4: i32;
+    let $v_2: i32;
     let $drop_v_12: ref null "tuple//[affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok, affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok]";
     d = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS;
     if ref.test "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Slot::One"(local.tee s(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Slot::Two" { discriminant: 2, payload_0: struct.new "tuple//[affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok, affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok]" { 0: struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok" { id: 1 }, 1: struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok" { id: 2 } } })) {
@@ -735,19 +735,19 @@ fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_d
             unreachable;
         }
         s = ref.null none;
-        if @unlikely((local.tee $v2_4(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) == 1) == 0) {
+        if @unlikely((local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) == 1) == 0) {
             cold_path;
-            "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out$cold2"(d, $v2_4);
+            "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out$cold2"(d, $v_2);
             unreachable;
         }
-        $v2_4 = t_2.id;
+        $v_2 = t_2.id;
         if ref.is_null(t_2) == 0 {
             global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
         }
-        if @unlikely(($v2_4 == 2) == 0) {
+        if @unlikely(($v_2 == 2) == 0) {
             cold_path;
             let $mv_arg_5: ref "core:prelude/string.wado//String";
-            "core:rt/panic"(local.tee $mv_arg_5("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: $v2_4, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:101
+            "core:rt/panic"(local.tee $mv_arg_5("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:101
 condition: eat(t) == 2
 t: "), used: 175 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:101
 condition: eat(t) == 2
@@ -769,18 +769,18 @@ eat(t): "), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr:
             unreachable;
         }
         s = ref.null none;
-        if @unlikely((local.tee $v2_4(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) == 1) == 0) {
+        if @unlikely((local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) == 1) == 0) {
             cold_path;
-            "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out$cold1"(d, $v2_4);
+            "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out$cold1"(d, $v_2);
             unreachable;
         }
-        $v2_4 = t_2.id;
+        $v_2 = t_2.id;
         if ref.is_null(t_2) == 0 {
             global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
         }
-        if @unlikely(($v2_4 == 2) == 0) {
+        if @unlikely(($v_2 == 2) == 0) {
             cold_path;
-            "core:rt/panic"(local.tee $mv_arg_5("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: $v2_4, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:101
+            "core:rt/panic"(local.tee $mv_arg_5("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:101
 condition: eat(t) == 2
 t: "), used: 175 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:101
 condition: eat(t) == 2
@@ -792,9 +792,9 @@ eat(t): "), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr:
     } else {
         s = ref.null none;
     }
-    if @unlikely(local.tee $v2_4(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out$cold0"(d, $v2_4);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out$cold0"(d, $v_2);
         unreachable;
     }
     if ref.is_null(s) == 0 {
@@ -895,7 +895,7 @@ eat(t): "), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr:
 fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_7_an_if_let_that_matches_consumes_the_scrutinee"() {
     let d: i32;
     let s: ref null "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Slot";
-    let $v2_2: i32;
+    let $v_2: i32;
     let $drop_v_7: ref null "tuple//[affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok, affine_pattern_drops_unbound_parts_on_arm_entry.wado/Tok]";
     d = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS;
     s = struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Slot::One" { discriminant: 1, payload_0: struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok" { id: 1 } };
@@ -905,16 +905,16 @@ fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_7_an_if_let_that_
             global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
         }
         s = ref.null none;
-        if @unlikely(local.tee $v2_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
+        if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
             cold_path;
-            "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_7_an_if_let_that_matches_consumes_the_scrutinee$cold1"(d, $v2_2);
+            "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_7_an_if_let_that_matches_consumes_the_scrutinee$cold1"(d, $v_2);
             unreachable;
         }
     } else {
     }
-    if @unlikely(local.tee $v2_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_7_an_if_let_that_matches_consumes_the_scrutinee$cold0"(d, $v2_2);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_7_an_if_let_that_matches_consumes_the_scrutinee$cold0"(d, $v_2);
         unreachable;
     }
     if ref.is_null(s) == 0 {
@@ -1019,23 +1019,23 @@ eat(t): "), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr:
 fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_9_a_constant_pattern_drops_the_whole_scrutinee"() {
     let d: i32;
     let t: ref null "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok";
-    let $v2_3: i32;
+    let $v_2: i32;
     d = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS;
     if global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::ZERO.id == 0 {
         global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
         t = ref.null none;
-        if @unlikely(local.tee $v2_3(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
+        if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
             cold_path;
-            "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_9_a_constant_pattern_drops_the_whole_scrutinee$cold1"(d, $v2_3);
+            "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_9_a_constant_pattern_drops_the_whole_scrutinee$cold1"(d, $v_2);
             unreachable;
         }
     } else {
         global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
         t = ref.null none;
     }
-    if @unlikely(local.tee $v2_3(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_9_a_constant_pattern_drops_the_whole_scrutinee$cold0"(d, $v2_3);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_9_a_constant_pattern_drops_the_whole_scrutinee$cold0"(d, $v_2);
         unreachable;
     }
     if ref.is_null(t) == 0 {
@@ -1045,7 +1045,7 @@ fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_9_a_constant_patt
 
 fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_10_a_field_of_a_temporary_drops_with_the_rest_of_it"() {
     let d: i32;
-    let $v2: i32;
+    let $v_2: i32;
     let $temp_3: ref null "affine_pattern_drops_unbound_parts_on_arm_entry.wado//P";
     d = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS;
     if ref.is_null(local.tee $temp_3(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//P" { a: struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok" { id: 1 }, b: struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok" { id: 2 } }).a) == 0 {
@@ -1056,9 +1056,9 @@ fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_10_a_field_of_a_t
         global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
     }
     $temp_3.b = ref.null none;
-    if @unlikely(local.tee $v2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_10_a_field_of_a_temporary_drops_with_the_rest_of_it$cold0"(d, $v2);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_10_a_field_of_a_temporary_drops_with_the_rest_of_it$cold0"(d, $v_2);
         unreachable;
     }
 }
@@ -1066,16 +1066,16 @@ fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_10_a_field_of_a_t
 fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_11_matches_consumes_nothing__a_guard_s_binding_included"() {
     let d: i32;
     let s: ref null "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Slot";
-    let $v2: i32;
+    let $v_3: i32;
     d = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS;
     if @unlikely(ref.cast "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Slot::One"(local.tee s(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Slot::One" { discriminant: 1, payload_0: struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//Tok" { id: 3 } })).payload_0.id <= 1) {
         cold_path;
         "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_11_matches_consumes_nothing__a_guard_s_binding_included$cold2"();
         unreachable;
     }
-    if @unlikely((local.tee $v2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) == 0) == 0) {
+    if @unlikely((local.tee $v_3(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) == 0) == 0) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_11_matches_consumes_nothing__a_guard_s_binding_included$cold1"(d, $v2);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_11_matches_consumes_nothing__a_guard_s_binding_included$cold1"(d, $v_3);
         unreachable;
     }
     if ref.is_null(s) == 0 {
@@ -1186,26 +1186,26 @@ fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$cm_export__$test_11_ma
 
 fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$cm_export__$test_12_a_destructuring_let_drops_the_fields_it_leaves_out"() {
     let d: i32;
-    let $v2_3: i32;
+    let $v_2: i32;
     d = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS;
     global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
-    if @unlikely(local.tee $v2_3(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 1) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_12_a_destructuring_let_drops_the_fields_it_leaves_out$cold1"(d, $v2_3);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_12_a_destructuring_let_drops_the_fields_it_leaves_out$cold1"(d, $v_2);
         unreachable;
     }
     global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS = global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS + 1;
-    if @unlikely(local.tee $v2_3(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
+    if @unlikely(local.tee $v_2(global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS - d) != 2) {
         cold_path;
-        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_12_a_destructuring_let_drops_the_fields_it_leaves_out$cold0"(d, $v2_3);
+        "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_12_a_destructuring_let_drops_the_fields_it_leaves_out$cold0"(d, $v_2);
         unreachable;
     }
     "wasi/task-return"(0);
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_0_a_wildcard_arm_drops_the_whole_scrutinee$cold0"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_0_a_wildcard_arm_drops_the_whole_scrutinee$cold0"(d, $v_7) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_wildcard_arm_drops_the_whole_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:44
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_7, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_wildcard_arm_drops_the_whole_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:44
 condition: DROPS - d == 1
 DROPS: "), used: 161 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_wildcard_arm_drops_the_whole_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:44
 condition: DROPS - d == 1
@@ -1215,9 +1215,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_0_a_wildcard_arm_drops_the_whole_scrutinee$cold1"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_0_a_wildcard_arm_drops_the_whole_scrutinee$cold1"(d, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_wildcard_arm_drops_the_whole_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:41
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_wildcard_arm_drops_the_whole_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:41
 condition: DROPS - d == 1
 DROPS: "), used: 161 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_wildcard_arm_drops_the_whole_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:41
 condition: DROPS - d == 1
@@ -1227,9 +1227,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_1_a_field_pattern_keeps_no_part_of_what_it_binds_nothing_of$cold0"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_1_a_field_pattern_keeps_no_part_of_what_it_binds_nothing_of$cold0"(d, $v_5) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_field_pattern_keeps_no_part_of_what_it_binds_nothing_of at affine_pattern_drops_unbound_parts_on_arm_entry.wado:53
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_5, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_field_pattern_keeps_no_part_of_what_it_binds_nothing_of at affine_pattern_drops_unbound_parts_on_arm_entry.wado:53
 condition: DROPS - d == 1
 DROPS: "), used: 178 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_field_pattern_keeps_no_part_of_what_it_binds_nothing_of at affine_pattern_drops_unbound_parts_on_arm_entry.wado:53
 condition: DROPS - d == 1
@@ -1239,9 +1239,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_2_a_struct_pattern_drops_the_fields_it_leaves_out$cold0"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_2_a_struct_pattern_drops_the_fields_it_leaves_out$cold0"(d, $v_17) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_struct_pattern_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:68
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_17, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_struct_pattern_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:68
 condition: DROPS - d == 2
 DROPS: "), used: 168 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_struct_pattern_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:68
 condition: DROPS - d == 2
@@ -1251,9 +1251,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_2_a_struct_pattern_drops_the_fields_it_leaves_out$cold1"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_2_a_struct_pattern_drops_the_fields_it_leaves_out$cold1"(d, $v_12) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_struct_pattern_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:65
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_12, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_struct_pattern_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:65
 condition: DROPS - d == 2
 DROPS: "), used: 168 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_struct_pattern_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:65
 condition: DROPS - d == 2
@@ -1263,9 +1263,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_2_a_struct_pattern_drops_the_fields_it_leaves_out$cold2"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_2_a_struct_pattern_drops_the_fields_it_leaves_out$cold2"(d, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_struct_pattern_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:63
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_struct_pattern_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:63
 condition: DROPS - d == 1
 DROPS: "), used: 168 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_a_struct_pattern_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:63
 condition: DROPS - d == 1
@@ -1275,9 +1275,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_3_a_temporary_s_unbound_element_drops_on_entry$cold0"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_3_a_temporary_s_unbound_element_drops_on_entry$cold0"(d, $v_12) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_temporary_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:79
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_12, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_temporary_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:79
 condition: DROPS - d == 2
 DROPS: "), used: 165 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_temporary_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:79
 condition: DROPS - d == 2
@@ -1287,9 +1287,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_3_a_temporary_s_unbound_element_drops_on_entry$cold1"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_3_a_temporary_s_unbound_element_drops_on_entry$cold1"(d, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_temporary_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:75
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_temporary_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:75
 condition: DROPS - d == 1
 DROPS: "), used: 165 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_temporary_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:75
 condition: DROPS - d == 1
@@ -1299,9 +1299,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_4_a_payload_s_unbound_element_drops_on_entry$cold0"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_4_a_payload_s_unbound_element_drops_on_entry$cold0"(d, $v_12) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_a_payload_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:92
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_12, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_a_payload_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:92
 condition: DROPS - d == 2
 DROPS: "), used: 163 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_a_payload_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:92
 condition: DROPS - d == 2
@@ -1311,9 +1311,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_4_a_payload_s_unbound_element_drops_on_entry$cold1"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_4_a_payload_s_unbound_element_drops_on_entry$cold1"(d, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_a_payload_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:87
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_a_payload_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:87
 condition: DROPS - d == 1
 DROPS: "), used: 163 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_a_payload_s_unbound_element_drops_on_entry at affine_pattern_drops_unbound_parts_on_arm_entry.wado:87
 condition: DROPS - d == 1
@@ -1323,9 +1323,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out$cold0"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out$cold0"(d, $v_12) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:105
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_12, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:105
 condition: DROPS - d == 2
 DROPS: "), used: 182 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:105
 condition: DROPS - d == 2
@@ -1335,9 +1335,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out$cold1"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out$cold1"(d, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:100
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:100
 condition: DROPS - d == 1
 DROPS: "), used: 182 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:100
 condition: DROPS - d == 1
@@ -1347,9 +1347,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out$cold2"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out$cold2"(d, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:100
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:100
 condition: DROPS - d == 1
 DROPS: "), used: 182 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_an_or_pattern_drops_what_its_matching_alternative_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:100
 condition: DROPS - d == 1
@@ -1359,9 +1359,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_6_a_guard_that_fails_consumes_nothing$cold0"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_6_a_guard_that_fails_consumes_nothing$cold0"(d, $v_12) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_guard_that_fails_consumes_nothing at affine_pattern_drops_unbound_parts_on_arm_entry.wado:119
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_12, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_guard_that_fails_consumes_nothing at affine_pattern_drops_unbound_parts_on_arm_entry.wado:119
 condition: DROPS - d == 1
 DROPS: "), used: 157 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_guard_that_fails_consumes_nothing at affine_pattern_drops_unbound_parts_on_arm_entry.wado:119
 condition: DROPS - d == 1
@@ -1371,9 +1371,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_6_a_guard_that_fails_consumes_nothing$cold1"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_6_a_guard_that_fails_consumes_nothing$cold1"(d, $v_7) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_guard_that_fails_consumes_nothing at affine_pattern_drops_unbound_parts_on_arm_entry.wado:116
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_7, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_guard_that_fails_consumes_nothing at affine_pattern_drops_unbound_parts_on_arm_entry.wado:116
 condition: DROPS - d == 1
 DROPS: "), used: 157 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_6_a_guard_that_fails_consumes_nothing at affine_pattern_drops_unbound_parts_on_arm_entry.wado:116
 condition: DROPS - d == 1
@@ -1383,9 +1383,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_7_an_if_let_that_matches_consumes_the_scrutinee$cold0"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_7_an_if_let_that_matches_consumes_the_scrutinee$cold0"(d, $v_7) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_an_if_let_that_matches_consumes_the_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:128
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_7, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_an_if_let_that_matches_consumes_the_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:128
 condition: DROPS - d == 1
 DROPS: "), used: 167 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_an_if_let_that_matches_consumes_the_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:128
 condition: DROPS - d == 1
@@ -1395,9 +1395,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_7_an_if_let_that_matches_consumes_the_scrutinee$cold1"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_7_an_if_let_that_matches_consumes_the_scrutinee$cold1"(d, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_an_if_let_that_matches_consumes_the_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:126
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_an_if_let_that_matches_consumes_the_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:126
 condition: DROPS - d == 1
 DROPS: "), used: 167 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_7_an_if_let_that_matches_consumes_the_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:126
 condition: DROPS - d == 1
@@ -1407,9 +1407,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_8_an_if_let_that_does_not_match_leaves_the_scrutinee$cold0"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_8_an_if_let_that_does_not_match_leaves_the_scrutinee$cold0"(d, $v_13) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_8_an_if_let_that_does_not_match_leaves_the_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:144
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_13, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_8_an_if_let_that_does_not_match_leaves_the_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:144
 condition: DROPS - d == 2
 DROPS: "), used: 172 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_8_an_if_let_that_does_not_match_leaves_the_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:144
 condition: DROPS - d == 2
@@ -1426,9 +1426,9 @@ condition: paired
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_8_an_if_let_that_does_not_match_leaves_the_scrutinee$cold2"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_8_an_if_let_that_does_not_match_leaves_the_scrutinee$cold2"(d, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_8_an_if_let_that_does_not_match_leaves_the_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:138
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_8_an_if_let_that_does_not_match_leaves_the_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:138
 condition: DROPS - d == 0
 DROPS: "), used: 172 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_8_an_if_let_that_does_not_match_leaves_the_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:138
 condition: DROPS - d == 0
@@ -1438,9 +1438,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_9_a_constant_pattern_drops_the_whole_scrutinee$cold0"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_9_a_constant_pattern_drops_the_whole_scrutinee$cold0"(d, $v_7) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_9_a_constant_pattern_drops_the_whole_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:158
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_7, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_9_a_constant_pattern_drops_the_whole_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:158
 condition: DROPS - d == 1
 DROPS: "), used: 166 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_9_a_constant_pattern_drops_the_whole_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:158
 condition: DROPS - d == 1
@@ -1450,9 +1450,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_9_a_constant_pattern_drops_the_whole_scrutinee$cold1"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_9_a_constant_pattern_drops_the_whole_scrutinee$cold1"(d, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_9_a_constant_pattern_drops_the_whole_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:154
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_9_a_constant_pattern_drops_the_whole_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:154
 condition: DROPS - d == 1
 DROPS: "), used: 166 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_9_a_constant_pattern_drops_the_whole_scrutinee at affine_pattern_drops_unbound_parts_on_arm_entry.wado:154
 condition: DROPS - d == 1
@@ -1462,9 +1462,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_10_a_field_of_a_temporary_drops_with_the_rest_of_it$cold0"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_10_a_field_of_a_temporary_drops_with_the_rest_of_it$cold0"(d, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_10_a_field_of_a_temporary_drops_with_the_rest_of_it at affine_pattern_drops_unbound_parts_on_arm_entry.wado:172
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_10_a_field_of_a_temporary_drops_with_the_rest_of_it at affine_pattern_drops_unbound_parts_on_arm_entry.wado:172
 condition: DROPS - d == 2
 DROPS: "), used: 171 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_10_a_field_of_a_temporary_drops_with_the_rest_of_it at affine_pattern_drops_unbound_parts_on_arm_entry.wado:172
 condition: DROPS - d == 2
@@ -1474,9 +1474,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_11_matches_consumes_nothing__a_guard_s_binding_included$cold1"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_11_matches_consumes_nothing__a_guard_s_binding_included$cold1"(d, $v_3) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_11_matches_consumes_nothing__a_guard_s_binding_included at affine_pattern_drops_unbound_parts_on_arm_entry.wado:180
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_11_matches_consumes_nothing__a_guard_s_binding_included at affine_pattern_drops_unbound_parts_on_arm_entry.wado:180
 condition: DROPS - d == 0
 DROPS: "), used: 175 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_11_matches_consumes_nothing__a_guard_s_binding_included at affine_pattern_drops_unbound_parts_on_arm_entry.wado:180
 condition: DROPS - d == 0
@@ -1493,9 +1493,9 @@ condition: big
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_12_a_destructuring_let_drops_the_fields_it_leaves_out$cold0"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_12_a_destructuring_let_drops_the_fields_it_leaves_out$cold0"(d, $v_12) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_12_a_destructuring_let_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:192
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_12, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_12_a_destructuring_let_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:192
 condition: DROPS - d == 2
 DROPS: "), used: 173 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_12_a_destructuring_let_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:192
 condition: DROPS - d == 2
@@ -1505,9 +1505,9 @@ DROPS - d: "), used: 12 }, s3: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_12_a_destructuring_let_drops_the_fields_it_leaves_out$cold1"(d, $v2) {
+fn "affine_pattern_drops_unbound_parts_on_arm_entry.wado/$test_12_a_destructuring_let_drops_the_fields_it_leaves_out$cold1"(d, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_12_a_destructuring_let_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:190
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_pattern_drops_unbound_parts_on_arm_entry.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "affine_pattern_drops_unbound_parts_on_arm_entry.wado//$tmpl$72a42041a31d7898" { h0: global:affine_pattern_drops_unbound_parts_on_arm_entry.wado::DROPS, h1: d, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_12_a_destructuring_let_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:190
 condition: DROPS - d == 1
 DROPS: "), used: 173 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_12_a_destructuring_let_drops_the_fields_it_leaves_out at affine_pattern_drops_unbound_parts_on_arm_entry.wado:190
 condition: DROPS - d == 1
@@ -2052,7 +2052,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/pad_text<core:prelude/stri
     let $load_4: i32;
     let $load_5: i32;
     let view: ref "core:prelude/string.wado//StrSlice";
-    let $v2_8: i32;
+    let $v_2: i32;
     if local.tee $load_0(f.precision) < 0 {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, text);
         return;
@@ -2060,10 +2060,10 @@ fn "core:prelude/format.wado/core:prelude/format.wado/pad_text<core:prelude/stri
     view = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(text.repr, text.used);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f, block -> ref "core:prelude/string.wado//StrSlice" {
         $load_0 = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::char_prefix_end"(local.tee $load_3(view.repr), local.tee $load_4(view.start), local.tee $load_5(view.end), $load_0);
-        $v2_8 = $load_5 - $load_4;
-        if @unlikely(((0 <= $load_0) & ($load_0 <= $v2_8)) == 0) {
+        $v_2 = $load_5 - $load_4;
+        if @unlikely(((0 <= $load_0) & ($load_0 <= $v_2)) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(0, $load_0, $v2_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:409"), used: 28 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(0, $load_0, $v_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:409"), used: 28 });
             unreachable;
         }
         if @unlikely("core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"($load_3, $load_4, $load_5, $load_0) == 0) {
@@ -2098,8 +2098,8 @@ value: "), used: 48 }, s2: struct.new "core:prelude/string.wado//String" { repr:
     unreachable;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of String::set_byte_at failed at "), used: 42 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of String::set_byte_at failed at "), used: 42 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of String::set_byte_at failed at "), used: 42 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of String::set_byte_at failed at "), used: 42 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -2109,8 +2109,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -2120,8 +2120,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(start, end, $v2, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$afdf3efc359fee73" { h0: $site, h1: start, h2: end, h3: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(start, end, $v_2, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$afdf3efc359fee73" { h0: $site, h1: start, h2: end, h3: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= start <= end <= self.len()
 start: "), used: 51 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= start <= end <= self.len()
@@ -2133,37 +2133,37 @@ self.len(): "), used: 13 }, s4: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v1, self, end, start, $site) {
-    let $v2: i32;
-    let $v2_seen: bool;
-    let $v3: bool;
-    let $v3_seen: bool;
-    let $v2_text: ref "core:prelude/string.wado//String";
-    let $v3_text: ref "core:prelude/string.wado//String";
-    $v2_seen = 0;
-    $v3_seen = 0;
-    drop((if $v1 -> i32 {
-        $v3 = block -> bool {
-            $v2 = end;
-            $v2_seen = 1;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(self.repr, self.start, self.end, $v2);
+fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v_9, self, end, start, $site) {
+    let $v_10: i32;
+    let $v_10_seen: bool;
+    let $v_11: bool;
+    let $v_11_seen: bool;
+    let $v_10_text: ref "core:prelude/string.wado//String";
+    let $v_11_text: ref "core:prelude/string.wado//String";
+    $v_10_seen = 0;
+    $v_11_seen = 0;
+    drop((if $v_9 -> i32 {
+        $v_11 = block -> bool {
+            $v_10 = end;
+            $v_10_seen = 1;
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(self.repr, self.start, self.end, $v_10);
         };
-        $v3_seen = 1;
-        $v3;
+        $v_11_seen = 1;
+        $v_11;
     } else {
         0;
     }));
-    $v2_text = (if $v2_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:prelude/string.wado//$tmpl$ebaa20f4a908b504" { h0: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_10_text = (if $v_10_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:prelude/string.wado//$tmpl$ebaa20f4a908b504" { h0: $v_10, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    $v3_text = (if $v3_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$ce9bda9252f81986,[bool]>"(struct.new "core:prelude/string.wado//$tmpl$ce9bda9252f81986" { h0: $v3, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_11_text = (if $v_11_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$ce9bda9252f81986,[bool]>"(struct.new "core:prelude/string.wado//$tmpl$ce9bda9252f81986" { h0: $v_11, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$b145b32c9a586330,[core:prelude/string.wado/String,i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "core:prelude/string.wado//$tmpl$b145b32c9a586330" { h0: $site, h1: start, h2: $v1, h3: $v2_text, h4: $v3_text, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$b145b32c9a586330,[core:prelude/string.wado/String,i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "core:prelude/string.wado//$tmpl$b145b32c9a586330" { h0: $site, h1: start, h2: $v_9, h3: $v_10_text, h4: $v_11_text, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::slice failed at "), used: 38 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: self.is_char_boundary(start) && self.is_char_boundary(end)
 start: "), used: 78 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: self.is_char_boundary(start) && self.is_char_boundary(end)
@@ -2177,8 +2177,8 @@ self.is_char_boundary(end): "), used: 29 }, s5: struct.new "core:prelude/string.
     unreachable;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::$contract$byte_at$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::$contract$byte_at$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/string.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of StrSlice::byte_at failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -2561,12 +2561,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/stri
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::byte_at$unchecked"(self, index) {
     let $load_1: i32;
-    let $v1: i32;
+    let $v_1: i32;
     return block -> u8 {
-        $v1 = self.end - local.tee $load_1(self.start);
-        if @unlikely(((0 <= index) & (index < $v1)) == 0) {
+        $v_1 = self.end - local.tee $load_1(self.start);
+        if @unlikely(((0 <= index) & (index < $v_1)) == 0) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1772"), used: 29 });
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0"(index, $v_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1772"), used: 29 });
             unreachable;
         }
         "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked"(self.repr, $load_1, index);
@@ -2707,7 +2707,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_patt
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(self, content) {
     let $load_17: i32;
-    let $v2_13: i32;
+    let $v_2_13: i32;
     let self_44: ref "core:prelude/string.wado//String";
     let other_45: ref "core:prelude/string.wado//StrSlice";
     let $av_85: i32;
@@ -2724,10 +2724,10 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         $mv_used_2 = "core:prelude/format.wado/core:prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>$dae[at]"(content, content.end - content.start);
         self_44 = self.buf;
         other_45 = block -> ref "core:prelude/string.wado//StrSlice" {
-            $v2_13 = local.tee $mv_byte_index_3(content.end) - local.tee $load_17(content.start);
-            if @unlikely(((0 <= $mv_used_2) & ($mv_used_2 <= $v2_13)) == 0) {
+            $v_2_13 = local.tee $mv_byte_index_3(content.end) - local.tee $load_17(content.start);
+            if @unlikely(((0 <= $mv_used_2) & ($mv_used_2 <= $v_2_13)) == 0) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(0, $mv_used_2, $v2_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:164"), used: 28 });
+                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(0, $mv_used_2, $v_2_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:164"), used: 28 });
                 unreachable;
             }
             if @unlikely("core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(local.tee $mv_repr_1(content.repr), $load_17, $mv_byte_index_3, $mv_used_2) == 0) {
@@ -2742,19 +2742,19 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         self_44 = self.buf;
         content = block -> ref "core:prelude/string.wado//StrSlice" {
             $load_17 = local.tee $av_85(content.end) - local.tee $mv_byte_index_3(content.start);
-            $v2_13 = $av_85 - $mv_byte_index_3;
-            if @unlikely((((0 <= $mv_used_2) & ($mv_used_2 <= $load_17)) & ($load_17 <= $v2_13)) == 0) {
+            $v_2_13 = $av_85 - $mv_byte_index_3;
+            if @unlikely((((0 <= $mv_used_2) & ($mv_used_2 <= $load_17)) & ($load_17 <= $v_2_13)) == 0) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"($mv_used_2, $load_17, $v2_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:166"), used: 28 });
+                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"($mv_used_2, $load_17, $v_2_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:166"), used: 28 });
                 unreachable;
             }
-            if @unlikely((if local.tee $v2_13("core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(local.tee $mv_repr_1(content.repr), $mv_byte_index_3, $av_85, $mv_used_2)) -> i32 {
+            if @unlikely((if local.tee $v_2_13("core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(local.tee $mv_repr_1(content.repr), $mv_byte_index_3, $av_85, $mv_used_2)) -> i32 {
                 "core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"($mv_repr_1, $mv_byte_index_3, $av_85, $load_17);
             } else {
                 0;
             }) == 0) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v2_13, content, $load_17, $mv_used_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:166"), used: 28 });
+                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v_2_13, content, $load_17, $mv_used_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:166"), used: 28 });
                 unreachable;
             }
             "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked"($mv_repr_1, $mv_byte_index_3, $mv_used_2, $load_17);
@@ -2782,7 +2782,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(self, content) {
     let $load_16: i32;
     let view_2: ref "core:prelude/string.wado//StrSlice";
-    let $v2_13: i32;
+    let $v_2_13: i32;
     let other_47: ref "core:prelude/string.wado//StrSlice";
     let $av_83: i32;
     if local.tee $av_83(self.width) <= 0 {
@@ -2799,10 +2799,10 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         $mv_used_2 = "core:prelude/format.wado/core:prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>$dae[at]"(view_2, view_2.end - view_2.start);
         content = self.buf;
         other_47 = block -> ref "core:prelude/string.wado//StrSlice" {
-            $v2_13 = local.tee $mv_byte_index_3(view_2.end) - local.tee $load_16(view_2.start);
-            if @unlikely(((0 <= $mv_used_2) & ($mv_used_2 <= $v2_13)) == 0) {
+            $v_2_13 = local.tee $mv_byte_index_3(view_2.end) - local.tee $load_16(view_2.start);
+            if @unlikely(((0 <= $mv_used_2) & ($mv_used_2 <= $v_2_13)) == 0) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(0, $mv_used_2, $v2_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:164"), used: 28 });
+                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"(0, $mv_used_2, $v_2_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:164"), used: 28 });
                 unreachable;
             }
             if @unlikely("core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(local.tee $mv_repr_1(view_2.repr), $load_16, $mv_byte_index_3, $mv_used_2) == 0) {
@@ -2817,19 +2817,19 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         content = self.buf;
         view_2 = block -> ref "core:prelude/string.wado//StrSlice" {
             $load_16 = local.tee $av_83(view_2.end) - local.tee $mv_byte_index_3(view_2.start);
-            $v2_13 = $av_83 - $mv_byte_index_3;
-            if @unlikely((((0 <= $mv_used_2) & ($mv_used_2 <= $load_16)) & ($load_16 <= $v2_13)) == 0) {
+            $v_2_13 = $av_83 - $mv_byte_index_3;
+            if @unlikely((((0 <= $mv_used_2) & ($mv_used_2 <= $load_16)) & ($load_16 <= $v_2_13)) == 0) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"($mv_used_2, $load_16, $v2_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:166"), used: 28 });
+                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0"($mv_used_2, $load_16, $v_2_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:166"), used: 28 });
                 unreachable;
             }
-            if @unlikely((if local.tee $v2_13("core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(local.tee $mv_repr_1(view_2.repr), $mv_byte_index_3, $av_83, $mv_used_2)) -> i32 {
+            if @unlikely((if local.tee $v_2_13("core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(local.tee $mv_repr_1(view_2.repr), $mv_byte_index_3, $av_83, $mv_used_2)) -> i32 {
                 "core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"($mv_repr_1, $mv_byte_index_3, $av_83, $load_16);
             } else {
                 0;
             }) == 0) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v2_13, view_2, $load_16, $mv_used_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:166"), used: 28 });
+                "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v_2_13, view_2, $load_16, $mv_used_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:166"), used: 28 });
                 unreachable;
             }
             "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked"($mv_repr_1, $mv_byte_index_3, $mv_used_2, $load_16);

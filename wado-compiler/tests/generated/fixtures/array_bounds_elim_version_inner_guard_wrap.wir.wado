@@ -152,7 +152,7 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 
 fn "array_bounds_elim_version_inner_guard_wrap.wado/probe"(n, from) {
     let hits: i32;
-    let $v1: i32;
+    let $v_2: i32;
     hits = 0;
     if n <= 2147483646 {
         b1: block {
@@ -170,9 +170,9 @@ fn "array_bounds_elim_version_inner_guard_wrap.wado/probe"(n, from) {
             l5: loop {
                 break_if b4 from >= n;
                 if (from + 2) < n {
-                    if @unlikely(local.tee $v1(from + 1) >= n) {
+                    if @unlikely(local.tee $v_2(from + 1) >= n) {
                         cold_path;
-                        "array_bounds_elim_version_inner_guard_wrap.wado/probe$cold0$dae[from]"(n, from, $v1);
+                        "array_bounds_elim_version_inner_guard_wrap.wado/probe$cold0$dae[from]"(n, from, $v_2);
                         unreachable;
                     }
                     hits = hits + 1;
@@ -199,19 +199,19 @@ fn "array_bounds_elim_version_inner_guard_wrap.wado/$hole_fmt$array_bounds_elim_
 
 fn "array_bounds_elim_version_inner_guard_wrap.wado/$cm_export__run"() {
     let n: i32;
-    let $v1: i32;
-    let $v2: i32;
-    if @unlikely((local.tee $v2("array_bounds_elim_version_inner_guard_wrap.wado/probe"(local.tee n(black_box(2147483647)), local.tee $v1(n - 1))) == 0) == 0) {
+    let $v_1: i32;
+    let $v_2: i32;
+    if @unlikely((local.tee $v_2("array_bounds_elim_version_inner_guard_wrap.wado/probe"(local.tee n(black_box(2147483647)), local.tee $v_1(n - 1))) == 0) == 0) {
         cold_path;
-        "array_bounds_elim_version_inner_guard_wrap.wado/run$cold0"(n, $v1, $v2);
+        "array_bounds_elim_version_inner_guard_wrap.wado/run$cold0"(n, $v_1, $v_2);
         unreachable;
     }
     "wasi/task-return"(0);
 }
 
-fn "array_bounds_elim_version_inner_guard_wrap.wado/probe$cold0$dae[from]"(n, i, $v1) {
+fn "array_bounds_elim_version_inner_guard_wrap.wado/probe$cold0$dae[from]"(n, i, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<array_bounds_elim_version_inner_guard_wrap.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "array_bounds_elim_version_inner_guard_wrap.wado//$tmpl$72a42041a31d7898" { h0: i, h1: $v1, h2: n, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in probe at array_bounds_elim_version_inner_guard_wrap.wado:11
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<array_bounds_elim_version_inner_guard_wrap.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "array_bounds_elim_version_inner_guard_wrap.wado//$tmpl$72a42041a31d7898" { h0: i, h1: $v_2, h2: n, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in probe at array_bounds_elim_version_inner_guard_wrap.wado:11
 condition: i + 1 < n
 i: "), used: 104 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in probe at array_bounds_elim_version_inner_guard_wrap.wado:11
 condition: i + 1 < n
@@ -221,9 +221,9 @@ i + 1: "), used: 8 }, s2: struct.new "core:prelude/string.wado//String" { repr: 
     unreachable;
 }
 
-fn "array_bounds_elim_version_inner_guard_wrap.wado/run$cold0"(n, $v1, $v2) {
+fn "array_bounds_elim_version_inner_guard_wrap.wado/run$cold0"(n, $v_1, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<array_bounds_elim_version_inner_guard_wrap.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "array_bounds_elim_version_inner_guard_wrap.wado//$tmpl$72a42041a31d7898" { h0: n, h1: $v1, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at array_bounds_elim_version_inner_guard_wrap.wado:20
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<array_bounds_elim_version_inner_guard_wrap.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "array_bounds_elim_version_inner_guard_wrap.wado//$tmpl$72a42041a31d7898" { h0: n, h1: $v_1, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at array_bounds_elim_version_inner_guard_wrap.wado:20
 condition: probe(n, n - 1) == 0
 n: "), used: 113 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at array_bounds_elim_version_inner_guard_wrap.wado:20
 condition: probe(n, n - 1) == 0

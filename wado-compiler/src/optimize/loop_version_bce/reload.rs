@@ -80,9 +80,8 @@ pub(super) fn points(
     let pure_head = stmts[..guard_idx]
         .iter()
         .all(|&s| match &body.stmts[s].kind {
-            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-                is_pure_operand(body, *value)
-            }
+            StmtKind::Let { value, .. } => value.is_none_or(|v| is_pure_operand(body, v)),
+            StmtKind::LetDestructure { value, .. } => is_pure_operand(body, *value),
             _ => unreachable!("only `let`s precede a break guard"),
         });
     let other_exit = stmts
@@ -144,7 +143,9 @@ impl Walk<'_> {
                 local_index, value, ..
             } => {
                 let reach = self.scan(engine, NodeRef::Stmt(s))?;
-                if let Some(x) = self.len_read(engine, *value) {
+                if let Some(value) = *value
+                    && let Some(x) = self.len_read(engine, value)
+                {
                     self.reads.insert(*local_index, (x, self.reloads));
                 }
                 reach

@@ -81,42 +81,42 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 
 fn "value_copy_list_of_wasi_alias_shares_helper.wado/$cm_binding__wasi:demo/gfx@0.1.0#bind"(offsets) with Api {
     let $offsets_disc: i32;
-    let $offsets_inner0: i32;
-    let $offsets_inner1: i32;
+    let $offsets_inner_0: i32;
+    let $offsets_inner_1: i32;
     let $local_5: ref "core:prelude/list.wado//List<u32>";
     let $local_9: i32;
     let $local_10: i32;
     let $local_11: u32;
     let $licm_repr_32: ref Array<u32>;
     $offsets_disc = ref.is_null(offsets) == 0;
-    $offsets_inner0 = 0;
-    $offsets_inner1 = 0;
+    $offsets_inner_0 = 0;
+    $offsets_inner_1 = 0;
     if ref.is_null(offsets) == 0 {
-        $offsets_inner1 = local.tee $local_5(ref.as_non_null(offsets)).used;
-        if @unlikely(536870911 <u $offsets_inner1) {
+        $offsets_inner_1 = local.tee $local_5(ref.as_non_null(offsets)).used;
+        if @unlikely(536870911 <u $offsets_inner_1) {
             cold_path;
             "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
             unreachable;
         }
-        $offsets_inner0 = "mem/realloc"(0, 0, 4, $offsets_inner1 * 4);
+        $offsets_inner_0 = "mem/realloc"(0, 0, 4, $offsets_inner_1 * 4);
         $local_9 = 0;
         $licm_repr_32 = $local_5.repr;
         b2: block {
             l3: loop {
-                break_if b2 (builtin::i64_extend_i32_s($local_9) + 3_i64) >= builtin::i64_extend_i32_s($offsets_inner1);
-                $local_10 = $offsets_inner0 + ($local_9 * 4);
+                break_if b2 (builtin::i64_extend_i32_s($local_9) + 3_i64) >= builtin::i64_extend_i32_s($offsets_inner_1);
+                $local_10 = $offsets_inner_0 + ($local_9 * 4);
                 $local_11 = builtin::array_get_value<u32>($licm_repr_32, $local_9);
                 builtin::store_i32($local_10, $local_11);
                 $local_9 = $local_9 + 1;
-                $local_10 = $offsets_inner0 + ($local_9 * 4);
+                $local_10 = $offsets_inner_0 + ($local_9 * 4);
                 $local_11 = builtin::array_get_value<u32>($licm_repr_32, $local_9);
                 builtin::store_i32($local_10, $local_11);
                 $local_9 = $local_9 + 1;
-                $local_10 = $offsets_inner0 + ($local_9 * 4);
+                $local_10 = $offsets_inner_0 + ($local_9 * 4);
                 $local_11 = builtin::array_get_value<u32>($licm_repr_32, $local_9);
                 builtin::store_i32($local_10, $local_11);
                 $local_9 = $local_9 + 1;
-                $local_10 = $offsets_inner0 + ($local_9 * 4);
+                $local_10 = $offsets_inner_0 + ($local_9 * 4);
                 $local_11 = builtin::array_get_value<u32>($licm_repr_32, $local_9);
                 builtin::store_i32($local_10, $local_11);
                 $local_9 = $local_9 + 1;
@@ -125,8 +125,8 @@ fn "value_copy_list_of_wasi_alias_shares_helper.wado/$cm_binding__wasi:demo/gfx@
         };
         b4: block {
             l5: loop {
-                break_if b4 $local_9 >= $offsets_inner1;
-                $local_10 = $offsets_inner0 + ($local_9 * 4);
+                break_if b4 $local_9 >= $offsets_inner_1;
+                $local_10 = $offsets_inner_0 + ($local_9 * 4);
                 $local_11 = builtin::array_get_value<u32>($licm_repr_32, $local_9);
                 builtin::store_i32($local_10, $local_11);
                 $local_9 = $local_9 + 1;
@@ -135,10 +135,10 @@ fn "value_copy_list_of_wasi_alias_shares_helper.wado/$cm_binding__wasi:demo/gfx@
         };
     } else {
     }
-    "wasi/$wasi:demo/gfx@0.1.0#bind"($offsets_disc, $offsets_inner0, $offsets_inner1);
+    "wasi/$wasi:demo/gfx@0.1.0#bind"($offsets_disc, $offsets_inner_0, $offsets_inner_1);
     if $offsets_disc == 1 {
-        if $offsets_inner1 > 0 {
-            drop("mem/realloc"($offsets_inner0, $offsets_inner1 * 4, 4, 0));
+        if $offsets_inner_1 > 0 {
+            drop("mem/realloc"($offsets_inner_0, $offsets_inner_1 * 4, 4, 0));
         }
     }
 }

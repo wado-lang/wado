@@ -50,10 +50,10 @@ lib = "src/lib.wado"
 # gale is used in two roles: the Kiln generator that turns the bundled grammar
 # into a parser at build time, and the `gale-highlight` runtime lib (`run_cli`).
 [build-dependencies]
-"lib:gale" = { path = "../package-gale", package = "wado-lang:gale", version = "^0.0.19" }
+"lib:gale" = { path = "../package-gale" }
 
 [dependencies]
-"lib:gale" = { path = "../package-gale", package = "wado-lang:gale", version = "^0.0.19" }
+"lib:gale" = { path = "../package-gale" }
 
 [test]
 # `build/` holds Kiln intermediates; not source (see package-gale's note).
@@ -208,11 +208,22 @@ publisher's machine ([Publishing](#publishing)).
 
 ```toml
 [dependencies]
-# Built from ../package-gale; published as a dependency on wado-lang:gale ^0.0.19.
-"lib:gale" = { path = "../package-gale", package = "wado-lang:gale", version = "^0.0.19" }
-# Built from ../shared; published as a dependency on the git repository.
-"lib:shared" = { path = "../shared", git = "https://github.com/acme/shared.git", version = "^0.1.0" }
+# Built from ../shared; published as a dependency on wado-lang:shared ^1.2.0.
+"lib:shared" = { path = "../shared", package = "wado-lang:shared", version = "^1.2.0" }
+# Built from ../vendored; published as a dependency on the git repository.
+"lib:vendored" = { path = "../vendored", git = "https://github.com/acme/vendored.git", version = "^0.1.0" }
 ```
+
+A path source that names another member of the same workspace, published in the
+same run, needs no other source. The workspace publishes its members in one run
+at the version they share ([Workspaces](#workspaces)), so the published package
+depends on that member at exactly that version, and no version written in a
+manifest can fall behind it. A member that `publish = false` keeps out of the
+run is not published, so a path source naming it still needs another source.
+
+> Not yet implemented: a published package records no dependencies. Its
+> component carries the code of every library it uses, so neither the
+> replacement source nor the member's version is written anywhere.
 
 ### Git Sources
 
@@ -713,7 +724,8 @@ publishable when all of these hold:
 - `[package]` has a `license` or a `license-file`.
 - Every `[dependencies]` and `[build-dependencies]` entry has a source that
   another machine can reach. A path source needs a git or registry source beside
-  it, which replaces it in the published package.
+  it, which replaces it in the published package, unless it names a workspace
+  member the same run publishes.
 
 Each world a package declares is published as its own component
 ([Registries](#registries)). A `[world]` entry in table form keeps one world

@@ -144,7 +144,7 @@ fn binding_value(engine: &mut Engine, local: u32) -> Option<Operand> {
     let StmtKind::Let { value, .. } = &engine.body.stmts[stmt].kind else {
         return None;
     };
-    Some(*value)
+    *value
 }
 
 /// The operand `base.field_index` reads, when `base` names a fresh struct
@@ -240,7 +240,10 @@ fn unparked_wrappers(engine: &Engine, stmts: &[StmtId]) -> Vec<(usize, ExprId, E
         .iter()
         .enumerate()
         .filter_map(|(at, &stmt)| {
-            let StmtKind::Let { value, .. } = &engine.body.stmts[stmt].kind else {
+            let StmtKind::Let {
+                value: Some(value), ..
+            } = &engine.body.stmts[stmt].kind
+            else {
                 return None;
             };
             let canonical = value.as_expr()?;

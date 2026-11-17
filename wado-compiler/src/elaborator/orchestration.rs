@@ -64,9 +64,10 @@ use crate::elaborator::{
 };
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
+use crate::module_path::resolve_import_with_invocations;
 use crate::name::{
     NEVER_TYPE_NAME, RefKind, UNIT_TYPE_NAME, contract_holder_name, namespace_member_alias,
-    resolve_import_with_invocations, split_namespace_member,
+    split_namespace_member,
 };
 use crate::primitive::PrimitiveType;
 use crate::resolve::{Resolution, Resolutions, head_site};

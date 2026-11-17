@@ -393,7 +393,7 @@ impl<'a> PatternLowerer<'a> {
 
     /// Generate a unique temp local name
     fn next_temp_name(&mut self) -> String {
-        let name = format!("$pattern_temp_{}", self.temp_counter);
+        let name = minted_name("pattern_temp", self.temp_counter);
         self.temp_counter += 1;
         name
     }
@@ -681,7 +681,7 @@ impl<'a> PatternLowerer<'a> {
                 conditions.push(cond);
 
                 *sub = TirPattern::Binding {
-                    name: format!("$lit_{temp_index}"),
+                    name: minted_name("lit", temp_index),
                     local_index: temp_index,
                     type_id: elem_type,
                 };
@@ -694,7 +694,7 @@ impl<'a> PatternLowerer<'a> {
             } => {
                 let (start, end, inclusive) = (*start, *end, *inclusive);
                 let temp_index = self.alloc_local(elem_type);
-                let temp_name = format!("$range_{temp_index}");
+                let temp_name = minted_name("range", temp_index);
 
                 let cond = self.range_condition(
                     temp_index, &temp_name, elem_type, start, end, inclusive, span,
@@ -716,7 +716,7 @@ impl<'a> PatternLowerer<'a> {
             } if !bindings.iter().any(Self::pattern_is_refutable) => {
                 let case_index = *case_index;
                 let temp_index = self.alloc_local(elem_type);
-                let temp_name = format!("$variant_{temp_index}");
+                let temp_name = minted_name("variant", temp_index);
 
                 // If the element is a reference, deref to get the variant value
                 let variant_expr = {
@@ -774,7 +774,7 @@ impl<'a> PatternLowerer<'a> {
                 case_index,
             } => {
                 let temp_index = self.alloc_local(elem_type);
-                let temp_name = format!("$enum_{temp_index}");
+                let temp_name = minted_name("enum", temp_index);
 
                 // If the element is a reference, deref to get the enum value
                 let enum_expr = {
@@ -820,7 +820,7 @@ impl<'a> PatternLowerer<'a> {
                 let local_expr = TirExpr::new(
                     TirExprKind::Local {
                         index: temp_index,
-                        name: format!("$const_{temp_index}"),
+                        name: minted_name("const", temp_index),
                     },
                     elem_type,
                     span,
@@ -836,7 +836,7 @@ impl<'a> PatternLowerer<'a> {
                 );
                 conditions.push(cond);
                 *sub = TirPattern::Binding {
-                    name: format!("$const_{temp_index}"),
+                    name: minted_name("const", temp_index),
                     local_index: temp_index,
                     type_id: elem_type,
                 };
@@ -870,7 +870,7 @@ impl<'a> PatternLowerer<'a> {
         type_table: &TypeTable,
     ) -> TirExpr {
         let temp_index = self.alloc_local(type_id);
-        let temp_name = format!("$tested_{temp_index}");
+        let temp_name = minted_name("tested", temp_index);
         let temp_expr = TirExpr::new(
             TirExprKind::Local {
                 index: temp_index,
@@ -945,14 +945,14 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Literal(lit) => {
                 let temp_index = self.alloc_local(pattern_type);
-                let temp_name = format!("$lit_{temp_index}");
+                let temp_name = minted_name("lit", temp_index);
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name,
                         local_index: temp_index,
                         is_mut: false,
                         type_id: pattern_type,
-                        value,
+                        value: Some(value),
                         storage: LetStorage::Planned,
                     },
                     span,
@@ -976,14 +976,14 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::ConstantValue { expr: const_expr } => {
                 let temp_index = self.alloc_local(pattern_type);
-                let temp_name = format!("$const_{temp_index}");
+                let temp_name = minted_name("const", temp_index);
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name.clone(),
                         local_index: temp_index,
                         is_mut: false,
                         type_id: pattern_type,
-                        value,
+                        value: Some(value),
                         storage: LetStorage::Planned,
                     },
                     span,
@@ -1040,14 +1040,14 @@ impl<'a> PatternLowerer<'a> {
                 case_index,
             } => {
                 let temp_index = self.alloc_local(pattern_type);
-                let temp_name = format!("$enum_{temp_index}");
+                let temp_name = minted_name("enum", temp_index);
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name.clone(),
                         local_index: temp_index,
                         is_mut: false,
                         type_id: pattern_type,
-                        value,
+                        value: Some(value),
                         storage: LetStorage::Planned,
                     },
                     span,
@@ -1269,14 +1269,14 @@ impl<'a> PatternLowerer<'a> {
                 ..
             } => {
                 let temp_index = self.alloc_local(pattern_type);
-                let temp_name = format!("$range_{temp_index}");
+                let temp_name = minted_name("range", temp_index);
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name.clone(),
                         local_index: temp_index,
                         is_mut: false,
                         type_id: pattern_type,
-                        value,
+                        value: Some(value),
                         storage: LetStorage::Planned,
                     },
                     span,
@@ -1390,7 +1390,7 @@ impl<'a> PatternLowerer<'a> {
         let local_expr = TirExpr::new(
             TirExprKind::Local {
                 index: local_index,
-                name: format!("$lit_{local_index}"),
+                name: minted_name("lit", local_index),
             },
             local_type,
             span,
@@ -1544,9 +1544,10 @@ impl<'a> PatternLowerer<'a> {
                 type_id,
                 storage,
             } => {
-                // Lower expressions inside the Let value
                 let mut value = value;
-                self.lower_expr(&mut value, type_table);
+                if let Some(value) = &mut value {
+                    self.lower_expr(value, type_table);
+                }
                 out.push(TirStmt::new(
                     TirStmtKind::Let {
                         name,
@@ -1663,7 +1664,7 @@ impl<'a> PatternLowerer<'a> {
                 local_index,
                 is_mut: self.locals[local_index as usize].is_mut,
                 type_id: pattern_type,
-                value,
+                value: Some(value),
                 storage: LetStorage::Planned,
             },
             span,
@@ -1735,7 +1736,7 @@ impl<'a> PatternLowerer<'a> {
         let type_id = hoisted.type_id;
         let scrutinee_span = hoisted.span;
         let temp = self.alloc_local(type_id);
-        let name = format!("$match_{temp}");
+        let name = minted_name("match", temp);
         self.owned_temps.insert(temp);
         *scrutinee = TirExpr::new(
             TirExprKind::Local {
@@ -1751,7 +1752,7 @@ impl<'a> PatternLowerer<'a> {
                 local_index: temp,
                 is_mut: false,
                 type_id,
-                value: hoisted,
+                value: Some(hoisted),
                 storage: LetStorage::Planned,
             },
             span,
@@ -1782,7 +1783,7 @@ impl<'a> PatternLowerer<'a> {
                 local_index,
                 is_mut: false,
                 type_id,
-                value,
+                value: Some(value),
                 storage: LetStorage::Planned,
             },
             span,
@@ -2072,7 +2073,7 @@ impl<'a> PatternLowerer<'a> {
                             span,
                         );
                         arm.pattern = TirPattern::Binding {
-                            name: format!("$lit_{temp_index}"),
+                            name: minted_name("lit", temp_index),
                             local_index: temp_index,
                             type_id: scrutinee_type_id,
                         };
@@ -2088,7 +2089,7 @@ impl<'a> PatternLowerer<'a> {
                         let local_expr = TirExpr::new(
                             TirExprKind::Local {
                                 index: temp_index,
-                                name: format!("$const_{temp_index}"),
+                                name: minted_name("const", temp_index),
                             },
                             scrutinee_type_id,
                             span,
@@ -2103,7 +2104,7 @@ impl<'a> PatternLowerer<'a> {
                             span,
                         );
                         arm.pattern = TirPattern::Binding {
-                            name: format!("$const_{temp_index}"),
+                            name: minted_name("const", temp_index),
                             local_index: temp_index,
                             type_id: scrutinee_type_id,
                         };

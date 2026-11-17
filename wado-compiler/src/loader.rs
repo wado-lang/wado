@@ -20,15 +20,16 @@ use crate::component_model::SourceInterfaceBatch;
 use crate::kiln::InvocationIndex;
 use crate::lexer::{LexError, is_valid_ident, lex};
 use crate::logger::Logger;
+use crate::module_path::{
+    canonicalize_entry_point, decl_file_of, entry_dir_of, is_package_namespace,
+    resolve_import_with_invocations, resolve_local_identity, resolve_module_path,
+    split_exported_file,
+};
 use crate::module_source::{
     CmNamespace, ExportRefusal, ModuleSource, ModuleSourceInterner, WasmAssetKind,
     is_bundled_specifier,
 };
-use crate::name::{
-    canonicalize_entry_point, decl_file_of, entry_dir_of, is_package_namespace,
-    resolve_import_with_invocations, resolve_local_identity, resolve_module_path,
-    split_exported_file, wado_identifier,
-};
+use crate::name::wado_identifier;
 use crate::parallel::lock;
 use crate::parser::Parser;
 use crate::path::{is_cwd_relative, normalize};

@@ -5,7 +5,10 @@
 
 use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::global_name;
+use crate::name::{
+    global_name, indexed_local_name, minted_name, minted_what, positional_param_name,
+    serial_suffixed,
+};
 use crate::nir::{CallParamSource, FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
 use crate::optimize::pass_dump;
 use crate::primitive::PrimitiveType;
@@ -198,12 +201,12 @@ fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[NirParam]) -> Inde
 /// is not enough: `e` at index 2 gives `e_2`, which another local may spell.
 fn free_name(name: &str, idx: u32, needs_suffix: bool, used: &mut IndexSet<String>) -> String {
     let mut out = if needs_suffix {
-        format!("{name}_{idx}")
+        serial_suffixed(name, idx)
     } else {
         name.to_string()
     };
     while !used.insert(out.clone()) {
-        out = format!("{out}_{idx}");
+        out = serial_suffixed(&out, idx);
     }
     out
 }
@@ -420,7 +423,7 @@ fn register_call_wrapper(
                 result_ty: functor_wir_type.clone(),
             },
             CallWrapperArg::UserParam(idx) => WirInstr::LocalGet {
-                name: format!("$p{idx}"),
+                name: positional_param_name(idx),
                 result_ty: user_params[*idx].clone(),
             },
         })
@@ -440,7 +443,7 @@ fn register_call_wrapper(
 
     let mut param_names = vec![env_local];
     for i in 0..user_param_count {
-        param_names.push(format!("$p{i}"));
+        param_names.push(positional_param_name(i));
     }
 
     let func = WirFunction {
@@ -1006,7 +1009,7 @@ impl FunctionTranslator<'_, '_> {
         self.resolved_local_names
             .get(&index)
             .cloned()
-            .unwrap_or_else(|| format!("$local_{index}"))
+            .unwrap_or_else(|| indexed_local_name(index))
     }
 
     /// Build a `LocalGet` with the WIR type resolved from a TIR local index.
@@ -1124,7 +1127,7 @@ impl FunctionTranslator<'_, '_> {
     ) -> (Vec<WirInstr>, Vec<(String, WirType)>) {
         let names: Vec<String> = fields
             .iter()
-            .map(|(field_name, _)| self.fresh_local(&format!("$mv_{field_name}")))
+            .map(|(field_name, _)| self.fresh_local(&minted_what("mv", field_name)))
             .collect();
         self.bind_multi_value_results(call, fields, &names)
     }
@@ -1253,7 +1256,7 @@ impl FunctionTranslator<'_, '_> {
             }
         }
 
-        let (prelude, read_whole) = self.spill_operand(op, "$mv_arg");
+        let (prelude, read_whole) = self.spill_operand(op, "mv_arg");
         let reads = self.field_reads(op, &read_whole, fields);
         (prelude, reads)
     }
@@ -1317,7 +1320,7 @@ impl FunctionTranslator<'_, '_> {
         let mut prelude = Vec::new();
         let mut by_name: IndexMap<String, WirInstr> = IndexMap::default();
         for field in written {
-            let (p, read) = self.spill_operand(field.value, "$mv_field");
+            let (p, read) = self.spill_operand(field.value, "mv_field");
             prelude.extend(p);
             by_name.insert(field.name.clone(), read);
         }
@@ -1334,12 +1337,12 @@ impl FunctionTranslator<'_, '_> {
 
     /// Evaluate `op` into a fresh local, and answer that with the read of it.
     /// Pins the evaluation where it stands, ahead of whatever follows.
-    fn spill_operand(&mut self, op: Operand, prefix: &str) -> (Vec<WirInstr>, WirInstr) {
+    fn spill_operand(&mut self, op: Operand, what: &str) -> (Vec<WirInstr>, WirInstr) {
         let ty = self
             .ctx
             .type_id_to_wir_type(self.type_table, self.operand_type_id(op));
         let value = self.translate_operand(op);
-        self.spill(value, ty, prefix)
+        self.spill(value, ty, what)
     }
 
     /// Evaluate `value` into a fresh local of type `ty`, and answer that with
@@ -1348,9 +1351,9 @@ impl FunctionTranslator<'_, '_> {
         &mut self,
         value: WirInstr,
         ty: WirType,
-        prefix: &str,
+        what: &str,
     ) -> (Vec<WirInstr>, WirInstr) {
-        let name = self.fresh_local(prefix);
+        let name = self.fresh_local(what);
         let prelude = declare_and_set_local(name.clone(), ty.clone(), value).to_vec();
         let read = WirInstr::LocalGet {
             name,
@@ -1520,9 +1523,9 @@ impl FunctionTranslator<'_, '_> {
 
     /// An [`Self::unshadowed`] name no other synthetic local in this function
     /// holds either.
-    pub(super) fn fresh_local(&mut self, base: &str) -> String {
+    pub(super) fn fresh_local(&mut self, what: &str) -> String {
         self.local_counter += 1;
-        self.unshadowed(format!("{base}_{}", self.local_counter))
+        self.unshadowed(minted_name(what, self.local_counter))
     }
 
     /// Return the N results by binding the aggregate and reading its fields —
@@ -1557,7 +1560,7 @@ impl FunctionTranslator<'_, '_> {
             );
         };
         let type_id = type_id.clone();
-        let name = self.fresh_local("$mv_return");
+        let name = self.fresh_local("mv_return");
         let fields: Vec<WirInstr> = field_names
             .iter()
             .zip(&result_types)
@@ -1900,8 +1903,8 @@ impl FunctionTranslator<'_, '_> {
 
         // WIR-unique prefix: codegen dedups `DeclareLocal` by name, so this must
         // not clash with the lower path's `$deref_ref_{nir_idx}` temps.
-        let ref_local = self.fresh_local("$expr_deref_ref");
-        let val_local = self.fresh_local("$expr_deref_val");
+        let ref_local = self.fresh_local("expr_deref_ref");
+        let val_local = self.fresh_local("expr_deref_val");
         // An affine referent's slot is nullable (WEP: Affine Types).
         let ref_ty = wir_type.clone();
         let mut instrs = Vec::with_capacity(4 + fields.len());
@@ -2245,7 +2248,9 @@ impl FunctionTranslator<'_, '_> {
         let arena = self.body;
         match &arena.stmts[stmt_id].kind {
             StmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value: Some(value),
+                ..
             } => {
                 // Phase 5: when the initializer is a direct call to a
                 // multi-value-return function, bind the result's N tuple
@@ -2281,6 +2286,7 @@ impl FunctionTranslator<'_, '_> {
                     })
                 }
             }
+            StmtKind::Let { value: None, .. } => None,
             StmtKind::Expr(expr) => {
                 let expr = *expr;
                 if let Some(instrs) = self.try_emit_multi_value_discard(expr) {
@@ -2600,7 +2606,7 @@ impl FunctionTranslator<'_, '_> {
                     prelude.push(self.translate_operand(op));
                 }
             } else if spilled {
-                let (p, read) = self.spill_operand(op, "$arg_spill");
+                let (p, read) = self.spill_operand(op, "arg_spill");
                 prelude.extend(p);
                 call_args.push(read);
             } else {
@@ -3307,13 +3313,13 @@ impl FunctionTranslator<'_, '_> {
                             };
                         }
                         let ty = self.wir_type(type_id);
-                        let name = self.fresh_local("$cm_arg");
+                        let name = self.fresh_local("cm_arg");
                         before.extend(declare_and_set_local(name.clone(), ty.clone(), arg));
                         let read = local_get(&name, &ty);
                         if !self.is_handle_box(type_id) {
                             return read;
                         }
-                        let handle = self.fresh_local("$cm_handle");
+                        let handle = self.fresh_local("cm_handle");
                         before.extend(declare_and_set_local(
                             handle.clone(),
                             WirType::I32,

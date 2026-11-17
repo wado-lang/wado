@@ -256,7 +256,7 @@ global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/strin
 fn "allocator_freelist_split.wado/run"() with Stdout {
     let big: i32;
     let small1: i32;
-    let $v2_5: i32;
+    let $v_10: i32;
     let $cm_pair_7: i64;
     let new_repr: ref Array<u8>;
     if @unlikely(local.tee big("mem/realloc"(0, 0, 8, 1024)) <= 0) {
@@ -271,17 +271,17 @@ fn "allocator_freelist_split.wado/run"() with Stdout {
         unreachable;
     }
     small1 = "mem/realloc"(0, 0, 8, 64);
-    $v2_5 = big + 80;
-    if @unlikely(small1 != $v2_5) {
+    $v_10 = big + 80;
+    if @unlikely(small1 != $v_10) {
         cold_path;
-        "allocator_freelist_split.wado/run$cold1"(big, small1, $v2_5);
+        "allocator_freelist_split.wado/run$cold1"(big, small1, $v_10);
         unreachable;
     }
     small1 = "mem/realloc"(0, 0, 8, 128);
-    $v2_5 = big + 160;
-    if @unlikely(small1 != $v2_5) {
+    $v_10 = big + 160;
+    if @unlikely(small1 != $v_10) {
         cold_path;
-        "allocator_freelist_split.wado/run$cold0"(big, small1, $v2_5);
+        "allocator_freelist_split.wado/run$cold0"(big, small1, $v_10);
         unreachable;
     }
     big = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
@@ -401,9 +401,9 @@ fn "allocator_freelist_split.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "allocator_freelist_split.wado/run$cold0"(big, small3, $v2) with Stdout {
+fn "allocator_freelist_split.wado/run$cold0"(big, small3, $v_16) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_split.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>"(struct.new "allocator_freelist_split.wado//$tmpl$afdf3efc359fee73" { h0: "core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_split.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>"(struct.new "allocator_freelist_split.wado//$tmpl$8db8629cb9c7db93" { h0: big + 160, h1: small3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected from remainder: expected="), used: 34 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected from remainder: expected="), used: 34 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", small3="), used: 9 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", small3="), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), h1: small3, h2: big, h3: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_split.wado:22: "), used: 61 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_split.wado:22: "), used: 61 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_split.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>"(struct.new "allocator_freelist_split.wado//$tmpl$afdf3efc359fee73" { h0: "core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_split.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>"(struct.new "allocator_freelist_split.wado//$tmpl$8db8629cb9c7db93" { h0: big + 160, h1: small3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected from remainder: expected="), used: 34 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected from remainder: expected="), used: 34 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", small3="), used: 9 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", small3="), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), h1: small3, h2: big, h3: $v_16, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_split.wado:22: "), used: 61 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_split.wado:22: "), used: 61 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: small3 == big + 160
 small3: "), used: 40 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: small3 == big + 160
@@ -415,9 +415,9 @@ big + 160: "), used: 12 }, s4: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "allocator_freelist_split.wado/run$cold1"(big, small2, $v2) with Stdout {
+fn "allocator_freelist_split.wado/run$cold1"(big, small2, $v_10) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_split.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>"(struct.new "allocator_freelist_split.wado//$tmpl$afdf3efc359fee73" { h0: "core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_split.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>"(struct.new "allocator_freelist_split.wado//$tmpl$8db8629cb9c7db93" { h0: big + 80, h1: small2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected split remainder: expected="), used: 35 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected split remainder: expected="), used: 35 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", small2="), used: 9 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", small2="), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), h1: small2, h2: big, h3: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_split.wado:18: "), used: 61 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_split.wado:18: "), used: 61 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_split.wado/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>"(struct.new "allocator_freelist_split.wado//$tmpl$afdf3efc359fee73" { h0: "core:prelude/string.wado/core:prelude/string.wado/String::format<allocator_freelist_split.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>"(struct.new "allocator_freelist_split.wado//$tmpl$8db8629cb9c7db93" { h0: big + 80, h1: small2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected split remainder: expected="), used: 35 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected split remainder: expected="), used: 35 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", small2="), used: 9 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", small2="), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), h1: small2, h2: big, h3: $v_10, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_split.wado:18: "), used: 61 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at allocator_freelist_split.wado:18: "), used: 61 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: small2 == big + 80
 small2: "), used: 39 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: small2 == big + 80

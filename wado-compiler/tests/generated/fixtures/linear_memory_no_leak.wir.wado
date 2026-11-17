@@ -1046,36 +1046,36 @@ fn "linear_memory_no_leak.wado/$cm_export__run"() {
 
 fn "linear_memory_no_leak.wado/growth$$Closure_0$dae[step]"() {
     let $discarded_0_4: ref null "core:linear//LinearArray<u8>";
-    let $v3_10: i32;
-    let $v3_31: i32;
+    let $v_3_10: i32;
+    let $v_3_31: i32;
     let $sroa_$iter_0_start_43: i32;
-    $v3_10 = 2147483647 / 1;
-    if @unlikely(16384 > $v3_10) {
+    $v_3_10 = 2147483647 / 1;
+    if @unlikely(16384 > $v_3_10) {
         cold_path;
-        "core:linear/core:linear/LinearArray<u8>::filled$contract_report0"(16384, $v3_10, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:linear:173"), used: 15 });
+        "core:linear/core:linear/LinearArray<u8>::filled$contract_report0"(16384, $v_3_10, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:linear:173"), used: 15 });
         unreachable;
     }
     let $mv_block_1: ref null "core:linear//Block";
-    multivalue_bind [$mv_block_1, $v3_10] = "core:linear/core:linear/LinearArray<u8>::filled$unchecked$spec0$dae[len,value]"();
-    $discarded_0_4 = struct.new "core:linear//LinearArray<u8>" { block: $mv_block_1, len: $v3_10 };
+    multivalue_bind [$mv_block_1, $v_3_10] = "core:linear/core:linear/LinearArray<u8>::filled$unchecked$spec0$dae[len,value]"();
+    $discarded_0_4 = struct.new "core:linear//LinearArray<u8>" { block: $mv_block_1, len: $v_3_10 };
     if ref.is_null($mv_block_1) == 0 {
         drop("mem/realloc"($mv_block_1.ptr, $mv_block_1.bytes, 16, 0));
     }
     $discarded_0_4.block = ref.null none;
-    $v3_10 = builtin::memory_size();
+    $v_3_10 = builtin::memory_size();
     $sroa_$iter_0_start_43 = 0;
     b10: block {
         l11: loop {
             break_if b10 $sroa_$iter_0_start_43 >= 40;
             $sroa_$iter_0_start_43 = $sroa_$iter_0_start_43 + 1;
-            $v3_31 = 2147483647 / 1;
-            if @unlikely(16384 > $v3_31) {
+            $v_3_31 = 2147483647 / 1;
+            if @unlikely(16384 > $v_3_31) {
                 cold_path;
-                "core:linear/core:linear/LinearArray<u8>::filled$contract_report0"(16384, $v3_31, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:linear:173"), used: 15 });
+                "core:linear/core:linear/LinearArray<u8>::filled$contract_report0"(16384, $v_3_31, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:linear:173"), used: 15 });
                 unreachable;
             }
-            multivalue_bind [$mv_block_1, $v3_31] = "core:linear/core:linear/LinearArray<u8>::filled$unchecked$spec0$dae[len,value]"();
-            $discarded_0_4 = struct.new "core:linear//LinearArray<u8>" { block: $mv_block_1, len: $v3_31 };
+            multivalue_bind [$mv_block_1, $v_3_31] = "core:linear/core:linear/LinearArray<u8>::filled$unchecked$spec0$dae[len,value]"();
+            $discarded_0_4 = struct.new "core:linear//LinearArray<u8>" { block: $mv_block_1, len: $v_3_31 };
             if ref.is_null($mv_block_1) == 0 {
                 drop("mem/realloc"($mv_block_1.ptr, $mv_block_1.bytes, 16, 0));
             }
@@ -1083,11 +1083,11 @@ fn "linear_memory_no_leak.wado/growth$$Closure_0$dae[step]"() {
             continue l11;
         };
     };
-    return builtin::memory_size() - $v3_10;
+    return builtin::memory_size() - $v_3_10;
 }
 
 fn "linear_memory_no_leak.wado/growth$$Closure_1"($mv$step$$capture_0, $mv$step$$capture_1) {
-    let $v0_5: ref "core:prelude/list.wado//List<u8>";
+    let $v_0_5: ref "core:prelude/list.wado//List<u8>";
     let self_8: ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>, core:zlib/ZlibError]";
     let i_20: i32;
     let i_44: i32;
@@ -1096,7 +1096,7 @@ fn "linear_memory_no_leak.wado/growth$$Closure_1"($mv$step$$capture_0, $mv$step$
     let $licm_used_56: i32;
     self_8 = "core:zlib/inflate_zlib$sroa[return]$dae[max_output]"($mv$step$$capture_0);
     let $match_scrut_0: i32;
-    $v0_5 = (if @likely(local.tee $match_scrut_0(self_8.0) == 0) -> ref "core:prelude/list.wado//List<u8>" {
+    $v_0_5 = (if @likely(local.tee $match_scrut_0(self_8.0) == 0) -> ref "core:prelude/list.wado//List<u8>" {
         ref.as_non_null(self_8.1);
     } else if $match_scrut_0 == 1 -> ref "core:prelude/list.wado//List<u8>" {
         $match_scrut_0 = self_8.2;
@@ -1106,11 +1106,11 @@ fn "linear_memory_no_leak.wado/growth$$Closure_1"($mv$step$$capture_0, $mv$step$
         unreachable;
     });
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
-        if local.tee $match_scrut_0($v0_5.used) != $mv$step$$capture_1.used {
+        if local.tee $match_scrut_0($v_0_5.used) != $mv$step$$capture_1.used {
             break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
         i_20 = 0;
-        $licm_repr_51 = $v0_5.repr;
+        $licm_repr_51 = $v_0_5.repr;
         $licm_repr_53 = $mv$step$$capture_1.repr;
         b18: block {
             l19: loop {
@@ -1148,7 +1148,7 @@ fn "linear_memory_no_leak.wado/growth$$Closure_1"($mv$step$$capture_0, $mv$step$
     } == 0) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<linear_memory_no_leak.wado/$tmpl$a4b3615205a04180,[core:prelude/bytes.wado/ByteList,core:prelude/bytes.wado/ByteList]>"(struct.new "linear_memory_no_leak.wado//$tmpl$a4b3615205a04180" { h0: $v0_5, h1: $mv$step$$capture_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run::{closure} at linear_memory_no_leak.wado:30
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<linear_memory_no_leak.wado/$tmpl$a4b3615205a04180,[core:prelude/bytes.wado/ByteList,core:prelude/bytes.wado/ByteList]>"(struct.new "linear_memory_no_leak.wado//$tmpl$a4b3615205a04180" { h0: $v_0_5, h1: $mv$step$$capture_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run::{closure} at linear_memory_no_leak.wado:30
 condition: inflate_zlib(&compressed).unwrap() == data
 inflate_zlib(&compressed).unwrap(): "), used: 158 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run::{closure} at linear_memory_no_leak.wado:30
 condition: inflate_zlib(&compressed).unwrap() == data
@@ -1167,7 +1167,7 @@ data: "), used: 7 }, s2: struct.new "core:prelude/string.wado//String" { repr: a
             i_20 = i_20 + 1;
             self_8 = "core:zlib/inflate_zlib$sroa[return]$dae[max_output]"($mv$step$$capture_0);
             let $match_scrut_1: i32;
-            $v0_5 = (if @likely(local.tee $match_scrut_1(self_8.0) == 0) -> ref "core:prelude/list.wado//List<u8>" {
+            $v_0_5 = (if @likely(local.tee $match_scrut_1(self_8.0) == 0) -> ref "core:prelude/list.wado//List<u8>" {
                 ref.as_non_null(self_8.1);
             } else if $match_scrut_1 == 1 -> ref "core:prelude/list.wado//List<u8>" {
                 $match_scrut_0 = self_8.2;
@@ -1177,11 +1177,11 @@ data: "), used: 7 }, s2: struct.new "core:prelude/string.wado//String" { repr: a
                 unreachable;
             });
             if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__11: block -> bool {
-                if local.tee $match_scrut_1($v0_5.used) != $licm_used_56 {
+                if local.tee $match_scrut_1($v_0_5.used) != $licm_used_56 {
                     break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
                 i_44 = 0;
-                $licm_repr_53 = $v0_5.repr;
+                $licm_repr_53 = $v_0_5.repr;
                 b33: block {
                     l34: loop {
                         break_if b33 (builtin::i64_extend_i32_s(i_44) + 3_i64) >= builtin::i64_extend_i32_s($match_scrut_1);
@@ -1217,7 +1217,7 @@ data: "), used: 7 }, s2: struct.new "core:prelude/string.wado//String" { repr: a
                 break $inline_core_prelude_array_wado_seq_eq_u8__11: 1;
             } == 0) {
                 cold_path;
-                "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<linear_memory_no_leak.wado/$tmpl$a4b3615205a04180,[core:prelude/bytes.wado/ByteList,core:prelude/bytes.wado/ByteList]>"(struct.new "linear_memory_no_leak.wado//$tmpl$a4b3615205a04180" { h0: $v0_5, h1: $mv$step$$capture_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run::{closure} at linear_memory_no_leak.wado:30
+                "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<linear_memory_no_leak.wado/$tmpl$a4b3615205a04180,[core:prelude/bytes.wado/ByteList,core:prelude/bytes.wado/ByteList]>"(struct.new "linear_memory_no_leak.wado//$tmpl$a4b3615205a04180" { h0: $v_0_5, h1: $mv$step$$capture_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run::{closure} at linear_memory_no_leak.wado:30
 condition: inflate_zlib(&compressed).unwrap() == data
 inflate_zlib(&compressed).unwrap(): "), used: 158 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run::{closure} at linear_memory_no_leak.wado:30
 condition: inflate_zlib(&compressed).unwrap() == data
@@ -1865,7 +1865,7 @@ fn "core:zlib/adler32_linear$unchecked$dae[adler,offset]"(buf, len) {
     let pairs: v128;
     let v_40: v128;
     let v_58: v128;
-    let $sroa_$iter_9_start_107: i32;
+    let $sroa_$iter_16_start_107: i32;
     let $cse_110: i32;
     let $licm_ptr_111: i32;
     s1 = 1_i64;
@@ -1882,11 +1882,11 @@ fn "core:zlib/adler32_linear$unchecked$dae[adler,offset]"(buf, len) {
             sums = zero;
             prefix_sums = zero;
             weighted = zero;
-            $sroa_$iter_9_start_107 = 0;
+            $sroa_$iter_16_start_107 = 0;
             b192: block {
                 l193: loop {
-                    break_if b192 $sroa_$iter_9_start_107 >= $cse_110;
-                    $sroa_$iter_9_start_107 = $sroa_$iter_9_start_107 + 1;
+                    break_if b192 $sroa_$iter_16_start_107 >= $cse_110;
+                    $sroa_$iter_16_start_107 = $sroa_$iter_16_start_107 + 1;
                     bytes = builtin::load_v128($licm_ptr_111 + pos);
                     prefix_sums = prefix_sums + sums;
                     pairs = i16x8.extadd_pairwise_i8x16_u(bytes);
@@ -2547,18 +2547,18 @@ fn "core:zlib/inflate_fast$sroa[return]"(state, input, output) {
 fn "core:zlib/inflate_raw_ex$sroa[return]$dae[input_offset]"(input, input_length, output) {
     let state: ref null "core:zlib//InflateState";
     let $drop_spill_16: ref "tuple//[i32, i32, core:zlib/ZlibError]";
-    let $v3: i32;
+    let $v_3: i32;
     let $licm_ptr_77: i32;
     let $hfs_next_79: i32;
     let $hfs_codes_82: ref null "core:linear//LinearArray<i32>";
     let $hfs_hold_83: u64;
-    state = struct.new "core:zlib//InflateState" { next: 0, end: input_length, hold: 0_i64, bits: 0, codes: let $mv_block_1: ref null "core:linear//Block"; multivalue_bind [$mv_block_1, $v3] = "core:linear/core:linear/LinearArray<i32>::filled$unchecked$dae[len]"($v3 = 2147483647 / 4; if @unlikely(1444 > $v3) {
+    state = struct.new "core:zlib//InflateState" { next: 0, end: input_length, hold: 0_i64, bits: 0, codes: let $mv_block_1: ref null "core:linear//Block"; multivalue_bind [$mv_block_1, $v_3] = "core:linear/core:linear/LinearArray<i32>::filled$unchecked$dae[len]"($v_3 = 2147483647 / 4; if @unlikely(1444 > $v_3) {
         cold_path;
-        "core:linear/core:linear/LinearArray<i32>::filled$contract_report0"(1444, $v3, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:791"), used: 13 });
+        "core:linear/core:linear/LinearArray<i32>::filled$contract_report0"(1444, $v_3, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:791"), used: 13 });
         unreachable;
-    }; 0); struct.new "core:linear//LinearArray<i32>" { block: $mv_block_1, len: $v3 }, lencode_off: 0, distcode_off: 0, lenbits: 0, distbits: 0, lens: struct.new "core:prelude/list.wado//List<u16>" { repr: builtin::array_new<u16>(320), used: 320 }, work: struct.new "core:prelude/list.wado//List<u16>" { repr: builtin::array_new<u16>(288), used: 288 } };
+    }; 0); struct.new "core:linear//LinearArray<i32>" { block: $mv_block_1, len: $v_3 }, lencode_off: 0, distcode_off: 0, lenbits: 0, distbits: 0, lens: struct.new "core:prelude/list.wado//List<u16>" { repr: builtin::array_new<u16>(320), used: 320 }, work: struct.new "core:prelude/list.wado//List<u16>" { repr: builtin::array_new<u16>(288), used: 288 } };
     output.start = output.len;
-    $v3 = 0;
+    $v_3 = 0;
     drop(state.codes);
     b296: block {
         l297: loop {
@@ -2566,7 +2566,7 @@ fn "core:zlib/inflate_raw_ex$sroa[return]$dae[input_offset]"(input, input_length
             $hfs_next_79 = state.next;
             b298: block {
                 l299: loop {
-                    break_if b298 $v3 >= 3;
+                    break_if b298 $v_3 >= 3;
                     if @unlikely($hfs_next_79 == input_length) {
                         cold_path;
                         cold_path;
@@ -2581,26 +2581,26 @@ fn "core:zlib/inflate_raw_ex$sroa[return]$dae[input_offset]"(input, input_length
                         return struct.new "tuple//[i32, i32, core:zlib/ZlibError]" { 0: 1, 1: 0, 2: 12 };
                     } else {
                     }
-                    $v3 = state.bits;
-                    $hfs_hold_83 = state.hold | (builtin::i64_extend_i32_u($hfs_next_79 = state.next; builtin::load_u8($licm_ptr_77 + ($hfs_next_79 * 1))) << builtin::i64_extend_i32_s($v3));
-                    $v3 = $v3 + 8;
+                    $v_3 = state.bits;
+                    $hfs_hold_83 = state.hold | (builtin::i64_extend_i32_u($hfs_next_79 = state.next; builtin::load_u8($licm_ptr_77 + ($hfs_next_79 * 1))) << builtin::i64_extend_i32_s($v_3));
+                    $v_3 = $v_3 + 8;
                     $hfs_next_79 = $hfs_next_79 + 1;
                     state.next = $hfs_next_79;
-                    state.bits = $v3;
+                    state.bits = $v_3;
                     state.hold = $hfs_hold_83;
                     continue l299;
                 };
             };
-            $licm_ptr_77 = $licm_ptr_77 = builtin::i32_wrap_i64(local.tee $hfs_hold_83(state.hold) & 1_i64); $hfs_hold_83 = $hfs_hold_83 >>u 1_i64; $v3 = state.bits - 1; $licm_ptr_77 != 0;
+            $licm_ptr_77 = $licm_ptr_77 = builtin::i32_wrap_i64(local.tee $hfs_hold_83(state.hold) & 1_i64); $hfs_hold_83 = $hfs_hold_83 >>u 1_i64; $v_3 = state.bits - 1; $licm_ptr_77 != 0;
             $hfs_next_79 = builtin::i32_wrap_i64($hfs_hold_83 & 3_i64);
             $hfs_hold_83 = $hfs_hold_83 >>u 2_i64;
-            $v3 = $v3 - 2;
+            $v_3 = $v_3 - 2;
             if $hfs_next_79 == 0 {
-                state.bits = $v3;
+                state.bits = $v_3;
                 state.hold = $hfs_hold_83;
-                multivalue_bind [$v3, $hfs_next_79] = "core:zlib/inflate_stored$sroa[return]"(state, input, output);
-                if @likely($v3 == 0) {
-                } else if @likely($v3 == 1) {
+                multivalue_bind [$v_3, $hfs_next_79] = "core:zlib/inflate_stored$sroa[return]"(state, input, output);
+                if @likely($v_3 == 0) {
+                } else if @likely($v_3 == 1) {
                     cold_path;
                     cold_path;
                     $drop_spill_16 = struct.new "tuple//[i32, i32, core:zlib/ZlibError]" { 0: 1, 1: 0, 2: $hfs_next_79 };
@@ -2625,11 +2625,11 @@ fn "core:zlib/inflate_raw_ex$sroa[return]$dae[input_offset]"(input, input_length
                     "core:zlib/core:zlib/InflateState::load_fixed_tables"(state);
                 } else {
                     if @likely($hfs_next_79 == 2) {
-                        state.bits = $v3;
+                        state.bits = $v_3;
                         state.hold = $hfs_hold_83;
-                        multivalue_bind [$v3, $hfs_next_79] = "core:zlib/read_dynamic_tables$sroa[return]"(state, input);
-                        if @likely($v3 == 0) {
-                        } else if @likely($v3 == 1) {
+                        multivalue_bind [$v_3, $hfs_next_79] = "core:zlib/read_dynamic_tables$sroa[return]"(state, input);
+                        if @likely($v_3 == 0) {
+                        } else if @likely($v_3 == 1) {
                             cold_path;
                             cold_path;
                             $drop_spill_16 = struct.new "tuple//[i32, i32, core:zlib/ZlibError]" { 0: 1, 1: 0, 2: $hfs_next_79 };
@@ -2651,7 +2651,7 @@ fn "core:zlib/inflate_raw_ex$sroa[return]$dae[input_offset]"(input, input_length
                         }
                     } else {
                         cold_path;
-                        state.bits = $v3;
+                        state.bits = $v_3;
                         state.hold = $hfs_hold_83;
                         if ref.is_null(state) == 0 {
                             if ref.is_null(local.tee $hfs_codes_82(state.codes)) == 0 {
@@ -2667,14 +2667,14 @@ fn "core:zlib/inflate_raw_ex$sroa[return]$dae[input_offset]"(input, input_length
                         state.codes = $hfs_codes_82;
                         return struct.new "tuple//[i32, i32, core:zlib/ZlibError]" { 0: 1, 1: 0, 2: 12 };
                     }
-                    $v3 = state.bits;
+                    $v_3 = state.bits;
                     $hfs_hold_83 = state.hold;
                 }
-                state.bits = $v3;
+                state.bits = $v_3;
                 state.hold = $hfs_hold_83;
-                multivalue_bind [$v3, $hfs_next_79] = "core:zlib/inflate_codes$sroa[return]"(state, input, output);
-                if @likely($v3 == 0) {
-                } else if @likely($v3 == 1) {
+                multivalue_bind [$v_3, $hfs_next_79] = "core:zlib/inflate_codes$sroa[return]"(state, input, output);
+                if @likely($v_3 == 0) {
+                } else if @likely($v_3 == 1) {
                     cold_path;
                     cold_path;
                     $drop_spill_16 = struct.new "tuple//[i32, i32, core:zlib/ZlibError]" { 0: 1, 1: 0, 2: $hfs_next_79 };
@@ -2696,15 +2696,15 @@ fn "core:zlib/inflate_raw_ex$sroa[return]$dae[input_offset]"(input, input_length
                 }
             }
             break_if b296 $licm_ptr_77;
-            $v3 = state.bits;
+            $v_3 = state.bits;
             drop(state.codes);
             drop(state.hold);
             continue l297;
         };
     };
-    $v3 = local.tee input_length(state.bits) & 7;
-    state.hold = state.hold >>u builtin::i64_extend_i32_s($v3);
-    state.bits = input_length - $v3;
+    $v_3 = local.tee input_length(state.bits) & 7;
+    state.hold = state.hold >>u builtin::i64_extend_i32_s($v_3);
+    state.bits = input_length - $v_3;
     $drop_spill_16 = struct.new "tuple//[i32, i32, core:zlib/ZlibError]" { 0: 0, 1: state.next, 2: 0 };
     if ref.is_null(state) == 0 {
         if ref.is_null(local.tee $hfs_codes_82(state.codes)) == 0 {
@@ -2720,7 +2720,7 @@ fn "core:zlib/inflate_raw_ex$sroa[return]$dae[input_offset]"(input, input_length
 
 fn "core:zlib/inflate_stored$sroa[return]"(state, input, output) {
     let $load_27: ref null "core:linear//LinearArray<u8>";
-    let $v3_18: i32;
+    let $v_6_18: i32;
     let n_28: i32;
     let $licm_ptr_83: i32;
     let $hfs_next_85: i32;
@@ -2789,16 +2789,16 @@ fn "core:zlib/inflate_stored$sroa[return]"(state, input, output) {
         "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report0"(n_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1137"), used: 14 });
         unreachable;
     }
-    $v3_18 = local.tee $hfs_next_85(local.tee $load_27(output.bytes).len) - n_28;
-    if @unlikely(((0 <= $av_86) & ($av_86 <= $v3_18)) == 0) {
+    $v_6_18 = local.tee $hfs_next_85(local.tee $load_27(output.bytes).len) - n_28;
+    if @unlikely(((0 <= $av_86) & ($av_86 <= $v_6_18)) == 0) {
         cold_path;
-        "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report1"($av_86, $v3_18, $hfs_next_85, n_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1137"), used: 14 });
+        "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report1"($av_86, $v_6_18, $hfs_next_85, n_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1137"), used: 14 });
         unreachable;
     }
-    $v3_18 = local.tee $hfs_next_85(input.len) - n_28;
-    if @unlikely(((0 <= $licm_ptr_83) & ($licm_ptr_83 <= $v3_18)) == 0) {
+    $v_6_18 = local.tee $hfs_next_85(input.len) - n_28;
+    if @unlikely(((0 <= $licm_ptr_83) & ($licm_ptr_83 <= $v_6_18)) == 0) {
         cold_path;
-        "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report2"($licm_ptr_83, $v3_18, $hfs_next_85, n_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1137"), used: 14 });
+        "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report2"($licm_ptr_83, $v_6_18, $hfs_next_85, n_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1137"), used: 14 });
         unreachable;
     }
     builtin::memory_copy($load_27.block.ptr + $av_86, input.block.ptr + $licm_ptr_83, n_28);
@@ -5271,7 +5271,7 @@ fn "core:zlib/write_dynamic_block"(bw, $mv$tokens$repr, $mv$tokens$used, sym_cou
     let ndist: i32;
     let nbl: i32;
     let sym: i32;
-    let $m_1_22: i32;
+    let $m_3_22: i32;
     let self_53: ref "core:prelude/list.wado//List<i32>";
     let $licm_bl_lengths_110: ref "core:prelude/list.wado//List<u8>";
     let $licm_repr_115: ref Array<i32>;
@@ -5292,7 +5292,7 @@ fn "core:zlib/write_dynamic_block"(bw, $mv$tokens$repr, $mv$tokens$used, sym_cou
         b794: block {
             l795: loop {
                 break_if b794 nlit >= nbl;
-                "core:zlib/core:zlib/BitWriter::write_bits"(bw, ndist = $licm_bl_lengths_110.used; $m_1_22 = builtin::array_get_value<i32>(global:core:zlib::INFLATE_ORDER.repr, nlit); if @unlikely(((0 <= $m_1_22) & ($m_1_22 < ndist)) == 0) {
+                "core:zlib/core:zlib/BitWriter::write_bits"(bw, ndist = $licm_bl_lengths_110.used; $m_3_22 = builtin::array_get_value<i32>(global:core:zlib::INFLATE_ORDER.repr, nlit); if @unlikely(((0 <= $m_3_22) & ($m_3_22 < ndist)) == 0) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(builtin::array_get_value<i32>(global:core:zlib::INFLATE_ORDER.repr, nlit), ndist, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:2263"), used: 14 });
                     unreachable;
@@ -5309,7 +5309,7 @@ fn "core:zlib/write_dynamic_block"(bw, $mv$tokens$repr, $mv$tokens$used, sym_cou
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(nlit, 19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:2263"), used: 14 });
                     unreachable;
-                }; ndist = $licm_bl_lengths_110.used; $m_1_22 = builtin::array_get_value<i32>(global:core:zlib::INFLATE_ORDER.repr, nlit); if @unlikely(((0 <= $m_1_22) & ($m_1_22 < ndist)) == 0) {
+                }; ndist = $licm_bl_lengths_110.used; $m_3_22 = builtin::array_get_value<i32>(global:core:zlib::INFLATE_ORDER.repr, nlit); if @unlikely(((0 <= $m_3_22) & ($m_3_22 < ndist)) == 0) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(builtin::array_get_value<i32>(global:core:zlib::INFLATE_ORDER.repr, nlit), ndist, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:2263"), used: 14 });
                     unreachable;
@@ -5327,13 +5327,13 @@ fn "core:zlib/write_dynamic_block"(bw, $mv$tokens$repr, $mv$tokens$used, sym_cou
     $licm_repr_116 = self_53.repr;
     $licm_repr_117 = $load_16.repr;
     nbl = $licm_bl_lengths_110.used;
-    $m_1_22 = self_53.used;
+    $m_3_22 = self_53.used;
     b801: block {
         l802: loop {
             break_if b801 nlit >= nbl;
-            if @unlikely(local.tee sym(builtin::array_get_value<u8>($licm_bl_lengths_110.repr, nlit)) >=u $m_1_22) {
+            if @unlikely(local.tee sym(builtin::array_get_value<u8>($licm_bl_lengths_110.repr, nlit)) >=u $m_3_22) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(sym, $m_1_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:2269"), used: 14 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(sym, $m_3_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:2269"), used: 14 });
                 unreachable;
             }
             nbl = builtin::array_get_value<i32>($licm_repr_116, sym);
@@ -5558,7 +5558,7 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
     let self_85: i32;
     let c_188: u8;
     let value_218: i32;
-    let $v3_576: i32;
+    let $v_19_576: i32;
     let array_632: ref null "core:linear//LinearArray<u8>";
     let bytes_642: i32;
     let block: ref null "core:linear//Block";
@@ -5605,18 +5605,18 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
         cold_path;
         "core:linear/core:linear/LinearArray<u8>::of_bytes$contract_report0"(1, $load_10, input, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1539"), used: 14 });
         unreachable;
-    }; $v3_576 = 2147483647 - $load_10; if @unlikely(16 > $v3_576) {
+    }; $v_19_576 = 2147483647 - $load_10; if @unlikely(16 > $v_19_576) {
         cold_path;
-        "core:linear/core:linear/LinearArray<u8>::of_bytes$contract_report1"(16, $v3_576, $load_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1539"), used: 14 });
+        "core:linear/core:linear/LinearArray<u8>::of_bytes$contract_report1"(16, $v_19_576, $load_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1539"), used: 14 });
         unreachable;
-    }; bytes_642 = local.tee $v3_576($load_10 + 16) * 1; array_632 = struct.new "core:linear//LinearArray<u8>" { block: local.tee block(struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, bytes_642), bytes: bytes_642 }), len: $v3_576 }; arr = input.repr; $v3_576 = block.ptr; bytes_642 = 0; $licm_arith_7 = $load_10 - 8; b847: block {
+    }; bytes_642 = local.tee $v_19_576($load_10 + 16) * 1; array_632 = struct.new "core:linear//LinearArray<u8>" { block: local.tee block(struct.new "core:linear//Block" { ptr: "mem/realloc"(0, 0, 16, bytes_642), bytes: bytes_642 }), len: $v_19_576 }; arr = input.repr; $v_19_576 = block.ptr; bytes_642 = 0; $licm_arith_7 = $load_10 - 8; b847: block {
         l848: loop {
             break_if b847 (builtin::i64_extend_i32_s(bytes_642) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 7)) << 56_i64);
-            builtin::store_i64($v3_576 + bytes_642, w);
+            builtin::store_i64($v_19_576 + bytes_642, w);
             bytes_642 = bytes_642 + 8;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 7)) << 56_i64);
-            builtin::store_i64($v3_576 + bytes_642, w);
+            builtin::store_i64($v_19_576 + bytes_642, w);
             bytes_642 = bytes_642 + 8;
             continue l848;
         };
@@ -5624,40 +5624,40 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
         l850: loop {
             break_if b849 bytes_642 > $licm_arith_7;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, bytes_642 + 7)) << 56_i64);
-            builtin::store_i64($v3_576 + bytes_642, w);
+            builtin::store_i64($v_19_576 + bytes_642, w);
             bytes_642 = bytes_642 + 8;
             continue l850;
         };
     }; b851: block {
         l852: loop {
             break_if b851 (builtin::i64_extend_i32_s(bytes_642) + 3_i64) >= builtin::i64_extend_i32_s($load_10);
-            builtin::store_u8($v3_576 + bytes_642, builtin::array_get_value_u8(arr, bytes_642));
+            builtin::store_u8($v_19_576 + bytes_642, builtin::array_get_value_u8(arr, bytes_642));
             bytes_642 = bytes_642 + 1;
-            builtin::store_u8($v3_576 + bytes_642, builtin::array_get_value_u8(arr, bytes_642));
+            builtin::store_u8($v_19_576 + bytes_642, builtin::array_get_value_u8(arr, bytes_642));
             bytes_642 = bytes_642 + 1;
-            builtin::store_u8($v3_576 + bytes_642, builtin::array_get_value_u8(arr, bytes_642));
+            builtin::store_u8($v_19_576 + bytes_642, builtin::array_get_value_u8(arr, bytes_642));
             bytes_642 = bytes_642 + 1;
-            builtin::store_u8($v3_576 + bytes_642, builtin::array_get_value_u8(arr, bytes_642));
+            builtin::store_u8($v_19_576 + bytes_642, builtin::array_get_value_u8(arr, bytes_642));
             bytes_642 = bytes_642 + 1;
             continue l852;
         };
     }; b853: block {
         l854: loop {
             break_if b853 bytes_642 >= $load_10;
-            builtin::store_u8($v3_576 + bytes_642, builtin::array_get_value_u8(arr, bytes_642));
+            builtin::store_u8($v_19_576 + bytes_642, builtin::array_get_value_u8(arr, bytes_642));
             bytes_642 = bytes_642 + 1;
             continue l854;
         };
-    }; builtin::memory_fill($v3_576 + $load_10, 0, 16); array_632, len: $load_10, head: multivalue_bind [block, $v3_576] = "core:linear/core:linear/LinearArray<i32>::filled$unchecked$spec0$dae[len]"($v3_576 = 2147483647 / 4; if @unlikely(32768 > $v3_576) {
+    }; builtin::memory_fill($v_19_576 + $load_10, 0, 16); array_632, len: $load_10, head: multivalue_bind [block, $v_19_576] = "core:linear/core:linear/LinearArray<i32>::filled$unchecked$spec0$dae[len]"($v_19_576 = 2147483647 / 4; if @unlikely(32768 > $v_19_576) {
         cold_path;
-        "core:linear/core:linear/LinearArray<i32>::filled$contract_report0"(32768, $v3_576, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1541"), used: 14 });
+        "core:linear/core:linear/LinearArray<i32>::filled$contract_report0"(32768, $v_19_576, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1541"), used: 14 });
         unreachable;
-    }; -1); struct.new "core:linear//LinearArray<i32>" { block: block, len: $v3_576 }, prev: multivalue_bind [block, $v3_576] = "core:linear/core:linear/LinearArray<i32>::filled$unchecked$spec0$dae[len]"($v3_576 = 2147483647 / 4; if @unlikely(32768 > $v3_576) {
+    }; -1); struct.new "core:linear//LinearArray<i32>" { block: block, len: $v_19_576 }, prev: multivalue_bind [block, $v_19_576] = "core:linear/core:linear/LinearArray<i32>::filled$unchecked$spec0$dae[len]"($v_19_576 = 2147483647 / 4; if @unlikely(32768 > $v_19_576) {
         cold_path;
-        "core:linear/core:linear/LinearArray<i32>::filled$contract_report0"(32768, $v3_576, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1542"), used: 14 });
+        "core:linear/core:linear/LinearArray<i32>::filled$contract_report0"(32768, $v_19_576, 4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:1542"), used: 14 });
         unreachable;
-    }; -1); struct.new "core:linear//LinearArray<i32>" { block: block, len: $v3_576 } };
-    $v3_576 = 0;
+    }; -1); struct.new "core:linear//LinearArray<i32>" { block: block, len: $v_19_576 } };
+    $v_19_576 = 0;
     bytes_642 = 0;
     $licm_arith_7 = 0;
     match_available = 0;
@@ -5672,29 +5672,29 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
     $licm_arith_700 = $load_10 - 2;
     b857: block {
         l858: loop {
-            break_if b857 $v3_576 >= self_85;
+            break_if b857 $v_19_576 >= self_85;
             best_len_19 = bytes_642;
             best_dist_20 = 0;
             h_21 = 0;
-            if ($v3_576 + 2) < self_85 {
-                if @unlikely(((0 <= $v3_576) & ($v3_576 < $licm_arith_700)) == 0) {
+            if ($v_19_576 + 2) < self_85 {
+                if @unlikely(((0 <= $v_19_576) & ($v_19_576 < $licm_arith_700)) == 0) {
                     cold_path;
-                    "core:zlib/core:zlib/Matcher::hash$contract_report0"($v3_576, $licm_arith_700, $load_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:2470"), used: 14 });
+                    "core:zlib/core:zlib/Matcher::hash$contract_report0"($v_19_576, $licm_arith_700, $load_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:2470"), used: 14 });
                     unreachable;
                 }
-                best_dist_20 = builtin::load_u8($licm_ptr_698 + ($v3_576 * 1));
-                h_21 = builtin::load_u8($licm_ptr_698 + (($v3_576 + 1) * 1));
-                c_188 = builtin::load_u8($licm_ptr_698 + (($v3_576 + 2) * 1));
+                best_dist_20 = builtin::load_u8($licm_ptr_698 + ($v_19_576 * 1));
+                h_21 = builtin::load_u8($licm_ptr_698 + (($v_19_576 + 1) * 1));
+                c_188 = builtin::load_u8($licm_ptr_698 + (($v_19_576 + 2) * 1));
                 h_21 = (((best_dist_20 << 10) ^ (h_21 << 5)) ^ c_188) & 32767;
-                multivalue_bind [best_len_19, best_dist_20] = (best_dist_20 = select i32(select i32(match_available, bytes_642 >= 8, 0), 32, 128); "core:zlib/core:zlib/Matcher::longest_match$dae[nice_length]"(matcher.bytes, matcher.len, matcher.head, matcher.prev, $v3_576, h_21, best_len_19, best_dist_20));
-                c_188 = $v3_576 & 32767;
+                multivalue_bind [best_len_19, best_dist_20] = (best_dist_20 = select i32(select i32(match_available, bytes_642 >= 8, 0), 32, 128); "core:zlib/core:zlib/Matcher::longest_match$dae[nice_length]"(matcher.bytes, matcher.len, matcher.head, matcher.prev, $v_19_576, h_21, best_len_19, best_dist_20));
+                c_188 = $v_19_576 & 32767;
                 value_218 = builtin::load_i32($licm_ptr_699 + (h_21 * 4));
                 builtin::store_i32($licm_ptr_664 + (c_188 * 4), value_218);
-                builtin::store_i32($licm_ptr_699 + (h_21 * 4), $v3_576);
+                builtin::store_i32($licm_ptr_699 + (h_21 * 4), $v_19_576);
             }
             if match_available {
                 if best_len_19 > bytes_642 {
-                    bytes_642 = builtin::load_u8($licm_ptr_698 + (($v3_576 - 1) * 1));
+                    bytes_642 = builtin::load_u8($licm_ptr_698 + (($v_19_576 - 1) * 1));
                     if @unlikely($sroa_tokens_used_652 >= builtin::array_len($sroa_tokens_repr_651)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $mv_arg_1(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_tokens_repr_651, used: $sroa_tokens_used_652 }));
@@ -5704,7 +5704,7 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
                     $sroa_tokens_used_652 = $sroa_tokens_used_652 + 1;
                     bytes_642 = best_len_19;
                     $licm_arith_7 = best_dist_20;
-                    $v3_576 = $v3_576 + 1;
+                    $v_19_576 = $v_19_576 + 1;
                 } else {
                     $licm_arith_7 = (((257 + bytes_642) - 3) & 65535) | (($licm_arith_7 & 65535) << 16);
                     if @unlikely($sroa_tokens_used_652 >= builtin::array_len($sroa_tokens_repr_651)) {
@@ -5715,13 +5715,13 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
                     builtin::array_set<i32>($sroa_tokens_repr_651, $sroa_tokens_used_652, $licm_arith_7);
                     $sroa_tokens_used_652 = $sroa_tokens_used_652 + 1;
                     bytes_642 = bytes_642 - 1;
-                    $licm_arith_7 = ($load_10 - $v3_576) - 2;
+                    $licm_arith_7 = ($load_10 - $v_19_576) - 2;
                     $licm_arith_7 = select i32(bytes_642 < $licm_arith_7, bytes_642, $licm_arith_7);
                     match_available = 1;
                     b865: block {
                         l866: loop {
                             break_if b865 match_available >= $licm_arith_7;
-                            best_len_19 = $v3_576 + match_available;
+                            best_len_19 = $v_19_576 + match_available;
                             best_dist_20 = builtin::load_u8($licm_ptr_698 + ((best_len_19 + 2) * 1));
                             h_21 = ((h_21 << 5) ^ best_dist_20) & 32767;
                             best_dist_20 = best_len_19 & 32767;
@@ -5732,7 +5732,7 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
                             continue l866;
                         };
                     };
-                    $v3_576 = $v3_576 + bytes_642;
+                    $v_19_576 = $v_19_576 + bytes_642;
                     match_available = 0;
                     bytes_642 = 0;
                     $licm_arith_7 = 0;
@@ -5742,7 +5742,7 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
                     match_available = 1;
                     bytes_642 = best_len_19;
                     $licm_arith_7 = best_dist_20;
-                    $v3_576 = $v3_576 + 1;
+                    $v_19_576 = $v_19_576 + 1;
                 } else {
                     bytes_642 = (((257 + best_len_19) - 3) & 65535) | ((best_dist_20 & 65535) << 16);
                     if @unlikely($sroa_tokens_used_652 >= builtin::array_len($sroa_tokens_repr_651)) {
@@ -5752,13 +5752,13 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
                     }
                     builtin::array_set<i32>($sroa_tokens_repr_651, $sroa_tokens_used_652, bytes_642);
                     $sroa_tokens_used_652 = $sroa_tokens_used_652 + 1;
-                    bytes_642 = ($load_10 - $v3_576) - 2;
+                    bytes_642 = ($load_10 - $v_19_576) - 2;
                     bytes_642 = select i32(best_len_19 < bytes_642, best_len_19, bytes_642);
                     match_available = 1;
                     b870: block {
                         l871: loop {
                             break_if b870 match_available >= bytes_642;
-                            best_dist_20 = $v3_576 + match_available;
+                            best_dist_20 = $v_19_576 + match_available;
                             c_188 = builtin::load_u8($licm_ptr_698 + ((best_dist_20 + 2) * 1));
                             h_21 = ((h_21 << 5) ^ c_188) & 32767;
                             c_188 = best_dist_20 & 32767;
@@ -5769,12 +5769,12 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
                             continue l871;
                         };
                     };
-                    $v3_576 = $v3_576 + best_len_19;
+                    $v_19_576 = $v_19_576 + best_len_19;
                     match_available = 0;
                     bytes_642 = 0;
                 }
             } else {
-                best_len_19 = builtin::load_u8($licm_ptr_698 + ($v3_576 * 1));
+                best_len_19 = builtin::load_u8($licm_ptr_698 + ($v_19_576 * 1));
                 if @unlikely($sroa_tokens_used_652 >= builtin::array_len($sroa_tokens_repr_651)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $mv_arg_1(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_tokens_repr_651, used: $sroa_tokens_used_652 }));
@@ -5782,7 +5782,7 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
                 }
                 builtin::array_set<i32>($sroa_tokens_repr_651, $sroa_tokens_used_652, best_len_19);
                 $sroa_tokens_used_652 = $sroa_tokens_used_652 + 1;
-                $v3_576 = $v3_576 + 1;
+                $v_19_576 = $v_19_576 + 1;
             }
             continue l858;
         };
@@ -5821,12 +5821,12 @@ fn "core:zlib/deflate_raw$dae[level,strategy]"(input) {
     let $mv$$pattern_temp_3$1: ref "core:prelude/list.wado//List<u8>";
     multivalue_bind [$mv$$pattern_temp_3$0, $mv$$pattern_temp_3$1] = "core:zlib/build_fixed_lengths"();
     $load_10 = 3 + "core:zlib/encoded_data_bits"($mv_arg_1.repr, $mv_arg_1.used, $mv$$pattern_temp_2$1.repr, $mv$$pattern_temp_2$1.used, $mv$$pattern_temp_3$0.repr, $mv$$pattern_temp_3$0.used, $mv$$pattern_temp_3$1.repr, $mv$$pattern_temp_3$1.used);
-    $v3_576 = local.tee plan("core:zlib/plan_dynamic_block"($mv_arg_1.repr, $mv_arg_1.used, $mv$$pattern_temp_2$1)).bits;
+    $v_19_576 = local.tee plan("core:zlib/plan_dynamic_block"($mv_arg_1.repr, $mv_arg_1.used, $mv$$pattern_temp_2$1)).bits;
     self_85 = ((self_85 * 8) + (((self_85 / 65535) + 1) * 40)) + 3;
     bw_6 = struct.new "core:zlib//BitWriter" { output: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }, buf: 0_i64, bits: 0 };
-    if (self_85 <= $load_10) & (self_85 <= $v3_576) {
+    if (self_85 <= $load_10) & (self_85 <= $v_19_576) {
         return multivalue_bind [arr, self_85] = "core:zlib/deflate_stored"(input.repr, input.used), struct.new "core:prelude/list.wado//List<u8>" { repr: arr, used: self_85 };
-    } else if $load_10 <= $v3_576 {
+    } else if $load_10 <= $v_19_576 {
         multivalue_bind [input, $mv$$pattern_temp_3$0] = "core:zlib/build_fixed_lengths"();
         $mv_arg_1 = "core:zlib/gen_huffman_codes$spec0$dae[max_sym,max_bits]"(input.repr, input.used);
         multivalue_bind [input, $mv$$pattern_temp_3$0] = "core:zlib/build_fixed_lengths"();
@@ -6250,62 +6250,62 @@ fn "core:prelude/types.wado/$template_segment$core:prelude/types.wado/$tmpl$20a7
     });
 }
 
-fn "core:linear/core:linear/LinearArray<u8>::of_bytes$contract_report0"($v1, len, bytes, start, $site) {
-    let $v2: i32;
-    let $v2_seen: bool;
-    let $v3: i32;
-    let $v3_seen: bool;
-    let $v4: i32;
-    let $v4_seen: bool;
-    let $v5: i32;
-    let $v5_seen: bool;
-    let $v6: bool;
-    let $v6_seen: bool;
-    let $v2_text: ref "core:prelude/string.wado//String";
-    let $v3_text: ref "core:prelude/string.wado//String";
-    let $v4_text: ref "core:prelude/string.wado//String";
-    let $v5_text: ref "core:prelude/string.wado//String";
-    let $v6_text: ref "core:prelude/string.wado//String";
-    $v2_seen = 0;
-    $v3_seen = 0;
-    $v4_seen = 0;
-    $v5_seen = 0;
-    $v6_seen = 0;
-    drop((if $v1 -> i32 {
-        $v2 = len;
-        $v2_seen = 1;
-        $v6 = (0 <= $v2) & ($v2 <= $v5 = $v3 = bytes.used; $v3_seen = 1; $v3 - $v4 = start; $v4_seen = 1; $v4; $v5_seen = 1; $v5);
-        $v6_seen = 1;
-        $v6;
+fn "core:linear/core:linear/LinearArray<u8>::of_bytes$contract_report0"($v_1, len, bytes, start, $site) {
+    let $v_2: i32;
+    let $v_2_seen: bool;
+    let $v_3: i32;
+    let $v_3_seen: bool;
+    let $v_4: i32;
+    let $v_4_seen: bool;
+    let $v_5: i32;
+    let $v_5_seen: bool;
+    let $v_6: bool;
+    let $v_6_seen: bool;
+    let $v_2_text: ref "core:prelude/string.wado//String";
+    let $v_3_text: ref "core:prelude/string.wado//String";
+    let $v_4_text: ref "core:prelude/string.wado//String";
+    let $v_5_text: ref "core:prelude/string.wado//String";
+    let $v_6_text: ref "core:prelude/string.wado//String";
+    $v_2_seen = 0;
+    $v_3_seen = 0;
+    $v_4_seen = 0;
+    $v_5_seen = 0;
+    $v_6_seen = 0;
+    drop((if $v_1 -> i32 {
+        $v_2 = len;
+        $v_2_seen = 1;
+        $v_6 = (0 <= $v_2) & ($v_2 <= $v_5 = $v_3 = bytes.used; $v_3_seen = 1; $v_3 - $v_4 = start; $v_4_seen = 1; $v_4; $v_5_seen = 1; $v_5);
+        $v_6_seen = 1;
+        $v_6;
     } else {
         0;
     }));
-    $v2_text = (if $v2_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:linear//$tmpl$ebaa20f4a908b504" { h0: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_2_text = (if $v_2_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:linear//$tmpl$ebaa20f4a908b504" { h0: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    $v3_text = (if $v3_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:linear//$tmpl$ebaa20f4a908b504" { h0: $v3, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_3_text = (if $v_3_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:linear//$tmpl$ebaa20f4a908b504" { h0: $v_3, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    $v4_text = (if $v4_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:linear//$tmpl$ebaa20f4a908b504" { h0: $v4, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_4_text = (if $v_4_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:linear//$tmpl$ebaa20f4a908b504" { h0: $v_4, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    $v5_text = (if $v5_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:linear//$tmpl$ebaa20f4a908b504" { h0: $v5, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_5_text = (if $v_5_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:linear//$tmpl$ebaa20f4a908b504" { h0: $v_5, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    $v6_text = (if $v6_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$ce9bda9252f81986,[bool]>"(struct.new "core:linear//$tmpl$ce9bda9252f81986" { h0: $v6, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_6_text = (if $v_6_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$ce9bda9252f81986,[bool]>"(struct.new "core:linear//$tmpl$ce9bda9252f81986" { h0: $v_6, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$18ff447469633398,[core:prelude/string.wado/String,i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "core:linear//$tmpl$18ff447469633398" { h0: $site, h1: start, h2: $v1, h3: $v2_text, h4: $v3_text, h5: $v4_text, h6: $v5_text, h7: $v6_text, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::of_bytes failed at "), used: 44 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::of_bytes failed at "), used: 44 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$18ff447469633398,[core:prelude/string.wado/String,i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "core:linear//$tmpl$18ff447469633398" { h0: $site, h1: start, h2: $v_1, h3: $v_2_text, h4: $v_3_text, h5: $v_4_text, h6: $v_5_text, h7: $v_6_text, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::of_bytes failed at "), used: 44 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::of_bytes failed at "), used: 44 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= start && 0 <= len <= bytes.len() - start
 start: "), used: 65 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= start && 0 <= len <= bytes.len() - start
@@ -6325,8 +6325,8 @@ bytes.len() - start: "), used: 22 }, s7: struct.new "core:prelude/string.wado//S
     unreachable;
 }
 
-fn "core:linear/core:linear/LinearArray<u8>::of_bytes$contract_report1"(zeros, $v3, len, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$b06047956fb36b6f,[core:prelude/string.wado/String,i32,i32,i32,i32]>"(struct.new "core:linear//$tmpl$b06047956fb36b6f" { h0: $site, h1: zeros, h2: 2147483647, h3: len, h4: $v3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::of_bytes failed at "), used: 44 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::of_bytes failed at "), used: 44 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:linear/core:linear/LinearArray<u8>::of_bytes$contract_report1"(zeros, $v_19, len, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$b06047956fb36b6f,[core:prelude/string.wado/String,i32,i32,i32,i32]>"(struct.new "core:linear//$tmpl$b06047956fb36b6f" { h0: $site, h1: zeros, h2: 2147483647, h3: len, h4: $v_19, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::of_bytes failed at "), used: 44 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::of_bytes failed at "), used: 44 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= zeros <= i32::MAX - len
 zeros: "), used: 48 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= zeros <= i32::MAX - len
@@ -6340,8 +6340,8 @@ i32::MAX - len: "), used: 17 }, s5: struct.new "core:prelude/string.wado//String
     unreachable;
 }
 
-fn "core:linear/core:linear/LinearArray<u8>::to_byte_list$contract_report0"(len, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:linear//$tmpl$59e16269228f9c88" { h0: $site, h1: len, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::to_byte_list failed at "), used: 48 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::to_byte_list failed at "), used: 48 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:linear/core:linear/LinearArray<u8>::to_byte_list$contract_report0"(len, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:linear//$tmpl$59e16269228f9c88" { h0: $site, h1: len, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::to_byte_list failed at "), used: 48 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::to_byte_list failed at "), used: 48 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= len <= self.len()
 len: "), used: 40 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= len <= self.len()
@@ -6360,8 +6360,8 @@ count: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { repr:
     unreachable;
 }
 
-fn "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report1"(at, $v3, $v1, count, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$b06047956fb36b6f,[core:prelude/string.wado/String,i32,i32,i32,i32]>"(struct.new "core:linear//$tmpl$b06047956fb36b6f" { h0: $site, h1: at, h2: $v1, h3: count, h4: $v3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::copy_from failed at "), used: 45 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::copy_from failed at "), used: 45 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report1"(at, $v_6, $v_4, count, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$b06047956fb36b6f,[core:prelude/string.wado/String,i32,i32,i32,i32]>"(struct.new "core:linear//$tmpl$b06047956fb36b6f" { h0: $site, h1: at, h2: $v_4, h3: count, h4: $v_6, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::copy_from failed at "), used: 45 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::copy_from failed at "), used: 45 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= at <= self.len() - count
 at: "), used: 46 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= at <= self.len() - count
@@ -6375,8 +6375,8 @@ self.len() - count: "), used: 21 }, s5: struct.new "core:prelude/string.wado//St
     unreachable;
 }
 
-fn "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report2"(from, $v3, $v1, count, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$b06047956fb36b6f,[core:prelude/string.wado/String,i32,i32,i32,i32]>"(struct.new "core:linear//$tmpl$b06047956fb36b6f" { h0: $site, h1: from, h2: $v1, h3: count, h4: $v3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::copy_from failed at "), used: 45 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::copy_from failed at "), used: 45 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:linear/core:linear/LinearArray<u8>::copy_from$contract_report2"(from, $v_14, $v_12, count, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$b06047956fb36b6f,[core:prelude/string.wado/String,i32,i32,i32,i32]>"(struct.new "core:linear//$tmpl$b06047956fb36b6f" { h0: $site, h1: from, h2: $v_12, h3: count, h4: $v_14, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::copy_from failed at "), used: 45 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::copy_from failed at "), used: 45 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= from <= source.len() - count
 from: "), used: 52 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= from <= source.len() - count
@@ -6390,8 +6390,8 @@ source.len() - count: "), used: 23 }, s5: struct.new "core:prelude/string.wado//
     unreachable;
 }
 
-fn "core:linear/core:linear/LinearArray<u8>::lengthen$contract_report0"($v0, len, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:linear//$tmpl$59e16269228f9c88" { h0: $site, h1: $v0, h2: len, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::lengthen failed at "), used: 44 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::lengthen failed at "), used: 44 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:linear/core:linear/LinearArray<u8>::lengthen$contract_report0"($v_0, len, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:linear//$tmpl$59e16269228f9c88" { h0: $site, h1: $v_0, h2: len, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::lengthen failed at "), used: 44 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::lengthen failed at "), used: 44 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: self.len() <= len
 self.len(): "), used: 42 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: self.len() <= len
@@ -6412,62 +6412,62 @@ high: "), used: 7 }, s3: struct.new "core:prelude/string.wado//String" { repr: a
     unreachable;
 }
 
-fn "core:zlib/adler32_linear$contract_report0"($v1, len, buf, offset, $site) {
-    let $v2: i32;
-    let $v2_seen: bool;
-    let $v3: i32;
-    let $v3_seen: bool;
-    let $v4: i32;
-    let $v4_seen: bool;
-    let $v5: i32;
-    let $v5_seen: bool;
-    let $v6: bool;
-    let $v6_seen: bool;
-    let $v2_text: ref "core:prelude/string.wado//String";
-    let $v3_text: ref "core:prelude/string.wado//String";
-    let $v4_text: ref "core:prelude/string.wado//String";
-    let $v5_text: ref "core:prelude/string.wado//String";
-    let $v6_text: ref "core:prelude/string.wado//String";
-    $v2_seen = 0;
-    $v3_seen = 0;
-    $v4_seen = 0;
-    $v5_seen = 0;
-    $v6_seen = 0;
-    drop((if $v1 -> i32 {
-        $v2 = len;
-        $v2_seen = 1;
-        $v6 = (0 <= $v2) & ($v2 <= $v5 = $v3 = buf.len; $v3_seen = 1; $v3 - $v4 = offset; $v4_seen = 1; $v4; $v5_seen = 1; $v5);
-        $v6_seen = 1;
-        $v6;
+fn "core:zlib/adler32_linear$contract_report0"($v_1, len, buf, offset, $site) {
+    let $v_2: i32;
+    let $v_2_seen: bool;
+    let $v_3: i32;
+    let $v_3_seen: bool;
+    let $v_4: i32;
+    let $v_4_seen: bool;
+    let $v_5: i32;
+    let $v_5_seen: bool;
+    let $v_6: bool;
+    let $v_6_seen: bool;
+    let $v_2_text: ref "core:prelude/string.wado//String";
+    let $v_3_text: ref "core:prelude/string.wado//String";
+    let $v_4_text: ref "core:prelude/string.wado//String";
+    let $v_5_text: ref "core:prelude/string.wado//String";
+    let $v_6_text: ref "core:prelude/string.wado//String";
+    $v_2_seen = 0;
+    $v_3_seen = 0;
+    $v_4_seen = 0;
+    $v_5_seen = 0;
+    $v_6_seen = 0;
+    drop((if $v_1 -> i32 {
+        $v_2 = len;
+        $v_2_seen = 1;
+        $v_6 = (0 <= $v_2) & ($v_2 <= $v_5 = $v_3 = buf.len; $v_3_seen = 1; $v_3 - $v_4 = offset; $v_4_seen = 1; $v_4; $v_5_seen = 1; $v_5);
+        $v_6_seen = 1;
+        $v_6;
     } else {
         0;
     }));
-    $v2_text = (if $v2_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:zlib//$tmpl$ebaa20f4a908b504" { h0: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_2_text = (if $v_2_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:zlib//$tmpl$ebaa20f4a908b504" { h0: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    $v3_text = (if $v3_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:zlib//$tmpl$ebaa20f4a908b504" { h0: $v3, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_3_text = (if $v_3_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:zlib//$tmpl$ebaa20f4a908b504" { h0: $v_3, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    $v4_text = (if $v4_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:zlib//$tmpl$ebaa20f4a908b504" { h0: $v4, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_4_text = (if $v_4_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:zlib//$tmpl$ebaa20f4a908b504" { h0: $v_4, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    $v5_text = (if $v5_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:zlib//$tmpl$ebaa20f4a908b504" { h0: $v5, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_5_text = (if $v_5_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:zlib//$tmpl$ebaa20f4a908b504" { h0: $v_5, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    $v6_text = (if $v6_seen -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$ce9bda9252f81986,[bool]>"(struct.new "core:zlib//$tmpl$ce9bda9252f81986" { h0: $v6, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+    $v_6_text = (if $v_6_seen -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$ce9bda9252f81986,[bool]>"(struct.new "core:zlib//$tmpl$ce9bda9252f81986" { h0: $v_6, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
     });
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$18ff447469633398,[core:prelude/string.wado/String,i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "core:zlib//$tmpl$18ff447469633398" { h0: $site, h1: offset, h2: $v1, h3: $v2_text, h4: $v3_text, h5: $v4_text, h6: $v5_text, h7: $v6_text, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of adler32_linear failed at "), used: 37 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of adler32_linear failed at "), used: 37 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$18ff447469633398,[core:prelude/string.wado/String,i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "core:zlib//$tmpl$18ff447469633398" { h0: $site, h1: offset, h2: $v_1, h3: $v_2_text, h4: $v_3_text, h5: $v_4_text, h6: $v_5_text, h7: $v_6_text, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of adler32_linear failed at "), used: 37 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of adler32_linear failed at "), used: 37 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= offset && 0 <= len <= buf.len() - offset
 offset: "), used: 66 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= offset && 0 <= len <= buf.len() - offset
@@ -6496,8 +6496,8 @@ n: "), used: 23 }, s2: struct.new "core:prelude/string.wado//String" { repr: arr
     unreachable;
 }
 
-fn "core:zlib/core:zlib/Matcher::hash$contract_report0"(pos, $v2, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>"(struct.new "core:zlib//$tmpl$afdf3efc359fee73" { h0: $site, h1: pos, h2: $v1, h3: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of Matcher::hash failed at "), used: 36 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of Matcher::hash failed at "), used: 36 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:zlib/core:zlib/Matcher::hash$contract_report0"(pos, $v_2, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$afdf3efc359fee73,[core:prelude/string.wado/String,i32,i32,i32]>"(struct.new "core:zlib//$tmpl$afdf3efc359fee73" { h0: $site, h1: pos, h2: $v_1, h3: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of Matcher::hash failed at "), used: 36 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of Matcher::hash failed at "), used: 36 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= pos < self.len - 2
 pos: "), used: 41 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= pos < self.len - 2
@@ -6509,8 +6509,8 @@ self.len - 2: "), used: 15 }, s4: struct.new "core:prelude/string.wado//String" 
     unreachable;
 }
 
-fn "core:linear/core:linear/LinearArray<u8>::filled$contract_report0"(len, $v3, $v2, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$b06047956fb36b6f,[core:prelude/string.wado/String,i32,i32,i32,i32]>"(struct.new "core:linear//$tmpl$b06047956fb36b6f" { h0: $site, h1: len, h2: 2147483647, h3: $v2, h4: $v3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::filled failed at "), used: 42 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::filled failed at "), used: 42 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:linear/core:linear/LinearArray<u8>::filled$contract_report0"(len, $v_3, $v_2, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$b06047956fb36b6f,[core:prelude/string.wado/String,i32,i32,i32,i32]>"(struct.new "core:linear//$tmpl$b06047956fb36b6f" { h0: $site, h1: len, h2: 2147483647, h3: $v_2, h4: $v_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::filled failed at "), used: 42 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::filled failed at "), used: 42 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= len <= i32::MAX / builtin::size_of::<T>()
 len: "), used: 64 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= len <= i32::MAX / builtin::size_of::<T>()
@@ -6524,8 +6524,8 @@ i32::MAX / builtin::size_of::<T>(): "), used: 37 }, s5: struct.new "core:prelude
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -6535,8 +6535,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -6546,8 +6546,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -6557,8 +6557,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:linear/core:linear/LinearArray<i32>::filled$contract_report0"(len, $v3, $v2, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$b06047956fb36b6f,[core:prelude/string.wado/String,i32,i32,i32,i32]>"(struct.new "core:linear//$tmpl$b06047956fb36b6f" { h0: $site, h1: len, h2: 2147483647, h3: $v2, h4: $v3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::filled failed at "), used: 42 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::filled failed at "), used: 42 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:linear/core:linear/LinearArray<i32>::filled$contract_report0"(len, $v_3, $v_2, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$b06047956fb36b6f,[core:prelude/string.wado/String,i32,i32,i32,i32]>"(struct.new "core:linear//$tmpl$b06047956fb36b6f" { h0: $site, h1: len, h2: 2147483647, h3: $v_2, h4: $v_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::filled failed at "), used: 42 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::filled failed at "), used: 42 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= len <= i32::MAX / builtin::size_of::<T>()
 len: "), used: 64 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= len <= i32::MAX / builtin::size_of::<T>()
@@ -6572,8 +6572,8 @@ i32::MAX / builtin::size_of::<T>(): "), used: 37 }, s5: struct.new "core:prelude
     unreachable;
 }
 
-fn "core:linear/core:linear/LinearArray<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:linear//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::index_assign failed at "), used: 48 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::index_assign failed at "), used: 48 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:linear/core:linear/LinearArray<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:linear/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:linear//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::index_assign failed at "), used: 48 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of LinearArray::index_assign failed at "), used: 48 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -6583,8 +6583,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<[i32,i32,i32]>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<[i32,i32,i32]>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -6594,8 +6594,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<[i32,i32]>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<[i32,i32]>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -6605,8 +6605,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -6667,9 +6667,9 @@ bits: "), used: 28 }, s2: struct.new "core:prelude/string.wado//String" { repr: 
     unreachable;
 }
 
-fn "core:zlib/inflate_stored$cold0$dae[state,input,output]"($v0) {
+fn "core:zlib/inflate_stored$cold0$dae[state,input,output]"($v_0) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:zlib//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in inflate_stored at core:zlib:1122
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:zlib/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "core:zlib//$tmpl$ebaa20f4a908b504" { h0: $v_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in inflate_stored at core:zlib:1122
 condition: state.bits == 0
 state.bits: "), used: 92 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in inflate_stored at core:zlib:1122
 condition: state.bits == 0
@@ -6709,8 +6709,8 @@ n_syms: "), used: 87 }, s1: struct.new "core:prelude/string.wado//String" { repr
     unreachable;
 }
 
-fn "core:zlib/plan_dynamic_block$cold0$dae[lit_freq,dist_freq]"($contract_arg_4, $v1) {
-    "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(builtin::array_get_value<i32>(global:core:zlib::INFLATE_ORDER.repr, $contract_arg_4), $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:2203"), used: 14 });
+fn "core:zlib/plan_dynamic_block$cold0$dae[lit_freq,dist_freq]"($contract_arg_4, $v_1) {
+    "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(builtin::array_get_value<i32>(global:core:zlib::INFLATE_ORDER.repr, $contract_arg_4), $v_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:2203"), used: 14 });
     unreachable;
 }
 
@@ -6724,9 +6724,9 @@ match_available: "), used: 95 }, s1: struct.new "core:prelude/string.wado//Strin
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(index, $v1) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u16>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(index, $v_1) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c" { h0: index, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c" { h0: index, h1: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
 condition: 0 <= index < self.used
 index: "), used: 110 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
 condition: 0 <= index < self.used
@@ -6736,9 +6736,9 @@ self.used: "), used: 12 }, s2: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(index, $v1) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(index, $v_1) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c" { h0: index, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c" { h0: index, h1: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
 condition: 0 <= index < self.used
 index: "), used: 110 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
 condition: 0 <= index < self.used
@@ -6748,9 +6748,9 @@ self.used: "), used: 12 }, s2: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(index, $v1) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(index, $v_1) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c" { h0: index, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c" { h0: index, h1: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
 condition: 0 <= index < self.used
 index: "), used: 110 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
 condition: 0 <= index < self.used
@@ -6760,9 +6760,9 @@ self.used: "), used: 12 }, s2: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<[i32,i32,i32]>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(index, $v1) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<[i32,i32,i32]>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(index, $v_1) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c" { h0: index, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c" { h0: index, h1: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
 condition: 0 <= index < self.used
 index: "), used: 110 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
 condition: 0 <= index < self.used
@@ -6788,8 +6788,8 @@ fn "core:linear/$hole_fmt$core:linear/$tmpl$ce9bda9252f81986$sroa[t.h0]"(t, inde
     }
 }
 
-fn "core:zlib/core:zlib/Output::to_list$cold0$sroa[self.len]"(self, $v1) {
-    "core:linear/core:linear/LinearArray<u8>::to_byte_list$contract_report0"(self, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:996"), used: 13 });
+fn "core:zlib/core:zlib/Output::to_list$cold0$sroa[self.len]"(self, $v_1) {
+    "core:linear/core:linear/LinearArray<u8>::to_byte_list$contract_report0"(self, $v_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:zlib:996"), used: 13 });
     unreachable;
 }
 

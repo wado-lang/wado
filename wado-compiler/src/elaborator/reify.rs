@@ -52,7 +52,7 @@ use crate::ast::{AttrArg, Attribute, InterfaceDecl, Visibility};
 use crate::compiler_item::{CompilerItem, Resolved};
 use crate::coverage::{CoverageMap, ProbeSite};
 use crate::defs::DefId;
-use crate::elaborator::assert::{MOVED, NOT_EVALUATED, render_local_name, seen_local_name};
+use crate::elaborator::assert::{MOVED, NOT_EVALUATED};
 use crate::elaborator::call::{ARRAY_NEW_DATA, RECEIVER, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::expr::{compose_union_plan, peel_to_struct};
@@ -82,9 +82,10 @@ use crate::format_spec::FormatKind;
 use crate::hashmap;
 use crate::lexer::defaults_to_float;
 use crate::name::{
-    DeclaredHead, LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
-    display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
-    minted_name, range_local_name, template_block_label, template_hole_local, test_function_name,
+    DeclaredHead, LocalMethodName, MethodName, assert_capture_name, assert_seen_name,
+    assert_text_name, constant_pattern_local_name, deref_capture_name, display_function_name,
+    effect_default_impl_name, for_body_label, mangle_local_item_name, minted_name, minted_what,
+    range_local_name, template_block_label, template_hole_local, test_function_name,
 };
 use crate::pgo::MarkMap;
 use crate::rarity::Mark;
@@ -308,7 +309,7 @@ impl WritePlace {
 /// One reify-side power-assert capture slot. Independent from
 /// [`super::assert::Capture`] so the two walks don't share state.
 pub(super) struct ReifyAssertSlot {
-    /// `$v0`, `$v1`, … — the local the panic template references.
+    /// The local the panic template references.
     pub(super) name: String,
     pub(super) label: String,
     /// `false` when the sub-expression evaporated during reify and no
@@ -2265,7 +2266,7 @@ impl<'a> Reify<'a> {
                 local_index,
                 is_mut: ctx.locals[local_index as usize].is_mut,
                 type_id,
-                value,
+                value: Some(value),
                 storage: LetStorage::Planned,
             },
             pattern => TirStmtKind::LetDestructure { pattern, value },
@@ -2410,17 +2411,20 @@ impl<'a> Reify<'a> {
     fn reify_let(&mut self, let_stmt: &ast::LetStmt, ctx: &mut FunctionContext) -> TirStmt {
         // Uninitialised `let x: T;` — the parser guarantees `ty`
         // is present, and annotate that the pattern is a single name or `_`.
-        // The WIR builder zero-initialises the slot; reify emits a Unit
-        // placeholder as the `value` and the `type_id` field carries the
-        // user-declared type.
         let Some(ast_value) = let_stmt.value.as_ref() else {
-            let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
             let Some(binding) = let_stmt.pattern.as_name() else {
                 assert!(
                     matches!(let_stmt.pattern, ast::Pattern::Wildcard),
                     "annotate rejects an uninitialized `let` that destructures"
                 );
-                return TirStmt::new(TirStmtKind::Expr(placeholder), let_stmt.span);
+                return TirStmt::new(
+                    TirStmtKind::Expr(TirExpr::new(
+                        TirExprKind::Unit,
+                        TypeTable::UNIT,
+                        let_stmt.span,
+                    )),
+                    let_stmt.span,
+                );
             };
             let type_id = self
                 .ann_local_type(binding.id)
@@ -2439,7 +2443,7 @@ impl<'a> Reify<'a> {
                     local_index,
                     is_mut,
                     type_id,
-                    value: placeholder,
+                    value: None,
                     storage: LetStorage::Planned,
                 },
                 let_stmt.span,
@@ -2489,7 +2493,7 @@ impl<'a> Reify<'a> {
                         local_index,
                         is_mut,
                         type_id,
-                        value,
+                        value: Some(value),
                         storage: LetStorage::Planned,
                     },
                     let_stmt.span,
@@ -3061,9 +3065,9 @@ impl<'a> Reify<'a> {
             )
         });
         let seen_local_index = conditional
-            .then(|| ctx.add_local(seen_local_name(&cap_name), TypeTable::BOOL, true, None));
+            .then(|| ctx.add_local(assert_seen_name(&cap_name), TypeTable::BOOL, true, None));
 
-        let binding = |value: TirExpr, is_mut: bool| {
+        let binding = |value: Option<TirExpr>, is_mut: bool| {
             TirStmt::new(
                 TirStmtKind::Let {
                     name: cap_name.clone(),
@@ -3086,7 +3090,7 @@ impl<'a> Reify<'a> {
                 "a conditional slot is never hoisted"
             );
             let local_ref = local_ref.expect("a hoisted slot is never a place");
-            decls.push(binding(resolved, false));
+            decls.push(binding(Some(resolved), false));
             // The capture stands where the operand did: what consumed the
             // operand moves the local.
             if self.takes(expr) {
@@ -3106,10 +3110,7 @@ impl<'a> Reify<'a> {
                 // The local hands on what the operand evaluated to, which it
                 // owns if the value is affine.
                 Some(local_ref) => {
-                    decls.push(binding(
-                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, cap_span),
-                        true,
-                    ));
+                    decls.push(binding(None, true));
                     stmts.push(assign_stmt(local_ref.clone(), resolved, cap_span));
                     if self.is_affine(expr) {
                         local_ref.clone().moved()
@@ -3122,18 +3123,18 @@ impl<'a> Reify<'a> {
                 let seen_ref = TirExpr::new(
                     TirExprKind::Local {
                         index: seen_index,
-                        name: seen_local_name(&cap_name),
+                        name: assert_seen_name(&cap_name),
                     },
                     TypeTable::BOOL,
                     cap_span,
                 );
                 decls.push(TirStmt::new(
                     TirStmtKind::Let {
-                        name: seen_local_name(&cap_name),
+                        name: assert_seen_name(&cap_name),
                         local_index: seen_index,
                         is_mut: true,
                         type_id: TypeTable::BOOL,
-                        value: bool_lit(false, cap_span),
+                        value: Some(bool_lit(false, cap_span)),
                         storage: LetStorage::Taken,
                     },
                     cap_span,
@@ -3211,7 +3212,7 @@ impl<'a> Reify<'a> {
                 local_index: render_index,
                 is_mut: false,
                 type_id: string_type,
-                value: choice,
+                value: Some(choice),
                 storage: LetStorage::Planned,
             },
             span,
@@ -3293,29 +3294,27 @@ impl<'a> Reify<'a> {
             (Vec::new(), IndexMap::default())
         };
 
+        let slots = slot_facts
+            .into_iter()
+            .map(|(label, conditional, is_place, hoisted)| ReifyAssertSlot {
+                name: assert_capture_name(ctx.fresh_serial()),
+                label,
+                emitted: false,
+                local_index: None,
+                type_id: None,
+                conditional,
+                is_place,
+                hoisted,
+                place_expr: None,
+                seen_local_index: None,
+                bindings: Vec::new(),
+            })
+            .collect();
         let mut scope = ctx.enter_scope();
         let ctx = &mut scope.replacing(
             |ctx| &mut ctx.reify_assert_capture_ctx,
             Some(ReifyAssertCaptureContext {
-                slots: slot_facts
-                    .iter()
-                    .enumerate()
-                    .map(
-                        |(i, (label, conditional, is_place, hoisted))| ReifyAssertSlot {
-                            name: format!("$v{i}"),
-                            label: label.clone(),
-                            emitted: false,
-                            local_index: None,
-                            type_id: None,
-                            conditional: *conditional,
-                            is_place: *is_place,
-                            hoisted: *hoisted,
-                            place_expr: None,
-                            seen_local_index: None,
-                            bindings: Vec::new(),
-                        },
-                    )
-                    .collect(),
+                slots,
                 ast_id_to_slot,
                 in_progress: IndexSet::default(),
             }),
@@ -3343,7 +3342,7 @@ impl<'a> Reify<'a> {
                 local_index: cond_local_index,
                 is_mut: false,
                 type_id: cond_type,
-                value: cond_tir,
+                value: Some(cond_tir),
                 storage: LetStorage::Planned,
             },
             span,
@@ -3362,7 +3361,7 @@ impl<'a> Reify<'a> {
             .enumerate()
             .filter(|(_, slot)| slot.conditional)
             .map(|(i, slot)| {
-                let name = render_local_name(&slot.name);
+                let name = assert_text_name(&slot.name);
                 (i, ctx.add_local(name, string_type, false, None))
             })
             .collect();
@@ -3443,13 +3442,13 @@ impl<'a> Reify<'a> {
             match slot.seen_local_index {
                 Some(seen_index) => {
                     let render_index = render_local_of[&slot_idx];
-                    let render_name = render_local_name(&slot.name);
+                    let render_name = assert_text_name(&slot.name);
                     text_lets.push(self.assert_slot_text_let(
                         render_index,
                         render_name.clone(),
                         string_type,
                         seen_index,
-                        seen_local_name(&slot.name),
+                        assert_seen_name(&slot.name),
                         local_ref,
                         inspect_spec,
                         span,
@@ -3501,7 +3500,7 @@ impl<'a> Reify<'a> {
         let assert_serial = ctx.fresh_serial();
         TirStmt::new(
             TirStmtKind::LabeledBlock {
-                label: format!("$assert_{assert_serial}"),
+                label: minted_name("assert", assert_serial),
                 block: TirBlock::new(inner_stmts, span),
             },
             span,
@@ -3553,8 +3552,8 @@ impl<'a> Reify<'a> {
         let mut frame = ctx.enter_loop();
         let ctx = &mut *frame;
         let unique_id = ctx.fresh_serial();
-        let iter_var = format!("$iter_{unique_id}");
-        let label = format!("$for_of_{unique_id}");
+        let iter_var = minted_name("iter", unique_id);
+        let label = minted_name("for_of", unique_id);
 
         let into_iter_receiver = self.reify_expr(&for_of.iterable, ctx, None);
         let into_iter_receiver = self.adjust_receiver_for(
@@ -3581,7 +3580,7 @@ impl<'a> Reify<'a> {
                 local_index: iter_local_index,
                 is_mut: true,
                 type_id: iter_type,
-                value: into_iter_call,
+                value: Some(into_iter_call),
                 storage: LetStorage::Planned,
             },
             span,
@@ -3709,7 +3708,7 @@ impl<'a> Reify<'a> {
             self.skip_for_of_body(for_of.id);
         }
 
-        let temp_name = format!("$tuple_{unique_id}");
+        let temp_name = minted_name("tuple", unique_id);
         let temp_local = ctx.add_local(temp_name.clone(), tuple_type_id, false, None);
         let temp_let = TirStmt::new(
             TirStmtKind::Let {
@@ -3717,7 +3716,7 @@ impl<'a> Reify<'a> {
                 local_index: temp_local,
                 is_mut: false,
                 type_id: tuple_type_id,
-                value: iterable,
+                value: Some(iterable),
                 storage: LetStorage::Planned,
             },
             span,
@@ -3833,7 +3832,7 @@ impl<'a> Reify<'a> {
                                     local_index,
                                     is_mut,
                                     type_id: bind_elem_type,
-                                    value: bind_value,
+                                    value: Some(bind_value),
                                     storage: LetStorage::Planned,
                                 },
                                 span,
@@ -3861,7 +3860,7 @@ impl<'a> Reify<'a> {
 
             outer_stmts.push(TirStmt::new(
                 TirStmtKind::LabeledBlock {
-                    label: format!("$tuple_iter_{unique_id}_{i}"),
+                    label: minted_name(&minted_what("tuple_iter", unique_id), i),
                     block: TirBlock::new(block_stmts, span),
                 },
                 span,
@@ -3870,7 +3869,7 @@ impl<'a> Reify<'a> {
 
         TirStmt::new(
             TirStmtKind::LabeledBlock {
-                label: format!("$tuple_for_of_{unique_id}"),
+                label: minted_name("tuple_for_of", unique_id),
                 block: TirBlock::new(outer_stmts, span),
             },
             span,
@@ -4071,7 +4070,7 @@ impl<'a> Reify<'a> {
                     local_index,
                     is_mut,
                     type_id: elem_type,
-                    value: field_access,
+                    value: Some(field_access),
                     storage: LetStorage::Planned,
                 },
                 span,
@@ -4831,7 +4830,7 @@ impl<'a> Reify<'a> {
                         local_index,
                         is_mut: false,
                         type_id: hole_ty,
-                        value,
+                        value: Some(value),
                         storage: LetStorage::Planned,
                     },
                     hole_span,
@@ -5538,7 +5537,7 @@ impl<'a> Reify<'a> {
                 local_index,
                 is_mut: false,
                 type_id,
-                value: j,
+                value: Some(j),
                 storage: LetStorage::Planned,
             },
             span,
@@ -6140,7 +6139,7 @@ impl<'a> Reify<'a> {
                     local_index: ref_index,
                     is_mut: false,
                     type_id: mc.ref_type,
-                    value: TirExpr::new(
+                    value: Some(TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::MutRef,
                             expr: Box::new(TirExpr::new(
@@ -6154,7 +6153,7 @@ impl<'a> Reify<'a> {
                         },
                         mc.ref_type,
                         span,
-                    ),
+                    )),
                     storage: LetStorage::Planned,
                 },
                 span,
@@ -6479,7 +6478,7 @@ impl<'a> Reify<'a> {
                         TirStmtKind::Let {
                             name,
                             local_index: idx,
-                            value,
+                            value: Some(value),
                             is_mut: false,
                             type_id,
                             storage: LetStorage::Planned,
@@ -6584,7 +6583,7 @@ impl<'a> Reify<'a> {
                             local_index: index,
                             is_mut: true,
                             type_id: output_type,
-                            value,
+                            value: Some(value),
                             storage: LetStorage::Planned,
                         },
                         member_span,
@@ -10096,7 +10095,7 @@ fn bind_to_local(
         TirStmtKind::Let {
             name: name.clone(),
             local_index: index,
-            value,
+            value: Some(value),
             is_mut: false,
             type_id,
             storage: LetStorage::Planned,

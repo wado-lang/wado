@@ -213,7 +213,7 @@ impl Build<'_, '_> {
                 local_index,
                 is_mut: false,
                 type_id: ty,
-                value,
+                value: Some(value),
                 skip_value_copy: true,
             },
             self.span,

@@ -155,7 +155,7 @@ impl Rule for RefElimRule {
                 local_index: value,
                 is_mut: false,
                 type_id: engine.body.exprs[source_e].type_id,
-                value: Operand::Expr(source_e),
+                value: Some(Operand::Expr(source_e)),
                 skip_value_copy: true,
             };
             let span = engine.body.stmts[s].span;
@@ -584,7 +584,7 @@ impl Analysis<'_> {
         if let StmtKind::Let {
             local_index, value, ..
         } = &body.stmts[stmt].kind
-            && let Some(ve) = value.as_expr()
+            && let Some(ve) = value.and_then(Operand::as_expr)
         {
             self.register_let_binding(*local_index, ve, refs);
         }
@@ -751,7 +751,7 @@ fn deref_collect_stmt(
         local_index, value, ..
     } = &body.stmts[stmt].kind
         && !rebound.contains(local_index)
-        && let Some(ve) = value.as_expr()
+        && let Some(ve) = value.and_then(Operand::as_expr)
         && let Some(src_e) = deref_only_source(body, ve)
     {
         refs.insert(

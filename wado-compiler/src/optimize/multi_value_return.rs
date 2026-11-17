@@ -497,7 +497,10 @@ fn stmt_break_values_match(body: &Body, stmt: StmtId, expected: &ExpectedShape<'
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
             all_break_values_match_shape(body, *b, expected)
         }
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+        StmtKind::Let { value, .. } => {
+            value.is_none_or(|v| expr_break_values_match_operand(body, v, expected))
+        }
+        StmtKind::LetDestructure { value, .. } => {
             expr_break_values_match_operand(body, *value, expected)
         }
         StmtKind::Expr(e) => expr_break_values_match_operand(body, *e, expected),
@@ -601,8 +604,11 @@ fn validate_stmt(
     discarded: bool,
 ) {
     match &body.stmts[stmt].kind {
+        StmtKind::Let { value: None, .. } => {}
         StmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value: Some(value),
+            ..
         } => {
             let (local_index, value) = (*local_index, *value);
             // The binding must be the local's sole definition, `mut` or not —

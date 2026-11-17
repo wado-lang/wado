@@ -95,7 +95,10 @@ impl Rule for ElideBoxLocalRule {
 
 /// The single-field initializer operand of a candidate `let x = Struct { f }`.
 fn candidate_inner(body: &Body, stmt: StmtId) -> Operand {
-    let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
+    let StmtKind::Let {
+        value: Some(value), ..
+    } = &body.stmts[stmt].kind
+    else {
         unreachable!("guarded by describe_candidate");
     };
     let Some(ExprKind::StructLiteral { fields, .. }) =
@@ -180,7 +183,7 @@ fn stats_stmt(body: &Body, stmt: StmtId, stats: &mut IndexMap<u32, LocalStats>) 
         } => {
             let (local_index, value) = (*local_index, *value);
             stats.entry(local_index).or_default().defs += 1;
-            if let Some(ve) = value.as_expr() {
+            if let Some(ve) = value.and_then(Operand::as_expr) {
                 stats_node(body, NodeRef::Expr(ve), stats);
             }
         }
@@ -290,7 +293,9 @@ fn describe_candidate(
     blacklist: &IndexSet<u32>,
 ) -> Option<(u32, String, ModRef)> {
     let StmtKind::Let {
-        local_index, value, ..
+        local_index,
+        value: Some(value),
+        ..
     } = &body.stmts[stmt].kind
     else {
         return None;
@@ -382,14 +387,17 @@ struct UseSite<'a> {
 
 fn walk_stmt_for_leftmost(body: &Body, stmt: StmtId, site: &UseSite<'_>) -> LeftmostWalk {
     match &body.stmts[stmt].kind {
-        StmtKind::Let { value, .. }
+        StmtKind::Let {
+            value: Some(value), ..
+        }
         | StmtKind::LetDestructure { value, .. }
         | StmtKind::Return { value: Some(value) }
         | StmtKind::Break {
             value: Some(value), ..
         } => observable_propagate(walk_operand_for_leftmost(body, *value, site)),
         StmtKind::Expr(e) => walk_operand_for_leftmost(body, *e, site),
-        StmtKind::Return { value: None }
+        StmtKind::Let { value: None, .. }
+        | StmtKind::Return { value: None }
         | StmtKind::Break { value: None, .. }
         | StmtKind::Continue
         | StmtKind::If { .. }
@@ -601,6 +609,7 @@ fn walk_children_observable(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::name::indexed_local_name;
     use crate::nir::{NirBinaryOp, NirUnaryOp};
     use crate::nir_arena::ExprNode;
     use crate::nir_value_graph::ValueKind;
@@ -643,7 +652,7 @@ mod tests {
             body,
             ExprKind::Local {
                 index,
-                name: format!("$l{index}"),
+                name: indexed_local_name(index),
             },
         )
     }

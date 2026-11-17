@@ -6,6 +6,7 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::iter;
 use std::os::fd::OwnedFd;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -26,7 +27,7 @@ use wasmtime_wasi::filesystem::Descriptor;
 use wasmtime_wasi::p2::OutputStream;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
-use super::types::{ExitStatus, Input, Output};
+use super::types::{self, ExitStatus, Input, Output};
 use super::{Command, ErrorCode, GuestStdio, ProcessHost, ProcessView, Spawned, Spawning};
 use crate::path_search::{find_program, is_executable};
 use crate::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio, Trace};
@@ -108,6 +109,7 @@ pub(super) fn spawn<U>(
         stdin,
         stdout,
         stderr,
+        grants,
     } = cmd;
     let started = start(
         store.get(),
@@ -117,6 +119,7 @@ pub(super) fn spawn<U>(
         &stdin,
         [stdout, stderr],
         cwd.as_ref(),
+        grants.as_ref(),
     )?;
     let Started {
         spawned,
@@ -173,6 +176,7 @@ fn start(
     stdin: &Input,
     [stdout, stderr]: [Output; 2],
     cwd: Option<&Resource<Descriptor>>,
+    asked: Option<&types::Grants>,
 ) -> wasmtime::Result<Result<Started, ErrorCode>> {
     let grants = view.ctx.grants()?;
     let cwd = match cwd {
@@ -212,12 +216,24 @@ fn start(
             None => Arc::new(File::open(scratch.home()).map_err(error_code)?),
         };
         let path = resolve(program, &cwd).map_err(error_code)?;
+        let host_reads: Vec<_> = grants
+            .read
+            .iter()
+            .chain(user_config().process_read())
+            .collect();
         let mut policy = Policy::new(Network::Granted);
         for grant in &grants.dirs {
             policy.grant_dir(grant.path.clone(), Arc::clone(&grant.dir));
         }
-        for path in grants.read.iter().chain(user_config().process_read()) {
-            policy.grant_path(path.clone(), Reach::ReadExecute);
+        for path in &host_reads {
+            policy.grant_path((*path).clone(), Reach::ReadExecute);
+        }
+        if let Some(asked) = asked {
+            policy = narrowed(&policy, asked, &cwd)?;
+            // Narrowing takes the guest's directories away, never the host's.
+            for path in &host_reads {
+                policy.grant_path((*path).clone(), Reach::ReadExecute);
+            }
         }
         policy.grant_path(scratch.0.path(), Reach::ReadWrite);
         if inherits {
@@ -270,6 +286,40 @@ fn start(
         scratch: scratch.0,
         trace: grants.trace,
     }))
+}
+
+/// The baseline and the paths `asked` names, relative to `cwd`, in place of
+/// the guest's directories. Each is granted through one descriptor, so what is
+/// checked against `guest` is what the child reaches.
+fn narrowed(guest: &Policy, asked: &types::Grants, cwd: &File) -> Result<Policy, ErrorCode> {
+    let held = guest.resolved();
+    let start = sandbox::descriptor_path(cwd).map_err(error_code)?;
+    let mut policy = Policy::new(Network::Granted);
+    for (paths, access) in [
+        (&asked.read, Reach::ReadExecute),
+        (&asked.write, Reach::ReadWrite),
+    ] {
+        for path in paths {
+            // Checked before it is opened: opening a FIFO blocks, and lets a
+            // writer that waits on it go on, so a path past the guest's
+            // access is never opened.
+            let real = fs::canonicalize(start.join(path)).map_err(error_code)?;
+            if !held.permits(&real, access) {
+                return Err(ErrorCode::NotPermitted);
+            }
+            let opened = fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_NONBLOCK)
+                .open(&real)
+                .map_err(error_code)?;
+            // A link swapped in between the two reaches elsewhere.
+            if sandbox::descriptor_path(&opened).map_err(error_code)? != real {
+                return Err(ErrorCode::NotPermitted);
+            }
+            policy.grant_opened(real, Arc::new(opened), access);
+        }
+    }
+    Ok(policy)
 }
 
 /// Whether the OS can pass these to a child: no string holds a NUL, and no

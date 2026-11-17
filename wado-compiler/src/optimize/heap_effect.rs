@@ -1072,7 +1072,9 @@ impl HeapFrame {
                         local_index, value, ..
                     } => {
                         let l = frame.define_local(*local_index);
-                        frame.unify_op(effects, body, l, *value);
+                        if let Some(value) = *value {
+                            frame.unify_op(effects, body, l, value);
+                        }
                     }
                     StmtKind::Return { value: Some(v) } => frame.unify_op(effects, body, RET, *v),
                     StmtKind::LetDestructure { pattern, value, .. } => {

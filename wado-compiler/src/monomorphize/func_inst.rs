@@ -11,7 +11,7 @@ use crate::defs::DefId;
 use crate::elaborator::trait_env::{BlanketImpl, BlanketReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind, minted_name, minted_what};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
@@ -1488,7 +1488,15 @@ impl Monomorphizer {
         match &mut stmt.kind {
             TirStmtKind::Let { value, type_id, .. } => {
                 *type_id = self.substitute_type(*type_id, substitution, type_table);
-                self.substitute_types_in_expr(value, substitution, type_table, local_count, locals);
+                if let Some(value) = value {
+                    self.substitute_types_in_expr(
+                        value,
+                        substitution,
+                        type_table,
+                        local_count,
+                        locals,
+                    );
+                }
             }
             TirStmtKind::Expr(expr) => {
                 self.substitute_types_in_expr(expr, substitution, type_table, local_count, locals);
@@ -3375,7 +3383,7 @@ impl Monomorphizer {
         };
 
         let uid = *unique_id;
-        let temp_name = format!("$tuple_{uid}");
+        let temp_name = minted_name("tuple", uid);
         let binding_local_idx = *binding_local;
         let b_name = binding_name.clone();
         let b_mut = *is_mut;
@@ -3387,7 +3395,9 @@ impl Monomorphizer {
             .then(|| {
                 body.stmts.iter().find_map(|s| {
                     let TirStmtKind::Let {
-                        local_index, value, ..
+                        local_index,
+                        value: Some(value),
+                        ..
                     } = &s.kind
                     else {
                         return None;
@@ -3441,7 +3451,7 @@ impl Monomorphizer {
                     local_index: temp_local_idx,
                     is_mut: false,
                     type_id: iterable_type,
-                    value: iterable.clone(),
+                    value: Some(iterable.clone()),
                     storage: LetStorage::Planned,
                 },
                 span,
@@ -3516,7 +3526,7 @@ impl Monomorphizer {
                         local_index: iter_binding,
                         is_mut: b_mut,
                         type_id: bind_type,
-                        value: bind_value,
+                        value: Some(bind_value),
                         storage: LetStorage::Taken,
                     },
                     span,
@@ -3582,7 +3592,7 @@ impl Monomorphizer {
                             name,
                             local_index,
                             is_mut,
-                            value: orig_value,
+                            value: Some(orig_value),
                             ..
                         } = &orig_stmt.kind
                         {
@@ -3633,7 +3643,7 @@ impl Monomorphizer {
                                     local_index: *local_index,
                                     is_mut: *is_mut,
                                     type_id: field_type,
-                                    value: field_access,
+                                    value: Some(field_access),
                                     storage: LetStorage::Taken,
                                 },
                                 span,
@@ -3749,7 +3759,7 @@ impl Monomorphizer {
 
             iter_stmts.extend(elem_body.stmts);
 
-            let label = format!("$tuple_iter_{uid}_{i}");
+            let label = minted_name(&minted_what("tuple_iter", uid), i);
             outer_stmts.push(TirStmt::new(
                 TirStmtKind::LabeledBlock {
                     label,
@@ -3759,7 +3769,7 @@ impl Monomorphizer {
             ));
         }
 
-        let outer_label = format!("$tuple_for_of_{uid}");
+        let outer_label = minted_name("tuple_for_of", uid);
         TirStmt {
             source: stmt.source,
             ..TirStmt::new(
@@ -3816,7 +3826,7 @@ impl Monomorphizer {
     /// `.enumerate()` index — i.e. whether the unroll reads the element at all.
     fn binds_element_field(destructure: &[TirStmt]) -> bool {
         destructure.iter().any(|s| {
-            matches!(&s.kind, TirStmtKind::Let { value, .. }
+            matches!(&s.kind, TirStmtKind::Let { value: Some(value), .. }
                 if matches!(&value.kind, TirExprKind::FieldAccess { field_index, .. } if *field_index != 0))
         })
     }
@@ -3841,7 +3851,9 @@ impl Monomorphizer {
         body.stmts
             .iter()
             .take_while(|s| {
-                if let TirStmtKind::Let { value, .. } = &s.kind
+                if let TirStmtKind::Let {
+                    value: Some(value), ..
+                } = &s.kind
                     && let TirExprKind::FieldAccess { expr: inner, .. } = &value.kind
                     && let TirExprKind::Local { index, .. } = &inner.kind
                 {
@@ -3929,7 +3941,7 @@ impl Monomorphizer {
 
         // Private to this unroll, one reader per field — so each element binding
         // moves its field out (`LetStorage::Taken`) rather than deep-copying it.
-        let temp_name = format!("$comp_{uid}");
+        let temp_name = minted_name("comp", uid);
         let temp_local = *local_count;
         *local_count += 1;
         locals.push(TirLocal {
@@ -3941,7 +3953,7 @@ impl Monomorphizer {
 
         let mut result_elements = Vec::with_capacity(elements.len());
         for (i, &elem_type) in elements.iter().enumerate() {
-            let element_label = format!("$comp_{uid}_{i}");
+            let element_label = minted_name(&minted_what("comp", uid), i);
             let mut stmts = Vec::new();
 
             let field = TirExpr::new(
@@ -4000,7 +4012,7 @@ impl Monomorphizer {
                         local_index: iter_binding,
                         is_mut: false,
                         type_id: bind_type,
-                        value: bind_value,
+                        value: Some(bind_value),
                         storage: LetStorage::Taken,
                     },
                     span,
@@ -4020,7 +4032,7 @@ impl Monomorphizer {
                 let TirStmtKind::Let {
                     name,
                     local_index,
-                    value,
+                    value: Some(value),
                     ..
                 } = &template.kind
                 else {
@@ -4056,7 +4068,7 @@ impl Monomorphizer {
                         local_index: sub_local,
                         is_mut: false,
                         type_id: field_type,
-                        value: if inline_enumerate_pair {
+                        value: Some(if inline_enumerate_pair {
                             if field_index == 0 {
                                 index_literal.clone()
                             } else {
@@ -4079,7 +4091,7 @@ impl Monomorphizer {
                                 field_type,
                                 span,
                             )
-                        },
+                        }),
                         storage: LetStorage::Taken,
                     },
                     span,
@@ -4153,7 +4165,7 @@ impl Monomorphizer {
             ));
         }
 
-        let outer_label = format!("$comp_{uid}_result");
+        let outer_label = minted_name(&minted_what("comp", uid), "result");
         let tuple = TirExpr::new(
             TirExprKind::TupleLiteral {
                 elements: result_elements,
@@ -4169,7 +4181,7 @@ impl Monomorphizer {
                     local_index: temp_local,
                     is_mut: false,
                     type_id: source_type,
-                    value: source,
+                    value: Some(source),
                     storage: LetStorage::Planned,
                 },
                 span,

@@ -5,6 +5,7 @@
 use crate::ast::{self, AssertStmt, AstId, Expr, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::{assert_capture_name, assert_seen_name, assert_text_name};
 use crate::tir::TypeId;
 use crate::unparse::unparse_expr_source;
 
@@ -19,7 +20,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn desugar_assert(&mut self, assert_stmt: &AssertStmt, ctx: &mut FunctionContext) {
         self.record_desugar(assert_stmt.id, DesugarKind::Assert);
 
-        let mut scanner = CaptureScanner::new();
+        let mut mint = || assert_capture_name(ctx.fresh_serial());
+        let mut scanner = CaptureScanner::new(&mut mint);
         scanner.scan_root(&assert_stmt.condition);
         let CaptureScanner {
             slots,
@@ -52,7 +54,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .slots
             .iter()
             .filter(|c| c.conditional)
-            .map(|c| render_local_name(&c.name))
+            .map(|c| assert_text_name(&c.name))
             .collect();
         let string_type = self
             .tysys
@@ -151,22 +153,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             ctx.add_local(cap_name.clone(), type_id, !hoisted, None);
             if conditional {
-                ctx.add_local(seen_local_name(&cap_name), TypeTable::BOOL, true, None);
+                ctx.add_local(assert_seen_name(&cap_name), TypeTable::BOOL, true, None);
             }
         }
 
         type_id
     }
-}
-
-/// Name of the flag recording whether a conditional slot's capture site ran.
-pub(super) fn seen_local_name(cap_name: &str) -> String {
-    format!("{cap_name}_seen")
-}
-
-/// Name of the cold-branch local holding a conditional slot's rendered text.
-pub(super) fn render_local_name(cap_name: &str) -> String {
-    format!("{cap_name}_text")
 }
 
 /// The text a conditional slot renders when the run never reached it.
@@ -199,7 +191,7 @@ pub(crate) fn render_plans(sem: &ModuleSemantics) -> String {
                 (false, false) => "in-place",
             };
             out.push_str(&format!(
-                "  $v{i}  {reach:<11}  {bind:<8}  {}\n",
+                "  #{i}  {reach:<11}  {bind:<8}  {}\n",
                 slot.capture_label
             ));
         }
@@ -209,7 +201,7 @@ pub(crate) fn render_plans(sem: &ModuleSemantics) -> String {
 
 /// One sub-expression captured during the power-assert scan.
 struct Capture {
-    /// Variable name (`$v0`, `$v1`, …) the rewritten condition refers to.
+    /// The local the rewritten condition refers to.
     name: String,
     /// Source text of the original sub-expression, used in the failure message.
     source: String,
@@ -293,7 +285,9 @@ impl AssertCaptureContext {
 /// Decides which sub-expressions of an assert condition become capture slots.
 /// No source-text dedup: `f() == f()` gets a slot per occurrence, so each
 /// evaluates as the source wrote it.
-struct CaptureScanner {
+struct CaptureScanner<'a> {
+    /// Names the next slot's local.
+    mint: &'a mut dyn FnMut() -> String,
     slots: Vec<Capture>,
     ast_id_to_slot: IndexMap<AstId, usize>,
     /// The condition itself, which `$cond` already holds.
@@ -312,9 +306,10 @@ struct CaptureScanner {
     writes: Vec<Option<String>>,
 }
 
-impl CaptureScanner {
-    fn new() -> Self {
+impl<'a> CaptureScanner<'a> {
+    fn new(mint: &'a mut dyn FnMut() -> String) -> Self {
         Self {
+            mint,
             slots: Vec::new(),
             ast_id_to_slot: IndexMap::default(),
             is_root: true,
@@ -347,7 +342,7 @@ impl CaptureScanner {
         } else {
             let idx = self.slots.len();
             self.slots.push(Capture {
-                name: format!("$v{idx}"),
+                name: (self.mint)(),
                 source,
                 conditional,
                 is_place,

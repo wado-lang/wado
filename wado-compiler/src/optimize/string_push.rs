@@ -556,7 +556,7 @@ fn let_stmt(
             local_index: local,
             is_mut: false,
             type_id,
-            value,
+            value: Some(value),
             skip_value_copy: true,
         },
         span,

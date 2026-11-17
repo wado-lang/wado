@@ -138,26 +138,26 @@ global global:global_init_pure_calls.wado::DOUBLER: ref "canonical//CanonicalClo
 global global:global_init_pure_calls.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(52, 50);
 
 fn "global_init_pure_calls.wado/run"() with Stdout {
-    let $v0: i32;
+    let $v_6: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_1_114: i32;
     let new_repr: ref Array<u8>;
-    if @unlikely(local.tee $v0(block -> i32 {
+    if @unlikely(local.tee $v_6(block -> i32 {
         let $indirect_call_1: ref null "canonical//CanonicalClosure_0";
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(global:global_init_pure_calls.wado::DOUBLER).env, 21);
     }) != 42) {
         cold_path;
-        "global_init_pure_calls.wado/run$cold0"($v0);
+        "global_init_pure_calls.wado/run$cold0"($v_6);
         unreachable;
     }
-    $v0 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $v_6 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_114 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $v0 = "global_init_pure_calls.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v0);
+    $v_6 = "global_init_pure_calls.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v_6);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:global_init_pure_calls.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_114, new_repr);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_114);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v0);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v_6);
 }
 
 fn "global_init_pure_calls.wado/$template_segment$global_init_pure_calls.wado/$tmpl$ebaa20f4a908b504"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {
@@ -183,9 +183,9 @@ fn "global_init_pure_calls.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "global_init_pure_calls.wado/run$cold0"($v0) with Stdout {
+fn "global_init_pure_calls.wado/run$cold0"($v_6) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<global_init_pure_calls.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "global_init_pure_calls.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at global_init_pure_calls.wado:27
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<global_init_pure_calls.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "global_init_pure_calls.wado//$tmpl$ebaa20f4a908b504" { h0: $v_6, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at global_init_pure_calls.wado:27
 condition: DOUBLER(21) == 42
 DOUBLER(21): "), used: 100 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at global_init_pure_calls.wado:27
 condition: DOUBLER(21) == 42
@@ -845,8 +845,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "closure/global_init_pure_calls.wado/$closure_wrapper_0"($env, $p0) {
-    return "global_init_pure_calls.wado/global_init_pure_calls.wado/$Closure_1::$call$dae[self]"($p0);
+fn "closure/global_init_pure_calls.wado/$closure_wrapper_0"($env, $p_0) {
+    return "global_init_pure_calls.wado/global_init_pure_calls.wado/$Closure_1::$call$dae[self]"($p_0);
 }
 
 export fn "global_init_pure_calls.wado/$cm_export__run" as "run"

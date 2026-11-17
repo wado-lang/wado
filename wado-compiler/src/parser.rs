@@ -3113,7 +3113,7 @@ impl Parser {
             return self.parse_item().map(|item| Stmt::Item(Box::new(item)));
         }
 
-        if matches!(self.peek_nth(at).kind, TokenKind::Let | TokenKind::Reactive) {
+        if matches!(self.peek_nth(at).kind, TokenKind::Let) {
             return self.parse_let_stmt();
         }
 
@@ -3250,15 +3250,6 @@ impl Parser {
         // does.
         let attrs = self.parse_attributes()?;
         let id = self.alloc_ast_id();
-
-        if self.check(&TokenKind::Reactive) {
-            return Err(ParseError {
-                message: "`reactive` is reserved for reactive signals, which are not in the \
-                    language yet"
-                    .to_string(),
-                span: self.peek().span,
-            });
-        }
 
         self.expect(&TokenKind::Let)?;
 
@@ -3630,7 +3621,7 @@ impl Parser {
         // Parse init (optional): `let i = 0` or expression statement
         let init = if self.check(&TokenKind::Semicolon) {
             None
-        } else if self.check(&TokenKind::Let) || self.check(&TokenKind::Reactive) {
+        } else if self.check(&TokenKind::Let) {
             // A for-loop initializer has no "rest of block" to guard, so
             // `let ... else` is not meaningful here.
             Some(Box::new(self.parse_let_stmt_inner(false)?))
@@ -7988,7 +7979,7 @@ mod tests {
         declared_handle_classes, declares_extern_handle, written_params,
     };
     use crate::lexer::lex;
-    use crate::name::INTERNAL_PREFIX;
+    use crate::name::minted_name;
     use crate::unparse::Unparser;
     use crate::{ast, format};
     use std::assert_matches;
@@ -9274,12 +9265,12 @@ mod tests {
     }
 
     /// The compiler's own namespace needs no reservation rule: no Wado
-    /// identifier starts with [`INTERNAL_PREFIX`], so a pass that knows a
+    /// identifier starts with the `$` a minted name does, so a pass that knows a
     /// synthesised block by its label cannot be fooled by a written one, and a
     /// synthesised local or function can never shadow one an author wrote.
     #[test]
     fn test_internal_prefix_is_unwritable() {
-        let source = format!("fn f() {{ {INTERNAL_PREFIX}tmpl: {{}} }}");
+        let source = format!("fn f() {{ {}: {{}} }}", minted_name("tmpl", 0));
         assert!(!lex(&source).errors.is_empty(), "{source} must not lex");
 
         // Every label the source *can* spell is its own, `__` included.

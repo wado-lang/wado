@@ -6,6 +6,7 @@
 use crate::const_eval::Value;
 use crate::escape::{escape_string, quoted, quoted_char};
 use crate::lexer::is_valid_ident;
+use crate::name::indexed_local_name;
 use crate::nir::{
     FuncId, NirBinaryOp, NirEnum, NirFlags, NirFunction, NirGlobal, NirLiteralPattern, NirModule,
     NirParam, NirStruct, NirUnaryOp,
@@ -339,8 +340,10 @@ impl<'a> NirUnparser<'a> {
                 self.output.push_str(": ");
                 self.output
                     .push_str(&self.type_table.mangle_type_arg_for_generic(*type_id));
-                self.output.push_str(" = ");
-                self.unparse_operand(body, value);
+                if let Some(value) = value {
+                    self.output.push_str(" = ");
+                    self.unparse_operand(body, value);
+                }
                 self.output.push_str(";\n");
             }
             StmtKind::Expr(expr) => {
@@ -529,7 +532,7 @@ impl<'a> NirUnparser<'a> {
             ValueKind::Opaque(oid) => match body.values.opaque_local(oid) {
                 Some(idx) => match self.locals.get(idx as usize) {
                     Some(local) => self.output.push_str(&local.name),
-                    None => self.output.push_str(&format!("$local_{idx}")),
+                    None => self.output.push_str(&indexed_local_name(idx)),
                 },
                 None => self.output.push_str(&format!("%{}", v.index())),
             },

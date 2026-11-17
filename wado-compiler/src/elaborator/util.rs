@@ -401,7 +401,7 @@ fn float_range_narrow(
                         local_index: widened,
                         is_mut: false,
                         type_id: TypeTable::F32,
-                        value: widen_half(type_table, scrutinee, half, span),
+                        value: Some(widen_half(type_table, scrutinee, half, span)),
                         storage: LetStorage::Planned,
                     },
                     span,

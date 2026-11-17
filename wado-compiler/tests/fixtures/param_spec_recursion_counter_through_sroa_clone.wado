@@ -1,0 +1,43 @@
+// Test: a recursion passing a counter one higher at each level is not
+// specialized level by level, though `sroa_param` moves the recursive call
+// into a function of its own.
+//
+// param_spec cloned `write` on `depth`, then the clone's call on `depth + 1`,
+// and so on, every level in one invocation until the clone budget ran out. A
+// bound tied to the function a call sits in does not hold here: `sroa_param`
+// splits `w.out` out of the clone, and the call that recurses moves with it.
+
+use { println, Stdout } from "core:cli";
+
+struct Node {
+    n: i32,
+    next: Option<Node>,
+}
+
+struct Writer {
+    out: &mut String,
+    depth: i32,
+}
+
+fn write(node: &Node, w: Writer) {
+    w.out.push_str(`${w.depth}:${node.n} `);
+    write_next(&node.next, Writer { out: w.out, depth: w.depth + 1 });
+}
+
+fn write_next(next: &Option<Node>, w: Writer) {
+    if let Some(node) = next {
+        write(node, w);
+    }
+}
+
+export fn run() with Stdout {
+    let node = builtin::black_box(Node { n: 1, next: Some(Node { n: 2, next: Some(Node { n: 3, next: null }) }) });
+    let mut out = "";
+    write(&node, Writer { out: &mut out, depth: 0 });
+    println(out);
+}
+
+__DATA__
+{
+    "stdout": "0:1 1:2 2:3 \n"
+}

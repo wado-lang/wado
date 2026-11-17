@@ -489,8 +489,9 @@ impl ModRef {
                 local_index, value, ..
             } => {
                 self.local_writes.insert(*local_index);
-                let value = *value;
-                self.accumulate_operand(body, value, scope);
+                if let Some(value) = *value {
+                    self.accumulate_operand(body, value, scope);
+                }
             }
             StmtKind::Expr(e) => {
                 let e = *e;
@@ -1018,6 +1019,7 @@ impl SummaryCache {
 mod tests {
     use super::*;
     use crate::call_args::CallArgs;
+    use crate::name::indexed_local_name;
     use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
     use crate::nir_arena::{
         ArenaCallArg, ArenaStructField, ArmData, BlockNode, Body, ExprNode, PatNode, StmtNode,
@@ -1064,7 +1066,7 @@ mod tests {
             body,
             ExprKind::Local {
                 index,
-                name: format!("$l{index}"),
+                name: indexed_local_name(index),
             },
         )
     }
@@ -1102,11 +1104,11 @@ mod tests {
         ps(
             body,
             StmtKind::Let {
-                name: format!("$l{index}"),
+                name: indexed_local_name(index),
                 local_index: index,
                 is_mut: false,
                 type_id: ty(),
-                value: value.into(),
+                value: Some(value.into()),
                 skip_value_copy: false,
             },
         )

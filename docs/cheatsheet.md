@@ -1939,6 +1939,8 @@ use { cmd, Command, Process } from "core:process";
 let head = cmd`git rev-parse HEAD`.read()?;          // ByteList; Err on a nonzero exit
 let out = cmd`git commit -m ${msg} -- ${files}`.output()?;  // status, stdout, stderr
 let status = Command::new("make").arg("test").inherit_stdio().status()?;
+// Less than the guest holds: these paths in place of its directories
+let built = cmd`cargo test`.grant_write("checkout").grant_read("vendor").status()?;
 
 let mut child = Command::new("cat").stdin_piped().stdout_piped().spawn()?;
 child.stdin.take().unwrap().write_all(b"ping");      // drop it to close the pipe

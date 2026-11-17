@@ -169,6 +169,10 @@ The signature is not this key's over this token.
 
 `nbf` has not arrived.
 
+#### `impl Display for JwtError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
 ### `pub enum Crit`
 
 Whether the header carries `crit`, which is all [`verify`] asks: the member
@@ -178,3 +182,7 @@ field would read an explicit `null` as the absent member it is not.
 #### `Absent`
 
 #### `Present`
+
+#### `impl Deserialize for Crit`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<Crit, DeserializeError>`

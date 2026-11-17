@@ -13,12 +13,11 @@ use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{
-    LocalMethodName, cm_future_begin_read_func_name, cm_future_lift_func_name,
-    cm_future_read_func_name, cm_future_write_func_name, cm_stream_lift_func_name,
-    cm_stream_lift_value_func_name, cm_stream_read_func_name, cm_stream_read_value_func_name,
-    cm_stream_write_func_name, minted_name,
+use crate::name::CmChannelHelper::{
+    FutureBeginRead, FutureLift, FutureRead, FutureWrite, StreamLift, StreamLiftValue, StreamRead,
+    StreamReadValue, StreamWrite,
 };
+use crate::name::{LocalMethodName, minted_name};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FrameLocals, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
@@ -244,7 +243,7 @@ fn synthesize_record_stream_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<Ti
         sites,
         |tt, expr| {
             let elem = record_stream_read_element(tt, expr)?;
-            Some((cm_stream_read_func_name(&tt.base_type_name(elem)), elem))
+            Some((StreamRead.func_name(&tt.base_type_name(elem)), elem))
         },
         synthesize_record_stream_read_func,
     )
@@ -270,8 +269,8 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> V
     let record = stream_element_decl(&ctx.type_table.borrow(), elem_type_id);
     synthesize_stream_read_funcs(
         StreamReadNames {
-            begin: cm_stream_read_func_name(&elem_name),
-            lift: cm_stream_lift_func_name(&elem_name),
+            begin: StreamRead.func_name(&elem_name),
+            lift: StreamLift.func_name(&elem_name),
         },
         CanonicalIntrinsic::StreamRead(CmStreamPayload::Record(record)),
         elem_type_id,
@@ -339,7 +338,7 @@ fn future_write_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
 
 /// The `$cm_future_write_*` helper name for a payload type.
 fn future_write_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
-    cm_future_write_func_name(&tt.mangle_type_arg_for_generic(payload_type_id))
+    FutureWrite.func_name(&tt.mangle_type_arg_for_generic(payload_type_id))
 }
 
 /// Generate per-element `StreamWritable<T>::write()` binding functions for
@@ -407,7 +406,7 @@ fn stream_write_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> 
 }
 
 fn stream_write_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
-    cm_stream_write_func_name(&tt.mangle_type_arg_for_generic(elem_type_id))
+    StreamWrite.func_name(&tt.mangle_type_arg_for_generic(elem_type_id))
 }
 
 /// Generate per-element `StreamReadable<T>::read()` binding functions for
@@ -487,11 +486,11 @@ fn stream_read_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
 
 /// The `$cm_stream_read_val_*` helper name for an element type.
 fn stream_read_value_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
-    cm_stream_read_value_func_name(&tt.mangle_type_arg_for_generic(elem_type_id))
+    StreamReadValue.func_name(&tt.mangle_type_arg_for_generic(elem_type_id))
 }
 
 fn stream_lift_value_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
-    cm_stream_lift_value_func_name(&tt.mangle_type_arg_for_generic(elem_type_id))
+    StreamLiftValue.func_name(&tt.mangle_type_arg_for_generic(elem_type_id))
 }
 
 fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunction {
@@ -807,7 +806,7 @@ fn future_read_payload(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId, TypeId
 
 /// The `$cm_future_read_*` helper name for a payload type.
 fn future_read_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
-    cm_future_read_func_name(&tt.mangle_type_arg_for_generic(payload_type_id))
+    FutureRead.func_name(&tt.mangle_type_arg_for_generic(payload_type_id))
 }
 
 /// The `handle` a copy binding takes, then the `ptr` of its buffer, both `i32`.
@@ -976,7 +975,7 @@ fn synthesize_future_started_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<T
         |tt, expr| {
             let payload = future_started_read_payload(tt, expr)?;
             let mangled = tt.mangle_type_arg_for_generic(payload);
-            Some((cm_future_begin_read_func_name(&mangled), payload))
+            Some((FutureBeginRead.func_name(&mangled), payload))
         },
         synthesize_future_started_read_funcs,
     )
@@ -1011,7 +1010,7 @@ fn synthesize_future_started_read_funcs(
     let packed = cm_canonical_call(read_name, vec![handle(), ptr()], TypeTable::I32);
     let buffer = copy_buffer_literal(handle(), packed, ptr(), i32_const(size), align, type_table);
     let begin = binding_function(
-        cm_future_begin_read_func_name(&mangled),
+        FutureBeginRead.func_name(&mangled),
         &[handle_idx],
         buffer.type_id,
         vec![allocate, return_stmt(Some(buffer))],
@@ -1038,7 +1037,7 @@ fn synthesize_future_started_read_funcs(
     );
     stmts.push(return_stmt(Some(lifted)));
     let lift = binding_function(
-        cm_future_lift_func_name(&mangled),
+        FutureLift.func_name(&mangled),
         &[handle_idx, ptr_idx],
         payload_type_id,
         stmts,
@@ -1623,7 +1622,11 @@ struct CmMethodRewriter<'a> {
 impl TirMutVisitor for CmMethodRewriter<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) {
         match &mut stmt.kind {
-            TirStmtKind::Let { value, type_id, .. } => {
+            TirStmtKind::Let {
+                value: Some(value),
+                type_id,
+                ..
+            } => {
                 let old_type = value.type_id;
                 self.visit_expr(value);
                 // A streaming rewrite can retype the let value (e.g. to i32);
@@ -1708,12 +1711,12 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         }
         if let Some(payload_type_id) = future_started_read_payload(self.tt, expr) {
             let mangled = self.tt.mangle_type_arg_for_generic(payload_type_id);
-            let func_name = if cm_name == "future-lift" {
-                cm_future_lift_func_name(&mangled)
+            let helper = if cm_name == "future-lift" {
+                FutureLift
             } else {
-                cm_future_begin_read_func_name(&mangled)
+                FutureBeginRead
             };
-            self.rewrite_call(expr, BindingTarget::Entry(func_name));
+            self.rewrite_call(expr, BindingTarget::Entry(helper.func_name(&mangled)));
             return;
         }
         // Value-payload stream reads and lifts call a generated per-element
@@ -1731,12 +1734,8 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         }
         if let Some(elem_type_id) = record_stream_read_element(self.tt, expr) {
             let elem_name = self.tt.base_type_name(elem_type_id);
-            let func_name = if lifts {
-                cm_stream_lift_func_name(&elem_name)
-            } else {
-                cm_stream_read_func_name(&elem_name)
-            };
-            self.rewrite_call(expr, BindingTarget::Entry(func_name));
+            let helper = if lifts { StreamLift } else { StreamRead };
+            self.rewrite_call(expr, BindingTarget::Entry(helper.func_name(&elem_name)));
             return;
         }
         // Stream ops on a non-u8 element, and future drop / cancel: parameterized

@@ -288,7 +288,10 @@ impl TirRefVisitor for SinkWalker<'_> {
             | TirStmtKind::Break {
                 value: Some(op), ..
             } => self.raise_ret(op),
-            TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+            TirStmtKind::Let {
+                value: Some(value), ..
+            }
+            | TirStmtKind::LetDestructure { value, .. } => {
                 self.raise_taken(value);
             }
             _ => {}
@@ -413,8 +416,11 @@ impl TirRefVisitor for BindingWalker {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
             TirStmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value: Some(value),
+                ..
             } => self.targets.push((*local_index, value.clone())),
+            TirStmtKind::Let { value: None, .. } => {}
             TirStmtKind::LetDestructure { pattern, value, .. } => self.bind_pattern(pattern, value),
             TirStmtKind::Expr(_)
             | TirStmtKind::Return { .. }

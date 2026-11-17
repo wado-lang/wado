@@ -72,6 +72,7 @@ use crate::elaborator::types::FunctionContext;
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::logger::{Bail, Logger};
+use crate::module_path::resolve_import_with_invocations;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, Receiver, RefKind};
 use crate::name::{FqTraitName, FqTypeName, global_name, namespace_member_alias};
@@ -1632,7 +1633,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn record_use_specifier_references(&mut self, module: &Module) {
         for item in &module.items {
             let Item::Use(use_decl) = item else { continue };
-            let source = name::resolve_import_with_invocations(
+            let source = resolve_import_with_invocations(
                 &mut self.interner.borrow_mut(),
                 &self.current_module_source,
                 &use_decl.source,

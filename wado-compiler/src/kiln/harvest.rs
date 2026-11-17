@@ -7,10 +7,10 @@ use crate::ast::{ImportAttributes, Item, Module, UseDecl};
 use crate::compiler_host::{Code, DependencyIndex, Diagnostic, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::inline::InvocationIndex;
-use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageHost};
-use crate::name::{
+use crate::module_path::{
     canonicalize_entry_point, decl_file_of, resolve_import_with_entry, resolve_module_path,
 };
+use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageHost};
 use crate::parse;
 use crate::path::is_cwd_relative;
 use crate::remote::{Integrity, next_in_pin_order, pin_of};

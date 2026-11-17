@@ -15,7 +15,7 @@ use std::cell::RefCell;
 
 use crate::ast::{BinaryOp, HandleClasses, Visibility};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName};
+use crate::name::{FqTypeName, LocalMethodName, indexed_local_name};
 use crate::rarity::Mark;
 use crate::tir;
 use crate::tir::{
@@ -439,7 +439,7 @@ pub fn let_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExpr) -
             local_index,
             is_mut: false,
             type_id,
-            value,
+            value: Some(value),
             storage: LetStorage::Planned,
         },
         synth_span(),
@@ -454,7 +454,7 @@ pub fn let_mut_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExp
             local_index,
             is_mut: true,
             type_id,
-            value,
+            value: Some(value),
             storage: LetStorage::Planned,
         },
         synth_span(),
@@ -688,7 +688,7 @@ pub fn alloc_named_local(
 ) -> u32 {
     let idx = *next_local;
     *next_local += 1;
-    let name = name.unwrap_or_else(|| format!("$local_{idx}"));
+    let name = name.unwrap_or_else(|| indexed_local_name(idx));
     locals.push(TirLocal {
         name,
         type_id: ty,

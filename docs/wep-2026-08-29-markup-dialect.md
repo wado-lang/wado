@@ -9,22 +9,18 @@ Wado has to emit HTML on two fronts and has a surface for neither.
   by [`core:router`](./wep-2026-05-06-core-router.md) returns HTML. Marl already
   exports `escape_text` / `escape_attr` for HTML-templating consumers; the
   consumer does not exist.
-- Client-side. [`wado-lang:web`](./wep-2026-04-01-web.md) is eight resources
-  generated from a WebIDL slice, with no host to run against, and
-  [Reactive Signals](./wep-2026-04-04-reactive-signals.md) is designed around a
-  UI surface it does not have.
+- Client-side. [`wado-lang:web`](./wep-2026-04-01-web.md) binds the DOM, and
+  [Reactive Signals](./wep-2026-04-04-reactive-signals.md) binds signals to it,
+  but a page is built by calls.
 
 The obvious import is JSX, and the ground is already prepared for it: a leading
 `<` in expression position belongs to JSX by
 [Overload Resolution](./wep-2026-07-31-overload-resolution.md), which is why
 `<Type as Trait>::method` is permanently out and the trait-qualified form is
-what Wado spells instead. Reactive Signals writes its examples in JSX and lists
-"integrate with JSX codegen" as work.
+what Wado spells instead.
 
-None of it exists. There is no `Element` type, no component model, no event
-wiring; `reactive` is a reserved word the parser rejects. JSX would be the
-surface of a UI
-framework that has not been built.
+No markup surface exists, and no component model. JSX would be the surface of a
+UI framework that has not been built.
 
 What changed is that the surface question is now separable from the language
 question. [Kiln](./wep-2026-04-12-kiln.md) admits any file as a generator input,
@@ -178,7 +174,7 @@ render function is its whole interface.
 ## Related WEPs
 
 - [Kiln — Keyed IDL Lowering Notation](./wep-2026-04-12-kiln.md) — the mechanism a dialect ships as
-- [Reactive Signals](./wep-2026-04-04-reactive-signals.md) — reserves `<` for JSX and assumes it in its codegen
+- [Reactive Signals](./wep-2026-04-04-reactive-signals.md) — the signals library a client-side dialect's output binds to
 - [Overload Resolution](./wep-2026-07-31-overload-resolution.md) — spends the reservation, ruling out `<Type as Trait>::method`
 - [Gale — Grammar Adaptive LL Engine](./wep-2026-03-02-gale.md) — the parser generator a dialect grammar feeds
 - [The Web Interface for Wado](./wep-2026-04-01-web.md) — `wado-lang:web`, the client-side target

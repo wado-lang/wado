@@ -282,7 +282,9 @@ impl Scan<'_> {
 impl TirRefVisitor for Scan<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
-            TirStmtKind::Let { value, .. } => self.bind_local(value),
+            TirStmtKind::Let {
+                value: Some(value), ..
+            } => self.bind_local(value),
             TirStmtKind::Expr(TirExpr {
                 kind: TirExprKind::Assign { target, value },
                 ..

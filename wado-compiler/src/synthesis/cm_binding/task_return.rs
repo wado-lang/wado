@@ -12,7 +12,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::canonical::CanonicalIntrinsic;
-use crate::name::cm_task_entry_func_name;
+use crate::name::{cm_task_entry_func_name, minted_name};
 
 use crate::ast::Type;
 use crate::cm_abi;
@@ -462,11 +462,10 @@ fn generate_inline_task_return(
         // Allocate mutable flat value locals (initialized to zero)
         let flat_locals: Vec<(u32, String)> = flat_return_types
             .iter()
-            .enumerate()
-            .map(|(i, &vt)| {
+            .map(|&vt| {
                 let type_id = cm_val_type_to_type_id(vt);
                 let local = alloc_local(next_local, locals, type_id);
-                let name = format!("$tv_{i}");
+                let name = minted_name("tv", local);
                 stmts.push(let_mut_stmt(&name, local, type_id, cm_zero(vt)));
                 (local, name)
             })
@@ -488,7 +487,7 @@ fn generate_inline_task_return(
         // is bound but never read, which is fine — `wir_build` won't
         // emit a spurious read.
         let ok_payload_local = alloc_local(next_local, locals, ok_type_id);
-        let ok_payload_name = format!("$ok_val_{ok_payload_local}");
+        let ok_payload_name = minted_name("ok_val", ok_payload_local);
 
         // === Ok arm body ===
         let mut ok_stmts: Vec<TirStmt> = Vec::new();
@@ -535,7 +534,7 @@ fn generate_inline_task_return(
 
         // === Err arm body ===
         let err_payload_local = alloc_local(next_local, locals, err_type_id);
-        let err_payload_name = format!("$err_val_{err_payload_local}");
+        let err_payload_name = minted_name("err_val", err_payload_local);
         let mut err_stmts: Vec<TirStmt> = Vec::new();
         err_stmts.push(expr_stmt(assign(
             local_ref(

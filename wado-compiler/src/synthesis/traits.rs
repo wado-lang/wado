@@ -32,11 +32,7 @@ use super::common::{
 };
 use crate::ast::{NamePolicy, Visibility};
 use crate::defs::DefId;
-use crate::name::{
-    FqTraitName, case_construct_helper_name, case_extract_helper_name, case_ref_helper_name,
-    eq_payload_local, field_get_helper_name, field_ref_helper_name, hole_get_helper_name,
-    hole_ref_helper_name, template_segment_helper_name,
-};
+use crate::name::{FqTraitName, MarkerBridge, eq_payload_local};
 use crate::synthesis::common;
 use crate::synthesis::common::{
     bool_lit, locals_from_params, option_some, relocate_synthetic_locals, unreachable_call,
@@ -1248,7 +1244,7 @@ pub(super) fn generate_field_bridge_helpers(
     generate_value_and_ref_bridges(
         type_table,
         &members,
-        (field_get_helper_name, field_ref_helper_name),
+        (MarkerBridge::FieldGet, MarkerBridge::FieldRef),
         struct_type,
         ref_struct_type,
         span,
@@ -1260,12 +1256,12 @@ pub(super) fn generate_field_bridge_helpers(
 fn generate_value_and_ref_bridges(
     type_table: &RefCell<TypeTable>,
     members: &[ReadBridgeMember],
-    (value_name, ref_name): (fn(&str, &str) -> String, fn(&str, &str) -> String),
+    (value_bridge, ref_bridge): (MarkerBridge, MarkerBridge),
     struct_type: TypeId,
     ref_struct_type: TypeId,
     span: Span,
 ) -> Vec<TirFunction> {
-    [(value_name, Read::Value), (ref_name, Read::Ref)]
+    [(value_bridge, Read::Value), (ref_bridge, Read::Ref)]
         .into_iter()
         .flat_map(|helper| {
             generate_read_bridge_helpers(
@@ -1323,7 +1319,7 @@ pub(super) fn generate_hole_bridge_helpers(
     let mut helpers = generate_value_and_ref_bridges(
         type_table,
         &holes,
-        (hole_get_helper_name, hole_ref_helper_name),
+        (MarkerBridge::HoleGet, MarkerBridge::HoleRef),
         struct_type,
         ref_struct_type,
         span,
@@ -1331,10 +1327,7 @@ pub(super) fn generate_hole_bridge_helpers(
     helpers.extend(generate_read_bridge_helpers(
         type_table,
         &segments,
-        (
-            |subject, _| template_segment_helper_name(subject),
-            Read::Ref,
-        ),
+        (MarkerBridge::TemplateSegment, Read::Ref),
         struct_type,
         ref_struct_type,
         span,
@@ -1372,7 +1365,7 @@ pub(super) struct ReadBridgeMember {
 pub(super) fn generate_read_bridge_helpers(
     type_table: &RefCell<TypeTable>,
     members: &[ReadBridgeMember],
-    (helper_name, read): (fn(&str, &str) -> String, Read),
+    (bridge, read): (MarkerBridge, Read),
     struct_type: TypeId,
     ref_struct_type: TypeId,
     span: Span,
@@ -1392,7 +1385,11 @@ pub(super) fn generate_read_bridge_helpers(
         .map(|(mangled_value, group)| {
             generate_read_helper(
                 type_table,
-                helper_name(&mangled_struct, mangled_value),
+                if bridge.names_member() {
+                    bridge.pair_name(&mangled_struct, mangled_value)
+                } else {
+                    bridge.shape_name(&mangled_struct)
+                },
                 ref_struct_type,
                 group,
                 read,
@@ -2220,16 +2217,13 @@ pub(super) fn generate_case_bridge_helpers(
 
     let mut helpers = Vec::new();
     for (mangled_payload, (payload_type, cases)) in &by_payload {
-        for (helper_name, read) in [
-            (
-                case_extract_helper_name as fn(&str, &str) -> String,
-                Read::Value,
-            ),
-            (case_ref_helper_name, Read::Ref),
+        for (bridge, read) in [
+            (MarkerBridge::CaseExtract, Read::Value),
+            (MarkerBridge::CaseRef, Read::Ref),
         ] {
             helpers.push(generate_case_extract_helper(
                 type_table,
-                helper_name(&mangled_variant, mangled_payload),
+                bridge.pair_name(&mangled_variant, mangled_payload),
                 variant_type,
                 ref_variant_type,
                 *payload_type,
@@ -2239,7 +2233,7 @@ pub(super) fn generate_case_bridge_helpers(
             ));
         }
         helpers.push(generate_case_construct_helper(
-            case_construct_helper_name(&mangled_variant, mangled_payload),
+            MarkerBridge::CaseConstruct.pair_name(&mangled_variant, mangled_payload),
             variant_type,
             *payload_type,
             cases,
@@ -2254,7 +2248,7 @@ pub(super) fn generate_case_bridge_helpers(
     let unit_payload = type_table.borrow().mangle_type_arg_erased(TypeTable::UNIT);
     if !by_payload.contains_key(&unit_payload) {
         helpers.push(generate_case_construct_helper(
-            case_construct_helper_name(&mangled_variant, &unit_payload),
+            MarkerBridge::CaseConstruct.pair_name(&mangled_variant, &unit_payload),
             variant_type,
             TypeTable::UNIT,
             &[],
@@ -4924,7 +4918,7 @@ fn scalar_order_stmts(
                 local_index,
                 is_mut: false,
                 type_id: ty,
-                value,
+                value: Some(value),
                 storage: LetStorage::Planned,
             },
             span,
@@ -5318,7 +5312,7 @@ fn build_struct_ord_body(
                 local_index: local_idx,
                 is_mut: false,
                 type_id: ordering_type,
-                value: cmp_result,
+                value: Some(cmp_result),
                 storage: LetStorage::Planned,
             },
             span,

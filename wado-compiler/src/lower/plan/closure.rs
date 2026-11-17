@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::fmt::Write as _;
 use std::rc::Rc;
 
 use crate::call_args::CallArgs;
@@ -13,7 +12,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{
     FqTraitName, FqTypeName, LocalMethodName, MethodName, closure_call_method_info,
     closure_call_name, closure_capture_field, closure_functor_struct_name, discarded_param_name,
-    is_fn_type_name, mangle_local_method,
+    functor_specialization_suffix, is_fn_type_name, mangle_local_method,
 };
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType,
@@ -203,12 +202,11 @@ fn build_capture_fields(
 /// Build the `$__Closure_N` mangled-name suffix appended to a callee that
 /// has been specialised over the listed functor struct types.
 fn build_functor_suffix(functor_types: &[(u32, TypeId)], type_table: &TypeTable) -> String {
-    functor_types
-        .iter()
-        .fold(String::new(), |mut acc, (_, tid)| {
-            let _ = write!(acc, "${}", type_table.struct_type_mangled_name(*tid));
-            acc
-        })
+    functor_specialization_suffix(
+        functor_types
+            .iter()
+            .map(|(_, tid)| type_table.struct_type_mangled_name(*tid)),
+    )
 }
 
 /// Pad raw call args out to a `CallArg` list whose `is_mut` flags match
@@ -1481,7 +1479,9 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
         // closure, mark the closure specialisable, then walk the body
         // (which owns a fresh local-index namespace).
         if let TirStmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value: Some(value),
+            ..
         } = &stmt.kind
             && let TirExprKind::Closure {
                 body,
@@ -1804,7 +1804,7 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) {
         if let TirStmtKind::Let {
             local_index,
-            value,
+            value: Some(value),
             type_id,
             ..
         } = &mut stmt.kind

@@ -11,10 +11,8 @@ use crate::compiler_host::{
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
 use crate::loader::strip_kiln_scheme;
-use crate::name::{
-    DeclaredHead, canonicalize_entry_point, effect_namespace, module_parent_dir,
-    packaged_module_name,
-};
+use crate::module_path::{canonicalize_entry_point, module_parent_dir};
+use crate::name::{DeclaredHead, effect_namespace, packaged_module_name};
 use crate::parallel::lock;
 use crate::path::{normalize, relative_path};
 use crate::primitive::PrimitiveType;
