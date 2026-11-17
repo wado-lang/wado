@@ -249,9 +249,9 @@ condition: fields.copy_all().is_empty()
 fn "resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(self, name, value) with Fields {
     let $name_packed: i64;
     let $value_packed: i64;
-    let $name_flat1: i32;
-    let $value_flat0: i32;
-    let $value_flat1: i32;
+    let $name_owned_1: i32;
+    let $value_owned_0: i32;
+    let $value_owned_1: i32;
     let $outptr: i32;
     let $result_val: ref null "wasi:http/types.wado//HeaderError";
     let $local_19: ref null "core:prelude/string.wado//String";
@@ -264,16 +264,16 @@ fn "resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[meth
     "core:rt/gc_array_to_memory$spec0$dae[src_start]"(value.repr, ptr_26, 1);
     $value_packed = builtin::i64_extend_i32_u(ptr_26) | 4294967296_i64;
     ptr_26 = builtin::i32_wrap_i64($name_packed);
-    $name_flat1 = builtin::i32_wrap_i64($name_packed >> 32_i64);
-    $value_flat0 = builtin::i32_wrap_i64($value_packed);
-    $value_flat1 = builtin::i32_wrap_i64($value_packed >> 32_i64);
+    $name_owned_1 = builtin::i32_wrap_i64($name_packed >> 32_i64);
+    $value_owned_0 = builtin::i32_wrap_i64($value_packed);
+    $value_owned_1 = builtin::i32_wrap_i64($value_packed >> 32_i64);
     $outptr = "mem/realloc"(0, 0, 4, 20);
-    "wasi/$wasi:http/types@0.3.0#[method]fields.append"(self.value, ptr_26, $name_flat1, $value_flat0, $value_flat1, $outptr);
-    if $name_flat1 > 0 {
-        drop("mem/realloc"(ptr_26, $name_flat1, 1, 0));
+    "wasi/$wasi:http/types@0.3.0#[method]fields.append"(self.value, ptr_26, $name_owned_1, $value_owned_0, $value_owned_1, $outptr);
+    if $name_owned_1 > 0 {
+        drop("mem/realloc"(ptr_26, $name_owned_1, 1, 0));
     }
-    if $value_flat1 > 0 {
-        drop("mem/realloc"($value_flat0, $value_flat1, 1, 0));
+    if $value_owned_1 > 0 {
+        drop("mem/realloc"($value_owned_0, $value_owned_1, 1, 0));
     }
     $result_val = (if builtin::load_u8($outptr) == 0 -> ref null "wasi:http/types.wado//HeaderError" {
         ref.null none;
@@ -290,10 +290,10 @@ fn "resource_store_through_mut_ref.wado/$cm_binding__wasi:http/types@0.3.0#[meth
         $local_19 = ref.null none;
         if ptr_26 != 0 {
             ptr_26 = builtin::load_i32((($outptr + 4) + 4) + 4);
-            "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_46(builtin::array_new<u8>(local.tee $name_flat1(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4)))), ptr_26, $name_flat1);
-            name = struct.new "core:prelude/string.wado//String" { repr: arr_46, used: $name_flat1 };
-            if $name_flat1 > 0 {
-                drop("mem/realloc"(ptr_26, $name_flat1, 1, 0));
+            "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_46(builtin::array_new<u8>(local.tee $name_owned_1(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4)))), ptr_26, $name_owned_1);
+            name = struct.new "core:prelude/string.wado//String" { repr: arr_46, used: $name_owned_1 };
+            if $name_owned_1 > 0 {
+                drop("mem/realloc"(ptr_26, $name_owned_1, 1, 0));
             }
             $local_19 = name;
         }

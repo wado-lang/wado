@@ -22,7 +22,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::{self, PlaceRef};
 use crate::lower::plan::value_copy::points_to::PointsTo;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
-use crate::name::MethodName;
+use crate::name::{MethodName, minted_name};
 use crate::synthesis::common::builtin_call;
 use cranelift_entity::EntityRef;
 
@@ -1183,8 +1183,8 @@ impl FunctionTranslator<'_, '_> {
         // Translator-synthesized bindings — never a user-visible defensive
         // copy, and the value's copy decision is made above.
         let mut out = vec![
-            self.synthesized_let(ref_idx, "$deref_ref", handle.type_id, ref_nir.into(), span),
-            self.synthesized_let(val_idx, "$deref_val", place_type, val_nir, span),
+            self.synthesized_let(ref_idx, "deref_ref", handle.type_id, ref_nir.into(), span),
+            self.synthesized_let(val_idx, "deref_val", place_type, val_nir, span),
         ];
         self.write_in_place(
             (ref_idx, handle.type_id),
@@ -1384,11 +1384,11 @@ impl FunctionTranslator<'_, '_> {
         let list_idx = self.alloc_local(list.type_id, "$list".to_string());
         let index_idx = self.alloc_local(TypeTable::I32, "$index".to_string());
         let val_idx = self.alloc_local(element, "$deref_val".to_string());
-        let local = |index: u32, stem: &str, ty: tir::TypeId| {
+        let local = |index: u32, what: &str, ty: tir::TypeId| {
             TirExpr::new(
                 TirExprKind::Local {
                     index,
-                    name: format!("{stem}_{index}"),
+                    name: minted_name(what, index),
                 },
                 ty,
                 span,
@@ -1398,25 +1398,25 @@ impl FunctionTranslator<'_, '_> {
         let mut out = vec![
             self.synthesized_let(
                 list_idx,
-                "$list",
+                "list",
                 list.type_id,
                 self.convert_expr(list).into(),
                 span,
             ),
             self.synthesized_let(
                 index_idx,
-                "$index",
+                "index",
                 TypeTable::I32,
                 self.convert_operand(index),
                 span,
             ),
-            self.synthesized_let(val_idx, "$deref_val", element, val_nir, span),
+            self.synthesized_let(val_idx, "deref_val", element, val_nir, span),
         ];
 
         let list_field = |field: SeqField, ty: tir::TypeId| {
             TirExpr::new(
                 TirExprKind::FieldAccess {
-                    expr: Box::new(local(list_idx, "$list", list.type_id)),
+                    expr: Box::new(local(list_idx, "list", list.type_id)),
                     field_index: field.index(),
                     field_name: field.field_name().to_string(),
                 },
@@ -1447,11 +1447,11 @@ impl FunctionTranslator<'_, '_> {
             compare(
                 zero,
                 TirBinaryOp::LtEq,
-                local(index_idx, "$index", TypeTable::I32),
+                local(index_idx, "index", TypeTable::I32),
             ),
             TirBinaryOp::BitAnd,
             compare(
-                local(index_idx, "$index", TypeTable::I32),
+                local(index_idx, "index", TypeTable::I32),
                 TirBinaryOp::Lt,
                 list_field(SeqField::Len, TypeTable::I32),
             ),
@@ -1473,14 +1473,14 @@ impl FunctionTranslator<'_, '_> {
                     array_ref_type,
                     span,
                 ),
-                local(index_idx, "$index", TypeTable::I32),
+                local(index_idx, "index", TypeTable::I32),
             ],
             element_ref_type,
         );
         let ref_idx = self.alloc_local(element_ref_type, "$deref_ref".to_string());
         let mut write = vec![self.synthesized_let(
             ref_idx,
-            "$deref_ref",
+            "deref_ref",
             element_ref_type,
             self.convert_expr(&get).into(),
             span,
@@ -1497,9 +1497,9 @@ impl FunctionTranslator<'_, '_> {
             unreachable!()
         };
         for (arg, replacement) in locals.iter_mut().zip([
-            local(list_idx, "$list", list.type_id),
-            local(index_idx, "$index", TypeTable::I32),
-            local(val_idx, "$deref_val", element),
+            local(list_idx, "list", list.type_id),
+            local(index_idx, "index", TypeTable::I32),
+            local(val_idx, "deref_val", element),
         ]) {
             arg.expr = replacement;
         }
@@ -1524,14 +1524,14 @@ impl FunctionTranslator<'_, '_> {
     fn synthesized_let(
         &self,
         index: u32,
-        stem: &str,
+        what: &str,
         type_id: tir::TypeId,
         value: Operand,
         span: Span,
     ) -> StmtId {
         self.alloc_stmt(
             StmtKind::Let {
-                name: format!("{stem}_{index}"),
+                name: minted_name(what, index),
                 local_index: index,
                 is_mut: false,
                 type_id,
@@ -1555,11 +1555,11 @@ impl FunctionTranslator<'_, '_> {
         out: &mut Vec<StmtId>,
     ) {
         let chain =
-            |local: u32, stem: &str, ty: tir::TypeId, path: &[(String, u32, tir::TypeId)]| {
+            |local: u32, what: &str, ty: tir::TypeId, path: &[(String, u32, tir::TypeId)]| {
                 let mut expr = self.alloc_expr(
                     ExprKind::Local {
                         index: local,
-                        name: format!("{stem}_{local}"),
+                        name: minted_name(what, local),
                     },
                     ty,
                     span,
@@ -1582,17 +1582,17 @@ impl FunctionTranslator<'_, '_> {
         let values: Vec<Operand> = leaves
             .iter()
             .map(|path| {
-                let read = chain(val, "$deref_val", val_type, path);
+                let read = chain(val, "deref_val", val_type, path);
                 if !nested {
                     return read.into();
                 }
                 let leaf_type = path.last().expect("a leaf path names a field").2;
                 let temp = self.alloc_local(leaf_type, "$leaf".to_string());
-                out.push(self.synthesized_let(temp, "$leaf", leaf_type, read.into(), span));
+                out.push(self.synthesized_let(temp, "leaf", leaf_type, read.into(), span));
                 let local = self.alloc_expr(
                     ExprKind::Local {
                         index: temp,
-                        name: format!("$leaf_{temp}"),
+                        name: minted_name("leaf", temp),
                     },
                     leaf_type,
                     span,
@@ -1603,7 +1603,7 @@ impl FunctionTranslator<'_, '_> {
         for (path, value) in leaves.iter().zip(values) {
             let assign = self.alloc_expr(
                 ExprKind::Assign {
-                    target: chain(handle, "$deref_ref", handle_type, path),
+                    target: chain(handle, "deref_ref", handle_type, path),
                     value,
                 },
                 TypeTable::UNIT,
@@ -1728,7 +1728,7 @@ impl FunctionTranslator<'_, '_> {
         ));
         let declare = self.alloc_stmt(
             StmtKind::Let {
-                name: format!("$assigned_{flag}"),
+                name: minted_name("assigned", flag),
                 local_index: flag,
                 is_mut: true,
                 type_id: TypeTable::BOOL,
@@ -1749,7 +1749,7 @@ impl FunctionTranslator<'_, '_> {
             self.alloc_expr(
                 ExprKind::Local {
                     index: flag,
-                    name: format!("$assigned_{flag}"),
+                    name: minted_name("assigned", flag),
                 },
                 TypeTable::BOOL,
                 span,

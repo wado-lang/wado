@@ -52,7 +52,7 @@ use crate::ast::{AttrArg, Attribute, InterfaceDecl, Visibility};
 use crate::compiler_item::{CompilerItem, Resolved};
 use crate::coverage::{CoverageMap, ProbeSite};
 use crate::defs::DefId;
-use crate::elaborator::assert::{MOVED, NOT_EVALUATED, render_local_name, seen_local_name};
+use crate::elaborator::assert::{MOVED, NOT_EVALUATED};
 use crate::elaborator::call::{ARRAY_NEW_DATA, RECEIVER, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::expr::{compose_union_plan, peel_to_struct};
@@ -82,9 +82,10 @@ use crate::format_spec::FormatKind;
 use crate::hashmap;
 use crate::lexer::defaults_to_float;
 use crate::name::{
-    DeclaredHead, LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
-    display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
-    minted_name, range_local_name, template_block_label, template_hole_local, test_function_name,
+    DeclaredHead, LocalMethodName, MethodName, assert_capture_name, assert_seen_name,
+    assert_text_name, constant_pattern_local_name, deref_capture_name, display_function_name,
+    effect_default_impl_name, for_body_label, mangle_local_item_name, minted_name, minted_what,
+    range_local_name, template_block_label, template_hole_local, test_function_name,
 };
 use crate::pgo::MarkMap;
 use crate::rarity::Mark;
@@ -308,7 +309,7 @@ impl WritePlace {
 /// One reify-side power-assert capture slot. Independent from
 /// [`super::assert::Capture`] so the two walks don't share state.
 pub(super) struct ReifyAssertSlot {
-    /// `$v0`, `$v1`, … — the local the panic template references.
+    /// The local the panic template references.
     pub(super) name: String,
     pub(super) label: String,
     /// `false` when the sub-expression evaporated during reify and no
@@ -3064,7 +3065,7 @@ impl<'a> Reify<'a> {
             )
         });
         let seen_local_index = conditional
-            .then(|| ctx.add_local(seen_local_name(&cap_name), TypeTable::BOOL, true, None));
+            .then(|| ctx.add_local(assert_seen_name(&cap_name), TypeTable::BOOL, true, None));
 
         let binding = |value: Option<TirExpr>, is_mut: bool| {
             TirStmt::new(
@@ -3122,14 +3123,14 @@ impl<'a> Reify<'a> {
                 let seen_ref = TirExpr::new(
                     TirExprKind::Local {
                         index: seen_index,
-                        name: seen_local_name(&cap_name),
+                        name: assert_seen_name(&cap_name),
                     },
                     TypeTable::BOOL,
                     cap_span,
                 );
                 decls.push(TirStmt::new(
                     TirStmtKind::Let {
-                        name: seen_local_name(&cap_name),
+                        name: assert_seen_name(&cap_name),
                         local_index: seen_index,
                         is_mut: true,
                         type_id: TypeTable::BOOL,
@@ -3293,29 +3294,27 @@ impl<'a> Reify<'a> {
             (Vec::new(), IndexMap::default())
         };
 
+        let slots = slot_facts
+            .into_iter()
+            .map(|(label, conditional, is_place, hoisted)| ReifyAssertSlot {
+                name: assert_capture_name(ctx.fresh_serial()),
+                label,
+                emitted: false,
+                local_index: None,
+                type_id: None,
+                conditional,
+                is_place,
+                hoisted,
+                place_expr: None,
+                seen_local_index: None,
+                bindings: Vec::new(),
+            })
+            .collect();
         let mut scope = ctx.enter_scope();
         let ctx = &mut scope.replacing(
             |ctx| &mut ctx.reify_assert_capture_ctx,
             Some(ReifyAssertCaptureContext {
-                slots: slot_facts
-                    .iter()
-                    .enumerate()
-                    .map(
-                        |(i, (label, conditional, is_place, hoisted))| ReifyAssertSlot {
-                            name: format!("$v{i}"),
-                            label: label.clone(),
-                            emitted: false,
-                            local_index: None,
-                            type_id: None,
-                            conditional: *conditional,
-                            is_place: *is_place,
-                            hoisted: *hoisted,
-                            place_expr: None,
-                            seen_local_index: None,
-                            bindings: Vec::new(),
-                        },
-                    )
-                    .collect(),
+                slots,
                 ast_id_to_slot,
                 in_progress: IndexSet::default(),
             }),
@@ -3362,7 +3361,7 @@ impl<'a> Reify<'a> {
             .enumerate()
             .filter(|(_, slot)| slot.conditional)
             .map(|(i, slot)| {
-                let name = render_local_name(&slot.name);
+                let name = assert_text_name(&slot.name);
                 (i, ctx.add_local(name, string_type, false, None))
             })
             .collect();
@@ -3443,13 +3442,13 @@ impl<'a> Reify<'a> {
             match slot.seen_local_index {
                 Some(seen_index) => {
                     let render_index = render_local_of[&slot_idx];
-                    let render_name = render_local_name(&slot.name);
+                    let render_name = assert_text_name(&slot.name);
                     text_lets.push(self.assert_slot_text_let(
                         render_index,
                         render_name.clone(),
                         string_type,
                         seen_index,
-                        seen_local_name(&slot.name),
+                        assert_seen_name(&slot.name),
                         local_ref,
                         inspect_spec,
                         span,
@@ -3501,7 +3500,7 @@ impl<'a> Reify<'a> {
         let assert_serial = ctx.fresh_serial();
         TirStmt::new(
             TirStmtKind::LabeledBlock {
-                label: format!("$assert_{assert_serial}"),
+                label: minted_name("assert", assert_serial),
                 block: TirBlock::new(inner_stmts, span),
             },
             span,
@@ -3553,8 +3552,8 @@ impl<'a> Reify<'a> {
         let mut frame = ctx.enter_loop();
         let ctx = &mut *frame;
         let unique_id = ctx.fresh_serial();
-        let iter_var = format!("$iter_{unique_id}");
-        let label = format!("$for_of_{unique_id}");
+        let iter_var = minted_name("iter", unique_id);
+        let label = minted_name("for_of", unique_id);
 
         let into_iter_receiver = self.reify_expr(&for_of.iterable, ctx, None);
         let into_iter_receiver = self.adjust_receiver_for(
@@ -3709,7 +3708,7 @@ impl<'a> Reify<'a> {
             self.skip_for_of_body(for_of.id);
         }
 
-        let temp_name = format!("$tuple_{unique_id}");
+        let temp_name = minted_name("tuple", unique_id);
         let temp_local = ctx.add_local(temp_name.clone(), tuple_type_id, false, None);
         let temp_let = TirStmt::new(
             TirStmtKind::Let {
@@ -3861,7 +3860,7 @@ impl<'a> Reify<'a> {
 
             outer_stmts.push(TirStmt::new(
                 TirStmtKind::LabeledBlock {
-                    label: format!("$tuple_iter_{unique_id}_{i}"),
+                    label: minted_name(&minted_what("tuple_iter", unique_id), i),
                     block: TirBlock::new(block_stmts, span),
                 },
                 span,
@@ -3870,7 +3869,7 @@ impl<'a> Reify<'a> {
 
         TirStmt::new(
             TirStmtKind::LabeledBlock {
-                label: format!("$tuple_for_of_{unique_id}"),
+                label: minted_name("tuple_for_of", unique_id),
                 block: TirBlock::new(outer_stmts, span),
             },
             span,

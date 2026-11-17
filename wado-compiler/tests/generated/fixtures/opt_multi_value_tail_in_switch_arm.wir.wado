@@ -246,7 +246,7 @@ fn "opt_multi_value_tail_in_switch_arm.wado/dispatch"(n) {
 
 fn "opt_multi_value_tail_in_switch_arm.wado/run"() {
     let i: i32;
-    let $v2_3: i32;
+    let $v_3: i32;
     i = 0;
     b14: block {
         l15: loop {
@@ -254,16 +254,16 @@ fn "opt_multi_value_tail_in_switch_arm.wado/run"() {
             let $mv$p$a: i32;
             let $mv$p$b: i32;
             multivalue_bind [$mv$p$a, $mv$p$b] = "opt_multi_value_tail_in_switch_arm.wado/dispatch"(i);
-            $v2_3 = i + 10;
-            if @unlikely($mv$p$a != $v2_3) {
+            $v_3 = i + 10;
+            if @unlikely($mv$p$a != $v_3) {
                 cold_path;
-                "opt_multi_value_tail_in_switch_arm.wado/run$cold3"(i, $mv$p$a, $v2_3);
+                "opt_multi_value_tail_in_switch_arm.wado/run$cold3"(i, $mv$p$a, $v_3);
                 unreachable;
             }
-            $v2_3 = local.tee $mv$p$a(i + 10) * 2;
-            if @unlikely($mv$p$b != $v2_3) {
+            $v_3 = local.tee $mv$p$a(i + 10) * 2;
+            if @unlikely($mv$p$b != $v_3) {
                 cold_path;
-                "opt_multi_value_tail_in_switch_arm.wado/run$cold2"(i, $mv$p$b, $mv$p$a, $v2_3);
+                "opt_multi_value_tail_in_switch_arm.wado/run$cold2"(i, $mv$p$b, $mv$p$a, $v_3);
                 unreachable;
             }
             i = i + 1;
@@ -328,9 +328,9 @@ fn "opt_multi_value_tail_in_switch_arm.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "opt_multi_value_tail_in_switch_arm.wado/run$cold0"($v0) {
+fn "opt_multi_value_tail_in_switch_arm.wado/run$cold0"($v_15) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_multi_value_tail_in_switch_arm.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_multi_value_tail_in_switch_arm.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_multi_value_tail_in_switch_arm.wado:47
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_multi_value_tail_in_switch_arm.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_multi_value_tail_in_switch_arm.wado//$tmpl$ebaa20f4a908b504" { h0: $v_15, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_multi_value_tail_in_switch_arm.wado:47
 condition: q.b == -1
 q.b: "), used: 96 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_multi_value_tail_in_switch_arm.wado:47
 condition: q.b == -1
@@ -338,9 +338,9 @@ q.b: "), used: 96 }, s1: struct.new "core:prelude/string.wado//String" { repr: a
     unreachable;
 }
 
-fn "opt_multi_value_tail_in_switch_arm.wado/run$cold1"($v0) {
+fn "opt_multi_value_tail_in_switch_arm.wado/run$cold1"($v_12) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_multi_value_tail_in_switch_arm.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_multi_value_tail_in_switch_arm.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_multi_value_tail_in_switch_arm.wado:46
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_multi_value_tail_in_switch_arm.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_multi_value_tail_in_switch_arm.wado//$tmpl$ebaa20f4a908b504" { h0: $v_12, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_multi_value_tail_in_switch_arm.wado:46
 condition: q.a == -1
 q.a: "), used: 96 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_multi_value_tail_in_switch_arm.wado:46
 condition: q.a == -1
@@ -348,9 +348,9 @@ q.a: "), used: 96 }, s1: struct.new "core:prelude/string.wado//String" { repr: a
     unreachable;
 }
 
-fn "opt_multi_value_tail_in_switch_arm.wado/run$cold2"(i, $v0, $v2, $v3) {
+fn "opt_multi_value_tail_in_switch_arm.wado/run$cold2"(i, $v_6, $v_8, $v_9) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_multi_value_tail_in_switch_arm.wado/$tmpl$9b4c2a20953233e7,[i32,i32,i32,i32]>"(struct.new "opt_multi_value_tail_in_switch_arm.wado//$tmpl$9b4c2a20953233e7" { h0: $v0, h1: i, h2: $v2, h3: $v3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_multi_value_tail_in_switch_arm.wado:43
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_multi_value_tail_in_switch_arm.wado/$tmpl$9b4c2a20953233e7,[i32,i32,i32,i32]>"(struct.new "opt_multi_value_tail_in_switch_arm.wado//$tmpl$9b4c2a20953233e7" { h0: $v_6, h1: i, h2: $v_8, h3: $v_9, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_multi_value_tail_in_switch_arm.wado:43
 condition: p.b == (i + 10) * 2
 p.b: "), used: 106 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_multi_value_tail_in_switch_arm.wado:43
 condition: p.b == (i + 10) * 2
@@ -362,9 +362,9 @@ i + 10: "), used: 9 }, s3: struct.new "core:prelude/string.wado//String" { repr:
     unreachable;
 }
 
-fn "opt_multi_value_tail_in_switch_arm.wado/run$cold3"(i, $v0, $v2) {
+fn "opt_multi_value_tail_in_switch_arm.wado/run$cold3"(i, $v_1, $v_3) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_multi_value_tail_in_switch_arm.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "opt_multi_value_tail_in_switch_arm.wado//$tmpl$72a42041a31d7898" { h0: $v0, h1: i, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_multi_value_tail_in_switch_arm.wado:42
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_multi_value_tail_in_switch_arm.wado/$tmpl$72a42041a31d7898,[i32,i32,i32]>"(struct.new "opt_multi_value_tail_in_switch_arm.wado//$tmpl$72a42041a31d7898" { h0: $v_1, h1: i, h2: $v_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_multi_value_tail_in_switch_arm.wado:42
 condition: p.a == i + 10
 p.a: "), used: 100 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_multi_value_tail_in_switch_arm.wado:42
 condition: p.a == i + 10

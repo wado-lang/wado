@@ -207,8 +207,8 @@ impl FunctionTranslator<'_, '_> {
     /// a `StructNew` reading the locals back as the struct fields.
     fn wrap_multivalue_i64(&mut self, instr: WirInstr, result_type_id: TypeId) -> WirInstr {
         let type_id = self.ref_type_id(result_type_id);
-        let lo = self.fresh_local("$mv_lo");
-        let hi = self.fresh_local("$mv_hi");
+        let lo = self.fresh_local("mv_lo");
+        let hi = self.fresh_local("mv_hi");
         WirInstr::Seq(vec![
             WirInstr::DeclareLocal {
                 name: lo.clone(),
@@ -375,9 +375,9 @@ impl FunctionTranslator<'_, '_> {
         // One set per clone: the `len` operand can hold a clone of this same
         // type, and it runs between this one's `src` store and its copy.
         let is_prefix = len.is_some();
-        let src_name = self.fresh_local("$array_clone_src");
-        let dst_name = self.fresh_local("$array_clone_dst");
-        let len_name = self.fresh_local("$array_clone_len");
+        let src_name = self.fresh_local("array_clone_src");
+        let dst_name = self.fresh_local("array_clone_dst");
+        let len_name = self.fresh_local("array_clone_len");
         let ref_ty = WirType::Ref {
             type_id: type_id.clone(),
             nullable: false,
@@ -439,8 +439,8 @@ impl FunctionTranslator<'_, '_> {
         [start, end]: [WirInstr; 2],
         element_copy: WirFuncId,
     ) -> [WirInstr; 4] {
-        let i_name = self.fresh_local("$array_clone_i");
-        let elem_name = self.fresh_local("$array_clone_elem");
+        let i_name = self.fresh_local("array_clone_i");
+        let elem_name = self.fresh_local("array_clone_elem");
         // `array.get` reads a ref element as nullable, and a `List<T>`'s
         // backing array is sized to its capacity, so the slots past `used`
         // hold `array.new_default`'s null. Keep it rather than hand it to the
@@ -512,7 +512,7 @@ impl FunctionTranslator<'_, '_> {
     ) -> (Vec<WirInstr>, [WirInstr; N]) {
         let mut seq = Vec::with_capacity(2 * N);
         let reads = std::array::from_fn(|i| {
-            let name = self.fresh_local("$builtin_arg");
+            let name = self.fresh_local("builtin_arg");
             let value = self.translate_operand(args[i].expr);
             let read = local_get(&name, &tys[i]);
             seq.extend(declare_and_set_local(name, tys[i].clone(), value));
@@ -940,7 +940,7 @@ impl FunctionTranslator<'_, '_> {
             "swap_handles" => {
                 let box_ty = self.wir_type(self.operand_type_id(args[0].expr));
                 let (mut seq, [a, b]) = self.spill_operands(args, [box_ty.clone(), box_ty]);
-                let held = self.fresh_local("$held");
+                let held = self.fresh_local("held");
                 seq.extend(declare_and_set_local(
                     held.clone(),
                     WirType::I32,
@@ -1013,7 +1013,7 @@ impl FunctionTranslator<'_, '_> {
             nullable: true,
         };
         let value_ty = self.struct_field_wir_type(&slot_box, "value").as_nullable();
-        let name = self.fresh_local("$slot_box");
+        let name = self.fresh_local("slot_box");
         let read = local_get(&name, &box_ty);
         let [declare, set] = declare_and_set_local(name, box_ty, boxed);
         WirInstr::Seq(vec![
@@ -1063,7 +1063,7 @@ impl FunctionTranslator<'_, '_> {
         seq: &mut Vec<WirInstr>,
     ) -> [WirInstr; N] {
         operands.map(|(operand, ty)| {
-            let name = self.fresh_local("$slot_store");
+            let name = self.fresh_local("slot_store");
             let read = local_get(&name, &ty);
             seq.extend(declare_and_set_local(name, ty, operand));
             read
@@ -1693,7 +1693,7 @@ impl FunctionTranslator<'_, '_> {
 
         // Nullable, so a callee read from a nullable slot is not narrowed: the
         // `struct.get`s that read it trap on null themselves.
-        let temp_name = self.fresh_local("$indirect_call");
+        let temp_name = self.fresh_local("indirect_call");
         let callee_ref_type = WirType::Ref {
             type_id: closure_struct_type_id.clone(),
             nullable: true,

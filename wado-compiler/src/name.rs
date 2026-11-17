@@ -912,6 +912,13 @@ pub fn to_cm_name(name: &str) -> String {
     name.to_kebab_case()
 }
 
+/// The CM export name of a test function (`$test_0_my_name` as `test-0-my-name`).
+/// The elaborator spells each non-alphanumeric character of the test's string as
+/// `_`, so a name may hold `__` or end in `_`, which the CM name collapses.
+pub fn test_export_name(function_name: &str) -> String {
+    to_cm_name(function_name.trim_start_matches(INTERNAL_PREFIX))
+}
+
 /// What the Component Model compares the CM name `cm_name` by when it requires
 /// names in one scope to be strongly unique: `a-b`, `ab` and `A-B` share one.
 pub fn cm_name_key(cm_name: &str) -> String {
@@ -1091,8 +1098,70 @@ pub fn minted_name(what: &str, serial: impl fmt::Display) -> String {
 
 /// `what` narrowed by `sub` (a field name, say), for [`minted_name`].
 #[must_use]
-pub fn minted_what(what: &str, sub: &str) -> String {
+pub fn minted_what(what: &str, sub: impl fmt::Display) -> String {
     format!("{what}_{sub}")
+}
+
+/// The name a local that has none of its own goes by: its index, which the
+/// local holds alone.
+#[must_use]
+pub fn indexed_local_name(index: impl fmt::Display) -> String {
+    minted_name("local", index)
+}
+
+/// The suffix a callee specialised over closure functor structs takes: each
+/// functor's mangled name after a `$`.
+#[must_use]
+pub fn functor_specialization_suffix(functors: impl IntoIterator<Item = String>) -> String {
+    functors
+        .into_iter()
+        .fold(String::new(), |mut suffix, functor| {
+            suffix.push_str(INTERNAL_PREFIX);
+            suffix.push_str(&functor);
+            suffix
+        })
+}
+
+/// The path of a module the compiler writes for itself in directory `dir`,
+/// which no source file can share.
+#[must_use]
+pub fn synthesized_module_path(dir: &str, stem: &str) -> String {
+    let file = format!("{INTERNAL_PREFIX}{stem}.wado");
+    if dir.is_empty() {
+        file
+    } else {
+        format!("{dir}/{file}")
+    }
+}
+
+/// The name of an anonymous struct, from its fields each rendered `name:type`.
+#[must_use]
+pub fn anonymous_struct_name(fields: &[String]) -> String {
+    format!("{INTERNAL_PREFIX}anon_{{{}}}", fields.join(","))
+}
+
+/// The `index`th parameter of a synthesized function, which no source names.
+#[must_use]
+pub fn positional_param_name(index: impl fmt::Display) -> String {
+    minted_name("p", index)
+}
+
+/// The local a power-assert binds a captured operand to.
+#[must_use]
+pub fn assert_capture_name(serial: u32) -> String {
+    minted_name("v", serial)
+}
+
+/// The flag recording whether a conditional power-assert capture ran.
+#[must_use]
+pub fn assert_seen_name(capture: &str) -> String {
+    format!("{capture}_seen")
+}
+
+/// The cold-branch local holding a conditional power-assert capture's text.
+#[must_use]
+pub fn assert_text_name(capture: &str) -> String {
+    format!("{capture}_text")
 }
 
 /// What every LICM hoist is minted under, narrowed by [`minted_what`].
@@ -3172,8 +3241,8 @@ mod tests {
             "id<P>"
         );
         assert_eq!(
-            named(&f1, "id<fn(a.wado/P)->i32with($e263)>$$Closure_0"),
-            "id<fn(P)->i32with($e263)>"
+            named(&f1, "id<fn(a.wado/P)->i32with($e_263)>$$Closure_0"),
+            "id<fn(P)->i32with($e_263)>"
         );
         let method = LocalMethodName::with_method_type_args(
             FqTypeName::builtin("Box"),

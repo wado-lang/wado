@@ -75,7 +75,7 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(23)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value,$v1]" = fn(i32);  // TypeId(24)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value,$v_1]" = fn(i32);  // TypeId(24)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(25)
 
@@ -136,7 +136,7 @@ fn "list_index_assign_negative_oob.wado/run"() with Stdout {
     repr_8 = builtin::array_new<i32>(4);
     if @unlikely(local.tee index_10(black_box(-1)) >=u 4) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value,$v1]"(index_10);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value,$v_1]"(index_10);
         unreachable;
     }
     builtin::array_set<i32>(repr_8, index_10, 7);
@@ -399,7 +399,7 @@ fn "core:rt/panic$cold0"($mv$message$repr, $mv$message$used) {
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value,$v1]"(index) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value,$v_1]"(index) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
     "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$4432d2d1cbeba55c" { h0: index, h1: 4, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in List::index_assign at core:prelude/list.wado:401
 condition: 0 <= index < self.used

@@ -609,6 +609,7 @@ fn walk_children_observable(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::name::indexed_local_name;
     use crate::nir::{NirBinaryOp, NirUnaryOp};
     use crate::nir_arena::ExprNode;
     use crate::nir_value_graph::ValueKind;
@@ -651,7 +652,7 @@ mod tests {
             body,
             ExprKind::Local {
                 index,
-                name: format!("$l{index}"),
+                name: indexed_local_name(index),
             },
         )
     }

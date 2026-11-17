@@ -167,21 +167,21 @@ fn "opt_store_load_forward_ref_place.wado/$template_segment$opt_store_load_forwa
 }
 
 fn "opt_store_load_forward_ref_place.wado/$cm_export__run"() {
-    let $v0: i32;
+    let $v_0: i32;
     let $sroa_o_inner_3: ref "opt_store_load_forward_ref_place.wado//Inner";
     local.tee $sroa_o_inner_3(struct.new "opt_store_load_forward_ref_place.wado//Inner" { v: 0 }).v = 5;
     "opt_store_load_forward_ref_place.wado/mutate"($sroa_o_inner_3);
-    if @unlikely(local.tee $v0($sroa_o_inner_3.v) != 105) {
+    if @unlikely(local.tee $v_0($sroa_o_inner_3.v) != 105) {
         cold_path;
-        "opt_store_load_forward_ref_place.wado/run$cold0"($v0);
+        "opt_store_load_forward_ref_place.wado/run$cold0"($v_0);
         unreachable;
     }
     "wasi/task-return"(0);
 }
 
-fn "opt_store_load_forward_ref_place.wado/run$cold0"($v0) {
+fn "opt_store_load_forward_ref_place.wado/run$cold0"($v_0) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_store_load_forward_ref_place.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_store_load_forward_ref_place.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_store_load_forward_ref_place.wado:26
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_store_load_forward_ref_place.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_store_load_forward_ref_place.wado//$tmpl$ebaa20f4a908b504" { h0: $v_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_store_load_forward_ref_place.wado:26
 condition: o.inner.v == 105
 o.inner.v: "), used: 107 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_store_load_forward_ref_place.wado:26
 condition: o.inner.v == 105

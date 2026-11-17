@@ -140,7 +140,7 @@ import fn wasi/task-return from "wasi/task-return";
 global global:opt_clone_forward_mutated.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(51, 32, 52);
 
 fn "opt_clone_forward_mutated.wado/run"() with Stdout {
-    let $v0_5: i32;
+    let $v_3: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_1_79: i32;
     let $sroa_$sroa_b_data_77_repr_80: ref Array<i32>;
@@ -155,29 +155,29 @@ fn "opt_clone_forward_mutated.wado/run"() with Stdout {
         $sroa_$sroa_b_data_77_repr_80 = $sroa_write_back_84.repr;
     }
     builtin::array_set<i32>($sroa_$sroa_b_data_77_repr_80, 3, 99);
-    if @unlikely(local.tee $v0_5(builtin::array_get_value<i32>($array_clone_dst_2, 0)) != 1) {
+    if @unlikely(local.tee $v_3(builtin::array_get_value<i32>($array_clone_dst_2, 0)) != 1) {
         cold_path;
-        "opt_clone_forward_mutated.wado/run$cold3"($v0_5);
+        "opt_clone_forward_mutated.wado/run$cold3"($v_3);
         unreachable;
     }
-    if @unlikely(local.tee $v0_5(builtin::array_get_value<i32>($array_clone_dst_2, 2)) != 3) {
+    if @unlikely(local.tee $v_3(builtin::array_get_value<i32>($array_clone_dst_2, 2)) != 3) {
         cold_path;
-        "opt_clone_forward_mutated.wado/run$cold2"($v0_5);
+        "opt_clone_forward_mutated.wado/run$cold2"($v_3);
         unreachable;
     }
-    if @unlikely(local.tee $v0_5(builtin::array_get_value<i32>($sroa_$sroa_b_data_77_repr_80, 3)) != 99) {
+    if @unlikely(local.tee $v_3(builtin::array_get_value<i32>($sroa_$sroa_b_data_77_repr_80, 3)) != 99) {
         cold_path;
-        "opt_clone_forward_mutated.wado/run$cold0"($v0_5);
+        "opt_clone_forward_mutated.wado/run$cold0"($v_3);
         unreachable;
     }
-    $v0_5 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $v_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_79 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $v0_5 = "opt_clone_forward_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v0_5);
+    $v_3 = "opt_clone_forward_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v_3);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(4)), 0, global:opt_clone_forward_mutated.wado::$const_obj_0, 0, 3);
     builtin::array_set_u8(new_repr, 3, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_79, new_repr);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_79);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v0_5);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v_3);
 }
 
 fn "opt_clone_forward_mutated.wado/$template_segment$opt_clone_forward_mutated.wado/$tmpl$ebaa20f4a908b504"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {
@@ -203,9 +203,9 @@ fn "opt_clone_forward_mutated.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "opt_clone_forward_mutated.wado/run$cold0"($v0) with Stdout {
+fn "opt_clone_forward_mutated.wado/run$cold0"($v_12) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_clone_forward_mutated.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_clone_forward_mutated.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_clone_forward_mutated.wado:35
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_clone_forward_mutated.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_clone_forward_mutated.wado//$tmpl$ebaa20f4a908b504" { h0: $v_12, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_clone_forward_mutated.wado:35
 condition: b.data[3] == 99
 b.data[3]: "), used: 99 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_clone_forward_mutated.wado:35
 condition: b.data[3] == 99
@@ -213,9 +213,9 @@ b.data[3]: "), used: 99 }, s1: struct.new "core:prelude/string.wado//String" { r
     unreachable;
 }
 
-fn "opt_clone_forward_mutated.wado/run$cold2"($v0) with Stdout {
+fn "opt_clone_forward_mutated.wado/run$cold2"($v_6) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_clone_forward_mutated.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_clone_forward_mutated.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_clone_forward_mutated.wado:33
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_clone_forward_mutated.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_clone_forward_mutated.wado//$tmpl$ebaa20f4a908b504" { h0: $v_6, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_clone_forward_mutated.wado:33
 condition: u[2] == 3
 u[2]: "), used: 88 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_clone_forward_mutated.wado:33
 condition: u[2] == 3
@@ -223,9 +223,9 @@ u[2]: "), used: 88 }, s1: struct.new "core:prelude/string.wado//String" { repr: 
     unreachable;
 }
 
-fn "opt_clone_forward_mutated.wado/run$cold3"($v0) with Stdout {
+fn "opt_clone_forward_mutated.wado/run$cold3"($v_3) with Stdout {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_clone_forward_mutated.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_clone_forward_mutated.wado//$tmpl$ebaa20f4a908b504" { h0: $v0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_clone_forward_mutated.wado:32
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_clone_forward_mutated.wado/$tmpl$ebaa20f4a908b504,[i32]>"(struct.new "opt_clone_forward_mutated.wado//$tmpl$ebaa20f4a908b504" { h0: $v_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_clone_forward_mutated.wado:32
 condition: u[0] == 1
 u[0]: "), used: 88 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_clone_forward_mutated.wado:32
 condition: u[0] == 1

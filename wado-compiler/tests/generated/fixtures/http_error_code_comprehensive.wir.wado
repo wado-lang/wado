@@ -959,37 +959,37 @@ fn "http_error_code_comprehensive.wado/$cm_binding__wasi:http/types@0.3.0#[const
 
 fn "http_error_code_comprehensive.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(headers, contents, trailers) with Response {
     let $contents_disc: i32;
-    let $contents_inner0: i32;
+    let $contents_inner_0: i32;
     let $outptr: i32;
     let $lifted_result_8: ref null "core:prelude//$Resource";
     let $lifted_result_9: ref null "core:prelude//$Resource";
     $contents_disc = ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents);
-    $contents_inner0 = 0;
+    $contents_inner_0 = 0;
     if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents) {
-        $contents_inner0 = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents).payload_0.value;
+        $contents_inner_0 = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents).payload_0.value;
     } else {
     }
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/$wasi:http/types@0.3.0#[static]response.new"(headers, $contents_disc, $contents_inner0, trailers, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[static]response.new"(headers, $contents_disc, $contents_inner_0, trailers, $outptr);
     $lifted_result_8 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
     $lifted_result_9 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
     return struct.new "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: $lifted_result_8, 1: $lifted_result_9 };
 }
 
-fn "http_error_code_comprehensive.wado/$cm_export__handle"($p0) {
+fn "http_error_code_comprehensive.wado/$cm_export__handle"($p_0) {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:http_error_code_comprehensive.wado::$modules_initialized);
         cold_path;
         "core:prelude/types.wado/$initialize_module"();
         global:http_error_code_comprehensive.wado::$modules_initialized = 1;
     };
-    "http_error_code_comprehensive.wado/$cm_task_entry__handle"($p0);
+    "http_error_code_comprehensive.wado/$cm_task_entry__handle"($p_0);
 }
 
 fn "http_error_code_comprehensive.wado/$cm_task_entry__handle"(request) {
     let dns_payload: ref "wasi:http/types.wado//DnsErrorPayload";
-    let $v1_53: ref "core:prelude/string.wado//String";
+    let $v_99: ref "core:prelude/string.wado//String";
     let tls_payload: ref "wasi:http/types.wado//TlsAlertReceivedPayload";
     let field_payload: ref "wasi:http/types.wado//FieldSizePayload";
     let resp_tx: i32;
@@ -1016,13 +1016,13 @@ condition: dns_payload.info_code matches { Some(_) }
 "), 121);
         unreachable;
     }
-    $v1_53 = "http_error_code_comprehensive.wado/error_tag$sroa[e.value]"(local.tee $sroa_dns_err_value_709(struct.new "wasi:http/types.wado//ErrorCode::DnsError" { discriminant: 1, payload_0: dns_payload }));
+    $v_99 = "http_error_code_comprehensive.wado/error_tag$sroa[e.value]"(local.tee $sroa_dns_err_value_709(struct.new "wasi:http/types.wado//ErrorCode::DnsError" { discriminant: 1, payload_0: dns_payload }));
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__49: block -> bool {
-        if local.tee a_end_552($v1_53.used) != 9 {
+        if local.tee a_end_552($v_99.used) != 9 {
             break $inline_core_prelude_array_wado_seq_eq_u8__49: 0;
         }
         i_557 = 0;
-        $licm_repr_728 = $v1_53.repr;
+        $licm_repr_728 = $v_99.repr;
         b25: block {
             l26: loop {
                 break_if b25 (builtin::i64_extend_i32_s(i_557) + 3_i64) >= builtin::i64_extend_i32_s(a_end_552);
@@ -1058,25 +1058,25 @@ condition: dns_payload.info_code matches { Some(_) }
         break $inline_core_prelude_array_wado_seq_eq_u8__49: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $v1_53("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$15d0cd67a88ce9f9,[wasi:http/types.wado/ErrorCode,core:prelude/string.wado/String]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$15d0cd67a88ce9f9" { h0: "http_error_code_comprehensive.wado/$value_copy$wasi:http/types.wado/ErrorCode"($sroa_dns_err_value_709), h1: $v1_53, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:93
+        "core:rt/panic"(local.tee $v_99("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$15d0cd67a88ce9f9,[wasi:http/types.wado/ErrorCode,core:prelude/string.wado/String]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$15d0cd67a88ce9f9" { h0: "http_error_code_comprehensive.wado/$value_copy$wasi:http/types.wado/ErrorCode"($sroa_dns_err_value_709), h1: $v_99, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:93
 condition: error_tag(&dns_err) == \"dns-error\"
 dns_err: "), used: 123 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:93
 condition: error_tag(&dns_err) == \"dns-error\"
 dns_err: "), used: 123 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 error_tag(&dns_err): "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-error_tag(&dns_err): "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v1_53.used);
+error_tag(&dns_err): "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_99.used);
         unreachable;
     }
     dns_payload = ref.cast "wasi:http/types.wado//ErrorCode::DnsError"($sroa_dns_err_value_709).payload_0;
     let $match_scrut_2: ref null "core:prelude/string.wado//String";
     if ref.is_null(local.tee $match_scrut_2(dns_payload.rcode)) == 0 {
-        $v1_53 = ref.as_non_null($match_scrut_2);
+        $v_99 = ref.as_non_null($match_scrut_2);
         if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__51: block -> bool {
-            if local.tee a_end_552($v1_53.used) != 8 {
+            if local.tee a_end_552($v_99.used) != 8 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__51: 0;
             }
             i_557 = 0;
-            $licm_repr_728 = $v1_53.repr;
+            $licm_repr_728 = $v_99.repr;
             b37: block {
                 l38: loop {
                     break_if b37 (builtin::i64_extend_i32_s(i_557) + 3_i64) >= builtin::i64_extend_i32_s(a_end_552);
@@ -1112,11 +1112,11 @@ error_tag(&dns_err): "), used: 22 }, s2: struct.new "core:prelude/string.wado//S
             break $inline_core_prelude_array_wado_seq_eq_u8__51: 1;
         } == 0) {
             cold_path;
-            "core:rt/panic"(local.tee $v1_53("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$d48748ffcad618c0" { h0: $v1_53, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:96
+            "core:rt/panic"(local.tee $v_99("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$d48748ffcad618c0" { h0: $v_99, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:96
 condition: rcode == \"NXDOMAIN\"
 rcode: "), used: 106 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:96
 condition: rcode == \"NXDOMAIN\"
-rcode: "), used: 106 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v1_53.used);
+rcode: "), used: 106 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_99.used);
             unreachable;
         }
     } else {
@@ -1125,23 +1125,23 @@ rcode: "), used: 106 }, s1: struct.new "core:prelude/string.wado//String" { repr
     if ref.test "core:prelude/types.wado//Option<u16>::Some"(local.tee $match_scrut_3(dns_payload.info_code)) {
         if @unlikely(local.tee a_end_552(ref.cast "core:prelude/types.wado//Option<u16>::Some"($match_scrut_3).payload_0) != 3) {
             cold_path;
-            "core:rt/panic"(local.tee $v1_53("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$f5d91125f718483c,[u16]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$f5d91125f718483c" { h0: a_end_552, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:99
+            "core:rt/panic"(local.tee $v_99("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$f5d91125f718483c,[u16]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$f5d91125f718483c" { h0: a_end_552, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:99
 condition: code == 3
 code: "), used: 95 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:99
 condition: code == 3
-code: "), used: 95 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v1_53.used);
+code: "), used: 95 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_99.used);
             unreachable;
         }
     } else {
     }
     dns_payload = struct.new "wasi:http/types.wado//DnsErrorPayload" { rcode: ref.null none, info_code: global:core:builtin::$unit_case$core:prelude/types.wado//Option<u16>$0 };
-    $v1_53 = "http_error_code_comprehensive.wado/error_tag$sroa[e.value]"(local.tee $sroa_dns_err_value_709(struct.new "wasi:http/types.wado//ErrorCode::DnsError" { discriminant: 1, payload_0: dns_payload }));
+    $v_99 = "http_error_code_comprehensive.wado/error_tag$sroa[e.value]"(local.tee $sroa_dns_err_value_709(struct.new "wasi:http/types.wado//ErrorCode::DnsError" { discriminant: 1, payload_0: dns_payload }));
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__53: block -> bool {
-        if local.tee a_end_552($v1_53.used) != 9 {
+        if local.tee a_end_552($v_99.used) != 9 {
             break $inline_core_prelude_array_wado_seq_eq_u8__53: 0;
         }
         i_557 = 0;
-        $licm_repr_728 = $v1_53.repr;
+        $licm_repr_728 = $v_99.repr;
         b50: block {
             l51: loop {
                 break_if b50 (builtin::i64_extend_i32_s(i_557) + 3_i64) >= builtin::i64_extend_i32_s(a_end_552);
@@ -1177,23 +1177,23 @@ code: "), used: 95 }, s1: struct.new "core:prelude/string.wado//String" { repr: 
         break $inline_core_prelude_array_wado_seq_eq_u8__53: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $v1_53("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$15d0cd67a88ce9f9,[wasi:http/types.wado/ErrorCode,core:prelude/string.wado/String]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$15d0cd67a88ce9f9" { h0: $sroa_dns_err_value_709, h1: $v1_53, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:109
+        "core:rt/panic"(local.tee $v_99("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$15d0cd67a88ce9f9,[wasi:http/types.wado/ErrorCode,core:prelude/string.wado/String]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$15d0cd67a88ce9f9" { h0: $sroa_dns_err_value_709, h1: $v_99, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:109
 condition: error_tag(&dns_err2) == \"dns-error\"
 dns_err2: "), used: 126 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:109
 condition: error_tag(&dns_err2) == \"dns-error\"
 dns_err2: "), used: 126 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 error_tag(&dns_err2): "), used: 23 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-error_tag(&dns_err2): "), used: 23 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v1_53.used);
+error_tag(&dns_err2): "), used: 23 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_99.used);
         unreachable;
     }
     tls_payload = struct.new "wasi:http/types.wado//TlsAlertReceivedPayload" { alert_id: struct.new "core:prelude/types.wado//Option<u8>::Some" { discriminant: 1, payload_0: 48 }, alert_message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("handshake failure"), used: 17 } };
-    $v1_53 = "http_error_code_comprehensive.wado/error_tag$sroa[e.value]"(local.tee $sroa_dns_err_value_709(struct.new "wasi:http/types.wado//ErrorCode::TlsAlertReceived" { discriminant: 14, payload_0: tls_payload }));
+    $v_99 = "http_error_code_comprehensive.wado/error_tag$sroa[e.value]"(local.tee $sroa_dns_err_value_709(struct.new "wasi:http/types.wado//ErrorCode::TlsAlertReceived" { discriminant: 14, payload_0: tls_payload }));
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__55: block -> bool {
-        if local.tee a_end_552($v1_53.used) != 18 {
+        if local.tee a_end_552($v_99.used) != 18 {
             break $inline_core_prelude_array_wado_seq_eq_u8__55: 0;
         }
         i_557 = 0;
-        $licm_repr_728 = $v1_53.repr;
+        $licm_repr_728 = $v_99.repr;
         b61: block {
             l62: loop {
                 break_if b61 (builtin::i64_extend_i32_s(i_557) + 3_i64) >= builtin::i64_extend_i32_s(a_end_552);
@@ -1229,13 +1229,13 @@ error_tag(&dns_err2): "), used: 23 }, s2: struct.new "core:prelude/string.wado//
         break $inline_core_prelude_array_wado_seq_eq_u8__55: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $v1_53("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$15d0cd67a88ce9f9,[wasi:http/types.wado/ErrorCode,core:prelude/string.wado/String]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$15d0cd67a88ce9f9" { h0: "http_error_code_comprehensive.wado/$value_copy$wasi:http/types.wado/ErrorCode"($sroa_dns_err_value_709), h1: $v1_53, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:117
+        "core:rt/panic"(local.tee $v_99("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$15d0cd67a88ce9f9,[wasi:http/types.wado/ErrorCode,core:prelude/string.wado/String]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$15d0cd67a88ce9f9" { h0: "http_error_code_comprehensive.wado/$value_copy$wasi:http/types.wado/ErrorCode"($sroa_dns_err_value_709), h1: $v_99, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:117
 condition: error_tag(&tls_err) == \"tls-alert-received\"
 tls_err: "), used: 133 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:117
 condition: error_tag(&tls_err) == \"tls-alert-received\"
 tls_err: "), used: 133 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 error_tag(&tls_err): "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-error_tag(&tls_err): "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v1_53.used);
+error_tag(&tls_err): "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_99.used);
         unreachable;
     }
     tls_payload = ref.cast "wasi:http/types.wado//ErrorCode::TlsAlertReceived"($sroa_dns_err_value_709).payload_0;
@@ -1243,23 +1243,23 @@ error_tag(&tls_err): "), used: 22 }, s2: struct.new "core:prelude/string.wado//S
     if ref.test "core:prelude/types.wado//Option<u8>::Some"(local.tee $match_scrut_4(tls_payload.alert_id)) {
         if @unlikely(local.tee a_end_552(ref.cast "core:prelude/types.wado//Option<u8>::Some"($match_scrut_4).payload_0) != 48) {
             cold_path;
-            "core:rt/panic"(local.tee $v1_53("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$7a99cb65f6ad01c7,[u8]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$7a99cb65f6ad01c7" { h0: a_end_552, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:120
+            "core:rt/panic"(local.tee $v_99("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$7a99cb65f6ad01c7,[u8]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$7a99cb65f6ad01c7" { h0: a_end_552, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:120
 condition: id == 48
 id: "), used: 93 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:120
 condition: id == 48
-id: "), used: 93 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v1_53.used);
+id: "), used: 93 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_99.used);
             unreachable;
         }
     } else {
     }
     if ref.is_null(local.tee $match_scrut_2(tls_payload.alert_message)) == 0 {
-        $v1_53 = ref.as_non_null($match_scrut_2);
+        $v_99 = ref.as_non_null($match_scrut_2);
         if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__57: block -> bool {
-            if local.tee a_end_552($v1_53.used) != 17 {
+            if local.tee a_end_552($v_99.used) != 17 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__57: 0;
             }
             i_557 = 0;
-            $licm_repr_728 = $v1_53.repr;
+            $licm_repr_728 = $v_99.repr;
             b75: block {
                 l76: loop {
                     break_if b75 (builtin::i64_extend_i32_s(i_557) + 3_i64) >= builtin::i64_extend_i32_s(a_end_552);
@@ -1295,23 +1295,23 @@ id: "), used: 93 }, s1: struct.new "core:prelude/string.wado//String" { repr: ar
             break $inline_core_prelude_array_wado_seq_eq_u8__57: 1;
         } == 0) {
             cold_path;
-            "core:rt/panic"(local.tee $v1_53("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$d48748ffcad618c0" { h0: $v1_53, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:123
+            "core:rt/panic"(local.tee $v_99("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$d48748ffcad618c0" { h0: $v_99, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:123
 condition: msg == \"handshake failure\"
 msg: "), used: 112 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:123
 condition: msg == \"handshake failure\"
-msg: "), used: 112 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v1_53.used);
+msg: "), used: 112 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_99.used);
             unreachable;
         }
     } else {
     }
     field_payload = struct.new "wasi:http/types.wado//FieldSizePayload" { field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-length"), used: 14 }, field_size: struct.new "core:prelude/types.wado//Option<u32>::Some" { discriminant: 1, payload_0: 1048576 } };
-    $v1_53 = "http_error_code_comprehensive.wado/error_tag$sroa[e.value]"(local.tee $sroa_dns_err_value_709(struct.new "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize" { discriminant: 22, payload_0: field_payload }));
+    $v_99 = "http_error_code_comprehensive.wado/error_tag$sroa[e.value]"(local.tee $sroa_dns_err_value_709(struct.new "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize" { discriminant: 22, payload_0: field_payload }));
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__59: block -> bool {
-        if local.tee a_end_552($v1_53.used) != 24 {
+        if local.tee a_end_552($v_99.used) != 24 {
             break $inline_core_prelude_array_wado_seq_eq_u8__59: 0;
         }
         i_557 = 0;
-        $licm_repr_728 = $v1_53.repr;
+        $licm_repr_728 = $v_99.repr;
         b86: block {
             l87: loop {
                 break_if b86 (builtin::i64_extend_i32_s(i_557) + 3_i64) >= builtin::i64_extend_i32_s(a_end_552);
@@ -1347,13 +1347,13 @@ msg: "), used: 112 }, s1: struct.new "core:prelude/string.wado//String" { repr: 
         break $inline_core_prelude_array_wado_seq_eq_u8__59: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $v1_53("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$15d0cd67a88ce9f9,[wasi:http/types.wado/ErrorCode,core:prelude/string.wado/String]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$15d0cd67a88ce9f9" { h0: $sroa_dns_err_value_709, h1: $v1_53, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:133
+        "core:rt/panic"(local.tee $v_99("core:prelude/string.wado/core:prelude/string.wado/String::format<http_error_code_comprehensive.wado/$tmpl$15d0cd67a88ce9f9,[wasi:http/types.wado/ErrorCode,core:prelude/string.wado/String]>"(struct.new "http_error_code_comprehensive.wado//$tmpl$15d0cd67a88ce9f9" { h0: $sroa_dns_err_value_709, h1: $v_99, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:133
 condition: error_tag(&header_err) == \"http-request-header-size\"
 header_err: "), used: 145 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_error_code_comprehensive.wado:133
 condition: error_tag(&header_err) == \"http-request-header-size\"
 header_err: "), used: 145 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 error_tag(&header_err): "), used: 25 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-error_tag(&header_err): "), used: 25 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v1_53.used);
+error_tag(&header_err): "), used: 25 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_99.used);
         unreachable;
     }
     a_end_552 = builtin::i32_wrap_i64(local.tee $cm_pair_303("wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"()));
@@ -2638,8 +2638,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/leading_sign_byte_len<core
     return 0;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::remove$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::remove failed at "), used: 35 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::remove failed at "), used: 35 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::remove$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::remove failed at "), used: 35 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::remove failed at "), used: 35 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -2649,8 +2649,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: index, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::index_value failed at "), used: 40 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
 index: "), used: 43 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= index < self.len()
@@ -2660,8 +2660,8 @@ self.len(): "), used: 13 }, s3: struct.new "core:prelude/string.wado//String" { 
     unreachable;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::split_off$contract_report0"(at, $v1, $site) {
-    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: at, h2: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::split_off failed at "), used: 38 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::split_off failed at "), used: 38 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::split_off$contract_report0"(at, $v_1, $site) {
+    "core:rt/panic"(local.tee $site("core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/list.wado/$tmpl$59e16269228f9c88,[core:prelude/string.wado/String,i32,i32]>"(struct.new "core:prelude/list.wado//$tmpl$59e16269228f9c88" { h0: $site, h1: at, h2: $v_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::split_off failed at "), used: 38 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Contract of List::split_off failed at "), used: 38 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= at <= self.len()
 at: "), used: 38 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: 0 <= at <= self.len()

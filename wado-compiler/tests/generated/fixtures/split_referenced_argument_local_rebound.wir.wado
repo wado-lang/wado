@@ -227,24 +227,24 @@ fn "split_referenced_argument_local_rebound.wado/sum_plus"($mv$p$a, $mv$p$b, n) 
 fn "split_referenced_argument_local_rebound.wado/run"() {
     let a: ref "split_referenced_argument_local_rebound.wado//P2";
     let b: ref "split_referenced_argument_local_rebound.wado//P2";
-    let $v1_3: i32;
-    let $v2: i32;
+    let $v_1: i32;
+    let $v_2: i32;
     a = struct.new "split_referenced_argument_local_rebound.wado//P2" { a: black_box(1), b: 2 };
     b = struct.new "split_referenced_argument_local_rebound.wado//P2" { a: black_box(10), b: 20 };
-    if @unlikely(local.tee $v2(block -> i32 {
+    if @unlikely(local.tee $v_2(block -> i32 {
         let $mv_arg_1: ref "split_referenced_argument_local_rebound.wado//P2";
         $mv_arg_1 = a;
         a = b;
-        $v1_3 = 0;
-        "split_referenced_argument_local_rebound.wado/sum_plus"($mv_arg_1.a, $mv_arg_1.b, $v1_3);
+        $v_1 = 0;
+        "split_referenced_argument_local_rebound.wado/sum_plus"($mv_arg_1.a, $mv_arg_1.b, $v_1);
     }) != 3) {
         cold_path;
-        "split_referenced_argument_local_rebound.wado/run$cold1"(a, $v1_3, $v2);
+        "split_referenced_argument_local_rebound.wado/run$cold1"(a, $v_1, $v_2);
         unreachable;
     }
-    if @unlikely(local.tee $v1_3("split_referenced_argument_local_rebound.wado/sum_plus$spec0$dae[n]"(a.a, a.b)) != 30) {
+    if @unlikely(local.tee $v_1("split_referenced_argument_local_rebound.wado/sum_plus$spec0$dae[n]"(a.a, a.b)) != 30) {
         cold_path;
-        "split_referenced_argument_local_rebound.wado/run$cold0"(a, $v1_3);
+        "split_referenced_argument_local_rebound.wado/run$cold0"(a, $v_1);
         unreachable;
     }
 }
@@ -316,9 +316,9 @@ fn "split_referenced_argument_local_rebound.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "split_referenced_argument_local_rebound.wado/run$cold0"(r, $v1) {
+fn "split_referenced_argument_local_rebound.wado/run$cold0"(r, $v_6) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<split_referenced_argument_local_rebound.wado/$tmpl$dc2839ae87121d57,[&split_referenced_argument_local_rebound.wado/P2,i32]>"(struct.new "split_referenced_argument_local_rebound.wado//$tmpl$dc2839ae87121d57" { h0: r, h1: $v1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at split_referenced_argument_local_rebound.wado:20
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<split_referenced_argument_local_rebound.wado/$tmpl$dc2839ae87121d57,[&split_referenced_argument_local_rebound.wado/P2,i32]>"(struct.new "split_referenced_argument_local_rebound.wado//$tmpl$dc2839ae87121d57" { h0: r, h1: $v_6, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at split_referenced_argument_local_rebound.wado:20
 condition: sum_plus(r, 0) == 30
 r: "), used: 110 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at split_referenced_argument_local_rebound.wado:20
 condition: sum_plus(r, 0) == 30
@@ -328,9 +328,9 @@ sum_plus(r, 0): "), used: 17 }, s2: struct.new "core:prelude/string.wado//String
     unreachable;
 }
 
-fn "split_referenced_argument_local_rebound.wado/run$cold1"(r, $v1, $v2) {
+fn "split_referenced_argument_local_rebound.wado/run$cold1"(r, $v_1, $v_2) {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
-    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<split_referenced_argument_local_rebound.wado/$tmpl$17d211332d4069be,[&split_referenced_argument_local_rebound.wado/P2,i32,i32]>"(struct.new "split_referenced_argument_local_rebound.wado//$tmpl$17d211332d4069be" { h0: r, h1: $v1, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at split_referenced_argument_local_rebound.wado:19
+    "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<split_referenced_argument_local_rebound.wado/$tmpl$17d211332d4069be,[&split_referenced_argument_local_rebound.wado/P2,i32,i32]>"(struct.new "split_referenced_argument_local_rebound.wado//$tmpl$17d211332d4069be" { h0: r, h1: $v_1, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at split_referenced_argument_local_rebound.wado:19
 condition: sum_plus(r, then: { r = &b; 0; }) == 3
 r: "), used: 128 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at split_referenced_argument_local_rebound.wado:19
 condition: sum_plus(r, then: { r = &b; 0; }) == 3

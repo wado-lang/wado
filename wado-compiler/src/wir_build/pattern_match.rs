@@ -13,7 +13,7 @@ use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::calls::{MULTIVALUE_I64_BUILTINS, MULTIVALUE_I64_RESULTS};
 use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
-use crate::name::{VARIANT_DISCRIMINANT_FIELD, variant_payload_field};
+use crate::name::{VARIANT_DISCRIMINANT_FIELD, minted_name, variant_payload_field};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprKind, Operand, PatId, PatKind};
 use crate::wir::{WirTypeDef, WirVariantCase, WirVariantType};
 use crate::wir_build::translate::ref_binding_needs_boxing;
@@ -164,7 +164,7 @@ impl FunctionTranslator<'_, '_> {
         let adjusted = if is_i64 {
             let switch_id = self.match_counter;
             self.match_counter += 1;
-            let name = self.unshadowed(format!("$switch_offset_{switch_id}"));
+            let name = self.unshadowed(minted_name("switch_offset", switch_id));
             let offset = WirInstr::I64Sub(Box::new(scrut), Box::new(WirInstr::I64Const(min_value)));
             offset_local.extend(declare_and_set_local(name.clone(), WirType::I64, offset));
             let get = || WirInstr::LocalGet {
@@ -361,7 +361,7 @@ impl FunctionTranslator<'_, '_> {
                 let type_id = self.ref_type_id(value_ty);
                 let mut instrs = Vec::new();
 
-                let temp_name = self.unshadowed(format!("$let_pattern_{}", self.match_counter));
+                let temp_name = self.unshadowed(minted_name("let_pattern", self.match_counter));
                 self.match_counter += 1;
                 instrs.extend(declare_and_set_local(
                     temp_name.clone(),
@@ -434,7 +434,7 @@ impl FunctionTranslator<'_, '_> {
         let scrut = self.translate_operand(scrutinee);
         let match_id = self.match_counter;
         self.match_counter += 1;
-        let scrut_local_name = self.unshadowed(format!("$match_scrut_{match_id}"));
+        let scrut_local_name = self.unshadowed(minted_name("match_scrut", match_id));
         let scrut_wir_type = self
             .ctx
             .type_id_to_wir_type(self.type_table, self.operand_type_id(scrutinee));
@@ -1071,7 +1071,7 @@ impl FunctionTranslator<'_, '_> {
                     // type check, which is more expensive than a
                     // `local.get`.
                     let cast_local = if consumers >= 2 {
-                        let cast_local = self.fresh_local("$cast");
+                        let cast_local = self.fresh_local("cast");
                         instrs.extend(declare_and_set_local(
                             cast_local.clone(),
                             WirType::Ref {
@@ -1150,7 +1150,7 @@ impl FunctionTranslator<'_, '_> {
                             let payload_tid = *payload_type;
                             let payload_wir =
                                 self.ctx.type_id_to_wir_type(self.type_table, payload_tid);
-                            let temp_name = self.fresh_local("$variant_payload");
+                            let temp_name = self.fresh_local("variant_payload");
                             let payload =
                                 self.read_slot(payload_get, &payload_result_ty, payload_tid);
                             instrs.extend(declare_and_set_local(
@@ -1219,7 +1219,7 @@ impl FunctionTranslator<'_, '_> {
                         }
                         PatKind::Wildcard => {}
                         _ => {
-                            let temp_name = self.fresh_local("$tuple_elem");
+                            let temp_name = self.fresh_local("tuple_elem");
                             let elem_wir_type =
                                 self.ctx.type_id_to_wir_type(self.type_table, elem_type);
                             let element = self.read_slot(field_get, &field_result_ty, elem_type);
@@ -1259,7 +1259,7 @@ impl FunctionTranslator<'_, '_> {
                         }
                         PatKind::Wildcard => {}
                         _ => {
-                            let temp_name = self.fresh_local("$struct_field");
+                            let temp_name = self.fresh_local("struct_field");
                             let field_type =
                                 self.resolve_struct_field_type(scrut_type, &field.field_name);
                             let field_wir_type =

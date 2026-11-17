@@ -8,7 +8,7 @@ use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::EMPTY_TUPLE_AT_BOUNDARY;
 use crate::module_source::ModuleSource;
-use crate::name::LocalMethodName;
+use crate::name::{LocalMethodName, minted_name, minted_what};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TypeId,
@@ -325,7 +325,7 @@ fn synthesize_lower_variant_to_memory(
     for (case_name, case_index, payload) in cases {
         if let Some((payload_ty, payload_type_id)) = payload {
             let binding_local = alloc_local(next_local, locals, payload_type_id);
-            let binding_name = format!("$variant_payload_{binding_local}");
+            let binding_name = minted_name("variant_payload", binding_local);
             let payload_expr = local_ref(binding_local, &binding_name, payload_type_id);
 
             let case_stmts = synthesize_lower_wasi_type_to_memory(
@@ -509,7 +509,7 @@ pub(super) fn synthesize_lower_option_to_memory(
     };
 
     let payload_binding_local = alloc_local(next_local, locals, inner_type_id);
-    let payload_binding_name = format!("$opt_payload_{payload_binding_local}");
+    let payload_binding_name = minted_name("opt_payload", payload_binding_local);
     let payload_expr = local_ref(payload_binding_local, &payload_binding_name, inner_type_id);
 
     let case_stmts = synthesize_lower_wasi_type_to_memory(
@@ -1056,7 +1056,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
     // `None` cannot occur under the `len` bound above — `entries` yields
     // exactly the live pairs `len` counts — so its arm is empty.
     let pair_binding_local = alloc_local(next_local, locals, pair_tid);
-    let pair_binding_name = format!("$map_pair_{pair_binding_local}");
+    let pair_binding_name = minted_name("map_pair", pair_binding_local);
     let mut case_stmts = Vec::new();
     for (slot, slot_ty) in pair.iter().enumerate() {
         let slot_tid = if slot == 0 { key_tid } else { value_tid };
@@ -1170,7 +1170,7 @@ pub(super) fn synthesize_lower_list_to_memory(
 pub(super) fn synthesize_flatten_value_to_flat_args(
     ty: &Type,
     value: TirExpr,
-    prefix: &str,
+    what: &str,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
@@ -1182,9 +1182,10 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
     match &resolved {
         // String → cm_lower_string → packed i64 → (ptr, len)
         Type::Named(_) if item == Some(CompilerItem::String) => {
+            let packed_name = minted_name(what, "packed");
             let packed_local = alloc_local(next_local, locals, TypeTable::I64);
             stmts.push(let_stmt(
-                &format!("{prefix}_packed"),
+                &packed_name,
                 packed_local,
                 TypeTable::I64,
                 internal_call(
@@ -1193,11 +1194,8 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                     TypeTable::I64,
                 ),
             ));
-            let (ptr, len) = split_packed_ptr_len(local_ref(
-                packed_local,
-                &format!("{prefix}_packed"),
-                TypeTable::I64,
-            ));
+            let (ptr, len) =
+                split_packed_ptr_len(local_ref(packed_local, &packed_name, TypeTable::I64));
             flat_args.push(ptr);
             flat_args.push(len);
         }
@@ -1232,15 +1230,12 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 .source_interface(n)
                 .expect("CM variant source_interface present");
             let vt = value.type_id;
+            let val_name = minted_name(what, "val");
             let val_local = alloc_local(next_local, locals, vt);
-            stmts.push(let_stmt(&format!("{prefix}_val"), val_local, vt, value));
+            stmts.push(let_stmt(&val_name, val_local, vt, value));
 
             // Push discriminant
-            flat_args.push(variant_tag(local_ref(
-                val_local,
-                &format!("{prefix}_val"),
-                vt,
-            )));
+            flat_args.push(variant_tag(local_ref(val_local, &val_name, vt)));
 
             // Compute max flat payload count across all cases (the "join")
             let cases = ctx
@@ -1269,17 +1264,19 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                     joined.get(1..).map(<[TypeId]>::to_vec).unwrap_or_default()
                 };
                 // Allocate mutable locals for each payload flat slot, zero-init.
-                let mut payload_locals: Vec<(u32, TypeId)> = Vec::new();
+                let slot_what = minted_what(what, "p");
+                let mut payload_locals: Vec<(u32, TypeId, String)> = Vec::new();
                 for i in 0..max_flat_count {
                     let slot_ty = payload_slot_types.get(i).copied().unwrap_or(TypeTable::I32);
                     let local = alloc_local(next_local, locals, slot_ty);
+                    let slot_name = minted_name(&slot_what, i);
                     stmts.push(let_mut_stmt(
-                        &format!("{prefix}_p{i}"),
+                        &slot_name,
                         local,
                         slot_ty,
                         flat_slot_zero(slot_ty),
                     ));
-                    payload_locals.push((local, slot_ty));
+                    payload_locals.push((local, slot_ty, slot_name));
                 }
 
                 // Single TIR Match over the materialised variant: one
@@ -1299,7 +1296,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                             cm_held_type_to_type_id(payload_ty, &mut tt, ctx.cm_interface_registry)
                         };
                         let binding_local = alloc_local(next_local, locals, payload_type_id);
-                        let binding_name = format!("$variant_payload_{binding_local}");
+                        let binding_name = minted_name("variant_payload", binding_local);
                         let payload_expr = local_ref(binding_local, &binding_name, payload_type_id);
 
                         let mut case_stmts = Vec::new();
@@ -1307,7 +1304,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                         synthesize_flatten_value_to_flat_args(
                             payload_ty,
                             payload_expr,
-                            &format!("{prefix}_c{}", case_name.as_str()),
+                            &minted_what(&minted_what(what, "c"), case_name.as_str()),
                             next_local,
                             &mut case_stmts,
                             locals,
@@ -1315,8 +1312,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                             ctx,
                         );
                         for (i, flat_val) in case_flat.into_iter().enumerate() {
-                            if i < payload_locals.len() {
-                                let (pl, pt) = payload_locals[i];
+                            if let Some((pl, pt, slot_name)) = payload_locals.get(i) {
                                 // Join this case's payload flat into the shared
                                 // slot, bit-reinterpreting when the join widened
                                 // the slot to a different core class (e.g. an
@@ -1325,12 +1321,10 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                                 let v = coerce_flat_lower(
                                     flat_val,
                                     cm_val_type_from_type_id(flat_val_ty),
-                                    cm_val_type_from_type_id(pt),
+                                    cm_val_type_from_type_id(*pt),
                                 );
-                                case_stmts.push(expr_stmt(assign(
-                                    local_ref(pl, &format!("{prefix}_p{i}"), pt),
-                                    v,
-                                )));
+                                case_stmts
+                                    .push(expr_stmt(assign(local_ref(*pl, slot_name, *pt), v)));
                             }
                         }
 
@@ -1378,7 +1372,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 if !arms.is_empty() {
                     let match_expr = TirExpr::new(
                         TirExprKind::Match {
-                            expr: Box::new(local_ref(val_local, &format!("{prefix}_val"), vt)),
+                            expr: Box::new(local_ref(val_local, &val_name, vt)),
                             arms,
                         },
                         TypeTable::UNIT,
@@ -1388,8 +1382,8 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 }
 
                 // Push all payload locals as flat args
-                for (i, (pl, pt)) in payload_locals.iter().enumerate() {
-                    flat_args.push(local_ref(*pl, &format!("{prefix}_p{i}"), *pt));
+                for (pl, pt, slot_name) in &payload_locals {
+                    flat_args.push(local_ref(*pl, slot_name, *pt));
                 }
             }
         }
@@ -1398,14 +1392,14 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         // payload via a Match. Reached for an `Option` field of a CM record.
         Type::Generic(g) if item == Some(CompilerItem::Option) => {
             synthesize_flatten_option_to_flat_args(
-                &g.args[0], value, prefix, next_local, stmts, locals, flat_args, ctx,
+                &g.args[0], value, what, next_local, stmts, locals, flat_args, ctx,
             );
         }
         // The core `Result` is not a CM-registry variant, so it never matches
         // the variant arm above and needs its own flattener.
         Type::Generic(g) if item == Some(CompilerItem::Result) => {
             synthesize_flatten_result_to_flat_args(
-                &g.args[0], &g.args[1], value, prefix, next_local, stmts, locals, flat_args, ctx,
+                &g.args[0], &g.args[1], value, what, next_local, stmts, locals, flat_args, ctx,
             );
         }
         // List<T> → (ptr, len): lower into an element buffer, push base/len.
@@ -1425,7 +1419,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             flat_args.push(local_ref(len_local, "$list_len", TypeTable::I32));
         }
         Type::Tuple(elems) if !elems.is_empty() => synthesize_flatten_tuple_to_flat_args(
-            elems, value, prefix, next_local, stmts, locals, flat_args, ctx,
+            elems, value, what, next_local, stmts, locals, flat_args, ctx,
         ),
         // CM record → its fields' flat args (recursion handles nested records).
         Type::Named(n)
@@ -1448,14 +1442,14 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 .expect("matched above");
             let value_type_id = value.type_id;
             let val_local = alloc_local(next_local, locals, value_type_id);
-            let val_name = format!("{prefix}_rec");
+            let val_name = minted_name(what, "rec");
             stmts.push(let_stmt(&val_name, val_local, value_type_id, value));
             flatten_cm_record_fields(
                 fields,
                 val_local,
                 &val_name,
                 value_type_id,
-                prefix,
+                what,
                 next_local,
                 stmts,
                 locals,
@@ -1479,7 +1473,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
 fn synthesize_flatten_tuple_to_flat_args(
     elems: &[Type],
     value: TirExpr,
-    prefix: &str,
+    what: &str,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
@@ -1488,7 +1482,7 @@ fn synthesize_flatten_tuple_to_flat_args(
 ) {
     let tuple_type_id = value.type_id;
     let val_local = alloc_local(next_local, locals, tuple_type_id);
-    let val_name = format!("{prefix}_tup");
+    let val_name = minted_name(what, "tup");
     stmts.push(let_stmt(&val_name, val_local, tuple_type_id, value));
     let elem_type_ids: Vec<TypeId> = ctx
         .type_table
@@ -1509,7 +1503,7 @@ fn synthesize_flatten_tuple_to_flat_args(
         synthesize_flatten_value_to_flat_args(
             elem_ty,
             elem_expr,
-            &format!("{prefix}_e{i}"),
+            &minted_what(&minted_what(what, "e"), i),
             next_local,
             stmts,
             locals,
@@ -1530,7 +1524,7 @@ pub(super) fn flatten_cm_record_fields(
     val_local: u32,
     val_name: &str,
     value_type_id: TypeId,
-    prefix: &str,
+    what: &str,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
@@ -1552,7 +1546,7 @@ pub(super) fn flatten_cm_record_fields(
         synthesize_flatten_value_to_flat_args(
             &resolved_field,
             field_expr,
-            &format!("{prefix}_f{field_idx}"),
+            &minted_what(&minted_what(what, "f"), field_idx),
             next_local,
             stmts,
             locals,
@@ -1570,7 +1564,7 @@ pub(super) fn flatten_cm_record_fields(
 pub(super) fn synthesize_flatten_option_to_flat_args(
     inner_type: &Type,
     value: TirExpr,
-    prefix: &str,
+    what: &str,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
@@ -1579,28 +1573,26 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
 ) {
     let names = &ctx.names;
     let vt = value.type_id;
+    let val_name = minted_name(what, "optval");
+    let disc_name = minted_name(what, "disc");
     let val_local = alloc_local(next_local, locals, vt);
-    stmts.push(let_stmt(&format!("{prefix}_optval"), val_local, vt, value));
+    stmts.push(let_stmt(&val_name, val_local, vt, value));
 
     // CM ABI option discriminant: 0 = None, 1 = Some.
     // Use variant_test (ref.test) instead of variant_tag (struct.get)
     // because variant_tag traps on null refs.
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt(
-        &format!("{prefix}_disc"),
+        &disc_name,
         disc_local,
         TypeTable::I32,
         variant_test(
-            local_ref(val_local, &format!("{prefix}_optval"), vt),
+            local_ref(val_local, &val_name, vt),
             names.some_index,
             &names.some_name,
         ),
     ));
-    flat_args.push(local_ref(
-        disc_local,
-        &format!("{prefix}_disc"),
-        TypeTable::I32,
-    ));
+    flat_args.push(local_ref(disc_local, &disc_name, TypeTable::I32));
 
     // Compute inner flat types
     let inner_flat_types = flatten_param_type(inner_type, ctx.cm_interface_registry);
@@ -1609,16 +1601,13 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     }
 
     // Zero-init by slot type: an `f32`/`f64` slot needs a float zero, not an i32 zero.
-    let mut inner_locals: Vec<(u32, TypeId)> = Vec::new();
+    let inner_what = minted_what(what, "inner");
+    let mut inner_locals: Vec<(u32, TypeId, String)> = Vec::new();
     for (i, &ft) in inner_flat_types.iter().enumerate() {
         let local = alloc_local(next_local, locals, ft);
-        stmts.push(let_mut_stmt(
-            &format!("{prefix}_inner{i}"),
-            local,
-            ft,
-            flat_slot_zero(ft),
-        ));
-        inner_locals.push((local, ft));
+        let inner_name = minted_name(&inner_what, i);
+        stmts.push(let_mut_stmt(&inner_name, local, ft, flat_slot_zero(ft)));
+        inner_locals.push((local, ft, inner_name));
     }
 
     // Flatten the Some payload via a TIR Match that binds the inner
@@ -1630,7 +1619,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
         .as_option(vt)
         .expect("an option flattens from an `Option` value");
     let payload_binding_local = alloc_local(next_local, locals, inner_type_id);
-    let payload_binding_name = format!("$opt_payload_{payload_binding_local}");
+    let payload_binding_name = minted_name("opt_payload", payload_binding_local);
     let payload_expr = local_ref(payload_binding_local, &payload_binding_name, inner_type_id);
 
     let mut some_stmts = Vec::new();
@@ -1638,21 +1627,15 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     synthesize_flatten_value_to_flat_args(
         inner_type,
         payload_expr,
-        &format!("{prefix}_s"),
+        &minted_what(what, "s"),
         next_local,
         &mut some_stmts,
         locals,
         &mut some_flat,
         ctx,
     );
-    for (i, flat_val) in some_flat.into_iter().enumerate() {
-        if i < inner_locals.len() {
-            let (il, it) = inner_locals[i];
-            some_stmts.push(expr_stmt(assign(
-                local_ref(il, &format!("{prefix}_inner{i}"), it),
-                flat_val,
-            )));
-        }
+    for ((il, it, inner_name), flat_val) in inner_locals.iter().zip(some_flat) {
+        some_stmts.push(expr_stmt(assign(local_ref(*il, inner_name, *it), flat_val)));
     }
 
     let span = synth_span();
@@ -1696,7 +1679,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     };
     let match_expr = TirExpr::new(
         TirExprKind::Match {
-            expr: Box::new(local_ref(val_local, &format!("{prefix}_optval"), vt)),
+            expr: Box::new(local_ref(val_local, &val_name, vt)),
             arms: vec![some_arm, none_arm],
         },
         TypeTable::UNIT,
@@ -1705,8 +1688,8 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
     stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
 
     // Push inner locals as flat args
-    for (i, (il, it)) in inner_locals.iter().enumerate() {
-        flat_args.push(local_ref(*il, &format!("{prefix}_inner{i}"), *it));
+    for (il, it, inner_name) in &inner_locals {
+        flat_args.push(local_ref(*il, inner_name, *it));
     }
 }
 
@@ -1716,7 +1699,7 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
     ok_type: &Type,
     err_type: &Type,
     value: TirExpr,
-    prefix: &str,
+    what: &str,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
@@ -1725,22 +1708,20 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
 ) {
     let names = &ctx.names;
     let vt = value.type_id;
+    let val_name = minted_name(what, "resval");
+    let disc_name = minted_name(what, "disc");
     let val_local = alloc_local(next_local, locals, vt);
-    stmts.push(let_stmt(&format!("{prefix}_resval"), val_local, vt, value));
+    stmts.push(let_stmt(&val_name, val_local, vt, value));
 
     // Discriminant: 0 = Ok, 1 = Err.
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt(
-        &format!("{prefix}_disc"),
+        &disc_name,
         disc_local,
         TypeTable::I32,
-        variant_tag(local_ref(val_local, &format!("{prefix}_resval"), vt)),
+        variant_tag(local_ref(val_local, &val_name, vt)),
     ));
-    flat_args.push(local_ref(
-        disc_local,
-        &format!("{prefix}_disc"),
-        TypeTable::I32,
-    ));
+    flat_args.push(local_ref(disc_local, &disc_name, TypeTable::I32));
 
     let ok_flat = flatten_param_type(ok_type, ctx.cm_interface_registry);
     let err_flat = flatten_param_type(err_type, ctx.cm_interface_registry);
@@ -1749,17 +1730,19 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
         return;
     }
 
-    let mut payload_locals: Vec<(u32, TypeId)> = Vec::new();
+    let slot_what = minted_what(what, "p");
+    let mut payload_locals: Vec<(u32, TypeId, String)> = Vec::new();
     for i in 0..max_len {
         let slot_ty = join_flat_slot(ok_flat.get(i).copied(), err_flat.get(i).copied());
         let local = alloc_local(next_local, locals, slot_ty);
+        let slot_name = minted_name(&slot_what, i);
         stmts.push(let_mut_stmt(
-            &format!("{prefix}_p{i}"),
+            &slot_name,
             local,
             slot_ty,
             flat_slot_zero(slot_ty),
         ));
-        payload_locals.push((local, slot_ty));
+        payload_locals.push((local, slot_ty, slot_name));
     }
 
     let span = synth_span();
@@ -1769,7 +1752,7 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
         ok_type,
         vt,
         &payload_locals,
-        prefix,
+        what,
         next_local,
         locals,
         ctx,
@@ -1780,14 +1763,14 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
         err_type,
         vt,
         &payload_locals,
-        prefix,
+        what,
         next_local,
         locals,
         ctx,
     );
     let match_expr = TirExpr::new(
         TirExprKind::Match {
-            expr: Box::new(local_ref(val_local, &format!("{prefix}_resval"), vt)),
+            expr: Box::new(local_ref(val_local, &val_name, vt)),
             arms: vec![ok_arm, err_arm],
         },
         TypeTable::UNIT,
@@ -1795,8 +1778,8 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
     );
     stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
 
-    for (i, (pl, pt)) in payload_locals.iter().enumerate() {
-        flat_args.push(local_ref(*pl, &format!("{prefix}_p{i}"), *pt));
+    for (pl, pt, slot_name) in &payload_locals {
+        flat_args.push(local_ref(*pl, slot_name, *pt));
     }
 }
 
@@ -1805,8 +1788,8 @@ fn flatten_result_case_arm(
     case_index: u32,
     payload_type: &Type,
     enum_type: TypeId,
-    payload_locals: &[(u32, TypeId)],
-    prefix: &str,
+    payload_locals: &[(u32, TypeId, String)],
+    what: &str,
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
     ctx: &LowerContext<'_>,
@@ -1839,7 +1822,7 @@ fn flatten_result_case_arm(
         cm_held_type_to_type_id(payload_type, &mut tt, ctx.cm_interface_registry)
     };
     let binding_local = alloc_local(next_local, locals, payload_type_id);
-    let binding_name = format!("$result_payload_{binding_local}");
+    let binding_name = minted_name("result_payload", binding_local);
     let payload_expr = local_ref(binding_local, &binding_name, payload_type_id);
 
     let mut case_stmts = Vec::new();
@@ -1847,29 +1830,23 @@ fn flatten_result_case_arm(
     synthesize_flatten_value_to_flat_args(
         payload_type,
         payload_expr,
-        &format!("{prefix}_c{case_name}"),
+        &minted_what(&minted_what(what, "c"), &case_name),
         next_local,
         &mut case_stmts,
         locals,
         &mut case_flat,
         ctx,
     );
-    for (i, flat_val) in case_flat.into_iter().enumerate() {
-        if i < payload_locals.len() {
-            let (pl, pt) = payload_locals[i];
-            // Bit-reinterpret into the joined slot; a numeric cast would corrupt
-            // a value sharing a different-class slot (f32 1.5 -> i32 1).
-            let flat_val_ty = flat_val.type_id;
-            let v = coerce_flat_lower(
-                flat_val,
-                cm_val_type_from_type_id(flat_val_ty),
-                cm_val_type_from_type_id(pt),
-            );
-            case_stmts.push(expr_stmt(assign(
-                local_ref(pl, &format!("{prefix}_p{i}"), pt),
-                v,
-            )));
-        }
+    for ((pl, pt, slot_name), flat_val) in payload_locals.iter().zip(case_flat) {
+        // Bit-reinterpret into the joined slot; a numeric cast would corrupt
+        // a value sharing a different-class slot (f32 1.5 -> i32 1).
+        let flat_val_ty = flat_val.type_id;
+        let v = coerce_flat_lower(
+            flat_val,
+            cm_val_type_from_type_id(flat_val_ty),
+            cm_val_type_from_type_id(*pt),
+        );
+        case_stmts.push(expr_stmt(assign(local_ref(*pl, slot_name, *pt), v)));
     }
 
     TirMatchArm {

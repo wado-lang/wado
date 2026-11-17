@@ -28,7 +28,7 @@ use super::types::{
 };
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
-use crate::name::{FqTypeName, LocalMethodName, UNIT_TYPE_NAME};
+use crate::name::{FqTypeName, LocalMethodName, UNIT_TYPE_NAME, minted_name};
 use crate::tir::CallArg;
 use crate::tir::FunctionRef;
 use crate::tir::StructDef;
@@ -176,7 +176,7 @@ pub(super) fn materialize_if_needed(
     // primitive types and handles (i32, i64, f32, f64, u8, u16, bool, char).
     let type_id = expr.type_id;
     let local = alloc_local(next_local, locals, type_id);
-    let name = format!("$lifted_result_{local}");
+    let name = minted_name("lifted_result", local);
     stmts.push(let_stmt(&name, local, type_id, expr));
     local_ref(local, &name, type_id)
 }

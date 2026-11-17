@@ -1,0 +1,243 @@
+//! Fails when a compiler source outside `name.rs` formats a minted name: a
+//! `format!`, `format_args!` or `write!` whose text opens with the `$` every
+//! minted name starts with, or any use of `INTERNAL_PREFIX` in code. Only
+//! `name.rs` knows a name format. A stem that carries the `$` into a
+//! `format!("{stem}_…")` is beyond what the text can show.
+//!
+//! Run from the repository root: `wado run` reaches only the current directory.
+
+use { eprintln, exit, Stderr, Exit } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+
+global SRC: String = "wado-compiler/src";
+global NAME_RS: String = "wado-compiler/src/name.rs";
+
+export fn run() with (Preopens, Stderr, Exit) {
+    let walk = match fs::walk_dir(&SRC) {
+        Ok(walk) => walk,
+        Err(e) => fail(`${e}`),
+    };
+    let mut found = 0;
+    for let walked of walk {
+        let entry = match walked {
+            Ok(entry) => entry,
+            Err(e) => fail(`${e}`),
+        };
+        if !entry.path.ends_with(".rs") || entry.path == NAME_RS {
+            continue;
+        }
+        let text = match fs::read_to_string(&entry.path) {
+            Ok(text) => text,
+            Err(e) => fail(`${e}`),
+        };
+        for let line of minted_name_lines(&text) {
+            eprintln(`${entry.path}:${line}: a minted name formatted outside name.rs`);
+            found += 1;
+        }
+    }
+    if found > 0 {
+        exit(1);
+    }
+}
+
+/// The 1-based lines of `source` that format a minted name, in order.
+fn minted_name_lines(source: &String) -> List<i32> {
+    let text = without_comments(source);
+    let mut lines: List<i32> = [];
+    for let [macro_name, takes_writer] of MACROS {
+        for let at of format_strings(&text, macro_name, takes_writer) {
+            let rest = text.as_str_slice().slice(at, text.len());
+            if rest.starts_with("\"$") && !rest.starts_with("\"${{") {
+                lines.push(line_of(&text, at));
+            }
+        }
+    }
+    let mut line = 0;
+    for let code_line of text.lines() {
+        line += 1;
+        if code_line.contains("INTERNAL_PREFIX") {
+            lines.push(line);
+        }
+    }
+    lines.sort();
+    let mut unique: List<i32> = [];
+    for let found of lines {
+        if unique.last() != Some(found) {
+            unique.push(found);
+        }
+    }
+    return unique;
+}
+
+/// Each formatting macro, and whether a writer comes before its format string.
+global MACROS: [[String, bool], [String, bool], [String, bool], [String, bool]] = [
+    ["format!(", false],
+    ["format_args!(", false],
+    ["write!(", true],
+    ["writeln!(", true],
+];
+
+/// The byte offset of the format string each `macro_name` call in `text` opens
+/// with.
+fn format_strings(text: &String, macro_name: String, takes_writer: bool) -> List<i32> {
+    let all = text.as_str_slice();
+    let mut found: List<i32> = [];
+    let mut from = 0;
+    while let Some(at) = all.slice(from, all.len()).find(&macro_name) {
+        from = from + at + macro_name.len();
+        let mut args = from;
+        if takes_writer {
+            let Some(comma) = all.slice(args, all.len()).find(",") else {
+                break;
+            };
+            args += comma + 1;
+        }
+        let rest = all.slice(args, all.len());
+        found.push(args + rest.len() - rest.trim_start().len());
+    }
+    return found;
+}
+
+/// `source` with every comment's bytes but its newlines turned to spaces, so
+/// offsets and line numbers still match. String and character literals are
+/// kept: a format string is what the scan reads.
+fn without_comments(source: &String) -> String {
+    let bytes = source.as_bytes();
+    let n = bytes.len();
+    let mut out = ByteList::with_capacity(n);
+    let mut i = 0;
+    while i < n {
+        let b = bytes[i];
+        let next = if i + 1 < n { bytes[i + 1] } else { 0 as u8 };
+        let mut end = i + 1;
+        if b == b'/' && next == b'/' {
+            end = i;
+            while end < n && bytes[end] != b'\n' {
+                end += 1;
+            }
+            blank(&mut out, &bytes, i, end);
+        } else if b == b'/' && next == b'*' {
+            let mut depth = 0;
+            end = i;
+            while end < n {
+                if end + 1 < n && bytes[end] == b'/' && bytes[end + 1] == b'*' {
+                    depth += 1;
+                    end += 2;
+                } else if end + 1 < n && bytes[end] == b'*' && bytes[end + 1] == b'/' {
+                    depth -= 1;
+                    end += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                } else {
+                    end += 1;
+                }
+            }
+            blank(&mut out, &bytes, i, end);
+        } else {
+            if b == b'"' {
+                end = string_end(&bytes, i + 1, null);
+            } else if b == b'r'
+                && (next == b'"' || next == b'#')
+                && (i == 0 || !is_ident_byte(bytes[i - 1]) || bytes[i - 1] == b'b') {
+                let mut quote = i + 1;
+                while quote < n && bytes[quote] == b'#' {
+                    quote += 1;
+                }
+                if quote < n && bytes[quote] == b'"' {
+                    end = string_end(&bytes, quote + 1, Some(quote - i - 1));
+                }
+            } else if b == b'\'' && next == b'\\' {
+                end = i + 2;
+                while end < n && bytes[end] != b'\'' {
+                    end += 1;
+                }
+                end += 1;
+            } else if b == b'\'' && i + 2 < n && bytes[i + 2] == b'\'' {
+                end = i + 3;
+            }
+            for let k of i..<i32::min(end, n) {
+                out.push(bytes[k]);
+            }
+        }
+        i = end;
+    }
+    return String::from_utf8(out);
+}
+
+/// The offset just past the string literal whose text starts at `from`: a
+/// cooked one when `raw_hashes` is `None`, else a raw one closed by `"` and
+/// that many `#`s.
+fn string_end(bytes: &ByteSlice, from: i32, raw_hashes: Option<i32>) -> i32 {
+    let n = bytes.len();
+    let hashes = raw_hashes.unwrap_or(0);
+    let mut at = from;
+    while at < n {
+        if raw_hashes == null && bytes[at] == b'\\' {
+            at += 2;
+            continue;
+        }
+        if bytes[at] == b'"' {
+            let mut closing = 0;
+            while closing < hashes && at + 1 + closing < n && bytes[at + 1 + closing] == b'#' {
+                closing += 1;
+            }
+            if closing == hashes {
+                return at + 1 + hashes;
+            }
+        }
+        at += 1;
+    }
+    return n;
+}
+
+fn blank(out: &mut ByteList, bytes: &ByteSlice, from: i32, to: i32) {
+    for let k of from..<i32::min(to, bytes.len()) {
+        out.push(if bytes[k] == b'\n' { b'\n' } else { b' ' });
+    }
+}
+
+fn is_ident_byte(b: u8) -> bool {
+    return b == b'_' || b >= b'0' && b <= b'9' || b >= b'a' && b <= b'z' || b >= b'A' && b <= b'Z';
+}
+
+fn line_of(text: &String, offset: i32) -> i32 {
+    let mut line = 1;
+    for let b of text.as_str_slice().slice(0, offset).bytes() {
+        if b == b'\n' {
+            line += 1;
+        }
+    }
+    return line;
+}
+
+fn fail(message: String) -> ! with (Stderr, Exit) {
+    eprintln(message);
+    exit(1);
+}
+
+test "a minted name in a format string is found" {
+    let text = "a\nlet x = format!(\"$v{i}\");\nlet y = format!(\n    \"{INTERNAL_PREFIX}e\",\n);\nwrite!(f, \"$w{i}\");";
+    assert minted_name_lines(&text) == [2, 4, 6];
+}
+
+test "INTERNAL_PREFIX passed as an argument is found" {
+    let text = "x\nformat!(\"{}/{}p.wado\", root, name::INTERNAL_PREFIX)";
+    assert minted_name_lines(&text) == [2];
+}
+
+test "a minted name quoted in a comment passes" {
+    let text = "// format!(\"$v{i}\")\nlet x = 1; // uses INTERNAL_PREFIX\n/* write!(f, \"$w\") /* nested */ INTERNAL_PREFIX */";
+    assert minted_name_lines(&text).is_empty();
+}
+
+test "a comment marker inside a literal does not hide the code after it" {
+    let text = "let u = \"http://x\"; let c = '\"'; format!(\"$a{i}\");\nlet r = r#\"/*\"#; format!(\"$b\");\nlet s = r\"\\\"; // format!(\"$c\")";
+    assert minted_name_lines(&text) == [1, 2];
+}
+
+test "a literal `${`, a plain format string and a comment pass" {
+    let text = "format!(\"${{{}}}\", t); format!(\"{n}:{t}\"); \"$env\"\n/// starts with [`INTERNAL_PREFIX`]";
+    assert minted_name_lines(&text).is_empty();
+}

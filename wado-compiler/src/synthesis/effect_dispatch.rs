@@ -18,7 +18,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{
     DeclaredHead, FqTypeName, LocalMethodName, MethodName, Receiver, cm_wrap_async_func_name,
     dispatch_field_name, dispatch_global_name, dispatch_struct_name, dispatch_wrapper_name,
-    effect_default_impl_name, effect_namespace, mangle_generic_name,
+    effect_default_impl_name, effect_namespace, mangle_generic_name, minted_name,
 };
 use crate::package::Package;
 use crate::synthesis::common::{
@@ -1175,7 +1175,7 @@ impl LowerCtx {
     fn fresh_with_label(&mut self) -> String {
         let serial = self.with_serial;
         self.with_serial += 1;
-        format!("$with_{serial}")
+        minted_name("with", serial)
     }
 }
 
@@ -1575,7 +1575,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 (*existing_local, existing_name.clone())
             } else {
                 let local = ctx.alloc_local(handler_type);
-                let name = format!("$h_bundle_{group_id}");
+                let name = minted_name("h_bundle", group_id);
                 prelude.push(TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
@@ -1592,7 +1592,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             }
         } else {
             let local = ctx.alloc_local(handler_type);
-            let name = format!("$h_{label}");
+            let name = minted_name("h", &label);
             prelude.push(TirStmt::new(
                 TirStmtKind::Let {
                     name: name.clone(),
@@ -1609,7 +1609,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
 
         // 2. let $save_<E> = global.get $effect_<E>;
         let save_local = ctx.alloc_local(plan.nullable_ref_type_id);
-        let save_name = format!("$save_{label}");
+        let save_name = minted_name("save", &label);
         let global_get = TirExpr::new(
             TirExprKind::GlobalVarGet {
                 module_source: env.entry_source.clone(),
@@ -1680,7 +1680,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             });
         }
         let d_local = ctx.alloc_local(plan.struct_type_id);
-        let d_name = format!("$d_{label}");
+        let d_name = minted_name("d", &label);
         let struct_lit = TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type: plan.struct_type_id,
@@ -1765,7 +1765,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
 
     let is_never = env.type_table.borrow().is_never(result_type);
     let result_slot = (result_type != TypeTable::UNIT && !is_never)
-        .then(|| ExitSlot::new(result_type, "$with_result", &env.type_table, ctx));
+        .then(|| ExitSlot::new(result_type, "with_result", &env.type_table, ctx));
 
     let mut stmts = prelude;
     for slot in result_slot
@@ -1825,7 +1825,7 @@ struct ExitSlot {
 impl ExitSlot {
     fn new(
         payload_type: TypeId,
-        prefix: &str,
+        what: &str,
         type_table: &Rc<RefCell<TypeTable>>,
         ctx: &mut LowerCtx,
     ) -> Self {
@@ -1840,7 +1840,7 @@ impl ExitSlot {
         let local = ctx.alloc_local(option_type);
         Self {
             local,
-            name: format!("{prefix}_{local}"),
+            name: minted_name(what, local),
             option_type,
             payload_type,
             some_index,
@@ -1943,7 +1943,7 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
                 _ => None,
             };
             let payload_type = carried.as_ref().map_or(TypeTable::UNIT, |v| v.type_id);
-            let slot = ExitSlot::new(payload_type, "$exit", self.type_table, self.ctx);
+            let slot = ExitSlot::new(payload_type, "exit", self.type_table, self.ctx);
             let parked = match carried {
                 Some(value) => std::mem::replace(value, slot.take()),
                 None => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
