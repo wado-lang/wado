@@ -1634,12 +1634,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         reach: Reach,
     ) -> Option<(u32, Vec<DefId>)> {
         let mut types: IndexSet<TypeId> = self.spelled_type(receiver).into_iter().collect();
-        let unapplied = receiver.ty().is_none()
-            && receiver
-                .key()
-                .decl()
-                .is_some_and(|def| self.bare_generic_type_arity(def).is_some());
-        if unapplied {
+        if receiver.ty().is_none() && self.receiver_generic_arity(receiver).is_some() {
             types.extend(self.written_instances(receiver));
         }
         let mut found: Vec<(u32, Vec<DefId>)> = types

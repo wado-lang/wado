@@ -5677,10 +5677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TypeId> {
         // A generic type spelled without its arguments names no instance, so
         // the call's context settles one before the rules are asked.
-        let unapplied = receiver
-            .key()
-            .decl()
-            .and_then(|def| self.bare_generic_type_arity(def));
+        let unapplied = self.receiver_generic_arity(receiver);
         let instance = match unapplied {
             Some(_) => self.unapplied_static_instance(receiver, method, args, expected_type),
             None => UnappliedStatic::AsSpelled,

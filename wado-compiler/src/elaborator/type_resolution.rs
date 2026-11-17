@@ -992,6 +992,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(self.type_lookup().declared_generic_params(def)?.len())
     }
 
+    /// [`Self::bare_generic_type_arity`] of the declaration `receiver` names.
+    pub(super) fn receiver_generic_arity(
+        &self,
+        receiver: &super::static_call::ReceiverId,
+    ) -> Option<usize> {
+        self.bare_generic_type_arity(receiver.key().decl()?)
+    }
+
     /// The type a generic application resolves to. `site` names the head's
     /// declaration; `name` is its spelling, for the diagnostics.
     pub(super) fn resolve_generic_type(
