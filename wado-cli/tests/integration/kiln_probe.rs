@@ -35,7 +35,7 @@ export fn probe(path: String, mut content: Stream<u8>) -> Result<u64, Error> {
     return Result::Ok(n);
 }
 
-export fn generate(req: Request) -> Result<Response, Error> {
+export fn generate(req: Request) -> Result<Response, Error> with Stream {
     let origin = req.origin();
     let head = read_text(req.primary.content).unwrap();
     return Result::Ok(Response {

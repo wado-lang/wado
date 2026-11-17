@@ -3,7 +3,7 @@
 
 use { Error, OutputFile, Request, Response, read_text } from "core:kiln";
 
-export fn generate(req: Request) -> Result<Response, Error> {
+export fn generate(req: Request) -> Result<Response, Error> with Stream {
     let origin = req.origin();
     let text = match read_text(req.primary.content) {
         Ok(t) => t,
