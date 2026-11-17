@@ -144,37 +144,57 @@ jobs:
           git worktree remove --force "$RUNNER_TEMP/head"
       # Workload Identity Federation, so no API key is stored. The rule accepts
       # only this workflow on main, which only an admin's comment or dispatch
-      # starts. The token is minted here, in the one step that uses it, and
-      # Eddy does not see the means to mint another.
+      # starts. A token lives at most twice what the job's identity token has
+      # left, far less than a review, so a loop in this step mints the next one
+      # into the file Eddy reads before each request. Eddy runs without the
+      # means to mint, and the reviewed code cannot read the file.
       - id: eddy
         run: |
           set -euo pipefail
           mkdir -p scratchpad
-          jwt="$(curl -sSf -G -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            --data-urlencode audience=https://api.anthropic.com "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)"
-          echo "::add-mask::$jwt"
-          # The claims a federation rule matches on, none of them secret: the
-          # exchange answers a mismatch with nothing but "Authentication failed".
-          jq -rR 'split(".")[1] | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson
-            | {iss, aud, sub, ref, event_name, repository_owner_id, repository_id, job_workflow_ref}' <<< "$jwt"
-          response="$(jq -n --arg jwt "$jwt" '{
-              grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-              assertion: $jwt,
-              federation_rule_id: "fdrl_01N2UzGtpPyqSMQz3htMdLce",
-              organization_id: "b5accdd0-f052-4fe6-88e6-65bc34d1cba9",
-              service_account_id: "svac_01WVnWQoBfyRFsf4wyM7EHq7",
-              workspace_id: "wrkspc_01Ug39YtMABrbjfon1tEpoXy"
-            }' | curl -sS https://api.anthropic.com/v1/oauth/token -H "content-type: application/json" --data @- 2>&1)" || true
-          token="$(jq -r '.access_token // empty' <<< "$response" 2> /dev/null)" || true
-          if [ -z "$token" ]; then
-            # The post job reads the reason from the log, as from Eddy's own.
-            echo "eddy: the token exchange failed: $(head -c 500 <<< "$response" | tr '\n' ' ')" | tee scratchpad/eddy.log
+          key_dir="$RUNNER_TEMP/claude-api-key"
+          mkdir -m 700 "$key_dir"
+          # Writes the token to $key_dir/token and sets `lifetime`, in seconds.
+          mint() {
+            local jwt response token
+            jwt="$(curl -sSf -G -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              --data-urlencode audience=https://api.anthropic.com "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)"
+            echo "::add-mask::$jwt"
+            response="$(jq -n --arg jwt "$jwt" '{
+                grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+                assertion: $jwt,
+                federation_rule_id: "fdrl_01N2UzGtpPyqSMQz3htMdLce",
+                organization_id: "b5accdd0-f052-4fe6-88e6-65bc34d1cba9",
+                service_account_id: "svac_01WVnWQoBfyRFsf4wyM7EHq7",
+                workspace_id: "wrkspc_01Ug39YtMABrbjfon1tEpoXy"
+              }' | curl -sS https://api.anthropic.com/v1/oauth/token -H "content-type: application/json" --data @- 2>&1)" || true
+            token="$(jq -r '.access_token // empty' <<< "$response" 2> /dev/null)" || true
+            if [ -z "$token" ]; then
+              echo "eddy: the token exchange failed: $(head -c 500 <<< "$response" | tr '\n' ' ')" >&2
+              # The claims a federation rule matches on, none of them secret:
+              # the exchange answers a mismatch with "Authentication failed".
+              jq -rR 'split(".")[1] | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson
+                | {sub, ref, event_name, job_workflow_ref}' <<< "$jwt" >&2 || true
+              return 1
+            fi
+            echo "::add-mask::$token"
+            printf '%s\n' "$token" > "$key_dir/token.next"
+            mv "$key_dir/token.next" "$key_dir/token"
+            lifetime="$(jq -r .expires_in <<< "$response")"
+          }
+          # The post job reads the reason from the log, as from Eddy's own.
+          if ! mint 2> scratchpad/eddy.log; then
+            cat scratchpad/eddy.log
             exit 1
           fi
-          echo "::add-mask::$token"
+          interval=$((lifetime / 2 < 600 ? lifetime / 2 : 600))
+          echo "the token lives ${lifetime}s; minting the next every ${interval}s"
+          (while sleep "$interval"; do mint 2>> scratchpad/mint.log || true; done) &
+          minting=$!
           status=0
-          env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL CLAUDE_API_KEY="$token" \
+          env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL CLAUDE_API_KEY_FILE="$key_dir/token" \
             mise run eddy-review --head "$SHA" > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
+          kill "$minting"
           cat scratchpad/eddy.log
           exit "$status"
       # The record is what Eddy later learns from; it outlives the run here.
@@ -185,6 +205,7 @@ jobs:
           path: |
             scratchpad/eddy.json
             scratchpad/eddy.log
+            scratchpad/mint.log
             scratchpad/eddy/${{ env.SHA }}/
             package-eddy/reviews/${{ env.SHA }}.json
           retention-days: 90

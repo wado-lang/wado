@@ -9,7 +9,8 @@ rest of the pipeline below is not implemented yet.
 
 ## Reviewing a Branch
 
-From the repository root, with `CLAUDE_API_KEY` set and the branch committed:
+From the repository root, with the branch committed and `CLAUDE_API_KEY` set,
+or `CLAUDE_API_KEY_FILE` naming a file outside the checkout that holds the key:
 
 ```sh
 mise run eddy-review             # the reviewer reads, writes tests and runs them
@@ -88,7 +89,9 @@ artifact for 90 days, as `eddy-<pr>-<head>`.
 
 The workflow holds no API key. It exchanges the job's GitHub OIDC token for a
 short-lived one under a Workload Identity Federation rule, which accepts only
-`eddy.yml` on main.
+`eddy.yml` on main. The token expires within the review, so the workflow
+writes a fresh one to `CLAUDE_API_KEY_FILE` before it does, and Eddy reads
+that file before each request.
 
 `src/main.wado` states the options.
 
