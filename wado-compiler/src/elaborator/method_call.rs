@@ -7,6 +7,7 @@ use super::trait_env::{ImplTargetKey, written_arg_nodes};
 use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
+use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{
     ARRAY_TYPE_NAME, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, UNIT_TYPE_NAME,
@@ -15,7 +16,7 @@ use crate::name::{
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, StructDef, SubstitutionContext, TemplateId,
-    TupleSlot, TypeId, slots_from_impl_args,
+    TupleSlot, TypeArgMap, TypeId, slots_from_impl_args,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -33,7 +34,8 @@ use super::reflect::ReflectDispatch;
 use super::scope::{BoundsOf, ParamRef, ScopedBound};
 use super::sem::types::{CalleeParams, StaticMethodDispatch, impl_self_layers};
 use super::sig::{MethodSig, Param};
-use super::static_call::{CandidateKind, ReceiverId, Selector, StaticLookup, StaticQuery};
+use super::solver_bridge::Reach;
+use super::static_call::{ReceiverId, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
 use super::trait_query::{NewtypePeel, OnBoundTrait, SelfBinding};
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
@@ -104,6 +106,46 @@ fn primitive_receiver(prim: PrimitiveType) -> QualifiedReceiver {
         FqTypeName::builtin(prim.as_str()),
         vec![],
     )
+}
+
+/// What a call passing its receiver first names before the method.
+pub(super) enum Qualifier<'a> {
+    /// `Trait::method(recv, …)`: only that trait's impls answer. With
+    /// `Trait::<Self = T>::method(recv, …)`, `recv` is of the bound type too.
+    Trait(RequiredTrait, Option<&'a ReceiverId>),
+    /// `Type::method(recv, …)`: what `recv.method(…)` selects, `recv` being of
+    /// that type.
+    Type(&'a ReceiverId),
+}
+
+/// The nearest link among `found`, with every block answering there.
+fn nearest_link(found: Vec<(u32, Vec<DefId>)>) -> Option<(u32, Vec<DefId>)> {
+    let nearest = found.iter().map(|(link, _)| *link).min()?;
+    let blocks = found
+        .into_iter()
+        .filter(|(link, _)| *link == nearest)
+        .flat_map(|(_, blocks)| blocks)
+        .collect();
+    Some((nearest, blocks))
+}
+
+/// The instance a blanket's static call on a generic type spelled without its
+/// arguments means.
+pub(super) enum UnappliedStatic {
+    /// The spelling stands: the type is not such a generic, or no value
+    /// blanket declares the static.
+    AsSpelled,
+    Settled(TypeId),
+    /// A blanket declares it, and nothing says which instance the call means.
+    Open,
+}
+
+/// What kind of declaration a type answers `Type::method` with.
+pub(super) enum QualifiedAnswer {
+    Static,
+    Method,
+    /// Traits at one link answer with both kinds: each trait, by name.
+    Ambiguous(Vec<String>),
 }
 
 /// Inputs to [`Elaborator::resolve_method_call_with`], the TIR-level method-call
@@ -534,6 +576,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut matched_ref_kind: Option<RefKind> = None;
         let is_ref = self.tysys.type_table.borrow().is_reference(receiver);
 
+        // An inherent method shadows the trait impls at its link of the
+        // newtype chain and every link past it; a trait impl at a nearer link
+        // answers instead. A qualified call names a trait, which no inherent
+        // method answers for.
+        let inherent = if required_trait.is_none() {
+            self.lookup_method_info(receiver, method_name)
+                .map(|info| (self.inherent_link(base_type_id, info.owner), info))
+        } else {
+            None
+        };
+        let trait_answers_nearer = |this: &Self, through_ref: Option<bool>| match &inherent {
+            None => true,
+            Some((link, _)) => {
+                this.trait_answers_before(base_type_id, through_ref, method_name, *link)
+            }
+        };
+
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
         // Only specific ref impls are preferred (not blanket impls like impl Inspect for &T).
@@ -548,7 +607,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let subject_ref_kind = subject
             .and_then(|s| RefKind::from_resolved(&self.tysys.type_table.borrow().get(s).clone()));
-        if let Some(ref_kind) = subject_ref_kind {
+        if let Some(ref_kind) = subject_ref_kind
+            && trait_answers_nearer(self, Some(ref_kind == RefKind::Mut))
+        {
             let result = self.find_trait_method_for_type(
                 &ImplTargetKey::Ref(ref_kind),
                 method_name,
@@ -611,8 +672,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Look up method info based on receiver type (inherent + base type trait methods)
-        if method_info.is_none() && required_trait.is_none() {
-            method_info = self.lookup_method_info(receiver, method_name);
+        if method_info.is_none() && inherent.is_some() && !trait_answers_nearer(self, None) {
+            method_info = inherent.map(|(_, info)| info);
             if let Some(def) = method_info.as_ref().and_then(|info| info.impl_block) {
                 self.defer_awaited_impl_bounds(def, base_type_id, span);
             }
@@ -986,9 +1047,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let optional = param_defaults.iter().filter(|d| d.is_some()).count();
         let required = expected_param_types.len().saturating_sub(optional);
         if method_found && (args.len() < required || args.len() > expected_param_types.len()) {
+            // A qualified call writes the receiver among its arguments.
+            let receiver_written = usize::from(defaults_site.is_some());
             let _ = self.emit(TypeError::ArgumentCountMismatch {
-                expected: expected_param_types.len(),
-                found: args.len(),
+                expected: expected_param_types.len() + receiver_written,
+                found: args.len() + receiver_written,
                 span,
             });
             return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
@@ -1381,9 +1444,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Record the dispatch decision so reify can emit the same TIR without
-        // re-running trait lookup or mangling. Only a trait-qualified caller
-        // reads the signature facts back, so an ordinary call skips the clones.
-        let signature = (method_found && required_trait.is_some()).then(|| MethodSignatureFacts {
+        // re-running trait lookup or mangling. Only a qualified caller, which
+        // files the call under its own site, reads the signature facts back,
+        // so an ordinary call skips the clones.
+        let signature = (method_found && defaults_site.is_some()).then(|| MethodSignatureFacts {
             param_is_mut: param_is_mut.clone(),
             param_names: param_names.clone(),
             param_defaults: param_defaults.clone(),
@@ -1426,6 +1490,393 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The link of `receiver`'s newtype chain whose inherent impl declares the
+    /// method `owner` says answered: 0 for the receiver's own. A reference a
+    /// newtype wraps is no link of its own.
+    fn inherent_link(&self, receiver: TypeId, owner: MethodOwner) -> u32 {
+        let declaring = match owner {
+            MethodOwner::Receiver => return 0,
+            MethodOwner::InheritedFrom(ty) | MethodOwner::Referent(ty) => Some(ty),
+            // A resource ends its newtype chain.
+            MethodOwner::Ancestor(_) => None,
+        };
+        let mut link = 0;
+        let mut ty = receiver;
+        loop {
+            if Some(ty) == declaring {
+                return link;
+            }
+            let ResolvedType::Newtype { base_type, .. } =
+                self.tysys.type_table.borrow().get(ty).clone()
+            else {
+                return link;
+            };
+            ty = self.tysys.get_base_type(base_type);
+            link += 1;
+        }
+    }
+
+    /// What `Type::method(…)` names. The spelled type answers the name once,
+    /// with declarations of both kinds, in the order a method call ranks them:
+    /// the nearest link of its newtype chain, and there the type's own
+    /// declaration before a trait's. The kind of what answers decides whether
+    /// the call selects as `recv.method(…)` does or as a static; traits there
+    /// answering with both kinds leave nothing to select.
+    pub(super) fn qualified_answer(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+    ) -> QualifiedAnswer {
+        if self.declares_case_named(receiver.key(), method_name) {
+            return QualifiedAnswer::Static;
+        }
+        let kind = |takes_receiver: bool| {
+            if takes_receiver {
+                QualifiedAnswer::Method
+            } else {
+                QualifiedAnswer::Static
+            }
+        };
+        let own = [true, false].map(|takes_receiver| {
+            self.own_link(receiver.key(), method_name, takes_receiver)
+                .map(|link| ((link, false), Vec::new(), takes_receiver))
+        });
+        // The type's own declaration at its own link answers before any trait.
+        if let Some((_, _, takes_receiver)) = own.iter().flatten().find(|(order, ..)| order.0 == 0)
+        {
+            return kind(*takes_receiver);
+        }
+        // A trait the call site cannot name answers only where nothing it can
+        // name does, so an import it lacks never hides what it reaches.
+        let mut supplied = self.trait_answer(receiver, method_name, Reach::InScope);
+        if supplied.is_none() && own.iter().all(Option::is_none) {
+            supplied = self.trait_answer(receiver, method_name, Reach::OutOfScope);
+        }
+        let supplied = supplied.map(|(link, blocks)| ((link, true), blocks, false));
+        let Some((_, blocks, takes_receiver)) = own
+            .into_iter()
+            .chain([supplied])
+            .flatten()
+            .min_by_key(|(order, _, _)| *order)
+        else {
+            return QualifiedAnswer::Static;
+        };
+        let kinds: IndexSet<bool> = blocks
+            .iter()
+            .filter_map(|&block| self.block_takes_receiver(block, method_name))
+            .collect();
+        match kinds.len() {
+            0 => kind(takes_receiver),
+            1 => kind(kinds[0]),
+            _ => {
+                // A receiver-taking trait first: the diagnostic's example
+                // spelling, `Trait::m(&value)`, is that kind's.
+                let mut blocks = blocks;
+                blocks.sort_by_key(|&block| {
+                    self.block_takes_receiver(block, method_name) != Some(true)
+                });
+                let defs = self.tysys.resolutions.defs();
+                let traits: IndexSet<String> = blocks
+                    .iter()
+                    .filter_map(|&block| self.tysys.signatures.impl_trait(block))
+                    .map(|decl| defs.name(decl).to_string())
+                    .collect();
+                QualifiedAnswer::Ambiguous(traits.into_iter().collect())
+            }
+        }
+    }
+
+    /// The link of `key`'s newtype chain whose own declaration of
+    /// `method_name` takes a receiver, or takes none: an inherent method or a
+    /// resource's.
+    fn own_link(
+        &mut self,
+        key: &ImplTargetKey,
+        method_name: &str,
+        takes_receiver: bool,
+    ) -> Option<u32> {
+        let mut key = key.clone();
+        for link in 0.. {
+            let inherent = self
+                .impl_method_entries(&key, method_name)
+                .any(|entry| entry.is_inherent() && entry.has_self == takes_receiver);
+            // The nearest resource of the `extends` chain declaring the name
+            // answers, so a child's static shadows its parent's method.
+            let resource = key.decl().is_some_and(|def| {
+                self.tysys
+                    .resource_chain_of(def)
+                    .into_iter()
+                    .find_map(|resource| {
+                        self.tysys
+                            .signatures
+                            .resource_method_sig(resource, method_name)
+                    })
+                    .is_some_and(|sig| (sig.self_kind != ast::SelfKind::None) == takes_receiver)
+            });
+            if inherent || resource {
+                return Some(link);
+            }
+            key = self.newtype_link_target(&key)?.0;
+        }
+        unreachable!("a chain ends")
+    }
+
+    /// The link of the spelled type's chain where trait impls answer
+    /// `method_name`, and those impls. The order asks the type itself, by
+    /// value and through each reference, so a blanket answers where its
+    /// bounds hold. A generic type spelled without its arguments names no one
+    /// instance, so the order is asked at each instance a trait impl is
+    /// written for, and the blocks written for its head answer besides.
+    fn trait_answer(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+        reach: Reach,
+    ) -> Option<(u32, Vec<DefId>)> {
+        let mut types: IndexSet<TypeId> = self.spelled_type(receiver).into_iter().collect();
+        if receiver.ty().is_none() && self.receiver_generic_arity(receiver).is_some() {
+            types.extend(self.written_instances(receiver));
+        }
+        let mut found: Vec<(u32, Vec<DefId>)> = types
+            .into_iter()
+            .filter_map(|ty| self.ordered_impls(ty, method_name, reach))
+            .collect();
+        found.extend(self.written_impls(receiver, method_name, reach));
+        nearest_link(found)
+    }
+
+    /// [`SolverBridge::nearest_impls`] at `ty`, by value and through each
+    /// reference.
+    fn ordered_impls(
+        &self,
+        ty: TypeId,
+        method_name: &str,
+        reach: Reach,
+    ) -> Option<(u32, Vec<DefId>)> {
+        let bridge = self.tysys.solver.as_ref()?.borrow();
+        let module = self.frame_module();
+        nearest_link(
+            [None, Some(false), Some(true)]
+                .into_iter()
+                .filter_map(|through_ref| {
+                    bridge.nearest_impls(
+                        &self.tysys,
+                        &self.annotate_ctx,
+                        module,
+                        ty,
+                        through_ref,
+                        method_name,
+                        reach,
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    /// The concrete instances of `receiver`'s type that a trait impl is
+    /// written for.
+    fn written_instances(&self, receiver: &ReceiverId) -> IndexSet<TypeId> {
+        let blocks = self.trait_impls_for_receiver(&receiver.at_type(None), &[]);
+        let table = self.tysys.type_table.borrow();
+        blocks
+            .into_iter()
+            .map(|block| table.impl_target_whole(block))
+            .filter(|&target| table.is_concrete(target))
+            .collect()
+    }
+
+    /// The trait impls written for a link of `receiver`'s chain that declare
+    /// `method_name`, among those `reach` names, at the nearest link any does.
+    fn written_impls(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+        reach: Reach,
+    ) -> Option<(u32, Vec<DefId>)> {
+        let reached = |this: &Self, block: DefId| {
+            let in_scope = this.tysys.signatures.impl_trait(block).is_some_and(|decl| {
+                this.tysys
+                    .resolutions
+                    .decl_in_scope(this.frame_module(), decl)
+            });
+            in_scope == (reach == Reach::InScope)
+        };
+        // A link keyed by no declaration (`&Point`) is told apart by its whole
+        // type, which the chain declares.
+        let (mut key, mut declared) = (receiver.key().clone(), receiver.ty());
+        for link in 0.. {
+            let blocks: Vec<DefId> = self
+                .trait_impls_for_receiver(&ReceiverId::keyed(key.clone(), declared), &[])
+                .into_iter()
+                .filter(|&block| {
+                    self.block_takes_receiver(block, method_name).is_some() && reached(self, block)
+                })
+                .collect();
+            if !blocks.is_empty() {
+                return Some((link, blocks));
+            }
+            let (next, ty) = self.newtype_link_target(&key)?;
+            (key, declared) = (next, Some(ty));
+        }
+        unreachable!("a chain ends")
+    }
+
+    /// Whether the declaration that impl block `block` answers `method_name`
+    /// with takes a receiver: the body it writes, else its trait's. `None`
+    /// where neither declares the name.
+    fn block_takes_receiver(&self, block: DefId, method_name: &str) -> Option<bool> {
+        let header = &self.tysys.trait_env.impl_headers[&block];
+        let self_kind = if let Some(method) = header.methods.iter().find(|m| m.name == method_name)
+        {
+            self.tysys.signatures.method_sig(method.def)?.self_kind
+        } else {
+            let trait_decl = self.tysys.signatures.impl_trait(block)?;
+            let declared = self
+                .tysys
+                .signatures
+                .trait_sig(trait_decl)?
+                .method(method_name)?;
+            declared.sig.self_kind
+        };
+        Some(self_kind != ast::SelfKind::None)
+    }
+
+    /// The type `receiver` spells: the one the call settled, else its
+    /// declaration's, a generic one at its own parameters.
+    fn spelled_type(&self, receiver: &ReceiverId) -> Option<TypeId> {
+        receiver.ty().or_else(|| match receiver.key() {
+            ImplTargetKey::Decl(def) => self.declared_self_type(*def),
+            ImplTargetKey::Builtin(name) => TypeTable::primitive_by_name(name),
+            ImplTargetKey::Undeclared(..)
+            | ImplTargetKey::Ref(_)
+            | ImplTargetKey::TypeParam { .. }
+            | ImplTargetKey::Function { .. } => None,
+        })
+    }
+
+    /// Which instance of the generic type `receiver` spells without arguments
+    /// a call of a value blanket's static `method_name` means. The expected
+    /// type or an argument says, where the blanket's signature places `Self`;
+    /// else the one instance an impl is written for that a blanket answers at.
+    pub(super) fn unapplied_static_instance(
+        &mut self,
+        receiver: &ReceiverId,
+        method_name: &str,
+        args: &[TypeId],
+        expected_type: Option<TypeId>,
+    ) -> UnappliedStatic {
+        let decl = receiver
+            .key()
+            .decl()
+            .expect("an unapplied generic is a declaration");
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let statics: Vec<(TypeId, &MethodSig)> = trait_env
+            .blanket_impls
+            .values()
+            .flatten()
+            .filter(|blanket| blanket.receiver == BlanketReceiver::Value)
+            .filter_map(|blanket| {
+                let method = self.tysys.declared_method(blanket.def, method_name)?;
+                let sig = self.tysys.signatures.method_sig(method)?;
+                let slot = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .impl_target_whole(blanket.def);
+                (sig.self_kind == ast::SelfKind::None).then_some((slot, sig))
+            })
+            .collect();
+        if statics.is_empty() {
+            return UnappliedStatic::AsSpelled;
+        }
+        let mut instances: IndexSet<TypeId> = IndexSet::default();
+        {
+            let mut table = self.tysys.type_table.borrow_mut();
+            for &(slot, sig) in &statics {
+                let ResolvedType::TypeParam { id } = *table.get(slot) else {
+                    unreachable!("a value blanket targets its own parameter")
+                };
+                let mut slots = TypeArgMap::default();
+                table.bind_each_into(&sig.value_param_types(), args, &mut slots);
+                if let (Some(declared), Some(expected)) = (sig.decl.return_type, expected_type) {
+                    table.bind_each_into(&[declared], &[expected], &mut slots);
+                }
+                if let Some(&instance) = slots.get(&id)
+                    && table.nominal_def(instance) == Some(decl)
+                {
+                    instances.insert(instance);
+                }
+            }
+        }
+        if instances.is_empty() {
+            instances = self
+                .written_instances(receiver)
+                .into_iter()
+                .filter(|&target| {
+                    !self
+                        .applicable_blanket_statics(target, method_name, NewtypePeel::Here)
+                        .is_empty()
+                })
+                .collect();
+        }
+        if instances.len() == 1 {
+            UnappliedStatic::Settled(instances[0])
+        } else {
+            UnappliedStatic::Open
+        }
+    }
+
+    /// Whether `receiver_type`, behind its references, is the type `spelled`
+    /// names, or a resource extending it.
+    fn receiver_is_spelled(&self, spelled: &ReceiverId, receiver_type: TypeId) -> bool {
+        if receiver_type == TypeTable::ERROR || receiver_type == TypeTable::UNKNOWN {
+            return true;
+        }
+        let table = self.tysys.type_table.borrow();
+        let pointee = table.peel_refs(receiver_type);
+        if let (Some(sub), Some(sup)) = (table.nominal_def(pointee), spelled.key().decl()) {
+            // Where the spelling writes the type's arguments, they are the
+            // receiver's too.
+            let writes_args = |ty| {
+                table
+                    .nominal_type_args(ty)
+                    .is_some_and(|args| !args.is_empty())
+            };
+            let instance_agrees = sub != sup
+                || spelled
+                    .ty()
+                    .is_none_or(|ty| ty == pointee || !writes_args(ty));
+            return table.is_resource_subtype(sub, sup) && instance_agrees;
+        }
+        drop(table);
+        self.receiver_of(pointee).key() == spelled.key()
+    }
+
+    /// Whether a trait impl the call site can name answers `method_name` on
+    /// `receiver` at a link nearer than `inherent_link`.
+    fn trait_answers_before(
+        &self,
+        receiver: TypeId,
+        through_ref: Option<bool>,
+        method_name: &str,
+        inherent_link: u32,
+    ) -> bool {
+        inherent_link > 0
+            && self.tysys.solver.as_ref().is_some_and(|bridge| {
+                bridge
+                    .borrow()
+                    .answering_link(
+                        &self.tysys,
+                        &self.annotate_ctx,
+                        self.frame_module(),
+                        receiver,
+                        through_ref,
+                        method_name,
+                    )
+                    .is_some_and(|link| link < inherent_link)
+            })
+    }
+
     /// Whether the trait named at `head_site` declares `method_name` with a
     /// receiver, making a call on it the trait-qualified (UFCS) form
     /// `Trait::method(recv, args…)` (WEP 2026-07-31).
@@ -1437,7 +1888,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// [`Self::is_trait_instance_method_at`] for the receiver-less kind — what
-    /// `Trait::<T>::method(…)` binds `Self` for, since it has no receiver
+    /// `Trait::<Self = T>::method(…)` binds `Self` for, since it has no receiver
     /// argument to pin it.
     pub(super) fn is_trait_static_method_at(&self, head_site: AstId, method_name: &str) -> bool {
         self.tysys
@@ -1475,8 +1926,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Expr::Ident(ident) => ident.segments.last().map(|seg| seg.id),
             _ => None,
         };
-        self.resolve_trait_qualified_call_parts(
-            required,
+        self.resolve_qualified_call_parts(
+            Qualifier::Trait(required, None),
             method_name,
             &call.args,
             type_args,
@@ -1488,13 +1939,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// The shared engine behind both qualified spellings: the bare
-    /// `Trait::method(recv, …)` ident form, and the trait-turbofish
+    /// The shared engine behind every spelling that passes the receiver first:
+    /// the bare `Trait::method(recv, …)` ident form, the trait-turbofish
     /// `Take::<A>::take(recv, …)` static form whose `required_trait` carries
-    /// the resolved trait arguments and thereby pins one argument list.
-    fn resolve_trait_qualified_call_parts(
+    /// the resolved trait arguments and thereby pins one argument list, and
+    /// `Type::method(recv, …)`, which selects what `recv.method(…)` does.
+    pub(super) fn resolve_qualified_call_parts(
         &mut self,
-        required_trait: RequiredTrait,
+        qualifier: Qualifier<'_>,
         method_name: &str,
         args: &[ast::Expr],
         type_args: Vec<TypeId>,
@@ -1505,16 +1957,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
+        let (required_trait, spelled, qualifier_display) = match qualifier {
+            Qualifier::Trait(required, bound) => {
+                let display = required.display.clone();
+                (Some(required), bound, display)
+            }
+            Qualifier::Type(receiver) => (None, Some(receiver), self.receiver_display(receiver)),
+        };
         let Some((receiver_ast, rest)) = args.split_first() else {
             let _ = self.emit(TypeError::TraitQualifiedCallNeedsReceiver {
-                trait_name: required_trait.display,
+                trait_name: qualifier_display,
                 method: method_name.to_string(),
                 span,
             });
             return TypeTable::ERROR;
         };
-        let trait_display = required_trait.display.clone();
         let receiver_type = self.resolve_expr(receiver_ast, ctx, None);
+        if let Some(spelled) = spelled
+            && !self.receiver_is_spelled(spelled, receiver_type)
+        {
+            // The spelling names the receiver's type, not the mode it is
+            // passed in, so both sides are compared behind their references.
+            let pointee = self.tysys.type_table.borrow().peel_refs(receiver_type);
+            let _ = self.emit(TypeError::TypeMismatch {
+                expected: self.receiver_display(spelled),
+                found: self.tysys.type_id_to_string(pointee),
+                span: receiver_ast.span(),
+            });
+            return self.resolve_args_without_callee(rest, ctx);
+        }
         // `call_id: None` — the dispatcher would file the decision under
         // `method_dispatch`, which reify only reads for a `MethodCallExpr`
         // node. A qualified call spells its receiver's mode itself (`&x` for
@@ -1536,19 +2007,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args: rest,
                 expected_type,
                 span,
-                required_trait: Some(required_trait),
+                required_trait,
             },
             ctx,
         );
-        if let Some(sig) = &outcome.signature {
-            self.check_trait_qualified_receiver_mode(
-                &trait_display,
-                method_name,
-                sig.self_kind,
-                receiver_type,
-                receiver_ast.span(),
-            );
-        }
         if let (Some(dispatched), Some(sig)) = (outcome.dispatch, outcome.signature) {
             // `self` as the method declares it, which a reference's own impl
             // (`impl IntoIterator for &List<T>`) takes one layer deeper.
@@ -1557,6 +2019,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type,
                 &self.tysys.type_table.borrow(),
             );
+            // The mode may be spelled against `Self`, which such an impl's own
+            // reference is part of: `Tr::m(r)` passes `r: &P` by value to an
+            // `impl Tr for &P`'s `fn m(self)`.
+            let as_self = (0..self_layers).fold(receiver_type, |ty, _| {
+                self.tysys.type_table.borrow().ref_pointee(ty).unwrap_or(ty)
+            });
+            if !self.receiver_mode_fits(sig.self_kind, as_self) {
+                self.check_trait_qualified_receiver_mode(
+                    &qualifier_display,
+                    method_name,
+                    sig.self_kind,
+                    receiver_type,
+                    receiver_ast.span(),
+                );
+            }
             let self_type = adjusted_receiver_type(
                 receiver_type,
                 sig.self_kind,
@@ -1578,6 +2055,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         outcome.type_id
     }
 
+    /// Whether a receiver of `receiver_type` spells `self_kind`'s mode.
+    fn receiver_mode_fits(&self, self_kind: ast::SelfKind, receiver_type: TypeId) -> bool {
+        if receiver_type == TypeTable::ERROR || receiver_type == TypeTable::UNKNOWN {
+            return true;
+        }
+        let (is_ref, is_mut_ref) = match self.tysys.type_table.borrow().get(receiver_type) {
+            ResolvedType::Ref(_) => (true, false),
+            ResolvedType::MutRef(_) => (false, true),
+            _ => (false, false),
+        };
+        match self_kind {
+            ast::SelfKind::Value => !(is_ref || is_mut_ref),
+            ast::SelfKind::Ref => is_ref || is_mut_ref,
+            ast::SelfKind::MutRef => is_mut_ref,
+            ast::SelfKind::None => true,
+        }
+    }
+
     /// The receiver of a qualified call spells its own mode (WEP 2026-07-31);
     /// enforce that the spelling agrees with the method's `self` parameter.
     /// Without this, a by-value receiver against `&mut self` mutates a copy
@@ -1591,17 +2086,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type: TypeId,
         span: Span,
     ) {
-        if receiver_type == TypeTable::ERROR || receiver_type == TypeTable::UNKNOWN {
+        if self.receiver_mode_fits(self_kind, receiver_type) {
             return;
         }
-        let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
-        let is_ref = matches!(resolved, ResolvedType::Ref(_));
-        let is_mut_ref = matches!(resolved, ResolvedType::MutRef(_));
         let (expected, spelled) = match self_kind {
-            ast::SelfKind::Value if is_ref || is_mut_ref => ("self", "value"),
-            ast::SelfKind::Ref if !(is_ref || is_mut_ref) => ("&self", "&value"),
-            ast::SelfKind::MutRef if !is_mut_ref => ("&mut self", "&mut value"),
-            _ => return,
+            ast::SelfKind::Value => ("self", "value"),
+            ast::SelfKind::Ref => ("&self", "&value"),
+            ast::SelfKind::MutRef => ("&mut self", "&mut value"),
+            ast::SelfKind::None => return,
         };
         let _ = self.emit(TypeError::TraitQualifiedReceiverMode {
             trait_name: trait_name.to_string(),
@@ -1735,7 +2227,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        self.resolve_static_method_call_of_trait(static_call, None, ctx, expected_type)
+        self.resolve_static_method_call_of_trait(static_call, (None, &[]), ctx, expected_type)
     }
 
     /// [`Self::resolve_static_method_call`] restricted to one trait's impls,
@@ -1743,7 +2235,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_static_method_call_of_trait(
         &mut self,
         static_call: &ast::StaticMethodCallExpr,
-        required_trait: Option<DefId>,
+        // The trait a qualified spelling names, and the arguments it writes
+        // on it.
+        (required_trait, required_args): (Option<DefId>, &[TypeId]),
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
@@ -1813,10 +2307,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .and_then(|key| self.tysys.trait_decl_type_params_of(&key))
                 .unwrap_or_default();
             let trait_arity = ast::written_params(&trait_params).count();
-            if self.is_trait_instance_method_at(head.site, &static_call.method)
-                && trait_arity != 0
-                && trait_arity == head.args.len()
-            {
+            // The turbofish is the trait's argument list, all of it or none;
+            // `Self = T` beside it binds the receiver.
+            let writes_trait_args = trait_arity != 0 && trait_arity == head.args.len();
+            let takes_receiver = self.is_trait_instance_method_at(head.site, &static_call.method);
+            let self_type = static_call.self_type.as_ref();
+            if self_type.is_some() && !head.args.is_empty() && !writes_trait_args {
+                let _ = self.emit(TypeError::TypeArgumentCount {
+                    name: self.declared_trait_name(Some(head.site), &head.name),
+                    expected: trait_arity,
+                    found: head.args.len(),
+                    span: static_call.span,
+                });
+                return self.resolve_args_without_callee(&static_call.args, ctx);
+            }
+            // A binding naming no type was reported where it is written.
+            if self_type.is_some_and(|ty| {
+                matches!(self.resolve_type(ty), TypeTable::UNKNOWN | TypeTable::ERROR)
+            }) {
+                return self.resolve_args_without_callee(&static_call.args, ctx);
+            }
+            if takes_receiver && (writes_trait_args || self_type.is_some()) {
                 let declared_head = self.declared_trait_name(Some(head.site), &head.name);
                 let trait_args: Vec<TypeId> =
                     head.args.iter().map(|a| self.resolve_type(a)).collect();
@@ -1827,13 +2338,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect();
                 let required = RequiredTrait {
                     decl: self.tysys.resolutions.get(head.site),
-                    args: Some(trait_args),
+                    args: writes_trait_args.then_some(trait_args),
                     display: display_generic_name(&declared_head, &args_spelled),
                 };
+                let bound = self_type.map(|ty| {
+                    let self_ty = self.resolve_type(ty);
+                    self.receiver_of(self_ty)
+                });
                 let method_type_args: Vec<TypeId> =
                     self.resolve_turbofish_args(&static_call.type_args);
-                return self.resolve_trait_qualified_call_parts(
-                    required,
+                return self.resolve_qualified_call_parts(
+                    Qualifier::Trait(required, bound.as_ref()),
                     &static_call.method.clone(),
                     &static_call.args,
                     method_type_args,
@@ -1844,34 +2359,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ctx,
                 );
             }
-            // `Tagged::<V>::tag(…)` — the static counterpart. A receiver-less
-            // declaration has no receiver argument to pin `Self`, so the
-            // turbofish supplies it and the call reads as `V::tag(…)`. Only
-            // where the trait declares no parameters of its own: the branch
-            // above claims the turbofish for a trait that does, and there is
-            // then nowhere left to write `Self`.
-            if let [self_ty_ast] = head.args
+            // `Tagged::<Self = V>::tag(…)` — the static counterpart. A
+            // receiver-less declaration has no receiver argument to pin
+            // `Self`, so the binding supplies it and the call reads as
+            // `V::tag(…)`.
+            if let Some(self_ty_ast) = self_type
                 && self.is_trait_static_method_at(head.site, &static_call.method)
-                && trait_arity == 0
-                && self.resolve_type(self_ty_ast) != TypeTable::UNKNOWN
             {
+                let trait_args: Vec<TypeId> =
+                    head.args.iter().map(|a| self.resolve_type(a)).collect();
                 let mut on_self = static_call.clone();
                 on_self.target_type = self_ty_ast.clone();
+                on_self.self_type = None;
                 // Restricted to the named trait: the rewritten spelling reads
                 // as `V::tag(…)`, and without it a case or an inherent static
                 // `V` declares of that name answers in the trait's place.
                 let required = self.tysys.resolutions.declared(head.site);
                 return self.resolve_static_method_call_of_trait(
                     &on_self,
-                    required,
+                    (required, &trait_args),
                     ctx,
                     expected_type,
                 );
             }
-            // The same spelling on a trait that does declare parameters: the
-            // turbofish is already spoken for, so say that rather than let the
-            // call read as an unknown function.
-            if self.is_trait_static_method_at(head.site, &static_call.method) && trait_arity != 0 {
+            // A receiver-less declaration named with no binding: the turbofish
+            // is the trait's, so say that rather than let the call read as an
+            // unknown function.
+            if self.is_trait_static_method_at(head.site, &static_call.method)
+                && static_call.self_type.is_none()
+            {
                 let _ = self.emit(TypeError::StaticNeedsWrittenReceiver {
                     trait_name: self.declared_trait_name(Some(head.site), &head.name),
                     method: static_call.method.clone(),
@@ -1884,6 +2400,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: static_call.span,
             });
             return TypeTable::ERROR;
+        }
+
+        if static_call.self_type.is_some() {
+            let _ = self.emit(TypeError::SelfBindingOnType {
+                name: head.map_or_else(
+                    || self.tysys.type_id_to_string(target_type_id),
+                    |head| head.name,
+                ),
+                span: static_call.span,
+            });
+            return self.resolve_args_without_callee(&static_call.args, ctx);
         }
 
         // The name and canonical decl key the parameter types are looked up
@@ -1911,6 +2438,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         });
         let static_receiver = lookup_receiver.as_ref().map(ReceiverId::key);
+
+        let spelled = own_key.at_type(Some(target_type_id));
+        // A default body's `Self::m(self)` names its trait, as `Tr::m(self)` does.
+        let qualifier = match required_trait {
+            Some(decl)
+                if self
+                    .tysys
+                    .trait_declares_method(Some(decl), &static_call.method, |kind| {
+                        kind != ast::SelfKind::None
+                    }) =>
+            {
+                Some(Qualifier::Trait(self.tysys.required_trait(decl), None))
+            }
+            Some(_) => None,
+            None => match self.qualified_answer(&spelled, &static_call.method) {
+                QualifiedAnswer::Static => None,
+                QualifiedAnswer::Method => Some(Qualifier::Type(&spelled)),
+                QualifiedAnswer::Ambiguous(traits) => {
+                    let _ = self.emit(TypeError::AmbiguousTraitMethod {
+                        method: static_call.method.clone(),
+                        traits,
+                        span: static_call.span,
+                    });
+                    return self.resolve_args_without_callee(&static_call.args, ctx);
+                }
+            },
+        };
+        if let Some(qualifier) = qualifier {
+            let method_type_args = self.resolve_turbofish_args(&static_call.type_args);
+            return self.resolve_qualified_call_parts(
+                qualifier,
+                &static_call.method,
+                &static_call.args,
+                method_type_args,
+                static_call.id,
+                Some(static_call.method_id),
+                static_call.span,
+                expected_type,
+                ctx,
+            );
+        }
 
         // `Type::<T>::method()` parses as a static-method call and never
         // reaches `resolve_call`, which checks the bare spelling. The receiver
@@ -1983,6 +2551,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(receiver) => self.preselect_static_args(
                 StaticReceiver {
                     required_trait,
+                    required_args,
                     expected_return: expected_type,
                     ..StaticReceiver::of(receiver)
                 },
@@ -2007,7 +2576,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver,
                 &static_call.method,
                 &arg_types,
-                required_trait,
+                (required_trait, required_args),
                 expected_type,
             ),
             None => StaticLookup::NotStatic,
@@ -2422,6 +2991,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 arg_types: &args,
                 method_args: &method_type_args,
                 required_trait,
+                required_args,
                 expected_return: expected_type,
                 ..StaticQuery::of(&receiver, &static_call.method)
             },
@@ -3419,7 +3989,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// It walks the impls directly rather than reading the resolution, because
     /// its consumers need every candidate and the resolution keeps one.
     pub(super) fn static_arg_survey(
-        &self,
+        &mut self,
         recv: StaticReceiver<'_>,
         method_name: &str,
     ) -> StaticArgSurvey {
@@ -3442,6 +4012,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 continue;
             }
+            if !recv.required_args.is_empty()
+                && !self
+                    .tysys
+                    .impl_answers_trait_args(impl_def, receiver.ty(), recv.required_args)
+            {
+                continue;
+            }
             let header = &self.tysys.trait_env.impl_headers[&impl_def];
             // The same walk the rules read, so a body the block inherits is a
             // candidate here too.
@@ -3451,9 +4028,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else {
                 continue;
             };
-            if offer.kind != CandidateKind::Static {
-                continue;
-            }
             let trait_name = || {
                 header
                     .trait_head_name()
@@ -4065,6 +4639,9 @@ pub(super) struct StaticReceiver<'a> {
     pub(super) args: &'a [TypeId],
     /// The trait a qualified spelling names; only its impls answer.
     pub(super) required_trait: Option<DefId>,
+    /// The arguments that spelling writes on its trait; only an impl of the
+    /// trait at those arguments answers.
+    pub(super) required_args: &'a [TypeId],
     /// What the call's context expects of its result, which selects among
     /// the impls the arguments leave as an annotated argument does.
     pub(super) expected_return: Option<TypeId>,
@@ -4077,6 +4654,7 @@ impl<'a> StaticReceiver<'a> {
             receiver,
             args: &[],
             required_trait: None,
+            required_args: &[],
             expected_return: None,
         }
     }

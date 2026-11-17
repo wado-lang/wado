@@ -1,10 +1,13 @@
-// On a trait declaring parameters of its own the turbofish is that trait's
-// argument list, so `Take::<i32>::take()` names no receiver. A static's
-// receiver is written out instead — `V::take()` below — and where several
-// impls declare the function, the arguments select among them.
+// A trait's turbofish is its argument list, so `Take::<i32>::take()` names no
+// receiver: a static's receiver is bound as `Self` beside the arguments, or
+// written out as `V::take()`, where the arguments select among the impls.
 
 trait Take<A> with () {
     fn take() -> A;
+}
+
+trait Plain with () {
+    fn plain() -> i32;
 }
 
 struct V {}
@@ -15,10 +18,25 @@ impl Take<i32> for V {
     }
 }
 
+impl Plain for V {
+    fn plain() -> i32 {
+        return 1;
+    }
+}
+
 export fn run() {
     let _ = V::take();
+    let _ = Take::<i32, Self = V>::take();
     let _ = Take::<i32>::take();
+    let _ = Plain::<V>::plain();
+    let _ = V::<Self = V>::take();
 }
 
 __DATA__
-{"compile_error": "the turbofish of 'Take::<…>::take' is its argument list and names no receiver; write the receiver out"}
+{
+  "compile_error": ":30:13: analysis error: 'Take::take' takes no receiver, and the turbofish of 'Take' is its argument list; bind the receiver as 'Self', e.g. 'Take::<Self = Receiver>::take(…)'",
+  "compile_errors_contains": [
+    "'Plain::plain' takes no receiver",
+    "'V' is not a trait, and only a trait's turbofish binds 'Self'"
+  ]
+}

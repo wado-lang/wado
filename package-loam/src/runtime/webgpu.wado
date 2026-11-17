@@ -66,6 +66,10 @@ use {
     GpuBufferBinding,
     GpuCommandEncoderDescriptor,
     GpuComputePassDescriptor,
+    GpuComputePassTimestampWrites,
+    GpuQuerySet,
+    GpuQuerySetDescriptor,
+    GpuQueryType,
     GpuCommandBufferDescriptor,
     GpuDeviceDescriptor,
     GpuShaderModuleDescriptor,
@@ -209,7 +213,42 @@ affine struct CachedGroup {
 affine struct Pipeline {
     compiled: GpuComputePipeline,
     layout: GpuBindGroupLayout,
+    /// The case of the `ShaderKey` it was compiled from.
+    kernel: String,
 }
+
+/// The device time of each dispatch since `profile`: a pair of timestamps
+/// around each, resolved to the device and read back a query set at a time.
+affine struct Profiler {
+    queries: GpuQuerySet,
+    resolved: GpuBuffer,
+    readable: GpuBuffer,
+    /// What each pair of `queries` written times, in order.
+    timed: List<Timed>,
+    /// The nanoseconds and the count of each `Timed` read back so far.
+    spent: TreeMap<Timed, [i64, i32]>,
+}
+
+/// One kind of dispatch a profile tells apart: a shader on a grid.
+struct Timed {
+    pipeline: i32,
+    groups: [i32, i32, i32],
+}
+
+/// What `WebGpuBackend::profiled` tells of one kind of dispatch.
+pub struct KernelTime {
+    /// The shader's kind, the `ShaderKey` case it was compiled from.
+    pub kernel: String,
+    /// Its workgroups along each dimension.
+    pub groups: [i32, i32, i32],
+    pub dispatches: i32,
+    /// The device time all of them took, as the passes' timestamps measure it.
+    pub nanoseconds: i64,
+}
+
+/// The dispatches one query set times: two queries each, and wgpu's limit of
+/// 4096 queries a set.
+global PROFILED_DISPATCHES: i32 = 2048;
 
 /// The encoder recording a pass's commands until they are submitted, and the
 /// one compute pass every dispatch goes into. A compute pass makes each
@@ -283,6 +322,9 @@ struct LaunchParameters {
     pipelines: List<i32>,
     /// The last pass a call ran the launch in.
     pass: i32,
+    /// The submits made when a call last set its parameters: a later call
+    /// sets them again only once the dispatches that read them are submitted.
+    staged_at: i32,
 }
 
 /// A buffer launches' parameters are carved from, how many of its words are
@@ -305,10 +347,6 @@ struct Running {
     launch: i64,
     made: List<i32>,
     dispatched: List<i32>,
-    /// Whether its dispatches bind the launch's own parameters. A second call
-    /// in one pass binds the pass's, since a write to them reaches the device
-    /// before the first call's dispatches run.
-    own: bool,
 }
 
 /// The slots a recorded launch named, and those its replay names in their
@@ -483,6 +521,8 @@ pub affine struct WebGpuBackend {
     recording: List<Recording>,
     /// The dispatches recorded and not yet submitted.
     unsubmitted: i32,
+    /// How many times `flush` has submitted what was recorded.
+    submits: i32,
     /// Each bind group made, and its place by its `group_key`.
     groups: Places<CachedGroup>,
     group_at: HashMap<List<i32>, i32>,
@@ -521,6 +561,9 @@ pub affine struct WebGpuBackend {
     /// Whether a shader reads and writes f16s, which the device's
     /// `shader-f16` grants; where not, it reads a word of two halves.
     f16: bool,
+    /// Whether the device grants `timestamp-query`, which `profile` needs.
+    timestamps: bool,
+    profiler: Option<Profiler>,
     read_backs: i32,
     dispatches: i32,
     bind_groups: i32,
@@ -622,6 +665,14 @@ impl WebGpuBackend {
             return null;
         };
         let shader_f16 = adapter.features().has("shader-f16");
+        let timestamps = adapter.features().has("timestamp-query");
+        let mut features: List<GpuFeatureName> = [];
+        if shader_f16 {
+            features.push(GpuFeatureName::ShaderF16);
+        }
+        if timestamps {
+            features.push(GpuFeatureName::TimestampQuery);
+        }
         let offered = adapter.limits();
         let required = RecordOptionGpuSize64::new();
         required.add(
@@ -638,7 +689,7 @@ impl WebGpuBackend {
             Option::Some(offered.min_storage_buffer_offset_alignment() as u64 as GpuSize64),
         );
         let descriptor = GpuDeviceDescriptor {
-            required_features: if shader_f16 { Option::Some([GpuFeatureName::ShaderF16]) } else { null },
+            required_features: Option::Some(features),
             required_limits: Option::Some(required),
             default_queue: null,
             label: null,
@@ -668,6 +719,7 @@ impl WebGpuBackend {
             filled: HashMap::new(),
             recording: [],
             unsubmitted: 0,
+            submits: 0,
             groups: Places::new(),
             group_at: HashMap::new(),
             taping: null,
@@ -687,6 +739,8 @@ impl WebGpuBackend {
             max_binding: saturated(bytes),
             alignment,
             f16: shader_f16,
+            timestamps,
+            profiler: null,
             read_backs: 0,
             dispatches: 0,
             bind_groups: 0,
@@ -736,6 +790,109 @@ impl WebGpuBackend {
     /// at batch size 1.
     pub fn dispatches(&self) -> i32 {
         return self.dispatches;
+    }
+
+    /// The most words one buffer, or one binding of it, holds.
+    internal fn max_binding(&self) -> i32 {
+        return self.max_binding;
+    }
+
+    /// Starts timing each later dispatch on the device, for `profiled`, where
+    /// the device grants `timestamp-query`; returns whether it does. Each
+    /// dispatch then takes a compute pass and a submit of its own, so the
+    /// host's time is no longer the one to read.
+    pub fn profile(
+        &mut self,
+    ) -> bool with (GpuDevice, GpuQuerySet, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroup, GpuComputePassEncoder) {
+        if !self.timestamps {
+            return false;
+        }
+        // A dispatch joining a pass begun before would go untimed.
+        self.flush();
+        let Ok(queries) = self.device.create_query_set(GpuQuerySetDescriptor {
+            type: GpuQueryType::Timestamp,
+            count: (2 * PROFILED_DISPATCHES) as u32 as GpuSize32,
+            label: null,
+        }) else {
+            panic("loam: a device granting `timestamp-query` made no query set");
+        };
+        let size = (16 * PROFILED_DISPATCHES) as u64 as GpuSize64;
+        let resolved = self.device.create_buffer(GpuBufferDescriptor {
+            size,
+            usage: GpuBufferUsage::QueryResolve | GpuBufferUsage::CopySrc,
+            mapped_at_creation: null,
+            label: null,
+        });
+        let readable = self.device.create_buffer(GpuBufferDescriptor {
+            size,
+            usage: GpuBufferUsage::MapRead | GpuBufferUsage::CopyDst,
+            mapped_at_creation: null,
+            label: null,
+        });
+        self.profiler = Option::Some(Profiler { queries, resolved, readable, timed: [], spent: TreeMap::new() });
+        return true;
+    }
+
+    /// The device time each kind of dispatch took since `profile`, the
+    /// longest first. Waits for the device to finish what was recorded.
+    pub fn profiled(
+        &mut self,
+    ) -> List<KernelTime> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroup, GpuComputePassEncoder) {
+        self.flush();
+        self.read_profile();
+        let Some(p) = &self.profiler else {
+            unreachable();
+        };
+        let mut times: List<KernelTime> = [];
+        for let [timed, [nanoseconds, dispatches]] of p.spent.entries() {
+            times.push(KernelTime {
+                kernel: self.pipelines[timed.pipeline].kernel,
+                groups: timed.groups,
+                dispatches: *dispatches,
+                nanoseconds: *nanoseconds,
+            });
+        }
+        times.sort_by(|a, b| b.nanoseconds.cmp(&a.nanoseconds));
+        return times;
+    }
+
+    /// Adds the timestamps the profile's dispatches wrote to what it has
+    /// spent, leaving its query set to write again.
+    fn read_profile(&mut self) with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer) {
+        let Some(p) = &mut self.profiler else {
+            panic("loam: `profile` must have started a profile");
+        };
+        let count = p.timed.len();
+        if count == 0 {
+            return;
+        }
+        let size = (16 * count) as u64 as GpuSize64;
+        let encoder = self.device.create_command_encoder(Option::Some(GpuCommandEncoderDescriptor { label: null }));
+        encoder.resolve_query_set(&p.queries, 0, (2 * count) as u32 as GpuSize32, &p.resolved, 0);
+        encoder.copy_buffer_to_buffer(&p.resolved, null, &p.readable, null, Option::Some(size));
+        let commands = encoder.finish(Option::Some(GpuCommandBufferDescriptor { label: null }));
+        self.queue.submit([&commands]);
+        let Ok(_) = p.readable.map_async(GpuMapMode::Read, null, Option::Some(size)).wait() else {
+            panic("loam: a profile's timestamps did not map for reading");
+        };
+        let Ok(bytes) = p.readable.get_mapped_range_get_with_copy(null, Option::Some(size)) else {
+            panic("loam: a profile's mapped timestamps gave no bytes");
+        };
+        let stamps = List::<u64>::from_le_bytes(bytes as ByteList);
+        let Ok(_) = p.readable.unmap() else {
+            panic("loam: a profile's timestamps did not unmap");
+        };
+        for let i of 0..<count {
+            // A device may reset its counter between two stamps, and WebGPU
+            // lets such a pass be ignored.
+            if stamps[2 * i + 1] < stamps[2 * i] {
+                continue;
+            }
+            let elapsed = (stamps[2 * i + 1] - stamps[2 * i]) as i64;
+            let [nanoseconds, dispatches] = p.spent.get(p.timed[i]).unwrap_or([0 as i64, 0]);
+            p.spent[p.timed[i]] = [nanoseconds + elapsed, dispatches + 1];
+        }
+        p.timed = [];
     }
 
     /// How many bind groups have been made: a pass that binds what the one
@@ -850,23 +1007,30 @@ impl WebGpuBackend {
 
     /// Starts the launch whose root is the node `root` of the program
     /// `serial`, which makes its buffers in those its calls own and binds the
-    /// parameters they bound.
-    internal fn launching(&mut self, serial: i32, root: i32) {
+    /// parameters they bound, so a call finds its bind groups made. A call
+    /// whose last one's dispatches are still recorded submits them first:
+    /// queued after the submit, its write to the parameters reaches the device
+    /// once they ran.
+    internal fn launching(
+        &mut self,
+        serial: i32,
+        root: i32,
+    ) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer, GpuComputePassEncoder) {
         let launch = launch_key(serial, root);
         if !self.launch_parameters.contains_key(launch) {
-            self.launch_parameters[launch] = LaunchParameters { spans: [], pipelines: [], pass: -1 };
+            self.launch_parameters[launch] = LaunchParameters { spans: [], pipelines: [], pass: -1, staged_at: -1 };
         }
-        let parameters = &mut self.launch_parameters[launch];
-        let own = parameters.pass < self.passes;
-        parameters.pass = self.passes;
+        if self.launch_parameters[launch].staged_at == self.submits {
+            self.flush();
+        }
+        self.launch_parameters[launch].pass = self.passes;
         if let Some(r) = &mut self.running {
             r.launch = launch;
             r.made.clear();
             r.dispatched.clear();
-            r.own = own;
             return;
         }
-        self.running = Option::Some(Running { launch, made: [], dispatched: [], own });
+        self.running = Option::Some(Running { launch, made: [], dispatched: [] });
     }
 
     /// Ends a call of the program `serial`, which returned the values at the
@@ -907,17 +1071,14 @@ impl WebGpuBackend {
 
     /// The span of `params` a dispatch of the shader at `pipeline` binds: the
     /// running launch's own, carved where its calls have not dispatched the
-    /// shader that often yet, and the pass's where no launch runs or where it
-    /// binds the pass's.
+    /// shader that often yet, and the pass's where no launch runs.
     fn parameters_for(&mut self, pipeline: i32, params: &List<u32>) -> Span with (GpuDevice, GpuQueue, GpuBuffer) {
         let Some(r) = &mut self.running else {
             return self.parameter_span(params);
         };
-        if !r.own {
-            return self.parameter_span(params);
-        }
         let mut nth = occurrence(&mut r.dispatched, pipeline);
         let own = &mut self.launch_parameters[r.launch];
+        own.staged_at = self.submits;
         for let i of 0..<own.spans.len() {
             if own.pipelines[i] != pipeline {
                 continue;
@@ -1368,6 +1529,7 @@ impl WebGpuBackend {
             self.queue.submit([&commands]);
         }
         self.unsubmitted = 0;
+        self.submits += 1;
     }
 
     /// `t` with its f32 elements in row-major order from its offset: `t`
@@ -1421,7 +1583,7 @@ impl WebGpuBackend {
         });
         let at = self.pipelines.len();
         let layout = pipeline.get_bind_group_layout(0);
-        self.pipelines.push(Pipeline { compiled: pipeline, layout });
+        self.pipelines.push(Pipeline { compiled: pipeline, layout, kernel: shader.key.kind() });
         self.compiled[*shader] = at;
         return at;
     }
@@ -1539,9 +1701,24 @@ impl WebGpuBackend {
         let cached = self.groups.get_mut(at);
         cached.used = self.passes;
         if self.recording.is_empty() {
+            if let Some(p) = &self.profiler && p.timed.len() == PROFILED_DISPATCHES {
+                self.read_profile();
+            }
             let encoder = self.device.create_command_encoder(Option::Some(GpuCommandEncoderDescriptor { label: null }));
+            let timestamp_writes = match &mut self.profiler {
+                Some(p) => {
+                    let first = 2 * p.timed.len();
+                    p.timed.push(Timed { pipeline, groups });
+                    Option::Some(GpuComputePassTimestampWrites {
+                        query_set: &p.queries,
+                        beginning_of_pass_write_index: Option::Some(first as u32 as GpuSize32),
+                        end_of_pass_write_index: Option::Some((first + 1) as u32 as GpuSize32),
+                    });
+                },
+                None => null,
+            };
             let pass = encoder.begin_compute_pass(Option::Some(GpuComputePassDescriptor {
-                timestamp_writes: null,
+                timestamp_writes,
                 label: null,
             }));
             self.recording.push(Recording { encoder, pass });
@@ -1557,7 +1734,7 @@ impl WebGpuBackend {
             Option::Some(z as u32 as GpuSize32),
         );
         self.unsubmitted += 1;
-        if self.unsubmitted >= SUBMIT_EVERY {
+        if self.unsubmitted >= SUBMIT_EVERY || self.profiler matches { Some(_) } {
             self.flush();
         }
     }
@@ -2381,7 +2558,9 @@ impl WebGpuBackend {
     /// turned, and values to the attention cache, one attends each
     /// query row over each part of its positions in a workgroup of its own,
     /// and one joins each row's parts. `rotary` is the cosine and sine
-    /// tables. Each batch row's past is the first of its `pasts` positions
+    /// tables. Of a `stored` half, the turned keys and queries and the result
+    /// round to it, held as the f32 equal to each, and the scores stay f32.
+    /// Each batch row's past is the first of its `pasts` positions
     /// `past_k` and `past_v` hold, and the cache holds every position they do:
     /// their buffer where they are `shared`, onnxruntime's shared buffer. A
     /// query of a row reads no position at or past the row's of `reaches`.
@@ -2399,6 +2578,7 @@ impl WebGpuBackend {
         rotary: &Option<[DeviceTensor, DeviceTensor]>,
         bias: &Option<DeviceTensor>,
         options: &Attention,
+        stored: Option<HalfFloat>,
     ) -> Option<[DeviceTensor, DeviceTensor, DeviceTensor]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder)
         contract pasts.len() == q.extents[0] && reaches.len() == q.extents[0]
         contract q.extents[0] > 0, "a batch holds a row"
@@ -2495,7 +2675,7 @@ impl WebGpuBackend {
         // Recorded where a later call can do it again: over the cache it
         // appends to in place, in a launch, outside another recording.
         let key = if appending matches { Some(_) } && self.taping matches { None } {
-            self.attention_key();
+            self.attention_key(stored);
         } else {
             null;
         };
@@ -2568,7 +2748,7 @@ impl WebGpuBackend {
             &append_operands,
             Span { slot: cache, first: 0, count: 2 * n },
             heads_of[0],
-            |bindings| ShaderKey::Append([bindings, half > 0, batch]),
+            |bindings| ShaderKey::Append([bindings, half > 0, batch, stored]),
             grids[0],
         );
 
@@ -2581,13 +2761,19 @@ impl WebGpuBackend {
             &attend_operands,
             Span { slot: parts, first: 0, count: attended },
             heads_of[1],
-            |bindings| ShaderKey::Attend([bindings, d, half > 0, biased, part, batch]),
+            |bindings| ShaderKey::Attend([bindings, d, half > 0, biased, part, batch, stored]),
             grids[1],
         );
 
         let result = contiguous(self.allocated(rows * d, false), 0, [batch, s, heads * d]);
         let joined = [contiguous(parts, 0, [attended])] as List<DeviceTensor>;
-        self.dispatch_bound(&joined, fresh(&result), heads_of[2], |bindings| ShaderKey::AttendJoin(bindings), grids[2]);
+        self.dispatch_bound(
+            &joined,
+            fresh(&result),
+            heads_of[2],
+            |bindings| ShaderKey::AttendJoin([bindings, stored]),
+            grids[2],
+        );
         if let Some(replay) = key {
             let mut lengths: List<i32> = [];
             for let h of &heads_of {
@@ -2598,14 +2784,21 @@ impl WebGpuBackend {
         return Option::Some([result, present_k, present_v]);
     }
 
-    /// The replay key of the attention of the running launch, where one runs.
-    fn attention_key(&mut self) -> Option<i32> {
+    /// The replay key of the attention of the running launch, where one runs,
+    /// writing its result as `stored` says. Programs whose graphs differ in
+    /// their element kinds alone share a serial, so the format is in the key.
+    fn attention_key(&mut self, stored: Option<HalfFloat>) -> Option<i32> {
         let Some(r) = &self.running else {
             return null;
         };
+        let format = match stored {
+            None => 0,
+            Some(F16) => 1,
+            Some(BF16) => 2,
+        };
         // A kernel's key starts with its program's serial, which is never
         // negative.
-        return Option::Some(self.replay_key([-1, (r.launch >> 32) as i32, r.launch as i32]));
+        return Option::Some(self.replay_key([-1, (r.launch >> 32) as i32, r.launch as i32, format]));
     }
 
     /// The positions an attention cache holds once it holds `total`: a power
@@ -2991,31 +3184,49 @@ impl WebGpuBackend {
     }
 
     /// `Graph::quantized_product` of `operands`, the input as `[M, K]`, the
-    /// packed weight, its scales and any zero points, as a `[M, N]` result:
-    /// one workgroup per column and `QUANTIZED_ROWS` rows, rounded to any
-    /// `half` and held as `new_tensor` holds it. `None` where they do not bind.
-    internal fn quantized_product_kernel(
+    /// packed weight, its scales and any zero points, then `then` over a
+    /// `[M, N]` product: one workgroup per `QUANTIZED_COLUMNS` columns and at
+    /// most `QUANTIZED_ROWS` rows, each weight rounded to any `half`, and the
+    /// result held as `new_tensor` holds what `then` stores. Where `paired`,
+    /// the weights' rows alternate between two products', and `then` reads
+    /// both over `[M, N / 2]`: `operand(0)` the even column's sum and
+    /// `operand(1)` the odd one's. `None` where they do not bind.
+    internal fn quantized_product_kernel<Out>(
         &mut self,
         operands: &List<DeviceTensor>,
         bits: i32,
         block: i32,
         half: Option<HalfFloat>,
+        then: &Epilogue<PlacedRead<Out>>,
+        paired: bool,
     ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let [m, k] = [operands[0].extents[0], operands[0].extents[1]];
         let packed = &operands[1].extents;
         let n = packed[0];
-        if m * n > self.max_binding || !self.binds(operands) {
+        assert !paired || n % 2 == 0, "a pair's weights hold two products' rows";
+        let product = [m, if paired { n / 2 } else { n }] as List<i32>;
+        let mut all = *operands;
+        for let o of &then.operands {
+            all.push(DeviceTensor { ..o.view, extents: product, strides: stretched(&o.view, &product) });
+        }
+        if m * n > self.max_binding || !self.binds(&all) {
             return null;
         }
-        let out = self.new_tensor([m, n], half matches { Some(F16) });
-        let groups = n * m.div_ceil(QUANTIZED_ROWS);
+        let out = self.new_tensor(product, rounds_to_f16(&then.op));
+        // An empty input dispatches no workgroup, whatever its rows.
+        let rows = i32::clamp(m, 1, QUANTIZED_ROWS);
+        let groups = n.div_ceil(QUANTIZED_COLUMNS) * m.div_ceil(rows);
         let [gx, gy] = spread(groups);
         let zero_points = operands.len() > 3;
+        let weight = &operands[1];
+        let blob = packed[2];
+        let aligned = blob % 4 == 0 && weight.offset % 4 == 0 && weight.strides == [packed[1] * blob, blob, 1];
+        let shape = QuantizedShape { bits, block, zero_points, half, rows, aligned, paired, padded: k % block != 0 };
         self.dispatch_bound(
-            operands,
+            &all,
             fresh(&out),
-            [groups as u32, gx as u32, m as u32, k as u32, n as u32, packed[1] as u32, packed[2] as u32],
-            |bindings| ShaderKey::QuantizedProduct([bindings, bits, block, zero_points, half]),
+            [groups as u32, gx as u32, m as u32, k as u32, n as u32, packed[1] as u32, blob as u32],
+            |bindings| ShaderKey::QuantizedProduct([then.op, bindings, shape]),
             [gx, gy, 1],
         );
         return Option::Some(out);
@@ -3608,17 +3819,29 @@ variant ShaderKey {
     /// [`gather_shader`]'s arguments.
     Gather([i32, i32, bool]),
     /// [`append_shader`]'s arguments.
-    Append([List<i32>, bool, i32]),
+    Append([List<i32>, bool, i32, Option<HalfFloat>]),
     /// [`attend_shader`]'s arguments.
-    Attend([List<i32>, i32, bool, bool, i32, i32]),
-    /// [`attend_join_shader`]'s argument.
-    AttendJoin(List<i32>),
+    Attend([List<i32>, i32, bool, bool, i32, i32, Option<HalfFloat>]),
+    /// [`attend_join_shader`]'s arguments.
+    AttendJoin([List<i32>, Option<HalfFloat>]),
     /// [`arg_max_shader`]'s arguments.
     ArgMax([List<i32>, i32, ArgMaxStage]),
     /// [`quantized_product_shader`]'s arguments.
-    QuantizedProduct([List<i32>, i32, i32, bool, Option<HalfFloat>]),
+    QuantizedProduct([Expr, List<i32>, QuantizedShape]),
     /// [`quantized_gather_shader`]'s arguments.
     QuantizedGather([List<i32>, i32, i32, bool, Option<HalfFloat>]),
+}
+
+impl ShaderKey {
+    /// The name of its case.
+    fn kind(&self) -> String {
+        for let case of ReflectVariant::<ShaderKey>::members() {
+            if case.holds(self) {
+                return case.name();
+            }
+        }
+        unreachable();
+    }
 }
 
 /// A shader: what its key makes, over bindings holding `words`, the output's
@@ -3663,26 +3886,20 @@ impl Shader {
                 }
                 gather_shader(*rank, *axis, *ranked, &bound);
             },
-            Append([bindings, rotary, batch]) => append_shader(bindings, *rotary, *batch, words),
-            Attend([bindings, head, rotary, biased, part, batch]) => attend_shader(
+            Append([bindings, rotary, batch, stored]) => append_shader(bindings, *rotary, *batch, *stored, words),
+            Attend([bindings, head, rotary, biased, part, batch, stored]) => attend_shader(
                 bindings,
                 *head,
                 *rotary,
                 *biased,
                 *part,
                 *batch,
+                *stored,
                 words,
             ),
-            AttendJoin(bindings) => attend_join_shader(bindings, words),
+            AttendJoin([bindings, stored]) => attend_join_shader(bindings, *stored, words),
             ArgMax([bindings, rank, stage]) => arg_max_shader(bindings, *rank, *stage, words),
-            QuantizedProduct([bindings, bits, block, zero_points, half]) => quantized_product_shader(
-                bindings,
-                *bits,
-                *block,
-                *zero_points,
-                *half,
-                words,
-            ),
+            QuantizedProduct([op, bindings, shape]) => quantized_product_shader(op, bindings, shape, words),
             QuantizedGather([bindings, bits, block, zero_points, half]) => quantized_gather_shader(
                 bindings,
                 *bits,
@@ -3787,8 +4004,15 @@ ${indent}}
 /// count, the invocations per row, the extents `[batch, key heads, new
 /// positions, head]`, the turned half's length, the view of the cache's keys,
 /// where its values start, each of the `batch` rows' past length, then the
-/// views of the new keys, new values, cosines and sines.
-fn append_shader(bindings: &List<i32>, rotary: bool, batch: i32, words: &List<Words>) -> String {
+/// views of the new keys, new values, cosines and sines. A turned key rounds
+/// once to the `stored` half, as the decomposition stores one.
+fn append_shader(
+    bindings: &List<i32>,
+    rotary: bool,
+    batch: i32,
+    stored: Option<HalfFloat>,
+    words: &List<Words>,
+) -> String {
     let views = 13 + batch;
     let new_at = |k: i32, at: i32, col: String| view_wgsl(bindings, k, at, ["b", "s", col]);
     let key = if rotary {
@@ -3818,9 +4042,9 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
     let x = ${new_at(0, views, "h * d + e")};
-${key}    out[at] = turned;
+${key}    out[at] = ${rounded_wgsl(stored, "turned")};
 }
-`;
+${ELEMENTWISE_OPERATORS}`;
 }
 
 /// `attend_shader`'s word of what `options` says, a bit each: causal, whether
@@ -3846,7 +4070,8 @@ fn attention_flags(options: &Attention) -> u32 {
 /// and the cap as f32 bits, the window, `attention_flags`, a hidden position's
 /// score as f32 bits, each of the `batch` rows' past length and the positions
 /// it attends, then the views of the queries, the present keys and values, the
-/// cosines and sines, and the bias.
+/// cosines and sines, and the bias. A turned query rounds once to the `stored`
+/// half, and the scores stay f32, as the decomposition's do.
 fn attend_shader(
     bindings: &List<i32>,
     head: i32,
@@ -3854,6 +4079,7 @@ fn attend_shader(
     biased: bool,
     part: i32,
     batch: i32,
+    stored: Option<HalfFloat>,
     words: &List<Words>,
 ) -> String {
     let views = 14 + 2 * batch;
@@ -3906,7 +4132,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     let none = non_finite(0xff800000u);
     for (var e = lid; e < d; e += ${LANES}u) {
         let x = ${query_at("e")};
-${turning}        query[e] = turned;
+${turning}        query[e] = ${rounded_wgsl(stored, "turned")};
     }
     workgroupBarrier();
     // Adjacent lanes split one position's dot, reading adjacent elements.
@@ -3981,14 +4207,15 @@ ${biasing}    }
         out[at + d + 1u] = sum;
     }
 }
-`;
+${ELEMENTWISE_OPERATORS}`;
 }
 
 /// The WGSL joining the parts `attend_shader` wrote of each row, one row per
 /// workgroup: each part's weighed values and weights' sum rescaled from its
-/// greatest score to the row's. Parameters: the rows, the workgroups per row of
-/// the grid, the parts of a row, the head's length, then the view of the parts.
-fn attend_join_shader(bindings: &List<i32>, words: &List<Words>) -> String {
+/// greatest score to the row's, the result rounded once to the `stored` half.
+/// Parameters: the rows, the workgroups per row of the grid, the parts of a
+/// row, the head's length, then the view of the parts.
+fn attend_join_shader(bindings: &List<i32>, stored: Option<HalfFloat>, words: &List<Words>) -> String {
     let part = |c: String, at: String| `load${bindings[0]}(p[4] + (row * parts + ${c}) * (d + 2u) + ${at})`;
     return `${buffers_wgsl(words)}
 @compute @workgroup_size(${LANES})
@@ -4015,10 +4242,10 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
             let top = ${part("c", "d")};
             acc += select(exp(top - most), 0.0, top == none) * ${part("c", "e")};
         }
-        out[row * d + e] = acc / all;
+        out[row * d + e] = ${rounded_wgsl(stored, "acc / all")};
     }
 }
-`;
+${ELEMENTWISE_OPERATORS}`;
 }
 
 /// What one dispatch of [`arg_max_shader`] reduces.
@@ -4229,9 +4456,23 @@ ${coords_wgsl("i", 2, 0, rank, "c", "    ")}    put(u32(${index_wgsl(to, 0, rank
 `;
 }
 
-/// The rows of the input one workgroup of a quantized product sums against its
-/// column, each in a lane's register.
+/// The most rows of the input one workgroup of a quantized product sums
+/// against its columns, each in a lane's register.
 global QUANTIZED_ROWS: i32 = 8;
+
+/// The columns one workgroup of a quantized product sums, each over
+/// `QUANTIZED_LANES / QUANTIZED_COLUMNS` lanes, which write a row each. On
+/// Gemma 3 (270M)'s `q4` products, 8 lanes a column ran its output layer 1.4
+/// times as fast as 16, and its layers as fast; 8, 16 and 32 columns of 8
+/// lanes ran alike.
+global QUANTIZED_COLUMNS: i32 = 16;
+
+/// The lanes of a quantized product's workgroup.
+global QUANTIZED_LANES: i32 = 128;
+
+/// The most values of a block one lane of a quantized product sums at once,
+/// which bounds the inputs a workgroup stages.
+global SEGMENT: i32 = 32;
 
 /// The WGSL rounding `value` to the nearest `half`, or `value` where there is
 /// none.
@@ -4274,69 +4515,177 @@ fn zero(n: u32, b: u32) -> f32 {
 `;
 }
 
-/// The WGSL of `Graph::quantized_product`, one workgroup per column `n` of
-/// the output and `QUANTIZED_ROWS` of its rows: each lane takes every
-/// `LANES`th byte of the column's packed weight, dequantizes its values and
-/// adds each times the rows' inputs, and the workgroup sums the lanes. A
-/// `half` rounds each weight to it, as the decomposition stores one, and the
-/// sum once. Parameters: the workgroups, the workgroups per row of the grid,
-/// `M`, `K`, `N`, the blocks, the bytes of a block, then the views of the
-/// input `[M, K]`, the packed weight, the scales and any zero points.
-fn quantized_product_shader(
-    bindings: &List<i32>,
+/// What a quantized product's shader is specialized to beside its epilogue:
+/// the bits of a value and the values of a block, whether zero points are
+/// bound, the half each weight rounds to, the most rows a workgroup sums,
+/// whether the weight's columns each start a word, whether its columns pair,
+/// as `quantized_product_kernel` says, and whether its last block pads past
+/// the inner extent.
+struct QuantizedShape {
     bits: i32,
     block: i32,
     zero_points: bool,
     half: Option<HalfFloat>,
-    words: &List<Words>,
-) -> String {
-    let rows = QUANTIZED_ROWS;
-    let input = view_load_wgsl(bindings[0], 7, &(["m0 + r", "k"] as List<String>));
-    let byte = view_load_wgsl(bindings[1], 10, &(["n", "b", "j % p[6]"] as List<String>));
+    rows: i32,
+    aligned: bool,
+    paired: bool,
+    padded: bool,
+}
+
+/// The WGSL of `Graph::quantized_product`, one workgroup per
+/// `QUANTIZED_COLUMNS` columns of the output and `rows` of its rows. The inner
+/// axis splits into segments of at most `SEGMENT` values within a block, and
+/// a chunk of as many segments as a column has lanes. The workgroup stages a
+/// chunk of the rows' inputs in workgroup memory, which each of its columns
+/// reads, and each lane of a column dequantizes a segment of the column's
+/// packed weight and adds each value times the staged inputs; the column's
+/// lanes then sum. A `half` rounds each weight to it, as the decomposition
+/// stores one. Each lane of a column then writes a row's element through `op`,
+/// whose `operand(0)` is the sum and `operand(i)` the `i - 1`th epilogue
+/// operand; where `paired`, only an even column's lanes write, with `operand(1)`
+/// the odd column's sum and the epilogue's operands from `operand(2)`.
+/// Parameters: the workgroups, the workgroups per row of the grid, `M`, `K`,
+/// `N`, the blocks, the bytes of a block, then the views of the input
+/// `[M, K]`, the packed weight, the scales, any zero points and the epilogue's
+/// operands over `[M, N]`, or `[M, N / 2]` where `paired`.
+fn quantized_product_shader(op: &Expr, bindings: &List<i32>, shape: &QuantizedShape, words: &List<Words>) -> String {
+    let QuantizedShape { bits, block, zero_points, half, rows, aligned, paired, padded } = *shape;
+    let lanes = QUANTIZED_LANES / QUANTIZED_COLUMNS;
+    assert lanes >= QUANTIZED_ROWS, "a column's lanes write its rows";
+    let segment = i32::min(block, SEGMENT);
+    let chunk = lanes * segment;
+    assert block >= 16 && block % segment == 0, "a block is a power of two of at least 16 values";
+    assert rows * chunk % QUANTIZED_LANES == 0, "a chunk's values stage evenly over the lanes";
+    assert 4 * rows * (chunk + QUANTIZED_LANES) <= WORKGROUP_BYTES;
+    let per = 8 / bits;
+    let segment_bytes = segment * bits / 8;
+    // An aligned weight's column starts a word, and so does each segment: a
+    // lane reads its words whole. A weight copied to bind holds a byte a word.
+    let weight = bindings[1];
+    let [unit, read]: [i32, fn(i32) -> String] = if aligned
+        && words[weight] matches { Bytes }
+        && segment_bytes % 4 == 0 {
+        [4, |t| `o${weight}[(p[10] + n * p[11] + b * p[6] + within) / 4u + ${t}u]`];
+    } else {
+        [1, |t| `u32(${view_load_wgsl(weight, 10, &(["n", "b", `within + ${t}u`] as List<String>))})`];
+    };
     let scale = view_load_wgsl(bindings[2], 14, &(["n", "b"] as List<String>));
+    let weights = if zero_points { 4 } else { 3 };
     let zp = if zero_points { bindings[3] } else { 0 };
+    // Both the staging and the sums are written out rather than looped: a WGSL
+    // loop is bounded by a counter the compiler adds to every iteration. A
+    // chunk is staged a segment's value at a time across the lanes, so the
+    // lanes of a column read neighbouring words, not one bank: Gemma 3
+    // (270M)'s `q4` output layer took 0.66 times as long as when each lane's
+    // segment lay whole.
+    let mut staging = "";
+    for let i of 0..<rows * chunk / QUANTIZED_LANES {
+        staging.push_str(`        {
+            let i = lid + ${i * QUANTIZED_LANES}u;
+            let r = i / ${chunk}u;
+            let k = c * ${chunk}u + i % ${chunk}u;
+            let at = x_at + i32(min(r, rows - 1u)) * row_stride + i32(min(k, p[3] - 1u)) * k_stride;
+            let into = r * ${chunk}u + i % ${segment}u * ${lanes}u + i % ${chunk}u / ${segment}u;
+            xs[into] = select(0.0, load${bindings[0]}(u32(at)), r < rows && k < p[3]);
+        }
+`);
+    }
+    // A segment reaching past the inner extent `K` pads with values the
+    // product never reads: one that rounds to an infinity would make the
+    // staged zero it meets a NaN, so each value past `K` weighs zero. Only a
+    // `padded` weight's last block holds one, so the other segments, and every
+    // segment of a weight whose blocks fill `K`, test nothing.
+    let segment_sums = |past_k: bool| {
+        let mut sums = "";
+        for let t of 0..<segment_bytes / unit {
+            sums.push_str(`                let packed${t} = ${read(t)};\n`);
+            for let v of 0..<unit * per {
+                let k = t * unit * per + v;
+                let mut w = rounded_wgsl(half, `(f32((packed${t} >> ${v * bits}u) & MASK) - center) * scale`);
+                if past_k {
+                    w = `select(0.0, ${w}, start + ${k}u < p[3])`;
+                }
+                sums.push_str(`                {\n                    let w = ${w};\n`);
+                for let r of 0..<rows {
+                    sums.push_str(`                    acc[${r}] += xs[${r * chunk + k * lanes}u + lane] * w;\n`);
+                }
+                sums.push_str("                }\n");
+            }
+        }
+        return sums;
+    };
+    let sums = if padded {
+        `            let start = b * ${block}u + s % ${block / segment}u * ${segment}u;
+            if start + ${segment}u <= p[3] {
+${segment_sums(false)}            } else {
+${segment_sums(true)}            }
+`;
+    } else {
+        segment_sums(false);
+    };
+    assert !paired || QUANTIZED_COLUMNS % 2 == 0, "a pair's columns sum in one workgroup";
+    // Where `paired`, the odd column's lanes follow the even one's.
+    let mut epilogue = `        let x0 = sums[lane * ${QUANTIZED_LANES}u + lid - lane];\n`;
+    if paired {
+        epilogue.push_str(`        let x1 = sums[lane * ${QUANTIZED_LANES}u + lid - lane + ${lanes}u];\n`);
+    }
+    let [sums_read, column, columns] = if paired { [2, "n / 2u", "p[4] / 2u"] } else { [1, "n", "p[4]"] };
+    for let i of weights..<bindings.len() {
+        let at = 17 + (i - 3) * 3;
+        epilogue.push_str(`        let x${i - weights + sums_read} = ${view_load_wgsl(
+            bindings[i],
+            at,
+            &(["m", column] as List<String>),
+        )};\n`);
+    }
+    epilogue.push_str(&steps_wgsl(op, op.steps.len() - 1, "        "));
     return `${buffers_wgsl(words)}
 ${dequantizing_wgsl(bits, block, zero_points, zp, 17)}
-var<workgroup> sums: array<f32, ${rows * LANES}>;
+var<workgroup> sums: array<f32, ${rows * QUANTIZED_LANES}>;
+var<workgroup> xs: array<f32, ${rows * chunk}>;
 
-@compute @workgroup_size(${LANES})
+@compute @workgroup_size(${QUANTIZED_LANES})
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
     let flat = group.x + group.y * p[1];
     if flat >= p[0] {
         return;
     }
-    let n = flat % p[4];
-    let m0 = flat / p[4] * ${rows}u;
+    let column_groups = (p[4] + ${QUANTIZED_COLUMNS - 1}u) / ${QUANTIZED_COLUMNS}u;
+    let n = flat % column_groups * ${QUANTIZED_COLUMNS}u + lid / ${lanes}u;
+    let lane = lid % ${lanes}u;
+    let m0 = flat / column_groups * ${rows}u;
     let rows = min(${rows}u, p[2] - m0);
     var acc: array<f32, ${rows}>;
-    for (var j = lid; j < p[5] * p[6]; j += ${LANES}u) {
-        let b = j / p[6];
-        let packed = u32(${byte});
-        let scale = ${scale};
-        let center = zero(n, b);
-        let k0 = b * BLOCK + j % p[6] * PER;
-        for (var v = 0u; v < PER && k0 + v < p[3]; v++) {
-            let k = k0 + v;
-            let w = ${rounded_wgsl(half, "(f32((packed >> (v * BITS)) & MASK) - center) * scale")};
-            for (var r = 0u; r < rows; r++) {
-                acc[r] += ${input} * w;
-            }
-        }
+    let row_stride = bitcast<i32>(p[8]);
+    let k_stride = bitcast<i32>(p[9]);
+    let x_at = bitcast<i32>(p[7]) + i32(m0) * row_stride;
+    let segments = p[5] * ${block / segment}u;
+    for (var c = 0u; c * ${lanes}u < segments; c++) {
+${staging}        workgroupBarrier();
+        let s = c * ${lanes}u + lane;
+        if s < segments && n < p[4] {
+            let b = s / ${block / segment}u;
+            let within = s % ${block / segment}u * ${segment_bytes}u;
+            let scale = ${scale};
+            let center = zero(n, b);
+${sums}        }
+        workgroupBarrier();
     }
     for (var r = 0u; r < ${rows}u; r++) {
-        sums[r * ${LANES}u + lid] = acc[r];
+        sums[r * ${QUANTIZED_LANES}u + lid] = acc[r];
     }
     workgroupBarrier();
-    for (var half = ${LANES / 2}u; half > 0u; half >>= 1u) {
-        if lid < half {
+    for (var half = ${lanes / 2}u; half > 0u; half >>= 1u) {
+        if lane < half {
             for (var r = 0u; r < ${rows}u; r++) {
-                sums[r * ${LANES}u + lid] += sums[r * ${LANES}u + lid + half];
+                sums[r * ${QUANTIZED_LANES}u + lid] += sums[r * ${QUANTIZED_LANES}u + lid + half];
             }
         }
         workgroupBarrier();
     }
-    if lid < rows {
-        put((m0 + lid) * p[4] + n, ${rounded_wgsl(half, `sums[lid * ${LANES}u]`)});
+    if lane < rows && n < p[4]${if paired { " && n % 2u == 0u" } else { "" }} {
+        let m = m0 + lane;
+${epilogue}        put(m * ${columns} + ${column}, s${op.steps.len() - 1});
     }
 }
 ${ELEMENTWISE_OPERATORS}`;

@@ -8,20 +8,21 @@ design and the initial implementation are in
 
 The pipeline works end to end: WebIDL snapshot, generated bindings and glue,
 `SurfaceDom`, server-side rendering, callbacks, and a jsdom run in CI. The slice
-covers eight interfaces: `EventTarget`, `Event`, `Node`, `Element`,
-`HTMLElement`, `HTMLInputElement`, `Document` and `Window`.
+covers ten interfaces: `EventTarget`, `Event`, `Node`, `CharacterData`, `Text`,
+`Element`, `HTMLElement`, `HTMLInputElement`, `Document` and `Window`.
 
-`wado-from-idl` skips every member it cannot lower and names it on stderr. On
-the current snapshot it skips 539 members (`mise run update-package-web` prints
-each):
+`wado-from-idl` skips every member it cannot lower and names it on stderr.
+`mise run update-package-web` prints each one the current snapshot skips:
 
 | Reason                        | Members | Examples                                               |
 | ----------------------------- | ------- | ------------------------------------------------------ |
 | An event handler attribute    | 353     | `onclick`, `oninput`                                   |
 | A type outside the slice      | 164     | `NodeList`, `HTMLCollection`, `sequence<Range>`, `any` |
-| A union                       | 13      | `append`, `prepend`, `before`, the `inner_html` getter |
+| A union                       | 16      | `append`, `prepend`, `before`, the `inner_html` getter |
 | More than one overload lowers | 8       | `Window.alert`, `scroll_to`                            |
 | `ObservableArray<T>`          | 1       | `adopted_style_sheets`                                 |
+| `[HTMLConstructor]`, a getter | 4       | `HTMLElement.new`, `Document`'s named getter           |
+| Total                         | 546     |                                                        |
 
 A member returning `Promise<T>` lowers where `T` does, so one whose `T` is
 outside the slice is counted there.
@@ -67,8 +68,9 @@ lower is then available to each interface the slice adds.
 
 ### 5. A wider slice
 
-- [ ] Tree: `Text`, `CharacterData`, `Comment`, `DocumentFragment`, `NodeList`,
-  `HTMLCollection`
+- [x] Tree: `Text` and `CharacterData`; `SurfaceDom` answers `create_text_node`,
+  `data` and `insert_before`
+- [ ] Tree: `Comment`, `DocumentFragment`, `NodeList`, `HTMLCollection`
 - [ ] Style and classes: `DOMTokenList`, `CSSStyleDeclaration`, `DOMRect`
 - [ ] Elements: `HTMLButtonElement`, `HTMLAnchorElement`, `HTMLFormElement`,
   `HTMLSelectElement`, `HTMLTextAreaElement`, `HTMLCanvasElement`,

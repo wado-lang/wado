@@ -1,0 +1,75 @@
+//! `Trait::<Self = T>::method(…)` binds the receiver of a trait-qualified call,
+//! the counterpart of Rust's `<T as Trait>::method`. The trait's own arguments
+//! come first, so a trait declaring parameters has a place to write `Self`.
+
+trait Conv<T> with () {
+    fn make() -> T;
+    fn tagged(&self) -> T;
+}
+
+struct S {
+    v: i32,
+}
+
+impl Conv<i32> for S {
+    fn make() -> i32 {
+        return 1;
+    }
+
+    fn tagged(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Conv<String> for S {
+    fn make() -> String {
+        return "one";
+    }
+
+    fn tagged(&self) -> String {
+        return `${self.v}`;
+    }
+}
+
+trait Mk with () {
+    fn tag() -> i32;
+}
+
+impl Mk for S {
+    fn tag() -> i32 {
+        return 100;
+    }
+}
+
+impl S {
+    fn tag(&self) -> i32 {
+        return self.v;
+    }
+}
+
+trait Echo<T> with () {
+    fn echo(x: T) -> T;
+}
+
+// The impl's own parameter is bound by the arguments the turbofish writes.
+impl<T> Echo<T> for S {
+    fn echo(x: T) -> T {
+        return x;
+    }
+}
+
+test "the binding supplies Self to a static" {
+    assert Mk::<Self = S>::tag() == 100;
+}
+
+test "beside the trait's arguments, which pick the impl" {
+    assert Conv::<i32, Self = S>::make() == 1;
+    assert Conv::<String, Self = S>::make() == "one";
+    assert Echo::<i32, Self = S>::echo(3) == 3;
+}
+
+test "a receiver-taking method takes it too" {
+    let s = S { v: 7 };
+    assert Conv::<i32, Self = S>::tagged(&s) == 7;
+    assert Conv::<String, Self = S>::tagged(&s) == "7";
+}

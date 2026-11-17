@@ -13,6 +13,7 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::scope::{BinderInScope, BoundSelf, BoundsOf, FamilySite, ParamRef, ScopedBound};
+use super::static_call::ReceiverId;
 use super::trait_query::SelfBinding;
 use super::types::{ParamSlot, TypeError, TypeLookup, forward_type_param_defaults};
 use crate::ast;
@@ -990,6 +991,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// and "whose parameters are these" can never be about two of them.
     pub(super) fn bare_generic_type_arity(&self, def: DefId) -> Option<usize> {
         Some(self.type_lookup().declared_generic_params(def)?.len())
+    }
+
+    /// [`Self::bare_generic_type_arity`] of the declaration `receiver` names.
+    pub(super) fn receiver_generic_arity(&self, receiver: &ReceiverId) -> Option<usize> {
+        self.bare_generic_type_arity(receiver.key().decl()?)
     }
 
     /// The type a generic application resolves to. `site` names the head's

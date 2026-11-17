@@ -168,7 +168,7 @@ use monomorphize::{Monomorphization, lower_instance_patterns};
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
 pub use package::TestSelection;
-pub use parser::{ParseError, Parser};
+pub use parser::{ParseError, ParseErrorKind, Parser};
 use self_comparison::self_comparison_diagnostics;
 use synthesis::SynthesisError;
 pub use token::Span;

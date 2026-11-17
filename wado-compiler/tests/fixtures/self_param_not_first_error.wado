@@ -1,0 +1,14 @@
+// A method's receiver is its first parameter.
+
+struct Counter { n: i32 }
+
+impl Counter {
+    fn add(by: i32, &self) -> i32 {
+        return self.n + by;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":6:21: parse error: `self` must be a method's first parameter"}

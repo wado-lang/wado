@@ -18,6 +18,7 @@ pub fn emit_tokenizer(bpe: &BpePipeline, path: &String, runtime: &String) -> Str
     w.blank();
     w.line("global TOKENIZER: BpeTokenizer = BpeTokenizer::new(");
     w.line(`    &${byte_string_literal(&tokens)},`);
+    w.line(`    &${byte_string_literal(&order_bytes(&bpe.tokens))},`);
     w.line(`    &${byte_string_literal(&merges_bytes(&bpe.merges))},`);
     w.line(`    [${specials.join(", ")}],`);
     w.line(`    TokenSpelling::${bpe.spelling},`);
@@ -48,15 +49,31 @@ pub fn tokens_bytes(tokens: &List<String>) -> ByteList {
     return tokens.join("\0").bytes().collect();
 }
 
+/// The ids ordered by their tokens as `BpeTokenizer::new` reads them, the
+/// lowest of a repeated token's first: little-endian `i32`s.
+pub fn order_bytes(tokens: &List<String>) -> ByteList {
+    let mut ids: List<i32> = (0..<tokens.len()).collect();
+    ids.sort_by(|a, b| tokens[*a].cmp(&tokens[*b]));
+    let mut bytes = ByteList::with_capacity(ids.len() * 4);
+    for let id of ids {
+        push_le(&mut bytes, id);
+    }
+    return bytes;
+}
+
 /// The merges as `BpeTokenizer::new` reads them: three little-endian `i32`s each.
 pub fn merges_bytes(merges: &List<[i32, i32, i32]>) -> ByteList {
     let mut bytes = ByteList::with_capacity(merges.len() * 12);
     for let [left, right, joined] of *merges {
         for let id of [left, right, joined] {
-            for let shift of [0, 8, 16, 24] {
-                bytes.push((id >> shift & 0xff) as u8);
-            }
+            push_le(&mut bytes, id);
         }
     }
     return bytes;
+}
+
+fn push_le(bytes: &mut ByteList, n: i32) {
+    for let shift of [0, 8, 16, 24] {
+        bytes.push((n >> shift & 0xff) as u8);
+    }
 }

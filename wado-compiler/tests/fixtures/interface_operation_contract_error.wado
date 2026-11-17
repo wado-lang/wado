@@ -1,0 +1,12 @@
+// An interface operation takes no `contract` clause yet, though a trait
+// method does.
+
+interface Count {
+    fn take(n: i32) -> i32
+        contract n >= 0;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":6:9: parse error: an interface operation takes no `contract` clause yet"}

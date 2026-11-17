@@ -1,4 +1,4 @@
-use { Binary, DotDims, Graph, Unary } from "./hlo.wado";
+use { Binary, DotDims, Graph, Quantized, Unary } from "./hlo.wado";
 use { Kernel, Plan, planned, replanned, splats_of } from "./fusion.wado";
 use { Recorded, Recorder, Untyped, Value, constants } from "./recorded.wado";
 use { BinaryOp, ElementKind, Float, HalfFloat, Holds, Tensor, UnaryOp, operand } from "./tensor.wado";
@@ -299,6 +299,85 @@ test "a value the product reads is not computed in its epilogue" {
     let y = r.binary(Binary::Add, &product, &doubled);
     let recorded = r.finished([y.id]);
     assert spelled(&plan_of(&recorded)) == [`node ${x.id}`, `node ${w.id}`, `kernel ${doubled.id}`, `kernel ${y.id}`] as List<String>;
+}
+
+test "a quantized product computes what follows it in its epilogue" {
+    let mut r = Recorder::new();
+    let x = r.parameter::<f32, Untyped>([1, 3, 64]);
+    let packed = r.parameter::<u8, [Untyped, Untyped, Untyped]>([4, 2, 16]);
+    let scales = r.parameter::<f32, [Untyped, Untyped]>([4, 2]);
+    let residual = r.parameter::<f32, Untyped>([1, 3, 4]);
+    let product = r.quantized_product::<f32, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
+        &x,
+        &packed,
+        &scales,
+        null,
+        &Quantized { bits: 4, block: 32 },
+    );
+    let y = r.binary(Binary::Add, &product, &residual);
+    let recorded = r.finished([y.id]);
+    let plan = plan_of(&recorded);
+    assert spelled(&plan) == [
+        `node ${x.id}`, `node ${packed.id}`, `node ${scales.id}`, `node ${residual.id}`, `kernel ${y.id}`,
+    ] as List<String>;
+    let Kernel(k) = plan.launches[4] else {
+        unreachable();
+    };
+    assert k.product == Option::Some(product.id);
+    assert k.operands.into_iter().map(|o| o.node).collect() == [residual.id] as List<i32>;
+}
+
+/// A product of `x`, `[1, 3, 64]`, by a 4-bit weight of `columns` columns.
+fn quantized_by(r: &mut Recorder, x: &Value<f32, Untyped>, columns: i32) -> Value<f32, Untyped> {
+    let packed = r.parameter::<u8, [Untyped, Untyped, Untyped]>([columns, 2, 16]);
+    let scales = r.parameter::<f32, [Untyped, Untyped]>([columns, 2]);
+    return r.quantized_product::<f32, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
+        x,
+        &packed,
+        &scales,
+        null,
+        &Quantized { bits: 4, block: 32 },
+    );
+}
+
+test "quantized products of one left matrix, with nothing in their epilogues, launch as one" {
+    let mut r = Recorder::new();
+    let x = r.parameter::<f32, Untyped>([1, 3, 64]);
+    let normal = r.unary(Unary::Tanh, &x);
+    let q = quantized_by(&mut r, &normal, 8);
+    let k = quantized_by(&mut r, &normal, 4);
+    let v = quantized_by(&mut r, &normal, 4);
+    let recorded = r.finished([q.id, k.id, v.id]);
+    assert spelled(&plan_of(&recorded)).contains(&`joined ${q.id} ${k.id} ${v.id}`);
+}
+
+test "a gated layer of quantized products is one paired product" {
+    let mut r = Recorder::new();
+    let x = r.parameter::<f32, Untyped>([1, 3, 64]);
+    let gate = quantized_by(&mut r, &x, 8);
+    let up = quantized_by(&mut r, &x, 8);
+    let silu = r.binary(Binary::Multiply, &gate, &r.unary(Unary::Logistic, &gate));
+    let y = r.binary(Binary::Multiply, &silu, &up);
+    let recorded = r.finished([y.id]);
+    assert spelled(&plan_of(&recorded)).contains(&`paired ${gate.id} ${y.id}`);
+}
+
+test "quantized products by weights of other blocks do not launch as one" {
+    let mut r = Recorder::new();
+    let x = r.parameter::<f32, Untyped>([1, 3, 64]);
+    let q = quantized_by(&mut r, &x, 8);
+    let packed = r.parameter::<u8, [Untyped, Untyped, Untyped]>([4, 4, 8]);
+    let scales = r.parameter::<f32, [Untyped, Untyped]>([4, 4]);
+    let k = r.quantized_product::<f32, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
+        &x,
+        &packed,
+        &scales,
+        null,
+        &Quantized { bits: 4, block: 16 },
+    );
+    let recorded = r.finished([q.id, k.id]);
+    let launches = spelled(&plan_of(&recorded));
+    assert launches.contains(&`kernel ${q.id}`) && launches.contains(&`kernel ${k.id}`);
 }
 
 test "only a node that reads an argument is launched" {

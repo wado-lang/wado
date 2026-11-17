@@ -58,16 +58,24 @@ The order governs the trait-impl step of a _method call_ `recv.m(args)`. Method
 lookup reaches it after two steps that are not part of it, and three other
 dispatch paths select without it:
 
-| Step or path                                  | What selects                                                                |
-| --------------------------------------------- | --------------------------------------------------------------------------- |
-| Inherent method (`impl Type { fn m }`)        | Shadows every trait method of that name, along the whole newtype chain      |
-| A reference receiver's `&T` impls             | Ranked ahead of the base type's, concrete before blanket                    |
-| Trait impls on the receiver                   | The order below                                                             |
-| A type parameter's bounds (`T: Tr` in a body) | The first bound declaring the method; two or more is an ambiguity error     |
-| `Type::m(args)` and other associated calls    | Current-module-first scan, first hit; value blankets on a separate fallback |
-| Operators and indexing                        | The operand's type, unique-or-error (WEP 2026-07-31)                        |
+| Step or path                                  | What selects                                                              |
+| --------------------------------------------- | ------------------------------------------------------------------------- |
+| Inherent method (`impl Type { fn m }`)        | Shadows the trait methods of that name at its link and every link past it |
+| A reference receiver's `&T` impls             | Ranked ahead of the base type's, concrete before blanket                  |
+| Trait impls on the receiver                   | The order below                                                           |
+| A type parameter's bounds (`T: Tr` in a body) | The first bound declaring the method; two or more is an ambiguity error   |
+| `Type::m(recv, args)`, `m` taking a receiver  | What `recv.m(args)` selects                                               |
+| `Type::m(args)`, `m` receiver-less            | The static-call walk (WEP 2026-09-06)                                     |
+| Operators and indexing                        | The operand's type, unique-or-error (WEP 2026-07-31)                      |
 
 These paths do not yet follow this order: see Known gaps.
+
+An inherent method shadows by link, the way rank 1 ranks: a trait impl the
+newtype's author wrote answers before an inherent method its base declares. A
+link is one newtype of the chain with the references to it, so an inherent
+`fn m(&self)` on `P` also shadows `impl Tr for &P`. Rust reaches the same
+answers, since it looks a method up by the receiver type at each autoderef
+step and puts inherent before trait within a step (issue #2650).
 
 Two inherent blocks that reach a common receiver may not both define one method
 name. An inherent method carries no trait contract that could rank the two, so
@@ -241,8 +249,9 @@ answers yes.
 
 #### Rank 2: the least general impl
 
-Within one level, the impl that names the most of the receiver answers. A target
-is one of three, least general first:
+Within one level, among one trait's impls, the impl that names the most of the
+receiver answers. Impls of two traits at one level are the two-trait ambiguity
+below whatever they name. A target is one of three, least general first:
 
 | Generality | Target                       | Example                                                                              |
 | ---------- | ---------------------------- | ------------------------------------------------------------------------------------ |
@@ -311,6 +320,12 @@ differently.
 The receiver has `impl Alpha for Item` and `impl Beta for Item`, both declaring
 `describe`. They share no contract, so nothing selects. The call names the
 trait: `Alpha::describe(&it)` (WEP 2026-07-31).
+
+Rank 2 does not separate them, though rank 1 does. An exact `impl Alpha for Item`
+beside a blanket of `Beta` is still ambiguous at one level. Ranking the exact
+impl first would let a library's new impl of another trait change what an
+existing call means, which Scope already keeps out (issue #2650). Rust reports
+the same collision as E0034 for the same reason.
 
 Blankets join the collision like any other candidate. Two traits' blankets
 sharing a method name and both applying is the same question with no impl to
@@ -727,13 +742,13 @@ unbounded value blanket. The orphan rule still runs over the AST:
 
 ### The call forms do not share one resolution yet
 
-`Type::m(args)` scans the receiver's trait impls current-module-first and takes
-the first that declares the method, with value blankets on a separate fallback
-behind it. Operators and indexing filter by operand type and report
+`Type::m(…)` asks the order which kind the type answers `m` with, and with a
+receiver-taking `m` is a method call, so it shares the order. A receiver-less
+`Type::m(args)` then walks the newtype chain link by link
+and ranks within a link by its own rules, asking the order only among one
+trait's impls. Operators and indexing filter by operand type and report
 unique-or-error. A bound in a generic body takes the first bound declaring the
-name. They share which impls reach the receiver, and nothing after that. Ranks
-0-3 exist on none of them; they agree with the order only by coincidence of scan
-order.
+name. They share which impls reach the receiver, and nothing after that.
 
 Every form binds a parameter only the trait's arguments determine, and owes its
 bounds at the call (`impl_param_from_trait_arg_*.wado`). The forms reach that

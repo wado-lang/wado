@@ -1,4 +1,4 @@
-use { Document, Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node, Window } from "./dom.wado";
+use { Document, Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node, Text, Window } from "./dom.wado";
 use { SurfaceDom } from "./surface_dom.wado";
 
 test "a fresh document has a body" {
@@ -35,6 +35,38 @@ test "a doctype is never an element's child" {
     };
 }
 
+test "a doctype goes back ahead of the document's element" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let doctype = doc.remove_child(doc.first_child().unwrap());
+        let html = doc.document_element().unwrap();
+        doc.insert_before(doctype, Option::Some(html as Node));
+        assert doc.first_child() == Option::Some(doctype);
+        assert doctype.next_sibling() == Option::Some(html as Node);
+    };
+}
+
+#[expect_trap]
+test "an element never goes ahead of the doctype" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        doc.remove_child(doc.document_element().unwrap());
+        doc.insert_before(doc.create_element("html"), doc.first_child());
+    };
+}
+
+#[expect_trap]
+test "a doctype never goes after the document's element" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let doctype = doc.remove_child(doc.first_child().unwrap());
+        doc.insert_before(doctype, null);
+    };
+}
+
 #[expect_trap]
 test "the document holds one doctype" {
     let mut dom = SurfaceDom::new();
@@ -59,6 +91,7 @@ test "the handles carry the classes dom.wado numbers" {
         div.set_text_content(Option::Some("hi"));
         let text = div.first_child().unwrap();
         assert !text matches { _: Element };
+        assert text matches { _: Text };
         assert text.node_name() == "#text";
     };
 }
@@ -112,6 +145,59 @@ test "a tree is built by appending" {
     };
 }
 
+test "insert_before places a node ahead of a child, or last for null" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let list = doc.create_element("ul");
+        let a = doc.create_element("li");
+        let b = doc.create_element("li");
+        let c = doc.create_element("li");
+        list.append_child(c);
+        assert list.insert_before(a, Option::Some(c as Node)) == a as Node;
+        list.insert_before(b, Option::Some(c as Node));
+        assert list.first_child() == Option::Some(a as Node);
+        assert a.next_sibling() == Option::Some(b as Node);
+        assert b.next_sibling() == Option::Some(c as Node);
+        assert c.previous_sibling() == Option::Some(b as Node);
+
+        // A node already in the list moves.
+        list.insert_before(c, Option::Some(a as Node));
+        assert list.first_child() == Option::Some(c as Node);
+        assert list.last_child() == Option::Some(b as Node);
+        list.insert_before(c, null);
+        assert list.last_child() == Option::Some(c as Node);
+        assert b.next_sibling() == Option::Some(c as Node);
+
+        // Before itself, a node stays where it is.
+        list.insert_before(b, Option::Some(b as Node));
+        assert a.next_sibling() == Option::Some(b as Node);
+        assert b.next_sibling() == Option::Some(c as Node);
+    };
+}
+
+#[expect_trap]
+test "insert_before a node that is not a child is a not-found error" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let list = doc.create_element("ul");
+        list.insert_before(doc.create_element("li"), Option::Some(doc.create_element("li") as Node));
+    };
+}
+
+#[expect_trap]
+test "insert_before checks the hierarchy as append_child does" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let outer = doc.create_element("div");
+        let inner = doc.create_element("div");
+        outer.append_child(inner);
+        inner.insert_before(outer, null);
+    };
+}
+
 test "text content concatenates the descendants' text" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
@@ -127,6 +213,30 @@ test "text content concatenates the descendants' text" {
         p.set_text_content(Option::Some("replaced"));
         assert p.text_content() == Option::Some("replaced");
         assert b.parent_node() == null;
+    };
+}
+
+test "a text node's data is its content, and changes in place" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let p = doc.create_element("p");
+        let text = doc.create_text_node("a < b");
+        assert text.data() == "a < b";
+        assert text.node_type() == 3;
+        assert text.text_content() == Option::Some("a < b");
+        p.append_child(doc.create_element("b"));
+        p.insert_before(text, p.first_child());
+        assert p.get_html() == "a &lt; b<b></b>";
+
+        text.set_data("c");
+        assert p.first_child() == Option::Some(text as Node);
+        assert p.text_content() == Option::Some("c");
+        text.set_text_content(Option::Some("d"));
+        assert text.data() == "d";
+
+        assert Text::new("e").data() == "e";
+        assert Text::new().data() == "";
     };
 }
 

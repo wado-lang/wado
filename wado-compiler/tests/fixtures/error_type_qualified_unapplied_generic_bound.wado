@@ -1,0 +1,29 @@
+// A blanket answering at an instance of `Pair` an impl is written for makes
+// `Pair::span` a method call, and the receiver's own type settles whether it
+// answers: `Holds` is written for `Pair<i32, i32>` alone.
+trait Holds with () {}
+
+trait Measured with () {
+    fn span(&self) -> i32;
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl Holds for Pair<i32, i32> {}
+
+impl<X: Holds> Measured for X {
+    fn span(&self) -> i32 {
+        return 7;
+    }
+}
+
+export fn run() {
+    let q: Pair<bool, bool> = { a: true, b: false };
+    let _ = Pair::span(&q);
+}
+
+__DATA__
+{"compile_error": ":25:13: analysis error: no method 'span' found on type 'Pair<bool, bool>'"}

@@ -1,0 +1,116 @@
+// A blanket's bound asks whether the type implements the trait, not how the
+// impl came about, so each trait Wado derives from a use meets it, for a method
+// and a static alike (issue #2659). `Default` derives only where every field
+// declares a default.
+use { Serialize, Deserialize } from "core:serde";
+
+struct S {
+    a: i32,
+}
+
+struct D {
+    a: i32 = 0,
+}
+
+trait ByEq with () {
+    fn by_eq(&self) -> i32;
+    fn of_eq() -> i32;
+}
+
+trait ByOrd with () {
+    fn by_ord(&self) -> i32;
+    fn of_ord() -> i32;
+}
+
+trait ByHash with () {
+    fn by_hash(&self) -> i32;
+    fn of_hash() -> i32;
+}
+
+trait BySerialize with () {
+    fn by_serialize(&self) -> i32;
+    fn of_serialize() -> i32;
+}
+
+trait ByDeserialize with () {
+    fn by_deserialize(&self) -> i32;
+    fn of_deserialize() -> i32;
+}
+
+trait ByDefault with () {
+    fn by_default(&self) -> i32;
+    fn built() -> Self;
+}
+
+impl<X: Eq> ByEq for X {
+    fn by_eq(&self) -> i32 {
+        return 1;
+    }
+    fn of_eq() -> i32 {
+        return 1;
+    }
+}
+
+impl<X: Ord> ByOrd for X {
+    fn by_ord(&self) -> i32 {
+        return 2;
+    }
+    fn of_ord() -> i32 {
+        return 2;
+    }
+}
+
+impl<X: Hash> ByHash for X {
+    fn by_hash(&self) -> i32 {
+        return 3;
+    }
+    fn of_hash() -> i32 {
+        return 3;
+    }
+}
+
+impl<X: Serialize> BySerialize for X {
+    fn by_serialize(&self) -> i32 {
+        return 4;
+    }
+    fn of_serialize() -> i32 {
+        return 4;
+    }
+}
+
+impl<X: Deserialize> ByDeserialize for X {
+    fn by_deserialize(&self) -> i32 {
+        return 5;
+    }
+    fn of_deserialize() -> i32 {
+        return 5;
+    }
+}
+
+impl<X: Default> ByDefault for X {
+    fn by_default(&self) -> i32 {
+        return 6;
+    }
+    fn built() -> X {
+        return X::default();
+    }
+}
+
+test "method" {
+    let s = S { a: 1 };
+    assert s.by_eq() == 1;
+    assert s.by_ord() == 2;
+    assert s.by_hash() == 3;
+    assert s.by_serialize() == 4;
+    assert s.by_deserialize() == 5;
+    assert D { a: 1 }.by_default() == 6;
+}
+
+test "static" {
+    assert S::of_eq() == 1;
+    assert S::of_ord() == 2;
+    assert S::of_hash() == 3;
+    assert S::of_serialize() == 4;
+    assert S::of_deserialize() == 5;
+    assert D::built().a == 0;
+}

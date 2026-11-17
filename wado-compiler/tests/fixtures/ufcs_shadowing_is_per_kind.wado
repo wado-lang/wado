@@ -1,14 +1,7 @@
-// An inherent declaration shadows a trait impl's *of the same kind*. Only
-// same-kind declarations are alternatives for one call: a trait's associated
-// function and an inherent method taking a receiver are reached by different
-// argument lists. Shadowed across the two, `Mk::tag`'s associated function has
-// no spelling left: `S::tag()` demands a receiver, and `Mk::tag()` has none to
-// infer `Self` from.
-//
-// Known gap, not pinned here: where one name carries both kinds, only the
-// argument list separates them and the spelling does not resolve on it, so
-// `S::tag(&s)` reaches the associated function too. `label` below is the
-// same-kind case, which shadowing does decide.
+// An inherent declaration shadows a trait impl's of either kind: `S::tag` is
+// what `S` answers `tag` with, its own method, and `S::tag()` asks it for a
+// receiver. The trait's associated function stays reachable through the trait,
+// which `Mk::<Self = S>::tag()` names. `label` is the same-kind case.
 
 use { println, Stdout } from "core:cli";
 
@@ -37,7 +30,7 @@ impl Lbl for S {
 }
 
 impl S {
-    // Shadows `Lbl::label` for `S::label`, and leaves `Mk::tag` alone.
+    // Shadows both `Mk::tag` and `Lbl::label` for `S::tag` and `S::label`.
     fn tag(&self) -> i32 {
         return self.v;
     }
@@ -49,11 +42,12 @@ impl S {
 
 export fn run() with Stdout {
     let s = S { v: 9 };
-    println(`${S::tag()}`);
+    println(`${Mk::<Self = S>::tag()}`);
+    println(`${S::tag(&s)}`);
     println(`${s.tag()}`);
     println(`${S::label(&s)}`);
     println(`${Lbl::label(&s)}`);
 }
 
 __DATA__
-{"stdout": "100\n9\n3\n200\n"}
+{"stdout": "100\n9\n9\n3\n200\n"}

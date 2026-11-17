@@ -1,6 +1,6 @@
-use { Signal, flush, on_cleanup, scope, signal } from "./signals.wado";
-use { each, element, text } from "./view.wado";
-use { Dom, Element, SurfaceDom } from "wado-lang:web";
+use { Signal, flush, observe, on_cleanup, scope, signal } from "./signals.wado";
+use { bind_text, each, element, text } from "./view.wado";
+use { Dom, Element, Node, SurfaceDom } from "wado-lang:web";
 
 fn children_text(parent: Element) -> String with Dom {
     let mut out = "";
@@ -26,6 +26,133 @@ test "each follows a new order with the nodes it had" {
         assert children_text(list) == "312";
         assert list.first_child().unwrap() == last;
         assert list.first_child().unwrap().next_sibling().unwrap() == first;
+    };
+}
+
+test "bind_text owns one text node, and leaves the element's other children" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let label = element("p");
+        label.append_child(text("b", "Count: "));
+        let count = signal(0);
+        let _dispose = scope(|| bind_text(label, || `${count.get()}`));
+        let shown = label.last_child().unwrap();
+        assert label.get_html() == "<b>Count: </b>0";
+
+        count.set(1);
+        flush();
+        assert label.get_html() == "<b>Count: </b>1";
+        assert label.last_child().unwrap() == shown;
+    };
+}
+
+test "bind_text takes its text node out when it is disposed of" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let label = element("p");
+        let shown = signal(true);
+        let _dispose = scope(|| observe(|| {
+            if shown.get() {
+                bind_text(label, || "x");
+            }
+        }));
+        assert label.get_html() == "x";
+
+        shown.set(true);
+        flush();
+        assert label.get_html() == "x";
+        shown.set(false);
+        flush();
+        assert label.get_html() == "";
+    };
+}
+
+// Counts the insertions that reach the DOM beneath it.
+struct Insertions {
+    count: i32,
+}
+
+impl Node for Insertions {
+    fn append_child(&mut self, this: &Node, node: Node) -> Node with Node {
+        self.count += 1;
+        resume (*this).append_child(node);
+    }
+
+    fn insert_before(&mut self, this: &Node, node: Node, child: Option<Node>) -> Node with Node {
+        self.count += 1;
+        resume (*this).insert_before(node, child);
+    }
+
+    ..forward
+}
+
+test "each moves only the rows out of place" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = element("ul");
+        let items: Signal<List<i32>> = signal([1, 2, 3, 4, 5]);
+        let _dispose = scope(|| each(list, || items.get(), |item: i32| text("li", `${item}`)));
+
+        let mut insertions = Insertions { count: 0 };
+        with Node => &mut insertions do {
+            items.set([2, 3, 4, 5, 1]);
+            flush();
+        };
+        assert children_text(list) == "23451";
+        assert insertions.count == 1;
+
+        with Node => &mut insertions do {
+            items.set([1, 2, 3, 4, 5]);
+            flush();
+        };
+        assert children_text(list) == "12345";
+        assert insertions.count == 2;
+    };
+}
+
+test "each takes back a row moved out of its parent" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = element("ul");
+        let items: Signal<List<i32>> = signal([1, 2]);
+        let _dispose = scope(|| each(list, || items.get(), |item: i32| text("li", `${item}`)));
+        element("ol").append_child(list.last_child().unwrap());
+
+        items.set([0, 1, 2]);
+        flush();
+        assert children_text(list) == "012";
+    };
+}
+
+test "each restores its order after render moved a row" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = element("ul");
+        let items: Signal<List<i32>> = signal([1, 2]);
+        let _dispose = scope(|| each(list, || items.get(), |item: i32| {
+            if item == 0 {
+                list.append_child(list.first_child().unwrap());
+            }
+            return text("li", `${item}`);
+        }));
+
+        items.set([0, 1, 2]);
+        flush();
+        assert children_text(list) == "012";
+    };
+}
+
+test "each restores its order after a row moved within its parent" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = element("ul");
+        let items: Signal<List<i32>> = signal([1, 2]);
+        let _dispose = scope(|| each(list, || items.get(), |item: i32| text("li", `${item}`)));
+        list.append_child(list.first_child().unwrap());
+
+        items.set([0, 1, 2]);
+        flush();
+        assert children_text(list) == "012";
     };
 }
 

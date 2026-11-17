@@ -19,6 +19,8 @@ const SLICE = [
   "EventTarget",
   "Event",
   "Node",
+  "CharacterData",
+  "Text",
   "Element",
   "HTMLElement",
   "HTMLInputElement",

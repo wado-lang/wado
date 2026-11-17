@@ -2347,12 +2347,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: &ReceiverId,
         method_name: &str,
         arg_types: &[TypeId],
-        required_trait: Option<DefId>,
+        (required_trait, required_args): (Option<DefId>, &[TypeId]),
         expected_return: Option<TypeId>,
     ) -> StaticLookup {
         self.resolve_static_callee(StaticQuery {
             arg_types,
             required_trait,
+            required_args,
             expected_return,
             ..StaticQuery::of(receiver, method_name)
         })
@@ -2448,6 +2449,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Some(Ordered::AmbiguousTraits(_)) => {
                 self.report_cross_trait_ambiguity(&found_traits, method_name, span);
+                // The call continues on one of them only to recover, so it
+                // continues on one taking the receiver it was written with.
+                let takes_receiver =
+                    |m: &TraitMethodMatch| m.method_info.self_kind != ast::SelfKind::None;
+                if found_traits.iter().any(takes_receiver) {
+                    found_traits.retain(takes_receiver);
+                }
             }
             Some(
                 Ordered::One(_)
@@ -4487,7 +4495,7 @@ impl TypeSystem {
 
     /// `def` and every resource it extends. Collected, so the walk's own
     /// lookups can borrow the type table again.
-    fn resource_chain_of(&self, def: DefId) -> Vec<DefId> {
+    pub(super) fn resource_chain_of(&self, def: DefId) -> Vec<DefId> {
         self.type_table.borrow().resource_chain(def).collect()
     }
 

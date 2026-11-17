@@ -1,0 +1,62 @@
+// An inherent method shadows the trait impls at its link of the newtype chain
+// and past it. A trait impl at a nearer link answers instead (issue #2650).
+trait Alpha with () {
+    fn m(&self) -> String;
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+type N = Pair<i32, i32>;
+
+impl Pair<i32, i32> {
+    fn m(&self) -> String {
+        return "inherent at Pair";
+    }
+}
+
+impl Alpha for N {
+    fn m(&self) -> String {
+        return "Alpha at N";
+    }
+}
+
+type M = Pair<i32, i64>;
+
+impl M {
+    fn m(&self) -> String {
+        return "inherent at M";
+    }
+}
+
+impl Alpha for M {
+    fn m(&self) -> String {
+        return "Alpha at M";
+    }
+}
+
+impl Alpha for Pair<i32, i64> {
+    fn m(&self) -> String {
+        return "Alpha at Pair";
+    }
+}
+
+test "a trait impl on the newtype answers before an inherent method on its base" {
+    let x: N = { a: 1, b: 2 };
+    assert x.m() == "Alpha at N";
+    assert N::m(&x) == "Alpha at N";
+    assert (&x).m() == "Alpha at N";
+}
+
+test "an inherent method answers before a trait impl at its link" {
+    let y: M = { a: 1, b: 2 };
+    assert y.m() == "inherent at M";
+    assert M::m(&y) == "inherent at M";
+}
+
+test "on the base, its inherent method answers" {
+    let p: Pair<i32, i32> = { a: 1, b: 2 };
+    assert p.m() == "inherent at Pair";
+}

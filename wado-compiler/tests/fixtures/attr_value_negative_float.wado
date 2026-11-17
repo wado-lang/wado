@@ -1,0 +1,12 @@
+// A negative value may be any number, a float among them. The attribute is
+// unknown, so the file is refused after it parses.
+
+#[tolerance(eps = -1.5)]
+test "negative float value" {
+    assert 1 == 1;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "unknown attribute: `tolerance`", "compile_error_codes": ["UNKNOWN_ATTR"]}

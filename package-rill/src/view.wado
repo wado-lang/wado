@@ -2,7 +2,7 @@
 //! so a write to a signal touches the nodes that show it and no others.
 
 use { Track, flush, observe, on_cleanup, scope, untracked } from "./signals.wado";
-use { Dom, Element, Event, EventTarget } from "wado-lang:web";
+use { Dom, Element, Event, EventTarget, Node } from "wado-lang:web";
 
 pub fn element(tag: String) -> Element with Dom {
     return Dom::document().create_element(tag);
@@ -14,9 +14,18 @@ pub fn text(tag: String, content: String) -> Element with Dom {
     return made;
 }
 
+/// Appends a text node to `target` and keeps its text at what `content`
+/// answers. The element's other children stay where they are.
 pub fn bind_text(target: Element, content: fn mut() -> String with Track) with (Track, Dom) {
     let mut content = content;
-    observe(|| target.set_text_content(Option::Some(content())));
+    let shown = Dom::document().create_text_node("");
+    target.append_child(shown);
+    on_cleanup(|| {
+        if let Some(holder) = shown.parent_node() {
+            holder.remove_child(shown);
+        }
+    });
+    observe(|| shown.set_data(content()));
 }
 
 /// Keeps the attribute at what `value` answers, absent for `None`.
@@ -71,33 +80,114 @@ pub fn each<T: Eq>(
     });
     observe(|| {
         let mut kept: List<Row<T>> = [];
-        let mut moved = false;
+        // Each kept row's index among the rows before, -1 for a new one.
+        let mut was: List<i32> = [];
+        let shown = rows.len();
+        let mut left: List<i32> = (0..<shown).collect();
         for let item of items() {
-            let mut found: Option<Row<T>> = null;
+            let mut found = false;
             for let i of 0..<rows.len() {
                 if rows[i].item == item {
-                    found = Option::Some(rows.remove(i));
-                    moved = moved || i != 0;
+                    kept.push(rows.remove(i));
+                    was.push(left.remove(i));
+                    found = true;
                     break;
                 }
             }
-            if let Some(row) = found {
-                kept.push(row);
+            if found {
                 continue;
             }
             let mut node: Option<Element> = null;
             let dispose = scope(|| node = Option::Some(render(item)));
             kept.push(Row { item, node: node.unwrap(), dispose });
-            moved = true;
+            was.push(-1);
         }
         remove_rows(parent, rows);
-        if moved {
-            // Appending a child already there moves it, so this leaves the
-            // children in the new order.
-            for let row of kept {
-                parent.append_child(row.node);
+        // `render` and the cleanups have run, and either may have moved a row.
+        // Nothing runs from here on, so the DOM now is the DOM the moves meet.
+        let mut before: List<Option<Element>> = [];
+        for let _ of 0..<shown {
+            before.push(null);
+        }
+        for let i of 0..<kept.len() {
+            if was[i] >= 0 {
+                before[was[i]] = Option::Some(kept[i].node);
             }
+        }
+        if !holds_in_order(parent, &before) {
+            for let i of 0..<was.len() {
+                was[i] = -1;
+            }
+        }
+        // The rows already in their old order stay; the rest move in among
+        // them, from the last row back.
+        let stay = longest_increasing(&was);
+        let mut next: Option<Node> = null;
+        for let mut i = kept.len() - 1; i >= 0; i -= 1 {
+            let node = kept[i].node;
+            if !stay[i] {
+                parent.insert_before(node, next);
+            }
+            next = Option::Some(node);
         }
         rows = kept;
     });
+}
+
+// Whether `parent`'s children are exactly `nodes`, in order, the gaps skipped:
+// other code may have moved one.
+fn holds_in_order(parent: Element, nodes: &List<Option<Element>>) -> bool with Dom {
+    let mut child = parent.first_child();
+    for let slot of nodes {
+        let Some(expected) = slot else {
+            continue;
+        };
+        if child != Option::Some(expected as Node) {
+            return false;
+        }
+        child = child.unwrap().next_sibling();
+    }
+    return child == null;
+}
+
+// Marks a longest strictly increasing subsequence of `values`, skipping the
+// negative ones.
+fn longest_increasing(values: &List<i32>) -> List<bool> {
+    // `tails[k]` ends the increasing run of length k + 1 with the least last value.
+    let mut tails: List<i32> = [];
+    let mut previous: List<i32> = [];
+    for let i of 0..<values.len() {
+        previous.push(-1);
+        if values[i] < 0 {
+            continue;
+        }
+        let mut low = 0;
+        let mut high = tails.len();
+        while low < high {
+            let middle = (low + high) / 2;
+            if values[tails[middle]] < values[i] {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        if low > 0 {
+            previous[i] = tails[low - 1];
+        }
+        if low == tails.len() {
+            tails.push(i);
+        } else {
+            tails[low] = i;
+        }
+    }
+    let mut marked: List<bool> = [];
+    for let _ of 0..<values.len() {
+        marked.push(false);
+    }
+    let mut at = if tails.is_empty() { -1 } else { tails[tails.len() - 1] };
+    while at >= 0 {
+        marked[at] = true;
+        at = previous[at];
+    }
+    return marked;
 }

@@ -1,5 +1,5 @@
 // A qualified static names its trait, so a newtype's own impl of another trait
-// with a same-named method does not take the call: `Wanted::<N>::mk()` is the
+// with a same-named method does not take the call: `Wanted::<Self = N>::mk()` is the
 // base's `Wanted`, which `N` inherits.
 
 struct Base {
@@ -31,9 +31,9 @@ impl Other for N {
 type Outer = N;
 
 test {
-    assert Wanted::<N>::mk() == 1;
-    assert Other::<N>::mk() == 2;
-    assert Wanted::<Outer>::mk() == 1;
+    assert Wanted::<Self = N>::mk() == 1;
+    assert Other::<Self = N>::mk() == 2;
+    assert Wanted::<Self = Outer>::mk() == 1;
 }
 
 __DATA__

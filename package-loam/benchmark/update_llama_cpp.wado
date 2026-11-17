@@ -1,0 +1,126 @@
+//! Pins llama_cpp.lock to llama.cpp's newest release that ships the Vulkan
+//! archive fetch_llama_cpp.sh downloads: its tag, the SHA-256 GitHub records
+//! for that archive, and that of the tag's source archive, which GitHub
+//! records none of, so this downloads and hashes it. Its builds are marked
+//! prereleases, and a release that is not one may ship no binaries.
+//!
+//!     cd package-loam/benchmark
+//!     wado run update_llama_cpp.wado
+
+use { println, Stdout } from "core:cli";
+use { sha256 } from "core:digest";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { from_bytes } from "core:json";
+use { Url } from "core:url";
+use { Client, ErrorCode, FieldValue, Headers, Request, Response, Scheme, Trailers } from "wasi:http";
+
+/// The redirects a download follows: GitHub sends an archive through one.
+global REDIRECTS: i32 = 5;
+
+struct Release {
+    tag_name: String,
+    assets: List<Asset>,
+}
+
+struct Asset {
+    name: String,
+    digest: Option<String>,
+}
+
+export fn run() with (Stdout, Client, Preopens) {
+    // Newest first.
+    let releases = match from_bytes::<List<Release>, ByteList>(fetched(
+        "https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=30",
+    )) {
+        Ok(r) => r,
+        Err(e) => panic(`unparsed releases: ${e}`),
+    };
+    let [tag, digest] = newest: {
+        for let r of releases {
+            let name = vulkan_archive(&r.tag_name);
+            for let a of r.assets {
+                if a.name == name {
+                    break newest: [r.tag_name, a.digest.unwrap()];
+                }
+            }
+        }
+        panic("no recent release ships the Vulkan archive");
+    };
+    let Some(vulkan) = digest.strip_prefix("sha256:") else {
+        panic(`${vulkan_archive(&tag)}'s digest ${digest} is not a SHA-256`);
+    };
+    let source = hex(&sha256(&fetched(`https://github.com/ggml-org/llama.cpp/archive/refs/tags/${tag}.tar.gz`)));
+    let lock = `# The llama.cpp release fetch_llama_cpp.sh downloads, and the SHA-256 of each
+# archive it reads. update_llama_cpp.wado writes it.
+TAG=${tag}
+SOURCE_SHA=${source}
+UBUNTU_VULKAN_X64_SHA=${vulkan}
+`;
+    fs::write("llama_cpp.lock", &lock).unwrap();
+    println(`llama_cpp.lock pins ${tag}`);
+}
+
+fn vulkan_archive(tag: &String) -> String {
+    return `llama-${*tag}-bin-ubuntu-vulkan-x64.tar.gz`;
+}
+
+/// The body `url` answers with, through any redirects, which must end in 200.
+fn fetched(url: String) -> ByteList with Client {
+    let mut at = Url::from_str(url).unwrap();
+    for let _ of 0..=REDIRECTS {
+        let resp = sent(&at);
+        let status = resp.get_status_code() as i32;
+        if status == 200 {
+            return body(resp);
+        }
+        let location = resp.get_headers().get("location");
+        assert 300 <= status < 400 && location.len() == 1, `HTTP ${status} from ${at}`;
+        at = at.resolve(String::from_utf8_lossy(location[0] as ByteList)).unwrap();
+    }
+    panic(`${url} redirects more than ${REDIRECTS} times`);
+}
+
+fn sent(url: &Url) -> Response with Client {
+    let headers = Headers::new();
+    // api.github.com refuses a request that names no agent.
+    headers.append("user-agent", b"wado-lang/package-loam" as FieldValue);
+    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [req, sending] = Request::new(headers, null, trailers_rx, null);
+    req.set_scheme(Option::Some(Scheme::Https));
+    req.set_authority(Option::Some(url.authority()));
+    req.set_path_with_query(Option::Some(url.path_with_query()));
+    let subtask = Client::send(req);
+    trailers_tx.write(Result::Ok(null));
+    let resp = match subtask.wait() {
+        Ok(resp) => resp,
+        Err(e) => panic(`GET ${url} failed: ${e:?}`),
+    };
+    done(sending, "the request");
+    return resp;
+}
+
+fn body(resp: Response) -> ByteList {
+    let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [stream, received] = Response::consume_body(resp, res_rx);
+    let bytes = stream.read_to_end_bytes();
+    stream.drop();
+    res_tx.write(Result::Ok(()));
+    done(received, "the response body");
+    return bytes;
+}
+
+/// Panics unless `transfer`, the future a `wasi:http` transfer resolves once
+/// it ends, reports success.
+fn done<affine T>(transfer: Future<Result<T, ErrorCode>>, what: String) {
+    let outcome = transfer.read();
+    assert outcome matches { Some(Ok(_)) }, `${what} failed: ${outcome:?}`;
+}
+
+fn hex(bytes: &ByteList) -> String {
+    let mut out = String::with_capacity(2 * bytes.len());
+    for let b of bytes {
+        out.push_str(`${b:02x}`);
+    }
+    return out;
+}

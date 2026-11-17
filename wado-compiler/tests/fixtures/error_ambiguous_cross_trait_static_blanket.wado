@@ -1,0 +1,37 @@
+// A static is selected by the same order as a method: a block written for the
+// receiver ranks above a blanket of its own trait only, so another trait's
+// blanket declaring the name at the same level is ambiguous (issue #2650).
+trait Holds with () {}
+
+trait Alpha with () {
+    fn make() -> i32;
+}
+
+trait Beta with () {
+    fn make() -> i32;
+}
+
+struct P {
+    v: i32,
+}
+
+impl Holds for P {}
+
+impl<T: Holds> Alpha for T {
+    fn make() -> i32 {
+        return 1;
+    }
+}
+
+impl Beta for P {
+    fn make() -> i32 {
+        return 2;
+    }
+}
+
+export fn run() {
+    assert P::make() == 2;
+}
+
+__DATA__
+{"compile_error": "ambiguous", "compile_error_codes": ["AMBIGUOUS_CANDIDATE"]}

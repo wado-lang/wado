@@ -134,7 +134,7 @@ trait Builder: Build with () {
 
 impl Builder for Both {}
 
-// Selected through the bound, `Self::zero()` is spelled as `Zero::<Self>::zero()`
+// Selected through the bound, `Self::zero()` is spelled as `Zero::<Self = Self>::zero()`
 // is, which must reach `()` and a default a primitive's block inherits.
 trait Zero with () {
     fn zero() -> i32;
@@ -202,12 +202,12 @@ test "a static call on Self picks through the trait's supertrait" {
 }
 
 test "a static call on Self reaches the unit type's impl" {
-    assert Zero::<()>::zero() == 5;
-    assert Zero::<()>::zero_twice() == 10;
+    assert Zero::<Self = ()>::zero() == 5;
+    assert Zero::<Self = ()>::zero_twice() == 10;
 }
 
 test "a static call on Self reaches a default a primitive inherits" {
-    assert Zero::<i32>::zero_twice() == 10;
+    assert Zero::<Self = i32>::zero_twice() == 10;
     assert i32::zero_thrice() == 15;
 }
 

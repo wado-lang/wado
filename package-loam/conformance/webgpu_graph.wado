@@ -19,6 +19,7 @@ use {
     GpuShaderModule,
     GpuComputePipeline,
     GpuComputePassEncoder,
+    GpuQuerySet,
     GpuSupportedFeatures,
     GpuSupportedLimits,
     RecordOptionGpuSize64,
@@ -34,6 +35,7 @@ use {
     Graph,
     Holds,
     Placed,
+    Quantized,
     Slots,
     strided_gather,
     Tensor,
@@ -80,7 +82,7 @@ use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
         },
     };
 
-export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
+export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuQuerySet, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
     let Some(mut gpu) = WebGpuBackend::new() else {
         println("no WebGPU adapter");
         return;
@@ -99,6 +101,15 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let [ex, ey] = cases::elementwise_inputs();
     let every = cases::elementwise(&mut gpu, &gpu.upload(&ex), &gpu.upload(&ey));
     println(`elementwise ${apart(&mut gpu, &every, &cases::elementwise(cpu, &ex, &ey))}`);
+
+    // A profile times every dispatch, and changes nothing computed.
+    let mut timed = WebGpuBackend::new().unwrap();
+    if timed.profile() {
+        let profiled = cases::elementwise(&mut timed, &timed.upload(&ex), &timed.upload(&ey));
+        assert timed.download(&profiled).data == gpu.download(&every).data;
+        let times = timed.profiled();
+        assert times.into_iter().map(|t| t.dispatches).sum() == Option::Some(timed.dispatches());
+    }
 
     // A device without `shader-f16` computes a half as one with it does.
     let mut plain = WebGpuBackend::new().unwrap();
@@ -225,6 +236,28 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         quantized_in::<bf16>(device, ` of bf16${words}`);
     }
 
+    // A block past the inner extent pads with values the product never reads,
+    // however large they round: 7 times 10000 is past f16's range.
+    let mut padding = List::<u8>::filled(16, 0xff);
+    padding[0] = 0xf8;
+    let padded = gpu.quantized_product::<f16, [cases::A, cases::B], cases::C, cases::Blocks, cases::Blob, cases::Zeros, [cases::A, cases::C]>(
+        &gpu.upload(&Tensor::<f16, [cases::A, cases::B]> {
+            data: [1.0],
+            extents: [1, 1],
+        }),
+        &gpu.upload(&Tensor::<u8, [cases::C, cases::Blocks, cases::Blob]> {
+            data: padding,
+            extents: [1, 1, 16],
+        }),
+        &gpu.upload(&Tensor::<f16, [cases::C, cases::Blocks]> {
+            data: [10000.0],
+            extents: [1, 1],
+        }),
+        null,
+        &Quantized { bits: 4, block: 32 },
+    );
+    assert gpu.download(&padded).data == [0.0] as List<f16>, "a padding value adds nothing";
+
     // The packed weights a model keeps, as it keeps them.
     let packed = gpu.kept_weights(cases::quantized_pass, 2, 5, cases::quantized_weight).unwrap();
     let quantizing_program = gpu.compiled(cases::quantized_pass, &packed, &[]).unwrap();
@@ -236,6 +269,38 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let kept_gather = typed::<WebGpuBackend, f32, [cases::A, cases::B]>(&gpu, &dequantized[1]);
     println(`quantized kept product ${apart(&mut gpu, &kept_product, &want_quantized.0)}`);
     println(`quantized kept gather ${apart(&mut gpu, &kept_gather, &want_quantized.1)}`);
+
+    // A quantized product computes what follows it in its own dispatch.
+    let q = cases::quantized_case();
+    let then_want = cases::quantized_then(cpu, &q.a, &[q.weight, q.scales, q.zero_points]);
+    let then_weights = gpu.kept_weights(cases::quantized_then_pass, 1, 3, cases::quantized_weight).unwrap();
+    let then_program = gpu.compiled(cases::quantized_then_pass, &then_weights, &[]).unwrap();
+    let then_from = gpu.dispatches();
+    let then_got = gpu.executed(
+        &then_program,
+        &[Any::F32(gpu.relabeled::<f32, [cases::A, cases::B], Untyped>(&held_a))],
+        &then_weights,
+    );
+    assert gpu.dispatches() - then_from == 2, "the row sums, then the product and its epilogue";
+    let fused_then = typed::<WebGpuBackend, f32, [cases::A, cases::C]>(&gpu, &then_got[0]);
+    println(`quantized product epilogue ${apart(&mut gpu, &fused_then, &then_want)}`);
+
+    // Products of one input run as one kernel, by their kept weights side by
+    // side, and a gate with what it gates as one more.
+    let layer_want = cases::quantized_layer(cpu, &q.a, &cases::quantized_layer_weights());
+    let layer_weights = gpu.kept_weights(cases::quantized_layer_pass, 1, 12, cases::quantized_layer_weight).unwrap();
+    let layer_program = gpu.compiled(cases::quantized_layer_pass, &layer_weights, &[]).unwrap();
+    let layer_from = gpu.dispatches();
+    let layer_got = gpu.executed(
+        &layer_program,
+        &[Any::F32(gpu.relabeled::<f32, [cases::A, cases::B], Untyped>(&held_a))],
+        &layer_weights,
+    );
+    assert gpu.dispatches() - layer_from == 2, "the joined products, then the paired ones";
+    for let [i, expected] of [layer_want.0, layer_want.1, layer_want.2].enumerate() {
+        let output = typed::<WebGpuBackend, f32, [cases::A, cases::C]>(&gpu, &layer_got[i]);
+        println(`quantized layer ${i} ${apart(&mut gpu, &output, &expected)}`);
+    }
 
     for let p of [true, false] as List<bool> {
         let [pred, bx] = cases::branching_inputs(p);
@@ -277,6 +342,14 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         println(
             `attending ${name} ${deviation(&leading(cpu, &read, valid).data, &leading(cpu, &reference, valid).data)}`,
         );
+    }
+
+    for let [words, device] of [
+        ["", &mut gpu],
+        [" in f32 words", &mut plain],
+    ] {
+        attention_in::<f16>(device, ` of f16${words}`);
+        attention_in::<bf16>(device, ` of bf16${words}`);
     }
 
     // Rows of different pasts in one buffer.
@@ -594,6 +667,24 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     };
     assert gpu.download(&gpu.binary(Binary::Add, &ranked, &gpu.upload(&far))).data == [16777217] as List<i64>;
 
+    // A decode's steps run in one pass, each over the buffers and parameters
+    // the first step bound, so a step makes a bind group only for what it
+    // reads from the step before and leaves for the next.
+    let decoding = |device: &mut WebGpuBackend, steps: i32| {
+        let [groups, dispatches] = [
+            device.bind_groups(),
+            device.dispatches(),
+        ];
+        decoded_tokens(device, [2, 6, 1], [steps], &samplers()[0]);
+        return [
+            device.bind_groups() - groups,
+            device.dispatches() - dispatches,
+        ];
+    };
+    let [short_groups, short_dispatches] = decoding(&mut gpu, 3);
+    let [long_groups, long_dispatches] = decoding(&mut gpu, 7);
+    assert 4 * (long_groups - short_groups) < long_dispatches - short_dispatches;
+
     for let [k, sampling] of samplers().into_iter().enumerate() {
         let want_tokens = stepped_tokens(cpu, [2, 6, 1], 8, &sampling);
         let reads_before_decoding = gpu.read_backs();
@@ -648,6 +739,71 @@ fn quantized_in<E: Float>(
     println(`quantized product${name} ${apart(gpu, &got.0, &want.0)}`);
     println(`quantized gather${name} ${apart(gpu, &got.1, &want.1)}`);
     return [held_a, held_ids, want];
+}
+
+/// `cases::attention_case` in `E` on `gpu`, which runs it in its kernels,
+/// against the decomposition on the CPU.
+fn attention_in<E: Float>(
+    gpu: &mut WebGpuBackend,
+    name: String,
+) with (Stdout, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let cpu = &mut Cpu {};
+    let case = cases::attention_case();
+    let inputs: [Tensor<E, [cases::Bt, cases::St, cases::Qt]>, Tensor<E, [cases::Bt, cases::St, cases::Kt]>, Tensor<E, [cases::Bt, cases::St, cases::Kt]>] = [
+        cpu.convert(&case.inputs.0),
+        cpu.convert(&case.inputs.1),
+        cpu.convert(&case.inputs.2),
+    ];
+    let past: [Tensor<E, [cases::Bt, cases::Ht, cases::Pt, cases::Dt]>, Tensor<E, [cases::Bt, cases::Ht, cases::Pt, cases::Dt]>, Tensor<i64, [Slots]>] = [
+        cpu.convert(&case.past.0),
+        cpu.convert(&case.past.1),
+        case.past.2,
+    ];
+    let rotation: [Tensor<E, [cases::Pos, cases::Half]>, Tensor<E, [cases::Pos, cases::Half]>] = [
+        cpu.convert(&case.rotation.0),
+        cpu.convert(&case.rotation.1),
+    ];
+    let bias: Tensor<E, [cases::Bt, cases::Ht, cases::St, cases::Tt]> = cpu.convert(&case.bias);
+    let want = cases::attending::<Cpu, E>(cpu, &inputs, &past, &rotation, &bias, &case.options);
+    let held_inputs = [
+        gpu.upload(&inputs.0),
+        gpu.upload(&inputs.1),
+        gpu.upload(&inputs.2),
+    ];
+    let held_past = [
+        gpu.upload(&past.0),
+        gpu.upload(&past.1),
+        gpu.upload(&past.2),
+    ];
+    let held_rotation = [
+        gpu.upload(&rotation.0),
+        gpu.upload(&rotation.1),
+    ];
+    let held_bias = gpu.upload(&bias);
+    let from = gpu.dispatches();
+    let got = cases::attending::<WebGpuBackend, E>(
+        gpu,
+        &held_inputs,
+        &held_past,
+        &held_rotation,
+        &held_bias,
+        &case.options,
+    );
+    assert gpu.dispatches() - from == 5, "a half attention runs in its kernels";
+    println(`attending out${name} ${apart(gpu, &got.0, &want.0)}`);
+    // What a shared present holds past the valid positions is unspecified.
+    let valid = case.past.2.data[0] as i32 + case.inputs.0.extents[1];
+    for let [part, present, reference] of [
+        ["present_k", got.1, want.1],
+        ["present_v", got.2, want.2],
+    ] {
+        let read: Tensor<f32, [cases::Bt, cases::Ht, cases::Tt, cases::Dt]> = cpu.convert(&gpu.download(&present));
+        let wanted: Tensor<f32, [cases::Bt, cases::Ht, cases::Tt, cases::Dt]> = cpu.convert(&reference);
+        println(`attending ${part}${name} ${deviation(
+            &leading(cpu, &read, valid).data,
+            &leading(cpu, &wanted, valid).data,
+        )}`);
+    }
 }
 
 /// Passes enough that every launch is idle.
