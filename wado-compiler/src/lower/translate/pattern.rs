@@ -952,7 +952,7 @@ impl<'a> PatternLowerer<'a> {
                         local_index: temp_index,
                         is_mut: false,
                         type_id: pattern_type,
-                        value,
+                        value: Some(value),
                         storage: LetStorage::Planned,
                     },
                     span,
@@ -983,7 +983,7 @@ impl<'a> PatternLowerer<'a> {
                         local_index: temp_index,
                         is_mut: false,
                         type_id: pattern_type,
-                        value,
+                        value: Some(value),
                         storage: LetStorage::Planned,
                     },
                     span,
@@ -1047,7 +1047,7 @@ impl<'a> PatternLowerer<'a> {
                         local_index: temp_index,
                         is_mut: false,
                         type_id: pattern_type,
-                        value,
+                        value: Some(value),
                         storage: LetStorage::Planned,
                     },
                     span,
@@ -1276,7 +1276,7 @@ impl<'a> PatternLowerer<'a> {
                         local_index: temp_index,
                         is_mut: false,
                         type_id: pattern_type,
-                        value,
+                        value: Some(value),
                         storage: LetStorage::Planned,
                     },
                     span,
@@ -1544,9 +1544,10 @@ impl<'a> PatternLowerer<'a> {
                 type_id,
                 storage,
             } => {
-                // Lower expressions inside the Let value
                 let mut value = value;
-                self.lower_expr(&mut value, type_table);
+                if let Some(value) = &mut value {
+                    self.lower_expr(value, type_table);
+                }
                 out.push(TirStmt::new(
                     TirStmtKind::Let {
                         name,
@@ -1663,7 +1664,7 @@ impl<'a> PatternLowerer<'a> {
                 local_index,
                 is_mut: self.locals[local_index as usize].is_mut,
                 type_id: pattern_type,
-                value,
+                value: Some(value),
                 storage: LetStorage::Planned,
             },
             span,
@@ -1751,7 +1752,7 @@ impl<'a> PatternLowerer<'a> {
                 local_index: temp,
                 is_mut: false,
                 type_id,
-                value: hoisted,
+                value: Some(hoisted),
                 storage: LetStorage::Planned,
             },
             span,
@@ -1782,7 +1783,7 @@ impl<'a> PatternLowerer<'a> {
                 local_index,
                 is_mut: false,
                 type_id,
-                value,
+                value: Some(value),
                 storage: LetStorage::Planned,
             },
             span,

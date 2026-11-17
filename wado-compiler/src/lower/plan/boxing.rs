@@ -138,7 +138,7 @@ fn shadow_one_function(func: &mut TirFunction, type_table: &mut TypeTable) -> In
                     local_index: *shadow_idx,
                     is_mut: false,
                     type_id: *original_type_id,
-                    value: param_read,
+                    value: Some(param_read),
                     storage: LetStorage::Aliased,
                 },
                 span,
@@ -223,10 +223,11 @@ fn remap_locals_in_block(block: &mut TirBlock, remap: &IndexMap<u32, u32>) {
 
 fn remap_locals_in_stmt(stmt: &mut TirStmt, remap: &IndexMap<u32, u32>) {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => remap_locals_in_expr(value, remap),
         TirStmtKind::Expr(expr) => remap_locals_in_expr(expr, remap),
-        TirStmtKind::Return { value: Some(v) } => remap_locals_in_expr(v, remap),
-        TirStmtKind::Return { value: None } => {}
+        TirStmtKind::Let { value: Some(v), .. } | TirStmtKind::Return { value: Some(v) } => {
+            remap_locals_in_expr(v, remap);
+        }
+        TirStmtKind::Let { value: None, .. } | TirStmtKind::Return { value: None } => {}
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }

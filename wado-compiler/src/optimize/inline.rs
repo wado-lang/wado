@@ -389,14 +389,12 @@ impl<'a> CostWalk<'a> {
             StmtKind::Expr(expr) => self.operand(*expr, seen),
             // A `let` is a `local.set` the backend folds into its producer, and
             // one whose value is a bare operand disappears in copy propagation.
-            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-                self.operand(*value, seen)
-            }
+            StmtKind::LetDestructure { value, .. } => self.operand(*value, seen),
             // A `break L: <expr>` carries a value just like a `return`; charge it
             // so labeled-block-valued callees are not systematically undercounted.
-            StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-                value.map_or(0, |v| self.operand(v, seen))
-            }
+            StmtKind::Let { value, .. }
+            | StmtKind::Return { value }
+            | StmtKind::Break { value, .. } => value.map_or(0, |v| self.operand(v, seen)),
             StmtKind::If {
                 condition,
                 then_block,
@@ -886,7 +884,9 @@ fn has_safepoint(
                         return self.children(NodeRef::Expr(e));
                     }
                     StmtKind::Let {
-                        local_index, value, ..
+                        local_index,
+                        value: Some(value),
+                        ..
                     } if !self.written.contains(&local_index)
                         && is_constant_arg(self.body, value, &IndexSet::default()) =>
                     {
@@ -989,7 +989,7 @@ struct BodyScan {
     /// not show.
     written: IndexSet<u32>,
     /// Every `let`, as the local and the value bound to it.
-    lets: Vec<(u32, Operand)>,
+    lets: Vec<(u32, Option<Operand>)>,
     /// Every call, with its by-value arguments keyed by position: an
     /// [`ArgSite`] before the callee's own writes rule any out.
     calls: Vec<ArgSite>,
@@ -1096,7 +1096,7 @@ fn scan_body(
                 local_index, value, ..
             } => {
                 scan.lets.push((*local_index, *value));
-                copies.push((*local_index, *value));
+                copies.extend(value.map(|value| (*local_index, value)));
             }
             StmtKind::Loop { .. } => scan.loopy = true,
             _ => {}
@@ -1212,7 +1212,8 @@ fn looped_exprs(body: &Body) -> IndexSet<ExprId> {
 fn constant_locals(body: &Body, scan: &BodyScan) -> IndexSet<u32> {
     let mut bound: IndexMap<u32, bool> = IndexMap::default();
     for &(local_index, value) in &scan.lets {
-        let is_const = is_constant_arg(body, value, &IndexSet::default());
+        let is_const =
+            value.is_some_and(|value| is_constant_arg(body, value, &IndexSet::default()));
         match bound.get_mut(&local_index) {
             // A second binding of the same slot: keep it only if both are
             // constant, since either may reach the call.
@@ -1534,7 +1535,7 @@ fn single_bindings(scan: &BodyScan) -> IndexMap<u32, Operand> {
         bound
             .entry(local_index)
             .and_modify(|v| *v = None)
-            .or_insert(Some(value));
+            .or_insert(value);
     }
     bound
         .into_iter()
@@ -3331,7 +3332,9 @@ fn inline_calls_in_block(
             site = Site::Cold(ColdBy::Run(body.stmts[stmt_id].span));
         }
         let shape = match &body.stmts[stmt_id].kind {
-            StmtKind::Let { value, .. }
+            StmtKind::Let {
+                value: Some(value), ..
+            }
             | StmtKind::LetDestructure { value, .. }
             | StmtKind::Expr(value)
             | StmtKind::Return { value: Some(value) }
@@ -3583,7 +3586,7 @@ fn bind_mut_ref_temporary(
             local_index: index,
             is_mut: true,
             type_id,
-            value: Operand::Expr(temporary),
+            value: Some(Operand::Expr(temporary)),
             skip_value_copy: false,
         },
         span,
@@ -3648,7 +3651,7 @@ fn build_inlined_labeled_block(
                 local_index: new_local_index,
                 is_mut: binding.is_mut,
                 type_id: binding.local_type,
-                value: binding.value,
+                value: Some(binding.value),
                 skip_value_copy: false,
             },
             span: call_span,
@@ -3981,7 +3984,7 @@ pub(super) fn splice_stmt(
                 local_index: ctx.local(li),
                 is_mut,
                 type_id,
-                value: splice_operand(caller, callee, v, ctx),
+                value: v.map(|v| splice_operand(caller, callee, v, ctx)),
                 skip_value_copy: scv,
             }
         }

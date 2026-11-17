@@ -808,14 +808,18 @@ impl RunScan<'_> {
                 else_block,
             } => self.branches(*condition, std::iter::once(*then_block), *else_block),
             StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => self.block(*b),
-            StmtKind::Let { value: op, .. }
+            StmtKind::Let {
+                value: Some(op), ..
+            }
             | StmtKind::LetDestructure { value: op, .. }
             | StmtKind::Expr(op)
             | StmtKind::Return { value: Some(op) }
             | StmtKind::Break {
                 value: Some(op), ..
             } => self.operand(*op),
-            StmtKind::Return { value: None } | StmtKind::Break { value: None, .. } => false,
+            StmtKind::Let { value: None, .. }
+            | StmtKind::Return { value: None }
+            | StmtKind::Break { value: None, .. } => false,
             StmtKind::Continue => false,
         }
     }
@@ -1179,7 +1183,7 @@ fn is_pure_block(body: &Body, block: BlockId) -> bool {
         .iter()
         .all(|s| match &body.stmts[*s].kind {
             StmtKind::Expr(e) => is_pure_operand(body, *e),
-            StmtKind::Let { value, .. } => is_pure_operand(body, *value),
+            StmtKind::Let { value, .. } => value.is_none_or(|value| is_pure_operand(body, value)),
             _ => false,
         })
 }
@@ -1442,7 +1446,9 @@ impl MutRefAliases {
         match node {
             NodeRef::Stmt(s) => {
                 if let StmtKind::Let {
-                    local_index, value, ..
+                    local_index,
+                    value: Some(value),
+                    ..
                 } = &body.stmts[s].kind
                 {
                     self.classify_def(body, *local_index, *value);

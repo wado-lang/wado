@@ -964,25 +964,16 @@ impl<'a> Builder<'a> {
         self.stmt_entry_version.insert(stmt, self.heap_state.next);
         match self.body.stmts[stmt].kind.clone() {
             StmtKind::Let {
-                local_index,
-                type_id,
-                value,
-                ..
+                local_index, value, ..
             } => {
-                // `let x: T;` binds a unit placeholder, not a value of `T`: a
-                // read before the first assignment (only a dead one can) would
-                // stamp `T` on the placeholder's id.
-                let declared_without_value =
-                    type_id != TypeTable::UNIT && self.operand_type(value) == TypeTable::UNIT;
-                let v = self
-                    .walk_operand(value)
-                    .filter(|_| !declared_without_value)
+                let v = value
+                    .and_then(|value| self.walk_operand(value))
                     .unwrap_or_else(|| self.pool.fresh_opaque_local(local_index));
                 self.set_local_value(local_index, v);
                 // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
                 // each pure field so a later `x.f` read forwards the literal.
                 // A promoted constant binding has no struct fields / ref target.
-                if let Some(ve) = value.as_expr() {
+                if let Some(ve) = value.and_then(Operand::as_expr) {
                     self.seed_struct_literal_fields(local_index, v, ve);
                     self.update_ref_target(local_index, ve);
                 }
@@ -2377,7 +2368,7 @@ fn collect_writes_in_stmt(
             local_index, value, ..
         } => {
             out.insert(*local_index);
-            if let Some(ve) = value.as_expr() {
+            if let Some(ve) = value.and_then(Operand::as_expr) {
                 collect_writes_in_expr(body, ve, out, cache);
             }
         }
@@ -2740,52 +2731,6 @@ mod tests {
             !eff.has_external_writes,
             "a call that mutates no caller local writes no escaped state"
         );
-    }
-
-    /// `let x: i32;` lowers to a unit placeholder, which a read of `x` before
-    /// its first assignment must leave unit-typed: the declaration's lowering
-    /// reads the placeholder's type to tell that it stores nothing.
-    #[test]
-    fn a_read_before_the_first_assignment_leaves_the_placeholder_unit() {
-        let span = Span::new(0, 0, 0, 0);
-        let mut body = Body::empty();
-        *body.locals = vec![NirLocal {
-            name: "x".to_string(),
-            type_id: TypeTable::I32,
-            is_mut: true,
-        }];
-        let placeholder = body.values.alloc_unshared(ValueKind::Unit, TypeTable::UNIT);
-        let declare = body.stmts.push(StmtNode {
-            kind: StmtKind::Let {
-                name: "x".to_string(),
-                local_index: 0,
-                is_mut: true,
-                type_id: TypeTable::I32,
-                value: Operand::Value(placeholder),
-                skip_value_copy: false,
-            },
-            span,
-        });
-        let read = body.exprs.push(ExprNode {
-            kind: ExprKind::Local {
-                index: 0,
-                name: "x".to_string(),
-            },
-            type_id: TypeTable::I32,
-            span,
-        });
-        let read = body.stmts.push(StmtNode {
-            kind: StmtKind::Expr(Operand::Expr(read)),
-            span,
-        });
-        body.push_root(BlockNode {
-            stmts: vec![declare, read],
-            span,
-        });
-
-        let facts = TestFacts::default();
-        let pool = walked_pool(&body, &[], &AliasSets::default(), facts.facts());
-        assert_eq!(pool.type_of(placeholder), Some(TypeTable::UNIT));
     }
 
     /// The pool a walk of the whole of `body` leaves, `params` seeded as its

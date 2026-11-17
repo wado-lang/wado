@@ -57,16 +57,15 @@ pub(super) fn promote_lone_assignments(
             local_index: local,
             is_mut: declared.is_mut,
             type_id: declared.type_id,
-            value,
+            value: Some(value),
             skip_value_copy: false,
         };
-        if let Some(&declaration) = declarations.get(&local) {
-            let StmtKind::Let { value: unit, .. } = body.stmts[declaration].kind else {
-                unreachable!("a declaration is a `let`");
-            };
-            body.stmts[declaration].kind = StmtKind::Expr(unit);
-        }
     }
+    let declared: Vec<StmtId> = promoted
+        .iter()
+        .filter_map(|(_, local, _)| declarations.get(local).copied())
+        .collect();
+    body.detach_stmts(&declared);
     !promoted.is_empty()
 }
 
@@ -134,13 +133,9 @@ fn lone_assignees(body: &Body, params: &[NirParam]) -> Assignees {
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(s) => {
             if let StmtKind::Let {
-                local_index,
-                value,
-                type_id,
-                ..
+                local_index, value, ..
             } = &body.stmts[s].kind
-                && (!body.declares_without_value(*type_id, *value)
-                    || declarations.insert(*local_index, s).is_some())
+                && (value.is_some() || declarations.insert(*local_index, s).is_some())
             {
                 bound.insert(*local_index);
             }

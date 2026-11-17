@@ -481,7 +481,7 @@ impl Taint<'_> {
                 StmtKind::Let {
                     local_index, value, ..
                 } => {
-                    if self.operand(*value) {
+                    if value.is_some_and(|v| self.operand(v)) {
                         found_locals.push(*local_index);
                     }
                 }

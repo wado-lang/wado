@@ -200,7 +200,9 @@ pub trait TirMutVisitor {
                 storage: _,
             } => {
                 self.visit_type_id(type_id);
-                self.visit_expr(value);
+                if let Some(value) = value {
+                    self.visit_expr(value);
+                }
             }
             TirStmtKind::Expr(expr) => {
                 self.visit_expr(expr);
@@ -626,7 +628,9 @@ pub trait TirRefVisitor {
     fn walk_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
             TirStmtKind::Let { value, .. } => {
-                self.visit_expr(value);
+                if let Some(value) = value {
+                    self.visit_expr(value);
+                }
             }
             TirStmtKind::Expr(expr) => {
                 self.visit_expr(expr);
@@ -893,7 +897,7 @@ pub fn opt_walk_block(visitor: &mut impl TirOptVisitor, block: &mut TirBlock) ->
 /// Walk a statement's children.
 pub fn opt_walk_stmt(visitor: &mut impl TirOptVisitor, stmt: &mut TirStmt) -> bool {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => visitor.visit_expr(value),
+        TirStmtKind::Let { value, .. } => value.as_mut().is_some_and(|v| visitor.visit_expr(v)),
         TirStmtKind::LetDestructure { pattern, value, .. } => {
             let mut changed = visitor.visit_pattern(pattern);
             changed |= visitor.visit_expr(value);
@@ -1074,9 +1078,10 @@ pub fn stmt_has_break_to(label: &str, stmt: &TirStmt) -> bool {
         TirStmtKind::Break { value, .. } => {
             value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
         }
-        TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
-            expr_has_break_to(label, value)
+        TirStmtKind::Let { value, .. } => {
+            value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
         }
+        TirStmtKind::LetDestructure { value, .. } => expr_has_break_to(label, value),
         TirStmtKind::Expr(expr) => expr_has_break_to(label, expr),
         TirStmtKind::Return { value } => {
             value.as_ref().is_some_and(|v| expr_has_break_to(label, v))

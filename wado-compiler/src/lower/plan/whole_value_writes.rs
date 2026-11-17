@@ -339,7 +339,7 @@ impl TirRefVisitor for WriteWalker<'_> {
         // reports replacing nothing and the caller neither refuses nor writes
         // back.
         if let TirStmtKind::Let {
-            value,
+            value: Some(value),
             local_index,
             type_id,
             ..

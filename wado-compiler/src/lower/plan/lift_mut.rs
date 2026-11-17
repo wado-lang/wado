@@ -72,14 +72,14 @@ impl MutBindingLifter {
                 local_index: original,
                 is_mut: true,
                 type_id,
-                value: TirExpr::new(
+                value: Some(TirExpr::new(
                     TirExprKind::Local {
                         index: fresh,
                         name: fresh_local_name(fresh),
                     },
                     type_id,
                     span,
-                ),
+                )),
                 storage: LetStorage::Planned,
             },
             span,

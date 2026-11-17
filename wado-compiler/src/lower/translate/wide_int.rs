@@ -95,7 +95,7 @@ pub(super) fn build_if_chain(
                         local_index: *local_index,
                         is_mut: false,
                         type_id: *type_id,
-                        value: scrutinee.clone(),
+                        value: Some(scrutinee.clone()),
                         storage: LetStorage::Aliased,
                     },
                     span,

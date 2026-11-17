@@ -896,7 +896,7 @@ impl<'a> Engine<'a> {
                 local_index,
                 is_mut: false,
                 type_id,
-                value,
+                value: Some(value),
                 skip_value_copy: true,
             },
             span,
@@ -1666,7 +1666,7 @@ mod tests {
                 local_index: 0,
                 is_mut,
                 type_id: TypeTable::UNIT,
-                value: value.into(),
+                value: Some(value.into()),
                 skip_value_copy: false,
             },
         )
@@ -1886,7 +1886,7 @@ mod tests {
         let StmtKind::Let { value, .. } = &body.stmts[s0].kind else {
             panic!("expected let");
         };
-        let Operand::Value(v) = value else {
+        let Some(Operand::Value(v)) = value else {
             panic!("expected folded constant operand, got {value:?}");
         };
         assert_matches!(body.values.kind(*v), ValueKind::Int(12, _));
@@ -1901,7 +1901,7 @@ mod tests {
         let StmtKind::Let { value, .. } = &body.stmts[s0].kind else {
             panic!("expected let");
         };
-        let original = value.as_expr().unwrap();
+        let original = value.and_then(Operand::as_expr).unwrap();
         let (orig_left, orig_right) = match &body.exprs[original].kind {
             ExprKind::Binary { left, right, .. } => (*left, *right),
             other => panic!("expected Binary, got {other:?}"),
@@ -2000,7 +2000,7 @@ mod tests {
                 return false;
             };
             let StmtKind::Let {
-                value: Operand::Expr(value),
+                value: Some(Operand::Expr(value)),
                 ..
             } = e.body.stmts[stmts[at]].kind
             else {
@@ -2028,7 +2028,7 @@ mod tests {
         let mut body = sample_body();
         let root = body.root();
         let StmtKind::Let {
-            value: Operand::Expr(add),
+            value: Some(Operand::Expr(add)),
             ..
         } = body.stmts[body.blocks[root].stmts[0]].kind
         else {

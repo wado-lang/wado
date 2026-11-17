@@ -2135,7 +2135,10 @@ pub enum TirStmtKind {
         local_index: u32,
         is_mut: bool,
         type_id: TypeId,
-        value: TirExpr,
+        /// `None` declares the local without a value, as `let x: T;` does:
+        /// the statement writes nothing, so the slot holds `T`'s Wasm default
+        /// on first entry and what it last held on a later one.
+        value: Option<TirExpr>,
         /// Whose storage the binding holds.
         storage: LetStorage,
     },

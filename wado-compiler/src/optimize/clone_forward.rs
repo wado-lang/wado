@@ -318,7 +318,9 @@ fn collect_in_block(
         // place-stability interval check below, so a mutable-declared-but-never-
         // mutated or a SROA-planted (`skip_value_copy`) binding is fair game.
         let StmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value: Some(value),
+            ..
         } = &body.stmts[stmt].kind
         else {
             continue;

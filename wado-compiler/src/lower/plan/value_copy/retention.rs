@@ -1248,7 +1248,9 @@ impl TirRefVisitor for AnchorScan<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
             TirStmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value: Some(value),
+                ..
             } => self.bind(*local_index, value),
             TirStmtKind::LetDestructure { pattern, value, .. } => {
                 self.bind_pattern(pattern, value);
@@ -1971,7 +1973,9 @@ impl TirRefVisitor for StoresWalker<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
             TirStmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value: Some(value),
+                ..
             } => {
                 let c = self.carried(value);
                 self.rebind(*local_index, &c);

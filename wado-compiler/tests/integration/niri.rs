@@ -3473,7 +3473,7 @@ fn let_stmt_b(name: &str, local_index: u32, type_id: TypeId, value: Build) -> St
                 local_index,
                 is_mut: false,
                 type_id,
-                value,
+                value: Some(value),
                 skip_value_copy: false,
             },
         )
@@ -3491,7 +3491,7 @@ fn let_mut_stmt_b(name: &str, local_index: u32, type_id: TypeId, value: Build) -
                 local_index,
                 is_mut: true,
                 type_id,
-                value,
+                value: Some(value),
                 skip_value_copy: false,
             },
         )

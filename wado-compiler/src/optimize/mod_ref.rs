@@ -489,8 +489,9 @@ impl ModRef {
                 local_index, value, ..
             } => {
                 self.local_writes.insert(*local_index);
-                let value = *value;
-                self.accumulate_operand(body, value, scope);
+                if let Some(value) = *value {
+                    self.accumulate_operand(body, value, scope);
+                }
             }
             StmtKind::Expr(e) => {
                 let e = *e;
@@ -1106,7 +1107,7 @@ mod tests {
                 local_index: index,
                 is_mut: false,
                 type_id: ty(),
-                value: value.into(),
+                value: Some(value.into()),
                 skip_value_copy: false,
             },
         )

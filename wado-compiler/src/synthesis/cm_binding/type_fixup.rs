@@ -97,7 +97,9 @@ fn fixup_types_in_stmts(
                 ..
             } => {
                 let idx = *local_index;
-                fixup_adapter_let(value, idx, old_type, new_type, type_id, locals);
+                if let Some(value) = value {
+                    fixup_adapter_let(value, idx, old_type, new_type, type_id, locals);
+                }
             }
             TirStmtKind::Expr(expr) => {
                 fixup_adapter_expr(expr, old_type, new_type);

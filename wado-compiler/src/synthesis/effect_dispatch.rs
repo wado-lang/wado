@@ -674,7 +674,7 @@ fn build_dispatch_wrapper_function(
             local_index: saved_local,
             is_mut: false,
             type_id: nullable_ref_type_id,
-            value: global_get_expr,
+            value: Some(global_get_expr),
             storage: LetStorage::Aliased,
         },
         span,
@@ -749,7 +749,7 @@ fn build_dispatch_wrapper_function(
                 local_index: rl,
                 is_mut: false,
                 type_id: return_type,
-                value: indirect_call,
+                value: Some(indirect_call),
                 storage: LetStorage::Planned,
             },
             span,
@@ -1226,12 +1226,12 @@ fn lower_dispatch_in_block(block: &mut TirBlock, env: &DispatchEnv, ctx: &mut Lo
 
 fn lower_dispatch_in_stmt(stmt: &mut TirStmt, env: &DispatchEnv, ctx: &mut LowerCtx) {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. }
-        | TirStmtKind::Expr(value)
-        | TirStmtKind::TaskReturn { value } => {
+        TirStmtKind::Expr(value) | TirStmtKind::TaskReturn { value } => {
             lower_dispatch_in_expr(value, env, ctx);
         }
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+        TirStmtKind::Let { value, .. }
+        | TirStmtKind::Return { value }
+        | TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 lower_dispatch_in_expr(v, env, ctx);
             }
@@ -1582,7 +1582,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                         local_index: local,
                         is_mut: false,
                         type_id: handler_type,
-                        value: binding.handler.clone(),
+                        value: Some(binding.handler.clone()),
                         storage: LetStorage::Aliased,
                     },
                     span,
@@ -1599,7 +1599,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                     local_index: local,
                     is_mut: false,
                     type_id: handler_type,
-                    value: binding.handler.clone(),
+                    value: Some(binding.handler.clone()),
                     storage: LetStorage::Aliased,
                 },
                 span,
@@ -1624,7 +1624,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 local_index: save_local,
                 is_mut: false,
                 type_id: plan.nullable_ref_type_id,
-                value: global_get,
+                value: Some(global_get),
                 storage: LetStorage::Aliased,
             },
             span,
@@ -1696,7 +1696,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 local_index: d_local,
                 is_mut: false,
                 type_id: plan.struct_type_id,
-                value: struct_lit,
+                value: Some(struct_lit),
                 storage: LetStorage::Taken,
             },
             span,
@@ -1967,12 +1967,13 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
 
     fn visit_stmt(&mut self, stmt: &mut TirStmt) {
         match &mut stmt.kind {
-            TirStmtKind::Let { value, .. }
-            | TirStmtKind::Expr(value)
+            TirStmtKind::Expr(value)
             | TirStmtKind::LetDestructure { value, .. }
             // A `task return` delivers the result but stays in the body.
             | TirStmtKind::TaskReturn { value } => self.visit_expr(value),
-            TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+            TirStmtKind::Let { value, .. }
+            | TirStmtKind::Return { value }
+            | TirStmtKind::Break { value, .. } => {
                 if let Some(v) = value {
                     self.visit_expr(v);
                 }
@@ -2695,12 +2696,12 @@ fn rewrite_calls_in_block(block: &mut TirBlock, ctx: &RewriteCtx<'_>) {
 
 fn rewrite_calls_in_stmt(stmt: &mut TirStmt, ctx: &RewriteCtx<'_>) {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. }
-        | TirStmtKind::Expr(value)
-        | TirStmtKind::TaskReturn { value } => {
+        TirStmtKind::Expr(value) | TirStmtKind::TaskReturn { value } => {
             rewrite_calls_in_expr(value, ctx);
         }
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
+        TirStmtKind::Let { value, .. }
+        | TirStmtKind::Return { value }
+        | TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 rewrite_calls_in_expr(v, ctx);
             }

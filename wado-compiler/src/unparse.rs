@@ -4590,8 +4590,10 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str(name);
                 self.output.push_str(": ");
                 self.output.push_str(&self.type_spelling(*type_id));
-                self.output.push_str(" = ");
-                self.unparse_expr(value);
+                if let Some(value) = value {
+                    self.output.push_str(" = ");
+                    self.unparse_expr(value);
+                }
                 self.output.push_str(";\n");
             }
             TirStmtKind::Expr(expr) => {

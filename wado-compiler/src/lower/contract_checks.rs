@@ -266,13 +266,17 @@ impl ReportFailures<'_> {
             });
             reports
                 && find_site(then_block).is_some()
-                && matches!(block.stmts[at - 1].kind, TirStmtKind::Let { .. })
+                && matches!(
+                    block.stmts[at - 1].kind,
+                    TirStmtKind::Let { value: Some(_), .. }
+                )
         })
     }
 
     fn share(&mut self, block: &mut TirBlock, at: usize) {
         let TirStmtKind::Let {
-            value: condition, ..
+            value: Some(condition),
+            ..
         } = &mut block.stmts[at - 1].kind
         else {
             unreachable!("matched by `failing_check`");
@@ -950,7 +954,7 @@ impl Expander<'_> {
             type_id,
             span,
         );
-        let binding = |value: TirExpr| {
+        let binding = |value: Option<TirExpr>| {
             TirStmt::new(
                 TirStmtKind::Let {
                     name,
@@ -966,15 +970,11 @@ impl Expander<'_> {
         let value = take(slot);
         *slot = match sink {
             Sink::Ahead(stmts) => {
-                stmts.push(binding(value));
+                stmts.push(binding(Some(value)));
                 read.clone()
             }
             Sink::InPlace => {
-                self.declared.push(binding(TirExpr::new(
-                    TirExprKind::Unit,
-                    TypeTable::UNIT,
-                    span,
-                )));
+                self.declared.push(binding(None));
                 TirExpr::new(
                     TirExprKind::Block(TirBlock::new(
                         vec![

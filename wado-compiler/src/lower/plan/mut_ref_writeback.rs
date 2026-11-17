@@ -171,7 +171,7 @@ impl WriteBack<'_> {
                 local_index: index,
                 is_mut,
                 type_id,
-                value,
+                value: Some(value),
                 storage,
             },
             span,
@@ -716,7 +716,9 @@ impl TirOptVisitor for WriteBack<'_> {
             // Only a binding something replaces through loses a write — one used
             // to mutate a payload lands through the box either way.
             TirStmtKind::Let {
-                value, local_index, ..
+                value: Some(value),
+                local_index,
+                ..
             } => {
                 let local_index = *local_index;
                 if self.detached_in_value_position(value).is_some() {

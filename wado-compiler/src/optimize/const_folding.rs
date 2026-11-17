@@ -362,7 +362,7 @@ fn const_seq_len(body: &Body, e: ExprId) -> Option<i32> {
             let StmtKind::Let { value, .. } = &body.stmts[*nearest].kind else {
                 unreachable!("`nearest` matched a `let` of `index` above")
             };
-            const_seq_len_operand(body, *value)
+            const_seq_len_operand(body, (*value)?)
         }
         ExprKind::StructLiteral { fields, .. } => fields.iter().find_map(|f| {
             if f.name == SeqField::Len.field_name()
@@ -560,7 +560,10 @@ impl GlobalStoreCollector<'_> {
     /// binding read-only — which is how the local comes to alias after all.
     fn visit_stmt(&mut self, body: &Body, s: StmtId) {
         let value = match &body.stmts[s].kind {
-            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => *value,
+            StmtKind::Let {
+                value: Some(value), ..
+            }
+            | StmtKind::LetDestructure { value, .. } => *value,
             _ => return,
         };
         let Some(e) = value.as_expr() else {
@@ -959,14 +962,13 @@ impl ConstFoldVisitor<'_> {
     /// After a statement is walked, capture any introduced binding into
     /// the interpreter's env so subsequent uses can fold against it.
     fn update_env_from_stmt(&mut self, body: &Body, s: StmtId) {
-        let (local_index, is_mut, value, type_id) = match &body.stmts[s].kind {
+        let (local_index, is_mut, value) = match &body.stmts[s].kind {
             StmtKind::Let {
                 local_index,
                 is_mut,
                 value,
-                type_id,
                 ..
-            } => (*local_index, *is_mut, *value, *type_id),
+            } => (*local_index, *is_mut, *value),
             // A destructure can rebind an index a prior `let` recorded — index
             // reuse is real (`labeled_block_fusion` producing a `LetDestructure`,
             // see `const_object_globalization`'s `locals_declared_once` note). The
@@ -987,10 +989,9 @@ impl ConstFoldVisitor<'_> {
             }
             _ => return,
         };
-        let lat = if body.declares_without_value(type_id, value) {
-            Lattice::Unevaluated
-        } else {
-            operand_lattice(&self.interpreter, body, value)
+        let lat = match value {
+            Some(value) => operand_lattice(&self.interpreter, body, value),
+            None => Lattice::Unevaluated,
         };
         // A mutable binding carries its value forward only while that value is a
         // scalar. An aggregate is mutated in place — through an element `&mut`,
@@ -1001,8 +1002,8 @@ impl ConstFoldVisitor<'_> {
         // A same-index reuse would otherwise keep the earlier `let`'s constant
         // and its field entries.
         self.interpreter.invalidate_local(local_index);
-        self.interpreter
-            .record_ref_root(local_index, Self::ref_root_of(body, value));
+        let ref_root = value.map_or(RefRoot::NotARef, |value| Self::ref_root_of(body, value));
+        self.interpreter.record_ref_root(local_index, ref_root);
         self.interpreter.bind_local(local_index, lat);
     }
 

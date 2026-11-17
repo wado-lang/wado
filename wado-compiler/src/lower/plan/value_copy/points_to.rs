@@ -1644,7 +1644,7 @@ impl Builder<'_> {
             TirStmtKind::Let {
                 local_index, value, ..
             } => {
-                let v = self.eval(value);
+                let v = value.as_ref().and_then(|value| self.eval(value));
                 let node = self.local(self.frame, *local_index);
                 if let Some(v) = v {
                     self.g.copy(v, node);
