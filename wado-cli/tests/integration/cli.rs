@@ -660,9 +660,10 @@ fn test_help_summarizes_check_as_verifying_a_source_file() {
         .arg("--help")
         .assert()
         .success()
-        .stderr(predicate::str::contains(
-            "check [options] [file.wado | dir]   Verify a source file and its Kiln generators",
-        ));
+        .stderr(predicate::str::is_match(
+            r"check \[options\] \[file\.wado \| dir\] +Verify a source file and its Kiln generators",
+        )
+        .unwrap());
 }
 
 /// `--help` must print usage rather than start the language server on stdio.
