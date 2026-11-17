@@ -86,6 +86,10 @@ and every script come from the default branch, so the pull request's code runs
 only inside Eddy's confinement. The record and the patches stay in the run's
 artifact for 90 days, as `eddy-<pr>-<head>`.
 
+The workflow holds no API key. It exchanges the job's GitHub OIDC token for a
+short-lived one under a Workload Identity Federation rule, which accepts only
+`eddy.yml` on main.
+
 `src/main.wado` states the options.
 
 - [Design notes](./docs/design.md): the decisions taken, and the leanings not

@@ -95,6 +95,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      id-token: write
     concurrency:
       group: eddy-${{ needs.gate.outputs.pr }}
     env:
@@ -135,13 +136,29 @@ jobs:
           git worktree add --quiet --detach "$RUNNER_TEMP/head" "$SHA"
           (cd "$RUNNER_TEMP/head" && cargo fetch --locked)
           git worktree remove --force "$RUNNER_TEMP/head"
+      # Workload Identity Federation: the rule accepts only this workflow on
+      # main, so no API key is stored. The token is minted here, in the one
+      # step that uses it, and Eddy does not see the means to mint another.
       - id: eddy
-        env:
-          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
         run: |
+          set -euo pipefail
+          jwt="$(curl -sSf -G -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            --data-urlencode audience=https://api.anthropic.com "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)"
+          echo "::add-mask::$jwt"
+          token="$(jq -n --arg jwt "$jwt" '{
+              grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+              assertion: $jwt,
+              federation_rule_id: "fdrl_01N2UzGtpPyqSMQz3htMdLce",
+              organization_id: "b5accdd0-f052-4fe6-88e6-65bc34d1cba9",
+              service_account_id: "svac_01WVnWQoBfyRFsf4wyM7EHq7",
+              workspace_id: "wrkspc_01Ug39YtMABrbjfon1tEpoXy"
+            }' | curl -sSf https://api.anthropic.com/v1/oauth/token -H "content-type: application/json" --data @- \
+            | jq -r .access_token)"
+          echo "::add-mask::$token"
           mkdir -p scratchpad
           status=0
-          mise run eddy-review --head "$SHA" > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
+          env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL CLAUDE_API_KEY="$token" \
+            mise run eddy-review --head "$SHA" > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
           cat scratchpad/eddy.log
           exit "$status"
       # The record is what Eddy later learns from; it outlives the run here.
