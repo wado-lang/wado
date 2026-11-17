@@ -322,6 +322,9 @@ struct LaunchParameters {
     pipelines: List<i32>,
     /// The last pass a call ran the launch in.
     pass: i32,
+    /// The submits made when a call last set its parameters: a later call
+    /// sets them again only once the dispatches that read them are submitted.
+    staged_at: i32,
 }
 
 /// A buffer launches' parameters are carved from, how many of its words are
@@ -344,10 +347,6 @@ struct Running {
     launch: i64,
     made: List<i32>,
     dispatched: List<i32>,
-    /// Whether its dispatches bind the launch's own parameters. A second call
-    /// in one pass binds the pass's, since a write to them reaches the device
-    /// before the first call's dispatches run.
-    own: bool,
 }
 
 /// The slots a recorded launch named, and those its replay names in their
@@ -522,6 +521,8 @@ pub affine struct WebGpuBackend {
     recording: List<Recording>,
     /// The dispatches recorded and not yet submitted.
     unsubmitted: i32,
+    /// How many times `flush` has submitted what was recorded.
+    submits: i32,
     /// Each bind group made, and its place by its `group_key`.
     groups: Places<CachedGroup>,
     group_at: HashMap<List<i32>, i32>,
@@ -718,6 +719,7 @@ impl WebGpuBackend {
             filled: HashMap::new(),
             recording: [],
             unsubmitted: 0,
+            submits: 0,
             groups: Places::new(),
             group_at: HashMap::new(),
             taping: null,
@@ -991,23 +993,30 @@ impl WebGpuBackend {
 
     /// Starts the launch whose root is the node `root` of the program
     /// `serial`, which makes its buffers in those its calls own and binds the
-    /// parameters they bound.
-    internal fn launching(&mut self, serial: i32, root: i32) {
+    /// parameters they bound, so a call finds its bind groups made. A call
+    /// whose last one's dispatches are still recorded submits them first:
+    /// queued after the submit, its write to the parameters reaches the device
+    /// once they ran.
+    internal fn launching(
+        &mut self,
+        serial: i32,
+        root: i32,
+    ) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer, GpuComputePassEncoder) {
         let launch = launch_key(serial, root);
         if !self.launch_parameters.contains_key(launch) {
-            self.launch_parameters[launch] = LaunchParameters { spans: [], pipelines: [], pass: -1 };
+            self.launch_parameters[launch] = LaunchParameters { spans: [], pipelines: [], pass: -1, staged_at: -1 };
         }
-        let parameters = &mut self.launch_parameters[launch];
-        let own = parameters.pass < self.passes;
-        parameters.pass = self.passes;
+        if self.launch_parameters[launch].staged_at == self.submits {
+            self.flush();
+        }
+        self.launch_parameters[launch].pass = self.passes;
         if let Some(r) = &mut self.running {
             r.launch = launch;
             r.made.clear();
             r.dispatched.clear();
-            r.own = own;
             return;
         }
-        self.running = Option::Some(Running { launch, made: [], dispatched: [], own });
+        self.running = Option::Some(Running { launch, made: [], dispatched: [] });
     }
 
     /// Ends a call of the program `serial`, which returned the values at the
@@ -1048,17 +1057,14 @@ impl WebGpuBackend {
 
     /// The span of `params` a dispatch of the shader at `pipeline` binds: the
     /// running launch's own, carved where its calls have not dispatched the
-    /// shader that often yet, and the pass's where no launch runs or where it
-    /// binds the pass's.
+    /// shader that often yet, and the pass's where no launch runs.
     fn parameters_for(&mut self, pipeline: i32, params: &List<u32>) -> Span with (GpuDevice, GpuQueue, GpuBuffer) {
         let Some(r) = &mut self.running else {
             return self.parameter_span(params);
         };
-        if !r.own {
-            return self.parameter_span(params);
-        }
         let mut nth = occurrence(&mut r.dispatched, pipeline);
         let own = &mut self.launch_parameters[r.launch];
+        own.staged_at = self.submits;
         for let i of 0..<own.spans.len() {
             if own.pipelines[i] != pipeline {
                 continue;
@@ -1509,6 +1515,7 @@ impl WebGpuBackend {
             self.queue.submit([&commands]);
         }
         self.unsubmitted = 0;
+        self.submits += 1;
     }
 
     /// `t` with its f32 elements in row-major order from its offset: `t`

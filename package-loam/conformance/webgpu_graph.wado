@@ -627,6 +627,24 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     };
     assert gpu.download(&gpu.binary(Binary::Add, &ranked, &gpu.upload(&far))).data == [16777217] as List<i64>;
 
+    // A decode's steps run in one pass, each over the buffers and parameters
+    // the first step bound, so a step makes a bind group only for what it
+    // reads from the step before and leaves for the next.
+    let decoding = |gpu: &mut WebGpuBackend, steps: i32| {
+        let [groups, dispatches] = [
+            gpu.bind_groups(),
+            gpu.dispatches(),
+        ];
+        decoded_tokens(gpu, [2, 6, 1], [steps], &samplers()[0]);
+        return [
+            gpu.bind_groups() - groups,
+            gpu.dispatches() - dispatches,
+        ];
+    };
+    let [short_groups, short_dispatches] = decoding(&mut gpu, 3);
+    let [long_groups, long_dispatches] = decoding(&mut gpu, 7);
+    assert 4 * (long_groups - short_groups) < long_dispatches - short_dispatches;
+
     for let [k, sampling] of samplers().into_iter().enumerate() {
         let want_tokens = stepped_tokens(cpu, [2, 6, 1], 8, &sampling);
         let reads_before_decoding = gpu.read_backs();
