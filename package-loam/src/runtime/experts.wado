@@ -88,10 +88,8 @@ pub fn mixture_of_experts<affine G: Graph, E: Float, In, T, X, N, P, Blocks, Z, 
 {
     let extents = g.extents_of(x);
     let hidden = extents[extents.len() - 1];
-    let [tokens, pool] = [
-        g.extents_of(router)[0],
-        g.extents_of(router)[1],
-    ];
+    let routing = g.extents_of(router);
+    let [tokens, pool] = [routing[0], routing[1]];
     assert experts.k <= pool, "a token picks among the experts";
     assert tokens * hidden == element_count(&extents), "the router holds a row for each token";
     let rows: G::Tensor<f32, [Picked, Hidden]> = g.convert(&g.reshape::<E, In, [Picked, Hidden]>(x, [tokens, hidden]));
@@ -265,11 +263,8 @@ fn projection_of<affine G: Graph, E: Float, X, N, P, Blocks, Z>(
     bias: Option<&G::Tensor<E, [X, N]>>,
     zero_points: Option<&G::Tensor<u8, [X, N, Z]>>,
 ) -> Projection<G> with _ {
-    let [pool, rows, bytes] = [
-        g.extents_of(packed)[0],
-        g.extents_of(packed)[1],
-        g.extents_of(packed)[2],
-    ];
+    let weight = g.extents_of(packed);
+    let [pool, rows, bytes] = [weight[0], weight[1], weight[2]];
     let blocks = g.extents_of(scales)[2];
     assert bytes % blocks == 0, "a row's bytes are whole blocks";
     let flat = |extents: List<i32>| [pool, element_count(&extents) / pool] as List<i32>;
@@ -352,11 +347,8 @@ fn swiglu<affine G: Graph>(
     h: &G::Tensor<f32, [Picked, Width]>,
     experts: &Experts,
 ) -> G::Tensor<f32, [Picked, Inner]> with _ {
-    let [rows, width] = [
-        g.extents_of(h)[0],
-        g.extents_of(h)[1],
-    ];
-    let inner = width / 2;
+    let extents = g.extents_of(h);
+    let [rows, inner] = [extents[0], extents[1] / 2];
     let pairs: G::Tensor<f32, [Picked, Inner, Pair]> = g.reshape(h, [rows, inner, 2]);
     let half = |offset: i32| -> G::Tensor<f32, [Picked, Inner]> {
         return g.reshape(
