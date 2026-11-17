@@ -1,0 +1,17 @@
+// Two value blankets of one trait at different arguments supply `S::make()`,
+// and only the expected type separates them. It does so through a namespace
+// as it does on the bare spelling.
+use lib from "./sub/blanket_static_selected_by_expected_type_lib.wado";
+use { S, Conv } from "./sub/blanket_static_selected_by_expected_type_lib.wado";
+
+test "the bare spelling" {
+    let v: i32 = S::make();
+    let s: String = S::make();
+    assert v == 1 && s == "s";
+}
+
+test "through a namespace" {
+    let v: i32 = lib::S::make();
+    let s: String = lib::S::make();
+    assert v == 1 && s == "s";
+}

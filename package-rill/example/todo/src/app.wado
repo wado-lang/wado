@@ -1,8 +1,20 @@
 //! A to-do list. `mount` runs once and builds the page; after that only the
 //! bindings run, each when a signal it read was written.
 
-use { Memo, Signal, Track, memo, scope, signal } from "./signals.wado";
-use { bind_attribute, bind_text, each, element, on, text } from "./view.wado";
+use {
+    Memo,
+    Signal,
+    Track,
+    bind_attribute,
+    bind_text,
+    each,
+    element,
+    memo,
+    on,
+    scope,
+    signal,
+    text,
+} from "wado-lang:rill";
 use { Dom, Element, Event, HtmlInputElement, SurfaceDom } from "wado-lang:web";
 
 struct Todo {
@@ -41,7 +53,8 @@ fn todo_row(todos: Signal<List<Todo>>, todo: Todo) -> Element with (Track, Dom) 
 }
 
 /// Builds the list under `root`, and returns what stops its bindings and takes
-/// the rows out. The other nodes stay, and so do the listeners.
+/// out the rows and the summary's text. The other nodes stay, and so do the
+/// listeners.
 pub fn mount(root: Element) -> fn mut() with Dom with Dom {
     return scope(|| {
         let todos: Signal<List<Todo>> = signal([]);
@@ -132,7 +145,7 @@ test "the list follows what the user does" {
         assert body.last_child().unwrap().text_content() == Option::Some("1 left");
 
         unmount();
-        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul></ul><p>1 left</p>";
+        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul></ul><p></p>";
     };
 }
 

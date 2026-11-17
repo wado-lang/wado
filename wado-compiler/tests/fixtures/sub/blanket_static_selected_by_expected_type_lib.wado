@@ -1,0 +1,6 @@
+pub trait B with () {}
+pub trait Conv<T> with () { fn make() -> T; }
+pub struct S { pub v: i32 }
+impl B for S {}
+impl<X: B> Conv<i32> for X { fn make() -> i32 { return 1; } }
+impl<X: B> Conv<String> for X { fn make() -> String { return "s"; } }

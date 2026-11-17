@@ -697,11 +697,6 @@ pub trait Element with () {
     fn from_f32(v: f32) -> Self;
     fn from_i64(v: i64) -> Self;
     fn from_bool(v: bool) -> Self;
-    /// Whether this is `f32`, the one element a GPU computes in: WGSL has
-    /// neither `i64` nor a stored `bool`.
-    fn is_f32() -> bool {
-        return Self::kind() matches { F32 };
-    }
     /// Whether an f32 holds every value of this exactly, so a GPU can store
     /// it as one: a float, and `bool` as 1.0 and 0.0.
     fn exact_in_f32() -> bool {

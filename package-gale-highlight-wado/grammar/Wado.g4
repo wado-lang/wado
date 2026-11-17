@@ -13,12 +13,18 @@ sourceFile
     : innerAttribute* item* EOF
     ;
 
+// `export(…)` names the world export a function provides, and a re-export
+// names its members, so neither form reaches every item.
 item
     : attribute* itemModifiers itemKind
+    | attribute* 'pub'? 'export' exportTargets 'async'? 'fn' funcSig
+    | attribute* wholeModuleUse
     ;
 
+// Only an export runs asynchronously.
 itemModifiers
-    : 'internal'? 'pub'? ('export' exportTargets?)? 'async'?
+    : 'internal'
+    | 'pub'? ('export' 'async'?)?
     ;
 
 exportTargets
@@ -68,30 +74,71 @@ innerAttribute
     ;
 
 attrArgs
-    : '(' (attrArg (',' attrArg)*)? ')'
+    : '(' (attrArg (',' attrArg)* ','?)? ')'
     ;
 
 attrArg
     : identifier ('=' attrValue)?
-    | attrValue
+    | STRING_LITERAL
+    | number
     ;
 
+// An array holds strings or names, never both.
 attrValue
-    : literal
-    | '-' INTEGER
+    : STRING_LITERAL
+    | '-'? number
     | identifier
+<<<<<<< HEAD
     | '_'
     | '[' (attrValue (',' attrValue)*)? ']'
+||||||| 861f89f6e
+    | '[' (attrValue (',' attrValue)*)? ']'
+=======
+    | '[' ']'
+    | '[' STRING_LITERAL (',' STRING_LITERAL)* ','? ']'
+    | '[' identifier (',' identifier)* ','? ']'
+    ;
+
+number
+    : INTEGER
+    | FLOAT
+    | FLOAT_EXP
+>>>>>>> origin/main
     ;
 
 useDecl
-    : 'use' importGroup 'from' STRING_LITERAL ('with' braceLiteral)? ';'
+    : 'use' '{' importList? '}' useSource
     ;
 
-importGroup
-    : '{' importList? '}'
-    | name
-    | '_'
+// A namespace or wildcard import, which no modifier re-exports.
+wholeModuleUse
+    : 'use' (name | '_') useSource
+    ;
+
+useSource
+    : 'from' STRING_LITERAL ('with' importAttributes)? ';'
+    ;
+
+// A tree of plain values: what the keys mean is the analyzer's and Kiln's.
+importAttributes
+    : '{' (importAttribute (',' importAttribute)* ','?)? '}'
+    ;
+
+importAttribute
+    : importKey ':' importValue
+    ;
+
+importKey
+    : identifier
+    ;
+
+importValue
+    : STRING_LITERAL
+    | '-'? number
+    | 'true'
+    | 'false'
+    | '[' (importValue (',' importValue)* ','?)? ']'
+    | importAttributes
     ;
 
 importList
@@ -104,12 +151,22 @@ importItem
     | STRING_LITERAL 'as' bindingName
     ;
 
-functionDecl
-    : itemModifiers 'fn' funcSig
+funcSig
+    : bindingName genericParams? '(' paramList? ')' sigTail
     ;
 
-funcSig
-    : bindingName genericParams? '(' paramList? ')' returnType? withClause? contractClause* (block | ';')
+methodSig
+    : methodHead sigTail
+    ;
+
+// Only a function in an `impl`, a trait, an interface or a resource takes `self`.
+methodHead
+    : bindingName genericParams? '(' (selfParam (',' paramList?)? | paramList)? ')'
+    ;
+
+// Elsewhere a contract is checked in the body, so a bodyless declaration takes none.
+sigTail
+    : returnType? withClause? (contractClause* block | ';')
     ;
 
 contractClause
@@ -141,18 +198,23 @@ typeName
     : name
     ;
 
+// Defaults trail: a parameter without one follows none with one.
 paramList
-    : param (',' param)* ','?
+    : param (',' param)* (',' defaultedParam)* ','?
+    | defaultedParam (',' defaultedParam)* ','?
     ;
 
 param
-    : selfParam
-    | attribute* 'mut'? ('_' | bindingName) ':' typeRef ('=' expression)?
+    : attribute* 'mut'? ('_' | bindingName) ':' typeRef
+    ;
+
+defaultedParam
+    : param '=' expression
     ;
 
 selfParam
     : '&' 'mut'? 'self'
-    | 'self' (':' typeRef)?
+    | 'self'
     ;
 
 returnType
@@ -221,7 +283,7 @@ traitDecl
     ;
 
 interfaceDecl
-    : 'interface' typeName genericParams? '{' traitMember* '}'
+    : 'interface' typeName '{' operation* '}'
     ;
 
 worldDecl
@@ -234,24 +296,29 @@ worldItem
     ;
 
 resourceDecl
-    : 'resource' typeName genericParams? ('extends' typeRef)? ('{' resourceMember* '}' | ';')
+    : 'resource' typeName genericParams? ('extends' typeRef)? ('{' operation* '}' | ';')
     ;
 
-resourceMember
-    : attribute* functionDecl
-    ;
-
+// A trait method's contract binds every implementation, so it needs no body.
 traitMember
-    : attribute* traitMemberBody
+    : attribute* 'affine'? 'type' name genericParams? (':' traitBounds)? ';'
+    | attribute* 'fn' methodHead returnType? withClause? contractClause* (block | ';')
     ;
 
-traitMemberBody
-    : 'affine'? 'type' name genericParams? (':' traitBounds)? ';'
-    | functionDecl
+// An interface operation or a resource method: modifiers come from the
+// declaration, and a contract is not supported yet.
+operation
+    : attribute* 'async'? 'fn' methodHead returnType? withClause? (block | ';')
     ;
 
 implBlock
-    : 'impl' genericParams? typeRef ('for' typeRef)? ('{' implMember* '}' | ';')
+    : 'impl' genericParams? implTarget ('for' implTarget)? ('{' implMember* '}' | ';')
+    ;
+
+// A type or one reference to it, never a reference to a reference.
+implTarget
+    : '&' 'mut'? typeAtom
+    | typeAtom
     ;
 
 implMember
@@ -261,13 +328,13 @@ implMember
 implMemberBody
     : 'type' name genericParams? '=' typeRef ';'
     | '..' ('trap' | 'forward')
-    | 'export' 'async'? 'fn' funcSig
+    | 'export' 'async'? 'fn' methodSig
     | ('pub' | 'internal')? implPubMember
     ;
 
 implPubMember
     : 'const' name ':' typeRef '=' expression ';'
-    | 'fn' funcSig
+    | 'fn' methodSig
     ;
 
 // The attributes sit here rather than in `genericParam`, whose subtree the
@@ -276,8 +343,9 @@ genericParams
     : '<' attribute* genericParam (',' attribute* genericParam)* '>'
     ;
 
+// `affine` admits an affine type argument, so an effect parameter takes none.
 genericParam
-    : 'affine'? '..'? 'effect'? name (':' traitBounds)? ('=' typeRef)?
+    : ('affine'? '..'? | 'effect') name (':' traitBounds)? ('=' typeRef)?
     ;
 
 traitBounds
@@ -286,7 +354,11 @@ traitBounds
 
 typeRef
     : ('&' | '&&') 'mut'? typeRef
-    | '!'
+    | typeAtom
+    ;
+
+typeAtom
+    : '!'
     | '_'
     | '(' (typeRef (',' typeRef)*)? ')'
     | '[' (typeElement (',' typeElement)*)? ']'
@@ -308,7 +380,7 @@ typeArgs
     ;
 
 typeArg
-    : IDENTIFIER '=' typeRef
+    : (IDENTIFIER | 'Self') '=' typeRef
     | IDENTIFIER ':' traitBounds
     | typeRef
     ;
@@ -392,15 +464,25 @@ localItemKind
     | traitDecl
     | implBlock
     | typeAliasDecl
-    | 'fn' funcSig
     ;
 
 labeledBlock
     : identifier ':' block
     ;
 
+// Only a typed binding may wait for its value.
 letStatement
-    : attribute* 'let' pattern ('=' expression ('else' block)?)?
+    : attribute* 'let' letPattern (':' typeRef)? '=' expression ('else' block)?
+    | attribute* 'let' letPattern ':' typeRef
+    ;
+
+// The annotation types the whole pattern, so no alternative carries its own.
+letPattern
+    : letPatternRange ('|' letPatternRange)*
+    ;
+
+letPatternRange
+    : patternPrimary (('..<' | '..=') patternPrimary)?
     ;
 
 assertStatement
@@ -497,7 +579,7 @@ bodyExpression
     ;
 
 logicTail
-    : (cmpOp notExpr)* ('&&' cmpExpr)* ('||' andExpr)* (rangeOp orExpr)? (assignOp expression)?
+    : cmpChain? ('&&' cmpExpr)* ('||' andExpr)* (rangeOp orExpr)? (assignOp expression)?
     ;
 
 orExpr
@@ -509,7 +591,15 @@ andExpr
     ;
 
 cmpExpr
-    : notExpr (cmpOp notExpr)*
+    : notExpr cmpChain?
+    ;
+
+// A chain runs one way: ascending, descending or `==`. A `!=` stands alone.
+cmpChain
+    : (('<' | '<=') notExpr)+
+    | (('>' | '>=') notExpr)+
+    | ('==' notExpr)+
+    | '!=' notExpr
     ;
 
 notExpr
@@ -555,10 +645,6 @@ assignOp
 
 rangeOp
     : '..<' | '..='
-    ;
-
-cmpOp
-    : '==' | '!=' | '<' | '<=' | '>' | '>='
     ;
 
 shiftOp
@@ -623,15 +709,6 @@ stmtPrimary
     | braceLiteral
     ;
 
-bodyPrimary
-    : atom
-    | structLiteral
-    | ifExpr
-    | matchExpr
-    | withExpr
-    | labeledBlock
-    ;
-
 atom
     : literal
     | 'self'
@@ -656,15 +733,21 @@ braceLiteral
     : '{' fieldInitList? '}'
     ;
 
+// One turbofish: a second belongs to a static method call, which `postfixOp`
+// spells with its `(`.
 exprPath
-    : (identifier | 'Self') ('::' (typeArgs | pathSegment))*
+    : (identifier | 'Self') ('::' pathSegment)* ('::' typeArgs ('::' pathSegment)*)?
     ;
 
-// A template literal directly after a path tags it (WEP 2026-01-10). The
-// compiler demands adjacency, which whitespace skipping hides from this
-// grammar; the gap case is a `compile_error` fixture.
+// A template literal directly after a path tags it (WEP 2026-01-10). A gap
+// leaves two expressions side by side, which nothing accepts.
 taggedTemplate
-    : (tagOwner '::')* tagName templateString
+    : (tagOwner '::')* tagName taggedTemplateString
+    ;
+
+taggedTemplateString
+    : TAG_BACKTICK templatePart* BACKTICK
+    | TAG_RAW_OPEN templatePart* RAW_CLOSE
     ;
 
 // The type or module a qualified tag hangs off, uncoloured like a `::`
@@ -691,7 +774,7 @@ compileTimeExpr
 // `expression`'s levels where a brace opens the block that follows, as in a
 // condition: no operand outside brackets is a struct literal.
 exprNoStruct
-    : notExprNoStruct (cmpOp notExprNoStruct)* ('&&' cmpExprNoStruct)* ('||' andExprNoStruct)* (rangeOp orExprNoStruct)? (assignOp exprNoStruct)?
+    : notExprNoStruct cmpChainNoStruct? ('&&' cmpExprNoStruct)* ('||' andExprNoStruct)* (rangeOp orExprNoStruct)? (assignOp exprNoStruct)?
     ;
 
 orExprNoStruct
@@ -703,7 +786,14 @@ andExprNoStruct
     ;
 
 cmpExprNoStruct
-    : notExprNoStruct (cmpOp notExprNoStruct)*
+    : notExprNoStruct cmpChainNoStruct?
+    ;
+
+cmpChainNoStruct
+    : (('<' | '<=') notExprNoStruct)+
+    | (('>' | '>=') notExprNoStruct)+
+    | ('==' notExprNoStruct)+
+    | '!=' notExprNoStruct
     ;
 
 notExprNoStruct
@@ -757,9 +847,18 @@ fieldInitList
     : fieldInit (',' fieldInit)* ','?
     ;
 
+// A shorthand reads the variable of the field's name, so a keyword no variable
+// takes needs the colon.
 fieldInit
-    : (fieldName | STRING_LITERAL) (':' expression)?
+    : (fieldName | STRING_LITERAL) ':' expression
+    | shorthandField
+    | STRING_LITERAL
     | '..' expression
+    ;
+
+// A field's name and a variable's at once, coloured as the field.
+shorthandField
+    : bindingName
     ;
 
 tupleOrArrayLiteral
@@ -772,12 +871,32 @@ arrayElement
     | expression
     ;
 
-// The `with` row is the closure's own, never the handler expression that shares
-// the keyword; a handler reaches the body through a block or parentheses. The
-// compiler parses the row and then reports that it carries none yet, so the
-// shape belongs here either way.
+// A closure declares no `with` row yet, and a `with` after its head would read
+// as one, so a handler reaches the body through a block or parentheses.
 closure
-    : ('||' | '|' closureParamList? '|') returnType? withClause? (block | bodyExpression)
+    : ('||' | '|' closureParamList? '|') returnType? (block | closureBody)
+    ;
+
+closureBody
+    : ('!' notExpr | closureUnary notTail) logicTail
+    ;
+
+closureUnary
+    : prefixOp unary
+    | closurePrimary postfixOp*
+    ;
+
+closurePrimary
+    : atom
+    | structLiteral
+    | ifExpr
+    | matchExpr
+    | labeledBlock
+    ;
+
+bodyPrimary
+    : closurePrimary
+    | withExpr
     ;
 
 closureParamList
@@ -828,7 +947,7 @@ patternPrimary
     : '_'
     | 'mut'? bindingName
     | literal
-    | '-' (INTEGER | FLOAT)
+    | '-' number
     | 'mut'? patternPath ('(' (pattern (',' pattern)*)? ')')?
     | 'mut'? path? '{' patternFieldList? '}'
     | 'mut'? '(' (pattern (',' pattern)*)? ')'
@@ -850,12 +969,13 @@ patternFieldList
     ;
 
 patternField
-    : (fieldName | STRING_LITERAL) (':' pattern)?
+    : (fieldName | STRING_LITERAL) ':' pattern
+    | shorthandField
+    | STRING_LITERAL
     ;
 
 literal
-    : INTEGER
-    | FLOAT
+    : number
     | STRING_LITERAL
     | templateString
     | CHAR_LITERAL
@@ -864,9 +984,10 @@ literal
     | 'null'
     ;
 
+// An untagged literal may still touch a keyword, as after `return`.
 templateString
-    : BACKTICK templatePart* BACKTICK
-    | RAW_OPEN templatePart* RAW_CLOSE
+    : (BACKTICK | TAG_BACKTICK) templatePart* BACKTICK
+    | (RAW_OPEN | TAG_RAW_OPEN) templatePart* RAW_CLOSE
     ;
 
 templatePart
@@ -898,20 +1019,30 @@ formatSpecAtom
     | '!' | '%' | '&' | '(' | ')' | ',' | ';' | '=' | '[' | ']' | '|' | '~' | '$'
     ;
 
+// An `_` stands between two digits. A float with an exponent is its own token,
+// as `t.0.1` reads a FLOAT as two tuple fields and `t.1.5e3` cannot.
 FLOAT
-    : [0-9] [0-9_]* '.' [0-9] [0-9_]* ([eE] [+-]? [0-9] [0-9_]*)?
-    | [0-9] [0-9_]* [eE] [+-]? [0-9] [0-9_]*
+    : DIGITS '.' DIGITS
+    ;
+
+FLOAT_EXP
+    : DIGITS ('.' DIGITS)? [eE] [+-]? DIGITS
     ;
 
 INTEGER
-    : '0' [xX] [0-9a-fA-F] [0-9a-fA-F_]*
-    | '0' [bB] [01] [01_]*
-    | '0' [oO] [0-7] [0-7_]*
-    | [0-9] [0-9_]*
+    : '0' [xX] [0-9a-fA-F] ('_'? [0-9a-fA-F])*
+    | '0' [bB] [01] ('_'? [01])*
+    | '0' [oO] [0-7] ('_'? [0-7])*
+    | DIGITS
     ;
 
+fragment DIGITS
+    : [0-9] ('_'? [0-9])*
+    ;
+
+// In literal text a CR is the line break of a CRLF and nothing else.
 STRING_LITERAL
-    : 'b'? '"' ('\\' . | ~["\\])* '"'
+    : 'b'? '"' ('\\' ~[\r] | '\\'? '\r\n' | ~["\\\r])* '"'
     ;
 
 // A raw string is one STRING_LITERAL, as a cooked one is: `more` carries the
@@ -933,6 +1064,19 @@ RBRACE
     : '}' -> popMode
     ;
 
+// A template touching the name before it is tagged. Whitespace never reaches
+// the parser, so the lexer tells the touching opener apart. Ahead of
+// `BACKTICK` and `RAW_OPEN`, which it otherwise ties.
+TAG_BACKTICK
+    : '`' { start > 0 && (lx.src.byte_at(start - 1).is_ascii_alphanumeric() || lx.src.byte_at(start - 1) == b'_') }?
+      -> pushMode(TEMPLATE)
+    ;
+
+TAG_RAW_OPEN
+    : '#'+ '`' { start > 0 && (lx.src.byte_at(start - 1).is_ascii_alphanumeric() || lx.src.byte_at(start - 1) == b'_') }?
+      { lx.raw_hashes.push(pos - start - 1) } -> pushMode(RAW_TEMPLATE)
+    ;
+
 BACKTICK
     : '`' -> pushMode(TEMPLATE)
     ;
@@ -944,7 +1088,7 @@ RAW_OPEN
     ;
 
 CHAR_LITERAL
-    : 'b'? '\'' (UNICODE_ESCAPE | HEX_ESCAPE | '\\' . | ~['\\\r\n])+ '\''
+    : 'b'? '\'' (UNICODE_ESCAPE | HEX_ESCAPE | '\\' ~[\r] | ~['\\\r\n])+ '\''
     ;
 
 fragment HEX_ESCAPE
@@ -992,7 +1136,7 @@ NON_ASCII
 mode TEMPLATE;
 
 TEMPLATE_TEXT
-    : ('\\' . | ~[`$\\])+
+    : ('\\' ~[\r] | '\\'? '\r\n' | ~[`$\\\r])+
     ;
 
 INTERP_OPEN
@@ -1023,7 +1167,7 @@ RAW_INTERP_OPEN
     ;
 
 RAW_TEXT
-    : ~[`$]+ -> type(TEMPLATE_TEXT)
+    : (~[`$\r] | '\r\n')+ -> type(TEMPLATE_TEXT)
     ;
 
 RAW_LONE
@@ -1039,7 +1183,7 @@ RAW_STRING_CLOSE
     ;
 
 RAW_STRING_TEXT
-    : ~'"'+ -> more
+    : (~["\r] | '\r\n')+ -> more
     ;
 
 RAW_STRING_QUOTE

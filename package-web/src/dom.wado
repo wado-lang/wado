@@ -1,6 +1,6 @@
 #![generated(by = "wado-from-idl", sources = ["package-web/idl/dom.webidl.json"])]
 
-#[cm("wado-lang:web/event-target", linearity = "unrestricted", repr = "externref", classes = "0..=6")]
+#[cm("wado-lang:web/event-target", linearity = "unrestricted", repr = "externref", classes = "0..=8")]
 pub resource EventTarget {
     #[cm("wado-lang:web/event-target#new")]
     fn new() -> EventTarget;
@@ -15,7 +15,7 @@ pub resource EventTarget {
     fn dispatch_event(&self, event: Event) -> bool;
 }
 
-#[cm("wado-lang:web/event", linearity = "unrestricted", repr = "externref", classes = "7..=7")]
+#[cm("wado-lang:web/event", linearity = "unrestricted", repr = "externref", classes = "9..=9")]
 pub resource Event {
     #[cm("wado-lang:web/event#new")]
     #[cm_params("type")]
@@ -82,7 +82,7 @@ pub resource Event {
     fn init_event(&self, type: String, bubbles: bool = false, cancelable: bool = false);
 }
 
-#[cm("wado-lang:web/node", linearity = "unrestricted", repr = "externref", classes = "1..=5")]
+#[cm("wado-lang:web/node", linearity = "unrestricted", repr = "externref", classes = "1..=7")]
 pub resource Node extends EventTarget {
     #[cm("wado-lang:web/node#node-type")]
     #[cm_params("self")]
@@ -176,7 +176,57 @@ pub resource Node extends EventTarget {
     fn remove_child(&self, child: Node) -> Node;
 }
 
-#[cm("wado-lang:web/element", linearity = "unrestricted", repr = "externref", classes = "2..=4")]
+#[cm("wado-lang:web/character-data", linearity = "unrestricted", repr = "externref", classes = "2..=3")]
+pub resource CharacterData extends Node {
+    #[cm("wado-lang:web/character-data#data")]
+    #[cm_params("self")]
+    fn data(&self) -> String;
+    #[cm("wado-lang:web/character-data#set-data")]
+    #[cm_params("self", "value")]
+    fn set_data(&self, value: String);
+    #[cm("wado-lang:web/character-data#length")]
+    #[cm_params("self")]
+    fn length(&self) -> u32;
+    #[cm("wado-lang:web/character-data#substring-data")]
+    #[cm_params("self", "offset", "count")]
+    fn substring_data(&self, offset: u32, count: u32) -> String;
+    #[cm("wado-lang:web/character-data#append-data")]
+    #[cm_params("self", "data")]
+    fn append_data(&self, data: String);
+    #[cm("wado-lang:web/character-data#insert-data")]
+    #[cm_params("self", "offset", "data")]
+    fn insert_data(&self, offset: u32, data: String);
+    #[cm("wado-lang:web/character-data#delete-data")]
+    #[cm_params("self", "offset", "count")]
+    fn delete_data(&self, offset: u32, count: u32);
+    #[cm("wado-lang:web/character-data#replace-data")]
+    #[cm_params("self", "offset", "count", "data")]
+    fn replace_data(&self, offset: u32, count: u32, data: String);
+    #[cm("wado-lang:web/character-data#previous-element-sibling")]
+    #[cm_params("self")]
+    fn previous_element_sibling(&self) -> Option<Element>;
+    #[cm("wado-lang:web/character-data#next-element-sibling")]
+    #[cm_params("self")]
+    fn next_element_sibling(&self) -> Option<Element>;
+    #[cm("wado-lang:web/character-data#remove")]
+    #[cm_params("self")]
+    fn remove(&self);
+}
+
+#[cm("wado-lang:web/text", linearity = "unrestricted", repr = "externref", classes = "3..=3")]
+pub resource Text extends CharacterData {
+    #[cm("wado-lang:web/text#new")]
+    #[cm_params("data")]
+    fn new(data: String = "") -> Text;
+    #[cm("wado-lang:web/text#split-text")]
+    #[cm_params("self", "offset")]
+    fn split_text(&self, offset: u32) -> Text;
+    #[cm("wado-lang:web/text#whole-text")]
+    #[cm_params("self")]
+    fn whole_text(&self) -> String;
+}
+
+#[cm("wado-lang:web/element", linearity = "unrestricted", repr = "externref", classes = "4..=6")]
 pub resource Element extends Node {
     #[cm("wado-lang:web/element#get-spatial-navigation-container")]
     #[cm_params("self")]
@@ -681,7 +731,7 @@ pub resource Element extends Node {
     fn aria_notify(&self, announcement: String);
 }
 
-#[cm("wado-lang:web/html-element", linearity = "unrestricted", repr = "externref", classes = "3..=4")]
+#[cm("wado-lang:web/html-element", linearity = "unrestricted", repr = "externref", classes = "5..=6")]
 pub resource HtmlElement extends Element {
     #[cm("wado-lang:web/html-element#container-timing")]
     #[cm_params("self")]
@@ -877,7 +927,7 @@ pub resource HtmlElement extends Element {
     fn blur(&self);
 }
 
-#[cm("wado-lang:web/html-input-element", linearity = "unrestricted", repr = "externref", classes = "4..=4")]
+#[cm("wado-lang:web/html-input-element", linearity = "unrestricted", repr = "externref", classes = "6..=6")]
 pub resource HtmlInputElement extends HtmlElement {
     #[cm("wado-lang:web/html-input-element#webkitdirectory")]
     #[cm_params("self")]
@@ -1169,7 +1219,7 @@ pub resource HtmlInputElement extends HtmlElement {
     fn set_popover_target_action(&self, value: String);
 }
 
-#[cm("wado-lang:web/document", linearity = "unrestricted", repr = "externref", classes = "5..=5")]
+#[cm("wado-lang:web/document", linearity = "unrestricted", repr = "externref", classes = "7..=7")]
 pub resource Document extends Node {
     #[cm("wado-lang:web/document#element-from-point")]
     #[cm_params("self", "x", "y")]
@@ -1212,6 +1262,9 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#create-element-ns")]
     #[cm_params("self", "namespace", "qualified-name", "options")]
     fn create_element_ns(&self, namespace: Option<String>, qualified_name: String, options: Option<String> = null) -> Element;
+    #[cm("wado-lang:web/document#create-text-node")]
+    #[cm_params("self", "data")]
+    fn create_text_node(&self, data: String) -> Text;
     #[cm("wado-lang:web/document#import-node")]
     #[cm_params("self", "node", "options")]
     fn import_node(&self, node: Node, options: bool = false) -> Node;
@@ -1421,7 +1474,7 @@ pub resource Document extends Node {
     fn aria_notify(&self, announcement: String);
 }
 
-#[cm("wado-lang:web/window", linearity = "unrestricted", repr = "externref", classes = "6..=6")]
+#[cm("wado-lang:web/window", linearity = "unrestricted", repr = "externref", classes = "8..=8")]
 pub resource Window extends EventTarget {
     #[cm("wado-lang:web/window#credentialless")]
     #[cm_params("self")]

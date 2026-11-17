@@ -466,6 +466,12 @@ fn apply_fn(f:   fn(i32) -> i32   with   Stdout,  x:  i32)  ->  i32  with  Stdou
 export fn run() {
 }
 
+/// A `Self` binding closes a trait's turbofish
+fn self_binding() {
+    let _ = Mk::<Self=Point>::tag();
+    let _ = Conv::<i32,Self  =  List<Point>>::make();
+}
+
 /// Unary ref with cast: &(x as T) must keep parentheses (as has lower precedence than &)
 fn ref_cast_parens(x: i32) {
     let _ = &(x as i64);

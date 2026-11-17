@@ -558,6 +558,27 @@ fn test_format_turbofish_wildcard_roundtrips() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// A `Self` binding closes a trait's turbofish, after the trait's own
+/// arguments. Dropping it would rewrite the call to one naming no receiver.
+#[test]
+fn test_format_self_binding_roundtrips() {
+    let source = concat!(
+        "fn run() {\n",
+        "    let a = Mk::<Self=S>::tag();\n",
+        "    let b = Conv::<i32,Self = List<S>>::make();\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("Mk::<Self = S>::tag()")
+            && formatted.contains("Conv::<i32, Self = List<S>>::make()"),
+        "expected the binding to survive formatting, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 /// A turbofish on a case path sits on the path's *prefix*
 /// (`Maybe::<i32>::Nothing`). Appending it to the whole name would emit
 /// `Maybe::Nothing::<i32>`, which re-parses as the identifier's own turbofish

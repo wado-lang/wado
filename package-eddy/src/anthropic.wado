@@ -239,7 +239,7 @@ pub fn converse(
 
 fn post<T: Deserialize>(api_key: String, request: ByteSlice) -> Result<T, String> with Client {
     let resp = send("api.anthropic.com", "/v1/messages", [
-        ["x-api-key", api_key],
+        ["authorization", `Bearer ${api_key}`],
         ["anthropic-version", "2023-06-01"],
         ["content-type", "application/json"],
     ], request)?;

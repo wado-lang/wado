@@ -9,6 +9,7 @@ export const decoder = {
   model: join(build, 'model.onnx'),
   layers: 18,
   emptyPast: [1, 1, 0, 256],
+  vocab: 262144,
 };
 
 export const decoderFp16 = { ...decoder, model: join(build, 'model_fp16.onnx'), half: true };

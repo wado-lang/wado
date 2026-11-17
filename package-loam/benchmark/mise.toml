@@ -48,10 +48,14 @@ for model in gpt2_124m gemma3_270m; do
 done
 """
 
+[tasks.update-llama-cpp]
+description = "Pin llama_cpp.lock to llama.cpp's newest release with a Vulkan build"
+run = "wado run update_llama_cpp.wado"
+
 [tasks.build-llama-cpp]
 description = "Build the llama.cpp arm, where the host has its release"
 hide = true
-sources = ["fetch_llama_cpp.sh", "harness.hpp", "gemma3_270m/llama_cpp.cpp"]
+sources = ["fetch_llama_cpp.sh", "llama_cpp.lock", "harness.hpp", "gemma3_270m/llama_cpp.cpp"]
 outputs = ["build/llama_cpp"]
 run = """
 #!/usr/bin/env bash
@@ -80,8 +84,9 @@ fi
 wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
 
 if [ -x build/onnxruntime_gpt2_124m ]; then
+    graph=$(node ../tools/picking.mjs $model decoder topk)
     echo "=== onnxruntime (CUDA) ==="
-    build/onnxruntime_gpt2_124m
+    build/onnxruntime_gpt2_124m "$graph"
 fi
 
 ./onnxruntime_webgpu.sh $model
@@ -107,22 +112,14 @@ fi
 wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
 
 if [ -x build/onnxruntime_gemma3_270m ]; then
+    graph=$(node ../tools/picking.mjs $model decoder topk)
     echo "=== onnxruntime (CUDA) ==="
-    build/onnxruntime_gemma3_270m
+    build/onnxruntime_gemma3_270m "$graph"
 fi
 
 ./onnxruntime_webgpu.sh $model
 
-llama=$(./fetch_llama_cpp.sh)
-if [ -n "$llama" ]; then
-    # llama.cpp's own tools run a thread per physical core.
-    cores=$(getconf _NPROCESSORS_ONLN)
-    if command -v lscpu > /dev/null; then
-        cores=$(lscpu -p=core | grep -v '^#' | sort -u | wc -l)
-    fi
-    echo "=== llama.cpp (Vulkan) ==="
-    build/llama_cpp "$(gemma3_270m/fetch_gguf.sh)" "$llama" -1 $cores
-fi
+gemma3_270m/llama_cpp.sh F16
 
 echo "=== Loam (WebGPU) ==="
 WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m_webgpu.wado
@@ -136,8 +133,8 @@ echo "=== Loam (Cpu) ==="
 """
 
 [tasks.gemma3-270m-quantized]
-description = "Run Gemma 3 (270M)'s q4 and q4f16 exports (Loam WebGPU vs onnxruntime WebGPU)"
-depends = ["build"]
+description = "Run Gemma 3 (270M)'s q4 and q4f16 exports (Loam WebGPU vs onnxruntime WebGPU, and llama.cpp's Q4_0 and Q4_1)"
+depends = ["build", "build-llama-cpp"]
 run = """
 #!/usr/bin/env bash
 set -e
@@ -155,6 +152,9 @@ for export in q4 q4f16; do
     echo "=== Loam (WebGPU $export decode) ==="
     WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gemma3_270m/${export}_webgpu.wado
 done
+
+gemma3_270m/llama_cpp.sh Q4_0
+gemma3_270m/llama_cpp.sh Q4_1
 """
 
 [tasks.all]

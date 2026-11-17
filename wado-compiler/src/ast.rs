@@ -1010,6 +1010,9 @@ pub fn walk_expr<'ast, V: AstVisitor<'ast>>(v: &mut V, expr: &'ast Expr) {
         }
         Expr::StaticMethodCall(e) => {
             v.visit_type(&e.target_type);
+            if let Some(self_type) = &e.self_type {
+                v.visit_type(self_type);
+            }
             v.visit_id(e.method_id, e.method_span);
             for ty in &e.type_args {
                 v.visit_type(ty);
@@ -4011,6 +4014,9 @@ pub struct StaticMethodCallExpr {
     pub id: AstId,
     /// The target type (e.g., `List<i32>` or `Point`)
     pub target_type: Type,
+    /// The type a trait head's turbofish binds `Self` to: `S` in
+    /// `Alpha::<Self = S>::go(…)`.
+    pub self_type: Option<Type>,
     /// The method name (e.g., `with_capacity` or `origin`)
     pub method: String,
     /// `AstId` of the method name token, for cursor-based navigation (jump-to-def).

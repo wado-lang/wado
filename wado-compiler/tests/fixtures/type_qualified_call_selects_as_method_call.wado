@@ -1,0 +1,73 @@
+// `N::m(&x)` selects what `x.m()` selects (issue #2650): a blanket impl is a
+// candidate, and the newtype's level answers before its base's.
+trait Alpha with () {
+    fn m(&self) -> String;
+}
+
+trait Holds with () {}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+type N = Pair<i32, i32>;
+
+impl Holds for N {}
+
+impl<X: Holds> Alpha for X {
+    fn m(&self) -> String {
+        return "blanket";
+    }
+}
+
+impl Alpha for Pair<i32, i32> {
+    fn m(&self) -> String {
+        return "exact at Pair";
+    }
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Holds for Point {}
+
+test "a blanket answers a type-qualified call" {
+    let p = Point { x: 1 };
+    assert p.m() == "blanket";
+    assert Point::m(&p) == "blanket";
+}
+
+test "the newtype's blanket answers before an exact impl on its base" {
+    let x: N = { a: 1, b: 2 };
+    assert x.m() == "blanket";
+    assert N::m(&x) == "blanket";
+}
+
+// Another trait declares `span` receiver-less and `Point` does not implement
+// it, so only the blanket's instance method answers the spelling.
+trait Spanned with () {
+    fn span() -> i32;
+}
+
+trait Measured with () {
+    fn span(&self) -> i32;
+}
+
+impl<X: Holds> Measured for X {
+    fn span(&self) -> i32 {
+        return 7;
+    }
+}
+
+test "a blanket's instance method answers where another trait's static shares the name" {
+    let p = Point { x: 1 };
+    assert Point::span(&p) == 7;
+}
+
+test "the base's spelling starts at the base" {
+    let p: Pair<i32, i32> = { a: 1, b: 2 };
+    assert p.m() == "exact at Pair";
+    assert Pair::<i32, i32>::m(&p) == "exact at Pair";
+}

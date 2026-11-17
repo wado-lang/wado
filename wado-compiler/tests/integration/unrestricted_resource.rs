@@ -615,7 +615,10 @@ fn an_ancestor_qualified_call_passes_every_check() {
 #[test]
 fn the_qualified_form_checks_its_arguments() {
     let cases = [
-        ("EventTarget::tag()", "expected 1 arguments, found 0"),
+        (
+            "EventTarget::tag()",
+            "takes the receiver as its first argument",
+        ),
         ("EventTarget::tag(&n, 1)", "expected 1 arguments, found 2"),
         ("EventTarget::tag(1)", "type mismatch"),
     ];

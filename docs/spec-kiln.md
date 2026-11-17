@@ -835,8 +835,8 @@ Its own manifest lists both:
 
 ```toml
 [build-dependencies]
-"lib:gale" = { path = "../package-gale", package = "wado-lang:gale", version = "^0.0.28" }
-"lib:grog" = { path = "../package-grog", package = "wado-lang:grog", version = "^0.0.28" }
+"lib:gale" = { path = "../package-gale" }
+"lib:grog" = { path = "../package-grog" }
 ```
 
 An invocation whose generator is built from its own output, directly or through
@@ -861,10 +861,10 @@ generated types are encoded by Grog's runtime:
 
 ```toml
 [build-dependencies]
-"lib:grog" = { path = "../..", package = "wado-lang:grog", version = "^0.0.28" }
+"lib:grog" = { path = "../.." }
 
 [dependencies]
-"lib:grog" = { path = "../..", package = "wado-lang:grog", version = "^0.0.28" }
+"lib:grog" = { path = "../.." }
 ```
 
 The consumer imports the runtime and the generated types side by side:

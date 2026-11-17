@@ -72,6 +72,14 @@ pub fn rank(candidates: &[Candidate]) -> Selection {
     let mut live: Vec<usize> = (0..candidates.len()).collect();
     drop_variadic_where_non_variadic_exists(candidates, &mut live);
     keep_shallowest(candidates, &mut live);
+    // Two traits share no contract, so how much of the receiver each impl
+    // names cannot choose between them: only the level can.
+    if live
+        .iter()
+        .any(|&i| candidates[i].trait_ != candidates[live[0]].trait_)
+    {
+        return Selection::AmbiguousTraits(live);
+    }
     keep_least_general(candidates, &mut live);
     keep_written_trait_args(candidates, &mut live);
     classify(candidates, live)
@@ -139,9 +147,6 @@ fn classify(candidates: &[Candidate], live: Vec<usize>) -> Selection {
         [_, _, ..] => {}
     }
     let first = &candidates[live[0]];
-    if live.iter().any(|&i| candidates[i].trait_ != first.trait_) {
-        return Selection::AmbiguousTraits(live);
-    }
     if live
         .iter()
         .any(|&i| candidates[i].trait_args != first.trait_args)
@@ -433,15 +438,21 @@ mod tests {
         assert_eq!(rank(&candidates), Selection::One(2));
     }
 
-    /// Rank 2 the same way: a blanket collision at one level is settled by an
-    /// impl written for the receiver rather than reported.
+    /// Rank 2 reads one trait's impls only: an impl written for the receiver
+    /// does not settle a collision with another trait at its level.
     #[test]
-    fn a_concrete_impl_settles_a_blanket_collision() {
+    fn a_concrete_impl_does_not_settle_a_cross_trait_collision() {
         let candidates = Build::new()
             .blanket(TR, 0)
             .blanket(OTHER, 0)
             .concrete(TR, 0)
             .done();
-        assert_eq!(rank(&candidates), Selection::One(2));
+        assert_eq!(rank(&candidates), Selection::AmbiguousTraits(vec![0, 1, 2]));
+    }
+
+    #[test]
+    fn an_exact_impl_and_another_traits_head_impl_are_ambiguous() {
+        let candidates = Build::new().concrete(TR, 0).head(OTHER, 0).done();
+        assert_eq!(rank(&candidates), Selection::AmbiguousTraits(vec![0, 1]));
     }
 }

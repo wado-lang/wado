@@ -1,0 +1,94 @@
+//! The device time of each kernel of Gemma 3 (270M)'s decode, on Loam's
+//! `WebGpuBackend`: the `decode` arm of `gemma3_270m_webgpu.wado`, or with the
+//! argument `q4`, `q4_webgpu.wado`. It runs once to compile, then once timed.
+//!
+//!     wado run-webgpu --dir ../example/gemma3-270m gemma3_270m/profile.wado q4
+
+use { println, args, Environment, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+use { Preopens } from "core:fs";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuQuerySet,
+    GpuSupportedFeatures,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { FileSource, KernelTime, Sampling, WebGpuBackend } from "lib:loam";
+use { Tokenizer, Model } from "../../example/gemma3-270m/model.wado";
+use { Q4Model } from "../../example/gemma3-270m/q4.wado";
+use { PROMPT, STEPS } from "../generate.wado";
+
+export fn run() with (Environment, Stdout, Preopens, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuQuerySet, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(gpu) = WebGpuBackend::new() else {
+        println("no WebGPU adapter");
+        return;
+    };
+    let ids = Tokenizer::encode(&PROMPT);
+    if args().contains_str("q4") {
+        let mut model = Q4Model::load(gpu).unwrap();
+        model.continued(&ids, STEPS);
+        if !model.backend_mut().profile() {
+            println("no timestamp-query");
+            return;
+        }
+        model.continued(&ids, STEPS);
+        report(&model.backend_mut().profiled());
+    } else {
+        let mut model = Model::load(gpu, &FileSource { dir: "build" }).unwrap();
+        model.next_tokens(&ids, STEPS, &Sampling {});
+        model.forget();
+        if !model.backend_mut().profile() {
+            println("no timestamp-query");
+            return;
+        }
+        model.next_tokens(&ids, STEPS, &Sampling {});
+        report(&model.backend_mut().profiled());
+    }
+}
+
+/// Prints the time of each kind of kernel, then of each kernel on its grid.
+fn report(times: &List<KernelTime>) with Stdout {
+    let mut total: i64 = 0;
+    let mut by_kind = TreeMap::<String, [i32, i64]>::new();
+    for let t of times {
+        total += t.nanoseconds;
+        let [dispatches, nanoseconds] = by_kind.get_or_insert(t.kernel, [0, 0 as i64]);
+        by_kind[t.kernel] = [dispatches + t.dispatches, nanoseconds + t.nanoseconds];
+    }
+    let mut kinds: List<[String, i32, i64]> = [];
+    for let [kernel, [dispatches, nanoseconds]] of by_kind.entries() {
+        kinds.push([*kernel, *dispatches, *nanoseconds]);
+    }
+    kinds.sort_by(|a, b| b.2.cmp(&a.2));
+    println(`device ${total / 1000} us`);
+    for let [kernel, dispatches, nanoseconds] of kinds {
+        println(`${kernel:<18} ${dispatches:>6} x ${nanoseconds / 1000:>8} us ${share(nanoseconds, total):>5.1}%`);
+    }
+    println("");
+    for let t of times {
+        let [x, y, z] = t.groups;
+        println(
+            `${t.kernel:<18} ${`${x}x${y}x${z}`:<12} ${t.dispatches:>6} x ${t.nanoseconds / t.dispatches as i64 / 1000:>6} us ${share(
+                t.nanoseconds,
+                total,
+            ):>5.1}%`,
+        );
+    }
+}
+
+fn share(part: i64, whole: i64) -> f64 {
+    return 100.0 * part as f64 / whole as f64;
+}
