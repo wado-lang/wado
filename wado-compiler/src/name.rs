@@ -1113,10 +1113,11 @@ pub fn indexed_local_name(index: impl fmt::Display) -> String {
 /// functor's mangled name after a `$`.
 #[must_use]
 pub fn functor_specialization_suffix(functors: impl IntoIterator<Item = String>) -> String {
-    functors
-        .into_iter()
-        .map(|functor| format!("{INTERNAL_PREFIX}{functor}"))
-        .collect()
+    functors.into_iter().fold(String::new(), |mut suffix, functor| {
+        suffix.push_str(INTERNAL_PREFIX);
+        suffix.push_str(&functor);
+        suffix
+    })
 }
 
 /// The path of a module the compiler writes for itself in directory `dir`,
