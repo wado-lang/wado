@@ -184,7 +184,7 @@ impl Graph for WebGpuBackend {
     ) -> Result<List<Any<WebGpuBackend>>, Er> with _ {
         let recorded = record(&mut Recorder::new());
         let contracted = contracted_axes(&recorded, first, count);
-        let joined = joined_products(&recorded);
+        let joined = joined_products(&recorded, self.max_binding());
         let mut kept = List::<Option<Any<WebGpuBackend>>>::filled(count, null);
         for let [run, paired] of weight_runs(&recorded, &joined, first, count, &contracted) {
             let axis = contracted[run[0]].unwrap();
@@ -237,15 +237,12 @@ impl Graph for WebGpuBackend {
             }
         }
         for let [run, paired] of weight_rows(&recorded, &joined, first, count) {
-            let mut parts: List<HostWeight> = [];
-            for let at of run {
-                parts.push(load(at)?);
-            }
-            let whole = kept_plain(self, &rows_laid(&parts, paired));
+            let [laid, rows_of] = rows_laid(&run, paired, load)?;
+            let whole = kept_plain(self, &laid);
             let d = *on_device(&whole).unwrap();
             let mut start = 0;
             for let [j, at] of run.into_iter().enumerate() {
-                let rows = parts[j].extents[0];
+                let rows = rows_of[j];
                 let mut extents = d.extents;
                 extents[0] = rows;
                 let mut strides = d.strides;
@@ -879,21 +876,47 @@ internal fn contracted_axes(recorded: &Recorded, first: i32, count: i32) -> List
 }
 
 /// The products of each `Joined` and `Paired` launch `recorded` plans into,
-/// and whether they pair.
-fn joined_products(recorded: &Recorded) -> List<[List<Kernel>, bool]> {
+/// and whether they pair, where each weight they read, laid as one across
+/// them, fits a buffer of `words` words. A launch whose weights lie apart runs
+/// a product at a time.
+internal fn joined_products(recorded: &Recorded, words: i32) -> List<[List<Kernel>, bool]> {
     let mut joined: List<[List<Kernel>, bool]> = [];
     for let launch of planned(recorded, &splats_of(&constants(recorded))).flattened() {
-        match launch {
-            Joined(ks) => joined.push([ks, false]),
-            Paired(p) => joined.push([
-                [p.first, p.second],
-                true,
-            ]),
+        let [ks, paired] = match launch {
+            Joined(ks) => [ks, false],
+            Paired(p) => [[p.first, p.second] as List<Kernel>, true],
             _ => {
+                continue;
             },
+        };
+        if fits_together(recorded, &ks, words) {
+            joined.push([ks, paired]);
         }
     }
     return joined;
+}
+
+/// Whether each weight the products of `ks` read, laid as one across them,
+/// takes at most `words` words on the device.
+fn fits_together(recorded: &Recorded, ks: &List<Kernel>, words: i32) -> bool {
+    let weights: List<List<i32>> = ks.into_iter().map(|k| weights_of(&recorded.nodes[k.product.unwrap()])).collect();
+    for let i of 0..<weights[0].len() {
+        let mut held: i64 = 0;
+        for let w of &weights {
+            held += kept_words(&recorded.nodes[w[i]]);
+        }
+        if held > words as i64 {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The most words `weight` takes on the device: a quarter of one a byte, and
+/// one any other element.
+fn kept_words(weight: &RecordedNode) -> i64 {
+    let count = element_count(&weight.extents) as i64;
+    return if weight.kind matches { U8 } { (count + 3) / 4 } else { count };
 }
 
 /// The right matrices of each of `joined`'s launches, by their places among
@@ -984,28 +1007,43 @@ fn kept_plain(g: &mut WebGpuBackend, w: &HostWeight) -> Any<WebGpuBackend> with 
     return of_kind(g, w.kind, Placed::Device(g.kept_values(w)));
 }
 
-fn rows_laid(parts: &List<HostWeight>, paired: bool) -> HostWeight {
-    let width = stored_width(parts[0].kind);
-    let mut extents = parts[0].extents;
-    extents[0] = parts.into_iter().map(|p| p.extents[0]).sum().unwrap();
-    let row = width * element_count(&extents[1..<extents.len()].to_list());
-    let mut bytes = LinearArray::<u8>::filled(row * extents[0], 0);
-    let mut at = 0;
-    if paired {
-        assert parts.len() == 2 && parts[0].extents == parts[1].extents, "a pair's weights are of one shape";
-        for let r of 0..<parts[0].extents[0] {
-            for let p of parts {
-                bytes.copy_from(at, p.bytes(), r * row, row);
-                at += row;
+/// The weights at `run`, which `load` reads, of one kind and differing in
+/// extents along the first axis alone, as one: their rows one after another,
+/// or alternating between the two of a pair. Each is read and laid in turn, so
+/// one weight is held beside the result. Also each weight's rows.
+fn rows_laid<Er>(
+    run: &List<i32>,
+    paired: bool,
+    load: fn(i32) -> Result<HostWeight, Er> with _,
+) -> Result<[HostWeight, List<i32>], Er> with _ {
+    let mut head = Option::Some(load(run[0])?);
+    let [kind, mut extents, size] = match &head {
+        Some(h) => [h.kind, h.extents, h.bytes().len()],
+        None => unreachable(),
+    };
+    assert !paired || run.len() == 2, "a pair is of two weights";
+    let row = stored_width(kind) * element_count(&extents[1..<extents.len()].to_list());
+    let mut bytes = LinearArray::<u8>::filled(if paired { 2 * size } else { 0 }, 0);
+    let mut rows: List<i32> = [];
+    for let [j, at] of run.into_iter().enumerate() {
+        let part = match head.take() {
+            Some(h) => h,
+            None => load(*at)?,
+        };
+        if paired {
+            assert part.extents == extents, "a pair's weights are of one shape";
+            for let r of 0..<part.extents[0] {
+                bytes.copy_from((2 * r + j) * row, part.bytes(), r * row, row);
             }
+        } else {
+            let end = bytes.len();
+            bytes.lengthen(end + part.bytes().len());
+            bytes.copy_from(end, part.bytes(), 0, part.bytes().len());
         }
-    } else {
-        for let p of parts {
-            bytes.copy_from(at, p.bytes(), 0, p.bytes().len());
-            at += p.bytes().len();
-        }
+        rows.push(part.extents[0]);
     }
-    return HostWeight::stored(parts[0].kind, extents, bytes);
+    extents[0] = rows.into_iter().sum().unwrap();
+    return Result::Ok([HostWeight::stored(kind, extents, bytes), rows]);
 }
 
 fn contracted_axis(recorded: &Recorded, weight: i32) -> Option<i32> {

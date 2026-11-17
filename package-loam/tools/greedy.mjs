@@ -28,7 +28,8 @@ delete globalThis.Float16Array;
  * A decoder is `{ model, layers, emptyPast, vocab, half, feeds }`: `emptyPast`
  * is the shape of a layer's cache before the first token, `vocab` the logits'
  * last extent, `half` says the cache and the logits are float16, and
- * `feeds(seen)` any input beyond the ids, the mask and the cache.
+ * `feeds(seen, ort)` any input beyond the ids, the mask and the cache, built
+ * with `ort`, onnxruntime-node, so that reading a decoder loads no runtime.
  */
 export async function writeGenerated({ dir, prompts, ends = [], decoder, name = 'generate.json', logits }) {
   const recorded = JSON.parse(readFileSync(join(dir, 'tokenize.json'), 'utf8')).tokenize;
@@ -127,7 +128,7 @@ export function fed({ layers, emptyPast, half = false, feeds = () => ({}) }, fre
   const inputs = {
     input_ids: new ort.Tensor('int64', BigInt64Array.from(fresh, BigInt), [1, fresh.length]),
     attention_mask: new ort.Tensor('int64', new BigInt64Array(total).fill(1n), [1, total]),
-    ...feeds(seen),
+    ...feeds(seen, ort),
   };
   for (let l = 0; l < layers; l++) {
     for (const kind of ['key', 'value']) {

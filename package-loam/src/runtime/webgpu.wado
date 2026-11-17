@@ -792,6 +792,11 @@ impl WebGpuBackend {
         return self.dispatches;
     }
 
+    /// The most words one buffer, or one binding of it, holds.
+    internal fn max_binding(&self) -> i32 {
+        return self.max_binding;
+    }
+
     /// Starts timing each later dispatch on the device, for `profiled`, where
     /// the device grants `timestamp-query`; returns whether it does. Each
     /// dispatch then takes a compute pass and a submit of its own, so the
@@ -2670,7 +2675,7 @@ impl WebGpuBackend {
         // Recorded where a later call can do it again: over the cache it
         // appends to in place, in a launch, outside another recording.
         let key = if appending matches { Some(_) } && self.taping matches { None } {
-            self.attention_key();
+            self.attention_key(stored);
         } else {
             null;
         };
@@ -2779,14 +2784,21 @@ impl WebGpuBackend {
         return Option::Some([result, present_k, present_v]);
     }
 
-    /// The replay key of the attention of the running launch, where one runs.
-    fn attention_key(&mut self) -> Option<i32> {
+    /// The replay key of the attention of the running launch, where one runs,
+    /// writing its result as `stored` says. Programs whose graphs differ in
+    /// their element kinds alone share a serial, so the format is in the key.
+    fn attention_key(&mut self, stored: Option<HalfFloat>) -> Option<i32> {
         let Some(r) = &self.running else {
             return null;
         };
+        let format = match stored {
+            None => 0,
+            Some(F16) => 1,
+            Some(BF16) => 2,
+        };
         // A kernel's key starts with its program's serial, which is never
         // negative.
-        return Option::Some(self.replay_key([-1, (r.launch >> 32) as i32, r.launch as i32]));
+        return Option::Some(self.replay_key([-1, (r.launch >> 32) as i32, r.launch as i32, format]));
     }
 
     /// The positions an attention cache holds once it holds `total`: a power
