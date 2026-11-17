@@ -54,7 +54,7 @@ const DOCUMENTS: &[(&str, &str)] = &[
     ("pgo", include_str!("../../docs/spec-pgo.md")),
 ];
 
-/// A heading and the lines it heads, up to the next heading of any level.
+/// A heading of a document, with the lines it heads.
 struct Section<'a> {
     level: usize,
     title: &'a str,
@@ -70,7 +70,6 @@ struct Section<'a> {
 /// A bundled document split into its sections.
 struct Document<'a> {
     name: &'static str,
-    text: &'a str,
     lines: Vec<&'a str>,
     sections: Vec<Section<'a>>,
 }
@@ -123,19 +122,26 @@ impl<'a> Document<'a> {
                     body: lines[start + 1..next].join("\n"),
                 }
             })
-            .collect();
+            .collect::<Vec<_>>();
+        assert!(
+            sections
+                .first()
+                .is_some_and(|s| s.start == 0 && s.level == 1),
+            "`{name}` must open with its title, the section that spans it whole"
+        );
         Self {
             name,
-            text,
             lines,
             sections,
         }
     }
 
+    fn title_section(&self) -> &Section<'a> {
+        &self.sections[0]
+    }
+
     fn title(&self) -> &str {
-        let first = &self.sections[0];
-        assert_eq!(first.level, 1, "a document opens with its title");
-        first.title
+        self.title_section().title
     }
 
     fn section(&self, slug: &str) -> Option<&Section<'a>> {
@@ -268,36 +274,31 @@ pub fn run(opts: &SpecOptions) -> Result<(), CliExit> {
             let sections = docs.iter().flat_map(|doc| Target::whole(doc).sections());
             print!("{}", search(sections, query)?);
         }
-        (None, Some(target)) => print!("{}", target.text()),
+        (None, Some(target)) => print!("{}", target.doc.text_of(target.section)),
         (None, None) => print!("{}", index(&docs)),
     }
     Ok(())
 }
 
-/// What an argument of `wado spec` names: a document, or one section of it.
+/// What an argument of `wado spec` names: a section and the subsections under
+/// it, a whole document being its title's section.
 #[derive(Clone, Copy)]
 struct Target<'d> {
     doc: &'d Document<'d>,
-    section: Option<&'d Section<'d>>,
+    section: &'d Section<'d>,
 }
 
 impl<'d> Target<'d> {
     fn whole(doc: &'d Document<'d>) -> Self {
-        Self { doc, section: None }
-    }
-
-    fn text(&self) -> String {
-        match self.section {
-            Some(section) => self.doc.text_of(section),
-            None => self.doc.text.to_string(),
+        Self {
+            doc,
+            section: doc.title_section(),
         }
     }
 
     /// The sections the target spans, each with its document.
     fn sections(self) -> impl Iterator<Item = (&'d Document<'d>, &'d Section<'d>)> {
-        let span = self
-            .section
-            .map_or(0..self.doc.lines.len(), |s| s.start..s.end);
+        let span = self.section.start..self.section.end;
         self.doc
             .sections
             .iter()
@@ -324,10 +325,7 @@ fn resolve<'d>(docs: &'d [Document<'d>], target: &str) -> Result<Target<'d>, Cli
             "no section `{anchor}` in `{name}`; `wado spec --search` finds one"
         ))
     })?;
-    Ok(Target {
-        doc,
-        section: Some(section),
-    })
+    Ok(Target { doc, section })
 }
 
 fn index(docs: &[Document]) -> String {
@@ -532,6 +530,8 @@ mod tests {
         let docs = documents();
         assert!(resolve(&docs, "effects#nope").is_err());
         assert!(resolve(&docs, "nope").is_err());
-        assert!(resolve(&docs, "effects").unwrap().text().starts_with("# "));
+        let whole = resolve(&docs, "effects").unwrap();
+        let source = DOCUMENTS.iter().find(|(n, _)| *n == "effects").unwrap().1;
+        assert_eq!(whole.doc.text_of(whole.section), source);
     }
 }
