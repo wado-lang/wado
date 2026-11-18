@@ -48,18 +48,7 @@ The embedding is a `float16` table a `Gather` reads, so the model has no
 `GatherBlockQuantized`. The inputs and outputs are `int64` and `float16`, and
 the two `Cast`s give `int32`.
 
-1. [ ] Experts held on demand. An expert is one slice along the first axis of
-   each `QMoE` input the operator's definition indexes by expert, so no model
-   is named. A device holds as many experts as a budget the caller sets: all
-   of them on a TPU chip, fewer on a GPU of 8 GB and on `Cpu`. The rest stay
-   in the checkpoint until a token routes to one, and the guest's heap only
-   passes an expert through. An expert the device does not hold is loaded,
-   never computed in its place. Where the budget holds fewer than all the
-   experts, the host reads back which experts a layer routes to before it runs
-   them. So the host waits once a layer, which The MVP Is Tier 1 Only says a
-   `QMoE` spares it. Finished when `operators_test.wado` holds a `QMoE` to
-   onnxruntime with a budget of half its experts on every device.
-2. [ ] gpt-oss-20b, a mixture of experts. Finished when
+1. [ ] gpt-oss-20b, a mixture of experts. Finished when
    `example/gpt-oss-20b/` continues a prompt with the tokens onnxruntime picks
    from onnx-community's `q4f16` export on `Cpu`, under `wado run-webgpu` on a
    device with 8 GB, and under `wado run-pjrt`, with no line that names a
@@ -378,6 +367,17 @@ Whether the backend should be an effect after all. The trait is chosen because
 its cost is known to be zero and the effect's is unmeasured. A device builds the
 graph once per shape class, so on one either cost falls only on a shape class's
 first call.
+
+### Experts held on demand
+
+- [ ] `decode` and `Requests` with fewer experts held than the layers route to.
+  Their steps run in a loop, and a host step is allowed only in the pass's own
+  region, so recording one traps. They run where the budget holds every
+  expert.
+- [ ] `conformance/held_experts.wado` on an input that is not ill-conditioned
+  and that still reaches every product. Its second token moves by 1.7e-4 with
+  the order a held pass sums in, so the device tests hold it to 4e-4 rather
+  than to `LOAM_TOLERANCE`.
 
 ### Devices
 

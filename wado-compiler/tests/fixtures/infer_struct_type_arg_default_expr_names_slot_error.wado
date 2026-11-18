@@ -1,0 +1,19 @@
+// A default may name a slot its field's type does not. Nothing settles the
+// slot here, so the literal reports it, and the default is not walked.
+
+trait Named {
+    fn name() -> String;
+}
+
+struct Labelled<T: Named> {
+    items: List<T>,
+    label: String = T::name(),
+}
+
+test {
+    let labelled = Labelled { items: [] };
+    assert labelled.label == "";
+}
+
+__DATA__
+{"test": {}, "compile_error": ":14:20: analysis error: cannot infer type parameter `T` of struct `Labelled`"}

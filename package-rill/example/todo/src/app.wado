@@ -39,7 +39,7 @@ fn todo_row(todos: Signal<List<Todo>>, todo: Todo) -> View with (Track, Dom) {
 }
 
 /// Builds the list under `root`, and returns what stops its bindings and takes
-/// out the rows and the summary's text. The other nodes stay, and so do the
+/// out the rows and the summary. The other nodes stay, and so do the
 /// listeners.
 pub fn mount(root: Element) -> fn mut() with Dom with Dom {
     return scope(|| {
@@ -59,22 +59,28 @@ pub fn mount(root: Element) -> fn mut() with Dom with Dom {
         let input: HtmlInputElement = field.node else {
             unreachable();
         };
-        View::of(root).children([
-            field,
-            element("button").attribute("id", "add").text("Add").on("click", |_: Event| {
-                let title = input.value();
-                if title.is_empty() {
-                    return;
+        View::of(root)
+            .children([
+                field,
+                element("button").attribute("id", "add").text("Add").on("click", |_: Event| {
+                    let title = input.value();
+                    if title.is_empty() {
+                        return;
+                    }
+                    let mut list = todos.get();
+                    list.push(Todo { id: next_id, title, done: signal(false) });
+                    next_id += 1;
+                    todos.set(list);
+                    input.set_value("");
+                }),
+                element("ul").each(|| todos.get(), |todo: Todo| todo_row(todos, todo)),
+            ])
+            .switch(|| todos.get().is_empty(), |empty| {
+                if empty {
+                    return element("p").text("Nothing to do.");
                 }
-                let mut list = todos.get();
-                list.push(Todo { id: next_id, title, done: signal(false) });
-                next_id += 1;
-                todos.set(list);
-                input.set_value("");
-            }),
-            element("ul").each(|| todos.get(), |todo: Todo| todo_row(todos, todo)),
-            element("p").bind_text(|| `${remaining.get()} left`),
-        ]);
+                return element("p").bind_text(|| `${remaining.get()} left`);
+            });
     });
 }
 
@@ -107,7 +113,7 @@ test "the list follows what the user does" {
     with &mut dom do {
         let body = Dom::document().body().unwrap();
         let mut unmount = mount(body);
-        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul></ul><p>0 left</p>";
+        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul></ul><p>Nothing to do.</p>";
 
         add_todo("one");
         add_todo("two");
@@ -116,14 +122,17 @@ test "the list follows what the user does" {
         let first = Dom::document().get_element_by_id("todo-1").unwrap();
         first.first_child().unwrap().dispatch_event(Event::new("click"));
         assert first.get_attribute("class") == Option::Some("done");
-        assert body.last_child().unwrap().text_content() == Option::Some("1 left");
+        assert body.text_content() == Option::Some("Addone×two×1 left");
 
         first.last_child().unwrap().dispatch_event(Event::new("click"));
         assert Dom::document().get_element_by_id("todo-1") == null;
-        assert body.last_child().unwrap().text_content() == Option::Some("1 left");
+        assert body.text_content() == Option::Some("Addtwo×1 left");
+
+        Dom::document().get_element_by_id("todo-2").unwrap().last_child().unwrap().dispatch_event(Event::new("click"));
+        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul></ul><p>Nothing to do.</p>";
 
         unmount();
-        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul></ul><p></p>";
+        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul></ul>";
     };
 }
 

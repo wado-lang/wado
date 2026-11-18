@@ -19,7 +19,8 @@ t : D B { p.emit("db") }
   ;
 
 A : ( 'a' { lx.count += 1 } )+ ;
-// The same action one level down, in a fragment the repeat inlines.
+// The same action one level down, in a fragment the repeat inlines, never
+// runs: the jar runs only the matching rule's own actions.
 D : F+ ;
 fragment F : 'd' { lx.count += 1 } ;
 B : 'b' { if lx.count == 3 { lx.set_type(TK_C) } } ;

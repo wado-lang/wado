@@ -1041,6 +1041,7 @@ impl Lexer {
 fn apply_INDENT_actions(lx: &mut Lexer, start: i32, end: i32) {
     let src = &lx.src;
     let mut pos = start;
+    let mut deferred_actions: List<[i32, i32]> = [];
     let la_start_0 = pos;
     let mut accept_0: i32 = -1;
     let mut la_end_0: i32 = -1;
@@ -1079,7 +1080,16 @@ fn apply_INDENT_actions(lx: &mut Lexer, start: i32, end: i32) {
         pos += 1;
     }
     if pos != accept_0 { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
-    lx.emit(`INDENT\n`);
+    deferred_actions.push([1, pos]);
+    for let [action, at] of deferred_actions {
+        pos = at;
+        match action {
+            1 => {
+                lx.emit(`INDENT\n`);
+            },
+            _ => unreachable(),
+        }
+    }
 }
 
 fn try_INDENT(src: &StrSlice, start: i32) -> i32 {

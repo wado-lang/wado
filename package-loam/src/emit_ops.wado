@@ -567,17 +567,27 @@ fn built_quantized(node: &Node, checked: &Checked, exprs: &Operands, symbols: &m
 }
 
 /// A `QMoE` as its composite's call. An absent zero point's axes are spelled as
-/// its scales'.
+/// its scales'. A pooled one reads its pools, whose axes past the slots are
+/// the weights' standing for them.
 fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
-    let shapes = &checked.shapes;
     let element = checked.primitives[node.outputs[0]];
     let options = settled(expert_options(node));
     let q = settled(quantization(node));
+    let placed = exprs.experts.get(node.outputs[0]);
+    let shape_of = |at: i32| -> Shape {
+        let read = node.inputs[at];
+        return checked.shapes[exprs.pooled.get(read).unwrap_or(read)];
+    };
+    let [slots, layer, layers, step] = match &placed {
+        Some(p) => [p.slots, `${p.layer}`, `${p.layers}`, `${p.step}`],
+        None => [shape_of(QMOE_UP).axes[0].name, "0", "1", "0"],
+    };
     let mut turbofish: List<String> = [
         BACKEND_PARAM,
         element,
-        `[${axis_list(&shapes[node.inputs[0]])}]`,
-        axis_list(&shapes[node.inputs[1]]),
+        `[${axis_list(&shape_of(0))}]`,
+        axis_list(&shape_of(1)),
+        slots,
     ];
     let mut operands: List<String> = [
         exprs.reference(&node.inputs[0]),
@@ -587,14 +597,9 @@ fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
         [QMOE_UP, QMOE_UP_ZERO_POINTS],
         [QMOE_DOWN, QMOE_DOWN_ZERO_POINTS],
     ] {
-        let weight = shapes[node.inputs[at]];
-        let scales = shapes[node.inputs[at + 1]];
-        let zero_axis = if node.has_operand(zeros) {
-            shapes[node.inputs[zeros]].axes[2].name;
-        } else {
-            scales.axes[2].name;
-        };
-        // The experts' axis is the router's, which the turbofish spells already.
+        let weight = shape_of(at);
+        let scales = shape_of(at + 1);
+        let zero_axis = if node.has_operand(zeros) { shape_of(zeros).axes[2].name } else { scales.axes[2].name };
         turbofish.extend(&([weight.axes[1].name, weight.axes[2].name, scales.axes[2].name, zero_axis] as List<String>));
         operands.extend(&([
             exprs.reference(&node.inputs[at]),
@@ -606,7 +611,7 @@ fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     operands.push(
         `&Experts { k: ${options.k}, normalized: ${options.normalized}, alpha: ${f32_literal(options.alpha)}, beta: ${f32_literal(
             options.beta,
-        )}, limit: ${f32_literal(options.limit)}, quantized: Quantized { bits: ${q.bits}, block: ${q.block} } }`,
+        )}, limit: ${f32_literal(options.limit)}, quantized: Quantized { bits: ${q.bits}, block: ${q.block} }, layer: ${layer}, layers: ${layers}, step: ${step} }`,
     );
     return `mixture_of_experts::<${turbofish.join(", ")}>(backend, ${operands.join(", ")})`;
 }

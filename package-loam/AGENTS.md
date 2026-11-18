@@ -34,11 +34,17 @@ nothing. Correctness and speed come first.
 - Test data and models may be copied in and read, each directory carrying its
   source and license, as `tests/onnx/` and `tests/models/` do.
 
+## Backends
+
+Each semantics is written once per backend: `Cpu`, `WebGpuBackend`, and
+`PjrtBackend`. `Cpu` is the reference the others are held to, not a backend
+anyone runs a model on, so a simpler design across the three outranks its
+speed.
+
 ## Testing a change
 
-Each semantics is written once per device: `Cpu`, `WebGpuBackend`, and
-`PjrtBackend`. Generated code reaches all of them, so a change can break code
-it never touched. Test outward from the change, as
+Generated code reaches every backend, so a change can break code it never
+touched. Test outward from the change, as
 [tools.md](./tools.md#testing) lists, and run the whole package once, last.
 
 CI tests the logic on every device with very small programs, which should

@@ -9,6 +9,19 @@ use std::process::{Command, Output};
 /// order, and `erf` as XLA approximates it.
 const LOAM_TOLERANCE: f32 = 1e-4;
 
+/// How far `held_experts.wado`'s held passes may sit from its whole ones. Its
+/// second token is ill-conditioned: its layers clamp and cancel, so the order
+/// a held pass sums its experts in moves it by up to 1.7e-4.
+const HELD_EXPERTS_TOLERANCE: f32 = 4e-4;
+
+fn loam_tolerance(line: &str) -> f32 {
+    if line.starts_with("compiled experts held by half") {
+        HELD_EXPERTS_TOLERANCE
+    } else {
+        LOAM_TOLERANCE
+    }
+}
+
 /// How the program at `path`, from this crate, ends under `command`.
 fn output_of(mut command: Command, path: &str) -> Output {
     command
@@ -101,20 +114,21 @@ fn an_import_nothing_serves_traps_where_it_is_called() {
 /// Every operation a recorded pass holds, a chain stored in each half, the
 /// composite decomposed over rows of
 /// different pasts, `compute` over models with a cache and an `If`, one compile
-/// per shape class, a counted loop, and a decoding program under each kind of
-/// sampler, alone and for requests in slots.
+/// per shape class, a counted loop, a decoding program under each kind of
+/// sampler, alone and for requests in slots, and experts fetched into pools at
+/// a host step.
 #[test]
 #[ignore = "needs a plugin: run `mise run test-pjrt`"]
 fn loams_programs_compute_what_its_cpu_graph_does() {
     let printed = run("../package-loam/conformance/pjrt_graph.wado");
-    assert_eq!(printed.lines().count(), 74, "{printed}");
+    assert_eq!(printed.lines().count(), 81, "{printed}");
     for line in printed.lines() {
         let deviation: f32 = line
             .rsplit(' ')
             .next()
             .and_then(|d| d.parse().ok())
             .unwrap_or_else(|| panic!("no deviation in {line:?}"));
-        assert!(deviation <= LOAM_TOLERANCE, "{line}");
+        assert!(deviation <= loam_tolerance(line), "{line}");
     }
 }
 
@@ -171,7 +185,7 @@ fn loams_programs_compile_for_a_tpu() {
         )
         .env("TPU_SKIP_MDS_QUERY", "1");
     let printed = printed_by(command, "../package-loam/conformance/pjrt_topology.wado");
-    assert_eq!(printed.lines().count(), 79, "{printed}");
+    assert_eq!(printed.lines().count(), 89, "{printed}");
     for line in printed.lines() {
         assert!(line.contains("optimal seconds"), "{line}");
     }

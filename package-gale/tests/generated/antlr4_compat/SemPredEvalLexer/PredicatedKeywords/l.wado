@@ -1039,6 +1039,7 @@ impl Lexer {
 fn apply_ENUM_actions(lx: &mut Lexer, start: i32, end: i32) {
     let src = &lx.src;
     let mut pos = start;
+    let mut deferred_actions: List<[i32, i32]> = [];
     let la_start_0 = pos;
     let mut accept_0: i32 = -1;
     let mut la_end_0: i32 = -1;
@@ -1077,7 +1078,16 @@ fn apply_ENUM_actions(lx: &mut Lexer, start: i32, end: i32) {
         pos += 1;
     }
     if pos != accept_0 { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
-    lx.emit(`enum!\n`);
+    deferred_actions.push([1, pos]);
+    for let [action, at] of deferred_actions {
+        pos = at;
+        match action {
+            1 => {
+                lx.emit(`enum!\n`);
+            },
+            _ => unreachable(),
+        }
+    }
 }
 
 fn apply_ID_actions(lx: &mut Lexer, start: i32, end: i32) {

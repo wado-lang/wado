@@ -8,6 +8,9 @@ use { JToken } from "./jlexer.wado";
 
 pub variant JExpr {
     Int(String),
+    /// A char literal's code point: Java promotes a `char` to `int` in
+    /// arithmetic and comparisons, the only places it is emitted.
+    Char(i32),
     Str(String),
     Bool(bool),
     Attr(String),
@@ -348,6 +351,10 @@ fn parse_atom(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
             *pos += 1;
             Result::Ok(JExpr::Int(*v));
         },
+        Char(code) => {
+            *pos += 1;
+            Result::Ok(JExpr::Char(*code));
+        },
         Str(v) => {
             *pos += 1;
             Result::Ok(JExpr::Str(*v));
@@ -406,8 +413,7 @@ fn looks_like_cast(tokens: &List<JToken>, pos: i32) -> bool {
     }
     return match &tokens[nx] {
         Attr(_) => true,
-        Int(_) => true,
-        Str(_) => true,
+        Int(_) | Char(_) | Str(_) => true,
         Ident(_) => true,
         Punct(q) => *q == "(" || *q == "!",
     };

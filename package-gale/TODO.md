@@ -44,6 +44,8 @@ Design in [`action.md`](./action.md). Landed: every lexer emit the match can tak
 
 One narrow gap remains in the surface itself: the lexer's `$line` has no `$`-form. The runtime's line index (`line_starts`) covers the whole input and is built after tokenizing, so a read while lexing would rescan from the start. The alternative is a lexer that counts lines as it goes, for an attribute no grammar asks for. A reference to it is a loud error.
 
+- [ ] **A Wado `@members` block is Gale's own syntax, and nothing specifies it.** It is neither a Wado item nor Java. A field is `name: Type = init` like a struct field, but a method follows it as in an `impl`, and fields end at `;` or `,` like statements or struct fields. The only definition is what `wado_members.wado` scans (`parse_field`, `scan_to`, `closure_params_end`), and `action.md` covers the separators alone. Write the grammar down: what a field and a method may be, what separates them, and where an initializer ends. An initializer ending is found by scanning brackets, so the spec must say which commas belong to it (a turbofish's and a closure's parameters do today).
+
 A caller's scan evaluates a called rule's predicate only when it reads no parser state or only fields the scan gate simulates. `action.md` counts every predicate without `$arg` / `$local` / `$ret` as context-independent, so one calling `p.la(1)` or a base method is still read as true there. A scan has no `p`, and `scan_gate.wado` says why handing it the parser would read stale state.
 
 ### Not Stage C, and blocked

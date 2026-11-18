@@ -52,6 +52,340 @@ test "a view of an element made elsewhere builds on that element" {
     };
 }
 
+test "show puts its subtree where it stands in the chain while the condition holds" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = element("ul");
+        let empty = signal(true);
+        let _dispose = scope(|| {
+            list.child(item(1)).show(|| empty.get(), || element("li").text("none")).child(item(2));
+        });
+        assert list.node.get_html() == "<li>1</li><li>none</li><li>2</li>";
+
+        empty.set(false);
+        flush();
+        assert list.node.get_html() == "<li>1</li><li>2</li>";
+
+        empty.set(true);
+        flush();
+        assert list.node.get_html() == "<li>1</li><li>none</li><li>2</li>";
+    };
+}
+
+test "show keeps its subtree while the condition stays true" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div");
+        let count = signal(1);
+        let mut renders = 0;
+        let _dispose = scope(|| {
+            box.show(|| count.get() > 0, || {
+                renders += 1;
+                return element("p");
+            });
+        });
+        let shown = box.node.first_child().unwrap();
+
+        count.set(2);
+        flush();
+        assert renders == 1;
+        assert box.node.first_child().unwrap() == shown;
+    };
+}
+
+test "show disposes of its subtree when it hides it" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div");
+        let visible = signal(true);
+        let label = signal("a");
+        let mut cleanups = 0;
+        let _dispose = scope(|| {
+            box.show(|| visible.get(), || {
+                on_cleanup(|| cleanups += 1);
+                return element("p").bind_attribute("title", || Option::Some(label.get()));
+            });
+        });
+        let shown: Element = box.node.first_child().unwrap() else {
+            unreachable();
+        };
+
+        visible.set(false);
+        flush();
+        assert cleanups == 1;
+        label.set("b");
+        flush();
+        assert shown.get_attribute("title") == Option::Some("a");
+    };
+}
+
+test "show takes its subtree out when its owner is disposed of" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div").text("x");
+        let mut dispose = scope(|| {
+            box.show(|| true, || element("p"));
+        });
+        assert box.node.get_html() == "x<p></p>";
+
+        dispose();
+        assert box.node.get_html() == "x";
+        assert box.node.first_child() == box.node.last_child();
+    };
+}
+
+test "show survives a cleanup in its subtree disposing of its owner" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div");
+        let visible = signal(true);
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        dispose_owner = scope(|| {
+            box.show(|| visible.get(), || {
+                on_cleanup(|| dispose_owner());
+                return element("p");
+            });
+        });
+
+        visible.set(false);
+        flush();
+        assert box.node.get_html() == "";
+        assert !box.node.has_child_nodes();
+    };
+}
+
+test "show disposes of what render made after render disposed of its owner" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div");
+        let visible = signal(false);
+        let label = signal("a");
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        let mut made: Option<Element> = null;
+        dispose_owner = scope(|| {
+            box.show(|| visible.get(), || {
+                dispose_owner();
+                let p = element("p").bind_attribute("title", || Option::Some(label.get()));
+                made = Option::Some(p.node);
+                return p;
+            });
+        });
+
+        visible.set(true);
+        flush();
+        label.set("b");
+        flush();
+        assert made.unwrap().get_attribute("title") == Option::Some("a");
+        assert !box.node.has_child_nodes();
+    };
+}
+
+test "each renders no further once render disposed of its owner, and disposes of what it made" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = element("ul");
+        let items: Signal<List<i32>> = signal([]);
+        let label = signal("a");
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        let mut made: List<Element> = [];
+        dispose_owner = scope(|| {
+            list.each(|| items.get(), |value: i32| {
+                dispose_owner();
+                let row = item(value).bind_attribute("title", || Option::Some(label.get()));
+                made.push(row.node);
+                return row;
+            });
+        });
+
+        items.set([1, 2]);
+        flush();
+        label.set("b");
+        flush();
+        assert made.len() == 1;
+        for let row of made {
+            assert row.get_attribute("title") == Option::Some("a");
+        }
+        assert !list.node.has_child_nodes();
+    };
+}
+
+test "each keeps no rows once a removed row's cleanup disposed of its owner" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = element("ul");
+        let items: Signal<List<i32>> = signal([1]);
+        let label = signal("a");
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        let mut made: List<Element> = [];
+        let mut cleanups = 0;
+        dispose_owner = scope(|| {
+            list.each(|| items.get(), |value: i32| {
+                if value == 1 {
+                    on_cleanup(|| {
+                        cleanups += 1;
+                        dispose_owner();
+                    });
+                }
+                let row = item(value).bind_attribute("title", || Option::Some(label.get()));
+                made.push(row.node);
+                return row;
+            });
+        });
+
+        items.set([2]);
+        flush();
+        label.set("b");
+        flush();
+        assert cleanups == 1;
+        assert made[1].get_attribute("title") == Option::Some("a");
+        assert !list.node.has_child_nodes();
+    };
+}
+
+test "switch shows the subtree render makes for the key, and swaps it when the key changes" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div").text("[");
+        let mode = signal("view");
+        let mut cleanups: List<String> = [];
+        let mut renders = 0;
+        let mut dispose = scope(|| {
+            box
+                .switch(|| mode.get(), |key| {
+                    renders += 1;
+                    on_cleanup(|| cleanups.push(key));
+                    return element(if key == "edit" { "input" } else { "span" });
+                })
+                .text("]");
+        });
+        assert box.node.get_html() == "[<span></span>]";
+
+        mode.set("view");
+        flush();
+        assert renders == 1;
+
+        mode.set("edit");
+        flush();
+        assert box.node.get_html() == "[<input>]";
+        assert cleanups == ["view"];
+
+        mode.set("view");
+        flush();
+        assert renders == 3;
+        assert box.node.get_html() == "[<span></span>]";
+
+        dispose();
+        assert cleanups == ["view", "edit", "view"];
+        assert box.node.get_html() == "[]";
+    };
+}
+
+test "show asks when once to show what was hidden" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div");
+        let requests = signal(0);
+        let mut pending = 0;
+        let mut asked = 0;
+        let _dispose = scope(|| {
+            box.show(|| {
+                asked += 1;
+                requests.get();
+                let answer = pending > 0;
+                pending = 0;
+                return answer;
+            }, || element("p"));
+        });
+
+        pending = 1;
+        requests.set(1);
+        flush();
+        assert asked == 2;
+        assert box.node.has_child_nodes();
+    };
+}
+
+test "switch renders nothing once its key disposed of the owner" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div");
+        let mode = signal(1);
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        let mut renders = 0;
+        dispose_owner = scope(|| {
+            box.switch(|| {
+                let key = mode.get();
+                if key == 2 {
+                    with &mut dom do {
+                        dispose_owner();
+                    };
+                }
+                return key;
+            }, |_| {
+                renders += 1;
+                return element("p");
+            });
+        });
+
+        mode.set(2);
+        flush();
+        assert renders == 1;
+        assert !box.node.has_child_nodes();
+    };
+}
+
+test "switch renders the key a cleanup of the last subtree wrote" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div");
+        let mode = signal(1);
+        let mut rendered: List<i32> = [];
+        let _dispose = scope(|| {
+            box.switch(|| mode.get(), |key| {
+                rendered.push(key);
+                if key == 1 {
+                    on_cleanup(|| mode.set(3));
+                }
+                return element("p");
+            });
+        });
+
+        mode.set(2);
+        flush();
+        assert rendered == [1, 3];
+    };
+}
+
+test "switch renders no next subtree once the last one's cleanup disposed of its owner" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div");
+        let mode = signal(1);
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        let mut renders = 0;
+        dispose_owner = scope(|| {
+            box.switch(|| mode.get(), |key| {
+                renders += 1;
+                if key == 1 {
+                    on_cleanup(|| dispose_owner());
+                }
+                return element("p");
+            });
+        });
+
+        mode.set(2);
+        flush();
+        assert renders == 1;
+        assert !box.node.has_child_nodes();
+    };
+}
+
 test "each follows a new order with the nodes it had" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {

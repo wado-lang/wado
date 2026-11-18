@@ -79,9 +79,11 @@ test "build adds each operator's operations to the graph the backend builds" {
     // `build` takes the input and leaves the output on the backend, and
     // `compute` uploads the one and reads the other back.
     assert out.contains(
-        "pub fn compute<affine Bk: Graph>(backend: &mut Bk, X: &Tensor<f32, [N, X1]>, model: &mut Model<Bk>) -> Tensor<f32, [N, Y1]> with _ {",
+        "pub fn compute<affine Bk: Backend, affine Src: WeightSource>(backend: &mut Bk, X: &Tensor<f32, [N, X1]>, model: &mut Model<Bk, Src>) -> Tensor<f32, [N, Y1]> with _ {",
     );
-    assert out.contains("    return resized(&backend.download(&passed), [to_extent(dim_N), 2]);\n");
+    assert out.contains(
+        "    return resized(&backend.download(&typed::<Bk, f32, [N, Y1]>(backend, &results[0])), [to_extent(dim_N), 2]);\n",
+    );
 }
 
 test "each input is uploaded after the checks that read the host's and the pass begins, and no weight is" {
@@ -97,7 +99,7 @@ test "the weights become Params, which the backend holds for every pass" {
     let out = generate(MLP).unwrap();
 
     assert out.contains("    pub W1: Bk::Tensor<f32, [X1, W11]>,\n");
-    assert out.contains("    pub fn params<affine Bk: Graph>(&self, backend: &mut Bk) -> Params<Bk> with _ {\n");
+    assert out.contains("    pub fn params<affine Bk: Backend>(&self, backend: &mut Bk) -> Params<Bk> with _ {\n");
     assert out.contains("backend.dot_general::<f32, [N, X1], [X1, W11], [N, W11]>(X, &weights.W1");
 }
 
@@ -191,15 +193,15 @@ pair (float[N, 2] A) => (float[N, 2] Z, float[N, 2] Y)
 
     assert out.contains("pub struct Outputs {\n    pub Z: Tensor<f32, [N, A1]>,\n    pub Y: Tensor<f32, [N, A1]>,\n}");
     assert out.contains(
-        "pub fn compute<affine Bk: Graph>(backend: &mut Bk, A: &Tensor<f32, [N, A1]>, model: &mut Model<Bk>) -> Outputs with _ {",
+        "pub fn compute<affine Bk: Backend, affine Src: WeightSource>(backend: &mut Bk, A: &Tensor<f32, [N, A1]>, model: &mut Model<Bk, Src>) -> Outputs with _ {",
     );
     assert out.contains(
         "pub struct Passed<affine Bk: Holds> {\n    pub Z: Bk::Tensor<f32, [N, A1]>,\n    pub Y: Bk::Tensor<f32, [N, A1]>,\n}",
     );
     assert out.contains("return Passed { Z: Z, Y: Y };");
-    assert out.contains("let Passed { Z, Y } = match model.programs.run(");
+    assert out.contains("let results = model.programs.run(");
     assert out.contains(
-        "return Outputs { Z: resized(&backend.download(&Z), [to_extent(dim_N), 2]), Y: resized(&backend.download(&Y), [to_extent(dim_N), 2]) };",
+        "return Outputs { Z: resized(&backend.download(&typed::<Bk, f32, [N, A1]>(backend, &results[0])), [to_extent(dim_N), 2]), Y: resized(&backend.download(&typed::<Bk, f32, [N, A1]>(backend, &results[1])), [to_extent(dim_N), 2]) };",
     );
 }
 
@@ -233,7 +235,7 @@ test "the pasts and the presents they pair with are one Cache, which build takes
     assert !out.contains("pub present_key");
     assert out.contains("    pub Y: Tensor<f32, [");
     assert out.contains(
-        "return Outputs { Y: resized(&backend.download(&Y), [1, to_extent(dim_N), 2]), cache: fitted_fields(backend, &cache, &[[[1, ",
+        "(backend, &results[0])), [1, to_extent(dim_N), 2]), cache: fitted_fields(backend, &presents, &[[[1, ",
     );
 }
 
@@ -241,11 +243,11 @@ test "compute keeps the cache it is given through the pass it begins" {
     let out = generate(decoder("past_key", "present_key")).unwrap();
 
     let computed = compute_of(&out);
-    assert computed.contains("cache: &Cache<Bk>, model: &mut Model<Bk>) -> Outputs<Bk> with _ {");
+    assert computed.contains("cache: &Cache<Bk>, model: &mut Model<Bk, Src>) -> Outputs<Bk> with _ {");
     assert out.contains("pub struct Outputs<affine Bk: Holds> {");
     assert computed.find("retain_fields(backend, cache);").unwrap() < computed.find("backend.begin();").unwrap();
     assert !computed.contains("input_mismatch(past_key");
-    assert computed.contains("let Passed { Y, cache } = match model.programs.run(");
+    assert computed.contains("let presents: Cache<Bk> = restored_fields(backend, &results, 1);");
 }
 
 test "an empty cache holds no position along the past's length, and zeros of every other state" {
@@ -311,7 +313,7 @@ pass (float[N, 2] A) => (float[N, 2] A, float[N, 2] Y)
 
     assert out.contains("return Passed { A: *A, Y: Y };");
     assert out.contains(
-        "return Outputs { A: resized(&backend.download(&A), [to_extent(dim_N), 2]), Y: resized(&backend.download(&Y), [to_extent(dim_N), 2]) };",
+        "return Outputs { A: resized(&backend.download(&typed::<Bk, f32, [N, A1]>(backend, &results[0])), [to_extent(dim_N), 2]), Y: resized(&backend.download(&typed::<Bk, f32, [N, A1]>(backend, &results[1])), [to_extent(dim_N), 2]) };",
     );
 }
 
@@ -334,7 +336,7 @@ bias (float[N, 2] X) => (float[N, 2] Y)
     let out = generate(source).unwrap();
 
     assert out.contains(
-        "impl<affine Bk: Graph> Params<Bk> {\n    /// The weights the graph carries.\n    pub fn embedded(backend: &mut Bk) -> Params<Bk> with _ {",
+        "impl<affine Bk: Backend> Params<Bk> {\n    /// The weights the graph carries.\n    pub fn embedded(backend: &mut Bk) -> Params<Bk> with _ {",
     );
     assert out.contains("0 => HostWeight::of_bytes::<f32>([2], &embedded_data(0)),");
     // 1.0 is 0x3f800000 and -2.5 is 0xc0200000, little-endian.
@@ -490,7 +492,9 @@ g (float[N, 2] X) => (float[N, 2] X)
     let out = generate(source).unwrap();
 
     assert out.contains("    return *X;\n");
-    assert out.contains("return resized(&backend.download(&passed), [to_extent(dim_N), 2]);");
+    assert out.contains(
+        "return resized(&backend.download(&typed::<Bk, f32, [N, X1]>(backend, &results[0])), [to_extent(dim_N), 2]);",
+    );
 }
 
 test "folded tensors of one source keep their own elements, a Cast between them" {
@@ -941,7 +945,7 @@ g (float[N, 2] X) => (float[N, 2] Y)
     let out = generate(source).unwrap();
 
     assert out.contains("    pub params_: Tensor<f32, [X1]>,\n");
-    assert out.contains("pub fn params<affine Bk: Graph>(&self");
+    assert out.contains("pub fn params<affine Bk: Backend>(&self");
 }
 
 test "a tensor named as a runtime item the module does not import keeps its name" {
@@ -1118,7 +1122,7 @@ test "a half precision boundary states its own element type" {
     let out = generate(mlp("float16")).unwrap();
 
     assert out.contains(
-        "pub fn compute<affine Bk: Graph>(backend: &mut Bk, X: &Tensor<f16, [N, X1]>, model: &mut Model<Bk>) -> Tensor<f16, [N, Y1]> with _ {",
+        "pub fn compute<affine Bk: Backend, affine Src: WeightSource>(backend: &mut Bk, X: &Tensor<f16, [N, X1]>, model: &mut Model<Bk, Src>) -> Tensor<f16, [N, Y1]> with _ {",
     );
     assert out.contains("pub W1: Tensor<f16, [X1, W11]>,");
 }
@@ -1134,7 +1138,9 @@ test "a half precision graph computes in its own element type" {
     assert out.contains(
         "let A = backend.binary::<f16, [N, W11]>(Binary::Maximum, &HB, &full::<Bk, f16, [N, W11]>(backend, f16::from_f32(0 as f32), [to_extent(dim_N), 3]));",
     );
-    assert out.contains("return resized(&backend.download(&passed), [to_extent(dim_N), 2]);");
+    assert out.contains(
+        "return resized(&backend.download(&typed::<Bk, f16, [N, Y1]>(backend, &results[0])), [to_extent(dim_N), 2]);",
+    );
 }
 
 test "bfloat16 is the same graph with the other primitive" {
@@ -1457,7 +1463,7 @@ test "compute holds a cache at the capacity of the total, its past's length what
         Y, "present.0.key", "present.0.value" = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1>(Q, K, V, "past_key_values.0.key", "past_key_values.0.value", L, T32)
     }`;
     let computed = compute_of(&generate(source).unwrap());
-    assert computed.contains("cache: &Cache<Bk>, model: &mut Model<Bk>) -> Outputs<Bk>");
+    assert computed.contains("cache: &Cache<Bk>, model: &mut Model<Bk, Src>) -> Outputs<Bk>");
     assert computed.contains("let dim_P = -dim_S + dim_T;");
     // The cache holds the present at its capacity, so the past's is what that
     // leaves beside the sequence's.
@@ -1695,6 +1701,40 @@ test "a constant with no operator to fold into is a rank-0 literal" {
     assert out.split("data: [0.5 as f32]").count() == 2;
 }
 
+/// Two `QMoE` layers of one layout over 4 experts, their weights in a checkpoint.
+global QMOE_LAYERS: String = qmoe_layers(
+    "k = 2, expert_weight_bits = 4, block_size = 32, activation_type = \"swiglu\", swiglu_fusion = 1, activation_alpha = 1.702, activation_beta = 1.0",
+);
+
+fn qmoe_layers(attrs: String) -> String {
+    return `
+g (float[N, 32] X, float[N, 4] R, float[N, 4] Q) => (float[N, 32] Y)
+<uint8[4, 64, 16] W1, float[4, 64, 1] S1, uint8[4, 32, 16] W2, float[4, 32, 1] S2,
+ uint8[4, 64, 16] V1, float[4, 64, 1] T1, uint8[4, 32, 16] V2, float[4, 32, 1] T2>
+{
+    H = com.microsoft.QMoE<${attrs}>(X, R, W1, S1, "", W2, S2, "")
+    Y = com.microsoft.QMoE<${attrs}>(H, Q, V1, T1, "", V2, T2, "")
+}
+`;
+}
+
+test "QMoE layers of one layout read one set of pools, each at its own host step" {
+    let out = generate(QMOE_LAYERS).unwrap();
+    assert out.split("pub struct ExpertSlots {}").count() == 2;
+    assert out.contains("pub W1: Bk::Tensor<u8, [ExpertSlots, ");
+    assert !out.contains("pub V1: Bk::Tensor");
+    assert out.contains("layer: 0, layers: 2, step: 0 }");
+    assert out.contains("layer: 1, layers: 2, step: 1 }");
+    assert out.contains("budget: i64) -> Result<Model<Bk, Src>, LoadError> with _ {");
+}
+
+test "a QMoE whose expert weight another node reads keeps its experts out of the pools" {
+    let out = generate(QMOE_LAYERS.replace("    Y = ", "    U = Identity(T2)\n    Y = ")).unwrap();
+    assert out.contains("pub V1: Bk::Tensor<u8, [");
+    assert !out.contains("pub V1: Bk::Tensor<u8, [ExpertSlots");
+    assert out.split("layer: 0, layers: 1, step: 0 }").count() == 3;
+}
+
 test "Params keeps each weight as the backend lays it out for the pass recorded at the least lengths" {
     let source = `
 g (float[N, 2] X) => (float[N, 3] Y)
@@ -1706,13 +1746,13 @@ g (float[N, 2] X) => (float[N, 3] Y)
     let out = generate(source).unwrap();
     assert out.contains("fn least_extents() -> List<List<i32>> {");
     assert out.contains(
-        "fn held<Er>(backend: &mut Bk, load: fn(i32) -> Result<HostWeight, Er> with _) -> Result<Params<Bk>, Er> with _ {",
+        "fn held<Er>(backend: &mut Bk, load: fn(i32) -> Result<HostWeight, Er> with _, pools: List<Any<Bk>>) -> Result<Params<Bk>, Er> with _ {",
     );
     assert out.contains(
-        "let weights = backend.kept_weights(|recorder| recorded(recorder, &least_extents()), 1, 1, load)?;",
+        "let mut weights = backend.kept_weights(|recorder| recorded(recorder, &least_extents()), 1, 1, load)?;",
     );
     assert out.contains("return Result::Ok(restored_fields(backend, &weights, 0));");
-    assert out.contains("return Params::held::<!>(backend, |at| Result::Ok(match at {");
+    assert out.contains("let weights = Params::held::<!>(backend, |at| Result::Ok(match at {");
     assert out.contains("0 => HostWeight::of(&self.W),");
 }
 
@@ -1847,9 +1887,9 @@ fn refused_for(result: Result<String, EmitError>, reason: String) -> bool {
 
 test "decode offers a program beside compute, whose cache keeps room for its steps" {
     let out = decoded_from(DECODER).unwrap();
-    assert out.contains("pub fn decode<affine Bk: Graph>(");
-    assert out.contains("cache: &Cache<Bk>, room: i32, model: &mut Model<Bk>)");
-    assert out.contains("cache: &Cache<Bk>, steps: i32, sampling: &Sampling, model: &mut Model<Bk>)");
+    assert out.contains("pub fn decode<affine Bk: Backend, affine Src: WeightSource>(");
+    assert out.contains("cache: &Cache<Bk>, room: i32, model: &mut Model<Bk, Src>)");
+    assert out.contains("cache: &Cache<Bk>, steps: i32, sampling: &Sampling, model: &mut Model<Bk, Src>)");
 }
 
 test "a module built without decode takes no room" {
@@ -1878,8 +1918,10 @@ test "decode at rows a pass holds at a capacity ends the rows the capacity adds"
 
 test "rows of their own lengths decode at pasts of their own, which requests in slots take" {
     let out = decoded_from(ROWS_DECODER).unwrap();
-    assert out.contains("pub fn decode_rows<affine Bk: Graph>(");
-    assert out.contains(", pasts: &List<i64>, steps: i32, sampling: &Sampling, model: &mut Model<Bk>) -> Decoded<Bk>");
+    assert out.contains("pub fn decode_rows<affine Bk: Backend, affine Src: WeightSource>(");
+    assert out.contains(
+        ", pasts: &List<i64>, steps: i32, sampling: &Sampling, model: &mut Model<Bk, Src>) -> Decoded<Bk>",
+    );
     assert out.contains(
         "dim_P: backend.upload(&Tensor::<i64, [Slots]> { data: pasts.into_iter().map(|past| dim_P + past - (dim_P)).collect(), extents: [pasts.len()] })",
     );
@@ -1887,9 +1929,9 @@ test "rows of their own lengths decode at pasts of their own, which requests in 
         "let decoding = Decoding::new(backend, sampling, ended, steps, pasts.into_iter().map(|past| dim_T + past - (dim_P)).collect());",
     );
     assert out.contains("pub struct Requests<affine Bk: Holds> {");
-    assert out.contains("pub fn place(&mut self, backend: &mut Bk, slot: i32, ");
+    assert out.contains("pub fn place<affine Src: WeightSource>(&mut self, backend: &mut Bk, slot: i32, ");
     assert out.contains(
-        "pub fn decode(&mut self, backend: &mut Bk, steps: i32, sampling: &Sampling, model: &mut Model<Bk>) -> Tensor<i64, [Slots, Picks]>",
+        "pub fn decode<affine Src: WeightSource>(&mut self, backend: &mut Bk, steps: i32, sampling: &Sampling, model: &mut Model<Bk, Src>) -> Tensor<i64, [Slots, Picks]>",
     );
 }
 
@@ -1899,7 +1941,7 @@ test "a past that does not grow keeps rows of their own lengths from taking requ
         .replace("float[B, 1, ?, 16] present_value)", "float[B, 1, ?, 16] present_value, float[B, 4] present_state)")
         .replace("    logits = Add(raw, tilt)", "    logits = Add(raw, tilt)\n    present_state = Neg(past_state)");
     let out = decoded_from(stateful).unwrap();
-    assert out.contains("pub fn decode_rows<affine Bk: Graph>(");
+    assert out.contains("pub fn decode_rows<affine Bk: Backend, affine Src: WeightSource>(");
     assert !out.contains("Requests");
 }
 
@@ -1988,7 +2030,10 @@ test "decode refuses a past whose extent a pass changes uncounted" {
 
 test "decode checks its ids' token after their shape" {
     let out = decoded_from(DECODER).unwrap();
-    let body = out.substr_bytes(out.find("pub fn decode<affine Bk: Graph>(").unwrap(), out.len());
+    let body = out.substr_bytes(
+        out.find("pub fn decode<affine Bk: Backend, affine Src: WeightSource>(").unwrap(),
+        out.len(),
+    );
     assert body.find("input_mismatch(input_ids").unwrap() < body.find("extent_mismatch(\"input_ids\"").unwrap();
 }
 

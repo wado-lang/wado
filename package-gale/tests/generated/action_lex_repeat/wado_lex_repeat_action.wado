@@ -1079,43 +1079,6 @@ fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) {
     }
 }
 
-fn apply_D_actions(lx: &mut Lexer, start: i32, end: i32) {
-    let src = &lx.src;
-    let mut pos = start;
-    let rep_probe_2_saved = pos;
-    let mut rep_probe_2_ok = false;
-    rep_probe_2: {
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'd' { break rep_probe_2; }
-        pos += 1;
-        rep_probe_2_ok = true;
-    }
-    if !rep_probe_2_ok || pos > end { pos = rep_probe_2_saved; return; }
-    pos = rep_probe_2_saved;
-    if pos >= src.len() || unchecked src.byte_at(pos) != b'd' { return; }
-    pos += 1;
-    lx.count += 1;
-    loop {
-        let rep_saved_2 = pos;
-        rep_2: {
-            let rep_probe_3_saved = pos;
-            let mut rep_probe_3_ok = false;
-            rep_probe_3: {
-                if pos >= src.len() || unchecked src.byte_at(pos) != b'd' { break rep_probe_3; }
-                pos += 1;
-                rep_probe_3_ok = true;
-            }
-            if !rep_probe_3_ok || pos > end { pos = rep_probe_3_saved; break rep_2; }
-            pos = rep_probe_3_saved;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'd' { break rep_2; }
-            pos += 1;
-            lx.count += 1;
-            continue;
-        }
-        pos = rep_saved_2;
-        break;
-    }
-}
-
 fn apply_B_actions(lx: &mut Lexer, start: i32, end: i32) {
     let src = &lx.src;
     let mut pos = start;
@@ -1130,13 +1093,13 @@ fn try_A(lx: &Lexer, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_4 = pos;
-        rep_4: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { break rep_4; }
+        let rep_saved_2 = pos;
+        rep_2: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { break rep_2; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_4;
+        pos = rep_saved_2;
         break;
     }
     return pos;
@@ -1145,16 +1108,16 @@ fn try_A(lx: &Lexer, start: i32) -> i32 {
 fn try_D(lx: &Lexer, start: i32) -> i32 {
     let src = &lx.src;
     let mut pos = start;
-    if pos >= src.len() || unchecked src.byte_at(pos) != b'd' { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'd' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_6 = pos;
-        rep_6: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'd' { break rep_6; }
+        rep_4: {
+            if pos >= src.len() { break rep_4; }
+            if !(unchecked src.byte_at(pos) matches { b'd' }) { break rep_4; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_6;
         break;
     }
     return pos;
@@ -1198,7 +1161,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             },
             'b' => {
                 end = try_B(&lexer, start);
-                if end > best_end { best_end = end; best_kind = TK_B; best_more = false; best_channel = 0; best_act = 2; }
+                if end > best_end { best_end = end; best_kind = TK_B; best_more = false; best_channel = 0; best_act = 1; }
             },
             'c' => {
                 end = try_C(&lexer, start);
@@ -1206,7 +1169,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             },
             'd' => {
                 end = try_D(&lexer, start);
-                if end > best_end { best_end = end; best_kind = TK_D; best_more = false; best_channel = 0; best_act = 1; }
+                if end > best_end { best_end = end; best_kind = TK_D; best_more = false; best_channel = 0; best_act = -1; }
             },
             _ => {},
         }
@@ -1221,8 +1184,6 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if best_act == 0 {
                     apply_A_actions(&mut lexer, start, best_end);
                 } else if best_act == 1 {
-                    apply_D_actions(&mut lexer, start, best_end);
-                } else if best_act == 2 {
                     apply_B_actions(&mut lexer, start, best_end);
                 }
                 best_kind = lexer.act_type;

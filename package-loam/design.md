@@ -330,3 +330,68 @@ four experts of `graph_cases.wado`'s `experts_case`, through
 | ---------------------------- | --------------- |
 | Each pick, a step of 1 token | 409,600         |
 | Each expert, a prompt of 3   | 262,144         |
+
+### Experts Held on Demand
+
+A model's experts may not fit the device: gpt-oss-20b's take most of its
+weights. `Model::load` takes a budget in bytes for them. Where every expert
+fits, they are weights like any other, and nothing below happens. Otherwise the
+device holds as many as fit, and each pass loads the ones the tokens route to
+that it does not hold.
+
+#### The host reads back the routing
+
+Which experts a layer needs is known only once its router has run. The pass
+records a host step there: `Graph::fetched` names the values the host reads and
+the ones it gives back. `Programs::run` splits a recording at each host step
+into programs of its own. It runs a program, reads the values the step names,
+runs the step, and passes what the step gives to the programs after it. Only
+the pass's own region may hold a host step, not a branch or a loop.
+
+So a pass waits for the host once a layer, which
+[WEP: Loam § The MVP Is Tier 1 Only](../docs/wep-2026-09-20-loam.md#the-mvp-is-tier-1-only)
+says a `QMoE` spares it. That holds only where every expert fits, which a TPU
+chip does for gpt-oss-20b and a GPU of 8 GB does not.
+
+#### The pool
+
+An expert is one slice along the first axis of each `QMoE` input indexed by
+expert. The layers whose experts are laid out alike share a pool: one weight
+for each of those inputs, whose first axis is the pool's slots, so a slot holds
+one expert in each. The budget sets the number of slots, and each pool must
+hold one layer's experts, since one prompt may route to all of them.
+
+The host step of a layer reads its picks back, and loads each picked expert the
+pool does not hold into the slot used longest ago, among those the layer does
+not need. Each backend writes a slot in place, as it laid the weight out. It
+gives the layer each distinct expert it picked and the slot holding it, and
+the layer runs those experts alone.
+
+`HeldExperts` keeps that store on the host. It counts the budget at the widths
+the checkpoint stores. Each pool group first gets one layer's slots, and the
+rest of the budget is shared in proportion to the bytes of the layers that
+group still lacks. A budget below one layer per group is a `LoadError`. Where
+a group's slots hold every layer, the slot of a layer's expert is fixed, so the
+pass takes no host step for it.
+
+#### What the generator pools
+
+A `QMoE` is pooled where each expert weight it reads is an initializer that no
+other operand, branch or output reads, stored where the graph's other weights
+are. `Params` then holds a pool in place of those weights, and the layers whose
+weights have the same elements and extents share it. `Model::load` and
+`Model::embedded` take the budget; `Params::load` and `Params::embedded` hold
+every expert.
+
+A program after a host step must not read a weight the step has since written.
+So `split` computes a value that reads only weights again in each program that
+reads it, rather than passing it across the step.
+
+`conformance/operators_test.wado`'s `QMoeLayers` runs two layers that share
+pools holding half their experts, on `Cpu`. Over two layers onnxruntime sits up
+to 4e-4 from the value computed in f64, so the case holds Loam to that value.
+`held_experts.wado` holds each device's run of it to the same device's run with
+every expert held. Its second token is ill-conditioned: a device parts from
+`Cpu` there by as much as onnxruntime does, and the order in which a held run
+sums its experts moves it by up to 1.7e-4 on XLA's CPU plugin, so the device
+tests hold this case to 4e-4.
