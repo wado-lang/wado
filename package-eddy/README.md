@@ -86,9 +86,12 @@ and every script come from the default branch, so the pull request's code runs
 only inside Eddy's confinement. The record and the patches stay in the run's
 artifact for 90 days, as `eddy-<pr>-<head>`.
 
-The workflow holds no API key. It exchanges the job's GitHub OIDC token for a
-short-lived one under a Workload Identity Federation rule, which accepts only
-`eddy.yml` on main.
+The workflow holds no API key. With `ANTHROPIC_FEDERATION_RULE_ID` and the
+rest of a Workload Identity Federation rule in its environment, Eddy trades
+the job's GitHub OIDC token for a short-lived one, which the rule grants only
+to `eddy.yml` on main, and mints the next before each one expires. Its
+children, the reviewed code among them, get none of its environment, so they
+cannot mint one.
 
 `src/main.wado` states the options.
 

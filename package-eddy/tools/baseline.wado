@@ -26,7 +26,7 @@
 //!     package-eddy/eval/judged.json package-eddy/eval/baseline.json
 //! ```
 
-use { args, env, eprintln, Stderr, Environment } from "core:cli";
+use { args, eprintln, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Process } from "core:process";
@@ -47,7 +47,7 @@ use {
     Judged,
     Run,
 } from "./eval.wado";
-use { ask_json, Usage } from "../src/anthropic.wado";
+use { ask_json, Credential, Usage } from "../src/anthropic.wado";
 use { cost_summary } from "../src/cost.wado";
 use { review, Submission } from "../src/review.wado";
 use { hold_tree, Tree, home_runner, with_mise_tools, reset_snapshot, index } from "../src/snapshot.wado";
@@ -100,9 +100,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client, MonotonicC
     assert !SYMBOLS || TOOLS, "the symbol tools read the tree that tools=true checks out";
     assert !RUN || TOOLS, "Run builds the tree that tools=true checks out";
     assert arguments.len() == 4, "usage: baseline.wado <szz.json> <checked.json> <judged.json> <out.json>";
-    let Some(api_key) = env("CLAUDE_API_KEY") else {
-        panic("CLAUDE_API_KEY is not set");
-    };
+    let mut credential = Credential::from_env().unwrap();
     let census = from_string::<Census, String>(fs::read_to_string(&arguments[0]).unwrap()).unwrap();
     let checked = from_string::<Checked, String>(fs::read_to_string(&arguments[1]).unwrap()).unwrap();
     let judged = from_string::<Judged, String>(fs::read_to_string(&arguments[2]).unwrap()).unwrap();
@@ -171,7 +169,7 @@ ${fix_diff}
             if RUN && let Some(w) = &ws {
                 reset_snapshot(&w.repo, &w.root, &culprit.sha);
             }
-            let graded = review_once(&api_key, &review_prompt, &known, &ws, &mut grading);
+            let graded = review_once(&mut credential, &review_prompt, &known, &ws, &mut grading);
             reviewing.add(&graded.usage.unwrap_or(Usage {}));
             out.entries[i].runs.push(graded);
             // Written after every run, so a run that dies keeps what it paid for.
@@ -221,13 +219,13 @@ fn judged_defect(judged: &Judged, fix: i32) -> String {
 /// One review of the culprit, graded against the known defect. A failed
 /// review keeps what it spent. What the grader took is added to `grading`.
 fn review_once(
-    api_key: &String,
+    credential: &mut Credential,
     review_prompt: &Submission,
     known: &String,
     ws: &Option<Workspace>,
     grading: &mut Usage,
 ) -> Run with (Client, Preopens, Process, MonotonicClock) {
-    let r = review(api_key, CLAUDE_MODEL, review_prompt, ws, MAX_TURNS, EFFORT);
+    let r = review(credential, CLAUDE_MODEL, review_prompt, ws, MAX_TURNS, EFFORT);
     let mut reviewed = Run { findings: r.findings, turns: r.turns, calls: r.calls, usage: r.usage, error: r.error };
     if reviewed.error matches { Some(_) } {
         return reviewed;
@@ -237,7 +235,7 @@ fn review_once(
 <findings>
 ${to_string(&reviewed.findings).unwrap()}
 </findings>`;
-    match ask_json::<Grade>(api_key, GRADER, GRADE, grade_prompt, 16_000, grading) {
+    match ask_json::<Grade>(credential, GRADER, GRADE, grade_prompt, 16_000, grading) {
         Ok(g) && g.hit && !(0 <= g.finding < reviewed.findings.len()) => reviewed.error = Some(
             `the grader's hit names finding ${g.finding} of ${reviewed.findings.len()}`,
         ),

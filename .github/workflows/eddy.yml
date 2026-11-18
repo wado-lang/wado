@@ -142,39 +142,19 @@ jobs:
           git worktree add --quiet --detach "$RUNNER_TEMP/head" "$SHA"
           (cd "$RUNNER_TEMP" && cargo "+$toolchain" fetch --locked --manifest-path head/Cargo.toml)
           git worktree remove --force "$RUNNER_TEMP/head"
-      # Workload Identity Federation, so no API key is stored. The rule accepts
-      # only this workflow on main, which only an admin's comment or dispatch
-      # starts. The token is minted here, in the one step that uses it, and
-      # Eddy does not see the means to mint another.
+      # Workload Identity Federation, so no API key is stored: Eddy mints its
+      # tokens from the job's identity. The rule accepts only this workflow on
+      # main, which only an admin's comment or dispatch starts.
       - id: eddy
+        env:
+          ANTHROPIC_FEDERATION_RULE_ID: fdrl_01N2UzGtpPyqSMQz3htMdLce
+          ANTHROPIC_ORGANIZATION_ID: b5accdd0-f052-4fe6-88e6-65bc34d1cba9
+          ANTHROPIC_SERVICE_ACCOUNT_ID: svac_01WVnWQoBfyRFsf4wyM7EHq7
+          ANTHROPIC_WORKSPACE_ID: wrkspc_01Ug39YtMABrbjfon1tEpoXy
         run: |
-          set -euo pipefail
           mkdir -p scratchpad
-          jwt="$(curl -sSf -G -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            --data-urlencode audience=https://api.anthropic.com "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)"
-          echo "::add-mask::$jwt"
-          # The claims a federation rule matches on, none of them secret: the
-          # exchange answers a mismatch with nothing but "Authentication failed".
-          jq -rR 'split(".")[1] | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson
-            | {iss, aud, sub, ref, event_name, repository_owner_id, repository_id, job_workflow_ref}' <<< "$jwt"
-          response="$(jq -n --arg jwt "$jwt" '{
-              grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-              assertion: $jwt,
-              federation_rule_id: "fdrl_01N2UzGtpPyqSMQz3htMdLce",
-              organization_id: "b5accdd0-f052-4fe6-88e6-65bc34d1cba9",
-              service_account_id: "svac_01WVnWQoBfyRFsf4wyM7EHq7",
-              workspace_id: "wrkspc_01Ug39YtMABrbjfon1tEpoXy"
-            }' | curl -sS https://api.anthropic.com/v1/oauth/token -H "content-type: application/json" --data @- 2>&1)" || true
-          token="$(jq -r '.access_token // empty' <<< "$response" 2> /dev/null)" || true
-          if [ -z "$token" ]; then
-            # The post job reads the reason from the log, as from Eddy's own.
-            echo "eddy: the token exchange failed: $(head -c 500 <<< "$response" | tr '\n' ' ')" | tee scratchpad/eddy.log
-            exit 1
-          fi
-          echo "::add-mask::$token"
           status=0
-          env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL CLAUDE_API_KEY="$token" \
-            mise run eddy-review --head "$SHA" > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
+          mise run eddy-review --head "$SHA" > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
           cat scratchpad/eddy.log
           exit "$status"
       # The record is what Eddy later learns from; it outlives the run here.
