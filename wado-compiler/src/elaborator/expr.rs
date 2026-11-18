@@ -4267,12 +4267,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             if !omitted_defaults.is_empty() {
-                let omitted: Vec<usize> = omitted_defaults.iter().map(|(idx, _)| *idx).collect();
                 let (bindings, settled_params) = self.field_default_type_bindings(
                     struct_decl,
                     annotated_args.as_deref(),
                     &fields,
-                    &omitted,
+                    &omitted_defaults,
                     struct_lit.span,
                 );
                 // The declared type still names the struct's own parameters
@@ -4810,7 +4809,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_decl: Option<DefId>,
         expected_args: Option<&[TypeId]>,
         fields: &[ResolvedField],
-        omitted: &[usize],
+        omitted: &[(usize, ast::Expr)],
         span: Span,
     ) -> (Vec<DefaultTypeBinding>, SubstitutionContext) {
         let Some(info) = self.struct_fields_of_written_decl(struct_decl).cloned() else {
@@ -4866,7 +4865,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 if omitted
                     .iter()
-                    .any(|&idx| table.mentions_param(info.fields[idx].1, param))
+                    .any(|(idx, _)| table.mentions_param(info.fields[*idx].1, param))
                 {
                     settled.insert(slot, TypeTable::ERROR);
                     let name = util::bound_param_name(&table, slot)
