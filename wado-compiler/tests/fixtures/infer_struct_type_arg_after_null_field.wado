@@ -11,6 +11,12 @@ struct Lazy<T> {
     compute: fn() -> T,
 }
 
+struct Defaulted<T: Default> {
+    cached: Option<T>,
+    items: List<T>,
+    fallback: T = T::default(),
+}
+
 fn lazy<T>(compute: fn() -> T) -> Lazy<T> {
     let state = Lazy { cached: null, compute };
     return state;
@@ -21,6 +27,9 @@ test {
     let cache = Cache { cached: null, items };
     assert cache.items.len() == 2;
     assert cache.cached == null;
+
+    let defaulted = Defaulted { cached: null, items };
+    assert defaulted.fallback == 0;
 
     let made = lazy(|| "x");
     assert (made.compute)() == "x";

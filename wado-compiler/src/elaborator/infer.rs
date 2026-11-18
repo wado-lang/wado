@@ -50,10 +50,9 @@ pub(super) fn unify(
         ) => {
             bindings.entry(expected).or_insert(actual);
         }
-        // A variable met by itself, as `null` typed `Option<$T>` under an
-        // expected `Option<$T>` is, answers nothing, and must leave the slot
-        // for a later field to settle.
-        (ResolvedType::InferVar(_), _) if expected == actual => {}
+        // An unsolved variable, as in `null` typed `Option<$T>`, answers
+        // nothing, and must leave the slot for a later field to settle.
+        (ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_), ResolvedType::InferVar(_)) => {}
         // Direct type parameter mapping.
         //
         // `or_insert` prevents later fields with self-referential types
