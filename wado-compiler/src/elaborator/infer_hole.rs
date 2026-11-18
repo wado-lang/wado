@@ -53,6 +53,16 @@ pub(crate) struct InferHoleTable {
     /// The associated-type equalities of deferred owners, settled the moment
     /// the owner is answered.
     links: Vec<ProjectionLink>,
+    /// Struct literals whose field defaults were not walked, since a slot they
+    /// are typed by was a hole. An unsolved hole reports itself; a solved one
+    /// came too late for the defaults, so the literal reports it.
+    unwalked_defaults: Vec<UnwalkedDefaults>,
+}
+
+struct UnwalkedDefaults {
+    holes: Vec<TypeId>,
+    span: Span,
+    message: String,
 }
 
 /// An associated-type equality of a bound on a slot the call deferred
@@ -306,6 +316,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
             param: None,
             owner: message,
+        });
+    }
+
+    /// Leave a struct literal's field defaults unwalked while `holes` are
+    /// open, and report the literal with `message` if they are all solved.
+    pub(super) fn leave_defaults_unwalked(
+        &mut self,
+        holes: Vec<TypeId>,
+        span: Span,
+        message: String,
+    ) {
+        assert!(
+            holes
+                .iter()
+                .all(|hole| self.infer_holes.solutions.contains_key(hole)),
+            "a struct literal's open slot is a hole finalize settles"
+        );
+        self.infer_holes.unwalked_defaults.push(UnwalkedDefaults {
+            holes,
+            span,
+            message,
         });
     }
 
@@ -659,6 +690,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 message: blame.message(&unique),
                 span: blame.span,
             });
+        }
+        for unwalked in std::mem::take(&mut self.infer_holes.unwalked_defaults) {
+            let solved = unwalked.holes.iter().all(|hole| {
+                self.infer_holes
+                    .solutions
+                    .get(hole)
+                    .is_some_and(Option::is_some)
+            });
+            if solved {
+                let _ = self.emit(TypeError::CannotInferType {
+                    message: unwalked.message,
+                    span: unwalked.span,
+                });
+            }
         }
         let subst = self.pinned_hole_subst();
         self.verify_solved_hole_bounds(&subst);
