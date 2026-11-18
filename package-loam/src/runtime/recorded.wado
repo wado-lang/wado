@@ -1070,7 +1070,8 @@ impl Splitting {
         for let id of region.nodes {
             let node = &self.recorded.nodes[id];
             match &node.op {
-                Carried | Yield => {
+                // Every program takes the parameters, and the host sets the rest.
+                Parameter(_) | Carried | Yield => {
                 },
                 Fetched([step, k]) => {
                     if *k == 0 {

@@ -37,7 +37,7 @@ use {
     windowed_input,
     written_pools,
 } from "./graph_cases.wado";
-use { Any, Programs, Recorded, Recorder, Untyped, host_of, run, typed } from "./recorded.wado";
+use { Any, Programs, Recorded, Recorder, Untyped, host_of, run, split, typed } from "./recorded.wado";
 use { Binary, Graph, Slots, branched } from "./hlo.wado";
 use { Cpu, CpuTensor, Element, ElementKind, Holds, Tensor } from "./tensor.wado";
 
@@ -595,6 +595,12 @@ test "a branch holding a host step runs on the host, the step only where it is t
             }),
         ] as List<Any<Cpu>>;
     }
+}
+
+test "a pass whose parameters alone sit outside its host branch runs no program for them" {
+    let recorded = stepped_branch(&mut Recorder::new(), &[[3], []]);
+    let [programs, _] = split(&recorded, 0);
+    assert programs.len() == 0;
 }
 
 test "a pool's slot holds the row written there, and the other slots what they held" {
