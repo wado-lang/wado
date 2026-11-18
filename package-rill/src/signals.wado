@@ -16,7 +16,8 @@ pub interface Track {
     }
 }
 
-/// Who reads a signal or a memo, and how many times its value changed.
+/// Who reads a signal or a memo, and how many times the signal was written or
+/// the memo's value came out different.
 struct Readers {
     observers: List<Observer>,
     version: i32,
@@ -234,7 +235,7 @@ struct MemoState<T> {
 /// A value computed from others, again only when one of them changed and
 /// someone asks. A value equal to the last one changes nothing for its
 /// readers. It stops listening when the computation that made it is disposed
-/// of, and listens again if it is read after that.
+/// of, and listens again if it is read after that. `compute` writes no signal.
 pub struct Memo<T> {
     state: &mut MemoState<T>,
 }
