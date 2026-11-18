@@ -166,11 +166,8 @@ jobs:
           ANTHROPIC_WORKSPACE_ID: wrkspc_01Ug39YtMABrbjfon1tEpoXy
         run: |
           mkdir -p scratchpad
-          # The records live in the wiki; a review adds to its commit's record.
-          git clone --quiet --depth 1 "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.wiki.git" scratchpad/wiki
           status=0
-          mise run eddy-review --head "$SHA" --reviews scratchpad/wiki/reviews \
-            > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
+          mise run eddy-review --head "$SHA" > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
           cat scratchpad/eddy.log
           exit "$status"
       - if: always()

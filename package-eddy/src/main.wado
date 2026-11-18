@@ -15,8 +15,8 @@
 //! `--report-again` reports the last recorded review of the head once more,
 //! with no new review, to try another reporter on the same findings.
 //!
-//! The record is
-//! `<--reviews>/<head>.json`, one entry per review. Under `<--out>/<head>/`
+//! The record is `<--reviews>/<head>.json`, one entry per review; the default
+//! is a clone of the repository's wiki, which keeps them. Under `<--out>/<head>/`
 //! (`scratchpad/eddy`) go `review.md`, one pull request comment for the whole
 //! review and its cost, written even when the review fails, and for each
 //! finding `<n>.md`, the body of a comment that reproduces it from one pasted
@@ -65,7 +65,7 @@ struct Options {
     report_again: bool = false,
     max_turns: i32 = 40,
     effort: String = "medium",
-    reviews: String = "package-eddy/reviews",
+    reviews: String = "scratchpad/wiki/reviews",
     out: String = "scratchpad/eddy",
 }
 impl Deserialize for Options;
