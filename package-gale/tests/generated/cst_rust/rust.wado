@@ -5304,33 +5304,148 @@ fn frag_UNICODE_ESCAPE(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { return -1; }
     pos += 1;
-    opt_36: {
-        if pos >= src.len() { break opt_36; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break opt_36; }
-        pos += 1;
+    let mut la_end_36: i32 = -1;
+    let mut la_once_36 = false;
+    loop {
+        let mut la_tot_37: i32 = -1;
+        let peek_save_38 = pos;
+        peek_38: {
+            let mut la_end_39: i32 = -1;
+            let mut la_once_39 = false;
+            loop {
+                let mut la_tot_40: i32 = -1;
+                let peek_save_41 = pos;
+                peek_41: {
+                    let mut la_end_42: i32 = -1;
+                    let mut la_once_42 = false;
+                    loop {
+                        let mut la_tot_43: i32 = -1;
+                        let peek_save_44 = pos;
+                        peek_44: {
+                            let mut la_end_45: i32 = -1;
+                            let mut la_once_45 = false;
+                            loop {
+                                let mut la_tot_46: i32 = -1;
+                                let peek_save_47 = pos;
+                                peek_47: {
+                                    let mut la_end_48: i32 = -1;
+                                    let mut la_once_48 = false;
+                                    loop {
+                                        let mut la_tot_49: i32 = -1;
+                                        let peek_save_50 = pos;
+                                        peek_50: {
+                                            if pos >= src.len() || unchecked src.byte_at(pos) != b'}' { break peek_50; }
+                                            pos += 1;
+                                            la_tot_49 = pos;
+                                        }
+                                        pos = peek_save_50;
+                                        if la_tot_49 >= 0 && la_tot_49 >= la_end_48 {
+                                            la_end_48 = la_tot_49;
+                                        }
+                                        if la_once_48 { break; }
+                                        la_once_48 = true;
+                                        let la_saved_48 = pos;
+                                        la_rep_48: {
+                                            if pos >= src.len() { break la_rep_48; }
+                                            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_48; }
+                                            pos += 1;
+                                            continue;
+                                        }
+                                        pos = la_saved_48;
+                                        break;
+                                    }
+                                    if la_end_48 < 0 {
+                                        break peek_47;
+                                    }
+                                    pos = la_end_48;
+                                    la_tot_46 = pos;
+                                }
+                                pos = peek_save_47;
+                                if la_tot_46 >= 0 && la_tot_46 >= la_end_45 {
+                                    la_end_45 = la_tot_46;
+                                }
+                                if la_once_45 { break; }
+                                la_once_45 = true;
+                                let la_saved_45 = pos;
+                                la_rep_45: {
+                                    if pos >= src.len() { break la_rep_45; }
+                                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_45; }
+                                    pos += 1;
+                                    continue;
+                                }
+                                pos = la_saved_45;
+                                break;
+                            }
+                            if la_end_45 < 0 {
+                                break peek_44;
+                            }
+                            pos = la_end_45;
+                            la_tot_43 = pos;
+                        }
+                        pos = peek_save_44;
+                        if la_tot_43 >= 0 && la_tot_43 >= la_end_42 {
+                            la_end_42 = la_tot_43;
+                        }
+                        if la_once_42 { break; }
+                        la_once_42 = true;
+                        let la_saved_42 = pos;
+                        la_rep_42: {
+                            if pos >= src.len() { break la_rep_42; }
+                            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_42; }
+                            pos += 1;
+                            continue;
+                        }
+                        pos = la_saved_42;
+                        break;
+                    }
+                    if la_end_42 < 0 {
+                        break peek_41;
+                    }
+                    pos = la_end_42;
+                    la_tot_40 = pos;
+                }
+                pos = peek_save_41;
+                if la_tot_40 >= 0 && la_tot_40 >= la_end_39 {
+                    la_end_39 = la_tot_40;
+                }
+                if la_once_39 { break; }
+                la_once_39 = true;
+                let la_saved_39 = pos;
+                la_rep_39: {
+                    if pos >= src.len() { break la_rep_39; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_39; }
+                    pos += 1;
+                    continue;
+                }
+                pos = la_saved_39;
+                break;
+            }
+            if la_end_39 < 0 {
+                break peek_38;
+            }
+            pos = la_end_39;
+            la_tot_37 = pos;
+        }
+        pos = peek_save_38;
+        if la_tot_37 >= 0 && la_tot_37 >= la_end_36 {
+            la_end_36 = la_tot_37;
+        }
+        if la_once_36 { break; }
+        la_once_36 = true;
+        let la_saved_36 = pos;
+        la_rep_36: {
+            if pos >= src.len() { break la_rep_36; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_36; }
+            pos += 1;
+            continue;
+        }
+        pos = la_saved_36;
+        break;
     }
-    opt_37: {
-        if pos >= src.len() { break opt_37; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break opt_37; }
-        pos += 1;
+    if la_end_36 < 0 {
+        return -1;
     }
-    opt_38: {
-        if pos >= src.len() { break opt_38; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break opt_38; }
-        pos += 1;
-    }
-    opt_39: {
-        if pos >= src.len() { break opt_39; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break opt_39; }
-        pos += 1;
-    }
-    opt_40: {
-        if pos >= src.len() { break opt_40; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break opt_40; }
-        pos += 1;
-    }
-    if pos >= src.len() || unchecked src.byte_at(pos) != b'}' { return -1; }
-    pos += 1;
+    pos = la_end_36;
     return pos;
 }
 
@@ -5345,27 +5460,27 @@ fn frag_ESC_NEWLINE(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_BYTE_ESCAPE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_41 = pos;
-    alts_done_41: {
-        alts_41_0: {
-            pos = alts_saved_41;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_41_0; }
+    let alts_saved_51 = pos;
+    alts_done_51: {
+        alts_51_0: {
+            pos = alts_saved_51;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_51_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break alts_41_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break alts_51_0; }
             pos += 1;
-            if pos >= src.len() { break alts_41_0; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break alts_41_0; }
+            if pos >= src.len() { break alts_51_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break alts_51_0; }
             pos += 1;
-            if pos >= src.len() { break alts_41_0; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break alts_41_0; }
+            if pos >= src.len() { break alts_51_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break alts_51_0; }
             pos += 1;
-            break alts_done_41;
+            break alts_done_51;
         }
-        alts_41_1: {
-            pos = alts_saved_41;
+        alts_51_1: {
+            pos = alts_saved_51;
             pos = frag_COMMON_ESCAPE(src, pos);
-            if pos < 0 { break alts_41_1; }
-            break alts_done_41;
+            if pos < 0 { break alts_51_1; }
+            break alts_done_51;
         }
         return -1;
     }
@@ -5374,135 +5489,135 @@ fn frag_BYTE_ESCAPE(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_INTEGER_SUFFIX(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_42 = pos;
-    alts_done_42: {
-        alts_42_0: {
-            pos = alts_saved_42;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_42_0; }
+    let alts_saved_52 = pos;
+    alts_done_52: {
+        alts_52_0: {
+            pos = alts_saved_52;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_52_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_42_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_52_0; }
             pos += 1;
-            break alts_done_42;
+            break alts_done_52;
         }
-        alts_42_1: {
-            pos = alts_saved_42;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_42_1; }
+        alts_52_1: {
+            pos = alts_saved_52;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_52_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_42_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_52_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_42_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_52_1; }
             pos += 1;
-            break alts_done_42;
+            break alts_done_52;
         }
-        alts_42_2: {
-            pos = alts_saved_42;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_42_2; }
+        alts_52_2: {
+            pos = alts_saved_52;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_52_2; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_42_2; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_52_2; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_42_2; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_52_2; }
             pos += 1;
-            break alts_done_42;
+            break alts_done_52;
         }
-        alts_42_3: {
-            pos = alts_saved_42;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_42_3; }
+        alts_52_3: {
+            pos = alts_saved_52;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_52_3; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_42_3; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_52_3; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_42_3; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_52_3; }
             pos += 1;
-            break alts_done_42;
+            break alts_done_52;
         }
-        alts_42_4: {
-            pos = alts_saved_42;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_42_4; }
+        alts_52_4: {
+            pos = alts_saved_52;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_52_4; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_42_4; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_52_4; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_42_4; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_52_4; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_42_4; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_52_4; }
             pos += 1;
-            break alts_done_42;
+            break alts_done_52;
         }
-        alts_42_5: {
-            pos = alts_saved_42;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_42_5; }
+        alts_52_5: {
+            pos = alts_saved_52;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_52_5; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break alts_42_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break alts_52_5; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_42_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_5; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'z' { break alts_42_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'z' { break alts_52_5; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_42_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_52_5; }
             pos += 1;
-            break alts_done_42;
+            break alts_done_52;
         }
-        alts_42_6: {
-            pos = alts_saved_42;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_42_6; }
+        alts_52_6: {
+            pos = alts_saved_52;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_6; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_42_6; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_52_6; }
             pos += 1;
-            break alts_done_42;
+            break alts_done_52;
         }
-        alts_42_7: {
-            pos = alts_saved_42;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_42_7; }
+        alts_52_7: {
+            pos = alts_saved_52;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_7; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_42_7; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_52_7; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_42_7; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_52_7; }
             pos += 1;
-            break alts_done_42;
+            break alts_done_52;
         }
-        alts_42_8: {
-            pos = alts_saved_42;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_42_8; }
+        alts_52_8: {
+            pos = alts_saved_52;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_8; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_42_8; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_52_8; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_42_8; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_52_8; }
             pos += 1;
-            break alts_done_42;
+            break alts_done_52;
         }
-        alts_42_9: {
-            pos = alts_saved_42;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_42_9; }
+        alts_52_9: {
+            pos = alts_saved_52;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_9; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_42_9; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_52_9; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_42_9; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_52_9; }
             pos += 1;
-            break alts_done_42;
+            break alts_done_52;
         }
-        alts_42_10: {
-            pos = alts_saved_42;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_42_10; }
+        alts_52_10: {
+            pos = alts_saved_52;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_10; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_42_10; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_52_10; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_42_10; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_52_10; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_42_10; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_52_10; }
             pos += 1;
-            break alts_done_42;
+            break alts_done_52;
         }
-        alts_42_11: {
-            pos = alts_saved_42;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_42_11; }
+        alts_52_11: {
+            pos = alts_saved_52;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_11; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break alts_42_11; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break alts_52_11; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_42_11; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_11; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'z' { break alts_42_11; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'z' { break alts_52_11; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_42_11; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_52_11; }
             pos += 1;
-            break alts_done_42;
+            break alts_done_52;
         }
         return -1;
     }
@@ -5514,14 +5629,14 @@ fn frag_FLOAT_EXPONENT(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'e' | b'E' }) { return -1; }
     pos += 1;
-    opt_43: {
-        if pos >= src.len() { break opt_43; }
-        if !(unchecked src.byte_at(pos) matches { b'+' | b'-' }) { break opt_43; }
+    opt_53: {
+        if pos >= src.len() { break opt_53; }
+        if !(unchecked src.byte_at(pos) matches { b'+' | b'-' }) { break opt_53; }
         pos += 1;
     }
     loop {
-        rep_44: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_44; }
+        rep_54: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_54; }
             pos += 1;
             continue;
         }
@@ -5534,27 +5649,27 @@ fn frag_FLOAT_EXPONENT(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_FLOAT_SUFFIX(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_45 = pos;
-    alts_done_45: {
-        alts_45_0: {
-            pos = alts_saved_45;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'f' { break alts_45_0; }
+    let alts_saved_55 = pos;
+    alts_done_55: {
+        alts_55_0: {
+            pos = alts_saved_55;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'f' { break alts_55_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_45_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_55_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_45_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_55_0; }
             pos += 1;
-            break alts_done_45;
+            break alts_done_55;
         }
-        alts_45_1: {
-            pos = alts_saved_45;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'f' { break alts_45_1; }
+        alts_55_1: {
+            pos = alts_saved_55;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'f' { break alts_55_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_45_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_55_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_45_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_55_1; }
             pos += 1;
-            break alts_done_45;
+            break alts_done_55;
         }
         return -1;
     }

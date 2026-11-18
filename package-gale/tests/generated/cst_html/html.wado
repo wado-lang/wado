@@ -4019,22 +4019,36 @@ fn frag_SINGLE_QUOTE_STRING(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_ATTCHARS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
+    let mut la_end_28: i32 = -1;
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'#' | b'+'..=b';' | b'=' | b'?' | b'A'..=b'Z' | b'_' | b'a'..=b'z' }) { return -1; }
     pos += 1;
     loop {
-        rep_28: {
-            if pos >= src.len() { break rep_28; }
-            if !(unchecked src.byte_at(pos) matches { b'#' | b'+'..=b';' | b'=' | b'?' | b'A'..=b'Z' | b'_' | b'a'..=b'z' }) { break rep_28; }
+        let mut la_tot_29: i32 = -1;
+        let peek_save_30 = pos;
+        opt_31: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break opt_31; }
+            pos += 1;
+        }
+        la_tot_29 = pos;
+        pos = peek_save_30;
+        if la_tot_29 >= 0 && la_tot_29 >= la_end_28 {
+            la_end_28 = la_tot_29;
+        }
+        let la_saved_28 = pos;
+        la_rep_28: {
+            if pos >= src.len() { break la_rep_28; }
+            if !(unchecked src.byte_at(pos) matches { b'#' | b'+'..=b';' | b'=' | b'?' | b'A'..=b'Z' | b'_' | b'a'..=b'z' }) { break la_rep_28; }
             pos += 1;
             continue;
         }
+        pos = la_saved_28;
         break;
     }
-    opt_30: {
-        if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break opt_30; }
-        pos += 1;
+    if la_end_28 < 0 {
+        return -1;
     }
+    pos = la_end_28;
     return pos;
 }
 
@@ -4046,9 +4060,9 @@ fn frag_HEXCHARS(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' }) { return -1; }
     pos += 1;
     loop {
-        rep_31: {
-            if pos >= src.len() { break rep_31; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' }) { break rep_31; }
+        rep_32: {
+            if pos >= src.len() { break rep_32; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' }) { break rep_32; }
             pos += 1;
             continue;
         }
@@ -4063,16 +4077,16 @@ fn frag_DECCHARS(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { return -1; }
     pos += 1;
     loop {
-        rep_33: {
-            if pos >= src.len() { break rep_33; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_33; }
+        rep_34: {
+            if pos >= src.len() { break rep_34; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_34; }
             pos += 1;
             continue;
         }
         break;
     }
-    opt_35: {
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'%' { break opt_35; }
+    opt_36: {
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'%' { break opt_36; }
         pos += 1;
     }
     return pos;
