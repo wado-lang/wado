@@ -52,12 +52,46 @@ impl View {
         let mut content = content;
         let shown = Dom::document().create_text_node("");
         self.node.append_child(shown);
-        on_cleanup(|| {
-            if let Some(holder) = shown.parent_node() {
-                holder.remove_child(shown);
-            }
-        });
+        on_cleanup(|| detach(shown));
         observe(|| shown.set_data(content()));
+        return *self;
+    }
+
+    /// Shows what `render` makes at this point among the element's children
+    /// while `when` answers true. It renders anew each time it shows, and
+    /// disposes of what it hides.
+    pub fn show(
+        &self,
+        when: fn mut() -> bool with Track,
+        render: fn mut() -> View with (Track, Dom),
+    ) -> View with (Track, Dom) {
+        let mut when = when;
+        let mut render = render;
+        // Holds the place, so siblings added later stay after the subtree.
+        let anchor = Dom::document().create_text_node("");
+        self.node.append_child(anchor);
+        let mut shown: Option<Shown> = null;
+        on_cleanup(|| {
+            hide(&mut shown);
+            detach(anchor);
+        });
+        observe(|| {
+            let visible = when();
+            if visible == shown matches { Some(_) } {
+                return;
+            }
+            if !visible {
+                hide(&mut shown);
+                return;
+            }
+            let mut node: Option<Element> = null;
+            let dispose = scope(|| node = Option::Some(render().node));
+            let made = node.unwrap();
+            if let Some(holder) = anchor.parent_node() {
+                holder.insert_before(made, Option::Some(anchor as Node));
+            }
+            shown = Option::Some(Shown { node: made, dispose });
+        });
         return *self;
     }
 
@@ -99,6 +133,30 @@ pub fn on(target: EventTarget, type: String, handler: fn mut(Event) with (Track,
         untracked(|| handler(event));
         flush();
     });
+}
+
+/// Takes `node` out of wherever it is now; other code may have moved it.
+fn detach(node: Node) with Dom {
+    if let Some(holder) = node.parent_node() {
+        holder.remove_child(node);
+    }
+}
+
+struct Shown {
+    node: Element,
+    dispose: fn mut() with Dom,
+}
+
+/// Clears `shown` before disposing of it, so a cleanup that reaches `shown`
+/// again finds nothing left to hide.
+fn hide(shown: &mut Option<Shown>) with Dom {
+    let Some(current) = *shown else {
+        return;
+    };
+    *shown = null;
+    let mut dispose = current.dispose;
+    dispose();
+    detach(current.node);
 }
 
 struct Row<T> {
