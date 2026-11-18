@@ -1927,13 +1927,10 @@ impl TypeLookup<'_> {
         }
     }
 
-    /// The type a struct, resource, variant, enum, flags or newtype declaration
-    /// `def` declares, read from the registry entry that holds it; `UNKNOWN`
-    /// for any other.
+    /// The type a struct, resource, variant, enum or flags declaration `def` declares,
+    /// read from the registry entry that holds it; `UNKNOWN` for any other.
     pub(super) fn nominal_type_of(&self, def: DefId, type_table: &mut TypeTable) -> TypeId {
-        if let Some(newtype) = self.newtype_of(def) {
-            newtype
-        } else if self.struct_fields_of(def).is_some() {
+        if self.struct_fields_of(def).is_some() {
             type_table.make_struct(StructDef::Decl(def))
         } else if self.resource_type_of(def).is_some() {
             type_table.make_resource(def)

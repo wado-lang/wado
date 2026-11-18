@@ -1743,7 +1743,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The type `receiver` spells: the one the call settled, else its
     /// declaration's, a generic one at its own parameters.
-    fn spelled_type(&self, receiver: &ReceiverId) -> Option<TypeId> {
+    fn spelled_type(&mut self, receiver: &ReceiverId) -> Option<TypeId> {
         receiver.ty().or_else(|| match receiver.key() {
             ImplTargetKey::Decl(def) => self.declared_self_type(*def),
             ImplTargetKey::Builtin(name) => TypeTable::primitive_by_name(name),
@@ -3536,7 +3536,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The signature of the declaration a static resolution selected, read in
     /// the block supplying it: a trait default the block inherits is read
     /// there as [`Self::inherited_sig_in_block`] reads it.
-    fn selected_static_sig(&self, selected: &StaticMethodRef) -> Option<sig::MethodSig> {
+    fn selected_static_sig(&mut self, selected: &StaticMethodRef) -> Option<sig::MethodSig> {
         let Some(block) = selected.supplying_block else {
             return self
                 .tysys
@@ -3714,7 +3714,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn type_declared_by(&mut self, key: Option<&ImplTargetKey>) -> Option<TypeId> {
         let def = key?.decl()?;
         self.declared_self_type(def)
-            .or_else(|| self.newtype_self_type(def))
     }
 
     /// The trait impl blocks on `receiver` at `receiver_args`,
