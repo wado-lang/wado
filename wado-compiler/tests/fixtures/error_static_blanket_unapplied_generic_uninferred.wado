@@ -1,5 +1,6 @@
-// The blanket's bounds hold of two instances of `Pair`, and nothing in the
-// call says which it means.
+// `Pair::made()` leaves `Pair`'s arguments to infer, and nothing in the call
+// settles them. One impl written for one instance does not: a generic
+// function does not infer its parameters from the impls written either.
 trait Holds with () {}
 
 trait Make with () {
@@ -12,7 +13,6 @@ struct Pair<A, B> {
 }
 
 impl Holds for Pair<i32, i32> {}
-impl Holds for Pair<bool, bool> {}
 
 impl<X: Holds> Make for X {
     fn made() -> i32 {

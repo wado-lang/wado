@@ -1,0 +1,64 @@
+// A type spelled without its arguments in `Type::m(&x)` has them as inference
+// variables, which the receiver settles: the call selects what `x.m()` does,
+// whatever instance an impl happens to be written for.
+
+trait Beta with () {
+    fn m(&self) -> String;
+}
+
+trait AtBase with () {}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+struct Box<T> {
+    v: T,
+}
+
+type G<T> = Pair<T, i32>;
+type H<U> = G<U>;
+type Phantom<T> = Pair<i32, i32>;
+type R<T> = &Pair<T, i32>;
+
+impl AtBase for Pair<i32, i32> {}
+impl<T> AtBase for Box<T> {}
+
+impl<X: AtBase> Beta for X {
+    fn m(&self) -> String {
+        return "blanket";
+    }
+}
+
+test "a generic newtype whose base the impl is written for" {
+    let g: G<i32> = { a: 1, b: 2 };
+    assert g.m() == "blanket";
+    assert G::m(&g) == "blanket";
+}
+
+test "two links down the chain" {
+    let h: H<i32> = { a: 1, b: 2 };
+    assert h.m() == "blanket";
+    assert H::m(&h) == "blanket";
+}
+
+test "a parameter the base does not use" {
+    let p: Phantom<String> = { a: 1, b: 2 };
+    assert p.m() == "blanket";
+    assert Phantom::m(&p) == "blanket";
+}
+
+test "a newtype over a reference" {
+    let pair: Pair<i32, i32> = { a: 1, b: 2 };
+    let r = &pair as R<i32>;
+    assert r.m() == "blanket";
+    assert R::m(&r) == "blanket";
+}
+
+test "a bound met by a generic impl" {
+    let b: Box<String> = { v: "x" };
+    assert b.m() == "blanket";
+    assert Box::m(&b) == "blanket";
+    assert Box::<_>::m(&b) == "blanket";
+}
