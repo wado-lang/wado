@@ -1590,7 +1590,10 @@ impl Graph for Cpu {
     }
 
     fn reshape<E: Element, In, Out>(&mut self, x: &CpuTensor<E, In>, extents: List<i32>) -> CpuTensor<E, Out> {
-        return CpuTensor::Value(reshape(self.held(x), extents));
+        return match x {
+            Value(v) => CpuTensor::Value(reshape(v, extents)),
+            Kept(k) => CpuTensor::Kept(k.reshaped(extents)),
+        };
     }
 
     fn transpose<E: Element, In, Out>(&mut self, x: &CpuTensor<E, In>, perm: List<i32>) -> CpuTensor<E, Out> {

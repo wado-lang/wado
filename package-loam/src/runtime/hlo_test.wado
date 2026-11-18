@@ -595,6 +595,15 @@ test "gather reads a weight Cpu keeps as it reads a value" {
     assert g.download(&kept).data == gathered_table().data;
 }
 
+test "a reshape of a weight Cpu keeps stays kept, decoding nothing" {
+    let g = &mut Cpu {};
+    let kept = CpuTensor::<f32, [A, B]>::Kept(g.kept_weight(HostWeight::of(&gathered_table())));
+    let flat: CpuTensor<f32, [A]> = g.reshape(&kept, [6]);
+    assert flat matches { Kept(_) };
+    assert g.extents_of(&flat) == [6] as List<i32>;
+    assert g.download(&flat).data == gathered_table().data;
+}
+
 test "gather along an inner axis puts the indices' axes where the axis was" {
     let g = &mut Cpu {};
     let x = cpu(Tensor::<i64, [A, B, C]> {

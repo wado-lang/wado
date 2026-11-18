@@ -1649,6 +1649,15 @@ pub struct KeptWeight {
     extents: List<i32>,
 }
 
+impl KeptWeight {
+    /// The same weight under `extents`, which a row-major reshape leaves in place.
+    internal fn reshaped(&self, extents: List<i32>) -> KeptWeight
+        contract element_count(&extents) == element_count(&self.extents)
+    {
+        return KeptWeight { ..*self, extents };
+    }
+}
+
 impl<E: Element, Axes> CpuTensor<E, Axes> {
     /// The value this holds, which every tensor but a kept weight is.
     pub fn value(&self) -> &Tensor<E, Axes> {
