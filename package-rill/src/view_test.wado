@@ -246,6 +246,35 @@ test "each keeps no rows once a removed row's cleanup disposed of its owner" {
     };
 }
 
+test "switch shows the subtree render makes for the key, and swaps it when the key changes" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div").text("[");
+        let mode = signal("view");
+        let mut cleanups: List<String> = [];
+        let mut renders = 0;
+        let _dispose = scope(|| {
+            box
+                .switch(|| mode.get(), |key: String| {
+                    renders += 1;
+                    on_cleanup(|| cleanups.push(key));
+                    return element(if key == "edit" { "input" } else { "span" });
+                })
+                .text("]");
+        });
+        assert box.node.get_html() == "[<span></span>]";
+
+        mode.set("view");
+        flush();
+        assert renders == 1;
+
+        mode.set("edit");
+        flush();
+        assert box.node.get_html() == "[<input>]";
+        assert cleanups == ["view"];
+    };
+}
+
 test "each follows a new order with the nodes it had" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {

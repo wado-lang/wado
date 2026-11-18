@@ -65,10 +65,35 @@ impl View {
         when: fn mut() -> bool with Track,
         render: fn mut() -> View with (Track, Dom),
     ) -> View with (Track, Dom) {
-        let mut when = when;
+        let mut render = render;
+        return self.place(when, |visible: bool| if visible { Option::Some(render()) } else { null });
+    }
+
+    /// Shows what `render` makes for the key `key` answers, at this point
+    /// among the element's children. It keeps that subtree while the key stays
+    /// equal, and disposes of it for the next one when the key changes.
+    pub fn switch<K: Eq>(
+        &self,
+        key: fn mut() -> K with Track,
+        render: fn mut(K) -> View with (Track, Dom),
+    ) -> View with (Track, Dom) {
+        let mut render = render;
+        return self.place(key, |current: K| Option::Some(render(current)));
+    }
+
+    /// Shows what `render` makes for the key, if anything, at this point among
+    /// the element's children.
+    fn place<K: Eq>(
+        &self,
+        key: fn mut() -> K with Track,
+        render: fn mut(K) -> Option<View> with (Track, Dom),
+    ) -> View with (Track, Dom) {
+        let mut key = key;
+        let mut render = render;
         // Holds the place, so siblings added later stay after the subtree.
         let anchor = Dom::document().create_text_node("");
         self.node.append_child(anchor);
+        let mut shown_for: Option<K> = null;
         let mut shown: Option<Rendered> = null;
         let mut disposed = false;
         on_cleanup(|| {
@@ -77,16 +102,21 @@ impl View {
             detach(anchor);
         });
         observe(|| {
-            let visible = when();
-            if visible == shown matches { Some(_) } {
+            let current = key();
+            if shown_for == Option::Some(current) {
                 return;
             }
-            if !visible {
-                hide(&mut shown);
+            shown_for = Option::Some(current);
+            hide(&mut shown);
+            // `key` or a cleanup of what was shown may have disposed of the
+            // binding's owner.
+            if disposed {
                 return;
             }
-            let made = render_owned(render);
-            // `render` may have disposed of the binding's owner.
+            let Some(made) = render_owned(|| render(current)) else {
+                return;
+            };
+            // So may `render`.
             if disposed {
                 remove(made);
                 return;
@@ -152,11 +182,17 @@ struct Rendered {
     dispose: fn mut() with Dom,
 }
 
-fn render_owned(render: fn mut() -> View with (Track, Dom)) -> Rendered with Dom {
+/// Runs `render` in a scope of its own. When it makes nothing, the scope is
+/// disposed of at once.
+fn render_owned(render: fn mut() -> Option<View> with (Track, Dom)) -> Option<Rendered> with Dom {
     let mut render = render;
     let mut node: Option<Element> = null;
-    let dispose = scope(|| node = Option::Some(render().node));
-    return Rendered { node: node.unwrap(), dispose };
+    let mut dispose = scope(|| node = render().map(|made: View| made.node));
+    let Some(made) = node else {
+        dispose();
+        return null;
+    };
+    return Option::Some(Rendered { node: made, dispose });
 }
 
 fn remove(rendered: Rendered) with Dom {
@@ -226,7 +262,7 @@ fn each<T: Eq>(
             if found {
                 continue;
             }
-            kept.push(Row { item, rendered: render_owned(|| render(item)) });
+            kept.push(Row { item, rendered: render_owned(|| Option::Some(render(item))).unwrap() });
             was.push(-1);
             if disposed {
                 break;

@@ -75,8 +75,12 @@ pub fn mount(root: Element) -> fn mut() with Dom with Dom {
                 }),
                 element("ul").each(|| todos.get(), |todo: Todo| todo_row(todos, todo)),
             ])
-            .show(|| todos.get().is_empty(), || element("p").text("Nothing to do."))
-            .show(|| !todos.get().is_empty(), || element("p").bind_text(|| `${remaining.get()} left`));
+            .switch(|| todos.get().is_empty(), |empty: bool| {
+                if empty {
+                    return element("p").text("Nothing to do.");
+                }
+                return element("p").bind_text(|| `${remaining.get()} left`);
+            });
     });
 }
 
