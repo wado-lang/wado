@@ -105,7 +105,7 @@ pub fn lex_interpolation(source: &str, origin: Position, space: AstIdSpace) -> L
             }
         }
     }
-    for error in &mut result.errors {
+    for error in result.errors.iter_mut().chain(&mut result.invalid_literals) {
         error.span = rebase_span(error.span, origin);
     }
     for comment in &mut result.comments {
@@ -189,7 +189,12 @@ pub struct LexResult {
     /// [`lex_interpolation`] rebased them onto the enclosing file.
     pub source: Arc<str>,
     pub tokens: Vec<Token>,
+    /// The errors that leave the token stream other than what the source means.
     pub errors: Vec<LexError>,
+    /// The literals whose text denotes no value (a bad escape), each still one
+    /// sound token, so a compile parses on past them and reports what follows.
+    /// Those inside a template's holes are here too, where the outer lex saw them.
+    pub invalid_literals: Vec<LexError>,
     pub comments: Vec<Comment>,
     pub shebang: Option<String>,
     pub data_section: Option<String>,
@@ -210,7 +215,7 @@ impl LexResult {
         for token in &mut self.tokens {
             token.span = token.span.in_space(space);
         }
-        for error in &mut self.errors {
+        for error in self.errors.iter_mut().chain(&mut self.invalid_literals) {
             error.span = error.span.in_space(space);
         }
         for comment in &mut self.comments {
@@ -250,6 +255,8 @@ pub(crate) struct Lexer<'a> {
     shebang: Option<String>,
     /// Recovered errors, in source order. Drained into [`LexResult::errors`].
     errors: Vec<LexError>,
+    /// Drained into [`LexResult::invalid_literals`].
+    invalid_literals: Vec<LexError>,
     /// How many templates enclose the hole being scanned.
     template_depth: u32,
 }
@@ -474,12 +481,6 @@ impl Radix {
 }
 
 impl LexError {
-    /// Whether the token stream around this error is what the source means,
-    /// so a batch compile may parse on and report the errors after it.
-    pub fn leaves_tokens_sound(&self) -> bool {
-        matches!(self.kind, LexErrorKind::InvalidLiteral(_))
-    }
-
     /// The diagnostic for this error, attributed to `file` when the caller
     /// knows one.
     pub fn diagnostic(&self, file: Option<&str>) -> Diagnostic {
@@ -511,7 +512,22 @@ impl<'a> Lexer<'a> {
             comments: Vec::new(),
             shebang: None,
             errors: Vec::new(),
+            invalid_literals: Vec::new(),
             template_depth: 0,
+        }
+    }
+
+    /// Record `kind`'s text as an invalid literal at `span`, unless an error
+    /// was recovered since `errors` counted them: a literal already in error
+    /// reports that one, not what its text lacks.
+    fn check_literal(&mut self, errors: usize, kind: &TokenKind, span: Span) {
+        if self.errors.len() == errors
+            && let Err(why) = literal_value_check(kind)
+        {
+            self.invalid_literals.push(LexError {
+                kind: LexErrorKind::InvalidLiteral(why),
+                span,
+            });
         }
     }
 
@@ -523,15 +539,7 @@ impl<'a> Lexer<'a> {
         loop {
             let errors = self.errors.len();
             let token = self.next_token();
-            // A literal already in error reports that one, not what its text lacks.
-            if self.errors.len() == errors
-                && let Err(why) = literal_value_check(&token.kind)
-            {
-                self.errors.push(LexError {
-                    kind: LexErrorKind::InvalidLiteral(why),
-                    span: token.span,
-                });
-            }
+            self.check_literal(errors, &token.kind, token.span);
             let is_eof = token.kind == TokenKind::Eof;
             tokens.push(token);
             if is_eof {
@@ -543,6 +551,7 @@ impl<'a> Lexer<'a> {
             source: Arc::from(self.input),
             tokens,
             errors: self.errors,
+            invalid_literals: self.invalid_literals,
             comments: self.comments,
             shebang: self.shebang,
             data_section: self.data_section,
@@ -1680,6 +1689,7 @@ impl<'a> Lexer<'a> {
     /// Consume the literal starting at the cursor, if one does, returning its
     /// source. Wado has no lifetimes, so `'` always opens a char literal.
     fn skip_nested_literal(&mut self) -> Option<&'a str> {
+        let open = self.position();
         let before = self.pos;
         let errors = self.errors.len();
         let template = |lexer: &mut Self, quote| {
@@ -1693,7 +1703,7 @@ impl<'a> Lexer<'a> {
             lexer.template_depth -= 1;
             Some(kind)
         };
-        match self.peek_char()? {
+        let kind = match self.peek_char()? {
             '"' => self.lex_string(Quote::Cooked),
             '\'' => self.lex_char(),
             '`' => template(self, Quote::Cooked)?,
@@ -1703,7 +1713,10 @@ impl<'a> Lexer<'a> {
             },
             _ => return None,
         };
-        // The parser lexes the hole's source again, and reports its errors then.
+        let span = self.span_from(open.offset, open.line, open.column);
+        self.check_literal(errors, &kind, span);
+        // The parser lexes the hole's source again, and reports its errors
+        // then. An invalid literal stays, since that lex does not report it.
         self.errors.truncate(errors);
         Some(&self.input[before..self.pos])
     }
@@ -2184,11 +2197,12 @@ test data";
     /// The tokens of `source`, whose one error is a literal's text, at `column`.
     fn tokens_past_invalid_literal(source: &str, column: usize) -> Vec<Token> {
         let r = lex(source);
+        assert!(r.errors.is_empty(), "{:?}", r.errors);
         assert_matches!(
-            r.errors.as_slice(),
-            [e] if e.leaves_tokens_sound() && e.span.column == column,
+            r.invalid_literals.as_slice(),
+            [e] if e.span.column == column,
             "{:?}",
-            r.errors
+            r.invalid_literals
         );
         r.tokens
     }
@@ -2221,16 +2235,18 @@ test data";
         assert_matches!(plain[1].kind, TokenKind::Plus);
     }
 
-    /// Each literal whose text denotes no value is reported where it opens, and
-    /// a literal already in error reports only that.
+    /// Each literal whose text denotes no value is reported where it opens, one
+    /// in a template's hole included, and a literal already in error reports
+    /// only that.
     #[test]
     fn test_invalid_literal_text_is_reported_per_literal() {
-        let r = lex(r#"'ab' b'\u{41}' "ok" b"é" `\q${x}` "\u{110000}""#);
-        let columns: Vec<usize> = r.errors.iter().map(|e| e.span.column).collect();
-        assert_eq!(columns, [1, 6, 21, 26, 35], "{:?}", r.errors);
-        assert!(r.errors.iter().all(LexError::leaves_tokens_sound));
+        let r = lex(r#"'ab' b'\u{41}' "ok" b"é" `\q${x}` "\u{110000}" `${"\q"}`"#);
+        assert!(r.errors.is_empty(), "{:?}", r.errors);
+        let columns: Vec<usize> = r.invalid_literals.iter().map(|e| e.span.column).collect();
+        assert_eq!(columns, [1, 6, 21, 26, 35, 51], "{:?}", r.invalid_literals);
 
         let unterminated = lex(r#""\q"#);
+        assert!(unterminated.invalid_literals.is_empty());
         assert_matches!(
             unterminated.errors.as_slice(),
             [LexError {

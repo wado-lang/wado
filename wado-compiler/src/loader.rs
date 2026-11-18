@@ -1142,7 +1142,7 @@ fn format_stdlib_error(
 
 fn parse_bind_stdlib(label: &str, source: &str) -> Module {
     let lex_result = lex(source);
-    if let Some(e) = lex_result.errors.first() {
+    if let Some(e) = lex_result.errors.iter().chain(&lex_result.invalid_literals).next() {
         // Bundled stdlib must always lex cleanly; a recovered lex error here
         // is a compiler bug, so fail loudly rather than degrade.
         panic!(
@@ -1569,7 +1569,18 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             let _span = self.logger.span(&format!("parse {tentative_entry_source}"));
             self.parse_source(entry_source, &tentative_entry_source)?
         };
+        self.report_invalid_literals(&entry_ast, &tentative_entry_source);
         self.load_all_inner(entry_ast, tentative_entry_source).await
+    }
+
+    /// Report `ast`'s invalid literals as it joins the load, ahead of whatever
+    /// a later step fails on: the error count is the analysis's, which runs
+    /// on, and the module is never complete.
+    fn report_invalid_literals(&self, ast: &Module, module_source: &ModuleSource) {
+        let file = module_source.source_path();
+        for e in ast.invalid_literals() {
+            self.host.emit_diagnostic(e.diagnostic(Some(&file)));
+        }
     }
 
     /// Variant of [`Self::load_all`] that takes a pre-parsed entry module
@@ -1692,6 +1703,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     self.parse_source_with(&source, &module_source, skip_generated_bodies)?
                 }
             };
+            self.report_invalid_literals(&ast, &module_source);
 
             // Collect its imports (before bind)
             self.collect_imports(&ast, &module_source, &mut pending, &mut wasm_imports)?;
@@ -2471,10 +2483,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         skip_generated_bodies: bool,
     ) -> Result<(Module, Option<Parser>), LoadError> {
         let mut lex_result = lex(source);
-        if let Some(e) = lex_result.errors.iter().find(|e| !e.leaves_tokens_sound()) {
+        if let Some(e) = lex_result.errors.first() {
             return Err(LoadError::from_lex_error(e, module_source.clone()));
         }
-        let invalid_literals = std::mem::take(&mut lex_result.errors);
+        let invalid_literals = std::mem::take(&mut lex_result.invalid_literals);
 
         let mut parser = Parser::from_lex_no_trivia(lex_result);
         if skip_generated_bodies {

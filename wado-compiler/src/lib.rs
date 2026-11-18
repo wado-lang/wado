@@ -2770,9 +2770,10 @@ pub async fn dump_with_options<H: CompilerHost>(
         lexer::lex(source)
     };
     let tokens_for_dump = lex_result.tokens.clone();
-    // Batch path is fail-fast: report a lex error that broke the token stream
-    // before parsing. The load below reports the rest with the analysis.
-    if let Some(e) = lex_result.errors.iter().find(|e| !e.leaves_tokens_sound()) {
+    // Batch path is fail-fast: report a recovered lex error before parsing
+    // so the wire format keeps the `lexer error: …` prefix. The load below
+    // reports the invalid literals.
+    if let Some(e) = lex_result.errors.first() {
         let _ = logger.error_in(&entry_source, e.clone());
         return Err(Bail);
     }
@@ -2864,10 +2865,10 @@ pub async fn dump_with_options<H: CompilerHost>(
 /// Format Wado source code canonically, preserving comments and the `__DATA__`
 /// section.
 pub fn format(source: &str) -> Result<String, CompileError> {
-    // Formatting requires a clean parse — the first lex error that broke the
-    // token stream becomes a `CompileError::Lexer`. A bad escape is kept as written.
+    // Formatting requires a clean parse — the first recovered lex error
+    // becomes a `CompileError::Lexer`. A bad escape is kept as written.
     let lex_result = lexer::lex(source);
-    if let Some(e) = lex_result.errors.iter().find(|e| !e.leaves_tokens_sound()) {
+    if let Some(e) = lex_result.errors.first() {
         return Err(CompileError::from_lex_error(e, None));
     }
     let mut parser = Parser::from_lex(lex_result);
@@ -2954,13 +2955,23 @@ fn dropped_comment(before: &str, after: &str) -> Option<DroppedComment> {
 pub struct ParseResult {
     pub ast: ast::Module,
     pub trivia: comment::TriviaMap,
-    /// Lexer errors recovered while tokenising, in source order.
+    /// Lexer errors recovered while tokenising, in source order. The invalid
+    /// literals are `ast`'s, which a compile reports past the parse.
     pub lex_errors: Vec<lexer::LexError>,
     /// Parser errors recovered while building the AST, in source order.
     pub errors: Vec<parser::ParseError>,
 }
 
 impl ParseResult {
+    /// Every error the lex and the parse recovered, attributed to `file`: the
+    /// recovered lex errors, the invalid literals, then the parse errors.
+    pub fn diagnostics(&self, file: Option<&str>) -> impl Iterator<Item = Diagnostic> {
+        let lexed = self.lex_errors.iter().chain(self.ast.invalid_literals());
+        lexed
+            .map(move |e| e.diagnostic(file))
+            .chain(self.errors.iter().map(move |e| e.diagnostic(file)))
+    }
+
     /// Fail-fast adapter: if lexing or parsing recovered any syntax error,
     /// return the first as a `CompileError`; otherwise yield the result
     /// unchanged. Used by batch compilation, `wado doc`, and the formatter,
@@ -3001,15 +3012,10 @@ pub async fn load<H: CompilerHost>(
 pub fn parse(source: &str) -> ParseResult {
     let mut lex_result = lexer::lex(source);
     let lex_errors = std::mem::take(&mut lex_result.errors);
+    let invalid_literals = std::mem::take(&mut lex_result.invalid_literals);
     let mut parser = Parser::from_lex(lex_result);
     let mut ast = parser.parse();
-    ast.set_invalid_literals(
-        lex_errors
-            .iter()
-            .filter(|e| e.leaves_tokens_sound())
-            .cloned()
-            .collect(),
-    );
+    ast.set_invalid_literals(invalid_literals);
     let errors = parser.take_errors();
     let mut trivia = parser.take_trivia();
     comment::populate_trailing(&mut trivia, &ast);

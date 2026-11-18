@@ -252,8 +252,8 @@ pub struct Module {
     /// those two readings apart, so it records its own, and every other token's
     /// lexical class is its role. Read by `wado_lsp::semantic_tokens`.
     contextual_keywords: Vec<Span>,
-    /// The lexer's errors that left every token sound (a bad escape), which a
-    /// batch load parses past and reports with the analysis after it.
+    /// [`crate::lexer::LexResult::invalid_literals`], which keep the analysis
+    /// from calling the module complete.
     invalid_literals: Vec<crate::lexer::LexError>,
 }
 
@@ -352,11 +352,6 @@ impl Module {
     }
 
     pub(crate) fn set_invalid_literals(&mut self, errors: Vec<crate::lexer::LexError>) {
-        assert!(
-            errors
-                .iter()
-                .all(crate::lexer::LexError::leaves_tokens_sound)
-        );
         self.invalid_literals = errors;
     }
 

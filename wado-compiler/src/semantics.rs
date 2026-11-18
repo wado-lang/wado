@@ -1491,16 +1491,8 @@ pub async fn semantics_for_world<H: CompilerHost>(
     // `Semantics::empty()` below — recovery helps only when binding succeeds,
     // which holds for the common cases (missing brace, garbage item) where
     // scopes stay separate.
-    // The analysis reports a bad literal's text, with every other module's.
-    for e in parsed
-        .lex_errors
-        .iter()
-        .filter(|e| !e.leaves_tokens_sound())
-    {
-        host.emit_diagnostic(e.diagnostic(filename));
-    }
-    for e in &parsed.errors {
-        host.emit_diagnostic(e.diagnostic(filename));
+    for d in parsed.diagnostics(filename) {
+        host.emit_diagnostic(d);
     }
     match load(parsed, filename, host, invocations, LogLevel::default()).await {
         Ok(mut loaded) => {
@@ -1589,16 +1581,6 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     let space_modules = ParseModules::of(&load_result.modules);
     logger.register_parses(&space_modules);
     logger.register_asset_origins(std::mem::take(&mut load_result.asset_origins));
-    // Past the error count: an analysis bails once its logger counts an error,
-    // and a literal's type does not depend on its text, so analysis runs on as
-    // over a clean source. `is_complete` stays false below.
-    for (source, module) in &load_result.modules {
-        for e in module.invalid_literals() {
-            logger
-                .host()
-                .emit_diagnostic(e.diagnostic(Some(&source.source_path())));
-        }
-    }
 
     // Wrap the loader's interner in `Rc<RefCell<>>` so analyze and the
     // per-module elaborators can each `borrow_mut()` it from `&self`

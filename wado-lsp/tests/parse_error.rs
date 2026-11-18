@@ -189,6 +189,24 @@ fn bad_escape_is_reported_once_beside_analysis_errors() {
     });
 }
 
+/// A bad escape is reported even where the load then fails on a missing module.
+#[test]
+fn bad_escape_is_reported_past_a_failed_load() {
+    futures::executor::block_on(async {
+        let source = "use { f } from \"./missing.wado\";\nfn g() { let a = \"\\q\"; }\n";
+        let mut engine = Engine::new();
+        engine.open_document(&uri(), source.to_string());
+        let host = in_memory_host(&[(PATH, source)]);
+
+        let diags = engine.diagnostics(&uri(), &host).await;
+        let messages: Vec<&str> = errors(&diags).iter().map(|d| d.message.as_str()).collect();
+        assert!(
+            messages.iter().any(|m| m.contains("invalid escape sequence")),
+            "{messages:?}"
+        );
+    });
+}
+
 /// Re-opening with a fix recovers all semantic features. Sanity check that
 /// the partial-Semantics path doesn't poison the cache.
 #[test]
