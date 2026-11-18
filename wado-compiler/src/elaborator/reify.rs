@@ -4606,7 +4606,6 @@ impl<'a> Reify<'a> {
         };
         for part in &template.parts {
             match part {
-                // Annotate validated every segment's escapes.
                 ast::TemplatePart::String(raw) => {
                     pieces.text(&checked_template_segment(raw, template.quote), raw);
                 }
@@ -4737,7 +4736,6 @@ impl<'a> Reify<'a> {
             .interpolations()
             .map(|expr| self.reify_expr(expr, ctx, None))
             .collect();
-        // Annotate validated every segment's escapes.
         let segments: Vec<[String; 2]> = tagged
             .template
             .raw_segments()

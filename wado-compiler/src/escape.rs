@@ -85,8 +85,8 @@ pub(crate) fn template_segment_value(text: &str, quote: Quote) -> Result<String,
     decode_text(text, quote, unescape_template_string)
 }
 
-/// [`template_segment_value`] past the body walk, whose template gate keeps a
-/// segment the lexer rejected from reaching here.
+/// [`template_segment_value`] in reify, which runs only on a module whose
+/// literals the lexer accepted.
 pub(crate) fn checked_template_segment(text: &str, quote: Quote) -> String {
     template_segment_value(text, quote).expect("the body walk gates a malformed template escape")
 }
