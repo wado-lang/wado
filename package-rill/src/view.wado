@@ -186,6 +186,14 @@ fn remove_rows<T>(rows: List<Row<T>>) with Dom {
     }
 }
 
+/// Empties `rows` before removing them, so a cleanup that reaches `rows` again
+/// finds none of them left to remove.
+fn clear_rows<T>(rows: &mut List<Row<T>>) with Dom {
+    let leaving = *rows;
+    *rows = [];
+    remove_rows(leaving);
+}
+
 fn each<T: Eq>(
     parent: Element,
     items: fn mut() -> List<T> with Track,
@@ -197,9 +205,7 @@ fn each<T: Eq>(
     let mut disposed = false;
     on_cleanup(|| {
         disposed = true;
-        let removed = rows;
-        rows = [];
-        remove_rows(removed);
+        clear_rows(&mut rows);
     });
     observe(|| {
         let mut kept: List<Row<T>> = [];
@@ -226,11 +232,7 @@ fn each<T: Eq>(
                 break;
             }
         }
-        // Detached first, so a cleanup that disposes of the binding's owner
-        // finds none of these left to remove.
-        let leaving = rows;
-        rows = [];
-        remove_rows(leaving);
+        clear_rows(&mut rows);
         // `render` or a cleanup may have disposed of the binding's owner,
         // whose cleanup removed only the rows not yet kept.
         if disposed {
