@@ -260,7 +260,7 @@ pub fn memo<T: Eq>(compute: fn mut() -> T with Track) -> Memo<T> with Track {
 fn recompute<T: Eq>(state: &mut MemoState<T>) {
     let core = state.core;
     unsubscribe_all(core.deps, core.id);
-    // Before the run, so a write during it leaves the value stale.
+    // Before the run, so a write during it marks the memo again.
     core.freshness = Freshness::Fresh;
     let mut computation = Computation {
         observer: Option::Some(Observer::Memo(core)),
