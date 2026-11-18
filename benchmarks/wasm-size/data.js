@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794994872010,
+  "lastUpdate": 1795002204089,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79541,6 +79541,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fd4603fe1721ec370c29a64e086509f44e6eef3c",
+          "message": "Merge pull request #2682 from wado-lang/gfx/optimistic-carson-ltw4it\n\nfeat(grammar): state compile-time literals, Self bindings and format specifiers in Wado.g4",
+          "timestamp": "2026-11-18T20:25:25+09:00",
+          "tree_id": "0682535eee759d80cc0b27047d188609ef1d0221",
+          "url": "https://github.com/wado-lang/wado/commit/fd4603fe1721ec370c29a64e086509f44e6eef3c"
+        },
+        "date": 1795002203364,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435013,
             "unit": "bytes"
           }
         ]
