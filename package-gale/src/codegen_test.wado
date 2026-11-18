@@ -1716,6 +1716,33 @@ WS : [ \\t]+ -> skip ;";
     assert got == "if IF iF x => IF:if IF:IF IF:iF STRICT:x\nX => error:X\n";
 }
 
+test "a predicate after the first element does not steer the choice between alternatives" {
+    // Both arms start with `ID` and test it after, so prediction reads tokens
+    // alone and takes the first arm that can match. `#inc("a")` also matches the
+    // `file` arm followed by a call, so the arm order decides it.
+    let grammar = |first: &String, second: &String| `grammar C;
+s : e EOF ;
+e : p ('(' a? ')')* ;
+a : ID | STR ;
+p : '#' ( ${first} | ${second} ) | ID ;
+ID : [a-z]+ ;
+STR : '\"' ~'\"'* '\"' ;
+WS : ' ' -> skip ;`;
+    let file = "ID {$ID.text.equals(\"file\")}?";
+    let inc = "ID {$ID.text.equals(\"inc\")}? '(' STR ')'";
+    let inputs: List<String> = ["#file", "#inc(\"a\")", "#file(x)", "#file(\"a\")"];
+    assert parses(grammar(&file, &inc), "s", inputs) == "#file => (s (e (p # file)))
+#inc(\"a\") => error
+#file(x) => (s (e (p # file) ( (a x) )))
+#file(\"a\") => (s (e (p # file) ( (a \"a\") )))
+";
+    assert parses(grammar(&inc, &file), "s", inputs) == "#file => (s (e (p # file)))
+#inc(\"a\") => (s (e (p # inc ( \"a\" ))))
+#file(x) => (s (e (p # file) ( (a x) )))
+#file(\"a\") => error
+";
+}
+
 test "a Wado lexer body reads the char stream through `view`" {
     // `view` is the `LexerView` a superClass base receives, at the cursor the
     // body runs at: here the token's start, so `la(-1)` is the char before it.
@@ -1727,6 +1754,20 @@ X : 'x' ;
 WS : ' ' -> skip ;";
     let got = lexes(input, ["x`", "x `", "`"]);
     assert got == "x` => X:x TAG:`\nx ` => X:x BT:`\n` => BT:`\n";
+}
+
+test "a lexer member naming `LexerView` carries the type" {
+    let input = "lexer grammar L;
+options { language = Wado; }
+@lexer::members {
+    fn after_x(&self, src: &StrSlice, start: i32, pos: i32) -> bool {
+        return LexerView { src, start, pos }.la(-1) == 'x' as i32;
+    }
+}
+TAG : { lx.after_x(src, start, pos) }? '`' ;
+BT : '`' ;
+X : 'x' ;";
+    assert lexes(input, ["x`", "`"]) == "x` => X:x TAG:`\n` => BT:`\n";
 }
 
 test "a Java lexer body reads the char stream through `_input.LA`" {

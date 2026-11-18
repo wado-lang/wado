@@ -786,9 +786,10 @@ exprPath
     ;
 
 // `Trait::<Self = T>::method(…)` binds the receiver of a trait's static
-// method. The binding closes the trait's own arguments, and a call follows.
+// method. The binding closes the trait's own arguments, and a call follows. A
+// namespace is as much qualification as the trait takes.
 selfBoundCall
-    : identifier ('::' pathSegment)* '::' '<' (typeRef ',')* 'Self' '=' typeRef '>'
+    : identifier ('::' pathSegment)? '::' '<' (typeRef ',')* 'Self' '=' typeRef '>'
       '::' pathSegment ('::' typeArgs)? '(' argumentList? ')'
     ;
 
@@ -820,14 +821,14 @@ pathSegment
     : memberName
     ;
 
-// The name is an identifier read by its spelling, so a predicate checks it. A
-// `(` picks the include before the predicates run, so `#line(…)`, which calls
-// the line number, is refused here and parsed by the compiler. An include's
-// path is a text string, never bytes.
+// The name is an identifier read by its spelling, so a predicate checks it,
+// after the name: prediction reads the tokens alone and takes the first arm
+// that can match. `#file("a")` matches the include, so it is refused here and
+// parsed by the compiler. An include's path is a text string, never bytes.
 compileTimeExpr
-    : '#' ( IDENTIFIER { p.token_text(p.lt(-1)) matches { "file" | "line" | "function" | "data" } }?
-          | IDENTIFIER { p.token_text(p.lt(-1)) matches { "include_str" | "include_bytes" } }?
+    : '#' ( IDENTIFIER { p.token_text(p.lt(-1)) matches { "include_str" | "include_bytes" } }?
             '(' { !p.token_text(p.lt(1)).starts_with("b") }? STRING_LITERAL ')'
+          | IDENTIFIER { p.token_text(p.lt(-1)) matches { "file" | "line" | "function" | "data" } }?
           )
     ;
 

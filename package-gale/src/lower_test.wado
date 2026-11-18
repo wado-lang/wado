@@ -5649,9 +5649,12 @@ test "a Java char literal is its code point, and its character in a string" {
     ] {
         assert java_pred(`_input.LA(1) == ${lit}`, "a : ID ;", false) == `p.la(1) == ${code}`;
     }
-    let printed = java_action("System.out.println(\"a\" + 'b');", "a : ID ;", false);
-    assert printed.contains("`ab\\n`");
-    assert java_pred_res("_input.LA(1) == 'ab'", "a : ID ;", false) matches { Err(_) };
+    for let body of ["System.out.println(\"a\" + 'b');", "System.out.println(\"a\" + ('b'));"] {
+        assert java_action(body, "a : ID ;", false).contains("`ab\\n`"), body;
+    }
+    for let bad of ["'ab'", "'\\u-041'", "'\\u00é'", "'\\u12'"] {
+        assert java_pred_res(`_input.LA(1) == ${bad}`, "a : ID ;", false) matches { Err(_) }, bad;
+    }
 }
 
 test "a recognizer call resolves the same bare and through `this`" {

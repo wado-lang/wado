@@ -201,8 +201,8 @@ pub enum ParseErrorKind {
     /// The tokens parse, but break a rule a context-free grammar over the same
     /// tokens cannot state, or states only by restating the expression or type
     /// grammar per context: a count or depth limit, what an identifier or a
-    /// string spells, or an expression or type allowed in one context and not
-    /// another.
+    /// string spells where the grammar tests no predicate on it, or an
+    /// expression or type allowed in one context and not another.
     Restriction,
 }
 

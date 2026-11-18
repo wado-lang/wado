@@ -106,12 +106,10 @@ fn scan_char_literal(src: &StrSlice, i: i32, n: i32) -> Result<[i32, i32], Strin
                 while j < n && src.byte_at(j) == b'u' {
                     j += 1;
                 }
-                if j + 4 > n {
+                if j + 4 > n || !(j..<j + 4).all(|k| (src.byte_at(k) as char).is_hexdigit()) {
                     return Result::Err(bad);
                 }
-                let Ok(v) = i32::from_str_hex(src.slice(j, j + 4)) else {
-                    return Result::Err(bad);
-                };
+                let v = i32::from_str_hex(src.slice(j, j + 4)).unwrap();
                 j += 3;
                 v;
             },

@@ -39,7 +39,8 @@ use {
     name_end,
 } from "./g4/scan.wado";
 use { CodeWriter } from "lib:wadopoet";
-use { to_snake_case, LEXER_VIEW_HERE } from "./ident.wado";
+use { to_snake_case, LEXER_VIEW_HERE, LEXER_VIEW_TYPE } from "./ident.wado";
+use { MemberDecls } from "./java2wado/jmembers.wado";
 
 /// One synthesized effect operation, from a distinct `this.<method>` call site.
 /// `is_predicate` distinguishes a `{...}?` predicate call from a `{...}` action.
@@ -768,11 +769,13 @@ pub fn super_emit_hook_expr<S: AsStrSlice, S1: AsStrSlice>(base_name: S, channel
     return `${base_name}::emit(LexerView { src: &lexer.src, start: tok_start, pos: best_end }, best_kind, ${channel})`;
 }
 
-/// Whether a staged lexer body builds a `LexerView`, so the generated module
-/// must carry the type.
-pub fn lexer_bodies_build_view(rules: &List<LexerRule>) -> bool {
+/// Whether a staged lexer body or a lexer member names `LexerView`, so the
+/// generated module must carry the type.
+pub fn lexer_names_view(rules: &List<LexerRule>, members: &MemberDecls) -> bool {
     let mut visited: List<String> = [];
-    return rules.iter_ref().any(|r| rule_bodies_contain(r, rules, "LexerView {", true, &mut visited));
+    return rules.iter_ref().any(|r| rule_bodies_contain(r, rules, LEXER_VIEW_TYPE, true, &mut visited))
+        || members.fields.iter_ref().any(|f| f.ty.contains(LEXER_VIEW_TYPE) || f.init.contains(LEXER_VIEW_TYPE))
+        || members.methods.iter_ref().any(|m| m.source.contains(LEXER_VIEW_TYPE));
 }
 
 /// The ambient operation call for a call site, reading the locals in scope

@@ -1379,7 +1379,7 @@ fn append_part(
                 None => append_interp(rule, rules, e, vals_in_scope, bindings, env, out),
             }
         },
-        Paren(p) && is_java_string(rule, rules, &p.inner, bindings, env) => {
+        Paren(p) && is_java_string(rule, rules, &p.inner, bindings, env) || p.inner matches { Char(_) | Paren(_) } => {
             append_part(rule, rules, &p.inner, vals_in_scope, bindings, env, out);
         },
         _ => append_interp(rule, rules, e, vals_in_scope, bindings, env, out),

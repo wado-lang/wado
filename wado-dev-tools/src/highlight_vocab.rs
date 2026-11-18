@@ -183,8 +183,20 @@ fn operators_by_highlighting() -> (Vec<&'static str>, Vec<&'static str>) {
     (highlighted, punctuation)
 }
 
+/// The grammar up to its first `mode`. A lexer mode spells what is not Wado
+/// code, such as a format specifier's `+`, `#` and `.`, so a literal there
+/// would satisfy invariant 1 for an operator the expression rules no longer
+/// take.
+fn grammar_before_modes(grammar: &str) -> &str {
+    let end = grammar
+        .find("\nmode ")
+        .expect("Wado.g4 declares its template and format modes");
+    &grammar[..end]
+}
+
 pub fn check() -> Vec<Drift> {
-    let grammar = read(GRAMMAR);
+    let full_grammar = read(GRAMMAR);
+    let grammar = grammar_before_modes(&full_grammar);
     let captures = literal_captures(&read(QUERY));
     let keywords = registry_keywords();
     let (highlighted, punctuation) = operators_by_highlighting();
