@@ -67,6 +67,7 @@ struct EffectCore {
 
 global mut NEXT_OBSERVER_ID: i32 = 0;
 global mut QUEUE: List<&mut EffectCore> = [];
+global mut COMPUTING_MEMOS: i32 = 0;
 
 fn next_observer_id() -> i32 {
     NEXT_OBSERVER_ID += 1;
@@ -217,6 +218,7 @@ impl<T> Signal<T> {
     }
 
     pub fn set(&self, value: T) {
+        assert COMPUTING_MEMOS == 0, "a memo computes a value and writes nothing";
         self.cell.value = value;
         self.cell.dep.readers.version += 1;
         notify(self.cell.dep);
@@ -259,9 +261,9 @@ pub fn memo<T: Eq>(compute: fn mut() -> T with Track) -> Memo<T> with Track {
 
 fn recompute<T: Eq>(state: &mut MemoState<T>) {
     let core = state.core;
+    // A memo stopped listening still has readers, and nothing marked them.
+    let restarted = core.freshness matches { Stale };
     unsubscribe_all(core.deps, core.id);
-    // Before the run, so a write during it marks the memo again.
-    core.freshness = Freshness::Fresh;
     let mut computation = Computation {
         observer: Option::Some(Observer::Memo(core)),
         deps: [],
@@ -269,15 +271,21 @@ fn recompute<T: Eq>(state: &mut MemoState<T>) {
         owned: [],
     };
     let mut compute = state.compute;
+    COMPUTING_MEMOS += 1;
     let value = with Track => &mut computation do {
         compute();
     };
+    COMPUTING_MEMOS -= 1;
     core.deps = computation.deps;
+    core.freshness = Freshness::Fresh;
     if let Some(was) = state.cached && was == value {
         return;
     }
     state.cached = Option::Some(value);
     core.dep.readers.version += 1;
+    if restarted {
+        notify(core.dep);
+    }
 }
 
 impl<T> Memo<T> {

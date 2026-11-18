@@ -272,6 +272,38 @@ test "an effect that read a memo and a signal reruns for the signal alone" {
     };
 }
 
+test "an effect reading a disposed memo reruns once a read restarts it with a new value" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(1);
+        let mut doubled: Option<Memo<i32>> = null;
+        let mut dispose = scope(|| doubled = Option::Some(memo(|| count.get() * 2)));
+        let doubled = doubled.unwrap();
+        let mut seen: List<i32> = [];
+        observe(|| seen.push(doubled.get()));
+        dispose();
+
+        count.set(2);
+        assert doubled.get() == 4;
+        flush();
+        assert seen == [2, 4];
+    };
+}
+
+#[expect_trap]
+test "a memo that writes a signal traps" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(1);
+        let other = signal(0);
+        let doubled = memo(|| {
+            other.set(1);
+            return count.get() * 2;
+        });
+        doubled.get();
+    };
+}
+
 test "a disposed memo listens again when it is read" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {

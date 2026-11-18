@@ -54,10 +54,11 @@ with &mut dom do {
   dependents in turn; an effect joins a queue. `flush` then reruns each queued
   effect once, and a memo recomputes when one of them reads it. So a write
   performs no effect, and an effect never sees half of a batch.
-- Every signal and memo counts the changes to its value, and a computation
-  keeps the count it read. A memo whose value comes out equal to the last one
-  leaves its count as it was, so a queued effect, or a memo marked through it,
-  whose counts all still hold skips its run.
+- A signal counts its writes, an equal value included, and a memo counts the
+  times its value came out different. A computation keeps the counts it read,
+  so a queued effect, or a marked memo, whose counts all still hold skips its
+  run. A memo computes a value and writes nothing: a write while one computes
+  traps.
 - A computation subscribes to a dependency when it reads it, and drops its
   subscriptions when it runs again or is disposed of. So a dependency it no
   longer reads wakes nothing. A memo is disposed of with the computation that
