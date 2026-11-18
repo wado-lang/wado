@@ -57,10 +57,12 @@ cost the review its attention. `--report-again` reports the last recorded
 review of a commit once more, which tries another reporter on the same
 findings.
 
-Each run is also added to
-`reviews/<head>.json`, the record of every review of that commit, which is
-committed with the branch: outcomes are what Eddy learns from, and an outcome
-needs the finding it answers.
+Each run is also recorded as a file of its own under `reviews/<head>/` in the
+repository's wiki, which holds every review of that commit: outcomes are what
+Eddy learns from, and an outcome needs the finding it answers.
+`mise run eddy-review` clones the wiki into `scratchpad/wiki` and writes the
+record there. It pushes nothing; the
+[`eddy` skill](../.claude/skills/eddy/SKILL.md)'s steps push the record.
 
 A run ends by printing what it cost to stderr, the total and each model's
 share, in US dollars:
@@ -83,8 +85,9 @@ A repository admin comments `@wado-bot review` on a pull request, or
 dispatches the `Eddy` workflow with its number. The workflow reviews the pull
 request's head and posts `review.md` as a comment. Eddy itself, `mise.toml`
 and every script come from the default branch, so the pull request's code runs
-only inside Eddy's confinement. The record and the patches stay in the run's
-artifact for 90 days, as `eddy-<pr>-<head>`.
+only inside Eddy's confinement. The workflow pushes the record to the wiki,
+and the patches stay in the run's artifact for 90 days, as
+`eddy-<pr>-<head>`.
 
 The workflow holds no API key. With `ANTHROPIC_FEDERATION_RULE_ID` and the
 rest of a Workload Identity Federation rule in its environment, Eddy trades
