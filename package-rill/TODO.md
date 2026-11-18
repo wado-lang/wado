@@ -12,8 +12,8 @@ already measured, not how to close it. Closed work belongs in commit history.
 - [ ] A memo owns nothing. Registering a cleanup inside one traps, and so does
   making an effect or another memo there.
 - [ ] Disposing of a scope stops its bindings, takes its rows out of an `each`,
-  the text nodes out of a `bind_text` and the subtree out of a `show`. It leaves every other node where it
-  is, and its listeners attached.
+  the text nodes out of a `bind_text` and the subtree out of a `show`. It
+  leaves every other node where it is, and its listeners attached.
 - [ ] A flush happens when an `on` listener returns or when the program asks.
   Nothing schedules one after the current task, as a microtask would.
 
