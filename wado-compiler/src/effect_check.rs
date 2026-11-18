@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::attribute::AMBIENT;
-use crate::demanded_imports;
+use crate::{Lints, demanded_imports};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::component_model::Demand;
@@ -190,7 +190,7 @@ impl From<UnhandledOperation> for Diagnostic {
                  if that is deliberate",
                 w.missing.join("`, `"),
                 w.handled.join("`, `"),
-                crate::ast::lint::UNHANDLED_OPERATION,
+                ast::lint::UNHANDLED_OPERATION,
             ),
             span: Some(DiagnosticSpan::from_span(&w.span, Some(&w.module))),
         }
@@ -508,7 +508,7 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
         &data.index(&sem.types),
         &mut out,
         &mut EffectRows::default(),
-        crate::Lints::Off,
+        Lints::Off,
         &mut Vec::new(),
     );
     out
@@ -523,7 +523,7 @@ pub fn check_semantics(
     sem: &Semantics,
     provided_import_fqs: IndexSet<String>,
     library_exports: Option<&[(&ModuleSource, &Function)]>,
-    lints: crate::Lints,
+    lints: Lints,
 ) -> SemanticDiagnostics {
     let mut diags = SemanticDiagnostics::default();
     let Some(state) = sem.state.as_ref() else {
@@ -582,7 +582,7 @@ fn run_effect_checks(
     index: &EffectIndex,
     out: &mut Vec<EffectError>,
     solved: &mut EffectRows,
-    lints: crate::Lints,
+    lints: Lints,
     warnings: &mut Vec<UnhandledOperation>,
 ) {
     let mut log = ReachLog::default();
