@@ -393,15 +393,17 @@ Where a method answers,
 `recv` must be of that type or a resource extending it. A trait's method that
 the spelling does not reach is reached as `Trait::method(recv, …)`.
 
-A generic type spelled without its arguments names no one instance. So
-`Pair::method(…)` names what an impl written for `Pair`'s head answers with,
-and what the instances of `Pair` an impl is written for answer with, a blanket
-whose bounds hold of one of them included. The receiver's own type then
-settles whether it answers. A static has no receiver, so the instance comes
-from the expected type or an argument, as a type parameter's would. Where
-neither says, it is the one instance an impl is written for that the static
-answers at. With two such instances or none, the type's arguments are left to
-infer, and the call reports that.
+A type argument the spelling omits is an inference variable, so
+`Pair::method(…)` means `Pair::<_, _>::method(…)`. The order runs at the
+spelled type, and with variables an impl is a candidate when it may apply: its
+target can match the link, a variable matching anything, and each bound of a
+blanket may hold, which it does unless no impl of the bound's trait can match.
+Where every candidate takes a receiver, the call selects what
+`recv.method(…)` selects, and the receiver's type settles the variables. Where
+every candidate is a static, the expected type or an argument settles them, as
+a generic function's parameters are settled; where neither does, the call
+reports that the type's arguments cannot be inferred. Candidates of both kinds
+are ambiguous, as two traits at one link are.
 
 An associated function with no `self` has no receiver argument to bind `Self`
 from, so the trait's turbofish binds it: `Trait::<Self = T>::method(…)`. The
@@ -421,7 +423,8 @@ assert Conv::<String, Self = S>::make() == "one";
 A reflection trait's one type argument is its subject, with no binding
 ([Trait-Qualified Calls](./spec-reflection.md#trait-qualified-calls)).
 
-Rationale: [WEP: Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md).
+Rationale: [WEP: Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md),
+[WEP: Omitted Type Arguments Are Inference Variables](./wep-2026-11-18-omitted-type-arguments.md).
 
 ### Default Method Implementations
 
