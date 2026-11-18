@@ -1818,6 +1818,15 @@ fragment F : 'd' { count += 1; } ;";
     assert lexes(input, ["ddd"]) == "ddd => D:ddd [0\n]\n";
 }
 
+test "no predicate in a token rule the replay calls sees an action of the same token" {
+    // The jar prints `xb`: `B`'s predicate sees `on` as the match saw it.
+    let input = "lexer grammar L;
+@lexer::members { boolean on = true; }
+A : 'x' { on = false; } B* { System.out.println(getText()); } ;
+B : { on }? 'b' ;";
+    assert lexes(input, ["xb"]) == "xb => A:xb [xb\n]\n";
+}
+
 test "an action in a fragment arm copied into its caller never runs" {
     // `'d'` and `'dd'` contest the suffix, so `F`'s arms are spliced into `D`.
     let got = lexes("lexer grammar L;
@@ -1833,7 +1842,7 @@ test "a member method may drive the lexer where no rule runs an action" {
 options { language = Wado; }
 @lexer::members {
 fn quiet(&mut self) { self.skip(); }
-fn enter(&mut self) { self.push_mode(1); }
+fn enter(&mut self) { self.push_mode(MODE_M); }
 }
 A : 'a' ;
 mode M;

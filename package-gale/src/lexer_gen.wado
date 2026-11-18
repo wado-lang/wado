@@ -348,16 +348,15 @@ pub fn gen_lexer<S: AsStrSlice>(
     // A superClass base is wired independently of the action language.
     let ea = lexer_grammar_executes_actions(grammar) || !sc_name.is_empty();
     let has_actions = !act_rule_names.is_empty();
-    let uses_modes = has_modes(&grammar.mode_names);
     let surface = lexer_surface(grammar, members, sc_ops, mode_use);
     if !sc_name.is_empty() {
         gen_super_interface(w, sc_name, sc_ops);
     }
     gen_lexer_struct(w, members, &surface);
+    if surface.mode_commands {
+        gen_mode_constants(w, &grammar.mode_names);
+    }
     if has_actions {
-        if uses_modes {
-            gen_mode_constants(w, &grammar.mode_names);
-        }
         gen_lexer_apply_fns(w, grammar, &act_rule_names, has_members, sc_name);
     }
     gen_lexer_match_fns(
@@ -1729,7 +1728,10 @@ fn gen_lexer_apply_replay_body(
     // nothing to select, so it never re-evaluates a predicate.
     let plan = lexer_rule_plan(rule, all_rules, grammar_opts);
     let ea = plan matches { Alts(_) };
-    let defers_actions = rule.body.iter_ref().any(|a: &LexerAlternative| lexer_alt_has_predicate_below(a, all_rules));
+    let mut seen: List<String> = [rule.name];
+    let defers_actions = rule.body
+        .iter_ref()
+        .any(|a: &LexerAlternative| lexer_alt_reaches_predicate(a, all_rules, &mut seen));
     if defers_actions {
         w.line(`let mut ${DEFERRED_ACTIONS}: List<[i32, i32]> = [];`);
     }
@@ -2142,6 +2144,32 @@ fn lexer_elem_has_non_greedy(elem: &LexerElement, all_rules: &List<LexerRule>, v
 /// top-level one does, so both must disable the maximal-munch scan.
 fn lexer_alt_has_predicate_below(alt: &LexerAlternative, all_rules: &List<LexerRule>) -> bool {
     return lexer_alt_carries(alt, ActionKind::Predicate, all_rules);
+}
+
+/// Whether matching `alt` can evaluate a predicate, inside the rules it calls
+/// included. `seen` names the rules already entered, so recursion ends.
+fn lexer_alt_reaches_predicate(alt: &LexerAlternative, all_rules: &List<LexerRule>, seen: &mut List<String>) -> bool {
+    return alt.actions.iter_ref().any(|a: &AltAction| a.kind matches { Predicate })
+        || alt.elements.iter_ref().any(|el: &LexerElement| lexer_elem_reaches_predicate(el, all_rules, seen));
+}
+
+fn lexer_elem_reaches_predicate(elem: &LexerElement, all_rules: &List<LexerRule>, seen: &mut List<String>) -> bool {
+    return match *elem {
+        Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_alt_reaches_predicate(a, all_rules, seen)),
+        Repeat(rep) => lexer_elem_reaches_predicate(&rep.element, all_rules, seen),
+        Not(n) => lexer_elem_reaches_predicate(&n.element, all_rules, seen),
+        RuleRef(name) => {
+            if seen.contains(&name) {
+                return false;
+            }
+            seen.push(name);
+            let Some(rule) = all_rules.iter_ref().find(|r: &LexerRule| r.name == name) else {
+                return false;
+            };
+            return rule.body.iter_ref().any(|a: &LexerAlternative| lexer_alt_reaches_predicate(a, all_rules, seen));
+        },
+        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => false,
+    };
 }
 
 /// Whether `alt` carries an action of `kind` at its own level or anywhere the
