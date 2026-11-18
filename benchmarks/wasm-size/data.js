@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795014138135,
+  "lastUpdate": 1795036676963,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79609,6 +79609,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bc5c0061798594a05d60004183a0b19c7a5e5412"
         },
         "date": 1795014137073,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435013,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1d46765378aa8d210e89aa215c922b5443bc1206",
+          "message": "Merge pull request #2685 from wado-lang/ccr-5a053762-2x7vni\n\nfeat(rill): switch keeps a subtree per key, and a memo that comes out the same wakes nothing",
+          "timestamp": "2026-11-19T05:59:48+09:00",
+          "tree_id": "4f0f21e514f556fbb5cf4cdbe9bd76e0b25bdf53",
+          "url": "https://github.com/wado-lang/wado/commit/1d46765378aa8d210e89aa215c922b5443bc1206"
+        },
+        "date": 1795036675748,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
