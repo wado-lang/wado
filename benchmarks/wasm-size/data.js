@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794960046671,
+  "lastUpdate": 1794967426003,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79125,6 +79125,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ac6784db460d776ce4c91c70640fabbe10330eb5"
         },
         "date": 1794960046208,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "76e27019cda90f20da1b3dbf10abb3a4864cb8b8",
+          "message": "Merge pull request #2672 from wado-lang/eddy-token-refresh\n\nfix(eddy): mint and renew the federated token in Eddy",
+          "timestamp": "2026-11-18T10:45:39+09:00",
+          "tree_id": "e832c323a28bf744dbf509a7b29ad72e442c1ef4",
+          "url": "https://github.com/wado-lang/wado/commit/76e27019cda90f20da1b3dbf10abb3a4864cb8b8"
+        },
+        "date": 1794967424776,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
