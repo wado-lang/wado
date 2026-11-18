@@ -696,6 +696,31 @@ fn a_single_file_dependency_reached_by_a_path_is_one_module() {
         .success();
 }
 
+/// A package reached back as a dependency of a package it reaches by a path is
+/// the entry's own package: its files keep one identity, so one type.
+#[test]
+fn the_entry_package_reached_back_as_a_dependency_is_one_package() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = tmp.path().join("app");
+    library(&app, "", "pub use { Token } from \"./token.wado\";\n");
+    fs::write(app.join("src/token.wado"), "pub struct Token { pub v: i32 }\n").unwrap();
+    library(
+        &app.join("side"),
+        "\"lib:app\" = { path = \"..\" }\n",
+        "use { Token } from \"lib:app\";\npub fn make() -> Token { return Token { v: 1 }; }\n",
+    );
+    fs::write(
+        app.join("src/token_test.wado"),
+        "use { Token } from \"./token.wado\";\nuse { make } from \"../side/src/lib.wado\";\n\
+         test { let t: Token = make(); assert t.v == 1; }\n",
+    )
+    .unwrap();
+    wado_in(&app)
+        .args(["test", "src/token_test.wado"])
+        .assert()
+        .success();
+}
+
 /// A dependency is named by the path the OS reaches it by, so a source tree
 /// linked in from elsewhere still reaches it, as one package however reached.
 #[cfg(unix)]
