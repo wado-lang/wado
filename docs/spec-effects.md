@@ -361,6 +361,13 @@ fn describe(n: Node) -> String with (Node, HtmlInputElement) {
         _ => n.tag(),
     };
 }
+
+test {
+    with Node => &Typed {}, HtmlInputElement => &Typed {} do {
+        assert describe(an_input()) == "input:typed";
+        assert describe(a_node()) == "input";
+    }
+}
 ```
 
 Only resources are implied. They are found inside references, containers, tuples, newtypes, struct fields and variant payloads, but a struct, enum, variant or primitive is never granted in its own right. Each effect implies its own resources and no others, so a function without `with` cannot call `Stream::<u8>::new()` just because some other effect would have implied `Stream`.
