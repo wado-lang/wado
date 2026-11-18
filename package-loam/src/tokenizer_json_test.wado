@@ -117,7 +117,45 @@ test "a setting that changes the ids Loam computes names itself" {
     assert refusal("pre_tokenizer", "{\"type\": \"ByteLevel\", \"add_prefix_space\": true}") == "pre_tokenizer: add_prefix_space true is not supported";
     assert refusal("pre_tokenizer", "{\"type\": \"ByteLevel\", \"use_regex\": false}") == "pre_tokenizer: use_regex false is not supported";
     assert refusal("model", model(["\"dropout\": 0.1"])) == "model: dropout 0.1 is not supported";
-    assert refusal("model", model(["\"ignore_merges\": true"])) == "model: ignore_merges true is not supported";
+}
+
+/// The pattern o200k's tokenizers split text by, as their files write it.
+global O200K: String = #"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"#;
+
+/// A `Split` by `pattern` with `behavior`, as JSON.
+fn split_by(pattern: &String, behavior: String) -> String {
+    return `{"type": "Split", "pattern": {"Regex": ${to_string(pattern).unwrap()}}, "behavior": "${behavior}", "invert": false}`;
+}
+
+/// A pre-tokenizer of `steps`, each a JSON value, in order.
+fn sequence(steps: List<String>) -> String {
+    return `{"type": "Sequence", "pretokenizers": [${steps.join(", ")}]}`;
+}
+
+global BYTES_ALONE: String = "{\"type\": \"ByteLevel\", \"add_prefix_space\": false, \"use_regex\": false}";
+
+test "o200k's pipeline reads as byte-level BPE split by its pattern, its merges ignored" {
+    let json = pipeline("pre_tokenizer", sequence([split_by(&O200K, "Isolated"), BYTES_ALONE]));
+    let Ok(o200k) = read(&json) else {
+        panic("the pipeline reads");
+    };
+    assert o200k.split matches { O200k } && !o200k.ignore_merges;
+    let ignoring = json.replace("\"fuse_unk\": false", "\"fuse_unk\": false, \"ignore_merges\": true");
+    assert read(&ignoring).unwrap().ignore_merges;
+    let Ok(plain) = read(&pipeline("", "")) else {
+        panic("the pipeline is GPT-2's");
+    };
+    assert plain.split matches { Gpt2 };
+}
+
+test "a pre-tokenizer sequence other than o200k's names itself" {
+    let split = split_by(&O200K, "Isolated");
+    assert refusal("pre_tokenizer", sequence([split_by(&"\\s+", "Isolated"), BYTES_ALONE])) == "pre_tokenizer: a Split by another pattern is not supported";
+    assert refusal("pre_tokenizer", sequence([split_by(&O200K, "Removed"), BYTES_ALONE])) == "pre_tokenizer: behavior Removed is not supported";
+    assert refusal("pre_tokenizer", sequence([split.replace("\"invert\": false", "\"invert\": true"), BYTES_ALONE])) == "pre_tokenizer: invert true is not supported";
+    assert refusal("pre_tokenizer", sequence([split, BYTES_ALONE.replace("false}", "true}")])) == "pre_tokenizer: use_regex true is not supported";
+    assert refusal("pre_tokenizer", sequence([BYTES_ALONE])) == "pre_tokenizer: Sequence of ByteLevel is not supported";
+    assert refusal("pre_tokenizer", split) == "pre_tokenizer: Split is not supported";
 }
 
 test "an added token that strips or matches a word names itself" {
