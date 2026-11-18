@@ -14,7 +14,6 @@ const LOAM_TOLERANCE: f32 = 1e-4;
 /// a held pass sums its experts in moves it by up to 1.7e-4.
 const HELD_EXPERTS_TOLERANCE: f32 = 4e-4;
 
-/// The bound on the conformance line `line`.
 fn loam_tolerance(line: &str) -> f32 {
     if line.starts_with("compiled experts held by half") {
         HELD_EXPERTS_TOLERANCE
