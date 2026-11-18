@@ -166,11 +166,13 @@ jobs:
           ANTHROPIC_WORKSPACE_ID: wrkspc_01Ug39YtMABrbjfon1tEpoXy
         run: |
           mkdir -p scratchpad
+          # The records live in the wiki; a review adds to its commit's record.
+          git clone --quiet --depth 1 "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.wiki.git" scratchpad/wiki
           status=0
-          mise run eddy-review --head "$SHA" > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
+          mise run eddy-review --head "$SHA" --reviews scratchpad/wiki/reviews \
+            > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
           cat scratchpad/eddy.log
           exit "$status"
-      # The record is what Eddy later learns from; it outlives the run here.
       - if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -179,7 +181,7 @@ jobs:
             scratchpad/eddy.json
             scratchpad/eddy.log
             scratchpad/eddy/${{ env.SHA }}/
-            package-eddy/reviews/${{ env.SHA }}.json
+            scratchpad/wiki/reviews/${{ env.SHA }}.json
           retention-days: 90
           if-no-files-found: warn
 
@@ -188,6 +190,9 @@ jobs:
     needs: [gate, review]
     if: always() && needs.gate.result == 'success'
     runs-on: ubuntu-latest
+    # The wiki, which holds the records, is written with the contents grant.
+    permissions:
+      contents: write
     steps:
       - id: token
         uses: actions/create-github-app-token@v3
@@ -198,7 +203,7 @@ jobs:
         continue-on-error: true
         with:
           name: eddy-${{ needs.gate.outputs.pr }}-${{ needs.gate.outputs.sha }}
-          path: eddy
+          path: scratchpad
       - env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           REPO: ${{ github.repository }}
@@ -208,7 +213,7 @@ jobs:
         run: |
           set -euo pipefail
           body="$RUNNER_TEMP/body.md"
-          comment="eddy/scratchpad/eddy/$SHA/review.md"
+          comment="scratchpad/eddy/$SHA/review.md"
           if [ -f "$comment" ]; then
             cp "$comment" "$body"
           else
@@ -217,17 +222,41 @@ jobs:
               echo "## Eddy"
               echo
               echo "The review of \`${SHA:0:9}\` did not finish."
-              if [ -f eddy/scratchpad/eddy.log ]; then
+              if [ -f scratchpad/eddy.log ]; then
                 echo
                 echo '```'
-                grep -E '^(eddy|cost):' eddy/scratchpad/eddy.log || true
+                grep -E '^(eddy|cost):' scratchpad/eddy.log || true
                 echo '```'
               fi
             } > "$body"
           fi
-          if [ -d eddy ]; then
-            printf '\n[The run](%s), and its artifact for the patches and the record.\n' "$RUN" >> "$body"
+          if [ -d scratchpad ]; then
+            printf '\n[The run](%s), and its artifact for the patches.\n' "$RUN" >> "$body"
           else
             printf '\n[The run](%s)\n' "$RUN" >> "$body"
           fi
           gh pr comment "$PR" --repo "$REPO" --body-file "$body"
+      - env:
+          SHA: ${{ needs.gate.outputs.sha }}
+          TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          record="scratchpad/wiki/reviews/$SHA.json"
+          if [ ! -f "$record" ]; then
+            exit 0
+          fi
+          git clone --quiet "https://x-access-token:$TOKEN@${GITHUB_SERVER_URL#https://}/$GITHUB_REPOSITORY.wiki.git" "$RUNNER_TEMP/wiki"
+          cd "$RUNNER_TEMP/wiki"
+          mkdir -p reviews
+          cp "$GITHUB_WORKSPACE/$record" reviews/
+          git add reviews
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit --quiet --message "Record Eddy's review of $SHA"
+          # Another review may have pushed meanwhile; each writes its own file.
+          for attempt in 1 2 3; do
+            if git push --quiet; then
+              exit 0
+            fi
+            git pull --quiet --rebase
+          done
+          exit 1
