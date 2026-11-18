@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795036676963,
+  "lastUpdate": 1795045964061,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79653,6 +79653,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1d46765378aa8d210e89aa215c922b5443bc1206"
         },
         "date": 1795036675748,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435013,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d93056024f5d509f4490c4e13506900d3099e9c4",
+          "message": "Merge pull request #2676 from wado-lang/gfx/eloquent-edison-06cjpr\n\nfix(effects)!: a function holds only the resources its with clause declares",
+          "timestamp": "2026-11-19T08:39:49+09:00",
+          "tree_id": "bb183a2975542ed3bfacd51c907cb51d1238c184",
+          "url": "https://github.com/wado-lang/wado/commit/d93056024f5d509f4490c4e13506900d3099e9c4"
+        },
+        "date": 1795045963031,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
