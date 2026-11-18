@@ -18,6 +18,7 @@ use {
     Holds,
     Cpu,
     Element,
+    ElementKind,
     Float,
     Epilogue,
     Expr,
@@ -1413,6 +1414,44 @@ impl WebGpuBackend {
             strides: if by_columns { [1, k] } else { [n, 1] },
             packed: Packed::halves(packed),
         };
+    }
+
+    /// A buffer kept for a pool of `kind` and `extents`, as `kept_plain` lays
+    /// a weight: four bytes to a word, or a float to a word.
+    internal fn pooled(
+        &mut self,
+        kind: ElementKind,
+        extents: List<i32>,
+    ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer)
+        contract kind matches { U8 | F32 | F16 | BF16 }
+    {
+        if kind matches { U8 } {
+            return self.reserved_bytes(extents, true);
+        }
+        return contiguous(self.reserved(element_count(&extents), true), 0, extents);
+    }
+
+    /// Writes `row` over the slot `slot` of the pool `pool` laid as `pooled`
+    /// lays one.
+    internal fn written_slot(&self, pool: &DeviceTensor, slot: i32, row: &HostWeight) with (GpuQueue, GpuBuffer) {
+        let width = row.count();
+        assert width * pool.extents[0] == element_count(&pool.extents), "a row fills one slot of the pool";
+        let start = slot * width;
+        if row.kind matches { U8 } {
+            assert width % 4 == 0, "a slot of bytes fills whole words";
+            let bytes = row.bytes();
+            self.write(
+                pool.slot,
+                start / 4,
+                (start + width) / 4,
+                |w| {
+                    let at = 4 * w - start;
+                    return bytes[at] as u32 | bytes[at + 1] as u32 << 8 | bytes[at + 2] as u32 << 16 | bytes[at + 3] as u32 << 24;
+                },
+            );
+            return;
+        }
+        self.write(pool.slot, start, start + width, |i| row.value(i - start).to_bits());
     }
 
     /// `w`, whose every element an f32 holds, kept in a buffer of its own.

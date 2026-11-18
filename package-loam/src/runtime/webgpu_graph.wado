@@ -18,6 +18,7 @@ use {
     GpuComputePassEncoder,
 } from "wasi:webgpu";
 use {
+    Backend,
     Binary,
     Comparison,
     Convolution,
@@ -121,26 +122,26 @@ struct Replay {
     reads: List<i32>,
 }
 
-impl Graph for WebGpuBackend {
+impl Backend for WebGpuBackend {
     type Program = WebGpuProgram;
-
-    fn relabeled<E: Element, In, Out>(&self, t: &Placed<E, In>) -> Placed<E, Out> {
-        return match t {
-            Host(h) => Placed::Host(Tensor { data: h.data, extents: h.extents }),
-            Device(d) => Placed::Device(*d),
-        };
-    }
 
     /// A program takes the plan of an earlier one of its structure where the
     /// extents let it. A constant is kept only where a launch reads it, so
     /// neither one only other constants read nor one a kernel writes in.
     fn compiled(
         &mut self,
-        record: fn(&mut Recorder) -> Recorded with _,
+        recorded: Recorded,
         weights: &List<Any<WebGpuBackend>>,
         earlier: &List<&WebGpuProgram>,
+<<<<<<< HEAD
     ) -> Option<WebGpuProgram> with (_, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let recorded = record(&mut Recorder::new());
+||||||| 4154dc241
+    ) -> Option<WebGpuProgram> with _ {
+        let recorded = record(&mut Recorder::new());
+=======
+    ) -> WebGpuProgram with _ {
+>>>>>>> origin/main
         let folded = constants(&recorded);
         let splats = splats_of(&folded);
         let serial = self.program_serial(structure_of(&recorded));
@@ -165,7 +166,7 @@ impl Graph for WebGpuBackend {
         }
         let mut replays = HashMap::<i32, Replay>::new();
         keyed(self, &recorded, serial, &plan, &mut replays);
-        return Option::Some(WebGpuProgram { recorded, plan, splats, constants: kept, serial, replays });
+        return WebGpuProgram { recorded, plan, splats, constants: kept, serial, replays };
     }
 
     /// A weight read only as products' right matrix, or as a gather's rows, is
@@ -292,6 +293,31 @@ impl Graph for WebGpuBackend {
             Some(d) && moved.contains_key(d.slot) => at_slot(&r, moved[d.slot]),
             _ => r,
         }).collect();
+    }
+
+    fn pool(
+        &mut self,
+        kind: ElementKind,
+        extents: List<i32>,
+    ) -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuBuffer) {
+        let d = self.pooled(kind, extents);
+        if kind matches { U8 } {
+            return Any::U8(Placed::Device(d));
+        }
+        return of_kind(self, kind, Placed::Device(d));
+    }
+
+    fn written(&mut self, pool: &mut Any<WebGpuBackend>, slot: i32, row: HostWeight) with (GpuQueue, GpuBuffer) {
+        self.written_slot(on_device(pool).unwrap(), slot, &row);
+    }
+}
+
+impl Graph for WebGpuBackend {
+    fn relabeled<E: Element, In, Out>(&self, t: &Placed<E, In>) -> Placed<E, Out> {
+        return match t {
+            Host(h) => Placed::Host(Tensor { data: h.data, extents: h.extents }),
+            Device(d) => Placed::Device(*d),
+        };
     }
 
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Placed<E, Axes> {

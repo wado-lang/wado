@@ -5,6 +5,7 @@
 use { HashMap, HashSet, TreeMap } from "core:collections";
 use { Deserialize } from "core:serde";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, wado } from "lib:wadopoet";
+use { ExpertPlan } from "./emit_experts.wado";
 use { built_call, built_split } from "./emit_ops.wado";
 use {
     Carrier,
@@ -162,6 +163,7 @@ struct Prepared {
     grown: List<[Grown, Option<Poly>]>,
     padded: List<String>,
     conditions: List<String>,
+    experts: ExpertPlan,
 }
 
 /// `build`, written apart, and the padded symbols it reads the value of.
@@ -178,7 +180,11 @@ impl Prepared {
             return Result::Err(EmitError::NoOutput);
         }
         refuse_unmapped_dtype(graph)?;
-        let axes = axis_names(graph, checked);
+        let mut axes = axis_names(graph, checked);
+        let experts = ExpertPlan::of(graph, checked, &axes);
+        for let group of &experts.groups {
+            axes.push(group.slots);
+        }
         let literals = graph_literals(graph, checked);
         let crossing = Crossing::of(graph, cache_pairs(graph));
         let carriers = symbol_carriers(graph, &checked.shapes, &crossing.cached);
@@ -193,7 +199,7 @@ impl Prepared {
             .collect();
         let conditions = held_conditions(graph, checked, &inputs);
         return Result::Ok(
-            Prepared { axes, literals, crossing, carriers, names, kept, grown, padded, conditions },
+            Prepared { axes, literals, crossing, carriers, names, kept, grown, padded, conditions, experts },
         );
     }
 
@@ -231,6 +237,7 @@ impl Prepared {
             symbols,
             &self.crossing,
             &self.conditions,
+            &self.experts,
         )?;
         return Result::Ok(Built { source, read, per_row: rows matches { Some(_) } });
     }
@@ -266,7 +273,7 @@ impl Prepared {
                 w.end();
             }
         }
-        emit_weights(&mut w, graph, checked, names, &self.kept, placement);
+        emit_weights(&mut w, graph, checked, names, &self.kept, placement, &self.experts);
         if crossing.has_cache() {
             emit_cache(&mut w, &crossing.pairs, checked, names);
         }
@@ -298,6 +305,7 @@ impl Prepared {
             padded: &self.padded,
             read: &built.read,
             kept: &self.kept,
+            experts: &self.experts,
             crossing,
             owed: &self.grown,
             conditions: &self.conditions,
@@ -430,6 +438,10 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 /// `build` adds its operations to: a backend may own device resources.
 global GRAPH_BOUND: String = `affine ${BACKEND_PARAM}: Graph`;
 
+/// The same parameter where code runs what a backend compiled or keeps its
+/// weights: `compute`, `decode`, `Model` and the weights' constructors.
+global BACKEND_BOUND: String = `affine ${BACKEND_PARAM}: Backend`;
+
 /// The same parameter where code only holds tensors: `Cache` and `Passed`,
 /// which a recording graph serves too.
 global HOLDS_BOUND: String = `affine ${BACKEND_PARAM}: Holds`;
@@ -437,9 +449,20 @@ global HOLDS_BOUND: String = `affine ${BACKEND_PARAM}: Holds`;
 /// `Params` over the backend.
 global PARAMS_TYPE: String = `${PARAMS}<${BACKEND_PARAM}>`;
 
+/// The source a model reads the experts its pools do not hold from.
+global SOURCE_BOUND: String = `affine ${SOURCE_PARAM}: WeightSource`;
+
+/// `Model` over the backend and its source.
+global MODEL_TYPE: String = `${MODEL}<${BACKEND_PARAM}, ${SOURCE_PARAM}>`;
+
+/// What a model's pass does at a host step: fetch the experts a layer picks
+/// into its pools.
+global HOST_STEP: String = "|step, read, weights| model.experts.fetched(backend, &model.source, step, read, weights)";
+
 /// The graph's initializers twice: `Weights` on the host as the graph holds
 /// them, and `Params`, which `build` reads, each a tensor of the graph.
-/// `Params` holds the `kept` literals too, which need no host copy.
+/// `Params` holds the `kept` literals too, which need no host copy, and holds
+/// the expert weights in pools.
 fn emit_weights(
     w: &mut CodeWriter,
     graph: &Graph,
@@ -447,17 +470,25 @@ fn emit_weights(
     names: &Names,
     kept: &List<String>,
     placement: &Placement,
+    experts: &ExpertPlan,
 ) {
     let mut weights = StructSpec::new("Weights", Vis::Pub);
     let mut params = StructSpec::new(PARAMS, Vis::Pub);
     params.add_generic(GRAPH_BOUND);
     for let vi of &graph.initializers {
-        let ident = names.get(&vi.name);
-        weights.add_pub_field(ident, tensor_type(checked, &vi.name));
-        params.add_pub_field(ident, prepared_type(checked, &vi.name));
+        weights.add_pub_field(names.get(&vi.name), tensor_type(checked, &vi.name));
+    }
+    for let vi of held_initializers(graph, experts) {
+        params.add_pub_field(names.get(&vi.name), prepared_type(checked, &vi.name));
     }
     for let tensor of *kept {
         params.add_pub_field(names.get(&tensor), prepared_type(checked, &tensor));
+    }
+    for let pool of experts.pools() {
+        params.add_pub_field(
+            names.get(&pool),
+            `${BACKEND_PARAM}::Tensor<${checked.primitives[pool]}, [${experts.pool_axes(checked, &pool)}]>`,
+        );
     }
     w.blank();
     w.line("/// The graph's initializers, held on the host as the graph holds them.");
@@ -470,20 +501,95 @@ fn emit_weights(
     }
     w.line("/// These weights as tensors of the graph `backend` builds.");
     FnSpec::new("params", Vis::Pub)
-        .add_generic(GRAPH_BOUND)
+        .add_generic(BACKEND_BOUND)
         .set_receiver("&self")
-        .add_param("backend", `&mut ${BACKEND_PARAM}`)
+        .add_param(
+            "backend",
+            `&mut ${BACKEND_PARAM}`,
+        )
         .set_return_type(PARAMS_TYPE)
         .add_effect("_")
         .emit_begin(w);
-    emit_held_call(w, graph, &hosts, false);
+    let pools = if experts.groups.is_empty() {
+        "[]";
+    } else {
+        w.line(`let mut source = ${EMBEDDED_SOURCE}::new();`);
+        for let [at, vi] of pooled_initializers(graph, experts) {
+            w.line(wado`source["${at}"] = ${hosts[vi.name]}.stored_bytes();`);
+        }
+        w.line(`let pools = HeldExperts::resident(${BY_POSITION}).pools(backend, &source);`);
+        "pools";
+    };
+    emit_held_call(w, graph, experts, &hosts, false, pools);
+    w.line("return weights;");
     w.end();
     w.end();
     w.blank();
     w.line("/// The graph's initializers as tensors of the graph `build` adds operations to.");
     params.emit(w);
-    emit_constructor(w, graph, checked, placement);
+    emit_constructor(w, graph, checked, placement, experts);
     emit_embedded_data(w, graph);
+    emit_expert_layouts(w, graph, checked, kept, experts);
+}
+
+/// The initializers `Params` holds as they are: all but those pools hold.
+fn held_initializers(graph: &Graph, experts: &ExpertPlan) -> List<ValueInfo> {
+    return graph.initializers.into_iter().filter(|vi| !experts.is_pooled(&vi.name)).collect();
+}
+
+/// The initializers pools hold, each by its position among them all.
+fn pooled_initializers(graph: &Graph, experts: &ExpertPlan) -> List<[i32, ValueInfo]> {
+    return graph.initializers.into_iter().enumerate().filter(|p| experts.is_pooled(&p.1.name)).collect();
+}
+
+/// The pools' layouts where each initializer is a file named by its position.
+global BY_POSITION: String = "expert_layouts(|at| Result::Ok([`${at}`, 0])).unwrap()";
+
+/// `expert_layouts`: each pool layout, every layer's expert weights where its
+/// argument places the initializer at each position, by its file and its
+/// first byte. The pools follow the held initializers and `kept` in `Params`.
+fn emit_expert_layouts(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kept: &List<String>, experts: &ExpertPlan) {
+    if experts.groups.is_empty() {
+        return;
+    }
+    let position = |name: &String| graph.initializers.into_iter().position(|vi| vi.name == *name).unwrap();
+    let mut first = held_initializers(graph, experts).len() + kept.len();
+    let mut layouts: List<String> = [];
+    w.blank();
+    w.line("/// Each layout of pools, every layer's expert weights where `placed` finds");
+    w.line("/// the initializer at each position: its file and its first byte.");
+    w.begin(
+        "fn expert_layouts(placed: fn(i32) -> Result<[String, i32], LoadError> with _) -> Result<List<ExpertLayout>, LoadError> with _",
+    );
+    for let group of &experts.groups {
+        let mut layers: List<String> = [];
+        for let layer of &group.layers {
+            let mut stored: List<String> = [];
+            for let weight of layer {
+                let at = position(weight);
+                let extents = static_extents(&checked.shapes[*weight]).unwrap();
+                let slice: List<String> = extents[1..<extents.len()].into_iter().map(|e| `${e}`).collect();
+                w.line(`let placed_${at} = placed(${at})?;`);
+                stored.push(
+                    `StoredExperts { file: placed_${at}.0, start: placed_${at}.1, kind: ElementKind::${any_case(
+                        &checked.primitives[*weight],
+                    )}, extents: [${slice.join(", ")}] }`,
+                );
+            }
+            layers.push(`[${stored.join(", ")}]`);
+        }
+        let pools: List<String> = (first..<first + group.pools().len()).map(|i| `${i}`).collect();
+        first += group.pools().len();
+        let steps: List<String> = group.steps.into_iter().map(|s| `${s}`).collect();
+        let x = static_extents(&checked.shapes[group.pools()[0]]).unwrap()[0];
+        layouts.push(
+            `ExpertLayout { weights: [${pools.join(", ")}], layers: [${layers.join(", ")}], steps: [${steps.join(
+                ", ",
+            )}], experts: ${x} }`,
+        );
+    }
+    w.line(`return Result::Ok([${layouts.join(", ")}]);`);
+    w.end();
 }
 
 /// A tensor as the backend holds it.
@@ -505,15 +611,16 @@ fn loads_weights(graph: &Graph) -> bool {
 /// `Params::load` reading the rest a tensor at a time from a `WeightSource`
 /// where `placement` says where they are. Each tensor is kept as it is read, so
 /// the host copy of one weight at a time is all that lives beside the kept
-/// ones, or of the weights a backend lays as one matrix.
-fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placement: &Placement) {
+/// ones, or of the weights a backend lays as one matrix. Where `experts` pools
+/// some, `Model` takes a budget for them besides.
+fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placement: &Placement, experts: &ExpertPlan) {
     let loads = loads_weights(graph);
     if loads && placement matches { Unplaced } {
         return;
     }
     w.blank();
     let mut block = ImplSpec::new(PARAMS_TYPE);
-    block.add_generic(GRAPH_BOUND);
+    block.add_generic(BACKEND_BOUND);
     block.emit_begin(w);
     if loads {
         // Where the weights are, and what `load` checks of its files before
@@ -557,51 +664,207 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
                 [`${in_place.files().join(", ")} where the build found them`, checks];
             },
         };
+        let pooled = !experts.groups.is_empty();
         w.line(`/// The weights, those the graph does not carry read from ${doc}.`);
-        FnSpec::new("load", Vis::Pub)
-            .add_generic(`affine ${SOURCE_PARAM}: WeightSource`)
+        let mut load = FnSpec::new("load", Vis::Pub);
+        load
+            .add_generic(SOURCE_BOUND)
             .add_param("backend", `&mut ${BACKEND_PARAM}`)
-            .add_param("source", `&${SOURCE_PARAM}`)
+            .add_param(
+                "source",
+                `&${SOURCE_PARAM}`,
+            )
             .set_return_type(`Result<${PARAMS_TYPE}, LoadError>`)
-            .add_effect("_")
-            .emit_begin(w);
+            .add_effect("_");
+        if pooled {
+            w.line("/// Its pools hold every expert.");
+            load.emit_begin(w);
+            w.line("return Result::Ok(Params::loaded(backend, source, i64::MAX)?.0);");
+            w.end();
+            w.blank();
+            w.line(`/// The weights, those the graph does not carry read from ${doc}, and the`);
+            w.line("/// experts their pools hold within `budget` bytes.");
+            FnSpec::new("loaded")
+                .add_generic(SOURCE_BOUND)
+                .add_param("backend", `&mut ${BACKEND_PARAM}`)
+                .add_param(
+                    "source",
+                    `&${SOURCE_PARAM}`,
+                )
+                .add_param("budget", "i64")
+                .set_return_type(`Result<[${PARAMS_TYPE}, HeldExperts], LoadError>`)
+                .add_effect(
+                    "_",
+                )
+                .emit_begin(w);
+        } else {
+            load.emit_begin(w);
+        }
         for let line of firsts {
             w.line(line);
         }
-    } else {
-        w.line("/// The weights the graph carries.");
-        FnSpec::new("embedded", Vis::Pub)
-            .add_param("backend", `&mut ${BACKEND_PARAM}`)
-            .set_return_type(PARAMS_TYPE)
-            .add_effect("_")
-            .emit_begin(w);
+        let pools = if pooled {
+            w.begin("let mut experts = HeldExperts::within(expert_layouts(|at| Result::Ok(match at");
+            for let [at, vi] of pooled_initializers(graph, experts) {
+                w.line(`${at} => ${expert_place(&expected(&vi, &checked.shapes[vi.name]), placement)},`);
+            }
+            w.line("_ => unreachable(),");
+            w.end_with("}))?, budget)?;");
+            w.line("let pools = experts.pools(backend, source);");
+            "pools";
+        } else {
+            "[]";
+        };
+        emit_held_call(w, graph, experts, &held_hosts(graph, checked, placement, experts), true, pools);
+        w.line(if pooled { "return Result::Ok([weights, experts]);" } else { "return Result::Ok(weights);" });
+        w.end();
+        w.end();
+        if pooled {
+            emit_model_constructor(
+                w,
+                "load",
+                `the weights, those the graph does not carry read from ${doc}`,
+                SOURCE_PARAM,
+                [
+                    ["source", SOURCE_PARAM],
+                ],
+                ["let [weights, experts] = Params::loaded(backend, &source, budget)?;"],
+            );
+        }
+        return;
     }
+    w.line("/// The weights the graph carries.");
+    let mut embedded = FnSpec::new("embedded", Vis::Pub);
+    embedded.add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(PARAMS_TYPE).add_effect("_");
+    if experts.groups.is_empty() {
+        embedded.emit_begin(w);
+        emit_held_call(w, graph, experts, &held_hosts(graph, checked, placement, experts), false, "[]");
+        w.line("return weights;");
+        w.end();
+        w.end();
+        return;
+    }
+    w.line("/// Its pools hold every expert.");
+    embedded.emit_begin(w);
+    w.line(
+        `return Params::embedded_within(backend, &mut HeldExperts::resident(${BY_POSITION}), &embedded_experts());`,
+    );
+    w.end();
+    w.blank();
+    w.line("/// The weights the graph carries, the experts as many as `experts` holds,");
+    w.line("/// read from `files`.");
+    FnSpec::new("embedded_within")
+        .add_param("backend", `&mut ${BACKEND_PARAM}`)
+        .add_param(
+            "experts",
+            "&mut HeldExperts",
+        )
+        .add_param("files", `&${EMBEDDED_SOURCE}`)
+        .set_return_type(PARAMS_TYPE)
+        .add_effect("_")
+        .emit_begin(w);
+    w.line("let pools = experts.pools(backend, files);");
+    emit_held_call(w, graph, experts, &held_hosts(graph, checked, placement, experts), false, "pools");
+    w.line("return weights;");
+    w.end();
+    w.end();
+    emit_model_constructor(
+        w,
+        "embedded",
+        "the weights the graph carries",
+        EMBEDDED_SOURCE,
+        [],
+        [
+            `let mut experts = HeldExperts::within(${BY_POSITION}, budget)?;`, "let source = embedded_experts();",
+            "let weights = Params::embedded_within(backend, &mut experts, &source);",
+        ],
+    );
+    w.blank();
+    w.line("/// The expert weights the graph carries, each a file named by its position");
+    w.line("/// among the initializers.");
+    w.begin(`fn embedded_experts() -> ${EMBEDDED_SOURCE}`);
+    w.line(`let mut files = ${EMBEDDED_SOURCE}::new();`);
+    for let [at, _] of pooled_initializers(graph, experts) {
+        w.line(wado`files["${at}"] = ${EMBEDDED_DATA}(${at});`);
+    }
+    w.line("return files;");
+    w.end();
+}
+
+/// The source of the experts a graph carries.
+global EMBEDDED_SOURCE: String = "HeldFiles";
+
+/// `Model::<name>`, over `source`, whose pools hold the experts within a
+/// budget: `params` it takes beside the backend and the budget, and `lines`
+/// binding `weights`, `experts` and `source`.
+fn emit_model_constructor(
+    w: &mut CodeWriter,
+    name: String,
+    doc: String,
+    source: String,
+    params: List<[String, String]>,
+    lines: List<String>,
+) {
+    let model = `${MODEL}<${BACKEND_PARAM}, ${source}>`;
+    w.blank();
+    let mut block = ImplSpec::new(model);
+    block.add_generic(BACKEND_BOUND);
+    if source == SOURCE_PARAM {
+        block.add_generic(SOURCE_BOUND);
+    }
+    block.emit_begin(w);
+    w.line(`/// A model of ${doc}, its pools holding as many experts as \`budget\` bytes`);
+    w.line("/// hold, and reading the others from the source as a pass picks them.");
+    let mut spec = FnSpec::new(name, Vis::Pub);
+    spec.add_param("backend", `&mut ${BACKEND_PARAM}`);
+    for let [ident, ty] of params {
+        spec.add_param(ident, ty);
+    }
+    spec.add_param("budget", "i64").set_return_type(`Result<${model}, LoadError>`).add_effect("_").emit_begin(w);
+    for let line of lines {
+        w.line(line);
+    }
+    w.line(`return Result::Ok(${MODEL} { weights, programs: Programs::new(), experts, source });`);
+    w.end();
+    w.end();
+}
+
+/// The `HostWeight` of each initializer `Params` holds as it is: its bytes the
+/// graph carries, or the payload `placement` reads.
+fn held_hosts(graph: &Graph, checked: &Checked, placement: &Placement, experts: &ExpertPlan) -> HashMap<String, String> {
     let mut hosts = HashMap::<String, String>::new();
     for let [at, vi] of graph.initializers.into_iter().enumerate() {
+        if experts.is_pooled(&vi.name) {
+            continue;
+        }
         let primitive = checked.primitives[vi.name];
-        let shape = checked.shapes.get(vi.name).unwrap();
-        let e = expected(&vi, &shape);
+        let e = expected(&vi, &checked.shapes[vi.name]);
         hosts[vi.name] = match vi.data {
             Some(_) => `HostWeight::of_bytes::<${primitive}>(${e.extents}, &${EMBEDDED_DATA}(${at}))`,
             None => checkpoint_payload(&e, &primitive, placement),
         };
     }
-    emit_held_call(w, graph, &hosts, loads);
-    w.end();
-    w.end();
+    return hosts;
 }
 
-/// A `return` of `Params::held` over the initializers' `HostWeight`s in
-/// `hosts`, each by its place among them: the `Result` where `fallible`, as a
-/// `load` returns one, and the unwrapped struct otherwise.
-fn emit_held_call(w: &mut CodeWriter, graph: &Graph, hosts: &HashMap<String, String>, fallible: bool) {
+/// `weights` bound to `Params::held` over the `HostWeight`s in `hosts` of the
+/// initializers `Params` holds as they are, each by its place among them, and
+/// `pools`: a load's error passed on where `fallible`.
+fn emit_held_call(
+    w: &mut CodeWriter,
+    graph: &Graph,
+    experts: &ExpertPlan,
+    hosts: &HashMap<String, String>,
+    fallible: bool,
+    pools: String,
+) {
     let error = if fallible { "LoadError" } else { "!" };
-    w.begin(`return ${PARAMS}::held::<${error}>(backend, |at| Result::Ok(match at`);
-    for let [at, vi] of graph.initializers.into_iter().enumerate() {
+    w.begin(`let weights = ${PARAMS}::held::<${error}>(backend, |at| Result::Ok(match at`);
+    for let [at, vi] of held_initializers(graph, experts).into_iter().enumerate() {
         w.line(`${at} => ${hosts[vi.name]},`);
     }
     w.line("_ => unreachable(),");
-    w.end_with(if fallible { "));" } else { ")).unwrap();" });
+    w.end_with(`), ${pools})${if fallible { "?" } else { ".unwrap()" }};`);
 }
 
 /// The function holding the bytes of each weight the graph carries, by its
@@ -633,7 +896,6 @@ fn emit_embedded_data(w: &mut CodeWriter, graph: &Graph) {
 /// The call reading a tensor's stored `primitive` elements out of the source
 /// `load` was given, checked against what the build compiled it as.
 fn checkpoint_payload(e: &Expected, primitive: &String, placement: &Placement) -> String {
-    let axes: List<String> = e.axes.into_iter().map(|axis| wado`"${axis}"`).collect();
     let file = match *placement {
         Unplaced => unreachable(),
         File(file) => file,
@@ -643,9 +905,30 @@ fn checkpoint_payload(e: &Expected, primitive: &String, placement: &Placement) -
             return wado`payload_at::<${*primitive}, ${SOURCE_PARAM}>(source, "${range.file}", "${e.tensor}", ${e.extents}, ${range.start}, ${range.end})?`;
         },
     };
-    return wado`header.payload::<${*primitive}, ${SOURCE_PARAM}>(source, "${file}", &Expected { tensor: "${e.tensor}", dtype: "${e.dtype}", axes: [${axes.join(
-        ", ",
-    )}], extents: ${e.extents}, elements: ${e.elements}, width: ${e.width} })?`;
+    return wado`header.payload::<${*primitive}, ${SOURCE_PARAM}>(source, "${file}", &${expected_literal(e)})?`;
+}
+
+/// Where the source `load` was given holds a tensor of experts: its file and
+/// its first byte. A header's entry is checked at load against what the build
+/// compiled the tensor as; a range the build found is that tensor's already.
+fn expert_place(e: &Expected, placement: &Placement) -> String {
+    let file = match *placement {
+        Unplaced => unreachable(),
+        File(file) => file,
+        Shards(placed) => placed[e.tensor],
+        InPlace(in_place) => {
+            let range = in_place.ranges[e.tensor];
+            assert range.end - range.start == e.elements * e.width, "a range the build found holds its tensor's bytes";
+            return wado`["${range.file}", ${range.start}]`;
+        },
+    };
+    return wado`["${file}", header.range("${file}", &${expected_literal(e)})?.0]`;
+}
+
+/// `e` as the `Expected` literal a header checks a tensor against.
+fn expected_literal(e: &Expected) -> String {
+    let axes: List<String> = e.axes.into_iter().map(|axis| wado`"${axis}"`).collect();
+    return wado`Expected { tensor: "${e.tensor}", dtype: "${e.dtype}", axes: [${axes.join(", ")}], extents: ${e.extents}, elements: ${e.elements}, width: ${e.width} }`;
 }
 
 /// The pass built as a graph, each node as the operations of `Graph` that
@@ -661,12 +944,13 @@ fn emit_build(
     symbols: Symbols,
     crossing: &Crossing,
     conditions: &List<String>,
+    experts: &ExpertPlan,
 ) -> Result<List<String>, EmitError> {
     let spelled = symbols;
     let axes = if symbols.per_row() { "[Slots]" } else { "[]" };
     w.line("/// The graph's pass, each operation added to the graph `backend` builds,");
     w.line("/// over inputs it holds.");
-    let read = emit_entry(w, graph, checked, names, literals, kept, symbols, crossing)?;
+    let read = emit_entry(w, graph, checked, names, literals, kept, symbols, crossing, experts)?;
     if !read.is_empty() {
         let mut lengths = StructSpec::new(LENGTHS, Vis::Pub);
         lengths.add_generic(HOLDS_BOUND);
@@ -717,43 +1001,23 @@ fn emit_compute(
     if room matches { Some(_) } {
         compute.add_param("room", "i32");
     }
-    let Entry { lines: mut lines, symbols: mut symbols, arguments: mut arguments, taken_args, first_weight, class, chosen, cache_fits } = entry;
-    // `build` and `recorded` take the branches where they take the lengths.
+    let Entry { lines: mut lines, symbols: mut symbols, taken_args, first_weight, class, chosen, cache_fits } = entry;
+    // `recorded` takes the branches where it takes the lengths.
     let [record, least] = if chosen.is_empty() {
         [RECORDED, `${RECORDED}(recorder, &${LEAST_EXTENTS}())`];
     } else {
-        arguments.push("&chosen");
         let unchosen: List<String> = chosen.into_iter().map(|c| `${c}: null`).collect();
         [
             `|recorder, extents| ${RECORDED}(recorder, extents, &chosen)`,
             `${RECORDED}(recorder, &${LEAST_EXTENTS}(), &${CHOSEN} { ${unchosen.join(", ")} })`,
         ];
     };
-    arguments.push("&model.weights");
     let erased = erased_arguments(&taken_args, first_weight);
-    let results = if crossing.several() {
-        let mut fields: List<String> = [];
-        for let [at, output] of returned.into_iter().enumerate() {
-            fields.push(`${names.get(&output)}: ${typed_result(checked, &output, at)}`);
-        }
-        if has_cache {
-            fields.push(`cache: ${cache_from_results(returned.len())}`);
-        }
-        `${PASSED} { ${fields.join(", ")} }`;
-    } else {
-        typed_result(checked, &returned[0], 0);
-    };
-    // Bound by a pattern, the run reads the `cache` the pattern shadows.
-    let mut bind_run = |pattern: String| {
-        lines.push(
-            `let ${pattern} = match model.programs.run(backend, [${class.join(", ")}], ${record}, || [${erased.join(
-                ", ",
-            )}], || ${ERASED_WEIGHTS}) {`,
-        );
-        lines.push(`    Some(results) => ${results},`);
-        lines.push(`    None => build(${arguments.join(", ")}),`);
-        lines.push("};");
-    };
+    lines.push(
+        `let results = model.programs.run(backend, [${class.join(", ")}], ${record}, || [${erased.join(
+            ", ",
+        )}], || ${ERASED_WEIGHTS}, ${HOST_STEP});`,
+    );
     let mut read_back = |tensor: &String, place: String| -> Result<String, EmitError> {
         let downloaded = `backend.download(&${place})`;
         let shape = shapes[*tensor];
@@ -761,18 +1025,14 @@ fn emit_compute(
         return Result::Ok(if cut { `resized(&${downloaded}, ${symbols.spell_shape(&shape)?})` } else { downloaded });
     };
     let returned_type = if crossing.several() {
-        let mut idents: List<String> = [];
         let mut fields: List<String> = [];
-        for let output of returned {
-            let ident = names.get(&output);
-            idents.push(ident);
-            fields.push(`${ident}: ${read_back(&output, ident)?}`);
+        for let [at, output] of returned.into_iter().enumerate() {
+            fields.push(`${names.get(&output)}: ${read_back(&output, typed_result(checked, &output, at))?}`);
         }
         if has_cache {
-            idents.push("cache");
-            fields.push(`cache: fitted_fields(backend, &cache, ${cache_fits})`);
+            lines.push(`let presents: ${CACHE}<${BACKEND_PARAM}> = ${cache_from_results(returned.len())};`);
+            fields.push(`cache: fitted_fields(backend, &presents, ${cache_fits})`);
         }
-        bind_run(`${PASSED} { ${idents.join(", ")} }`);
         lines.push(`return ${OUTPUTS} { ${fields.join(", ")} };`);
         if has_cache {
             `${OUTPUTS}<${BACKEND_PARAM}>`;
@@ -780,16 +1040,21 @@ fn emit_compute(
             OUTPUTS;
         }
     } else {
-        bind_run("passed");
-        lines.push(`return ${read_back(&returned[0], "passed")?};`);
+        lines.push(`return ${read_back(&returned[0], typed_result(checked, &returned[0], 0))?};`);
         tensor_type(checked, &returned[0]);
     };
-    compute.add_param("model", `&mut ${MODEL}<${BACKEND_PARAM}>`).set_return_type(returned_type).add_effect("_");
+    compute
+        .add_generic(SOURCE_BOUND)
+        .add_param("model", `&mut ${MODEL_TYPE}`)
+        .set_return_type(returned_type)
+        .add_effect(
+            "_",
+        );
     emit_model(w);
     w.blank();
     w.line("/// [`build`] over inputs on the host, each length padded to a capacity, its");
-    w.line("/// outputs read back cut to their lengths. A backend that compiles its");
-    w.line("/// pass runs the program it compiled for the capacities.");
+    w.line("/// outputs read back cut to their lengths, run as the program the backend");
+    w.line("/// compiled for the capacities.");
     if decoding matches { Some(_) } {
         w.line("/// The cache holds `room` positions past these, for the steps to come.");
     }
@@ -803,7 +1068,7 @@ fn emit_compute(
     w.end();
     emit_recorded(w, names, &taken_args, first_weight, &returned, crossing, !chosen.is_empty(), false);
     emit_least_extents(w, checked, carriers, names, owed, padded, &taken_args, per_row)?;
-    emit_held(w, graph, checked, kept, first_weight, least);
+    emit_held(w, graph, checked, kept, context.experts, first_weight, least);
     return Result::Ok(());
 }
 
@@ -823,6 +1088,7 @@ struct EntryContext {
     padded: &List<String>,
     read: &List<String>,
     kept: &List<String>,
+    experts: &ExpertPlan,
     crossing: &Crossing,
     owed: &List<[Grown, Option<Poly>]>,
     conditions: &List<String>,
@@ -831,13 +1097,12 @@ struct EntryContext {
 }
 
 /// What an entry has made by the time it can run its program: its `lines`, the
-/// lengths, what `build` is passed, what the program takes, its weights from
-/// `first_weight` on, what tells its programs apart, the fields of `chosen`,
-/// and what `fitted_fields` fits the cache to the capacities by.
+/// lengths, what the program takes, its weights from `first_weight` on, what
+/// tells its programs apart, the fields of `chosen`, and what `fitted_fields`
+/// fits the cache to the capacities by.
 struct Entry {
     lines: List<String>,
     symbols: Symbols,
-    arguments: List<String>,
     taken_args: List<ProgramArgument>,
     first_weight: i32,
     class: List<String>,
@@ -862,13 +1127,13 @@ fn prepared_entry(
     room: &Option<Room>,
     apart: Option<Apart> = null,
 ) -> Result<Entry, EmitError> {
-    let EntryContext { graph, checked, names, carriers, padded, read, kept, crossing, owed, conditions, per_row } = *context;
+    let EntryContext { graph, checked, names, carriers, padded, read, kept, experts, crossing, owed, conditions, per_row } = *context;
     let shapes = &checked.shapes;
     let has_cache = crossing.has_cache();
     // The cache holds a past at a capacity, so its length is what the graph
     // owes it to be, given the other inputs'.
     symbols.derive_owed(owed);
-    spec.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
+    spec.add_generic(BACKEND_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     let mut lines: List<String> = [];
     let taken: List<ValueInfo> = graph.inputs.into_iter().filter(|vi| !crossing.cached.contains(vi.name)).collect();
     // Every symbolic axis is its symbols' arithmetic over the lengths, but for
@@ -935,18 +1200,15 @@ fn prepared_entry(
         lines.push("retain_fields(backend, cache);");
     }
     lines.push("backend.begin();");
-    let mut arguments: List<String> = ["backend"];
     for let vi of &taken {
         let ident = names.get(&vi.name);
         let padded_to = `&resized(${ident}, ${capacities.spell_shape(&shapes[vi.name])?})`;
         lines.push(`let ${ident} = backend.upload(${padded_to});`);
-        arguments.push(`&${ident}`);
     }
     // The cache at the capacities, both as the pass takes it and as it returns it.
     let cache_fits = fits_at_capacities(crossing, owed, padded, &mut capacities)?;
     if has_cache {
         lines.push(`let cache = fitted_fields(backend, cache, ${cache_fits});`);
-        arguments.push("&cache");
     }
     // A capacity reads its length, and an unpadded symbol is its own capacity.
     symbols.use_what(&capacities);
@@ -996,18 +1258,16 @@ fn prepared_entry(
             });
         }
         lines.push(`let lengths = ${LENGTHS}::<${BACKEND_PARAM}> { ${fields.join(", ")} };`);
-        arguments.push("&lengths");
         // A program holds as many rows of lengths as it was recorded with.
         class.push(`backend.extents_of(&lengths.${symbols.ident(&read[0])})`);
     }
     let first_weight = taken_args.len();
-    for let weight of weight_names(graph, kept) {
+    for let weight of weight_names(graph, kept, experts) {
         taken_args.push(ProgramArgument::of(checked, names, &weight, Crossed::Weight));
     }
     return Result::Ok(Entry {
         lines,
         symbols,
-        arguments,
         taken_args,
         first_weight,
         class,
@@ -1107,8 +1367,8 @@ fn decoding_axes(
     return Result::Ok(DecodingAxes { ids: decode.ids, mask: decode.mask, logits: decode.logits, total });
 }
 
-/// `decode`: [`DECODED`] over inputs on the host, its tokens read back. A
-/// backend that compiles its pass runs the program `RECORDED_DECODED` records.
+/// `decode`: [`DECODED`] over inputs on the host, its tokens read back, run as
+/// the program `RECORDED_DECODED` records.
 /// `rows_past`, the length every row's past is, makes it `DECODE_ROWS`, each row
 /// at a past of its own, which the mask's extent holds with its steps, so no
 /// room moves the cache.
@@ -1151,12 +1411,6 @@ fn emit_decode(
     };
     lines.push(`let decoding = Decoding::new(backend, sampling, ended, steps, ${at});`);
     lines.push("let sampler = sampling.sampler();");
-    let mut arguments = entry.arguments;
-    if chooses {
-        arguments.push("&chosen");
-    }
-    arguments.push("&model.weights");
-    arguments.push("&decoding");
     let mut class = entry.class;
     class.push("sampler.key()");
     class.push("backend.extents_of(&decoding.tokens)");
@@ -1165,25 +1419,26 @@ fn emit_decode(
     let erased = erased_arguments(&taken, entry.first_weight);
     let chosen_argument = if chooses { ", &chosen" } else { "" };
     lines.push(
-        `let [tokens, cache]: [${BACKEND_PARAM}::Tensor<i64, [Slots, Picks]>, ${CACHE}<${BACKEND_PARAM}>] = match model.programs.run(backend, [${class.join(
+        `let results = model.programs.run(backend, [${class.join(
             ", ",
         )}], |recorder, extents| ${RECORDED_DECODED}(recorder, extents, &sampler${chosen_argument}), || {`,
     );
     lines.push(`    let mut all: List<Any<${BACKEND_PARAM}>> = [${erased.join(", ")}];`);
     lines.push("    all.extend(&decoding.erased(backend));");
     lines.push("    return all;");
-    lines.push(`}, || ${ERASED_WEIGHTS}) {`);
+    lines.push(`}, || ${ERASED_WEIGHTS}, ${HOST_STEP});`);
+    lines.push(`let tokens = typed::<${BACKEND_PARAM}, i64, [Slots, Picks]>(backend, &results[0]);`);
     lines.push(
-        `    Some(results) => [typed::<${BACKEND_PARAM}, i64, [Slots, Picks]>(backend, &results[0]), ${cache_from_results(
+        `return ${DECODED_TYPE} { tokens: resized(&backend.download(&tokens), [rows, steps]), cache: ${cache_from_results(
             1,
-        )}],`,
+        )} };`,
     );
-    lines.push(`    None => ${DECODED}(${arguments.join(", ")}),`);
-    lines.push("};");
-    lines.push(`return ${DECODED_TYPE} { tokens: resized(&backend.download(&tokens), [rows, steps]), cache };`);
     decode
-        .add_param("model", `&mut ${MODEL}<${BACKEND_PARAM}>`)
-        .set_return_type(`${DECODED_TYPE}<${BACKEND_PARAM}>`)
+        .add_generic(SOURCE_BOUND)
+        .add_param("model", `&mut ${MODEL_TYPE}`)
+        .set_return_type(
+            `${DECODED_TYPE}<${BACKEND_PARAM}>`,
+        )
         .add_effect("_");
 
     if !apart {
@@ -1320,7 +1575,7 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     requests.emit(w);
     w.blank();
     let mut held = ImplSpec::new(`${REQUESTS}<${bk}>`);
-    held.add_generic(GRAPH_BOUND);
+    held.add_generic(BACKEND_BOUND);
     held.emit_begin(w);
     w.line("/// `slots` empty slots of `capacity` positions, each a capacity of its own.");
     w.line(`pub fn new(backend: &mut ${bk}, slots: i32, capacity: i32) -> ${REQUESTS}<${bk}> with _ {`);
@@ -1340,7 +1595,7 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     w.line("/// its cache, its past, and the token `sampling` picks after it, which this");
     w.line("/// returns.");
     w.line(
-        `pub fn place(&mut self, backend: &mut ${bk}, slot: i32, ${place_params.join(", ")}, sampling: &Sampling, model: &mut ${MODEL}<${bk}>) -> i64 with _ {`,
+        `pub fn place<${SOURCE_BOUND}>(&mut self, backend: &mut ${bk}, slot: i32, ${place_params.join(", ")}, sampling: &Sampling, model: &mut ${MODEL_TYPE}) -> i64 with _ {`,
     );
     w.line(`    assert !self.active[slot], "a request is placed in an empty slot";`);
     w.line("    retain_fields(backend, &self.cache);");
@@ -1368,7 +1623,7 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     let mut params = [`&mut self`, `backend: &mut ${bk}`] as List<String>;
     params.extend(&decode_params);
     w.line(
-        `pub fn decode(${params.join(", ")}, steps: i32, sampling: &Sampling, model: &mut ${MODEL}<${bk}>) -> Tensor<i64, [Slots, Picks]> with _ {`,
+        `pub fn decode<${SOURCE_BOUND}>(${params.join(", ")}, steps: i32, sampling: &Sampling, model: &mut ${MODEL_TYPE}) -> Tensor<i64, [Slots, Picks]> with _ {`,
     );
     w.line("    let slots = self.pasts.len();");
     w.line(`    let ids = ${ids_type} { data: self.tokens, extents: [slots, 1] };`);
@@ -1568,34 +1823,52 @@ fn emit_least_extents(
     return Result::Ok(());
 }
 
-/// `Params::held`: the initializers as the backend keeps them for the pass
-/// `least`, a call of `recorded`, records at the least lengths, the weights
-/// taking its parameters from `first` on, and the folded literals `kept`.
-fn emit_held(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kept: &List<String>, first: i32, least: String) {
+/// `Params::held`: the initializers held as they are, as the backend keeps
+/// them for the pass `least`, a call of `recorded`, records at the least
+/// lengths, the weights taking its parameters from `first` on; the folded
+/// literals `kept`; then the pools.
+fn emit_held(
+    w: &mut CodeWriter,
+    graph: &Graph,
+    checked: &Checked,
+    kept: &List<String>,
+    experts: &ExpertPlan,
+    first: i32,
+    least: String,
+) {
     w.blank();
     let mut block = ImplSpec::new(PARAMS_TYPE);
-    block.add_generic(GRAPH_BOUND);
+    block.add_generic(BACKEND_BOUND);
     block.emit_begin(w);
-    w.line("/// The initializers, `load(at)` the `at`th on the host, as `backend` keeps");
-    w.line("/// them for the pass that reads them, and the folded literals.");
+    w.line("/// The initializers `Params` holds as they are, `load(at)` the `at`th on the");
+    w.line("/// host, as `backend` keeps them for the pass that reads them, the folded");
+    w.line("/// literals, and `pools`.");
     FnSpec::new("held")
         .add_generic("Er")
         .add_param("backend", `&mut ${BACKEND_PARAM}`)
-        .add_param("load", "fn(i32) -> Result<HostWeight, Er> with _")
+        .add_param(
+            "load",
+            "fn(i32) -> Result<HostWeight, Er> with _",
+        )
+        .add_param("pools", `List<Any<${BACKEND_PARAM}>>`)
         .set_return_type(`Result<${PARAMS_TYPE}, Er>`)
-        .add_effect("_")
+        .add_effect(
+            "_",
+        )
         .emit_begin(w);
-    let count = graph.initializers.len() + kept.len();
+    let held = held_initializers(graph, experts).len();
+    let count = held + kept.len();
     if kept.is_empty() {
-        w.line(`let weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, load)?;`);
+        w.line(`let mut weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, load)?;`);
     } else {
-        w.begin(`let weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, |at| match at`);
+        w.begin(`let mut weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, |at| match at`);
         for let [k, tensor] of kept.into_iter().enumerate() {
-            w.line(`${graph.initializers.len() + k} => Result::Ok(${kept_literal(checked, tensor)}),`);
+            w.line(`${held + k} => Result::Ok(${kept_literal(checked, tensor)}),`);
         }
         w.line("_ => load(at),");
         w.end_with(")?;");
     }
+    w.line("weights.extend(&pools);");
     w.line("return Result::Ok(restored_fields(backend, &weights, 0));");
     w.end();
     w.end();
@@ -1738,30 +2011,40 @@ fn any_case(primitive: &String) -> String {
     };
 }
 
-/// The initializers, then the folded literals `kept`, as `Params` holds them.
-fn weight_names(graph: &Graph, kept: &List<String>) -> List<String> {
-    let mut weights: List<String> = graph.initializers.into_iter().map(|vi| vi.name).collect();
+/// The initializers held as they are, the folded literals `kept`, then the
+/// weights standing for the pools, as `Params` holds them.
+fn weight_names(graph: &Graph, kept: &List<String>, experts: &ExpertPlan) -> List<String> {
+    let mut weights: List<String> = held_initializers(graph, experts).into_iter().map(|vi| vi.name).collect();
     weights.extend(kept);
+    weights.extend(&experts.pools());
     return weights;
 }
 
-/// `Model`, the weights beside the programs a backend compiled. The weights
-/// are private, since the programs hold them as the first call erased them.
+/// `Model`, the weights beside the programs a backend compiled, and the
+/// experts its pools hold with the source of the rest. The weights are
+/// private, since the programs hold them as the first call erased them.
 fn emit_model(w: &mut CodeWriter) {
     let mut model = StructSpec::new(MODEL, Vis::Pub);
-    model.add_generic(GRAPH_BOUND);
+    model.add_generic(BACKEND_BOUND);
+    model.add_generic(`${SOURCE_BOUND} = Unread`);
     model.add_field("weights", PARAMS_TYPE);
     model.add_pub_field("programs", `Programs<${BACKEND_PARAM}>`);
+    model.add_field("experts", "HeldExperts");
+    model.add_field("source", SOURCE_PARAM);
     w.blank();
-    w.line("/// The weights as `Bk` holds them, and the program `Bk` compiled for each");
-    w.line("/// shape class `compute` has met.");
+    w.line("/// The weights as `Bk` holds them, the program `Bk` compiled for each");
+    w.line("/// shape class `compute` has met, and the experts the pools hold, those");
+    w.line("/// they do not read from `source` as a pass picks them.");
     model.emit(w);
     w.blank();
     let mut held = ImplSpec::new(`${MODEL}<${BACKEND_PARAM}>`);
-    held.add_generic(GRAPH_BOUND);
+    held.add_generic(BACKEND_BOUND);
     held.emit_begin(w);
+    w.line("/// A model of `weights`, whose pools hold every expert.");
     w.line(`pub fn new(weights: ${PARAMS_TYPE}) -> ${MODEL}<${BACKEND_PARAM}> {`);
-    w.line(`    return ${MODEL} { weights, programs: Programs::new() };`);
+    w.line(
+        `    return ${MODEL} { weights, programs: Programs::new(), experts: HeldExperts::resident([]), source: Unread {} };`,
+    );
     w.line("}");
     w.end();
 }
@@ -2006,9 +2289,10 @@ fn emit_entry(
     kept: &List<String>,
     mut symbols: Symbols,
     crossing: &Crossing,
+    experts: &ExpertPlan,
 ) -> Result<List<String>, EmitError> {
     let shapes = &checked.shapes;
-    let mut exprs = Operands {};
+    let mut exprs = Operands { experts: experts.placements(), pooled: experts.pooled };
     let mut entry = FnSpec::new("build", Vis::Pub);
     entry.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     // The pasts cross in one `Cache`, and the presents replace them in it.
@@ -2029,7 +2313,7 @@ fn emit_entry(
         entry.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
     }
     for let vi of &graph.initializers {
-        exprs.values[vi.name] = `weights.${names.get(&vi.name)}`;
+        exprs.values[vi.name] = `weights.${names.get(&experts.held_in(&vi.name))}`;
     }
     for let tensor of kept {
         exprs.values[*tensor] = `weights.${names.get(tensor)}`;

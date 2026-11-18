@@ -24,7 +24,7 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Graph, WebGpuBackend } from "lib:loam";
+use { Backend, WebGpuBackend } from "lib:loam";
 use { Tokenizer } from "../../example/gemma3-270m/model.wado";
 use { Q4f16Model } from "../../example/gemma3-270m/q4f16.wado";
 use { Generator, STEPS, timed_by } from "../generate.wado";
@@ -38,7 +38,7 @@ export fn run() with (Environment, Stdout, Stderr, Preopens, MonotonicClock, Web
     timed_by("Gemma 3 (270M) q4f16, Loam WebGPU decode", &mut model, |m, ids| m.continued(ids, STEPS).0);
 }
 
-impl<affine Bk: Graph> Generator for Q4f16Model<Bk> {
+impl<affine Bk: Backend> Generator for Q4f16Model<Bk> {
     /// Each run starts from an empty cache, so there is nothing to drop.
     fn reset(&mut self) {
     }

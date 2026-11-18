@@ -11,9 +11,9 @@ already measured, not how to close it. Closed work belongs in commit history.
   rerun even when the value came out the same.
 - [ ] A memo owns nothing. Registering a cleanup inside one traps, and so does
   making an effect or another memo there.
-- [ ] Disposing of a scope stops its bindings, takes its rows out of an `each`
-  and the text nodes out of a `bind_text`. It leaves every other node where it
-  is, and its listeners attached.
+- [ ] Disposing of a scope stops its bindings, takes its rows out of an `each`,
+  the text nodes out of a `bind_text` and the subtree out of a `show`. It
+  leaves every other node where it is, and its listeners attached.
 - [ ] A flush happens when an `on` listener returns or when the program asks.
   Nothing schedules one after the current task, as a microtask would.
 
@@ -22,7 +22,8 @@ already measured, not how to close it. Closed work belongs in commit history.
 - [ ] No template syntax exists. A page is built with `View`.
   [WEP: Markup Dialect](../docs/wep-2026-08-29-markup-dialect.md) holds
   what is decided about one.
-- [ ] A child shown only on a condition has no form: `children` takes a list,
-  and a list literal holds no `if`.
-- [ ] No binding shows or swaps a subtree as a signal changes. `each` is the
-  only binding that adds and removes children.
+- [ ] Choosing between two subtrees takes two `show`s with opposite
+  conditions, each reading the condition's signals. No binding renders one of
+  several subtrees by a value.
+- [ ] `show` renders its subtree anew each time it shows. A subtree that is
+  costly to build has no way to be kept while hidden.

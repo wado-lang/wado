@@ -618,10 +618,12 @@ add('NBitsHalfBias', overHalves({
 // SwiGLU of 32 between two products in 4 bits and blocks of 32, its gate and
 // up rows interleaved. `zeros` packs zero points and `bias` adds biases. The
 // router's logits are apart in each row, so the experts a token picks are not
-// left to a tie.
-const qmoe = ({ tokens, k = 2, zeros = false, bias = true, attrs = {} }) => {
+// left to a tie. A `layer` past the first names its router, its weights and
+// what it reads and writes after itself, and draws them anew.
+const qmoe = ({ tokens, k = 2, zeros = false, bias = true, attrs = {}, layer = 0 }) => {
   const [experts, hidden, inter] = [4, 32, 32];
-  const logits = Array.from({ length: tokens * experts }, (_, i) => ((i * 5) % 11) / 2 - 2.5 + i / 64);
+  const named = (n) => (layer ? `${n}_${layer}` : n);
+  const logits = Array.from({ length: tokens * experts }, (_, i) => (((i + layer) * 5) % 11) / 2 - 2.5 + i / 64);
   // Zero points of 0 to 3 under values of 0 to 15 leave nearly every value
   // positive, as the input and the scales are, so no sum cancels to a value
   // that f32 rounds far from the exact one, and the zero points alone set it.
@@ -632,29 +634,30 @@ const qmoe = ({ tokens, k = 2, zeros = false, bias = true, attrs = {} }) => {
     const t = bytes(dims, seed);
     return { ...t, values: t.values.map((b) => b & 0xf3) };
   };
+  const seed = 10 * layer;
   const inits = {
-    W1: bytes([experts, 2 * inter, hidden / 2], 5),
-    S1: rowScales([experts, 2 * inter, 1]),
-    W2: bytes([experts, hidden, inter / 2], 6),
-    S2: rowScales([experts, hidden, 1]),
+    [named('W1')]: bytes([experts, 2 * inter, hidden / 2], 5 + seed),
+    [named('S1')]: rowScales([experts, 2 * inter, 1]),
+    [named('W2')]: bytes([experts, hidden, inter / 2], 6 + seed),
+    [named('S2')]: rowScales([experts, hidden, 1]),
   };
-  const operands = ['X', 'R', 'W1', 'S1', '', 'W2', 'S2', ''];
+  const operands = [named('X'), named('R'), named('W1'), named('S1'), '', named('W2'), named('S2'), ''];
   if (bias) {
-    inits.B1 = float([experts, 2 * inter], halves(experts * 2 * inter));
-    inits.B2 = float([experts, hidden], halves(experts * hidden).map((v) => v / 2));
-    operands[4] = 'B1';
-    operands[7] = 'B2';
+    inits[named('B1')] = float([experts, 2 * inter], halves(experts * 2 * inter).map((v) => v / (layer + 1)));
+    inits[named('B2')] = float([experts, hidden], halves(experts * hidden).map((v) => v / (layer + 2)));
+    operands[4] = named('B1');
+    operands[7] = named('B2');
   }
   if (zeros) {
-    inits.Z1 = small([experts, 2 * inter, 1], 7);
-    inits.Z2 = small([experts, hidden, 1], 8);
-    operands.push('', '', '', 'Z1', 'Z2');
+    inits[named('Z1')] = small([experts, 2 * inter, 1], 7 + seed);
+    inits[named('Z2')] = small([experts, hidden, 1], 8 + seed);
+    operands.push('', '', '', named('Z1'), named('Z2'));
   }
   const x = halves(tokens * hidden).map((v) => (zeros ? Math.abs(v) + 0.5 : v));
   return {
-    inputs: { X: float([tokens, hidden], x), R: float([tokens, experts], logits) },
+    inputs: { [named('X')]: float([tokens, hidden], x), [named('R')]: float([tokens, experts], logits) },
     inits,
-    nodes: [node('com.microsoft.QMoE', operands, 'Y', {
+    nodes: [node('com.microsoft.QMoE', operands, named('Y'), {
       k,
       activation_type: 'swiglu',
       swiglu_fusion: 1,
@@ -669,14 +672,24 @@ const qmoe = ({ tokens, k = 2, zeros = false, bias = true, attrs = {} }) => {
     domains: { 'com.microsoft': 1 },
   };
 };
-// The QMoE node of case `c` computed from its definition in f64, over the
-// tensors `given` names: each token's `k` largest logits pick its experts, and
-// each pick weighs its expert's output by its softmax over every expert,
-// divided by the picks' sum where `normalize_routing_weights` is set. Each
-// expert is a SwiGLU of interleaved gate and up rows between two products of
-// weights packed in blocks.
+// The QMoE nodes of case `c` computed from their definition in f64, in order,
+// each over the tensors `given` names and those the nodes before it wrote.
 const qmoeExact = (c, given) => {
-  const { inputs: ops, attrs } = c.nodes[0];
+  const known = { ...given };
+  let y;
+  for (const n of c.nodes) {
+    y = qmoeOf(n, known);
+    known[n.outputs[0]] = { dims: y.dims, values: y.data };
+  }
+  return y;
+};
+// The QMoE node `n` from its definition: each token's `k` largest logits pick
+// its experts, and each pick weighs its expert's output by its softmax over
+// every expert, divided by the picks' sum where `normalize_routing_weights` is
+// set. Each expert is a SwiGLU of interleaved gate and up rows between two
+// products of weights packed in blocks.
+const qmoeOf = (n, given) => {
+  const { inputs: ops, attrs } = n;
   const operand = (i) => (ops[i] ? given[ops[i]] : null);
   const number = (a, fallback) => (a === undefined ? fallback : (a.f32 ?? a));
   const [x, router] = [operand(0), operand(1)];
@@ -739,6 +752,24 @@ add('QMoeUnnormalized', { ...qmoe({ tokens: 3, attrs: { normalize_routing_weight
 add('QMoeZeroPoints', qmoe({ tokens: 3, zeros: true, bias: false }));
 add('QMoeHalf', overHalves(qmoe({ tokens: 3 }), ['X', 'R', 'S1', 'B1', 'S2', 'B2']));
 add('QMoeHalfStep', overHalves(qmoe({ tokens: 1 }), ['X', 'R', 'S1', 'B1', 'S2', 'B2']));
+// Two QMoE layers of one layout, the second over the first's output: a model
+// whose layers share pools, which hold as few experts as a budget sets.
+const qmoeLayers = (tokens) => {
+  const [first, second] = [qmoe({ tokens }), qmoe({ tokens, layer: 1 })];
+  const [[a], [b]] = [first.nodes, second.nodes];
+  return {
+    inputs: { X: first.inputs.X, R: first.inputs.R, R_1: second.inputs.R_1 },
+    inits: { ...first.inits, ...second.inits },
+    nodes: [
+      { ...a, outputs: ['H'] },
+      { ...b, inputs: b.inputs.map((n) => (n === 'X_1' ? 'H' : n)), outputs: ['Y'] },
+    ],
+    domains: first.domains,
+  };
+};
+// onnxruntime parts from the definition over two layers far more than over one,
+// so the definition computes this one.
+add('QMoeLayers', { ...qmoeLayers(3), exact: qmoeExact });
 
 // GatherBlockQuantized of a table of 5 rows of `width` values in blocks of
 // 32, by indices counting from the end and past it.

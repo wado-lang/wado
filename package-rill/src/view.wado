@@ -52,12 +52,50 @@ impl View {
         let mut content = content;
         let shown = Dom::document().create_text_node("");
         self.node.append_child(shown);
-        on_cleanup(|| {
-            if let Some(holder) = shown.parent_node() {
-                holder.remove_child(shown);
-            }
-        });
+        on_cleanup(|| detach(shown));
         observe(|| shown.set_data(content()));
+        return *self;
+    }
+
+    /// Shows what `render` makes at this point among the element's children
+    /// while `when` answers true. It renders anew each time it shows, and
+    /// disposes of what it hides.
+    pub fn show(
+        &self,
+        when: fn mut() -> bool with Track,
+        render: fn mut() -> View with (Track, Dom),
+    ) -> View with (Track, Dom) {
+        let mut when = when;
+        // Holds the place, so siblings added later stay after the subtree.
+        let anchor = Dom::document().create_text_node("");
+        self.node.append_child(anchor);
+        let mut shown: Option<Rendered> = null;
+        let mut disposed = false;
+        on_cleanup(|| {
+            disposed = true;
+            hide(&mut shown);
+            detach(anchor);
+        });
+        observe(|| {
+            let visible = when();
+            if visible == shown matches { Some(_) } {
+                return;
+            }
+            if !visible {
+                hide(&mut shown);
+                return;
+            }
+            let made = render_owned(render);
+            // `render` may have disposed of the binding's owner.
+            if disposed {
+                remove(made);
+                return;
+            }
+            if let Some(holder) = anchor.parent_node() {
+                holder.insert_before(made.node, Option::Some(anchor as Node));
+            }
+            shown = Option::Some(made);
+        });
         return *self;
     }
 
@@ -101,17 +139,59 @@ pub fn on(target: EventTarget, type: String, handler: fn mut(Event) with (Track,
     });
 }
 
-struct Row<T> {
-    item: T,
+/// Takes `node` out of wherever it is now; other code may have moved it.
+fn detach(node: Node) with Dom {
+    if let Some(holder) = node.parent_node() {
+        holder.remove_child(node);
+    }
+}
+
+/// A subtree and what disposes of what was made with it.
+struct Rendered {
     node: Element,
     dispose: fn mut() with Dom,
 }
 
-fn remove_rows<T>(parent: Element, rows: List<Row<T>>) with Dom {
-    for let mut row of rows {
-        (row.dispose)();
-        parent.remove_child(row.node);
+fn render_owned(render: fn mut() -> View with (Track, Dom)) -> Rendered with Dom {
+    let mut render = render;
+    let mut node: Option<Element> = null;
+    let dispose = scope(|| node = Option::Some(render().node));
+    return Rendered { node: node.unwrap(), dispose };
+}
+
+fn remove(rendered: Rendered) with Dom {
+    let mut dispose = rendered.dispose;
+    dispose();
+    detach(rendered.node);
+}
+
+/// Clears `shown` before removing it, so a cleanup that reaches `shown` again
+/// finds nothing left to hide.
+fn hide(shown: &mut Option<Rendered>) with Dom {
+    let Some(current) = *shown else {
+        return;
+    };
+    *shown = null;
+    remove(current);
+}
+
+struct Row<T> {
+    item: T,
+    rendered: Rendered,
+}
+
+fn remove_rows<T>(rows: List<Row<T>>) with Dom {
+    for let row of rows {
+        remove(row.rendered);
     }
+}
+
+/// Empties `rows` before removing them, so a cleanup that reaches `rows` again
+/// finds none of them left to remove.
+fn clear_rows<T>(rows: &mut List<Row<T>>) with Dom {
+    let leaving = *rows;
+    *rows = [];
+    remove_rows(leaving);
 }
 
 fn each<T: Eq>(
@@ -122,10 +202,10 @@ fn each<T: Eq>(
     let mut items = items;
     let mut render = render;
     let mut rows: List<Row<T>> = [];
+    let mut disposed = false;
     on_cleanup(|| {
-        let removed = rows;
-        rows = [];
-        remove_rows(parent, removed);
+        disposed = true;
+        clear_rows(&mut rows);
     });
     observe(|| {
         let mut kept: List<Row<T>> = [];
@@ -146,12 +226,19 @@ fn each<T: Eq>(
             if found {
                 continue;
             }
-            let mut node: Option<Element> = null;
-            let dispose = scope(|| node = Option::Some(render(item).node));
-            kept.push(Row { item, node: node.unwrap(), dispose });
+            kept.push(Row { item, rendered: render_owned(|| render(item)) });
             was.push(-1);
+            if disposed {
+                break;
+            }
         }
-        remove_rows(parent, rows);
+        clear_rows(&mut rows);
+        // `render` or a cleanup may have disposed of the binding's owner,
+        // whose cleanup removed only the rows not yet kept.
+        if disposed {
+            remove_rows(kept);
+            return;
+        }
         // `render` and the cleanups have run, and either may have moved a row.
         // Nothing runs from here on, so the DOM now is the DOM the moves meet.
         let mut before: List<Option<Element>> = [];
@@ -160,7 +247,7 @@ fn each<T: Eq>(
         }
         for let i of 0..<kept.len() {
             if was[i] >= 0 {
-                before[was[i]] = Option::Some(kept[i].node);
+                before[was[i]] = Option::Some(kept[i].rendered.node);
             }
         }
         if !holds_in_order(parent, &before) {
@@ -173,7 +260,7 @@ fn each<T: Eq>(
         let stay = longest_increasing(&was);
         let mut next: Option<Node> = null;
         for let mut i = kept.len() - 1; i >= 0; i -= 1 {
-            let node = kept[i].node;
+            let node = kept[i].rendered.node;
             if !stay[i] {
                 parent.insert_before(node, next);
             }

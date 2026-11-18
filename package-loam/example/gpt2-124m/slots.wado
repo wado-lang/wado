@@ -7,7 +7,7 @@
 use { eprintln, println, Stderr, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
 use { MonotonicClock } from "wasi:clocks";
-use { FileSource, Graph, Sampling, Tensor } from "lib:loam";
+use { Backend, FileSource, Sampling, Tensor } from "lib:loam";
 use { Tokenizer } from "./tokenizer.json"
     with {
         type: "hf-tokenizer",
@@ -71,7 +71,7 @@ fn prompt(i: i32) -> List<i64> {
 /// The `1 + STEPS` tokens `prompted` picks alone: it through `compute`,
 /// the rest in one call of `decode`. A pass with no past owes the mask the
 /// prompt's length, so the prompt leaves no room, and `decode` grows the cache.
-fn alone<affine Bk: Graph>(g: &mut Bk, model: &mut gpt2::Model<Bk>, prompted: List<i64>) -> List<i64> with _ {
+fn alone<affine Bk: Backend>(g: &mut Bk, model: &mut gpt2::Model<Bk>, prompted: List<i64>) -> List<i64> with _ {
     let sampling = Sampling {};
     let first = gpt2::compute(
         g,
@@ -99,7 +99,7 @@ fn alone<affine Bk: Graph>(g: &mut Bk, model: &mut gpt2::Model<Bk>, prompted: Li
 
 /// Each slot's `1 + STEPS` tokens, a prompt placed in every slot, and the
 /// nanoseconds the one call of `decode` took.
-fn side_by_side<affine Bk: Graph>(
+fn side_by_side<affine Bk: Backend>(
     g: &mut Bk,
     model: &mut gpt2::Model<Bk>,
     slots: i32,
@@ -122,7 +122,7 @@ fn side_by_side<affine Bk: Graph>(
 
 /// Prints the tokens a second each number of `SLOTS` decodes, the second of two
 /// runs, whose programs the first compiled.
-pub fn measured<affine Bk: Graph>(backend: Bk) with (Stdout, Stderr, Preopens, MonotonicClock, _) {
+pub fn measured<affine Bk: Backend>(backend: Bk) with (Stdout, Stderr, Preopens, MonotonicClock, _) {
     let mut g = backend;
     let params = match gpt2::Params::load(&mut g, &FileSource { dir: "." }) {
         Ok(params) => params,
