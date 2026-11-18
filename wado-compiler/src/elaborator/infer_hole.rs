@@ -321,7 +321,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Leave a struct literal's field defaults unwalked while `holes` are
     /// open, and report the literal with `message` if they are all solved.
-    pub(super) fn leave_defaults_unwalked(&mut self, holes: Vec<TypeId>, span: Span, message: String) {
+    pub(super) fn leave_defaults_unwalked(
+        &mut self,
+        holes: Vec<TypeId>,
+        span: Span,
+        message: String,
+    ) {
+        assert!(
+            holes
+                .iter()
+                .all(|hole| self.infer_holes.solutions.contains_key(hole)),
+            "a struct literal's open slot is a hole finalize settles"
+        );
         self.infer_holes.unwalked_defaults.push(UnwalkedDefaults {
             holes,
             span,
@@ -681,10 +692,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         for unwalked in std::mem::take(&mut self.infer_holes.unwalked_defaults) {
-            let solved = unwalked
-                .holes
-                .iter()
-                .all(|hole| self.infer_holes.solutions.get(hole).is_some_and(Option::is_some));
+            let solved = unwalked.holes.iter().all(|hole| {
+                self.infer_holes
+                    .solutions
+                    .get(hole)
+                    .is_some_and(Option::is_some)
+            });
             if solved {
                 let _ = self.emit(TypeError::CannotInferType {
                     message: unwalked.message,
