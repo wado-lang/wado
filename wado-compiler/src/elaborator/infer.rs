@@ -52,7 +52,8 @@ pub(super) fn unify(
         }
         // An unsolved variable, as in `null` typed `Option<$T>`, answers
         // nothing, and must leave the slot for a later field to settle.
-        (ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_), ResolvedType::InferVar(_)) => {}
+        (ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_), ResolvedType::InferVar(_)) => {
+        }
         // Direct type parameter mapping.
         //
         // `or_insert` prevents later fields with self-referential types

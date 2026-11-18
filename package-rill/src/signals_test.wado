@@ -1,4 +1,4 @@
-use { Memo, flush, memo, observe, on_cleanup, scope, signal } from "./signals.wado";
+use { Memo, Signal, flush, memo, observe, on_cleanup, scope, signal } from "./signals.wado";
 use { Dom, SurfaceDom } from "wado-lang:web";
 
 test "an effect reruns once for a batch of writes" {
@@ -287,6 +287,67 @@ test "an effect reading a disposed memo reruns once a read restarts it with a ne
         assert doubled.get() == 4;
         flush();
         assert seen == [2, 4];
+    };
+}
+
+struct Item {
+    done: Signal<bool>,
+}
+
+test "a memo over values holding signals compares them as the same signals" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let first = Item { done: signal(false) };
+        let items: Signal<List<Item>> = signal([first]);
+        let open = memo(|| {
+            let mut left: List<Item> = [];
+            for let item of items.get() {
+                if !item.done.get() {
+                    left.push(item);
+                }
+            }
+            return left;
+        });
+        let mut runs = 0;
+        observe(|| {
+            runs += 1;
+            open.get();
+        });
+
+        items.set([first]);
+        flush();
+        assert runs == 1;
+
+        first.done.set(true);
+        flush();
+        assert runs == 2;
+    };
+}
+
+test "an effect marked through an unchanged memo is skipped when it flushed inside its last run" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(1);
+        let parity = memo(|| count.get() % 2);
+        let mut write_next = false;
+        let mut seen: List<i32> = [];
+        observe(|| {
+            seen.push(parity.get());
+            if write_next {
+                write_next = false;
+                count.set(4);
+                flush();
+            }
+        });
+
+        write_next = true;
+        count.set(2);
+        flush();
+        assert seen == [1, 0];
+
+        count.set(5);
+        flush();
+        assert seen == [1, 0, 1];
     };
 }
 

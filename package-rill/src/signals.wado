@@ -226,6 +226,13 @@ impl<T> Signal<T> {
     }
 }
 
+/// Two signals are equal when they are the same signal, whatever they hold.
+impl<T> Eq for Signal<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return ref_eq(self.cell, other.cell);
+    }
+}
+
 struct MemoState<T> {
     core: &mut MemoCore,
     cached: Option<T>,
@@ -233,8 +240,8 @@ struct MemoState<T> {
 }
 
 /// A value computed from others, again only when one of them changed and
-/// someone asks. A value equal to the last one changes nothing for its
-/// readers. It stops listening when the computation that made it is disposed
+/// someone asks. A value `==` to the last one changes nothing for its readers,
+/// so a type whose `Eq` compares only a key hides a change outside the key. It stops listening when the computation that made it is disposed
 /// of, and listens again if it is read after that. `compute` writes no signal.
 pub struct Memo<T> {
     state: &mut MemoState<T>,
@@ -286,6 +293,13 @@ fn recompute<T: Eq>(state: &mut MemoState<T>) {
     core.dep.readers.version += 1;
     if restarted {
         notify(core.dep);
+    }
+}
+
+/// Two memos are equal when they are the same memo.
+impl<T> Eq for Memo<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return ref_eq(self.state, other.state);
     }
 }
 
