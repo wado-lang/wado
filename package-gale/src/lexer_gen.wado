@@ -392,9 +392,9 @@ pub fn gen_lexer<S: AsStrSlice>(
 
 /// What the generated `Lexer` has to carry, and what turns each part on.
 ///
-/// The parts have different producers: an effect is committed only by a rule
-/// that runs actions, while the output sink is written by anything that prints —
-/// an action, or a `@members` method. Spelled as a separate condition at each
+/// The parts have different producers: a latch is written by a rule that runs
+/// actions or by a `@members` method calling its setter, while the output sink
+/// is written by anything that prints — an action, or any `@members` method. Spelled as a separate condition at each
 /// emit site, those sets were never compared, and the one that had gained a
 /// producer kept the narrower test: a members-only lexer got a method calling an
 /// `emit` its struct did not carry. They are enumerated here instead, side by
@@ -439,8 +439,12 @@ pub fn lexer_surface(
 /// Whether a member method calls a method `gen_lexer_action_methods` emits. It
 /// must compile even where no rule runs an action to reach it.
 fn members_drive_lexer(members: &MemberDecls) -> bool {
-    let drivers: List<String> = ["set_type", "set_channel", "skip", "more", "push_mode", "pop_mode", "set_mode", "mode_depth"];
-    return members.methods.iter_ref().any(|m: &MemberMethod| drivers.iter_ref().any(|name: &String| m.source.contains(`.${*name}(`)));
+    let drivers: List<String> = [
+        "set_type", "set_channel", "skip", "more", "push_mode", "pop_mode", "set_mode", "mode_depth",
+    ];
+    return members.methods
+        .iter_ref()
+        .any(|m: &MemberMethod| drivers.iter_ref().any(|name: &String| m.source.contains(`.${*name}(`)));
 }
 
 fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSurface) {
@@ -1558,8 +1562,8 @@ pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
 /// every action body, and every caller here asks once per rule. Both
 /// single-alt and multi-alt rules run their
 /// alternatives' top-level `{ ... }` actions (a multi-alt rule re-matches to
-/// find the winning alternative in `apply_<rule>_actions`). Fragments and
-/// actions nested inside an element still warn. A rule carrying a body folds
+/// find the winning alternative in `apply_<rule>_actions`). An action the
+/// replay cannot reach still warns. A rule carrying a body folds
 /// into neither dispatch shortcut (`lexer_rule_carries_body`), so it keeps the
 /// `try_` fn that sets `best_act`.
 pub fn lexer_rule_executes_actions(grammar_executes: bool, rule: &LexerRule) -> bool {
@@ -2846,8 +2850,9 @@ fn gen_lexer_repeat_step<S: AsStrSlice>(
 }
 
 /// Emit the `{ ... }` actions positioned at `before` as statements, or queue
-/// them (`LexerEmit.defers_actions`), in source order. Only reached on the replay path, where `pos` is the live match cursor,
-/// so a body reading the matched text sees exactly what ANTLR4's would.
+/// them (`LexerEmit.defers_actions`), in source order. Only reached on the
+/// replay path, where `pos` is the live match cursor, so a body reading the
+/// matched text sees exactly what ANTLR4's would.
 fn gen_lexer_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, e: &LexerEmit) {
     for let a of actions {
         if a.kind matches { Action } && a.before_index == before {
