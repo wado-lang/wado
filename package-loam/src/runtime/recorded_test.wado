@@ -39,28 +39,33 @@ use {
 } from "./graph_cases.wado";
 use { Any, Programs, Recorded, Recorder, Untyped, host_of, run, typed } from "./recorded.wado";
 use { Binary, Graph, Slots, branched } from "./hlo.wado";
-use { Cpu, ElementKind, Holds, Tensor } from "./tensor.wado";
+use { Cpu, CpuTensor, Element, ElementKind, Holds, Tensor } from "./tensor.wado";
+
+/// What `cpu` computed, as a run hands it back.
+fn any_of<E: Element, Axes>(t: &CpuTensor<E, Axes>) -> Any<Cpu> {
+    return host_of(t.value());
+}
 
 test "a recorded graph run on the CPU computes what the CPU computes as each operation is added" {
     let [x, ids] = mixed_inputs();
     let cpu = &mut Cpu {};
-    let want = mixed(cpu, &x, &ids);
+    let want = mixed(cpu, &CpuTensor::Value(x), &CpuTensor::Value(ids));
     let mut r = Recorder::new();
     let rx = r.parameter::<f32, [A, B]>(x.extents);
     let rids = r.parameter::<i64, [C]>(ids.extents);
     let got = mixed(&mut r, &rx, &rids);
     let recorded = r.finished([got.0.id, got.1.id, got.2.id, got.3.id, got.4.id, got.5.id]);
-    assert recorded.nodes[got.0.id].extents == want.0.extents;
+    assert recorded.nodes[got.0.id].extents == want.0.value().extents;
     assert run(cpu, &recorded, &[
         host_of(&x),
         host_of(&ids),
     ]) == [
-        host_of(&want.0),
-        host_of(&want.1),
-        host_of(&want.2),
-        host_of(&want.3),
-        host_of(&want.4),
-        host_of(&want.5),
+        any_of(&want.0),
+        any_of(&want.1),
+        any_of(&want.2),
+        any_of(&want.3),
+        any_of(&want.4),
+        any_of(&want.5),
     ] as List<Any<Cpu>>;
 }
 
@@ -85,7 +90,7 @@ test "an arg max records as one node, which a run computes as the backend's kern
 test "every recorded elementwise operation computes the CPU's" {
     let cpu = &mut Cpu {};
     let [x, y] = elementwise_inputs();
-    let want = elementwise(cpu, &x, &y);
+    let want = elementwise(cpu, &CpuTensor::Value(x), &CpuTensor::Value(y));
     let mut r = Recorder::new();
     let rx = r.parameter::<f32, [A]>(x.extents);
     let ry = r.parameter::<f32, [A]>(y.extents);
@@ -93,7 +98,7 @@ test "every recorded elementwise operation computes the CPU's" {
     assert run(cpu, &recorded, &[
         host_of(&x),
         host_of(&y),
-    ]) == [host_of(&want)] as List<Any<Cpu>>;
+    ]) == [any_of(&want)] as List<Any<Cpu>>;
 }
 
 test "a recorded graph over halves stores each result in its half, as the CPU does" {
@@ -105,40 +110,41 @@ test "a recorded graph over halves stores each result in its half, as the CPU do
     let narrow = halved::<Recorder, f16>(&mut r, &rx, &redges);
     let wide = halved::<Recorder, bf16>(&mut r, &rx, &redges);
     let recorded = r.finished([narrow.0.id, narrow.1.id, narrow.2.id, wide.0.id, wide.1.id, wide.2.id]);
-    let want_narrow = halved::<Cpu, f16>(cpu, &x, &edges);
-    let want_wide = halved::<Cpu, bf16>(cpu, &x, &edges);
-    assert want_narrow.0.data != want_wide.0.data, "each half rounds its own way";
-    assert want_narrow.2.data[4] == f32::INFINITY && want_wide.2.data[4] == 65536.0;
+    let [cx, cedges] = [CpuTensor::Value(x), CpuTensor::Value(edges)];
+    let want_narrow = halved::<Cpu, f16>(cpu, &cx, &cedges);
+    let want_wide = halved::<Cpu, bf16>(cpu, &cx, &cedges);
+    assert want_narrow.0.value().data != want_wide.0.value().data, "each half rounds its own way";
+    assert want_narrow.2.value().data[4] == f32::INFINITY && want_wide.2.value().data[4] == 65536.0;
     assert run(cpu, &recorded, &[
         host_of(&x),
         host_of(&edges),
     ]) == [
-        host_of(&want_narrow.0),
-        host_of(&want_narrow.1),
-        host_of(&want_narrow.2),
-        host_of(&want_wide.0),
-        host_of(&want_wide.1),
-        host_of(&want_wide.2),
+        any_of(&want_narrow.0),
+        any_of(&want_narrow.1),
+        any_of(&want_narrow.2),
+        any_of(&want_wide.0),
+        any_of(&want_wide.1),
+        any_of(&want_wide.2),
     ] as List<Any<Cpu>>;
 }
 
 test "a recorded convolution and pooling compute the CPU's, an uploaded tensor a constant of the graph" {
     let x = windowed_input();
     let cpu = &mut Cpu {};
-    let want = windowed(cpu, &x);
+    let want = windowed(cpu, &CpuTensor::Value(x));
     let mut r = Recorder::new();
     let rx = r.parameter::<f32, [A, B, C]>(x.extents);
     let got = windowed(&mut r, &rx);
     let recorded = r.finished([got.id]);
-    assert recorded.nodes[got.id].extents == want.extents;
-    assert run(cpu, &recorded, &[host_of(&x)]) == [host_of(&want)] as List<Any<Cpu>>;
+    assert recorded.nodes[got.id].extents == want.value().extents;
+    assert run(cpu, &recorded, &[host_of(&x)]) == [any_of(&want)] as List<Any<Cpu>>;
 }
 
 test "a recorded conditional runs the branch its predicate picks, the first branch's results naming those of either" {
     for let p of [true, false] as List<bool> {
         let [pred, x] = branching_inputs(p);
         let cpu = &mut Cpu {};
-        let want = branching(cpu, &pred, &x);
+        let want = branching(cpu, &CpuTensor::Value(pred), &CpuTensor::Value(x));
         let mut r = Recorder::new();
         let rpred = r.parameter::<bool, [C]>(pred.extents);
         let rx = r.parameter::<f32, [A]>(x.extents);
@@ -147,7 +153,7 @@ test "a recorded conditional runs the branch its predicate picks, the first bran
         assert run(cpu, &recorded, &[
             host_of(&pred),
             host_of(&x),
-        ]) == [host_of(&want)] as List<Any<Cpu>>;
+        ]) == [any_of(&want)] as List<Any<Cpu>>;
     }
 }
 
@@ -155,7 +161,7 @@ test "a recorded loop runs its body as many times as its count, reading what lie
     for let times of [0, 1, 3] as List<i64> {
         let [count, x, ids] = repeating_inputs(times);
         let cpu = &mut Cpu {};
-        let want = repeating(cpu, &count, &x, &ids);
+        let want = repeating(cpu, &CpuTensor::Value(count), &CpuTensor::Value(x), &CpuTensor::Value(ids));
         let mut r = Recorder::new();
         let rcount = r.parameter::<i64, []>(count.extents);
         let rx = r.parameter::<f32, [A]>(x.extents);
@@ -167,8 +173,8 @@ test "a recorded loop runs its body as many times as its count, reading what lie
             host_of(&x),
             host_of(&ids),
         ]) == [
-            host_of(&want.0),
-            host_of(&want.1),
+            any_of(&want.0),
+            any_of(&want.1),
         ] as List<Any<Cpu>>;
     }
 }
@@ -226,9 +232,9 @@ test "a branch the host took in a loop's body adds nothing to what the loop retu
 
 test "a loop's body runs on the values the run before returned" {
     let [count, x, ids] = repeating_inputs(3);
-    let got = repeating(&mut Cpu {}, &count, &x, &ids);
-    assert got.0.data == [8.0, 648.0] as List<f32>;
-    assert got.1.data == [8, 10] as List<i64>;
+    let got = repeating(&mut Cpu {}, &CpuTensor::Value(count), &CpuTensor::Value(x), &CpuTensor::Value(ids));
+    assert got.0.value().data == [8.0, 648.0] as List<f32>;
+    assert got.1.value().data == [8, 10] as List<i64>;
 }
 
 #[expect_trap]
@@ -244,18 +250,18 @@ test "a loop's body returns what it carries, at its extents" {
 #[expect_trap]
 test "a loop on Cpu holds its body to what it carries, as a recording does" {
     let cpu = &mut Cpu {};
-    let count = Tensor::<i64, []> {
+    let count = CpuTensor::Value(Tensor::<i64, []> {
         data: [1],
         extents: [],
-    };
-    let x = Tensor::<f32, [A]> {
+    });
+    let x = CpuTensor::Value(Tensor::<f32, [A]> {
         data: [1.0],
         extents: [1],
-    };
-    let wider = Tensor::<f32, [A]> {
+    });
+    let wider = CpuTensor::Value(Tensor::<f32, [A]> {
         data: [1.0, 2.0],
         extents: [2],
-    };
+    });
     let start: List<Any<Cpu>> = [Any::F32(cpu.relabeled::<f32, [A], Untyped>(&x))];
     cpu.repeated(&count, &start, |_, _| [Any::F32(cpu.relabeled::<f32, [A], Untyped>(&wider))]);
 }
@@ -280,25 +286,27 @@ test "a recorded mixture of experts computes the CPU's, by its picks and by its 
     let cpu = &mut Cpu {};
     for let tokens of [1, 3] {
         let c = experts_case(tokens);
-        let want = mixing(cpu, &c.x, &c.router, &c.up, &c.down);
+        let up = [CpuTensor::Value(c.up.0), CpuTensor::Value(c.up.1), CpuTensor::Value(c.up.2)];
+        let down = [CpuTensor::Value(c.down.0), CpuTensor::Value(c.down.1), CpuTensor::Value(c.down.2)];
+        let want = mixing(cpu, &CpuTensor::Value(c.x), &CpuTensor::Value(c.router), &up, &down);
         let mut r = Recorder::new();
         let recorded = mixing_pass(&mut r, tokens);
-        assert run(cpu, &recorded, &mixing_arguments(cpu, tokens)) == [host_of(&want)] as List<Any<Cpu>>;
+        assert run(cpu, &recorded, &mixing_arguments(cpu, tokens)) == [any_of(&want)] as List<Any<Cpu>>;
     }
 }
 
 test "a recorded quantized product and gather compute the CPU's, as composites and decomposed" {
     let case = quantized_case();
     let cpu = &mut Cpu {};
-    let weight = [case.weight, case.scales, case.zero_points];
-    let table = [case.table, case.table_scales];
-    let want = quantizing(cpu, &case.a, &weight, &table, &case.ids);
+    let weight = [CpuTensor::Value(case.weight), CpuTensor::Value(case.scales), CpuTensor::Value(case.zero_points)];
+    let table = [CpuTensor::Value(case.table), CpuTensor::Value(case.table_scales)];
+    let want = quantizing(cpu, &CpuTensor::Value(case.a), &weight, &table, &CpuTensor::Value(case.ids));
     for let mut r of [
         Recorder::new(),
         Recorder::decomposing(),
     ] as List<Recorder> {
         let recorded = quantized_pass(&mut r);
-        assert recorded.nodes[recorded.body.results[1]].extents == want.1.extents;
+        assert recorded.nodes[recorded.body.results[1]].extents == want.1.value().extents;
         let arguments: List<Any<Cpu>> = [
             host_of(&case.a),
             host_of(&case.ids),
@@ -309,8 +317,8 @@ test "a recorded quantized product and gather compute the CPU's, as composites a
             host_of(&case.table_scales),
         ];
         assert run(cpu, &recorded, &arguments) == [
-            host_of(&want.0),
-            host_of(&want.1),
+            any_of(&want.0),
+            any_of(&want.1),
         ] as List<Any<Cpu>>;
     }
 }
@@ -320,7 +328,15 @@ fn recorded_attention(case: &AttentionCase) {
     let [past_k, past_v, length] = case.past;
     let [cos, sin] = case.rotation;
     let cpu = &mut Cpu {};
-    let want = attending(cpu, &case.inputs, &case.past, &case.rotation, &case.bias, &case.sinks, &case.options);
+    let want = attending(
+        cpu,
+        &[CpuTensor::Value(q), CpuTensor::Value(k), CpuTensor::Value(v)],
+        &[CpuTensor::Value(past_k), CpuTensor::Value(past_v), CpuTensor::Value(length)],
+        &[CpuTensor::Value(cos), CpuTensor::Value(sin)],
+        &CpuTensor::Value(case.bias),
+        &CpuTensor::Value(case.sinks),
+        &case.options,
+    );
     let mut r = Recorder::new();
     let inputs = [
         r.parameter::<f32, [Bt, St, Qt]>(q.extents),
@@ -340,7 +356,7 @@ fn recorded_attention(case: &AttentionCase) {
     let sinks = r.parameter::<f32, [Qt]>(case.sinks.extents);
     let got = attending(&mut r, &inputs, &past, &rotation, &bias, &sinks, &case.options);
     let recorded = r.finished([got.0.id, got.1.id, got.2.id]);
-    assert recorded.nodes[got.1.id].extents == want.1.extents;
+    assert recorded.nodes[got.1.id].extents == want.1.value().extents;
     let arguments: List<Any<Cpu>> = [
         host_of(&q),
         host_of(&k),
@@ -354,9 +370,9 @@ fn recorded_attention(case: &AttentionCase) {
         host_of(&case.sinks),
     ];
     assert run(cpu, &recorded, &arguments) == [
-        host_of(&want.0),
-        host_of(&want.1),
-        host_of(&want.2),
+        any_of(&want.0),
+        any_of(&want.1),
+        any_of(&want.2),
     ] as List<Any<Cpu>>;
 }
 
@@ -397,7 +413,7 @@ test "a pass split at a host step hands the host what it reads, and the programs
     ], stepped_pass, || [host_of(&x)], || [host_of(&w)], |step, read, weights| {
         assert step == 7;
         steps += 1;
-        let doubled = typed::<Cpu, f32, [A]>(&Cpu {}, &read[0]);
+        let doubled = *typed::<Cpu, f32, [A]>(&Cpu {}, &read[0]).value();
         assert doubled.data == [2.0, 4.0, 6.0] as List<f32>;
         weights[0] = host_of(&Tensor::<f32, [A]> {
             data: [1.0, 1.0, 1.0],
@@ -440,7 +456,8 @@ test "a host step inside a loop is refused" {
 }
 
 test "a pool's slot holds the row written there, and the other slots what they held" {
-    let [halves, bytes] = written_pools(&mut Cpu {});
-    assert typed::<Cpu, f16, [A, B]>(&Cpu {}, &halves).data == [3.0, 4.0, 0.25, 7.0, 5.0, 6.0] as List<f16>;
-    assert typed::<Cpu, u8, [A, B]>(&Cpu {}, &bytes).data == [0, 128, 64, 32, 1, 2, 3, 255, 9, 8, 7, 6] as List<u8>;
+    let mut cpu = Cpu {};
+    let [halves, bytes] = written_pools(&mut cpu);
+    assert cpu.download(&typed::<Cpu, f16, [A, B]>(&cpu, &halves)).data == [3.0, 4.0, 0.25, 7.0, 5.0, 6.0] as List<f16>;
+    assert cpu.download(&typed::<Cpu, u8, [A, B]>(&cpu, &bytes)).data == [0, 128, 64, 32, 1, 2, 3, 255, 9, 8, 7, 6] as List<u8>;
 }

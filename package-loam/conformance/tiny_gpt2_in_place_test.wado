@@ -22,11 +22,12 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     let [mask, mask_extents] = ints_of(attention_mask);
     let [want, want_extents] = tensor_of(logits);
 
+    let mut cpu = Cpu {};
     let mut model = Model::new(
-        Params::load(&mut Cpu {}, &one_file("model.onnx", #include_bytes("../tests/models/tiny-gpt2/model.onnx"))).unwrap(),
+        Params::load(&mut cpu, &one_file("model.onnx", #include_bytes("../tests/models/tiny-gpt2/model.onnx"))).unwrap(),
     );
     let got = compute(
-        &mut Cpu {},
+        &mut cpu,
         &Tensor::<i64, [BatchSize, SequenceLength]> { data: ids, extents: ids_extents },
         &Tensor::<i64, [BatchSize, SequenceLength]> { data: mask, extents: mask_extents },
         &mut model,

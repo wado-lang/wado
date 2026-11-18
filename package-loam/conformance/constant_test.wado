@@ -20,11 +20,13 @@ test "a scalar Constant folds into the Gemm bias" {
         #include_bytes("../tests/onnx/pytorch-operator/test_operator_mm/test_data_set_0/output_0.pb"),
     );
 
+    let mut cpu = Cpu {};
+    let mut model = Model::new(Params::embedded(&mut cpu));
     let got = compute(
-        &mut Cpu {},
+        &mut cpu,
         &Tensor::<f32, [Axis00, Axis01]> { data: a, extents: a_extents },
         &Tensor::<f32, [Axis01, Axis11]> { data: b, extents: b_extents },
-        &mut Model::new(Params::embedded(&mut Cpu {})),
+        &mut model,
     );
 
     assert got.extents == want_extents;

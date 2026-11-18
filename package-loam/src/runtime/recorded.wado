@@ -29,7 +29,7 @@ use {
     reduced_extents,
     sliced_extents,
 } from "./hlo.wado";
-use { Attention, Cpu, Element, ElementKind, Float, Holds, Tensor, element_count, optional } from "./tensor.wado";
+use { Attention, Cpu, CpuTensor, Element, ElementKind, Float, Holds, Tensor, element_count, optional } from "./tensor.wado";
 
 /// A tensor's elements, whichever element it holds.
 pub variant Data {
@@ -807,13 +807,13 @@ impl Erasable for bool {
 /// `t` as `Cpu` holds it among a program's arguments.
 pub fn host_of<E: Element, Axes>(t: &Tensor<E, Axes>) -> Any<Cpu> {
     return match data_of(&t.data) {
-        F32(data) => Any::F32(Tensor { data, extents: t.extents }),
-        F16(data) => Any::F16(Tensor { data, extents: t.extents }),
-        BF16(data) => Any::BF16(Tensor { data, extents: t.extents }),
-        U8(data) => Any::U8(Tensor { data, extents: t.extents }),
-        I64(data) => Any::I64(Tensor { data, extents: t.extents }),
-        I32(data) => Any::I32(Tensor { data, extents: t.extents }),
-        Bool(data) => Any::Bool(Tensor { data, extents: t.extents }),
+        F32(data) => Any::F32(CpuTensor::Value(Tensor { data, extents: t.extents })),
+        F16(data) => Any::F16(CpuTensor::Value(Tensor { data, extents: t.extents })),
+        BF16(data) => Any::BF16(CpuTensor::Value(Tensor { data, extents: t.extents })),
+        U8(data) => Any::U8(CpuTensor::Value(Tensor { data, extents: t.extents })),
+        I64(data) => Any::I64(CpuTensor::Value(Tensor { data, extents: t.extents })),
+        I32(data) => Any::I32(CpuTensor::Value(Tensor { data, extents: t.extents })),
+        Bool(data) => Any::Bool(CpuTensor::Value(Tensor { data, extents: t.extents })),
     };
 }
 
@@ -831,32 +831,32 @@ pub fn zeros_on_host(kind: ElementKind, extents: List<i32>) -> Any<Cpu> {
 }
 
 fn zeros_of<E: Erasable>(extents: List<i32>) -> Any<Cpu> {
-    return E::any::<Cpu>(Tensor { data: List::filled(element_count(&extents), E::from_i64(0)), extents });
+    return E::any::<Cpu>(CpuTensor::Value(Tensor { data: List::filled(element_count(&extents), E::from_i64(0)), extents }));
 }
 
-/// `value`, held on the host, as `h` holds it for this pass.
+/// `value`, a value on the host, as `h` holds it for this pass.
 pub fn uploaded_any<affine H: Holds>(h: &mut H, value: &Any<Cpu>) -> Any<H> with _ {
     return match value {
-        F32(t) => Any::F32(h.upload(t)),
-        F16(t) => Any::F16(h.upload(t)),
-        BF16(t) => Any::BF16(h.upload(t)),
-        U8(t) => Any::U8(h.upload(t)),
-        I64(t) => Any::I64(h.upload(t)),
-        I32(t) => Any::I32(h.upload(t)),
-        Bool(t) => Any::Bool(h.upload(t)),
+        F32(t) => Any::F32(h.upload(t.value())),
+        F16(t) => Any::F16(h.upload(t.value())),
+        BF16(t) => Any::BF16(h.upload(t.value())),
+        U8(t) => Any::U8(h.upload(t.value())),
+        I64(t) => Any::I64(h.upload(t.value())),
+        I32(t) => Any::I32(h.upload(t.value())),
+        Bool(t) => Any::Bool(h.upload(t.value())),
     };
 }
 
-/// `value`, held on the host, as `h` keeps it.
+/// `value`, a value on the host, as `h` keeps it.
 pub fn kept_any<affine H: Holds>(h: &mut H, value: &Any<Cpu>) -> Any<H> with _ {
     return match value {
-        F32(t) => Any::F32(h.keep(t)),
-        F16(t) => Any::F16(h.keep(t)),
-        BF16(t) => Any::BF16(h.keep(t)),
-        U8(t) => Any::U8(h.keep(t)),
-        I64(t) => Any::I64(h.keep(t)),
-        I32(t) => Any::I32(h.keep(t)),
-        Bool(t) => Any::Bool(h.keep(t)),
+        F32(t) => Any::F32(h.keep(t.value())),
+        F16(t) => Any::F16(h.keep(t.value())),
+        BF16(t) => Any::BF16(h.keep(t.value())),
+        U8(t) => Any::U8(h.keep(t.value())),
+        I64(t) => Any::I64(h.keep(t.value())),
+        I32(t) => Any::I32(h.keep(t.value())),
+        Bool(t) => Any::Bool(h.keep(t.value())),
     };
 }
 
@@ -1282,9 +1282,8 @@ pub fn run<affine G: Graph>(g: &mut G, recorded: &Recorded, arguments: &List<Any
 }
 
 /// The value of each node of `recorded` that reads no argument, computed on
-/// `Cpu`: what a program computes once, when it is compiled.
-pub fn constants(recorded: &Recorded) -> HashMap<i32, Any<Cpu>> {
-    let mut cpu = Cpu {};
+/// `cpu`: what a program computes once, when it is compiled.
+pub fn constants(cpu: &mut Cpu, recorded: &Recorded) -> HashMap<i32, Any<Cpu>> {
     let mut state = Run::<Cpu>::new(recorded, &[], &[], &HashMap::new());
     let mut folded = HashMap::<i32, Any<Cpu>>::new();
     for let id of 0..<recorded.nodes.len() {
@@ -1294,7 +1293,7 @@ pub fn constants(recorded: &Recorded) -> HashMap<i32, Any<Cpu>> {
             _ => node.operands.into_iter().all(|o| state.values.holds(o)),
         };
         if reads_none {
-            let value = state.computed(&mut cpu, id, node);
+            let value = state.computed(cpu, id, node);
             folded[id] = value;
             state.values[id] = value;
         }

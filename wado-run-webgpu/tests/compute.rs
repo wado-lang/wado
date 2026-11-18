@@ -402,8 +402,8 @@ fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
 }
 
 /// A checkpoint larger than the guest may grow to, over two files, loads onto
-/// the device a tensor at a time, and `Cpu`, which holds it whole, loads it
-/// from the same source once the limit is lifted.
+/// the device a tensor at a time, and `Cpu`, which keeps it whole in linear
+/// memory, loads it from the same source once the limit is lifted.
 #[test]
 fn a_checkpoint_larger_than_the_guest_loads_onto_the_device() {
     let conformance = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../package-loam/conformance");
@@ -437,8 +437,8 @@ fn a_checkpoint_larger_than_the_guest_loads_onto_the_device() {
     let held_whole = chain(&limited, &["cpu"]);
     let stderr = String::from_utf8_lossy(&held_whole.stderr);
     assert!(
-        !held_whole.status.success() && stderr.contains("GC heap out of memory"),
-        "the checkpoint must not fit the limit: {stderr}"
+        !held_whole.status.success() && stderr.contains("realloc") && stderr.contains("Cpu^"),
+        "the checkpoint must not fit the limit in linear memory: {stderr}"
     );
 }
 

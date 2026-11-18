@@ -106,17 +106,23 @@ and the little-endian bytes the checkpoint stores, in linear memory. Each
 backend lays its copy out from those bytes. `PjrtBackend` uploads them as they
 are, and an f32 weight as bf16 where every value's low half is zero.
 `WebGpuBackend` builds its matrix layout, packed in a half where one holds every
-value, by reading values from the bytes. `Cpu` decodes them into a tensor. A
-float or bool weight reaches a device with no GC list on the way; WebGPU decodes
-a `u8` or `i64` one and keeps it as `keep` does.
+value, by reading values from the bytes. `Cpu` keeps the bytes, as a device
+keeps its copy, so a model's weights need not fit the GC heap beside what a
+pass computes. A gather decodes the rows it takes, and any other operation the
+whole weight, for as long as it reads it. A float or bool weight reaches a
+device with no GC list on the way; WebGPU decodes a `u8` or `i64` one and keeps
+it as `keep` does.
+
+A `Cpu` reads only the weights it keeps, as a device does, so a model's
+`Params` and the `compute` that reads them take the same `Cpu`.
 
 `conformance/large/` shows a checkpoint larger than the guest loading. It writes
 80 MiB of weights over two shards, a chain of permutations that move each
 element where no other order of them would. Under `--max-memory 32m` the chain
 loads onto `WebGpuBackend` and `PjrtBackend` and runs with every output in
-place. `Cpu`, which holds the weights whole, loads them from the same
-`FileSource` with no limit and runs out of heap under it. The runners' tests run
-it.
+place. `Cpu`, which keeps the weights whole in linear memory, loads them from
+the same `FileSource` with no limit and runs out of memory under it. The
+runners' tests run it.
 
 Two sources come with the runtime. `FileSource { dir }` reads the files of a
 directory, a range at a time. A `HashMap<String, ByteList>` holds each file

@@ -4,7 +4,7 @@
 //! through the decoder taking them back, whose cache grows by the position it
 //! computes. Each step reproduces the logits onnxruntime computes for it.
 
-use { Cpu, Tensor, capacity_of } from "lib:loam";
+use { Cpu, CpuTensor, Holds, Tensor, capacity_of } from "lib:loam";
 use { assert_close, ints_of, one_file, tensor_of } from "./oracle.wado";
 use prompt from "../tests/models/tiny-gpt2/model.onnxtext"
     with {
@@ -33,13 +33,14 @@ use step from "../tests/models/tiny-gpt2/with-past/model.onnx"
 /// The logits for `token` after the `past` positions `cache` holds, and the
 /// cache grown by its position.
 fn decode(
+    cpu: &mut Cpu,
     token: i64,
     past: i32,
     cache: &step::Cache<Cpu>,
     model: &mut step::Model<Cpu>,
 ) -> [Tensor<f32, [step::BatchSize, step::InputIds1, step::Logits2]>, step::Cache<Cpu>] {
     let o = step::compute(
-        &mut Cpu {},
+        cpu,
         &Tensor::<i64, [step::BatchSize, step::InputIds1]> {
             data: [token],
             extents: [1, 1],
@@ -54,27 +55,28 @@ fn decode(
     return [o.logits, o.cache];
 }
 
-fn step_model() -> step::Model<Cpu> {
-    return step::Model::new(step::Params::embedded(&mut Cpu {}));
+fn step_model(cpu: &mut Cpu) -> step::Model<Cpu> {
+    return step::Model::new(step::Params::embedded(cpu));
 }
 
-/// `t` under the axes `B`. The prompt's module names the presents it returns
-/// apart from the pasts the step's module reads.
-fn relabel<A, B>(t: &Tensor<f32, A>) -> Tensor<f32, B> {
-    return Tensor { data: t.data, extents: t.extents };
+/// `t` under the axes `B`, on `cpu`. The prompt's module names the presents it
+/// returns apart from the pasts the step's module reads.
+fn relabel<A, B>(cpu: &mut Cpu, t: &Tensor<f32, A>) -> CpuTensor<f32, B> {
+    return cpu.upload(&Tensor::<f32, B> { data: t.data, extents: t.extents });
 }
 
 /// The prompt's logits, and the keys and values it leaves as the step's cache.
 fn prefill(
+    cpu: &mut Cpu,
     input_ids: ByteList,
 ) -> [Tensor<f32, [prompt::BatchSize, prompt::SequenceLength, prompt::Logits2]>, step::Cache<Cpu>] {
     let [ids, extents] = ints_of(input_ids);
     let weights = prompt::Params::load(
-        &mut Cpu {},
+        cpu,
         &one_file("model.safetensors", #include_bytes("../tests/models/tiny-gpt2/model.safetensors")),
     ).unwrap();
     let o = prompt::compute(
-        &mut Cpu {},
+        cpu,
         &Tensor::<i64, [prompt::BatchSize, prompt::SequenceLength]> { data: ids, extents },
         &Tensor::<i64, [prompt::BatchSize, prompt::SequenceLength]> {
             data: List::<i64>::filled(extents[1], 1),
@@ -84,30 +86,32 @@ fn prefill(
     );
     // A prompt's module has no past, so its presents are outputs like any.
     let cache: step::Cache<Cpu> = step::Cache {
-        past_key_values_0_key: relabel(&o.present_0_key),
-        past_key_values_0_value: relabel(&o.present_0_value),
-        past_key_values_1_key: relabel(&o.present_1_key),
-        past_key_values_1_value: relabel(&o.present_1_value),
-        past_key_values_2_key: relabel(&o.present_2_key),
-        past_key_values_2_value: relabel(&o.present_2_value),
-        past_key_values_3_key: relabel(&o.present_3_key),
-        past_key_values_3_value: relabel(&o.present_3_value),
-        past_key_values_4_key: relabel(&o.present_4_key),
-        past_key_values_4_value: relabel(&o.present_4_value),
+        past_key_values_0_key: relabel(cpu, &o.present_0_key),
+        past_key_values_0_value: relabel(cpu, &o.present_0_value),
+        past_key_values_1_key: relabel(cpu, &o.present_1_key),
+        past_key_values_1_value: relabel(cpu, &o.present_1_value),
+        past_key_values_2_key: relabel(cpu, &o.present_2_key),
+        past_key_values_2_value: relabel(cpu, &o.present_2_value),
+        past_key_values_3_key: relabel(cpu, &o.present_3_key),
+        past_key_values_3_value: relabel(cpu, &o.present_3_value),
+        past_key_values_4_key: relabel(cpu, &o.present_4_key),
+        past_key_values_4_value: relabel(cpu, &o.present_4_value),
     };
     return [o.logits, cache];
 }
 
 test "the prompt returns the logits it did without the cache, and a key and value per layer" {
-    let [logits, c] = prefill(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
+    let mut cpu = Cpu {};
+    let [logits, c] = prefill(&mut cpu, #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
     let [want, want_extents] = tensor_of(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"));
     assert logits.extents == want_extents;
     assert_close(&logits.data, &want);
     let presents: List<List<i32>> = [
-        c.past_key_values_0_key.extents, c.past_key_values_0_value.extents, c.past_key_values_1_key.extents,
-        c.past_key_values_1_value.extents, c.past_key_values_2_key.extents, c.past_key_values_2_value.extents,
-        c.past_key_values_3_key.extents, c.past_key_values_3_value.extents, c.past_key_values_4_key.extents,
-        c.past_key_values_4_value.extents,
+        cpu.extents_of(&c.past_key_values_0_key), cpu.extents_of(&c.past_key_values_0_value),
+        cpu.extents_of(&c.past_key_values_1_key), cpu.extents_of(&c.past_key_values_1_value),
+        cpu.extents_of(&c.past_key_values_2_key), cpu.extents_of(&c.past_key_values_2_value),
+        cpu.extents_of(&c.past_key_values_3_key), cpu.extents_of(&c.past_key_values_3_value),
+        cpu.extents_of(&c.past_key_values_4_key), cpu.extents_of(&c.past_key_values_4_value),
     ];
     for let extents of presents {
         assert extents == [1, 4, 4, 8] as List<i32>;
@@ -115,8 +119,9 @@ test "the prompt returns the logits it did without the cache, and a key and valu
 }
 
 test "each step after the prompt computes one position against the cache, as onnxruntime does" {
-    let [_, prefilled] = prefill(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
-    let mut model = step_model();
+    let mut cpu = Cpu {};
+    let [_, prefilled] = prefill(&mut cpu, #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
+    let mut model = step_model(&mut cpu);
     let mut cache = prefilled;
     let data: List<[ByteList, ByteList]> = [
         [
@@ -132,11 +137,11 @@ test "each step after the prompt computes one position against the cache, as onn
         let [input, output] = pair;
         let [ids, _] = ints_of(input);
         let [want, want_extents] = tensor_of(output);
-        let [logits, grown] = decode(ids[0], 4 + i, &cache, &mut model);
+        let [logits, grown] = decode(&mut cpu, ids[0], 4 + i, &cache, &mut model);
         assert logits.extents == want_extents;
         assert_close(&logits.data, &want);
         // The cache stays at the capacity the next step reads it at.
-        assert grown.past_key_values_0_key.extents == [1, 4, capacity_of(5 + i), 8] as List<i32>;
+        assert cpu.extents_of(&grown.past_key_values_0_key) == [1, 4, capacity_of(5 + i), 8] as List<i32>;
         cache = grown;
     }
 }
@@ -144,6 +149,8 @@ test "each step after the prompt computes one position against the cache, as onn
 // The mask says the past is five positions long, past the four the cache holds.
 #[expect_trap]
 test "a mask longer than the cache's past and the step stops the step" {
-    let [_, cache] = prefill(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
-    decode(11, 5, &cache, &mut step_model());
+    let mut cpu = Cpu {};
+    let [_, cache] = prefill(&mut cpu, #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
+    let mut model = step_model(&mut cpu);
+    decode(&mut cpu, 11, 5, &cache, &mut model);
 }

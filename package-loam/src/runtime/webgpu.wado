@@ -17,6 +17,7 @@ use {
     BinaryOp,
     Holds,
     Cpu,
+    CpuTensor,
     Element,
     ElementKind,
     Float,
@@ -1513,6 +1514,14 @@ impl WebGpuBackend {
                 Tensor { data, extents: d.extents };
             },
         };
+    }
+
+    /// `t` as `Cpu` computes on it.
+    internal fn on_cpu<E: Element, Axes>(
+        &mut self,
+        t: &Placed<E, Axes>,
+    ) -> CpuTensor<E, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        return CpuTensor::Value(self.host(t));
     }
 
     /// `t`'s elements on the host, in row-major order. Every command recorded

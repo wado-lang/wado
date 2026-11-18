@@ -18,8 +18,9 @@ test "MatMul reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-converted/test_Linear_no_bias/test_data_set_0/output_0.pb"),
     );
 
-    let mut model = Model::new(Params::embedded(&mut Cpu {}));
-    let got = compute(&mut Cpu {}, &Tensor::<f32, [Axis00, Axis01]> { data: x, extents: x_extents }, &mut model);
+    let mut cpu = Cpu {};
+    let mut model = Model::new(Params::embedded(&mut cpu));
+    let got = compute(&mut cpu,&Tensor::<f32, [Axis00, Axis01]> { data: x, extents: x_extents }, &mut model);
 
     assert got.extents == want_extents;
     assert_close(&got.data, &want);

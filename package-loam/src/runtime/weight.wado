@@ -3,7 +3,7 @@
 
 use { LinearArray } from "core:linear";
 use { Any, Untyped, data_of } from "./recorded.wado";
-use { Cpu, Element, ElementKind, Tensor, element_count } from "./tensor.wado";
+use { Cpu, CpuTensor, Element, ElementKind, Tensor, element_count } from "./tensor.wado";
 
 /// A weight on the host as a checkpoint stores it: `kind` elements,
 /// little-endian and a bool a byte each, row-major under `extents`. The bytes
@@ -91,6 +91,22 @@ impl HostWeight {
         return HostWeight::stored(E::kind(), extents, LinearArray::<u8>::of_bytes(bytes, 0, bytes.len()));
     }
 
+    /// Zeros of `kind` under `extents`.
+    pub fn zeroed(kind: ElementKind, extents: List<i32>) -> HostWeight {
+        let bytes = LinearArray::<u8>::filled(element_count(&extents) * stored_width(kind), 0);
+        return HostWeight { kind, extents, bytes };
+    }
+
+    /// This with `row`, one slice along the first axis, written over the
+    /// slice `slot`.
+    pub fn written_at(&mut self, slot: i32, row: &HostWeight)
+        contract row.kind == self.kind && 0 <= slot < self.extents[0]
+        contract row.bytes.len() * self.extents[0] == self.bytes.len(), "a row fills one slice"
+    {
+        let width = row.bytes.len();
+        self.bytes.copy_from(slot * width, &row.bytes, 0, width);
+    }
+
     /// How many elements this holds.
     pub fn count(&self) -> i32 {
         return element_count(&self.extents);
@@ -120,21 +136,20 @@ impl HostWeight {
         };
     }
 
-    /// The elements, decoded as `Cpu` holds them.
+    /// The elements, decoded as `Cpu` holds a value.
     pub fn decoded(&self) -> Any<Cpu> {
-        let n = self.count();
-        let extents = self.extents;
         return match self.kind {
-            F32 => Any::F32(Tensor::<f32, Untyped> { data: self.bytes.to_list_of::<f32>(0, 4 * n), extents }),
-            F16 => Any::F16(Tensor::<f16, Untyped> { data: self.bytes.to_list_of::<f16>(0, 2 * n), extents }),
-            BF16 => Any::BF16(Tensor::<bf16, Untyped> { data: self.bytes.to_list_of::<bf16>(0, 2 * n), extents }),
-            U8 => Any::U8(Tensor::<u8, Untyped> { data: self.bytes.to_list_of::<u8>(0, n), extents }),
-            I64 => Any::I64(Tensor::<i64, Untyped> { data: self.bytes.to_list_of::<i64>(0, 8 * n), extents }),
-            I32 => Any::I32(Tensor::<i32, Untyped> { data: self.bytes.to_list_of::<i32>(0, 4 * n), extents }),
-            Bool => Any::Bool(Tensor::<bool, Untyped> {
-                data: self.bytes.to_list_of::<u8>(0, n).into_iter().map(|b| b != 0).collect(),
-                extents,
-            }),
+            F32 => Any::F32(self.values::<f32>()),
+            F16 => Any::F16(self.values::<f16>()),
+            BF16 => Any::BF16(self.values::<bf16>()),
+            U8 => Any::U8(self.values::<u8>()),
+            I64 => Any::I64(self.values::<i64>()),
+            I32 => Any::I32(self.values::<i32>()),
+            Bool => Any::Bool(self.values::<bool>()),
         };
+    }
+
+    fn values<E: Element>(&self) -> CpuTensor<E, Untyped> {
+        return CpuTensor::Value(Tensor { data: E::loaded(&self.bytes, 0, self.count()), extents: self.extents });
     }
 }

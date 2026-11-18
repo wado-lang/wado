@@ -59,12 +59,13 @@ export fn run() with (Stdout, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice
         return;
     };
     let w = weights();
-    let mut on_host = Model::new(w.params(&mut Cpu {}));
+    let mut host = Cpu {};
+    let mut on_host = Model::new(w.params(&mut host));
     let mut on_device = Model::new(w.params(&mut gpu));
     let x = tensor::<[Batch, In]>([BATCH, 1024], 7, 1.0);
 
     let t0 = MonotonicClock::now();
-    let on_cpu = compute(&mut Cpu {}, &x, &mut on_host);
+    let on_cpu = compute(&mut host, &x, &mut on_host);
     let t1 = MonotonicClock::now();
     // The first call compiles the program, which the second replays.
     let _ = compute(&mut gpu, &x, &mut on_device);

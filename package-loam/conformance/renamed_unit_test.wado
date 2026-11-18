@@ -9,8 +9,10 @@ use { Model, Params, compute } from "./renamed_unit.onnxtext"
     };
 
 test "a folded scalar and a Gemm bias, folded or not, each name the axis of 1 they meet" {
+    let mut cpu = Cpu {};
+    let mut model = Model::new(Params::embedded(&mut cpu));
     let out = compute(
-        &mut Cpu {},
+        &mut cpu,
         &Tensor {
             data: [1.0],
             extents: [1],
@@ -23,7 +25,7 @@ test "a folded scalar and a Gemm bias, folded or not, each name the axis of 1 th
             data: [1.0, 0.0, 0.0, 1.0, 1.0, 1.0],
             extents: [3, 2],
         },
-        &mut Model::new(Params::embedded(&mut Cpu {})),
+        &mut model,
     );
 
     assert out.Y.data == [3.0] as List<f32>;

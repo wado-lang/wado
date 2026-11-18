@@ -1,10 +1,10 @@
 use { Binary, DotDims, Graph, Quantized, Unary } from "./hlo.wado";
 use { Kernel, Plan, planned, replanned, splats_of } from "./fusion.wado";
 use { Recorded, Recorder, Untyped, Value, constants } from "./recorded.wado";
-use { BinaryOp, ElementKind, Float, HalfFloat, Holds, Tensor, UnaryOp, operand } from "./tensor.wado";
+use { BinaryOp, Cpu, ElementKind, Float, HalfFloat, Holds, Tensor, UnaryOp, operand } from "./tensor.wado";
 
 fn plan_of(recorded: &Recorded) -> Plan {
-    return planned(recorded, &splats_of(&constants(recorded)));
+    return planned(recorded, &splats_of(&constants(&mut Cpu {}, recorded)));
 }
 
 /// The launches of `plan` as `node 3`, `kernel 7` and `kernel 9 from 8` say
@@ -68,7 +68,7 @@ fn centered(rows: i32, width: i32) -> Recorded {
 }
 
 fn replanned_from(was: &Recorded, now: &Recorded) -> Option<Plan> {
-    return replanned(was, &plan_of(was), &splats_of(&constants(was)), now, &splats_of(&constants(now)));
+    return replanned(was, &plan_of(was), &splats_of(&constants(&mut Cpu {}, was)), now, &splats_of(&constants(&mut Cpu {}, now)));
 }
 
 test "a plan reused at other extents is the one planning them gives" {
@@ -396,7 +396,7 @@ test "only a node that reads an argument is launched" {
         unreachable();
     };
     assert k.operands.len() == 1;
-    assert splats_of(&constants(&recorded))[three.id] == Option::Some(3.0);
+    assert splats_of(&constants(&mut Cpu {}, &recorded))[three.id] == Option::Some(3.0);
     // The kernel writes the splat in, so no launch reads it.
     assert plan.reads(&recorded) == [y.id, x.id] as List<i32>;
 }

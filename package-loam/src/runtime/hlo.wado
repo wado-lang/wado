@@ -5,10 +5,12 @@
 use {
     Attention,
     Cpu,
+    CpuTensor,
     Element,
     ElementKind,
     Float,
     Holds,
+    KeptWeight,
     Tensor,
     Window,
     advance,
@@ -26,7 +28,6 @@ use {
 use { HashMap } from "core:collections";
 use {
     Any,
-    Erasable,
     Recorded,
     Recorder,
     Run,
@@ -34,7 +35,6 @@ use {
     assert_carries,
     constants,
     kept_any,
-    zeros_on_host,
 } from "./recorded.wado";
 use { HostWeight } from "./weight.wado";
 
@@ -1410,7 +1410,7 @@ impl Backend for Cpu {
     type Program = CpuProgram;
 
     fn compiled(&mut self, recorded: Recorded, weights: &List<Any<Cpu>>, earlier: &List<&CpuProgram>) -> CpuProgram {
-        return CpuProgram { constants: constants(&recorded), recorded };
+        return CpuProgram { constants: constants(self, &recorded), recorded };
     }
 
     fn executed(&mut self, program: &CpuProgram, arguments: &List<Any<Cpu>>, weights: &List<Any<Cpu>>) -> List<Any<Cpu>> {
@@ -1422,69 +1422,111 @@ impl Backend for Cpu {
     }
 
     fn pool(&mut self, kind: ElementKind, extents: List<i32>) -> Any<Cpu> {
-        return zeros_on_host(kind, extents);
+        return kept_any_of(kind, self.kept_weight(HostWeight::zeroed(kind, extents)));
     }
 
     fn written(&mut self, pool: &mut Any<Cpu>, slot: i32, row: HostWeight) {
-        let decoded = row.decoded();
-        match pool {
-            F32(t) => spliced::<f32>(t, slot, &decoded),
-            F16(t) => spliced::<f16>(t, slot, &decoded),
-            BF16(t) => spliced::<bf16>(t, slot, &decoded),
-            U8(t) => spliced::<u8>(t, slot, &decoded),
-            I64(t) => spliced::<i64>(t, slot, &decoded),
-            I32(t) => spliced::<i32>(t, slot, &decoded),
-            Bool(t) => spliced::<bool>(t, slot, &decoded),
+        self.kept_mut(&kept_in(pool)).written_at(slot, &row);
+    }
+
+    /// Each weight kept as it is stored, in linear memory.
+    fn kept_weights<Er>(
+        &mut self,
+        record: fn(&mut Recorder) -> Recorded with _,
+        first: i32,
+        count: i32,
+        load: fn(i32) -> Result<HostWeight, Er> with _,
+    ) -> Result<List<Any<Cpu>>, Er> with _ {
+        let mut kept: List<Any<Cpu>> = [];
+        for let at of 0..<count {
+            let w = load(at)?;
+            let kind = w.kind;
+            kept.push(kept_any_of(kind, self.kept_weight(w)));
         }
+        return Result::Ok(kept);
     }
 }
 
-/// The elements of `row` written over the slot `slot` of `held`.
-fn spliced<E: Erasable>(held: &mut Tensor<E, Untyped>, slot: i32, row: &Any<Cpu>) {
-    let given = E::of_any::<Cpu>(row);
-    let width = given.data.len();
-    assert width * held.extents[0] == held.data.len() && 0 <= slot < held.extents[0], "a row fills one slot of the pool";
-    for let at of 0..<width {
-        held.data[slot * width + at] = given.data[at];
-    }
+/// The weight `k` names, of `kind`, as `Any` holds it.
+fn kept_any_of(kind: ElementKind, k: KeptWeight) -> Any<Cpu> {
+    return match kind {
+        F32 => Any::F32(CpuTensor::Kept(k)),
+        F16 => Any::F16(CpuTensor::Kept(k)),
+        BF16 => Any::BF16(CpuTensor::Kept(k)),
+        U8 => Any::U8(CpuTensor::Kept(k)),
+        I64 => Any::I64(CpuTensor::Kept(k)),
+        I32 => Any::I32(CpuTensor::Kept(k)),
+        Bool => Any::Bool(CpuTensor::Kept(k)),
+    };
+}
+
+/// The kept weight `a` holds.
+fn kept_in(a: &Any<Cpu>) -> KeptWeight {
+    return match a {
+        F32(t) => kept_of(t),
+        F16(t) => kept_of(t),
+        BF16(t) => kept_of(t),
+        U8(t) => kept_of(t),
+        I64(t) => kept_of(t),
+        I32(t) => kept_of(t),
+        Bool(t) => kept_of(t),
+    };
+}
+
+fn kept_of<E, Axes>(t: &CpuTensor<E, Axes>) -> KeptWeight {
+    let Kept(k) = t else {
+        unreachable();
+    };
+    return *k;
 }
 
 impl Graph for Cpu {
-    fn relabeled<E: Element, In, Out>(&self, t: &Tensor<E, In>) -> Tensor<E, Out> {
-        return Tensor { data: t.data, extents: t.extents };
+    fn relabeled<E: Element, In, Out>(&self, t: &CpuTensor<E, In>) -> CpuTensor<E, Out> {
+        return match t {
+            Value(v) => CpuTensor::Value(Tensor { data: v.data, extents: v.extents }),
+            Kept(k) => CpuTensor::Kept(*k),
+        };
     }
 
-    fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Tensor<E, Axes> {
+    fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> CpuTensor<E, Axes> {
         let mut data = List::<E>::with_capacity(element_count(&extents));
         let mut index = List::<i32>::filled(extents.len(), 0);
         for let _ of 0..<element_count(&extents) {
             data.push(E::from_i64(index[dimension] as i64));
             advance(&mut index, &extents);
         }
-        return Tensor { data, extents };
+        return CpuTensor::Value(Tensor { data, extents });
     }
 
-    fn convert<A: Element, B: Element, Axes>(&mut self, x: &Tensor<A, Axes>) -> Tensor<B, Axes> {
+    fn convert<A: Element, B: Element, Axes>(&mut self, x: &CpuTensor<A, Axes>) -> CpuTensor<B, Axes> {
+        let x = self.held(x);
         let mut data = List::<B>::with_capacity(x.data.len());
         for let v of x.data {
             data.push(v.cast_to::<B>());
         }
-        return Tensor { data, extents: x.extents };
+        return CpuTensor::Value(Tensor { data, extents: x.extents });
     }
 
-    fn unary<E: Float, Axes>(&mut self, op: Unary, x: &Tensor<E, Axes>) -> Tensor<E, Axes> {
+    fn unary<E: Float, Axes>(&mut self, op: Unary, x: &CpuTensor<E, Axes>) -> CpuTensor<E, Axes> {
+        let x = self.held(x);
         let mut data = List::<E>::with_capacity(x.data.len());
         for let v of x.data {
             data.push(E::from_f32(unary_f32(op, v.cast_to::<f32>())));
         }
-        return Tensor { data, extents: x.extents };
+        return CpuTensor::Value(Tensor { data, extents: x.extents });
     }
 
-    fn arg_max<E: Float, Axes>(&mut self, x: &Tensor<E, Axes>, axis: i32) -> Tensor<i64, Axes> {
-        return arg_max(x, axis);
+    fn arg_max<E: Float, Axes>(&mut self, x: &CpuTensor<E, Axes>, axis: i32) -> CpuTensor<i64, Axes> {
+        return CpuTensor::Value(arg_max(self.held(x), axis));
     }
 
-    fn binary<E: Element, Axes>(&mut self, op: Binary, a: &Tensor<E, Axes>, b: &Tensor<E, Axes>) -> Tensor<E, Axes> {
+    fn binary<E: Element, Axes>(
+        &mut self,
+        op: Binary,
+        a: &CpuTensor<E, Axes>,
+        b: &CpuTensor<E, Axes>,
+    ) -> CpuTensor<E, Axes> {
+        let [a, b] = [self.held(a), self.held(b)];
         let extents = elementwise_extents([a.extents, b.extents]);
         let mut data = List::<E>::with_capacity(a.data.len());
         if E::is_float() {
@@ -1496,15 +1538,16 @@ impl Graph for Cpu {
                 data.push(E::from_i64(binary_i64(op, a.data[i].cast_to::<i64>(), b.data[i].cast_to::<i64>())));
             }
         }
-        return Tensor { data, extents };
+        return CpuTensor::Value(Tensor { data, extents });
     }
 
     fn compare<E: Element, Axes>(
         &mut self,
         direction: Comparison,
-        a: &Tensor<E, Axes>,
-        b: &Tensor<E, Axes>,
-    ) -> Tensor<bool, Axes> {
+        a: &CpuTensor<E, Axes>,
+        b: &CpuTensor<E, Axes>,
+    ) -> CpuTensor<bool, Axes> {
+        let [a, b] = [self.held(a), self.held(b)];
         let extents = elementwise_extents([a.extents, b.extents]);
         let mut data = List::<bool>::with_capacity(a.data.len());
         for let i of 0..<a.data.len() {
@@ -1514,29 +1557,31 @@ impl Graph for Cpu {
                 compared_i64(direction, a.data[i].cast_to::<i64>(), b.data[i].cast_to::<i64>());
             });
         }
-        return Tensor { data, extents };
+        return CpuTensor::Value(Tensor { data, extents });
     }
 
     fn select<E: Element, Axes>(
         &mut self,
-        pred: &Tensor<bool, Axes>,
-        on_true: &Tensor<E, Axes>,
-        on_false: &Tensor<E, Axes>,
-    ) -> Tensor<E, Axes> {
+        pred: &CpuTensor<bool, Axes>,
+        on_true: &CpuTensor<E, Axes>,
+        on_false: &CpuTensor<E, Axes>,
+    ) -> CpuTensor<E, Axes> {
+        let [pred, on_true, on_false] = [self.held(pred), self.held(on_true), self.held(on_false)];
         let extents = elementwise_extents([pred.extents, on_true.extents, on_false.extents]);
         let mut data = List::<E>::with_capacity(pred.data.len());
         for let i of 0..<pred.data.len() {
             data.push(if pred.data[i] { on_true.data[i] } else { on_false.data[i] });
         }
-        return Tensor { data, extents };
+        return CpuTensor::Value(Tensor { data, extents });
     }
 
     fn broadcast_in_dim<E: Element, In, Out>(
         &mut self,
-        x: &Tensor<E, In>,
+        x: &CpuTensor<E, In>,
         extents: List<i32>,
         dims: List<i32>,
-    ) -> Tensor<E, Out> {
+    ) -> CpuTensor<E, Out> {
+        let x = self.held(x);
         let extents = broadcast_in_dim_extents(&x.extents, extents, &dims);
         let own = row_major_strides(&x.extents);
         let mut strides = List::<i32>::filled(extents.len(), 0);
@@ -1545,27 +1590,29 @@ impl Graph for Cpu {
                 strides[d] = own[i];
             }
         }
-        return Tensor { data: walked(&x.data, 0, &strides, &extents), extents };
+        return CpuTensor::Value(Tensor { data: walked(&x.data, 0, &strides, &extents), extents });
     }
 
-    fn reshape<E: Element, In, Out>(&mut self, x: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out> {
-        return reshape(x, extents);
+    fn reshape<E: Element, In, Out>(&mut self, x: &CpuTensor<E, In>, extents: List<i32>) -> CpuTensor<E, Out> {
+        return CpuTensor::Value(reshape(self.held(x), extents));
     }
 
-    fn transpose<E: Element, In, Out>(&mut self, x: &Tensor<E, In>, perm: List<i32>) -> Tensor<E, Out> {
+    fn transpose<E: Element, In, Out>(&mut self, x: &CpuTensor<E, In>, perm: List<i32>) -> CpuTensor<E, Out> {
+        let x = self.held(x);
         if is_identity(&perm) {
-            return Tensor { data: x.data, extents: x.extents };
+            return CpuTensor::Value(Tensor { data: x.data, extents: x.extents });
         }
-        return permute(x, perm);
+        return CpuTensor::Value(permute(x, perm));
     }
 
     fn slice<E: Element, In, Out>(
         &mut self,
-        x: &Tensor<E, In>,
+        x: &CpuTensor<E, In>,
         start: List<i32>,
         limit: List<i32>,
         strides: List<i32>,
-    ) -> Tensor<E, Out> {
+    ) -> CpuTensor<E, Out> {
+        let x = self.held(x);
         let own = row_major_strides(&x.extents);
         let mut base = 0;
         let mut steps: List<i32> = [];
@@ -1574,15 +1621,16 @@ impl Graph for Cpu {
             steps.push(own[i] * strides[i]);
         }
         let extents = sliced_extents(&x.extents, &start, &limit, &strides);
-        return Tensor { data: walked(&x.data, base, &steps, &extents), extents };
+        return CpuTensor::Value(Tensor { data: walked(&x.data, base, &steps, &extents), extents });
     }
 
     fn concatenate<E: Element, A, B, Out>(
         &mut self,
-        a: &Tensor<E, A>,
-        b: &Tensor<E, B>,
+        a: &CpuTensor<E, A>,
+        b: &CpuTensor<E, B>,
         dimension: i32,
-    ) -> Tensor<E, Out> {
+    ) -> CpuTensor<E, Out> {
+        let [a, b] = [self.held(a), self.held(b)];
         let extents = joined_extents(&a.extents, &b.extents, dimension);
         let outer = element_count(&a.extents[0..<dimension].to_list());
         let [a_run, b_run] = [
@@ -1594,20 +1642,21 @@ impl Graph for Cpu {
             data.extend_from_slice(a.data[o * a_run..<(o + 1) * a_run]);
             data.extend_from_slice(b.data[o * b_run..<(o + 1) * b_run]);
         }
-        return Tensor { data, extents };
+        return CpuTensor::Value(Tensor { data, extents });
     }
 
     fn reduce<E: Element, In, Out>(
         &mut self,
-        x: &Tensor<E, In>,
+        x: &CpuTensor<E, In>,
         op: Binary,
         init: f32,
         dims: List<i32>,
-    ) -> Tensor<E, Out> {
+    ) -> CpuTensor<E, Out> {
+        let x = self.held(x);
         let kept = kept_axes(x.extents.len(), &dims);
         let mut perm = kept;
         perm.extend(&(0..<x.extents.len()).filter(|i| dims.contains(&i)).collect());
-        let laid: Tensor<E, In> = self.transpose(x, perm);
+        let laid = if is_identity(&perm) { *x } else { permute::<E, In, In>(x, perm) };
         let extents = picked(&x.extents, &kept);
         let rows = element_count(&extents);
         let width = if rows == 0 { 0 } else { laid.data.len() / rows };
@@ -1622,15 +1671,16 @@ impl Graph for Cpu {
                 ));
             }
         }
-        return Tensor { data, extents };
+        return CpuTensor::Value(Tensor { data, extents });
     }
 
     fn dot_general<E: Float, A, B, Out>(
         &mut self,
-        lhs: &Tensor<E, A>,
-        rhs: &Tensor<E, B>,
+        lhs: &CpuTensor<E, A>,
+        rhs: &CpuTensor<E, B>,
         dims: &DotDims,
-    ) -> Tensor<E, Out> {
+    ) -> CpuTensor<E, Out> {
+        let [lhs, rhs] = [self.held(lhs), self.held(rhs)];
         let extents = dot_extents(&lhs.extents, &rhs.extents, dims);
         let lhs_free = free_axes(lhs.extents.len(), &dims.lhs_batch, &dims.lhs_contracting);
         let rhs_free = free_axes(rhs.extents.len(), &dims.rhs_batch, &dims.rhs_contracting);
@@ -1651,31 +1701,35 @@ impl Graph for Cpu {
         by_rows.extend(&rhs_free);
         by_rows.extend(&dims.rhs_contracting);
         if is_identity(&by_rows) {
-            return Tensor { data: product_by_rows(a.of(lhs), &rhs.data, batch, m, k, n), extents };
+            return CpuTensor::Value(Tensor { data: product_by_rows(a.of(lhs), &rhs.data, batch, m, k, n), extents });
         }
         let mut by_columns = dims.rhs_batch;
         by_columns.extend(&dims.rhs_contracting);
         by_columns.extend(&rhs_free);
         let b = laid_out(rhs, &by_columns);
-        return Tensor { data: product_by_columns(a.of(lhs), b.of(rhs), batch, m, k, n), extents };
+        return CpuTensor::Value(Tensor { data: product_by_columns(a.of(lhs), b.of(rhs), batch, m, k, n), extents });
     }
 
+    /// Reads only the elements it gathers, so a few rows of a kept table are
+    /// all that is decoded of it.
     fn gather<E: Element, D, I, Out>(
         &mut self,
-        operand: &Tensor<E, D>,
-        indices: &Tensor<i64, I>,
+        table: &CpuTensor<E, D>,
+        indices: &CpuTensor<i64, I>,
         dims: &GatherDims,
-    ) -> Tensor<E, Out> {
-        let rank = operand.extents.len();
+    ) -> CpuTensor<E, Out> {
+        let indices = self.held(indices);
+        let table_extents = self.extents_of(table);
+        let rank = table_extents.len();
         let implicit = dims.index_vector_dim == indices.extents.len();
         let offset_axes: List<i32> = (0..<rank).filter(|a| !dims.collapsed_slice_dims.contains(&a)).collect();
         let extents = gathered_extents(&indices.extents, dims);
         let out_rank = extents.len();
         let batch_at: List<i32> = (0..<out_rank).filter(|d| !dims.offset_dims.contains(&d)).collect();
-        let own = row_major_strides(&operand.extents);
+        let own = row_major_strides(&table_extents);
         let index_strides = row_major_strides(&indices.extents);
         let vector_stride = if implicit { 0 } else { index_strides[dims.index_vector_dim] };
-        let mut data = List::<E>::with_capacity(element_count(&extents));
+        let mut places = List::<i32>::with_capacity(element_count(&extents));
         let mut out = List::<i32>::filled(out_rank, 0);
         for let _ of 0..<element_count(&extents) {
             let mut index_base = 0;
@@ -1690,25 +1744,26 @@ impl Graph for Cpu {
             let mut at = 0;
             for let [k, axis] of dims.start_index_map.into_iter().enumerate() {
                 let start = indices.data[index_base + k * vector_stride];
-                let room = (operand.extents[axis] - dims.slice_sizes[axis]) as i64;
+                let room = (table_extents[axis] - dims.slice_sizes[axis]) as i64;
                 at += i64::clamp(start, 0, room) as i32 * own[axis];
             }
             for let [j, d] of dims.offset_dims.into_iter().enumerate() {
                 at += out[d] * own[offset_axes[j]];
             }
-            data.push(operand.data[at]);
+            places.push(at);
             advance(&mut out, &extents);
         }
-        return Tensor { data, extents };
+        return CpuTensor::Value(Tensor { data: self.elements_at(table, &places), extents });
     }
 
     fn scatter<E: Element, D, I, U>(
         &mut self,
-        operand: &Tensor<E, D>,
-        indices: &Tensor<i64, I>,
-        updates: &Tensor<E, U>,
+        operand: &CpuTensor<E, D>,
+        indices: &CpuTensor<i64, I>,
+        updates: &CpuTensor<E, U>,
         dims: &ScatterDims,
-    ) -> Tensor<E, D> {
+    ) -> CpuTensor<E, D> {
+        let [operand, indices, updates] = [self.held(operand), self.held(indices), self.held(updates)];
         let rank = operand.extents.len();
         let window_axes: List<i32> = (0..<rank).filter(|a| !dims.inserted_window_dims.contains(&a)).collect();
         let index_axes: List<i32> = (0..<indices.extents.len()).filter(|i| i != dims.index_vector_dim).collect();
@@ -1747,15 +1802,16 @@ impl Graph for Cpu {
             }
             advance(&mut u, &updates.extents);
         }
-        return Tensor { data, extents: operand.extents };
+        return CpuTensor::Value(Tensor { data, extents: operand.extents });
     }
 
     fn convolution<E: Float, In, K, Out>(
         &mut self,
-        x: &Tensor<E, In>,
-        kernel: &Tensor<E, K>,
+        x: &CpuTensor<E, In>,
+        kernel: &CpuTensor<E, K>,
         conv: &Convolution,
-    ) -> Tensor<E, Out> {
+    ) -> CpuTensor<E, Out> {
+        let [x, kernel] = [self.held(x), self.held(kernel)];
         let window = conv_window(&x.extents, &kernel.extents, conv);
         let t = conv_grouped::<Batch, Feature, Feature, Feature, [Spatial], [Spatial], [Spatial]>(
             &Tensor { data: f32s_of(&x.data), extents: x.extents },
@@ -1764,42 +1820,45 @@ impl Graph for Cpu {
             &window,
             &null,
         );
-        return Tensor { data: rounded(&t.data), extents: t.extents };
+        return CpuTensor::Value(Tensor { data: rounded(&t.data), extents: t.extents });
     }
 
     fn reduce_window<E: Float, In, Out>(
         &mut self,
-        x: &Tensor<E, In>,
+        x: &CpuTensor<E, In>,
         op: Binary,
         init: f32,
         window: &WindowReduce,
-    ) -> Tensor<E, Out>
+    ) -> CpuTensor<E, Out>
         contract op matches { Maximum } && init == f32::NEG_INFINITY, "the CPU reduces windows by their greatest alone"
     {
+        let x = self.held(x);
         let pooled = pooled_window(&x.extents, window);
         let t = max_pool::<Batch, Feature, [Spatial], [Spatial]>(
             &Tensor { data: f32s_of(&x.data), extents: x.extents },
             &pooled,
         );
-        return Tensor { data: rounded(&t.data), extents: t.extents };
+        return CpuTensor::Value(Tensor { data: rounded(&t.data), extents: t.extents });
     }
 
-    fn reverse<E: Element, Axes>(&mut self, x: &Tensor<E, Axes>, dims: List<i32>) -> Tensor<E, Axes> {
+    fn reverse<E: Element, Axes>(&mut self, x: &CpuTensor<E, Axes>, dims: List<i32>) -> CpuTensor<E, Axes> {
+        let x = self.held(x);
         let mut strides = row_major_strides(&x.extents);
         let mut base = 0;
         for let d of dims {
             base += (x.extents[d] - 1) * strides[d];
             strides[d] = -strides[d];
         }
-        return Tensor { data: walked(&x.data, base, &strides, &x.extents), extents: x.extents };
+        return CpuTensor::Value(Tensor { data: walked(&x.data, base, &strides, &x.extents), extents: x.extents });
     }
 
     fn conditional<Axes, T>(
         &mut self,
-        pred: &Tensor<bool, Axes>,
+        pred: &CpuTensor<bool, Axes>,
         then: fn() -> T with _,
         otherwise: fn() -> T with _,
     ) -> T with _ {
+        let pred = self.held(pred);
         assert pred.data.len() == 1, "a condition is one element";
         return if pred.data[0] { then() } else { otherwise() };
     }
@@ -1808,12 +1867,14 @@ impl Graph for Cpu {
     /// then summed against each row of `a` as `dot_general` sums.
     fn quantized_product<E: Float, In, N, Blocks, Blob, Z, Out>(
         &mut self,
-        a: &Tensor<E, In>,
-        packed: &Tensor<u8, [N, Blocks, Blob]>,
-        scales: &Tensor<E, [N, Blocks]>,
-        zero_points: Option<&Tensor<u8, [N, Z]>>,
+        a: &CpuTensor<E, In>,
+        packed: &CpuTensor<u8, [N, Blocks, Blob]>,
+        scales: &CpuTensor<E, [N, Blocks]>,
+        zero_points: Option<&CpuTensor<u8, [N, Z]>>,
         quantized: &Quantized,
-    ) -> Tensor<E, Out> {
+    ) -> CpuTensor<E, Out> {
+        let [a, packed, scales] = [self.held(a), self.held(packed), self.held(scales)];
+        let zero_points = zero_points.map(|z| self.held(z));
         let mut extents = a.extents;
         let last = extents.len() - 1;
         let k = extents[last];
@@ -1830,7 +1891,7 @@ impl Graph for Cpu {
             }
         }
         extents[last] = n;
-        return Tensor { data: out, extents };
+        return CpuTensor::Value(Tensor { data: out, extents });
     }
 
     /// Each row `indices` name dequantized as the decomposition rounds it, or
@@ -1838,12 +1899,14 @@ impl Graph for Cpu {
     /// table.
     fn quantized_gather<E: Float, R, P, I, Blocks, Z, Out>(
         &mut self,
-        packed: &Tensor<u8, [R, P]>,
-        indices: &Tensor<i64, I>,
-        scales: &Tensor<E, [R, Blocks]>,
-        zero_points: Option<&Tensor<u8, [R, Z]>>,
+        packed: &CpuTensor<u8, [R, P]>,
+        indices: &CpuTensor<i64, I>,
+        scales: &CpuTensor<E, [R, Blocks]>,
+        zero_points: Option<&CpuTensor<u8, [R, Z]>>,
         quantized: &Quantized,
-    ) -> Tensor<E, Out> {
+    ) -> CpuTensor<E, Out> {
+        let [packed, indices, scales] = [self.held(packed), self.held(indices), self.held(scales)];
+        let zero_points = zero_points.map(|z| self.held(z));
         let [rows, bytes] = [packed.extents[0], packed.extents[1]];
         let width = bytes * (8 / quantized.bits);
         let zeros = List::<E>::filled(width, E::from_f32(0.0));
@@ -1860,7 +1923,7 @@ impl Graph for Cpu {
         }
         let mut extents = indices.extents;
         extents.push(width);
-        return Tensor { data: out, extents };
+        return CpuTensor::Value(Tensor { data: out, extents });
     }
 }
 

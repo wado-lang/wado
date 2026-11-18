@@ -22,10 +22,12 @@ test "Exp reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-operator/test_operator_exp/test_data_set_0/output_0.pb"),
     );
 
+    let mut cpu = Cpu {};
+    let mut model = exp::Model::new(exp::Params::embedded(&mut cpu));
     let got = exp::compute(
-        &mut Cpu {},
+        &mut cpu,
         &Tensor::<f32, [exp::Axis00, exp::Axis01]> { data: x, extents: x_extents },
-        &mut exp::Model::new(exp::Params::embedded(&mut Cpu {})),
+        &mut model,
     );
 
     assert got.extents == want_extents;
@@ -40,10 +42,12 @@ test "Sqrt reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-operator/test_operator_sqrt/test_data_set_0/output_0.pb"),
     );
 
+    let mut cpu = Cpu {};
+    let mut model = sqrt::Model::new(sqrt::Params::embedded(&mut cpu));
     let got = sqrt::compute(
-        &mut Cpu {},
+        &mut cpu,
         &Tensor::<f32, [sqrt::Axis00, sqrt::Axis01]> { data: x, extents: x_extents },
-        &mut sqrt::Model::new(sqrt::Params::embedded(&mut Cpu {})),
+        &mut model,
     );
 
     assert got.extents == want_extents;

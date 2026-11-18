@@ -3,7 +3,7 @@
 //! branch without a past, all its positions at once, and each step after it
 //! through the branch with one. Each reproduces the logits onnxruntime computes.
 
-use { Cpu, Tensor, capacity_of } from "lib:loam";
+use { Cpu, Holds, Tensor, capacity_of } from "lib:loam";
 use { assert_close, ints_of, tensor_of } from "./oracle.wado";
 use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
     with {
@@ -19,16 +19,18 @@ use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
 /// The logits for `ids` after the `past_length` positions `cache` holds, and
 /// the cache grown by theirs. No past takes the branch without one.
 fn run(
+    cpu: &mut Cpu,
     ids: List<i64>,
     past_length: i32,
     cache: &merged::Cache<Cpu>,
     model: &mut merged::Model<Cpu>,
 ) -> [Tensor<f32, [merged::BatchSize, merged::SequenceLength, merged::Logits2]>, merged::Cache<Cpu>] {
-    return step(ids, past_length + ids.len(), past_length > 0, cache, model);
+    return step(cpu, ids, past_length + ids.len(), past_length > 0, cache, model);
 }
 
 /// `run` given the mask's length and the branch.
 fn step(
+    cpu: &mut Cpu,
     ids: List<i64>,
     mask_length: i32,
     use_cache: bool,
@@ -36,7 +38,7 @@ fn step(
     model: &mut merged::Model<Cpu>,
 ) -> [Tensor<f32, [merged::BatchSize, merged::SequenceLength, merged::Logits2]>, merged::Cache<Cpu>] {
     let o = merged::compute(
-        &mut Cpu {},
+        cpu,
         &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
             data: ids,
             extents: [1, ids.len()],
@@ -55,12 +57,8 @@ fn step(
     return [o.logits, o.cache];
 }
 
-fn empty_cache() -> merged::Cache<Cpu> {
-    return merged::Cache::empty(&mut Cpu {});
-}
-
-fn embedded_model() -> merged::Model<Cpu> {
-    return merged::Model::new(merged::Params::embedded(&mut Cpu {}));
+fn embedded_model(cpu: &mut Cpu) -> merged::Model<Cpu> {
+    return merged::Model::new(merged::Params::embedded(cpu));
 }
 
 test "the prompt and each step after it reproduce onnxruntime's logits through one module" {
@@ -78,19 +76,20 @@ test "the prompt and each step after it reproduce onnxruntime's logits through o
             #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_2/output_0.pb"),
         ],
     ];
-    let mut m = embedded_model();
-    let mut cache = empty_cache();
+    let mut cpu = Cpu {};
+    let mut m = embedded_model(&mut cpu);
+    let mut cache = merged::Cache::empty(&mut cpu);
     let mut length = 0;
     for let pair of data {
         let [input, output] = pair;
         let [ids, _] = ints_of(input);
         let [want, want_extents] = tensor_of(output);
-        let [logits, grown] = run(ids, length, &cache, &mut m);
+        let [logits, grown] = run(&mut cpu, ids, length, &cache, &mut m);
         length += ids.len();
         assert logits.extents == want_extents;
         assert_close(&logits.data, &want);
         // The cache stays at the capacity the next step reads it at.
-        assert grown.past_key_values_0_key.extents == [1, 4, capacity_of(length), 8] as List<i32>;
+        assert cpu.extents_of(&grown.past_key_values_0_key) ==[1, 4, capacity_of(length), 8] as List<i32>;
         cache = grown;
     }
 }
@@ -99,21 +98,28 @@ test "the prompt and each step after it reproduce onnxruntime's logits through o
 // tells them apart.
 #[expect_trap]
 test "a mask longer than the step stops the step without a past" {
-    step([1, 5, 42, 7, 9], 6, false, &empty_cache(), &mut embedded_model());
+    let mut cpu = Cpu {};
+    let mut m = embedded_model(&mut cpu);
+    let empty = merged::Cache::empty(&mut cpu);
+    step(&mut cpu, [1, 5, 42, 7, 9], 6, false, &empty, &mut m);
 }
 
 // The mask says the past is five positions long, past the four the cache holds.
 #[expect_trap]
 test "a mask longer than the cache's past and the step stops the step" {
-    let mut m = embedded_model();
-    let [_, cache] = run([1, 5, 42, 7], 0, &empty_cache(), &mut m);
-    run([11], 5, &cache, &mut m);
+    let mut cpu = Cpu {};
+    let mut m = embedded_model(&mut cpu);
+    let empty = merged::Cache::empty(&mut cpu);
+    let [_, cache] = run(&mut cpu, [1, 5, 42, 7], 0, &empty, &mut m);
+    run(&mut cpu, [11], 5, &cache, &mut m);
 }
 
 // The mask says the past is one position short of none.
 #[expect_trap]
 test "a mask shorter than the step stops the step" {
-    let mut m = embedded_model();
-    let [_, cache] = run([1, 5, 42, 7], 0, &empty_cache(), &mut m);
-    step([11, 12], 1, true, &cache, &mut m);
+    let mut cpu = Cpu {};
+    let mut m = embedded_model(&mut cpu);
+    let empty = merged::Cache::empty(&mut cpu);
+    let [_, cache] = run(&mut cpu, [1, 5, 42, 7], 0, &empty, &mut m);
+    step(&mut cpu, [11, 12], 1, true, &cache, &mut m);
 }
