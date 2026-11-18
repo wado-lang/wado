@@ -3002,7 +3002,14 @@ pub fn parse(source: &str) -> ParseResult {
     let mut lex_result = lexer::lex(source);
     let lex_errors = std::mem::take(&mut lex_result.errors);
     let mut parser = Parser::from_lex(lex_result);
-    let ast = parser.parse();
+    let mut ast = parser.parse();
+    ast.set_invalid_literals(
+        lex_errors
+            .iter()
+            .filter(|e| e.leaves_tokens_sound())
+            .cloned()
+            .collect(),
+    );
     let errors = parser.take_errors();
     let mut trivia = parser.take_trivia();
     comment::populate_trailing(&mut trivia, &ast);

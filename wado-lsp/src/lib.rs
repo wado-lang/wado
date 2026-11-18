@@ -872,8 +872,13 @@ async fn build_semantics<H: CompilerHost>(
     // AST so position queries resolve in the regions outside the error. A
     // load/bind failure on the partial AST still degrades to
     // `Semantics::empty()` below; recovery helps only when binding succeeds.
-    // `tests/parse_error.rs` pins this.
-    for e in &parsed.lex_errors {
+    // `tests/parse_error.rs` pins this. The analysis reports a bad literal's
+    // text, which leaves the tokens sound, with every other module's.
+    for e in parsed
+        .lex_errors
+        .iter()
+        .filter(|e| !e.leaves_tokens_sound())
+    {
         host.emit_diagnostic(e.diagnostic(Some(filename)));
     }
     for e in &parsed.errors {

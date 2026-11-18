@@ -1491,7 +1491,12 @@ pub async fn semantics_for_world<H: CompilerHost>(
     // `Semantics::empty()` below — recovery helps only when binding succeeds,
     // which holds for the common cases (missing brace, garbage item) where
     // scopes stay separate.
-    for e in &parsed.lex_errors {
+    // The analysis reports a bad literal's text, with every other module's.
+    for e in parsed
+        .lex_errors
+        .iter()
+        .filter(|e| !e.leaves_tokens_sound())
+    {
         host.emit_diagnostic(e.diagnostic(filename));
     }
     for e in &parsed.errors {
