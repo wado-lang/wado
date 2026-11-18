@@ -294,21 +294,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.defer_bounds_of(param.name.clone(), type_arg, bounds, span);
     }
 
-    /// Hold what `ty`, which still names variables, becomes once they are
-    /// solved to `trait_`, as [`Self::defer_declared_bounds`] holds a slot.
-    pub(super) fn defer_trait_to_answer(&mut self, ty: TypeId, trait_: &FqTraitName, span: Span) {
-        let subject = self.tysys.type_table.borrow().name(ty);
-        let bound = DeclaredBound {
-            trait_: trait_.clone(),
-            written: trait_.to_string(),
-            each_element: false,
-        };
-        self.defer_bounds_of(subject, ty, vec![bound], span);
-    }
-
     /// `bounds` checked at finalize against what `type_arg` becomes, through
     /// a fresh variable chained to it. `subject` is what a failure names.
-    fn defer_bounds_of(
+    pub(super) fn defer_bounds_of(
         &mut self,
         subject: String,
         type_arg: TypeId,

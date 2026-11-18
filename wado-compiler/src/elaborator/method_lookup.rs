@@ -47,6 +47,7 @@ use super::types::{
 use super::tysys::TypeSystem;
 use crate::elaborator::callee::CalleeRef;
 use crate::elaborator::expr::MemberOwner;
+use crate::elaborator::infer_hole::DeclaredBound;
 use crate::elaborator::scope;
 use crate::elaborator::scope::param_decl;
 use crate::elaborator::sem::types::{DesugarKind, OperatorDispatch};
@@ -2501,7 +2502,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) {
         if found.confirm_at_answer {
-            self.defer_trait_to_answer(subject, &found.trait_name, span);
+            let bound = DeclaredBound {
+                trait_: found.trait_name.clone(),
+                written: found.trait_name.to_string(),
+                each_element: false,
+            };
+            let named = self.tysys.type_table.borrow().name(subject);
+            self.defer_bounds_of(named, subject, vec![bound], span);
         }
     }
 
