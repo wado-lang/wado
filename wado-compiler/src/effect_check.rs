@@ -199,7 +199,6 @@ impl From<UnhandledOperation> for Diagnostic {
 
 /// One call a body makes, as what it reaches: the operations it dispatches
 /// itself and the function whose body it runs.
-#[derive(Clone)]
 struct Reach {
     /// The effects whose operations the call dispatches, or, for a function
     /// value, the effects its type says it performs.
@@ -222,7 +221,11 @@ impl Reach {
         summaries: &'a IndexMap<AstId, IndexSet<EffectRef>>,
     ) -> impl Iterator<Item = &'a EffectRef> {
         let body = self.callee.and_then(|callee| summaries.get(&callee));
-        let declared = if body.is_some() { &[][..] } else { &self.declared[..] };
+        let declared = if body.is_some() {
+            &[][..]
+        } else {
+            &self.declared[..]
+        };
         self.owners
             .iter()
             .chain(declared)
@@ -275,9 +278,8 @@ impl BodyReach {
 #[derive(Default)]
 struct ReachLog {
     bodies: IndexMap<AstId, Vec<Reach>>,
-    /// Each closed scope, with its module, and whether its body allows the
-    /// scope to leave operations out.
-    scopes: Vec<(HandlerScope, String, bool)>,
+    /// Each closed scope no `allow` waives, with its module.
+    scopes: Vec<(HandlerScope, String)>,
 }
 
 /// A position whose expression must be pure. The diagnostic names it.
@@ -630,7 +632,13 @@ fn run_effect_checks(
                     let mentioned: Option<Vec<EffectRef>> = trait_key
                         .and_then(|key| index.interfaces.get(&key))
                         .map(|(effect, _)| {
-                            index.mentions.get(effect).into_iter().flatten().cloned().collect()
+                            index
+                                .mentions
+                                .get(effect)
+                                .into_iter()
+                                .flatten()
+                                .cloned()
+                                .collect()
                         });
                     for method in &impl_block.methods {
                         let inherits_ambient = trait_key.is_some_and(|key| {
@@ -680,16 +688,7 @@ fn run_effect_checks(
                     admitted_effects(&global.name, &global.attributes, src, index, out);
                 }
                 Item::Test(test) => {
-                    check_test_effects_sem(
-                        sem,
-                        src,
-                        test,
-                        index,
-                        module_waives,
-                        out,
-                        solved,
-                        log,
-                    );
+                    check_test_effects_sem(sem, src, test, index, module_waives, out, solved, log);
                 }
                 _ => {}
             }
@@ -713,18 +712,18 @@ fn report_unhandled_operations(
         .iter()
         .filter(|(def, _)| index.resolutions.defs().kind(**def) == DefKind::Resource)
         .map(|(def, (effect, _))| {
-            let root = index.types.resource_chain(*def).last().expect("the chain starts at def");
+            let root = index
+                .types
+                .resource_chain(*def)
+                .last()
+                .expect("the chain starts at def");
             (effect, root)
         })
         .collect();
     let summaries = reach_summaries(log);
-    for (scope, module, allowed) in &log.scopes {
-        if *allowed {
-            continue;
-        }
-        let answered = |effect: &EffectRef| {
-            scope.installed.contains(effect) || scope.around.contains(effect)
-        };
+    for (scope, module) in &log.scopes {
+        let answered =
+            |effect: &EffectRef| scope.installed.contains(effect) || scope.around.contains(effect);
         let mut handled: IndexSet<String> = IndexSet::default();
         let mut missing: IndexSet<String> = IndexSet::default();
         let reached: IndexSet<&EffectRef> = scope
@@ -745,7 +744,10 @@ fn report_unhandled_operations(
                 continue;
             }
             missing.insert(effect.name().to_string());
-            handled.extend(kin.into_iter().map(|installed| installed.name().to_string()));
+            handled.extend(
+                kin.into_iter()
+                    .map(|installed| installed.name().to_string()),
+            );
         }
         if !missing.is_empty() {
             warnings.push(UnhandledOperation {
@@ -761,8 +763,11 @@ fn report_unhandled_operations(
 /// What each walked body reaches through its calls, transitively, past the
 /// handlers it installs itself.
 fn reach_summaries(log: &ReachLog) -> IndexMap<AstId, IndexSet<EffectRef>> {
-    let mut summaries: IndexMap<AstId, IndexSet<EffectRef>> =
-        log.bodies.keys().map(|key| (*key, IndexSet::default())).collect();
+    let mut summaries: IndexMap<AstId, IndexSet<EffectRef>> = log
+        .bodies
+        .keys()
+        .map(|key| (*key, IndexSet::default()))
+        .collect();
     loop {
         let mut grew = false;
         for (key, calls) in &log.bodies {
@@ -1866,12 +1871,15 @@ fn walk_body_effects(
             if let Some(key) = walk.key {
                 log.bodies.insert(key, reach.calls);
             }
-            log.scopes.extend(
-                reach
-                    .closed
-                    .into_iter()
-                    .map(|scope| (scope, module.source_path(), walk.allows_unhandled)),
-            );
+            if !walk.allows_unhandled {
+                let module = module.source_path();
+                log.scopes.extend(
+                    reach
+                        .closed
+                        .into_iter()
+                        .map(|scope| (scope, module.clone())),
+                );
+            }
             return;
         }
         rows = walked.solved;
@@ -1925,7 +1933,10 @@ fn build_propagation_closure_sem(
                 // every member.
                 if let Some(parent) = scan.tt.resource_chain(def).nth(1) {
                     let parent = resource_effect(resolutions, parent);
-                    direct.entry(parent.clone()).or_default().insert(key.clone());
+                    direct
+                        .entry(parent.clone())
+                        .or_default()
+                        .insert(key.clone());
                     direct.entry(key.clone()).or_default().insert(parent);
                 }
             }
@@ -3365,7 +3376,8 @@ impl SemEffectWalker<'_> {
         );
     }
 
-    /// Report what a dispatch to one callee requires ([`dispatch_effects`]).
+    /// Report what a dispatch to one callee requires ([`dispatch_effects`]),
+    /// noting what it reaches.
     fn report_resolved(
         &mut self,
         func_ref: &FunctionRef,

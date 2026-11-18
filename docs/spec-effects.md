@@ -357,7 +357,7 @@ An operation still belongs to the resource declaring it, and so does its demand,
 <!-- {"fixture":"spec_effects_operation_owner.wado"} -->
 
 ```wado
-fn describe(n: Node) -> String with (Node, HtmlInputElement) {
+fn describe(n: Node) -> String with Node {
     return match n {
         input: HtmlInputElement => `${input.tag()}:${input.value()}`,
         _ => n.tag(),
