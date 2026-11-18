@@ -34,11 +34,11 @@ use {
     MATMUL_NBITS,
     QMOE,
     absent,
+    computes_integers,
     data_type,
     dims_of,
     element_of,
     is_binary_elementwise,
-    computes_integers,
     is_float,
     is_signed_integer,
     is_unary_operator,
@@ -2131,11 +2131,8 @@ fn attention(
             owe_equal(node, owed, &l, &last, "seqlens_k must be one short of the total")?;
         }
     } else {
-        let lengths = operand_at(node, shapes, 5);
-        let mut count = Poly::constant(1);
-        for let axis of lengths.axes {
-            count = count.try_mul(&axis.extent.poly()).expect("a count of elements is within i64");
-        }
+        let extents: List<Extent> = operand_at(node, shapes, 5).axes.into_iter().map(|a| a.extent).collect();
+        let count = count_of(&extents).expect("a count of elements is within i64");
         owe_equal(node, owed, &count, &q.axes[0].extent.poly(), "seqlens_k holds one length per row")?;
     }
     if options.rotary {

@@ -97,14 +97,7 @@ pub fn mixed<affine G: Graph>(
     g: &mut G,
     x: &G::Tensor<f32, [A, B]>,
     ids: &G::Tensor<i64, [C]>,
-) -> [
-    G::Tensor<f32, [A, A]>,
-    G::Tensor<f32, [A, B]>,
-    G::Tensor<f32, [C]>,
-    G::Tensor<bool, [A, B]>,
-    G::Tensor<i64, [C]>,
-    G::Tensor<i32, []>,
-] with _ {
+) -> [G::Tensor<f32, [A, A]>, G::Tensor<f32, [A, B]>, G::Tensor<f32, [C]>, G::Tensor<bool, [A, B]>, G::Tensor<i64, [C]>, G::Tensor<i32, []>] with _ {
     let turned = g.unary(Unary::Tanh, x);
     let scaled = g.binary(Binary::Multiply, x, &turned);
     let counted = g.iota::<f32, [A, B]>([2, 3], 1);

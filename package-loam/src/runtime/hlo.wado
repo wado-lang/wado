@@ -1597,7 +1597,13 @@ impl Graph for Cpu {
         return Tensor { data, extents };
     }
 
-    fn reduce<E: Element, In, Out>(&mut self, x: &Tensor<E, In>, op: Binary, init: f32, dims: List<i32>) -> Tensor<E, Out> {
+    fn reduce<E: Element, In, Out>(
+        &mut self,
+        x: &Tensor<E, In>,
+        op: Binary,
+        init: f32,
+        dims: List<i32>,
+    ) -> Tensor<E, Out> {
         let kept = kept_axes(x.extents.len(), &dims);
         let mut perm = kept;
         perm.extend(&(0..<x.extents.len()).filter(|i| dims.contains(&i)).collect());
@@ -1611,7 +1617,9 @@ impl Graph for Cpu {
             if E::is_float() {
                 data.push(E::from_f32(row.into_iter().fold(init, |acc, v| binary_f32(op, acc, v.cast_to::<f32>()))));
             } else {
-                data.push(E::from_i64(row.into_iter().fold(init as i64, |acc, v| binary_i64(op, acc, v.cast_to::<i64>()))));
+                data.push(E::from_i64(
+                    row.into_iter().fold(init as i64, |acc, v| binary_i64(op, acc, v.cast_to::<i64>())),
+                ));
             }
         }
         return Tensor { data, extents };
