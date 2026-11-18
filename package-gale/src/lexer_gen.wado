@@ -3265,8 +3265,9 @@ fn ranges_intersect(a: &List<[i32, i32]>, b: &List<[i32, i32]>) -> List<[i32, i3
 /// Whether `elem` matches, where it matches at all, along one path of
 /// non-empty length: a string, a char set, or a sequence of those. A
 /// lookahead-aware repeat records where each iteration ends, so an inner that
-/// could end one in two places (`'a' | 'ab'`, a nested repeat, a rule call)
-/// would leave the scan a choice it does not make.
+/// could end one in two places (`'a' | 'ab'`, a nested repeat, a recursive
+/// fragment, a call of a non-fragment rule) would leave the scan a choice it
+/// does not make.
 fn lexer_element_one_path(elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
     return match elem {
         Literal(text) => !text.is_empty(),
@@ -3282,10 +3283,15 @@ fn lexer_element_one_path(elem: &LexerElement, all_rules: &List<LexerRule>) -> b
 
 fn lexer_alts_one_path(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> bool {
     if alts.len() != 1 {
-        return !alts.is_empty()
-            && alts.iter_ref().all(|a| a.elements.len() == 1 && lexer_element_can_consume_simple(&a.elements[0]));
+        return lexer_alts_one_char(alts);
     }
     return !alts[0].elements.is_empty() && alts[0].elements.iter_ref().all(|e| lexer_element_one_path(e, all_rules));
+}
+
+/// Whether every arm is one element taking exactly one char.
+fn lexer_alts_one_char(alts: &List<LexerAlternative>) -> bool {
+    return !alts.is_empty()
+        && alts.iter_ref().all(|a| a.elements.len() == 1 && lexer_element_can_consume_simple(&a.elements[0]));
 }
 
 /// Whether `elem` consumes exactly one char.
@@ -3298,17 +3304,7 @@ fn lexer_element_can_consume_simple(elem: &LexerElement) -> bool {
         Literal(text) => text.chars().count() == 1,
         CharRange(_) | CharClass(_) | AnyChar => true,
         Not(not_inner) => lexer_element_can_consume_simple(&not_inner.element),
-        Group(alts) => {
-            for let alt of alts {
-                if alt.elements.len() != 1 {
-                    return false;
-                }
-                if !lexer_element_can_consume_simple(&alt.elements[0]) {
-                    return false;
-                }
-            }
-            !alts.is_empty();
-        },
+        Group(alts) => lexer_alts_one_char(&alts),
         RuleRef(_) | Repeat(_) => false,
     };
 }
