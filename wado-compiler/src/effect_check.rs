@@ -9,8 +9,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::attribute::AMBIENT;
-use crate::{Lints, demanded_imports};
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::{Lints, demanded_imports};
 
 use crate::component_model::Demand;
 use crate::module_source::ModuleSource;
