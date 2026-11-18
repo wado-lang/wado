@@ -19,7 +19,7 @@ use {
 } from "./ir.wado";
 use { map_java_type } from "./java2wado/jemit.wado";
 use { translate_wado_action, translate_lexer_body, LexerAttrEnv } from "./action_translate.wado";
-use { LEXER_HANDLE, PARSER_HANDLE } from "./ident.wado";
+use { LEXER_HANDLE, PARSER_HANDLE, LEXER_VIEW_LOCAL, LEXER_VIEW_HERE } from "./ident.wado";
 use {
     translate_java_expr,
     translate_java_stmts,
@@ -29,7 +29,7 @@ use {
 } from "./java2wado/jemit.wado";
 use { translate_java_members, MemberDecls, MemberNames } from "./java2wado/jmembers.wado";
 use { translate_wado_members } from "./wado_members.wado";
-use { grammar_has_superclass } from "./superclass.wado";
+use { grammar_has_superclass, body_names_word } from "./superclass.wado";
 use { AltBinding } from "./attr_resolve.wado";
 
 /// Translate an action body to Wado: `Wado` routes to the identity translator,
@@ -136,12 +136,21 @@ fn stage_lexer_body(a: &AltAction, lang: &ActionLanguage, env: &JEnv) -> Result<
         } else {
             translate_java_lexer_stmts(&a.source.text, env);
         },
-        Wado => translate_lexer_body(
-            &a.source.text,
-            &LexerAttrEnv { in_action: !is_pred, uses_modes: env.uses_modes },
-        ),
+        Wado => {
+            let text = translate_lexer_body(
+                &a.source.text,
+                &LexerAttrEnv { in_action: !is_pred, uses_modes: env.uses_modes },
+            )?;
+            Result::Ok(if body_names_word(&text, &LEXER_VIEW_LOCAL) { bind_lexer_view(&text) } else { text });
+        },
         Other(name) => Result::Err(`no translator for action language '${name}'`),
     };
+}
+
+/// The body in a block binding `view` at the cursor it runs at. The block's
+/// tail is the body's own, so a predicate stays an expression.
+fn bind_lexer_view(body: &String) -> String {
+    return `lexer_view: { let ${LEXER_VIEW_LOCAL} = ${LEXER_VIEW_HERE}; ${body}\n}`;
 }
 
 fn stage_lexer_alt(alt: &mut LexerAlternative, lang: &ActionLanguage, env: &JEnv, errors: &mut List<String>) {
