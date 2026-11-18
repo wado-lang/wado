@@ -38,19 +38,26 @@ struct LazyInit {
     frame: LocalFrame,
 }
 
-/// The value a `$init$` function returns. Reify writes the one return, and
-/// every pass since rewrote expressions within it.
+/// The value a `$init$` function returns, as a block ending in it where a pass
+/// put statements ahead of the return: `contract_checks` declares the locals
+/// it binds a call's earlier arguments to there.
 fn returned_value(body: TirBlock) -> TirExpr {
+    let span = body.span;
     let mut stmts = body.stmts;
-    assert_eq!(stmts.len(), 1, "a global initializer is a single statement");
     let Some(TirStmt {
         kind: TirStmtKind::Return { value: Some(value) },
+        span: value_span,
         ..
     }) = stmts.pop()
     else {
-        panic!("a global initializer returns its value");
+        panic!("a global initializer ends in returning its value");
     };
-    value
+    if stmts.is_empty() {
+        return value;
+    }
+    let type_id = value.type_id;
+    stmts.push(TirStmt::new(TirStmtKind::Expr(value), value_span));
+    TirExpr::new(TirExprKind::Block(TirBlock::new(stmts, span)), type_id, span)
 }
 
 /// Take each global initializer out of its own function and into the module's
