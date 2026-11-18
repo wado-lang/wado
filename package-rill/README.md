@@ -57,8 +57,8 @@ with &mut dom do {
 - A signal counts its writes, an equal value included, and a memo counts the
   times its value came out different. A computation keeps the counts it read,
   so a queued effect, or a marked memo, whose counts all still hold skips its
-  run. A memo computes a value and writes nothing: a write while one computes
-  traps.
+  run. A memo computes a value and does nothing else: a write or a flush while
+  one computes, or while its value is compared with the last, traps.
 - A computation subscribes to a dependency when it reads it, and drops its
   subscriptions when it runs again or is disposed of. So a dependency it no
   longer reads wakes nothing. A memo is disposed of with the computation that

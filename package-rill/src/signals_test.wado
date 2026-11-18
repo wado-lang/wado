@@ -351,6 +351,73 @@ test "an effect marked through an unchanged memo is skipped when it flushed insi
     };
 }
 
+test "a memo reading one a read restarts mid-run comes out from both new values" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(1);
+        let mut doubled: Option<Memo<i32>> = null;
+        let mut dispose = scope(|| doubled = Option::Some(memo(|| count.get() * 2)));
+        let doubled = doubled.unwrap();
+        let forwarded = memo(|| doubled.get());
+        let tick = signal(0);
+        let pair = memo(|| {
+            tick.get();
+            return [
+                forwarded.get(),
+                doubled.get(),
+            ];
+        });
+        assert pair.get() == [2, 2];
+        dispose();
+
+        count.set(2);
+        tick.set(1);
+        pair.get();
+        assert pair.get() == [4, 4];
+    };
+}
+
+struct Loud {
+    value: i32,
+    on_compare: Signal<i32>,
+}
+
+impl Eq for Loud {
+    fn eq(&self, other: &Self) -> bool {
+        self.on_compare.set(1);
+        return self.value == other.value;
+    }
+}
+
+#[expect_trap]
+test "a memo whose values write when compared traps" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(1);
+        let other = signal(0);
+        let loud = memo(|| Loud { value: count.get(), on_compare: other });
+        loud.get();
+        count.set(2);
+        loud.get();
+    };
+}
+
+#[expect_trap]
+test "a memo that flushes traps" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(1);
+        let flushed = memo(|| {
+            let mut inner = SurfaceDom::new();
+            with &mut inner do {
+                flush();
+            };
+            return count.get();
+        });
+        flushed.get();
+    };
+}
+
 #[expect_trap]
 test "a memo that writes a signal traps" {
     let mut dom = SurfaceDom::new();

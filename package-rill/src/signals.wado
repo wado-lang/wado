@@ -279,14 +279,21 @@ fn recompute<T: Eq>(state: &mut MemoState<T>) {
         owned: [],
     };
     let mut compute = state.compute;
+    // Before the run, so a memo it restarts can mark this one again.
+    core.freshness = Freshness::Fresh;
+    // `==` runs the value's own `Eq`, so it is part of the computation.
     COMPUTING_MEMOS += 1;
     let value = with Track => &mut computation do {
         compute();
     };
+    let same = if let Some(was) = state.cached && was == value {
+        true;
+    } else {
+        false;
+    };
     COMPUTING_MEMOS -= 1;
     core.deps = computation.deps;
-    core.freshness = Freshness::Fresh;
-    if let Some(was) = state.cached && was == value {
+    if same {
         return;
     }
     state.cached = Option::Some(value);
@@ -390,6 +397,7 @@ pub fn untracked(body: fn mut() with (Track, Dom)) with Dom {
 /// effect whose body is the one flushing stays queued, and reruns once that
 /// run has kept what it read and made.
 pub fn flush() with Dom {
+    assert COMPUTING_MEMOS == 0, "a memo computes a value and flushes nothing";
     let mut running: List<&mut EffectCore> = [];
     while !QUEUE.is_empty() {
         let batch = QUEUE;

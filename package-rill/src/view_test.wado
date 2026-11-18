@@ -284,6 +284,61 @@ test "switch shows the subtree render makes for the key, and swaps it when the k
     };
 }
 
+test "show asks when once to show what was hidden" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div");
+        let requests = signal(0);
+        let mut pending = 0;
+        let mut asked = 0;
+        let _dispose = scope(|| {
+            box.show(|| {
+                asked += 1;
+                requests.get();
+                let answer = pending > 0;
+                pending = 0;
+                return answer;
+            }, || element("p"));
+        });
+
+        pending = 1;
+        requests.set(1);
+        flush();
+        assert asked == 2;
+        assert box.node.has_child_nodes();
+    };
+}
+
+test "switch renders nothing once its key disposed of the owner" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div");
+        let mode = signal(1);
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        let mut renders = 0;
+        dispose_owner = scope(|| {
+            box.switch(|| {
+                let key = mode.get();
+                if key == 2 {
+                    with &mut dom do {
+                        dispose_owner();
+                    };
+                }
+                return key;
+            }, |_| {
+                renders += 1;
+                return element("p");
+            });
+        });
+
+        mode.set(2);
+        flush();
+        assert renders == 1;
+        assert !box.node.has_child_nodes();
+    };
+}
+
 test "switch renders the key a cleanup of the last subtree wrote" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
