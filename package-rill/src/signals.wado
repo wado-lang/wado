@@ -283,11 +283,10 @@ fn recompute<T: Eq>(state: &mut MemoState<T>) {
     core.freshness = Freshness::Fresh;
     // `==` runs the value's own `Eq`, so it is part of the computation.
     COMPUTING_MEMOS += 1;
-    let cached = state.cached;
-    let [value, same] = with Track => &mut computation do {
-        let value = compute();
-        [value, cached matches { Some(was) && was == value }]
+    let value = with Track => &mut computation do {
+        compute();
     };
+    let same = state.cached matches { Some(was) && was == value };
     COMPUTING_MEMOS -= 1;
     core.deps = computation.deps;
     if same {

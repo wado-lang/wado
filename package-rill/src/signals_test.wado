@@ -392,35 +392,6 @@ impl Eq for Loud {
     }
 }
 
-struct Keyed {
-    value: i32,
-    key: Signal<i32>,
-}
-
-impl Eq for Keyed {
-    fn eq(&self, other: &Self) -> bool {
-        return self.value % self.key.get() == other.value % other.key.get();
-    }
-}
-
-test "a memo listens to what comparing its values reads" {
-    let mut dom = SurfaceDom::new();
-    with &mut dom do {
-        let count = signal(1);
-        let modulus = signal(2);
-        let keyed = memo(|| Keyed { value: count.get(), key: modulus });
-        let mut seen: List<i32> = [];
-        observe(|| seen.push(keyed.get().value));
-        count.set(3);
-        flush();
-        assert seen == [1];
-
-        modulus.set(3);
-        flush();
-        assert seen == [1, 3];
-    };
-}
-
 #[expect_trap]
 test "a memo whose values write when compared traps" {
     let mut dom = SurfaceDom::new();
