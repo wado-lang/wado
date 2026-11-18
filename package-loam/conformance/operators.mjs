@@ -579,6 +579,18 @@ const masked = (spec, mask) => {
     nodes,
   };
 };
+// The query, key and value packed in one operand, as gpt-oss's export gives
+// them: the query heads, then the key heads, then the value heads.
+const packed = (spec) => {
+  const { Q, K, V, ...inputs } = spec.inputs;
+  const nodes = spec.nodes.map((n) => ({ ...n, inputs: ['QKV', '', '', ...n.inputs.slice(3)] }));
+  return {
+    ...spec,
+    inputs: { ...inputs, QKV: float([1, Q.dims[1], Q.dims[2] + 2 * K.dims[2]]) },
+    nodes,
+  };
+};
+add('GqaPacked', packed(gqa({ s: 3, past: 2, heads: 4, kv: 2, dim: 16 })));
 add('GqaMaskedLengths', masked(gqa({ s: 3, past: 2, heads: 2, kv: 1, dim: 16 }), [1, 1, 1, 1, 1]));
 // A prompt padded on the right: the last position is no key.
 add('GqaMaskedPadding', masked(gqa({ s: 4, past: 0, heads: 2, kv: 1, dim: 16 }), [1, 1, 1, 0]));

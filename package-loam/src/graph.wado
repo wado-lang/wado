@@ -642,7 +642,12 @@ pub global QMOE: String = "com.microsoft.QMoE";
 /// - `Max` and `Min` take any number of operands, two at a time.
 /// - `Clip` is `Min(Max(x, min), max)`, as ONNX defines it, each bound an
 ///   optional operand, or before opset 11 an optional attribute.
+/// - `com.microsoft.GroupQueryAttention` given its query, key and value packed
+///   in its query is that attention given the three apart.
 fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
+    if node.op == GROUP_QUERY_ATTENTION && !node.has_operand(1) {
+        return unpacked_attention(node).map(|nodes| Option::Some(nodes));
+    }
     let [needed, write]: [i32, fn(&Node, &mut FunctionBody) -> Result<(), String>] = match node.op.as_str_slice() {
         "Gelu" => [1, gelu],
         "SimplifiedLayerNormalization" => [2, rms_normalization],
@@ -661,6 +666,39 @@ fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
     let mut body = FunctionBody { prefix: named.unwrap_or(node.op), x: node.inputs[0], nodes: [] };
     write(node, &mut body)?;
     return Result::Ok(Option::Some(body.nodes));
+}
+
+/// The nodes of a `GroupQueryAttention` whose query packs the query, key and
+/// value as `[batch, sequence, (heads + 2 kv_heads) × head]`, each head's run in
+/// turn, the query's heads first: its heads split apart, and the attention
+/// given each part as an operand of its own.
+fn unpacked_attention(node: &Node) -> Result<List<Node>, String> {
+    if node.has_operand(2) {
+        return Result::Err(`${node.site()}: packs the key in the query and is given a value`);
+    }
+    let heads = node.required_int_attr("num_heads").map_err(|e| at_node(node, e))?;
+    let kv_heads = node.required_int_attr("kv_num_heads").map_err(|e| at_node(node, e))?;
+    let mut body = FunctionBody { prefix: node.outputs[0], x: node.inputs[0], nodes: [] };
+    let by_head = body.node("Reshape", [node.inputs[0], body.ints([0, 0, heads + 2 * kv_heads, -1])], []);
+    let parts: List<String> = (["query", "key", "value"] as List<String>).into_iter().map(|p| `${body.prefix}/${p}_heads`).collect();
+    body.nodes.push(Node {
+        op: "Split",
+        inputs: [by_head, body.ints([heads, kv_heads, kv_heads])],
+        outputs: parts,
+        attrs: [
+            Attr {
+                name: "axis",
+                values: ["2"],
+                is_list: false,
+            },
+        ],
+    });
+    let mut inputs = node.inputs;
+    for let [i, part] of parts.into_iter().enumerate() {
+        inputs[i] = body.node("Reshape", [part, body.ints([0, 0, -1])], []);
+    }
+    body.nodes.push(Node { ..*node, inputs });
+    return Result::Ok(body.nodes);
 }
 
 /// Why a node given `given` leading operands cannot be one reading `needed`.
@@ -800,6 +838,17 @@ impl FunctionBody {
             },
         ]);
         return self.binary("CastLike", &written, &self.x);
+    }
+
+    /// An int64 constant of `values`.
+    fn ints(&mut self, values: List<i64>) -> String {
+        return self.node("Constant", [], [
+            Attr {
+                name: "value_ints",
+                values: values.into_iter().map(|v| `${v}`).collect(),
+                is_list: true,
+            },
+        ]);
     }
 
     fn unary(&mut self, op: String, x: &String) -> String {

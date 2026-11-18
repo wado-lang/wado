@@ -709,6 +709,10 @@ test "GroupQueryAttention over a prompt with no past" {
     assert_agrees(#include_bytes("./operators/GqaPrompt.onnx"), #include_str("./operators/GqaPrompt.txt"));
 }
 
+test "GroupQueryAttention reads its query, key and value packed in one operand" {
+    assert_agrees(#include_bytes("./operators/GqaPacked.onnx"), #include_str("./operators/GqaPacked.txt"));
+}
+
 test "GroupQueryAttention reads its lengths from a mask's values" {
     assert_agrees(#include_bytes("./operators/GqaMaskedLengths.onnx"), #include_str("./operators/GqaMaskedLengths.txt"));
 }
