@@ -2,7 +2,7 @@
 //! computes as it does with every expert held. `operators_test.wado` holds the
 //! same model to the operator's definition on `Cpu`.
 
-use { Backend, Tensor } from "lib:loam";
+use { Backend, Cpu, Tensor } from "lib:loam";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
 use { QMOE_LAYERS_EXPERT_BYTES } from "./oracle.wado";
 use layers from "./operators/QMoeLayers.onnx"
@@ -11,17 +11,16 @@ use layers from "./operators/QMoeLayers.onnx"
         generator: { module: "lib:loam" },
     };
 
-/// How far each of `passes` passes on `device`, its pools holding half the
-/// experts, sits from the same pass with every expert held.
-pub fn experts_apart<affine Bk: Backend>(device: &mut Bk, passes: i32) -> List<f32> with _ {
+global PASSES: i32 = 2;
+
+/// How far each pass on `device`, its pools holding half the experts, sits
+/// from the same pass with every expert held.
+pub fn experts_apart<affine Bk: Backend>(device: &mut Bk) -> List<f32> with _ {
     let mut held = layers::Model::embedded(device, 4 * QMOE_LAYERS_EXPERT_BYTES).unwrap();
     let mut whole = layers::Model::new(layers::Params::embedded(device));
     let mut apart: List<f32> = [];
-    for let pass of 0..<passes {
-        let x = Tensor::<f32, [layers::X0, layers::X1]> {
-            data: (0..<96).map(|i| ((i + pass) * 7 % 13 - 6) as f32 / 2.0).collect(),
-            extents: [3, 32],
-        };
+    for let pass of 0..<PASSES {
+        let x = input(pass, 1.0);
         let r = logits::<layers::R1>(pass);
         let q = logits::<layers::R11>(pass + 1);
         let got = layers::compute(device, &x, &r, &q, &mut held);
@@ -31,6 +30,14 @@ pub fn experts_apart<affine Bk: Backend>(device: &mut Bk, passes: i32) -> List<f
     return apart;
 }
 
+/// The tokens of pass `pass`, each element times `scale`.
+fn input(pass: i32, scale: f32) -> Tensor<f32, [layers::X0, layers::X1]> {
+    return Tensor {
+        data: (0..<96).map(|i| ((i + pass) * 5 % 13 - 6) as f32 / 2.0 * scale).collect(),
+        extents: [3, 32],
+    };
+}
+
 /// A router's logits over 4 experts for 3 tokens, apart in each row so no
 /// pick is left to a tie, and differing with `shift`.
 fn logits<Experts>(shift: i32) -> Tensor<f32, [layers::X0, Experts]> {
@@ -38,4 +45,22 @@ fn logits<Experts>(shift: i32) -> Tensor<f32, [layers::X0, Experts]> {
         data: (0..<12).map(|i| ((i + shift) * 5 % 11) as f32 / 2.0 + i as f32 / 64.0).collect(),
         extents: [3, 4],
     };
+}
+
+// The layers clamp at `swiglu_limit` and their sums cancel, so an input can sit
+// where a few ulps of rounding move the output by 1e-4: there a device's held
+// and whole passes, summed in other orders, part by that much for no fault of
+// either.
+test "each pass's input sits where a few ulps of rounding move the output by nothing" {
+    let cpu = &mut Cpu {};
+    let mut whole = layers::Model::new(layers::Params::embedded(cpu));
+    for let pass of 0..<PASSES {
+        let r = logits::<layers::R1>(pass);
+        let q = logits::<layers::R11>(pass + 1);
+        let exact = layers::compute(cpu, &input(pass, 1.0), &r, &q, &mut whole);
+        for let ulps of [-4.0, -1.0, 1.0, 2.0, 3.0, 8.0] as List<f32> {
+            let moved = layers::compute(cpu, &input(pass, 1.0 + ulps * f32::EPSILON), &r, &q, &mut whole);
+            assert deviation(&moved.data, &exact.data) == 0.0;
+        }
+    }
 }
