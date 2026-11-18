@@ -327,7 +327,7 @@ fn byte_level_split(pre: &Option<PreTokenizer>) -> Result<PieceSplit, TokenizerE
         Some(Sequence(sequence)) => {
             let steps = sequence.pretokenizers;
             if steps.len() == 2 && let Split(split) = steps[0] && let ByteLevel(level) = steps[1] {
-                if !(split.pattern matches { Regex(p) && p == O200K_PATTERN }) {
+                if !split.pattern matches { Regex(p) && p == O200K_PATTERN } {
                     return refused("pre_tokenizer: a Split by another pattern is not supported");
                 }
                 if split.behavior != "Isolated" {
@@ -342,7 +342,9 @@ fn byte_level_split(pre: &Option<PreTokenizer>) -> Result<PieceSplit, TokenizerE
             let kinds: List<String> = steps.into_iter().map(|s| case_name(&s)).collect();
             return refused(`pre_tokenizer: Sequence of ${kinds.join(", ")} is not supported`);
         },
-        _ => return refused(`pre_tokenizer: ${kind_of(pre)} is not supported`),
+        _ => {
+            return refused(`pre_tokenizer: ${kind_of(pre)} is not supported`);
+        },
     }
 }
 

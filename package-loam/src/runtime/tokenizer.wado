@@ -1,6 +1,6 @@
 //! Byte-pair encoding (Sennrich et al. 2016) in the two spellings Hugging Face
 //! tokenizers write down. GPT-2's (Radford et al. 2019, § 2.2) splits text by
-//! its pattern and spells each piece as bytes. SentencePiece's (Kudo and
+//! its pattern, or by o200k's as gpt-oss does, and spells each piece as bytes. SentencePiece's (Kudo and
 //! Richardson 2018), as Gemma uses it, spells each space as `▁`, takes the
 //! whole text as one piece, and spells a character the vocabulary lacks as its
 //! UTF-8 bytes, each a `<0xXX>` token. A generated tokenizer builds one from the
@@ -138,7 +138,11 @@ impl BpeTokenizer {
             prefix,
             letters: icu::ranges(GeneralCategoryGroup::Letter),
             numbers: icu::ranges(GeneralCategoryGroup::Number),
-            capitals: if o200k { union_of([UppercaseLetter, TitlecaseLetter, ModifierLetter, OtherLetter, Mark]) } else { [] },
+            capitals: if o200k {
+                union_of([UppercaseLetter, TitlecaseLetter, ModifierLetter, OtherLetter, Mark]);
+            } else {
+                [];
+            },
             lowers: if o200k { union_of([LowercaseLetter, ModifierLetter, OtherLetter, Mark]) } else { [] },
         };
         for let special of t.specials {
@@ -330,24 +334,14 @@ impl BpeTokenizer {
     /// Where the piece starting at `at` ends, as GPT-2's pattern splits text:
     /// `'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+`.
     fn piece_end(&self, chars: &List<char>, at: i32) -> i32 {
-        let n = chars.len();
-        if chars[at] == '\'' {
-            for let suffix of ["s", "t", "re", "ve", "m", "ll", "d"] {
-                if spells(chars, at + 1, &suffix) {
-                    return at + 1 + suffix.len();
-                }
-            }
+        if let Some(end) = contraction_end(chars, at, false) {
+            return end;
         }
-        let spaced = chars[at] == ' ' && at + 1 < n && !self.class_of(chars[at + 1]) matches { Space };
+        let spaced = chars[at] == ' ' && at + 1 < chars.len() && !self.class_of(chars[at + 1]) matches { Space };
         let lead = if spaced { at + 1 } else { at };
         let class = self.class_of(chars[lead]);
-        let mut end = lead + 1;
-        while end < n && self.class_of(chars[end]) == class {
-            end += 1;
-        }
-        // A space run before a word leaves its last space to the word.
-        let leaves_one = class matches { Space } && end < n && end - at > 1;
-        return if leaves_one { end - 1 } else { end };
+        let end = run_end(chars, lead + 1, |d| self.class_of(d) == class);
+        return if class matches { Space } { space_run_end(chars, at, end) } else { end };
     }
 
     /// Where the piece starting at `at` ends, as o200k's pattern splits text,
@@ -366,7 +360,7 @@ impl BpeTokenizer {
         for let capital_first of [false, true] {
             for let start of leads {
                 if let Some(end) = self.cased_end(chars, start, capital_first) {
-                    return self.contraction_end(chars, end);
+                    return contraction_end(chars, end, true).unwrap_or(end);
                 }
             }
         }
@@ -387,7 +381,7 @@ impl BpeTokenizer {
             }
         }
         assert spaces > at, "every character starts some alternative of the pattern";
-        return if spaces < n && spaces - at >= 2 { spaces - 1 } else { spaces };
+        return space_run_end(chars, at, spaces);
     }
 
     /// Where a word from `start` ends under o200k's pattern: capitals then
@@ -409,21 +403,6 @@ impl BpeTokenizer {
             }
         }
         return null;
-    }
-
-    /// `end`, past the contraction from there that o200k's pattern takes with a
-    /// word, its letters in either case.
-    fn contraction_end(&self, chars: &List<char>, end: i32) -> i32 {
-        if end >= chars.len() || chars[end] != '\'' {
-            return end;
-        }
-        for let suffix of ["s", "t", "re", "ve", "m", "ll", "d"] {
-            let after = end + 1 + suffix.len();
-            if after <= chars.len() && suffix.chars().enumerate().all(|p| icu::simple_fold(chars[end + 1 + p.0]) == p.1) {
-                return after;
-            }
-        }
-        return end;
     }
 
     fn class_of(&self, c: char) -> Class {
@@ -648,13 +627,33 @@ pub fn byte_chars() -> List<char> {
     return chars;
 }
 
-fn spells(chars: &List<char>, at: i32, text: &String) -> bool {
+fn spells(chars: &List<char>, at: i32, text: &String, folded: bool) -> bool {
     let mut i = at;
     for let c of text.chars() {
-        if i >= chars.len() || chars[i] != c {
+        if i >= chars.len() || if folded { icu::simple_fold(chars[i]) } else { chars[i] } != c {
             return false;
         }
         i += 1;
     }
     return true;
+}
+
+/// One past the contraction at `at`, an apostrophe and `s`, `t`, `re`, `ve`,
+/// `m`, `ll` or `d`, its letters in either case where `folded`.
+fn contraction_end(chars: &List<char>, at: i32, folded: bool) -> Option<i32> {
+    if at >= chars.len() || chars[at] != '\'' {
+        return null;
+    }
+    for let suffix of ["s", "t", "re", "ve", "m", "ll", "d"] {
+        if spells(chars, at + 1, &suffix, folded) {
+            return Option::Some(at + 1 + suffix.len());
+        }
+    }
+    return null;
+}
+
+/// Where a whitespace run from `at` to `end` ends as a piece: a run of two or
+/// more before anything else leaves its last character to the next piece.
+fn space_run_end(chars: &List<char>, at: i32, end: i32) -> i32 {
+    return if end < chars.len() && end - at > 1 { end - 1 } else { end };
 }

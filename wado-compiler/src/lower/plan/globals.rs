@@ -57,7 +57,11 @@ fn returned_value(body: TirBlock) -> TirExpr {
     }
     let type_id = value.type_id;
     stmts.push(TirStmt::new(TirStmtKind::Expr(value), value_span));
-    TirExpr::new(TirExprKind::Block(TirBlock::new(stmts, span)), type_id, span)
+    TirExpr::new(
+        TirExprKind::Block(TirBlock::new(stmts, span)),
+        type_id,
+        span,
+    )
 }
 
 /// Take each global initializer out of its own function and into the module's
