@@ -1681,12 +1681,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // an unrelated module's error must not stop a clean module from
             // reifying) and the AST is well-formed: recovered syntax errors
             // leave `Error` placeholder nodes reify must not walk, and the
-            // TIR would never be consumed anyway. A literal whose text denotes
-            // no value has nothing for reify to lower.
+            // TIR would never be consumed anyway.
             if module_walk_clean
                 && !decl_failed.contains(module_source)
                 && !module.has_syntax_errors()
-                && module.invalid_literals().is_empty()
             {
                 reify_eligible.insert(module_source.clone());
             }

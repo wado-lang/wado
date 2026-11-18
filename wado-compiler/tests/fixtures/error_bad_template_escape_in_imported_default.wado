@@ -1,0 +1,16 @@
+// A default lowers where it is used, in a module whose own literals are sound,
+// so the lowering meets the imported module's bad segment: it is the lexer's
+// error, not a crash.
+use { Named, greet } from "./sub/bad_template_escape_defaults_dep.wado";
+
+export fn run() {
+    let n = Named {};
+    let _ = n.name;
+    let _ = greet();
+}
+
+__DATA__
+{
+    "compile_error": "bad_template_escape_defaults_dep.wado:3:24: lexer error: invalid escape sequence: \\q",
+    "compile_errors_contains": ["lexer error: invalid escape sequence: \\q"]
+}
