@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794957762903,
+  "lastUpdate": 1794960046671,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79081,6 +79081,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1db3ce45197717e16dda69ee08a6a1d8e1090695"
         },
         "date": 1794957762291,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ac6784db460d776ce4c91c70640fabbe10330eb5",
+          "message": "Merge pull request #2671 from wado-lang/ccr-ab6e1e8d-gpq450\n\nchore(eddy): keep the records of the first pull request reviews",
+          "timestamp": "2026-11-18T08:32:04+09:00",
+          "tree_id": "0deac48e7a98a10223bf18313d7c73570d35396a",
+          "url": "https://github.com/wado-lang/wado/commit/ac6784db460d776ce4c91c70640fabbe10330eb5"
+        },
+        "date": 1794960046208,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
