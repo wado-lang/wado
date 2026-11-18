@@ -4267,10 +4267,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             if !omitted_defaults.is_empty() {
+                let omitted: Vec<usize> = omitted_defaults.iter().map(|(idx, _)| *idx).collect();
                 let (bindings, settled_params) = self.field_default_type_bindings(
                     struct_decl,
                     annotated_args.as_deref(),
                     &fields,
+                    &omitted,
+                    struct_lit.span,
                 );
                 // The declared type still names the struct's own parameters
                 // where no annotation pinned them, and the default answers in
@@ -4798,15 +4801,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// parameter neither source mentions settles to nothing rather than to
     /// itself, which would send the default down the abstract path with no
     /// caller to monomorphize it.
+    ///
+    /// A slot an omitted field's type names and neither source settles is
+    /// reported here, since the default is walked before inference could
+    /// answer it, and the default answers in `error`.
     fn field_default_type_bindings(
-        &self,
+        &mut self,
         struct_decl: Option<DefId>,
         expected_args: Option<&[TypeId]>,
         fields: &[ResolvedField],
+        omitted: &[usize],
+        span: Span,
     ) -> (Vec<DefaultTypeBinding>, SubstitutionContext) {
-        let Some(info) = self.struct_fields_of_written_decl(struct_decl) else {
+        let Some(info) = self.struct_fields_of_written_decl(struct_decl).cloned() else {
             return (Vec::new(), SubstitutionContext::new());
         };
+        // A body that declares the same parameter forwards its own, as in
+        // `report_uninferred_struct_type_args`.
+        let scope_params = self.scope_type_param_ids();
         let mut settled: IndexMap<TypeId, TypeId> = IndexMap::default();
         // The annotation names the whole instantiation, so it answers for every
         // parameter — including one no field mentions.
@@ -4832,14 +4844,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             // A field still typed by an unsolved variable, as `null` is by
             // `Option<$T>`, settles nothing, and leaves the slot to a later
-            // field.
+            // field. Nor does one typed by the slot itself, as `[]` is by
+            // `List<T>` until inference runs.
             let table = self.tysys.type_table.borrow();
             for (slot, answer) in answers {
-                if !table.contains_undecided(answer) {
+                let forwards = answer != slot || scope_params.owns(&table, answer);
+                if forwards && !table.contains_undecided(answer) {
                     settled.entry(slot).or_insert(answer);
                 }
             }
         }
+        let mut names: Vec<String> = Vec::new();
+        {
+            let table = self.tysys.type_table.borrow();
+            for &slot in &info.type_param_type_ids {
+                if settled.contains_key(&slot) {
+                    continue;
+                }
+                let Some(param) = table.type_param_id(slot) else {
+                    continue;
+                };
+                if omitted
+                    .iter()
+                    .any(|&idx| table.mentions_param(info.fields[idx].1, param))
+                {
+                    settled.insert(slot, TypeTable::ERROR);
+                    let name = util::bound_param_name(&table, slot)
+                        .expect("a struct slot is a type parameter");
+                    names.push(name.to_string());
+                }
+            }
+        }
+        self.report_cannot_infer_struct(&names, &info.name, span);
         let (slots, args): (Vec<TypeId>, Vec<TypeId>) = info
             .type_param_type_ids
             .iter()
@@ -5025,12 +5061,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 util::bound_param_name(&tt, decl_param).expect("a struct slot is a type parameter");
             names.push(name.to_string());
         }
+        self.report_cannot_infer_struct(&names, &struct_info.name, span);
+    }
+
+    fn report_cannot_infer_struct(&mut self, names: &[String], struct_name: &str, span: Span) {
         if names.is_empty() {
             return;
         }
-        let struct_name = &struct_info.name;
         let _ = self.emit(TypeError::cannot_infer(
-            &names,
+            names,
             &format!("struct `{struct_name}`"),
             &format!("`{struct_name}::<...> {{ … }}`"),
             span,
