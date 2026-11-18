@@ -2387,9 +2387,8 @@ impl<'a> Unparser<'a> {
         if args.is_empty() || (!has_trailing_comma && !forced) {
             let snap = self.snapshot();
             self.emit_inline_call_args(args, span.start);
-            let chain_broke = self.chain_breaks[snap.chain_breaks..].contains(&self.block_depth);
             if (args.is_empty() || !self.exceeds_width_since(snap))
-                && !chain_broke
+                && !self.chain_broke_since(snap)
                 && !self.has_comment_in_range(span.start, span.end)
             {
                 return;
@@ -2849,7 +2848,9 @@ impl<'a> Unparser<'a> {
             }
             self.output.push_str(" }");
 
-            if member_count <= 1 || !self.exceeds_width_since(snap) {
+            if (member_count <= 1 || !self.exceeds_width_since(snap))
+                && !self.chain_broke_since(snap)
+            {
                 return;
             }
             self.rollback(snap);
@@ -3033,6 +3034,12 @@ impl<'a> Unparser<'a> {
         self.emitted_comments.truncate(mark.emitted);
         self.per_line_opens.truncate(mark.per_line_opens);
         self.chain_breaks.truncate(mark.chain_breaks);
+    }
+
+    /// Whether a chain broke across lines since `mark` outside any block the
+    /// construct opened, which rules out the construct's one-line form.
+    fn chain_broke_since(&self, mark: Mark) -> bool {
+        self.chain_breaks[mark.chain_breaks..].contains(&self.block_depth)
     }
 
     /// The output written since `mark`.

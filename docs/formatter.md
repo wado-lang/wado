@@ -83,9 +83,9 @@ return element("li")
     .children([title, remove]);
 ```
 
-A call's arguments stay on the call's line unless one of them breaks a `&&` or `||`
-chain or a method chain across lines. Then each argument
-takes a line of its own, where the chain may fit again. A chain that breaks
+A call's arguments and a struct literal's fields stay on one line unless one of
+them breaks a `&&` or `||` chain or a method chain across lines. Then each takes
+a line of its own, where the chain may fit again. A chain that breaks
 inside a block, such as a closure's body, does not count:
 
 ```wado

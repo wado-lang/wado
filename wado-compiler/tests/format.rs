@@ -5045,6 +5045,51 @@ fn test_format_wraps_the_arguments_an_operator_chain_breaks_across() {
 }
 
 #[test]
+fn test_format_wraps_the_fields_an_operator_chain_breaks_across() {
+    let source = concat!(
+        "fn make() -> Config {\n",
+        "    return Config { name: \"a_rather_long_name_value_here\", enabled: first_long_condition_name && second_long_condition_name_here_and_more };\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn make() -> Config {\n",
+        "    return Config {\n",
+        "        name: \"a_rather_long_name_value_here\",\n",
+        "        enabled: first_long_condition_name && second_long_condition_name_here_and_more,\n",
+        "    };\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+#[test]
+fn test_format_wraps_the_arguments_a_method_chain_breaks_across() {
+    let source = concat!(
+        "fn check(p: Poly) {\n",
+        "    assert product.agrees(&Poly::symbol(&\"heads\").try_mul(&Poly::constant(2)).unwrap().try_sub(&Poly::constant(1)).unwrap().try_neg().unwrap());\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn check(p: Poly) {\n",
+        "    assert product.agrees(\n",
+        "        &Poly::symbol(&\"heads\")\n",
+        "            .try_mul(&Poly::constant(2))\n",
+        "            .unwrap()\n",
+        "            .try_sub(&Poly::constant(1))\n",
+        "            .unwrap()\n",
+        "            .try_neg()\n",
+        "            .unwrap(),\n",
+        "    );\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+#[test]
 fn test_format_keeps_arguments_on_the_call_line_around_a_block() {
     let source = concat!(
         "fn wire(button: View) -> View {\n",
