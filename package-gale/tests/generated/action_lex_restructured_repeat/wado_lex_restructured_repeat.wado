@@ -1182,6 +1182,7 @@ fn apply_E_actions(lx: &mut Lexer, start: i32, end: i32) {
 fn apply_G_actions(lx: &mut Lexer, start: i32, end: i32) {
     let src = &lx.src;
     let mut pos = start;
+    let mut deferred_actions: List<[i32, i32]> = [];
     if pos >= src.len() || unchecked src.byte_at(pos) != b'g' { return; }
     pos += 1;
     loop {
@@ -1203,7 +1204,16 @@ fn apply_G_actions(lx: &mut Lexer, start: i32, end: i32) {
     }
     if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { return; }
     pos += 1;
-    lx.count = pos - start - 2;
+    deferred_actions.push([13, pos]);
+    for let [action, at] of deferred_actions {
+        pos = at;
+        match action {
+            13 => {
+                lx.count = pos - start - 2;
+            },
+            _ => unreachable(),
+        }
+    }
 }
 
 fn apply_M_actions(lx: &mut Lexer, start: i32, end: i32) {

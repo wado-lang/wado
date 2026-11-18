@@ -3313,9 +3313,19 @@ impl Lexer {
 fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) {
     let src = &lx.src;
     let mut pos = start;
+    let mut deferred_actions: List<[i32, i32]> = [];
     if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { return; }
     pos += 1;
-    lx.seen += 1;
+    deferred_actions.push([3, pos]);
+    for let [action, at] of deferred_actions {
+        pos = at;
+        match action {
+            3 => {
+                lx.seen += 1;
+            },
+            _ => unreachable(),
+        }
+    }
 }
 
 fn try_A(lx: &Lexer, start: i32) -> i32 {
