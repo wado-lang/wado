@@ -236,6 +236,10 @@ jobs:
       - env:
           SHA: ${{ needs.gate.outputs.sha }}
           TOKEN: ${{ github.token }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
           set -euo pipefail
           record="scratchpad/wiki/reviews/$SHA.json"
@@ -247,8 +251,7 @@ jobs:
           mkdir -p reviews
           cp "$GITHUB_WORKSPACE/$record" reviews/
           git add reviews
-          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit --quiet --message "Record Eddy's review of $SHA"
+          git commit --quiet --message "Record Eddy's review of $SHA"
           # Another review may have pushed meanwhile; each writes its own file.
           for attempt in 1 2 3; do
             if git push --quiet; then

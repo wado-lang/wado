@@ -60,7 +60,8 @@ findings.
 Each run is also added to `reviews/<head>.json` in the repository's wiki, the
 record of every review of that commit: outcomes are what Eddy learns from, and
 an outcome needs the finding it answers. `mise run eddy-review` clones the
-wiki into `scratchpad/wiki` first, and the record is pushed back from there.
+wiki into `scratchpad/wiki` first and writes the record there; it pushes
+nothing, and the `eddy` skill's steps push the record.
 
 A run ends by printing what it cost to stderr, the total and each model's
 share, in US dollars:
