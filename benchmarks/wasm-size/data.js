@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795002204089,
+  "lastUpdate": 1795014138135,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79565,6 +79565,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fd4603fe1721ec370c29a64e086509f44e6eef3c"
         },
         "date": 1795002203364,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435013,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bc5c0061798594a05d60004183a0b19c7a5e5412",
+          "message": "Merge pull request #2686 from wado-lang/ccr-8e262a5a-pwfrz9\n\nfix(loam): hold the held-experts conformance case to the bound its conditioning allows",
+          "timestamp": "2026-11-18T23:48:13+09:00",
+          "tree_id": "cbdd496cf3557faf6582e103f5d0942a8cabcffc",
+          "url": "https://github.com/wado-lang/wado/commit/bc5c0061798594a05d60004183a0b19c7a5e5412"
+        },
+        "date": 1795014137073,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
