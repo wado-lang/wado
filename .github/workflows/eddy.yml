@@ -178,7 +178,7 @@ jobs:
             scratchpad/eddy.json
             scratchpad/eddy.log
             scratchpad/eddy/${{ env.SHA }}/
-            scratchpad/wiki/reviews/${{ env.SHA }}.json
+            scratchpad/wiki/reviews/${{ env.SHA }}/
           retention-days: 90
           if-no-files-found: warn
 
@@ -242,15 +242,18 @@ jobs:
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
           set -euo pipefail
-          record="scratchpad/wiki/reviews/$SHA.json"
-          if [ ! -f "$record" ]; then
+          record="scratchpad/wiki/reviews/$SHA"
+          if [ ! -d "$record" ]; then
             exit 0
           fi
           git clone --quiet "https://x-access-token:$TOKEN@${GITHUB_SERVER_URL#https://}/$GITHUB_REPOSITORY.wiki.git" "$RUNNER_TEMP/wiki"
           cd "$RUNNER_TEMP/wiki"
-          mkdir -p reviews
-          cp "$GITHUB_WORKSPACE/$record" reviews/
+          mkdir -p "reviews/$SHA"
+          cp "$GITHUB_WORKSPACE/$record"/*.json "reviews/$SHA/"
           git add reviews
+          if git diff --cached --quiet; then
+            exit 0
+          fi
           git commit --quiet --message "Record Eddy's review of $SHA"
           # Another review may have pushed meanwhile; each writes its own file.
           for attempt in 1 2 3; do

@@ -24,9 +24,11 @@ reviewed. It also writes tests into that checkout and runs them with `cargo`,
    line of `scratchpad/eddy.log` that starts with `eddy:` gives the reason.
    The line that starts with `cost:` gives what the review cost, in total and
    for each model; tell the user.
-4. Push the record the run wrote, `reviews/<head>.json` in the wiki's clone
-   `scratchpad/wiki`. It holds every review of that commit, and Eddy later
-   learns from which of its findings were addressed.
+4. Push the record the run wrote, a file under `reviews/<head>/` in the wiki's
+   clone `scratchpad/wiki`. That directory holds every review of the commit,
+   and Eddy later learns from which of its findings were addressed. A rejected
+   push takes `git -C scratchpad/wiki pull --rebase` first: every review adds
+   its own file, so nothing conflicts.
 
    ```sh
    git -C scratchpad/wiki add reviews
