@@ -1,5 +1,5 @@
 use { MemberField, MemberMethod, MemberDecls } from "./java2wado/jmembers.wado";
-use { wado_opaque_end, comment_end, skip_ws, word_at, ident_end, text_at } from "./g4/scan.wado";
+use { wado_opaque_end, comment_end, skip_trivia, skip_ws, word_at, ident_end, text_at } from "./g4/scan.wado";
 
 pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, String> {
     let src = body.as_str_slice();
@@ -209,14 +209,6 @@ fn ends_member(src: &StrSlice, i: i32, n: i32) -> bool {
     }
     let next = skip_separators(src, i + 1, n).0;
     return next >= n || is_member_start(src, next, n);
-}
-
-fn skip_trivia(src: &StrSlice, start: i32, n: i32) -> i32 {
-    let mut i = skip_ws(src, start, n);
-    while i < n && let Some(end) = comment_end(src, i, n) {
-        i = skip_ws(src, end, n);
-    }
-    return i;
 }
 
 /// Where `target` or a `;` sits outside any bracket, or the separator or line

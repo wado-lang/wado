@@ -336,20 +336,37 @@ pub fn word_at<S: AsStrSlice>(src: &StrSlice, i: i32, n: i32, word: S) -> bool {
     return ident_start(src, i) == i && ident_end(src, i + w.len(), n) == i + w.len();
 }
 
-/// Whether the Wado source `src` calls a method `name` (`.name(`, spaces
-/// allowed), outside its comments and literals.
+/// Past the whitespace and comments from `start`, stopping at `n`.
+pub fn skip_trivia(src: &StrSlice, start: i32, n: i32) -> i32 {
+    let mut i = skip_ws(src, start, n);
+    while i < n && let Some(end) = comment_end(src, i, n) {
+        i = skip_ws(src, end, n);
+    }
+    return i;
+}
+
+/// Whether the Wado source `src` calls a method `name` (`.name(`, trivia
+/// allowed between the tokens), in its code or a template's holes.
 pub fn calls_method<S: AsStrSlice>(src: &StrSlice, name: S) -> bool {
     let method = name.as_str_slice();
     let n = src.len();
     let mut i = 0;
     while i < n {
+        if src.byte_at(i) == b'`' {
+            let [end, holes] = scan_template(src, i, n);
+            if holes.iter_ref().any(|h: &[i32, i32]| calls_method(&src.slice(h.0, h.1), method)) {
+                return true;
+            }
+            i = end;
+            continue;
+        }
         if let Some(end) = wado_opaque_end(src, i, n) {
             i = end;
             continue;
         }
         if src.byte_at(i) == b'.' {
-            let at = skip_ws(src, i + 1, n);
-            if word_at(src, at, n, method) && text_at(src, skip_ws(src, at + method.len(), n), n, "(") {
+            let at = skip_trivia(src, i + 1, n);
+            if word_at(src, at, n, method) && text_at(src, skip_trivia(src, at + method.len(), n), n, "(") {
                 return true;
             }
         }

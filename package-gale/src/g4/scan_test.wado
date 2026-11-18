@@ -156,3 +156,10 @@ test "calls_method finds a call however it is spaced, and none in a comment or a
     assert !calls_method(&"// self.skip()\nlet s = \".skip()\";".as_str_slice(), "skip");
     assert !calls_method(&"self.skip".as_str_slice(), "skip");
 }
+
+test "calls_method reads past a comment before the call and into a template hole" {
+    assert calls_method(&"self /* c */ . skip /* c */ ();".as_str_slice(), "skip");
+    assert calls_method(&"let s = `at ${self.mode()}`;".as_str_slice(), "mode");
+    assert calls_method(&"let s = `${`${self.mode()}`}`;".as_str_slice(), "mode");
+    assert !calls_method(&"let s = `.mode()`;".as_str_slice(), "mode");
+}

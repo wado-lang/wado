@@ -1841,9 +1841,18 @@ test "a member method may drive the lexer where no rule runs an action" {
     let got = lexes("lexer grammar L;
 options { language = Wado; }
 @lexer::members {
-fn quiet(&mut self) { self.skip (); }
-fn enter(&mut self) { self.push_mode(MODE_M); }
-fn now(&self) -> i32 { return self.mode(); }
+fn quiet(&mut self) { self.skip /* now */ (); }
+}
+A : 'a' ;
+", ["a"]);
+    assert got == "a => A:a\n";
+}
+
+test "a member method may read the mode where no rule runs an action" {
+    let got = lexes("lexer grammar L;
+options { language = Wado; }
+@lexer::members {
+fn now(&self) -> String { return `${self.mode()}`; }
 }
 A : 'a' ;
 mode M;
