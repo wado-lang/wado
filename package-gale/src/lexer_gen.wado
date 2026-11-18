@@ -423,27 +423,28 @@ pub fn lexer_surface(
     mode_use: &ModeAttrUse,
 ) -> LexerSurface {
     let runs_actions = !executed_action_rule_names(grammar).is_empty();
-    let drives = runs_actions || members_drive_lexer(members);
-    let modes = drives && has_modes(&grammar.mode_names);
+    let drives = runs_actions
+        || members_call(members, [
+            "set_type", "set_channel", "skip", "more", "push_mode", "pop_mode", "set_mode", "mode_depth",
+        ]);
+    let reads_mode = mode_use.reads || members_call(members, [LEXER_MODE_READER]);
+    let modes = (drives || reads_mode) && has_modes(&grammar.mode_names);
     return LexerSurface {
-        commit_latches: drives,
+        commit_latches: drives || modes,
         sink: runs_actions || members_present(members),
         mode_commands: modes,
-        current_mode: modes && mode_use.reads,
+        current_mode: modes && reads_mode,
         mode_write_guard: modes && mode_use.writes,
         base_driven: sc_ops.iter_ref().any(|o: &SuperOp| !o.is_predicate),
     };
 }
 
-/// Whether a member method calls a method `gen_lexer_action_methods` emits. It
-/// must compile even where no rule runs an action to reach it.
-fn members_drive_lexer(members: &MemberDecls) -> bool {
-    let drivers: List<String> = [
-        "set_type", "set_channel", "skip", "more", "push_mode", "pop_mode", "set_mode", "mode_depth",
-    ];
+/// Whether a member method calls one of `names`, methods `gen_lexer_action_methods`
+/// emits. A member must compile even where no rule runs an action to reach it.
+fn members_call(members: &MemberDecls, names: List<String>) -> bool {
     return members.methods
         .iter_ref()
-        .any(|m: &MemberMethod| drivers.iter_ref().any(|name: &String| m.source.contains(`.${*name}(`)));
+        .any(|m: &MemberMethod| names.iter_ref().any(|name: &String| m.source.contains(`.${*name}(`)));
 }
 
 fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSurface) {
