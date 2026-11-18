@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794967426003,
+  "lastUpdate": 1794969990082,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79169,6 +79169,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/76e27019cda90f20da1b3dbf10abb3a4864cb8b8"
         },
         "date": 1794967424776,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4dd84a0e6dcb68701551b6cbf63dc21c2b0e1642",
+          "message": "Merge pull request #2673 from wado-lang/loam/gpt-oss-operators\n\nfeat(loam): lower the last of gpt-oss-20b's operators",
+          "timestamp": "2026-11-18T11:28:00+09:00",
+          "tree_id": "78f4a58299dbce3de082956591de42cf61467b8f",
+          "url": "https://github.com/wado-lang/wado/commit/4dd84a0e6dcb68701551b6cbf63dc21c2b0e1642"
+        },
+        "date": 1794969989405,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
