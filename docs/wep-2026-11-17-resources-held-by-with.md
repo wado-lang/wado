@@ -87,5 +87,7 @@ Two rules keep the coarser grant from reaching past a handler:
   host through it.
 
 What a function's signature no longer says, which handlers a test double needs,
-the compiler reports where the double is installed
-([Handlers a Scope Leaves Out](./spec-effects.md#handlers-a-scope-leaves-out)).
+the compiler reports where the double is installed: the
+[`unhandled_operation`](./spec-diagnostics.md#the-unhandled_operation-lint)
+lint warns at a handler scope whose body reaches a member of a handled family
+that no handler in scope answers.

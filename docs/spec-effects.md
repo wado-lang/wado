@@ -352,7 +352,7 @@ So `println` needs only `with Stdout`, though its body creates a stream and drop
 
 A family of resources under [`extends`](./spec-components.md#resource-inheritance) is one effect: a resource implies every other member, ancestors, descendants and siblings alike. So `with Node` covers what a `Node` inherits and what a handle [narrowed](./spec-patterns.md#type-patterns) from it offers.
 
-An operation still belongs to the resource declaring it, and so does its demand, whatever resource the handle is and however the call is spelled: `n.tag()`, `Node::tag(&n)` and `EventTarget::tag(&n)` on a `Node` all demand `EventTarget`. That resource's handler is the one the call reaches, so a handler of `Node` answers only what `Node` declares, and a `with Node => … do` block grants `Node` alone.
+An operation still belongs to the resource declaring it, and so does its demand, whatever resource the handle is and however the call is spelled: `n.tag()`, `Node::tag(&n)` and `EventTarget::tag(&n)` on a `Node` all demand `EventTarget`. That resource's handler is the one the call reaches, so a handler of `Node` answers only what `Node` declares, and a `with Node => … do` block grants `Node` alone. Where its body reaches `EventTarget`'s operations with no handler for them, the [`unhandled_operation`](./spec-diagnostics.md#the-unhandled_operation-lint) lint warns.
 
 <!-- {"fixture":"spec_effects_operation_owner.wado"} -->
 

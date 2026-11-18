@@ -165,6 +165,121 @@ impl From<EffectError> for Diagnostic {
     }
 }
 
+/// A handler scope that leaves out operations its body reaches through the
+/// `extends` family of a resource it handles. Those reach the next handler out
+/// or the host, which a test double installing the scope rarely means.
+#[derive(Debug, Clone)]
+pub struct UnhandledOperation {
+    /// The resources the scope handles whose families the body reaches into.
+    pub handled: Vec<String>,
+    /// The resources declaring the operations no handler in scope answers.
+    pub missing: Vec<String>,
+    pub span: Span,
+    pub module: String,
+}
+
+impl From<UnhandledOperation> for Diagnostic {
+    fn from(w: UnhandledOperation) -> Self {
+        Diagnostic {
+            severity: Severity::Warning,
+            code: Code::UnhandledOperation,
+            message: format!(
+                "the handlers installed here leave out `{}`, whose operations the body reaches \
+                 through the `extends` family of `{}`, so those calls reach the next handler out \
+                 or the host; install a handler for each, or write `#[allow({})]` \
+                 if that is deliberate",
+                w.missing.join("`, `"),
+                w.handled.join("`, `"),
+                crate::ast::lint::UNHANDLED_OPERATION,
+            ),
+            span: Some(DiagnosticSpan::from_span(&w.span, Some(&w.module))),
+        }
+    }
+}
+
+/// One call a body makes, as what it reaches: the operations it dispatches
+/// itself and the function whose body it runs.
+#[derive(Clone)]
+struct Reach {
+    /// The effects whose operations the call dispatches, or, for a function
+    /// value, the effects its type says it performs.
+    owners: Vec<EffectRef>,
+    /// The function called, whose own reach the call's includes.
+    callee: Option<AstId>,
+    /// What the callee's type declares, standing for its reach where no body
+    /// was walked: a function value, or a host binding.
+    declared: Vec<EffectRef>,
+    /// What a handler installed between the call and the place it is counted
+    /// at answers, so it reaches no further.
+    answered: IndexSet<EffectRef>,
+}
+
+impl Reach {
+    /// The effects whose operations the call reaches, given what each walked
+    /// body reaches.
+    fn reaches<'a>(
+        &'a self,
+        summaries: &'a IndexMap<AstId, IndexSet<EffectRef>>,
+    ) -> impl Iterator<Item = &'a EffectRef> {
+        let body = self.callee.and_then(|callee| summaries.get(&callee));
+        let declared = if body.is_some() { &[][..] } else { &self.declared[..] };
+        self.owners
+            .iter()
+            .chain(declared)
+            .chain(body.into_iter().flatten())
+            .filter(|effect| !self.answered.contains(*effect))
+    }
+}
+
+/// A `with … => … do` block, with the calls its body makes.
+struct HandlerScope {
+    installed: Vec<EffectRef>,
+    /// What scopes enclosing this one in the same body install.
+    around: IndexSet<EffectRef>,
+    calls: Vec<Reach>,
+    span: Span,
+}
+
+/// The calls one body makes, and its handler scopes, open and closed.
+#[derive(Default)]
+struct BodyReach {
+    calls: Vec<Reach>,
+    open: Vec<HandlerScope>,
+    closed: Vec<HandlerScope>,
+}
+
+impl BodyReach {
+    fn note(&mut self, owners: Vec<EffectRef>, callee: Option<AstId>, declared: &[EffectRef]) {
+        if owners.is_empty() && callee.is_none() && declared.is_empty() {
+            return;
+        }
+        // Each scope counts the call past what the scopes nested inside it
+        // answer; the body counts it past every scope open around it.
+        let mut deeper: IndexSet<EffectRef> = IndexSet::default();
+        let reach = |answered| Reach {
+            owners: owners.clone(),
+            callee,
+            declared: declared.to_vec(),
+            answered,
+        };
+        for scope in self.open.iter_mut().rev() {
+            scope.calls.push(reach(deeper.clone()));
+            deeper.extend(scope.installed.iter().cloned());
+        }
+        self.calls.push(reach(deeper));
+    }
+}
+
+/// What every body reaches, gathered across the walks, and the handler scopes
+/// to check against it once every body is known.
+#[derive(Default)]
+struct ReachLog {
+    bodies: IndexMap<AstId, Vec<Reach>>,
+    /// Each closed scope, with its module, and whether its body allows the
+    /// scope to leave operations out.
+    scopes: Vec<(HandlerScope, String, bool)>,
+}
+
 /// A position whose expression must be pure. The diagnostic names it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PureContext {
@@ -391,6 +506,8 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
         &data.index(&sem.types),
         &mut out,
         &mut EffectRows::default(),
+        crate::Lints::Off,
+        &mut Vec::new(),
     );
     out
 }
@@ -404,6 +521,7 @@ pub fn check_semantics(
     sem: &Semantics,
     provided_import_fqs: IndexSet<String>,
     library_exports: Option<&[(&ModuleSource, &Function)]>,
+    lints: crate::Lints,
 ) -> SemanticDiagnostics {
     let mut diags = SemanticDiagnostics::default();
     let Some(state) = sem.state.as_ref() else {
@@ -411,7 +529,14 @@ pub fn check_semantics(
     };
     let data = OwnedEffectData::build(sem, state, provided_import_fqs);
     let index = data.index(&sem.types);
-    run_effect_checks(sem, &index, &mut diags.effects, &mut diags.rows);
+    run_effect_checks(
+        sem,
+        &index,
+        &mut diags.effects,
+        &mut diags.rows,
+        lints,
+        &mut diags.unhandled,
+    );
     run_purity_checks(sem, &index, &mut diags.purity);
     diags.exported_host_interfaces =
         library_exports.map(|exports| exported_host_interfaces(sem, &index, exports));
@@ -423,6 +548,8 @@ pub fn check_semantics(
 pub struct SemanticDiagnostics {
     pub effects: Vec<EffectError>,
     pub purity: Vec<PurityError>,
+    /// Warnings: handler scopes leaving out part of a family they handle.
+    pub unhandled: Vec<UnhandledOperation>,
     /// What each effect variable the bodies' calls minted was solved to.
     pub rows: EffectRows,
     /// The `wasi:*` interfaces a library's exports hold, for a library build.
@@ -453,17 +580,38 @@ fn run_effect_checks(
     index: &EffectIndex,
     out: &mut Vec<EffectError>,
     solved: &mut EffectRows,
+    lints: crate::Lints,
+    warnings: &mut Vec<UnhandledOperation>,
 ) {
+    let mut log = ReachLog::default();
+    let log = &mut log;
     for (src, module) in &sem.modules {
         if !is_effect_checked(src) {
             continue;
         }
+        let module_waives = !lints.reports_in(src, module)
+            || ast::inner_attrs_allow(&module.inner_attributes, ast::lint::UNHANDLED_OPERATION);
+        let allows = |attrs: &[ast::Attribute]| {
+            module_waives || ast::attrs_allow(attrs, ast::lint::UNHANDLED_OPERATION)
+        };
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    check_function_effects_sem(sem, src, func, index, Held::Only(&[]), out, solved);
+                    let held = Held::Only(&[]);
+                    check_function_effects_sem(
+                        sem,
+                        src,
+                        func,
+                        index,
+                        held,
+                        module_waives,
+                        out,
+                        solved,
+                        log,
+                    );
                 }
                 Item::Impl(impl_block) => {
+                    let enclosing = allows(&impl_block.attrs);
                     check_impl_effect_conformance(sem, src, impl_block, index, out);
                     let facts = impl_facts(sem, src, impl_block);
                     let trait_key = facts.and_then(|facts| facts.trait_name.as_ref()?.canonical());
@@ -495,16 +643,21 @@ fn run_effect_checks(
                             Some(mentioned) => Held::Mentioned(mentioned),
                             None => Held::Only(&own_resource),
                         };
-                        check_function_effects_sem(sem, src, method, index, held, out, solved);
+                        check_function_effects_sem(
+                            sem, src, method, index, held, enclosing, out, solved, log,
+                        );
                     }
                 }
                 // A default body holds what the trait declares for it.
                 Item::Trait(trait_decl) => {
                     let def = index.resolutions.defs().def_at(trait_decl.id);
+                    let enclosing = allows(&trait_decl.attrs);
                     for method in &trait_decl.methods {
                         let declared = &index.trait_method_effects[&(def, method.name.clone())];
                         let held = Held::Only(declared);
-                        check_function_effects_sem(sem, src, method, index, held, out, solved);
+                        check_function_effects_sem(
+                            sem, src, method, index, held, enclosing, out, solved, log,
+                        );
                     }
                 }
                 // An operation's default body is ordinary code, so what it
@@ -513,9 +666,12 @@ fn run_effect_checks(
                 Item::Interface(interface_decl) => {
                     let def = index.resolutions.defs().def_at(interface_decl.id);
                     let own = index.interfaces.get(&def).map(|(effect, _)| effect);
+                    let enclosing = allows(&interface_decl.attrs);
                     for method in &interface_decl.methods {
                         let held = Held::Only(own.map_or(&[][..], std::slice::from_ref));
-                        check_function_effects_sem(sem, src, method, index, held, out, solved);
+                        check_function_effects_sem(
+                            sem, src, method, index, held, enclosing, out, solved, log,
+                        );
                     }
                 }
                 // What the initializer performs is the purity check's; only an
@@ -524,10 +680,104 @@ fn run_effect_checks(
                     admitted_effects(&global.name, &global.attributes, src, index, out);
                 }
                 Item::Test(test) => {
-                    check_test_effects_sem(sem, src, test, index, out, solved);
+                    check_test_effects_sem(
+                        sem,
+                        src,
+                        test,
+                        index,
+                        module_waives,
+                        out,
+                        solved,
+                        log,
+                    );
                 }
                 _ => {}
             }
+        }
+    }
+    report_unhandled_operations(index, log, warnings);
+}
+
+/// Warn at each handler scope whose body reaches an operation of a resource
+/// sharing an `extends` family with one the scope handles, where no handler in
+/// scope answers it. The family is one effect, so holding it says nothing of
+/// which members a test double must stand in for; the calls the double leaves
+/// out pass it by.
+fn report_unhandled_operations(
+    index: &EffectIndex,
+    log: &ReachLog,
+    warnings: &mut Vec<UnhandledOperation>,
+) {
+    let family_root: IndexMap<&EffectRef, DefId> = index
+        .interfaces
+        .iter()
+        .filter(|(def, _)| index.resolutions.defs().kind(**def) == DefKind::Resource)
+        .map(|(def, (effect, _))| {
+            let root = index.types.resource_chain(*def).last().expect("the chain starts at def");
+            (effect, root)
+        })
+        .collect();
+    let summaries = reach_summaries(log);
+    for (scope, module, allowed) in &log.scopes {
+        if *allowed {
+            continue;
+        }
+        let answered = |effect: &EffectRef| {
+            scope.installed.contains(effect) || scope.around.contains(effect)
+        };
+        let mut handled: IndexSet<String> = IndexSet::default();
+        let mut missing: IndexSet<String> = IndexSet::default();
+        let reached: IndexSet<&EffectRef> = scope
+            .calls
+            .iter()
+            .flat_map(|call| call.reaches(&summaries))
+            .collect();
+        for effect in reached.into_iter().filter(|effect| !answered(effect)) {
+            let Some(root) = family_root.get(effect) else {
+                continue;
+            };
+            let kin: Vec<&EffectRef> = scope
+                .installed
+                .iter()
+                .filter(|installed| family_root.get(installed) == Some(root))
+                .collect();
+            if kin.is_empty() {
+                continue;
+            }
+            missing.insert(effect.name().to_string());
+            handled.extend(kin.into_iter().map(|installed| installed.name().to_string()));
+        }
+        if !missing.is_empty() {
+            warnings.push(UnhandledOperation {
+                handled: handled.into_iter().collect(),
+                missing: missing.into_iter().collect(),
+                span: scope.span,
+                module: module.clone(),
+            });
+        }
+    }
+}
+
+/// What each walked body reaches through its calls, transitively, past the
+/// handlers it installs itself.
+fn reach_summaries(log: &ReachLog) -> IndexMap<AstId, IndexSet<EffectRef>> {
+    let mut summaries: IndexMap<AstId, IndexSet<EffectRef>> =
+        log.bodies.keys().map(|key| (*key, IndexSet::default())).collect();
+    loop {
+        let mut grew = false;
+        for (key, calls) in &log.bodies {
+            let reached: IndexSet<EffectRef> = summaries[key]
+                .iter()
+                .chain(calls.iter().flat_map(|call| call.reaches(&summaries)))
+                .cloned()
+                .collect();
+            if reached.len() != summaries[key].len() {
+                summaries[key] = reached;
+                grew = true;
+            }
+        }
+        if !grew {
+            return summaries;
         }
     }
 }
@@ -1402,8 +1652,10 @@ fn check_function_effects_sem(
     func: &Function,
     index: &EffectIndex,
     held: Held<'_>,
+    enclosing_allows_unhandled: bool,
     out: &mut Vec<EffectError>,
     solved: &mut EffectRows,
+    log: &mut ReachLog,
 ) {
     let admitted = admitted_effects(&func.name, &func.attrs, module, index, out);
     let Some(body) = &func.body else {
@@ -1442,12 +1694,15 @@ fn check_function_effects_sem(
 
     let walk = BodyWalk {
         name: &func.name,
+        key: Some(caller_key),
         current,
         param_types,
         body,
         holds_every_effect: matches!(held, Held::Every),
+        allows_unhandled: enclosing_allows_unhandled
+            || ast::attrs_allow(&func.attrs, ast::lint::UNHANDLED_OPERATION),
     };
-    walk_body_effects(sem, module, annotations, index, walk, out, solved);
+    walk_body_effects(sem, module, annotations, index, walk, out, solved, log);
 }
 
 /// What `func`'s body holds: its declared effects and `granted`, expanded
@@ -1510,15 +1765,20 @@ fn check_test_effects_sem(
     module: &ModuleSource,
     test: &TestDecl,
     index: &EffectIndex,
+    enclosing_allows_unhandled: bool,
     out: &mut Vec<EffectError>,
     solved: &mut EffectRows,
+    log: &mut ReachLog,
 ) {
     let walk = BodyWalk {
         name: test.name.as_deref().unwrap_or("test"),
+        key: None,
         current: IndexSet::default(),
         param_types: IndexMap::default(),
         body: &test.body,
         holds_every_effect: true,
+        allows_unhandled: enclosing_allows_unhandled
+            || ast::attrs_allow(&test.attributes, ast::lint::UNHANDLED_OPERATION),
     };
     walk_body_effects(
         sem,
@@ -1528,6 +1788,7 @@ fn check_test_effects_sem(
         walk,
         out,
         solved,
+        log,
     );
 }
 
@@ -1547,10 +1808,14 @@ fn module_annotations<'a>(
 /// One body to walk, with what it holds on entry.
 struct BodyWalk<'a> {
     name: &'a str,
+    /// The function the body is, which callers reach; a test has none.
+    key: Option<AstId>,
     current: IndexSet<EffectRef>,
     param_types: IndexMap<String, TypeId>,
     body: &'a Block,
     holds_every_effect: bool,
+    /// `#[allow(unhandled_operation)]` covers the body.
+    allows_unhandled: bool,
 }
 
 fn walk_body_effects(
@@ -1561,6 +1826,7 @@ fn walk_body_effects(
     walk: BodyWalk,
     out: &mut Vec<EffectError>,
     solved: &mut EffectRows,
+    log: &mut ReachLog,
 ) {
     // A variable is solved at the call that minted it, and read wherever the
     // call's value flows, which may come before the walk reaches the call. Walk
@@ -1582,15 +1848,30 @@ fn walk_body_effects(
             closures: ClosureEffects::default(),
             collecting: None,
             rows: Rows::starting_from(rows),
+            reach: BodyReach::default(),
         };
         ast::walk_block(&mut walker, walk.body);
-        let mut walked = walker.rows;
+        let SemEffectWalker {
+            rows: mut walked,
+            reach,
+            ..
+        } = walker;
         walked.propagate_flows(index);
         if walked.read_final() {
             walked.assert_solved(walk.name);
             walked.bound_flows(index, &mut found);
             out.extend(found);
             solved.extend(walked.solved);
+            assert!(reach.open.is_empty(), "every handler scope closes");
+            if let Some(key) = walk.key {
+                log.bodies.insert(key, reach.calls);
+            }
+            log.scopes.extend(
+                reach
+                    .closed
+                    .into_iter()
+                    .map(|scope| (scope, module.source_path(), walk.allows_unhandled)),
+            );
             return;
         }
         rows = walked.solved;
@@ -1909,6 +2190,8 @@ struct CalleeEffects {
     params: IndexMap<String, IndexSet<EffectRef>>,
     /// The callee's declared return type, which the call's type instantiates.
     returns: Option<TypeId>,
+    /// The function whose body the call runs, where a declaration names it.
+    body: Option<AstId>,
 }
 
 /// Every callee a call at `id` resolves to: a free function, each static
@@ -1934,6 +2217,7 @@ fn call_site_effects(
         resource: OperationDemands::default(),
         params: IndexMap::default(),
         returns: None,
+        body: None,
     };
     if let Expr::Ident(ident) = callee
         && let Some(def) = sem.referenced_symbol(ident.id)
@@ -1949,6 +2233,7 @@ fn call_site_effects(
         return vec![CalleeEffects {
             params: resolved.params,
             returns: index.fn_returns.get(&def).copied(),
+            body: Some(def),
             ..bare(ident.name.clone(), resolved.required)
         }];
     }
@@ -1987,6 +2272,7 @@ fn call_site_effects(
                 resource,
                 params: resolved.params,
                 returns: index.callee_return(&func_ref),
+                body: index.template_body(&func_ref),
             }
         })
         .collect()
@@ -2061,6 +2347,9 @@ struct SemEffectWalker<'a> {
     collecting: Option<IndexSet<EffectRef>>,
     /// What each effect variable this body's calls instantiated stands for.
     rows: Rows,
+    /// The calls this body makes and its handler scopes, for what each scope
+    /// leaves out.
+    reach: BodyReach,
 }
 
 impl EffectIndex<'_> {
@@ -2447,10 +2736,13 @@ impl EffectIndex<'_> {
 
     /// The declared return type of the declaration a dispatch selected.
     fn callee_return(&self, func_ref: &FunctionRef) -> Option<TypeId> {
+        self.fn_returns.get(&self.template_body(func_ref)?).copied()
+    }
+
+    /// The declaration whose body a dispatch to `func_ref` runs.
+    fn template_body(&self, func_ref: &FunctionRef) -> Option<AstId> {
         let def = func_ref.template.as_ref().and_then(TemplateId::def)?;
-        self.fn_returns
-            .get(&self.resolutions.defs().ast_id(def))
-            .copied()
+        Some(self.resolutions.defs().ast_id(def))
     }
 
     /// `func_ref`'s entry, looked up by the declaration the dispatch selected.
@@ -2846,7 +3138,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                         .method_info
                         .as_ref()
                         .map_or(func_ref.name.as_str(), |m| m.method_name.as_str());
-                    self.report_resolved(&resolved, &resource, callee, for_of.span);
+                    self.report_resolved(func_ref, &resolved, &resource, callee, for_of.span);
                 }
             }
         }
@@ -2881,9 +3173,23 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                     }
                     granted.extend(self.binding_granted_effects(binding));
                 }
+                let around = self
+                    .reach
+                    .open
+                    .iter()
+                    .flat_map(|scope| scope.installed.iter().cloned())
+                    .collect();
+                self.reach.open.push(HandlerScope {
+                    installed: granted.clone(),
+                    around,
+                    calls: Vec::new(),
+                    span: with_handler.span,
+                });
                 self.walk_granted(granted, |walker| {
                     ast::walk_block(walker, &with_handler.body);
                 });
+                let scope = self.reach.open.pop().expect("pushed above");
+                self.reach.closed.push(scope);
                 return;
             }
             // A closure's body runs wherever the closure is called, not where it
@@ -2919,6 +3225,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                     let returns = self.index.callee_return(&dispatch.function_ref);
                     self.solve_rows(returns, method_call.id, &resolved.params);
                     self.report_resolved(
+                        &dispatch.function_ref,
                         &resolved,
                         &resource,
                         &method_call.method,
@@ -2939,6 +3246,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                     let returns = self.index.callee_return(&func_ref);
                     self.solve_rows(returns, static_call.id, &resolved.params);
                     self.report_resolved(
+                        &func_ref,
                         &resolved,
                         &resource,
                         &static_call.method,
@@ -2998,6 +3306,9 @@ impl SemEffectWalker<'_> {
             closures: std::mem::take(&mut self.closures),
             collecting: Some(IndexSet::default()),
             rows: std::mem::take(&mut self.rows),
+            // A closure's calls run where it is called, which counts what
+            // its type performs instead.
+            reach: BodyReach::default(),
         };
         body.visit_expr(&closure.body);
         let performed: Vec<EffectRef> = body
@@ -3008,6 +3319,7 @@ impl SemEffectWalker<'_> {
             .collect();
         self.closures = std::mem::take(&mut body.closures);
         self.rows = std::mem::take(&mut body.rows);
+        self.reach.closed.append(&mut body.reach.closed);
         self.closures.insert(closure.id, performed.clone());
         for row in fn_rows(&self.sem.types, closure_types) {
             for var in row.iter().filter(|e| e.is_var()) {
@@ -3032,6 +3344,9 @@ impl SemEffectWalker<'_> {
         );
         for site in sites {
             self.solve_rows(site.returns, id, &site.params);
+            let mut owners = site.dispatched.all();
+            owners.extend(site.resource.all());
+            self.reach.note(owners, site.body, &site.declared);
             self.report_missing(&site.declared, &site.name, span);
             self.report_dispatched(&site.dispatched, &site.name, span);
             self.report_dispatched(&site.resource, &site.name, span);
@@ -3053,11 +3368,14 @@ impl SemEffectWalker<'_> {
     /// Report what a dispatch to one callee requires ([`dispatch_effects`]).
     fn report_resolved(
         &mut self,
+        func_ref: &FunctionRef,
         resolved: &Resolved,
         resource: &OperationDemands,
         callee: &str,
         span: Span,
     ) {
+        let body = self.index.template_body(func_ref);
+        self.reach.note(resource.all(), body, &resolved.required);
         self.report_missing(&resolved.required, callee, span);
         self.report_dispatched(resource, callee, span);
     }
