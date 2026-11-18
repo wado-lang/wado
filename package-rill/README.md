@@ -34,10 +34,9 @@ with &mut dom do {
 
 - `src/signals.wado` — `signal`, `memo`, `observe`, `scope` and `flush`.
 - `src/view.wado` — `View`, which builds an element, new from `element` or
-  adopted with `View::of`, and binds it: `text`,
-  `attribute`, `child` and `children` set it once, `bind_text`,
-  `bind_attribute` and the keyed list `each` keep it current, and `on`
-  listens on it.
+  adopted with `View::of`, and binds it: `text`, `attribute`, `child` and
+  `children` set it once, `bind_text`, `bind_attribute`, the keyed list `each`
+  and the conditional `show` keep it current, and `on` listens on it.
 - `example/todo/` — a to-do list. `wado run` there prints the page after a
   short session, and `wado test` runs the session against `SurfaceDom`.
 
