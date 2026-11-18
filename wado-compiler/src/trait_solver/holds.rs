@@ -188,6 +188,11 @@ impl Query<'_> {
         subject: Option<&SolverType>,
     ) -> Option<Holds> {
         let through_member = std::mem::take(&mut self.member_next);
+        // An unsettled type may be one that satisfies the trait; the type the
+        // call settles is asked again.
+        if *ty == SolverType::Var {
+            return Some(Holds::default());
+        }
         // Keyed by the arguments too: the same trait asked at two
         // instantiations is two questions, and only one of them may hold.
         if let Some(at) = self
@@ -749,7 +754,9 @@ impl Query<'_> {
                 is_mut: *is_mut,
                 inner: Box::new(self.normalized(inner)),
             },
-            SolverType::Param(_) | SolverType::Pack(_) | SolverType::AnyRow => ty.clone(),
+            SolverType::Param(_) | SolverType::Pack(_) | SolverType::AnyRow | SolverType::Var => {
+                ty.clone()
+            }
         }
     }
 }
@@ -979,7 +986,8 @@ fn fact_head(program: &Program, ty: &SolverType) -> Option<TypeDeclId> {
         | SolverType::Pack(_)
         | SolverType::Ref { .. }
         | SolverType::Projection { .. }
-        | SolverType::AnyRow => None,
+        | SolverType::AnyRow
+        | SolverType::Var => None,
     }
 }
 
@@ -1182,7 +1190,7 @@ fn projection_parts<'t>(
 fn params_past(ty: &SolverType) -> u32 {
     match ty {
         SolverType::Param(index) | SolverType::Pack(index) => index + 1,
-        SolverType::AnyRow => 0,
+        SolverType::AnyRow | SolverType::Var => 0,
         SolverType::Decl(_, inner) | SolverType::Tuple(inner) => {
             inner.iter().map(params_past).max().unwrap_or(0)
         }
@@ -1208,12 +1216,32 @@ fn match_target(
     match (target, ty) {
         (SolverType::Param(index), _) => {
             let slot = &mut bindings[*index as usize];
-            if let Some(bound) = slot {
-                return *bound == Binding::One(ty.clone());
+            match slot {
+                // An unsettled type meets whatever the parameter is bound to,
+                // and a settled one says more than it did.
+                Some(Binding::One(SolverType::Var)) => {
+                    *slot = Some(Binding::One(ty.clone()));
+                    true
+                }
+                Some(_) if *ty == SolverType::Var => true,
+                Some(bound) => *bound == Binding::One(ty.clone()),
+                None => {
+                    *slot = Some(Binding::One(ty.clone()));
+                    true
+                }
             }
-            *slot = Some(Binding::One(ty.clone()));
+        }
+        // An unsettled type may be any instance of the target, so whatever the
+        // target leaves to its parameters stays unsettled too.
+        (_, SolverType::Var) => {
+            for index in 0..bindings.len() as u32 {
+                if target.mentions_param(index) && bindings[index as usize].is_none() {
+                    bindings[index as usize] = Some(Binding::One(SolverType::Var));
+                }
+            }
             true
         }
+        (SolverType::Var, _) => unreachable!("an impl target writes no inference variable"),
         (SolverType::Decl(head, args), SolverType::Decl(ty_head, ty_args)) => {
             head == ty_head
                 && args.len() == ty_args.len()

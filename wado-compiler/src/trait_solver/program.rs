@@ -53,6 +53,10 @@ pub enum SolverType {
     /// A function type's row holding an effect parameter: it stands for
     /// whatever row meets it.
     AnyRow,
+    /// A type argument a call has yet to settle. It matches any impl target and
+    /// satisfies any bound, so the order run at a type holding one names every
+    /// impl that may apply, and the settled type confirms it.
+    Var,
 }
 
 /// An associated type of a trait: `Mul::Output`.
@@ -75,7 +79,7 @@ impl SolverType {
     pub fn mentions(&self, pred: &dyn Fn(&Self) -> bool) -> bool {
         match self {
             Self::Param(_) | Self::Pack(_) => pred(self),
-            Self::AnyRow => false,
+            Self::AnyRow | Self::Var => false,
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.mentions(pred)),
             Self::Ref { inner, .. } => inner.mentions(pred),
             Self::Projection { base, args, .. } => {
@@ -91,7 +95,7 @@ impl SolverType {
     pub fn binds(&self, pred: &dyn Fn(&Self) -> bool) -> bool {
         match self {
             Self::Param(_) | Self::Pack(_) => pred(self),
-            Self::AnyRow | Self::Projection { .. } => false,
+            Self::AnyRow | Self::Var | Self::Projection { .. } => false,
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.binds(pred)),
             Self::Ref { inner, .. } => inner.binds(pred),
         }
@@ -102,7 +106,7 @@ impl SolverType {
     #[must_use]
     pub fn mentions_decl(&self, pred: &dyn Fn(TypeDeclId) -> bool) -> bool {
         match self {
-            Self::Param(_) | Self::Pack(_) | Self::AnyRow => false,
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow | Self::Var => false,
             Self::Decl(id, inner) => pred(*id) || inner.iter().any(|t| t.mentions_decl(pred)),
             Self::Tuple(inner) => inner.iter().any(|t| t.mentions_decl(pred)),
             Self::Ref { inner, .. } => inner.mentions_decl(pred),
@@ -133,7 +137,7 @@ impl SolverType {
             }
             Self::Tuple(inner) => inner.iter().any(|t| t.projects_param(projecting)),
             Self::Ref { inner, .. } => inner.projects_param(projecting),
-            Self::Param(_) | Self::Pack(_) | Self::AnyRow => false,
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow | Self::Var => false,
         }
     }
 
@@ -158,6 +162,7 @@ impl SolverType {
         Some(match self {
             Self::Param(index) | Self::Pack(index) => arg(*index)?,
             Self::AnyRow => Self::AnyRow,
+            Self::Var => Self::Var,
             Self::Decl(head, inner) => Self::Decl(*head, each(inner)?),
             // A pack spread in a tuple splices its elements in: `[..T]` at
             // `T = [i32, bool]` is `[i32, bool]`, not `[[i32, bool]]`.
@@ -648,7 +653,8 @@ impl Program {
             | SolverType::Tuple(_)
             | SolverType::Ref { .. }
             | SolverType::Projection { .. }
-            | SolverType::AnyRow => true,
+            | SolverType::AnyRow
+            | SolverType::Var => true,
         };
         let undeclared = |ty: &SolverType| ty.mentions(&|p| !declared(p));
         assert!(

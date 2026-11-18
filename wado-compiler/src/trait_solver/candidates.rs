@@ -278,7 +278,8 @@ fn linked_chain(program: &Program, receiver: &SolverType) -> Vec<(SolverType, u3
         | SolverType::Pack(_)
         | SolverType::Tuple(_)
         | SolverType::Projection { .. }
-        | SolverType::AnyRow => (None, Some(receiver.clone())),
+        | SolverType::AnyRow
+        | SolverType::Var => (None, Some(receiver.clone())),
     };
     let mut chain: Vec<(SolverType, u32)> = Vec::new();
     let mut wrapped = false;
@@ -318,6 +319,7 @@ fn linked_chain(program: &Program, receiver: &SolverType) -> Vec<(SolverType, u3
 fn generality(target: &SolverType) -> Generality {
     match target {
         SolverType::Param(_) | SolverType::Pack(_) => Generality::Any,
+        SolverType::Var => unreachable!("an impl target writes no inference variable"),
         SolverType::Decl(..)
         | SolverType::Ref { .. }
         | SolverType::Tuple(_)

@@ -939,6 +939,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (ty != TypeTable::UNKNOWN).then_some(ty)
     }
 
+    /// [`Self::declared_self_type`], a generic one at a fresh inference
+    /// variable per parameter: the type a spelling omitting the arguments
+    /// names.
+    pub(super) fn open_self_type(&mut self, def: DefId) -> Option<TypeId> {
+        let arity = self
+            .lookup_generic_newtype_of_decl(def)
+            .map(|newtype| newtype.type_params.len())
+            .or_else(|| {
+                self.type_lookup()
+                    .declared_type_param_ids(def)
+                    .map(<[_]>::len)
+            });
+        let Some(arity) = arity else {
+            return self.declared_self_type(def);
+        };
+        let vars = vec![TypeTable::UNKNOWN; arity];
+        Some(self.open_instance(def, vars))
+    }
+
+    /// `ty` with each argument a turbofish leaves to inference (`_`) a fresh
+    /// inference variable.
+    pub(super) fn open_omitted_args(&mut self, ty: TypeId) -> TypeId {
+        let (def, args) = {
+            let table = self.tysys.type_table.borrow();
+            match (table.nominal_def(ty), table.nominal_type_args(ty)) {
+                (Some(def), Some(args)) if args.contains(&TypeTable::UNKNOWN) => {
+                    (def, args.to_vec())
+                }
+                _ => return ty,
+            }
+        };
+        self.open_instance(def, args)
+    }
+
+    /// `def` applied to `args`, a fresh inference variable in place of each
+    /// [`TypeTable::UNKNOWN`].
+    fn open_instance(&mut self, def: DefId, args: Vec<TypeId>) -> TypeId {
+        let args = args
+            .into_iter()
+            .map(|arg| {
+                if arg == TypeTable::UNKNOWN {
+                    self.mint_infer_var()
+                } else {
+                    arg
+                }
+            })
+            .collect();
+        if self.lookup_generic_newtype_of_decl(def).is_some() {
+            return self.generic_newtype_instance(def, args);
+        }
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .make_generic_instance(def, args)
+    }
+
     /// `derived` as the qualified spelling calls it: the receiver by reference,
     /// then the method's own parameters.
     fn derived_instance_callee(

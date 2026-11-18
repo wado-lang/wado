@@ -101,6 +101,7 @@ fn is_unbounded_value_blanket(def: &ImplDef) -> bool {
         SolverType::Param(index) => {
             def.trait_.is_some() && def.params[index as usize].bounds.is_empty()
         }
+        SolverType::Var => unreachable!("an impl target writes no inference variable"),
         SolverType::Decl(..)
         | SolverType::Pack(_)
         | SolverType::Ref { .. }

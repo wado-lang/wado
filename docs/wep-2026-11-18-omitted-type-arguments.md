@@ -78,17 +78,20 @@ inference broke as soon as a second impl was written elsewhere.
 
 ## Roadmap
 
-- [ ] The specification states the rule in `spec-traits.md` § Qualified Calls,
+- [x] The specification states the rule in `spec-traits.md` § Qualified Calls,
   in place of the listed instances.
-- [ ] Fixtures for each row of the table in Context, and for a static whose
+- [x] Fixtures for each row of the table in Context, and for a static whose
   instance nothing settles.
-- [ ] The receiver-taking call decides its kind from candidates that may apply,
+- [x] The receiver-taking call decides its kind from candidates that may apply,
   and the code listing written instances is deleted.
-- [ ] A static reports uninferred arguments where it took the one listed
+- [x] A static reports uninferred arguments where it took the one listed
   instance.
 
-## Known gaps
+## Implementation
 
-- Whether a bound may hold is asked one impl deep. A bound met only through a
-  chain of blankets keeps its blanket as a candidate, which can make a call with
-  a same-named static elsewhere report as ambiguous.
+The trait solver has a type `Var`. It matches any impl target, binding what the
+target leaves open to `Var` in turn, and every bound holds of it. The order run
+at a type holding one therefore names the impls that may apply, through blankets
+as deep as they go. An inference variable lowers to `Var` only for the question
+that decides the kind of a qualified call. Every other question waits for the
+variable to settle, as before.

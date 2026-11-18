@@ -152,6 +152,15 @@ impl ParamKind {
     }
 }
 
+/// What an inference variable still in a type lowers to.
+#[derive(Clone, Copy)]
+enum Unsettled {
+    /// Unsaid: the question waits for the variable to settle.
+    Open,
+    /// The solver's `Var`, for a question asking which impls may apply.
+    Var,
+}
+
 /// A rigid binder a resolved type names, for the caller to place.
 #[derive(Clone, Copy)]
 enum Binder {
@@ -635,6 +644,19 @@ impl Lowering {
         id: TypeId,
         param: &dyn Fn(Binder) -> Option<u32>,
     ) -> Result<SolverType, Unsaid> {
+        self.lower(Unsettled::Open, table, id, param)
+    }
+
+    /// [`Self::type_id`], with an inference variable lowered as `unsettled`
+    /// says.
+    fn lower(
+        &self,
+        unsettled: Unsettled,
+        table: &TypeTable,
+        id: TypeId,
+        param: &dyn Fn(Binder) -> Option<u32>,
+    ) -> Result<SolverType, Unsaid> {
+        let lower = |a: TypeId| self.lower(unsettled, table, a, param);
         let decl = |key: DeclKey, args: Vec<SolverType>| {
             self.known_type(&key)
                 .map(|id| SolverType::Decl(id, args))
@@ -648,7 +670,7 @@ impl Lowering {
                 id, mapped_elem, ..
             } = table.get(a)
             else {
-                return self.type_id(table, a, param);
+                return lower(a);
             };
             let pack = placed(*id)?;
             match mapped_elem {
@@ -659,14 +681,14 @@ impl Lowering {
         let instance = |def: DefId, type_args: &[TypeId]| {
             decl(
                 DeclKey::Def(def),
-                said(type_args.iter().map(|&a| self.type_id(table, a, param)))?,
+                said(type_args.iter().map(|&a| lower(a)))?,
             )
         };
         match table.get(id) {
             ResolvedType::Primitive(p) => decl(DeclKey::Builtin(p.as_str().to_string()), vec![]),
             ResolvedType::BuiltinArray(elem) => decl(
                 DeclKey::Builtin(ARRAY_TYPE_NAME.to_string()),
-                vec![self.type_id(table, *elem, param)?],
+                vec![lower(*elem)?],
             ),
             // `()` is the unit declaration, not the empty tuple
             // (WEP 2026-09-01, "The candidates").
@@ -685,7 +707,7 @@ impl Lowering {
             } => {
                 if let Some(template) = table.template_shape(*shape) {
                     let fields = said(template.holes.iter().map(|hole| {
-                        let held = self.type_id(table, hole.ty, param)?;
+                        let held = lower(hole.ty)?;
                         Ok(if table.hole_held_by_ref(hole.ty) {
                             SolverType::Ref {
                                 is_mut: false,
@@ -704,7 +726,7 @@ impl Lowering {
                     table
                         .anon_struct_fields(*shape)
                         .iter()
-                        .map(|(_, ty)| self.type_id(table, *ty, param)),
+                        .map(|(_, ty)| lower(*ty)),
                 )?;
                 decl(DeclKey::AnonymousStruct, vec![SolverType::Tuple(fields)])
             }
@@ -717,7 +739,7 @@ impl Lowering {
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Ok(SolverType::Ref {
                 is_mut: table.is_mut_ref(id),
-                inner: Box::new(self.type_id(table, *inner, param)?),
+                inner: Box::new(lower(*inner)?),
             }),
             ResolvedType::TypeParam { id, .. } => placed(*id).map(SolverType::Param),
             // Outside a tuple, a pack stands for one of its elements: a rigid
@@ -731,8 +753,8 @@ impl Lowering {
             ResolvedType::TypePack {
                 mapped_elem: Some(mapped),
                 ..
-            } => self.type_id(table, *mapped, param),
-            ResolvedType::PackElement { pack, .. } => self.type_id(table, *pack, param),
+            } => lower(*mapped),
+            ResolvedType::PackElement { pack, .. } => lower(*pack),
             ResolvedType::Function {
                 is_mut,
                 params,
@@ -743,7 +765,7 @@ impl Lowering {
                     params
                         .iter()
                         .chain(std::iter::once(return_type))
-                        .map(|&a| self.type_id(table, a, param)),
+                        .map(|&a| lower(a)),
                 )?;
                 Ok(self.fn_type(*is_mut, signature, self.effect_row(effects)))
             }
@@ -759,8 +781,8 @@ impl Lowering {
                 owning_trait,
                 ..
             } => {
-                let base = self.type_id(table, *param_id, param)?;
-                let args = said(args.iter().map(|&a| self.type_id(table, a, param)))?;
+                let base = lower(*param_id)?;
+                let args = said(args.iter().map(|&a| lower(a)))?;
                 let trait_ = self.known_trait(*owning_trait).ok_or(Unsaid::Unsayable)?;
                 Ok(SolverType::Projection {
                     base: Box::new(base),
@@ -774,7 +796,10 @@ impl Lowering {
             ResolvedType::AssocParam { .. } => param(Binder::Family(id))
                 .map(SolverType::Param)
                 .ok_or(Unsaid::Open),
-            ResolvedType::InferVar(_) => Err(Unsaid::Open),
+            ResolvedType::InferVar(_) => match unsettled {
+                Unsettled::Open => Err(Unsaid::Open),
+                Unsettled::Var => Ok(SolverType::Var),
+            },
             ResolvedType::Unknown | ResolvedType::Error => Err(Unsaid::Failed),
         }
     }
@@ -2004,6 +2029,7 @@ impl SolverBridge {
         tysys: &TypeSystem,
         ctx: &scope::Scope,
         type_id: TypeId,
+        unsettled: Unsettled,
     ) -> Result<(Env, SolverType), Unsaid> {
         // Every parameter in scope takes a position, bounded or not: an
         // unbounded `T` still appears in a receiver such as `Array<T>`, and a
@@ -2096,7 +2122,7 @@ impl SolverBridge {
             }
             env.param_bounds.push(ids);
         }
-        let ty = self.lowering.type_id(&table, type_id, &placed)?;
+        let ty = self.lowering.lower(unsettled, &table, type_id, &placed)?;
         said(
             unstated
                 .into_iter()
@@ -2131,7 +2157,7 @@ impl SolverBridge {
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Result<Question, Unsaid> {
-        let (env, ty) = self.env_for(tysys, ctx, type_id)?;
+        let (env, ty) = self.env_for(tysys, ctx, type_id, Unsettled::Open)?;
         if ty.mentions_decl(&|h| self.lowering.unstated.contains(&h)) {
             return Err(Unsaid::Unsayable);
         }
@@ -2415,6 +2441,7 @@ impl SolverBridge {
             method_name,
             required_trait,
             required_args,
+            Unsettled::Open,
         )?;
         let named = |live: &[usize]| {
             live.iter()
@@ -2473,6 +2500,7 @@ impl SolverBridge {
             method_name,
             None,
             &[],
+            Unsettled::Open,
         )?;
         answering_link(&self.program, &receiver, &found.in_scope).map(|(link, _)| link)
     }
@@ -2480,7 +2508,8 @@ impl SolverBridge {
     /// The impl blocks answering `method_name` on `type_id` at the nearest
     /// link any does, with that link, among those `reach` names. A block
     /// answers whether its declaration takes a receiver or not, so the caller
-    /// reads which kind it names.
+    /// reads which kind it names. An inference variable in `type_id` stands
+    /// for any type, so the blocks are those that may apply.
     pub(super) fn nearest_impls(
         &self,
         tysys: &TypeSystem,
@@ -2500,6 +2529,7 @@ impl SolverBridge {
             method_name,
             None,
             &[],
+            Unsettled::Var,
         )?;
         let set = match reach {
             Reach::InScope => &found.in_scope,
@@ -2525,6 +2555,7 @@ impl SolverBridge {
         method_name: &str,
         required_trait: Option<DefId>,
         required_args: &[TypeId],
+        unsettled: Unsettled,
     ) -> Option<(Candidates, SolverType)> {
         let method = MethodId(*self.lowering.methods.get(method_name)?);
         // A trait-qualified call named its trait, so the order runs within it:
@@ -2533,7 +2564,7 @@ impl SolverBridge {
             Some(def) => Some(self.lowering.known_trait(def)?),
             None => None,
         };
-        let (env, ty) = self.env_for(tysys, ctx, type_id).ok()?;
+        let (env, ty) = self.env_for(tysys, ctx, type_id, unsettled).ok()?;
         let ty = match through_ref {
             Some(is_mut) => SolverType::Ref {
                 is_mut,
