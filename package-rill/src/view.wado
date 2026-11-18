@@ -226,13 +226,17 @@ fn each<T: Eq>(
                 break;
             }
         }
-        // `render` may have disposed of the binding's owner, whose cleanup
-        // removed only the rows not yet kept.
+        // Detached first, so a cleanup that disposes of the binding's owner
+        // finds none of these left to remove.
+        let leaving = rows;
+        rows = [];
+        remove_rows(leaving);
+        // `render` or a cleanup may have disposed of the binding's owner,
+        // whose cleanup removed only the rows not yet kept.
         if disposed {
             remove_rows(kept);
             return;
         }
-        remove_rows(rows);
         // `render` and the cleanups have run, and either may have moved a row.
         // Nothing runs from here on, so the DOM now is the DOM the moves meet.
         let mut before: List<Option<Element>> = [];

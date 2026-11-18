@@ -212,6 +212,40 @@ test "each renders no further once render disposed of its owner, and disposes of
     };
 }
 
+test "each keeps no rows once a removed row's cleanup disposed of its owner" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = element("ul");
+        let items: Signal<List<i32>> = signal([1]);
+        let label = signal("a");
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        let mut made: List<Element> = [];
+        let mut cleanups = 0;
+        dispose_owner = scope(|| {
+            list.each(|| items.get(), |value: i32| {
+                if value == 1 {
+                    on_cleanup(|| {
+                        cleanups += 1;
+                        dispose_owner();
+                    });
+                }
+                let row = item(value).bind_attribute("title", || Option::Some(label.get()));
+                made.push(row.node);
+                return row;
+            });
+        });
+
+        items.set([2]);
+        flush();
+        label.set("b");
+        flush();
+        assert cleanups == 1;
+        assert made[1].get_attribute("title") == Option::Some("a");
+        assert !list.node.has_child_nodes();
+    };
+}
+
 test "each follows a new order with the nodes it had" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
