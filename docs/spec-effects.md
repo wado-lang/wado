@@ -350,23 +350,16 @@ with Stdout
 
 So `println` needs only `with Stdout`, though its body creates a stream and drops a future. An effect whose signatures mention no resource implies nothing: `with Environment` holds `Environment` alone.
 
-A resource also implies every resource that [extends](./spec-components.md#resource-inheritance) it, and never one it extends or a sibling. Its holder can [narrow](./spec-patterns.md#type-patterns) a handle to any of them, so the grant adds nothing it could not reach. An inherited method demands the resource of its receiver, however the call is spelled: `n.tag()`, `Node::tag(&n)` and `EventTarget::tag(&n)` on a `Node` all demand `Node`, which `with EventTarget` implies too.
+[`extends`](./spec-components.md#resource-inheritance) implies nothing, in either direction. An operation belongs to the resource declaring it, and so does its demand, whatever resource the handle is and however the call is spelled: `n.tag()`, `Node::tag(&n)` and `EventTarget::tag(&n)` on a `Node` all demand `EventTarget`. That resource's handler is the one the call reaches, so a handler of `Node` answers only what `Node` declares. [Narrowing](./spec-patterns.md#type-patterns) a handle grants nothing either.
 
-<!-- {"fixture":"spec_effects_narrowing_holds.wado"} -->
+<!-- {"fixture":"spec_effects_operation_owner.wado"} -->
 
 ```wado
-fn describe(n: Node) -> String with Node {
+fn describe(n: Node) -> String with (Node, HtmlInputElement) {
     return match n {
-        input: HtmlInputElement => input.value(), // Node holds HtmlInputElement
-        _ => "",
+        input: HtmlInputElement => `${input.tag()}:${input.value()}`,
+        _ => n.tag(),
     };
-}
-
-test {
-    with HtmlInputElement => &Typed {} do {
-        assert describe(an_input()) == "typed";
-        assert describe(a_node()) == "";
-    }
 }
 ```
 

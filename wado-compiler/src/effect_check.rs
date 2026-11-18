@@ -1619,16 +1619,6 @@ fn build_propagation_closure_sem(
             let key = resolutions
                 .effect_decl(def)
                 .expect("an interface or resource is an effect");
-            if is_resource {
-                // A holder of an ancestor narrows a handle to this resource at
-                // will, so the ancestor implies it.
-                for ancestor in scan.tt.resource_chain(def).skip(1) {
-                    direct
-                        .entry(resource_effect(resolutions, ancestor))
-                        .or_default()
-                        .insert(key.clone());
-                }
-            }
             let Some(ops) = annotations.effect_ops.get(&decl_id) else {
                 continue;
             };
@@ -1951,7 +1941,7 @@ fn call_site_effects(
             let dispatches_through_path = func_ref.method_info.is_none()
                 && !matches!(func_ref.module_source, ModuleSource::Binding { .. });
             let (resolved, resource) =
-                dispatch_effects(sem, index, &func_ref, None, self_in_args, args, rows);
+                dispatch_effects(sem, index, &func_ref, self_in_args, args, rows);
             CalleeEffects {
                 name: callee_name(callee).to_string(),
                 declared: resolved.required,
@@ -1972,18 +1962,15 @@ fn call_site_effects(
 /// declares, and what a method of a resource demands besides
 /// ([`EffectIndex::resource_demands`]). `self_in_args` says a qualified (UFCS)
 /// call spells the receiver as its first argument, so the arguments align with
-/// the callee's full parameter list; `receiver` is the one a method call
-/// spells before the dot.
+/// the callee's full parameter list.
 fn dispatch_effects(
     sem: &Semantics,
     index: &EffectIndex<'_>,
     func_ref: &FunctionRef,
-    receiver: Option<&Expr>,
     self_in_args: bool,
     args: &[Expr],
     rows: &Rows,
 ) -> (Resolved, OperationDemands) {
-    let receiver = receiver.or_else(|| args.first().filter(|_| self_in_args));
     // A synthesized template (a derived method) is a method of the type it is
     // derived for, so it takes `self`.
     let has_receiver = match func_ref.template.as_ref().and_then(TemplateId::def) {
@@ -2007,20 +1994,7 @@ fn dispatch_effects(
         &brought,
         rows,
     );
-    let receiver_resource = receiver.and_then(|receiver| receiver_resource(sem, receiver));
-    (
-        resolved,
-        index.resource_demands(sem, func_ref, receiver_resource),
-    )
-}
-
-/// The resource `receiver` is, behind any references, where every walk agrees.
-fn receiver_resource(sem: &Semantics, receiver: &Expr) -> Option<DefId> {
-    let mut defs = sem
-        .expression_types(receiver.id())
-        .map(|type_id| sem.types.resource_def_of(sem.types.peel_refs(type_id)));
-    let first = defs.next()??;
-    defs.all(|def| def == Some(first)).then_some(first)
+    (resolved, index.resource_demands(sem, func_ref))
 }
 
 /// The effects each closure literal's body performs, by the literal's node,
@@ -2093,14 +2067,10 @@ impl EffectIndex<'_> {
     /// What dispatching `func_ref` demands besides its declaration: for a
     /// direct (non-trait) method on a `resource`, what an operation of the
     /// resource demands ([`operation_demands`]). An inherited method demands
-    /// the resource of `receiver`, which extends the declaring one. The release
-    /// is ambient, as an implicit drop is: whoever holds a handle may release it.
-    fn resource_demands(
-        &self,
-        sem: &Semantics,
-        func_ref: &FunctionRef,
-        receiver: Option<DefId>,
-    ) -> OperationDemands {
+    /// the resource declaring it, whatever the receiver extends, since that
+    /// resource's handler is the one the call dispatches to. The release is
+    /// ambient, as an implicit drop is: whoever holds a handle may release it.
+    fn resource_demands(&self, sem: &Semantics, func_ref: &FunctionRef) -> OperationDemands {
         if let Some(method_info) = &func_ref.method_info
             && method_info.trait_name.is_none()
             && let Some(declaring) = method_info.receiver().def()
@@ -2108,14 +2078,11 @@ impl EffectIndex<'_> {
             && (method_info.method_name != RESOURCE_DROP
                 || self.drop_is_an_operation.contains(&declaring))
         {
-            let owner = receiver
-                .filter(|&receiver| self.types.resource_chain(receiver).any(|r| r == declaring))
-                .unwrap_or(declaring);
             assert!(
-                self.interfaces.contains_key(&owner),
+                self.interfaces.contains_key(&declaring),
                 "a resource is an operation owner"
             );
-            return operation_demands(sem, self, Some(owner));
+            return operation_demands(sem, self, Some(declaring));
         }
         OperationDemands::default()
     }
@@ -2843,7 +2810,6 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                         self.sem,
                         self.index,
                         func_ref,
-                        None,
                         false,
                         &[],
                         &self.rows,
@@ -2918,7 +2884,6 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                         sem,
                         self.index,
                         &dispatch.function_ref,
-                        Some(&method_call.receiver),
                         false,
                         &method_call.args,
                         &self.rows,
@@ -2939,7 +2904,6 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                         self.sem,
                         self.index,
                         &func_ref,
-                        None,
                         self_in_args,
                         &static_call.args,
                         &self.rows,
@@ -3543,7 +3507,6 @@ impl<'a> PurityWalker<'a> {
     fn flag_if_effectful(
         &mut self,
         func_ref: &FunctionRef,
-        receiver: Option<&Expr>,
         self_in_args: bool,
         args: &[Expr],
         callee: &str,
@@ -3553,7 +3516,6 @@ impl<'a> PurityWalker<'a> {
             self.sem,
             self.index,
             func_ref,
-            receiver,
             self_in_args,
             args,
             &Rows::default(),
@@ -3615,7 +3577,6 @@ impl AstVisitor<'_> for PurityWalker<'_> {
                 for dispatch in sem.method_dispatches_at(method_call.id) {
                     self.flag_if_effectful(
                         &dispatch.function_ref,
-                        Some(&method_call.receiver),
                         false,
                         &method_call.args,
                         &method_call.method,
@@ -3631,7 +3592,6 @@ impl AstVisitor<'_> for PurityWalker<'_> {
                 for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
                     self.flag_if_effectful(
                         &func_ref,
-                        None,
                         self_in_args,
                         &static_call.args,
                         &static_call.method,

@@ -57,16 +57,26 @@ Three bodies hold an effect they do not name:
 
 `#[ambient(_)]` admits every effect, as `with _` stands for every row.
 
-A resource implies every resource that extends it. A body used to hold a
-narrowed resource only after a type pattern narrowed a held handle to it. A
-closure holds nothing it captured, so a DOM event listener, typed
-`fn mut(Event) with Dom`, could not call `value()` on an input element it
-captured. The holder of an ancestor can narrow to any descendant, so the wider
-grant adds no reach, and the narrowing rule is gone. In exchange, `with Element`
-no longer says which kinds of element a function touches.
+An effect guards operations, not handles. Holding a handle is the authority
+over which values a function touches; `with` says which host operations it may
+perform, and a handler intercepts exactly those. The checker and the dispatch
+must therefore agree on whose operation a call is, and the dispatch has one
+answer: the resource declaring the operation, whose handler the call reaches.
 
-The grant runs downward only. A resource whose operations mention itself used
-to imply its ancestors, so with the downward edge one child granted its whole
-family, siblings included. An inherited method therefore demands the resource
-of its receiver rather than of its declaration: `with Node` covers the methods
-a `Node` inherits, and grants nothing on a sibling of `Node`.
+So an operation demands the resource declaring it, whatever resource the
+receiver is, and `extends` implies nothing in either direction. Two looser
+rules were tried and each let a call escape its check:
+
+- An ancestor implying its descendants made `with EventTarget` grant every
+  element's own operations, and one child implying its ancestors then granted
+  its siblings.
+- An inherited method demanding its receiver's resource let a handler of
+  `Node` discharge `n.tag()`, which `EventTarget` declares. The call went past
+  that handler to `EventTarget`'s handler or the host, from a function that
+  declared nothing.
+
+A body holding a narrowed resource after a type pattern narrowed a held handle
+to it is gone with them. A narrowing grants nothing, and a function calling an
+operation on the narrowed handle declares its resource. In exchange, a function
+using inherited operations lists each declaring resource: `with (EventTarget,
+Node)` where it calls both `tag` and `text`.

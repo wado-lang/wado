@@ -1,6 +1,6 @@
-// An inherited method demands the resource of its receiver, whether or not
-// that resource declares operations of its own, and so does the form qualified
-// by the declaring resource. The ancestor implies it too.
+// An inherited method demands the resource declaring it, whatever resource the
+// receiver is and however the call is qualified: that resource's handler is
+// the one the call reaches.
 #[cm("test:dom/dom#event-target", linearity = "unrestricted", repr = "externref", classes = "0..=2")]
 resource EventTarget {
     #[cm("test:dom/dom#tag")]
@@ -16,23 +16,18 @@ resource Node extends EventTarget {
     fn text(&self) -> String;
 }
 
-fn bare(b: Bare) -> String with Bare {
+fn bare(b: Bare) -> String with EventTarget {
     return b.tag();
 }
 
-fn node(n: &Node) -> String with Node {
-    return `${n.tag()}${EventTarget::tag(n)}${Node::tag(n)}`;
-}
-
-fn through_ancestor(n: Node) -> String with EventTarget {
-    return n.tag();
+fn node(n: &Node) -> String with (EventTarget, Node) {
+    return `${n.tag()}${EventTarget::tag(n)}${Node::tag(n)}${n.text()}`;
 }
 
 test {
-    with EventTarget => &Tagged {} do {
+    with EventTarget => &Tagged {}, Node => &Tagged {} do {
         assert bare(Bare::backed_by(Tagged {})) == "t";
-        assert node(&Node::backed_by(Tagged {})) == "ttt";
-        assert through_ancestor(Node::backed_by(Tagged {})) == "t";
+        assert node(&Node::backed_by(Tagged {})) == "tttx";
     }
 }
 
@@ -41,5 +36,11 @@ struct Tagged {}
 impl EventTarget for Tagged {
     fn tag(&self, this: &EventTarget) -> String {
         resume "t"
+    }
+}
+
+impl Node for Tagged {
+    fn text(&self, this: &Node) -> String {
+        resume "x"
     }
 }
