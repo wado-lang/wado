@@ -5621,7 +5621,6 @@ test "the parser's token-stream API is refused in a lexer body" {
     // so each of these would have emitted a method it does not carry.
     let lang = ActionLanguage::Java;
     let cases: List<[String, String]> = [
-        ["_input.LA(1) == 0", "_input.LA()"],
         ["_input.LT(1).getText().equals(\"x\")", "_input.LT()"],
         ["_input.getText().equals(\"x\")", "_input.getText()"],
         ["getRuleInvocationStack()", "getRuleInvocationStack()"],
@@ -5637,6 +5636,22 @@ A : 'a' { ${body} }? ;
     // The same call in a parser body is the API it belongs to.
     let ok = java_pred("_input.LA(1) == 0", "a : ID ;", false);
     assert ok == "p.la(1) == 0";
+}
+
+test "a Java char literal is its code point, and its character in a string" {
+    for let [lit, code] of [
+        ["'x'", "120"],
+        ["'\\n'", "10"],
+        ["'\\''", "39"],
+        ["'\\u0041'", "65"],
+        ["'\\101'", "65"],
+        ["'é'", "233"],
+    ] {
+        assert java_pred(`_input.LA(1) == ${lit}`, "a : ID ;", false) == `p.la(1) == ${code}`;
+    }
+    let printed = java_action("System.out.println(\"a\" + 'b');", "a : ID ;", false);
+    assert printed.contains("`ab\\n`");
+    assert java_pred_res("_input.LA(1) == 'ab'", "a : ID ;", false) matches { Err(_) };
 }
 
 test "a recognizer call resolves the same bare and through `this`" {

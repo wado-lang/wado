@@ -1716,6 +1716,30 @@ WS : [ \\t]+ -> skip ;";
     assert got == "if IF iF x => IF:if IF:IF IF:iF STRICT:x\nX => error:X\n";
 }
 
+test "a Wado lexer body reads the char stream through `view`" {
+    // `view` is the `LexerView` a superClass base receives, at the cursor the
+    // body runs at: here the token's start, so `la(-1)` is the char before it.
+    let input = "lexer grammar L;
+options { language = Wado; }
+TAG : { view.la(-1) == 'x' as i32 }? '`' ;
+BT : '`' ;
+X : 'x' ;
+WS : ' ' -> skip ;";
+    let got = lexes(input, ["x`", "x `", "`"]);
+    assert got == "x` => X:x TAG:`\nx ` => X:x BT:`\n` => BT:`\n";
+}
+
+test "a Java lexer body reads the char stream through `_input.LA`" {
+    // In a lexer `_input` is the char stream, not the parser's token stream.
+    let input = "lexer grammar L;
+TAG : {_input.LA(-1) == 'x'}? '`' ;
+BT : '`' ;
+X : 'x' ;
+WS : ' ' -> skip ;";
+    let got = lexes(input, ["x`", "x `", "`"]);
+    assert got == "x` => X:x TAG:`\nx ` => X:x BT:`\n` => BT:`\n";
+}
+
 test "a repeat over a fragment backs off for the element after it" {
     // `F` takes `>` too, so `>5` matches only with `F` skipped, and `G*` must
     // hand back the `ab` the suffix needs. The jar lexes each as one token.
@@ -7846,8 +7870,8 @@ test "a tail repeat takes a token only where the continuation still parses past 
         let got = parses(`grammar R;\ns : a X X Y EOF ;\na : ${body} ;\n${tokens}`, "s", ["xxy", "xxxy"], &LONGEST);
         assert got == "xxy => (s a x x y)\nxxxy => (s (a x) x x y)\n", `${body}: ${got}`;
     }
-    let got = parses(`grammar R;\ns : a X X Y EOF ;\na : X* ;\n${tokens}`, "s", ["xxxxy"], &LONGEST);
-    assert got == "xxxxy => (s (a x x) x x y)\n";
+    let deep = parses(`grammar R;\ns : a X X Y EOF ;\na : X* ;\n${tokens}`, "s", ["xxxxy"], &LONGEST);
+    assert deep == "xxxxy => (s (a x x) x x y)\n";
     for let body of ["X?", "X*"] {
         let got = parses(
             `grammar R;\ns : t EOF ;\nt : a X X Y | a X B ;\na : ${body} ;\n${tokens}`,

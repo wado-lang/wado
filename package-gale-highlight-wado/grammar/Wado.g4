@@ -55,6 +55,10 @@ options { language = Wado; }
     fn at_hole_top(&self) -> bool {
         return self.hole_braces.last() == Some(0) && self.hole_brackets.last() == Some(0);
     }
+
+    fn ends_name(&self, c: i32) -> bool {
+        return c >= 0 && c < 128 && ((c as u8).is_ascii_alphanumeric() || c == b'_' as i32);
+    }
 }
 
 sourceFile
@@ -1136,13 +1140,11 @@ COLON
 // the parser, so the lexer tells the touching opener apart. Ahead of
 // `BACKTICK` and `RAW_OPEN`, which it otherwise ties.
 TAG_BACKTICK
-    : '`' { start > 0 && (lx.src.byte_at(start - 1).is_ascii_alphanumeric() || lx.src.byte_at(start - 1) == b'_') }?
-      -> pushMode(TEMPLATE)
+    : { lx.ends_name(view.la(-1)) }? '`' -> pushMode(TEMPLATE)
     ;
 
 TAG_RAW_OPEN
-    : '#'+ '`' { start > 0 && (lx.src.byte_at(start - 1).is_ascii_alphanumeric() || lx.src.byte_at(start - 1) == b'_') }?
-      { lx.raw_hashes.push(pos - start - 1) } -> pushMode(RAW_TEMPLATE)
+    : { lx.ends_name(view.la(-1)) }? '#'+ '`' { lx.raw_hashes.push(pos - start - 1) } -> pushMode(RAW_TEMPLATE)
     ;
 
 BACKTICK

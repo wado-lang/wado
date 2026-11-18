@@ -11,6 +11,8 @@ pub variant JToken {
     /// Full `$name(.member)?` text, delimiters kept.
     Attr(String),
     Int(String),
+    /// A char literal, as its code point.
+    Char(i32),
     Str(String),
     Punct(String),
 }
@@ -36,6 +38,12 @@ pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
             };
             out.push(JToken::Str(src.slice(i + 1, e - 1).to_string()));
             i = e;
+            continue;
+        }
+        if b == b'\'' {
+            let [code, end] = scan_char_literal(&src, i, n)?;
+            out.push(JToken::Char(code));
+            i = end;
             continue;
         }
         if let Some([_, end]) = attr_ref_span(&src, i, n) {
@@ -69,6 +77,69 @@ pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
         }
     }
     return Result::Ok(out);
+}
+
+/// A Java char literal at `i` (its opening quote): its code point and where it
+/// ends. The escapes are Java's (JLS 3.10.6, 3.3): `\b \t \n \f \r \" \' \\`, an
+/// octal one, and `\uXXXX`.
+fn scan_char_literal(src: &StrSlice, i: i32, n: i32) -> Result<[i32, i32], String> {
+    let bad = "java2wado: malformed char literal in action body";
+    let mut j = i + 1;
+    if j >= n {
+        return Result::Err(bad);
+    }
+    let mut code = char_at(src, j) as i32;
+    if src.byte_at(j) == b'\\' {
+        j += 1;
+        if j >= n {
+            return Result::Err(bad);
+        }
+        let e = src.byte_at(j);
+        code = match e {
+            b'b' => 8,
+            b't' => 9,
+            b'n' => 10,
+            b'f' => 12,
+            b'r' => 13,
+            b'"' | b'\'' | b'\\' => e as i32,
+            b'u' => {
+                while j < n && src.byte_at(j) == b'u' {
+                    j += 1;
+                }
+                if j + 4 > n {
+                    return Result::Err(bad);
+                }
+                let Ok(v) = i32::from_str_hex(src.slice(j, j + 4)) else {
+                    return Result::Err(bad);
+                };
+                j += 3;
+                v;
+            },
+            b'0'..=b'7' => {
+                let mut v = 0;
+                let mut k = j;
+                while k < n
+                    && k < j + 3
+                    && src.byte_at(k) matches { b'0'..=b'7' }
+                    && v * 8 + (src.byte_at(k) - b'0') as i32 <= 0xFF {
+                    v = v * 8 + (src.byte_at(k) - b'0') as i32;
+                    k += 1;
+                }
+                j = k - 1;
+                v;
+            },
+            _ => {
+                return Result::Err(bad);
+            },
+        };
+        j += 1;
+    } else {
+        j = src.ceil_char_boundary(j + 1);
+    }
+    if j >= n || src.byte_at(j) != b'\'' {
+        return Result::Err(bad);
+    }
+    return Result::Ok([code, j + 1]);
 }
 
 /// Longest operator / punctuation token at `pos` (two-char before one-char).

@@ -23,7 +23,7 @@ use {
     LR_ACC_LOCAL,
 } from "../action_translate.wado";
 use { rule_is_left_recursive } from "../lr_util.wado";
-use { to_snake_case, escape_ident } from "../ident.wado";
+use { to_snake_case, escape_ident, LEXER_VIEW_HERE } from "../ident.wado";
 use { AltBinding } from "../attr_resolve.wado";
 use { wado } from "lib:wadopoet";
 use { JExpr, JMember, JCall, JStmt, JLocal, JAssign, JBinary } from "./jparser.wado";
@@ -142,8 +142,10 @@ enum ApiCall {
     InputText,
     /// `<token>.getText()`.
     TokenText,
-    /// `_input.LA(k)`.
+    /// `_input.LA(k)` over the parser's tokens.
     La,
+    /// `_input.LA(k)` over the lexer's chars.
+    CharLa,
     /// `_input.LT(k)`.
     Lt,
 }
@@ -159,7 +161,7 @@ enum ApiHost {
 fn api_host(call: ApiCall) -> ApiHost {
     return match call {
         Text => ApiHost::Either,
-        CharPos | TokenStartCharPos => ApiHost::Lexer,
+        CharPos | TokenStartCharPos | CharLa => ApiHost::Lexer,
         RuleStack | InputText | TokenText | La | Lt => ApiHost::Parser,
     };
 }
@@ -168,7 +170,7 @@ fn api_host(call: ApiCall) -> ApiHost {
 /// `pos`, or the parser's rule-start token. A `@members` method has neither.
 fn api_needs_frame(call: ApiCall) -> bool {
     return match call {
-        Text | CharPos | TokenStartCharPos => true,
+        Text | CharPos | TokenStartCharPos | CharLa => true,
         RuleStack | InputText | TokenText | La | Lt => false,
     };
 }
@@ -181,7 +183,7 @@ fn api_name(call: ApiCall) -> String {
         RuleStack => "getRuleInvocationStack()",
         InputText => "_input.getText()",
         TokenText => "<token>.getText()",
-        La => "_input.LA()",
+        La | CharLa => "_input.LA()",
         Lt => "_input.LT()",
     };
 }
@@ -569,6 +571,7 @@ pub fn emit_expr(
 ) -> Result<String, String> {
     return match e {
         Int(v) => Result::Ok(*v),
+        Char(code) => Result::Ok(`${*code}`),
         Bool(b) => Result::Ok(if *b { String::from("true") } else { String::from("false") }),
         Str(c) => Result::Ok(`"${*c}"`),
         Attr(text) => {
@@ -844,7 +847,7 @@ fn has_call(e: &JExpr) -> bool {
         Unary(u) => has_call(&u.operand),
         Binary(b) => has_call(&b.lhs) || has_call(&b.rhs),
         Paren(p) => has_call(&p.inner),
-        Int(_) | Str(_) | Bool(_) | Attr(_) | Name(_) => false,
+        Int(_) | Char(_) | Str(_) | Bool(_) | Attr(_) | Name(_) => false,
     };
 }
 
@@ -1000,6 +1003,10 @@ fn emit_member_call<S: AsStrSlice>(
         return api_expr(env, ApiCall::TokenText, `${env.this_bind}.token_text(${r})`);
     }
     if meth == "LA" && name_is(&m.recv, "_input") {
+        // A lexer's `_input` is the char stream; the parser's, its tokens.
+        if env.lexer {
+            return api_expr(env, ApiCall::CharLa, `${LEXER_VIEW_HERE}.la(${args_w})`);
+        }
         return api_expr(env, ApiCall::La, `${env.this_bind}.la(${args_w})`);
     }
     if meth == "LT" && name_is(&m.recv, "_input") {
@@ -1212,7 +1219,7 @@ fn is_java_string(
         Cast(c) => c.ty == "String",
         Binary(b) => b.op == "+" && concat_start(rule, rules, &plus_chain(e), bindings, env) matches { Some(_) },
         Paren(p) => is_java_string(rule, rules, &p.inner, bindings, env),
-        Int(_) | Bool(_) | Unary(_) => false,
+        Int(_) | Char(_) | Bool(_) | Unary(_) => false,
     };
 }
 
@@ -1355,6 +1362,14 @@ fn append_part(
     return match e {
         Str(c) => {
             out.push_str(&escape_template(c));
+            Result::Ok(());
+        },
+        // Java appends a `char` as the character, not its code.
+        Char(code) => {
+            let Ok(c) = char::try_from(*code as u32) else {
+                return Result::Err("java2wado: a lone surrogate char has no text to print");
+            };
+            out.push_str(&escape_template(&c.to_string()));
             Result::Ok(());
         },
         Binary(b) && b.op == "+" => {

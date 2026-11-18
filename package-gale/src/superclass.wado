@@ -39,7 +39,7 @@ use {
     name_end,
 } from "./g4/scan.wado";
 use { CodeWriter } from "lib:wadopoet";
-use { to_snake_case } from "./ident.wado";
+use { to_snake_case, LEXER_VIEW_HERE } from "./ident.wado";
 
 /// One synthesized effect operation, from a distinct `this.<method>` call site.
 /// `is_predicate` distinguishes a `{...}?` predicate call from a `{...}` action.
@@ -202,19 +202,24 @@ pub fn find_this_calls<S: AsStrSlice>(body: S) -> List<SuperCall> {
 /// Whether the body names `this` at all — a call, a field read, or the bare
 /// word. Wado has no such name, so nothing here can be emitted as written.
 pub fn body_names_this<S: AsStrSlice>(body: S) -> bool {
+    return body_names_word(body, &"this");
+}
+
+/// Whether `word` appears in the body as code, outside strings and comments.
+pub fn body_names_word<S: AsStrSlice>(body: S, word: &String) -> bool {
     let src = body.as_str_slice();
     let n = src.len();
     let mut i = 0;
     while i < n {
         let [end, spans] = inert_at(&src, i, n);
         if end > i {
-            if spans.iter_ref().any(|s: &[i32, i32]| body_names_this(src.slice(s.0, s.1))) {
+            if spans.iter_ref().any(|s: &[i32, i32]| body_names_word(src.slice(s.0, s.1), word)) {
                 return true;
             }
             i = end;
             continue;
         }
-        if word_at(&src, i, n, "this") {
+        if word_at(&src, i, n, word) {
             return true;
         }
         i += 1;
@@ -761,6 +766,13 @@ pub fn super_emit_hook_expr<S: AsStrSlice, S1: AsStrSlice>(base_name: S, channel
     return `${base_name}::emit(LexerView { src: &lexer.src, start: tok_start, pos: best_end }, best_kind, ${channel})`;
 }
 
+/// Whether a staged lexer body builds a `LexerView`, so the generated module
+/// must carry the type.
+pub fn lexer_bodies_build_view(rules: &List<LexerRule>) -> bool {
+    let mut visited: List<String> = [];
+    return rules.iter_ref().any(|r| rule_calls_super(r, rules, "LexerView {", true, &mut visited));
+}
+
 /// The ambient operation call for a call site, reading the locals in scope
 /// there and passing `args` after the receiver.
 pub fn super_call_expr<S: AsStrSlice, S1: AsStrSlice>(
@@ -770,8 +782,8 @@ pub fn super_call_expr<S: AsStrSlice, S1: AsStrSlice>(
     args: &List<String>,
 ) -> String {
     let recv = match site {
-        LexerPredicate => "LexerView { src, start, pos }",
-        LexerAction => "LexerView { src, start, pos }, lx",
+        LexerPredicate => LEXER_VIEW_HERE,
+        LexerAction => `${LEXER_VIEW_HERE}, lx`,
         ParserPredicate => "p",
     };
     return `${base_name}::${to_snake_case(method)}(${recv}${after_receiver(args)})`;
