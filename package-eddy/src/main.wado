@@ -32,7 +32,7 @@
 //! ```
 
 use { from_env } from "core:args";
-use { env, eprintln, println, exit_error, Environment, Exit, Stderr, Stdout } from "core:cli";
+use { eprintln, println, exit_error, Environment, Exit, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { to_bytes_pretty, from_string } from "core:json";
@@ -41,7 +41,7 @@ use { Deserialize } from "core:serde";
 use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
 use { git, try_git, paths_between, diff_between } from "./git.wado";
-use { Usage } from "./anthropic.wado";
+use { Credential, Usage } from "./anthropic.wado";
 use { comment, finding_id, review_comment } from "./comment.wado";
 use { cost_summary } from "./cost.wado";
 use { report } from "./report.wado";
@@ -104,8 +104,9 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens, Process, Clie
     if options.max_turns < 1 {
         fail(`--max-turns must be at least 1\n${USAGE}`);
     }
-    let Some(api_key) = env("CLAUDE_API_KEY") else {
-        fail("CLAUDE_API_KEY is not set");
+    let mut credential = match Credential::from_env() {
+        Ok(credential) => credential,
+        Err(e) => fail(e),
     };
     let Some(head) = try_git(["rev-parse", "--verify", `${options.head}^{commit}`]) else {
         fail(
@@ -150,13 +151,13 @@ ${commits.trim()}`;
         };
         reviewed_again(&w, &earlier.result);
     } else {
-        review(&api_key, CLAUDE_MODEL, &change, &Some(w), options.max_turns, options.effort);
+        review(&mut credential, CLAUDE_MODEL, &change, &Some(w), options.max_turns, options.effort);
     };
     // A report that fails leaves the findings as the reviewer worded them.
     let mut report_usage = Usage {};
     let report_error: Option<String> = match &result.error {
         Some(_) => null,
-        None => match report(&api_key, options.reporter, &change, &w, &head, &mut result, &mut report_usage) {
+        None => match report(&mut credential, options.reporter, &change, &w, &head, &mut result, &mut report_usage) {
             Ok(_) => null,
             Err(e) => Some(e),
         },

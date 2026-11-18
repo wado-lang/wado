@@ -159,17 +159,7 @@ async fn send_request(
     };
 
     let (mut sender, conn_driver) = if use_tls {
-        let domain = ServerName::try_from(host.as_str())
-            .map_err(|e| {
-                warn_log!("dns lookup error: {e:?}");
-                dns_error("invalid dns name".to_string(), 0)
-            })?
-            .to_owned();
-        let connector = TlsConnector::from(client_config);
-        let tls = connector.connect(domain, tcp).await.map_err(|e| {
-            warn_log!("tls protocol error: {e:?}");
-            HttpError::TlsProtocolError
-        })?;
+        let tls = tls_connect(client_config, &host, tcp, connect_timeout).await?;
         let protocol = WireProtocol::from_alpn(tls.get_ref().1.alpn_protocol());
         handshake(protocol, tls, connect_timeout).await?
     } else {
@@ -195,6 +185,30 @@ async fn send_request(
     });
 
     Ok((res, conn_driver))
+}
+
+/// The TLS session over `tcp`, which `connect_timeout` bounds as it bounds
+/// the TCP connect and the HTTP handshake on either side of it.
+async fn tls_connect(
+    client_config: Arc<rustls::ClientConfig>,
+    host: &str,
+    tcp: TcpStream,
+    connect_timeout: Duration,
+) -> Result<tokio_rustls::client::TlsStream<TcpStream>, HttpError> {
+    let domain = ServerName::try_from(host)
+        .map_err(|e| {
+            warn_log!("dns lookup error: {e:?}");
+            dns_error("invalid dns name".to_string(), 0)
+        })?
+        .to_owned();
+    let connector = TlsConnector::from(client_config);
+    tokio::time::timeout(connect_timeout, connector.connect(domain, tcp))
+        .await
+        .map_err(|_| HttpError::ConnectionTimeout)?
+        .map_err(|e| {
+            warn_log!("tls protocol error: {e:?}");
+            HttpError::TlsProtocolError
+        })
 }
 
 fn origin_form(uri: &http::Uri) -> http::Uri {
@@ -366,6 +380,28 @@ mod tests {
     fn origin_form_drops_scheme_and_authority() {
         let uri = "https://example.com/v1/greeter?a=1".parse().unwrap();
         assert_eq!(origin_form(&uri), "/v1/greeter?a=1");
+    }
+
+    #[test]
+    fn a_tls_handshake_with_a_silent_server_times_out() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            let tcp = TcpStream::connect(addr).await.unwrap();
+            let (_silent, _) = listener.accept().await.unwrap();
+            let outcome = tls_connect(
+                shared_client_config(),
+                "localhost",
+                tcp,
+                Duration::from_millis(100),
+            )
+            .await;
+            assert!(matches!(outcome, Err(HttpError::ConnectionTimeout)));
+        });
     }
 
     #[test]

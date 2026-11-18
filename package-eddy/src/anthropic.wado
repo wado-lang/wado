@@ -1,11 +1,15 @@
 //! Anthropic's Messages API: one text reply, or one turn of a conversation
 //! that uses tools.
 
-use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Method, Scheme, Trailers } from "wasi:http";
+use { Method } from "wasi:http";
 use { Client } from "wasi:http";
+use { MonotonicClock } from "wasi:clocks";
 use { to_bytes, from_bytes, from_string } from "core:json";
 use { Serialize, Deserialize } from "core:serde";
 use { Value, to_value, from_value } from "core:value";
+use { fetch } from "./http.wado";
+
+pub use { Credential } from "./credential.wado";
 
 pub struct Message {
     pub role: String,
@@ -163,13 +167,13 @@ pub fn message<T: Serialize>(value: &T) -> Value {
 /// The text of `model`'s reply to `user` under `system`, or the error the API
 /// returned. What the reply took is added to `spent`.
 pub fn ask(
-    api_key: String,
+    credential: &mut Credential,
     model: String,
     system: String,
     user: String,
     max_tokens: i32,
     spent: &mut Usage,
-) -> Result<String, String> with Client {
+) -> Result<String, String> with (Client, MonotonicClock) {
     let request = MessagesRequest {
         model,
         max_tokens,
@@ -178,7 +182,7 @@ pub fn ask(
             Message { role: "user", content: user },
         ],
     };
-    let parsed = post::<MessagesResponse>(api_key, to_bytes(&request).unwrap())?;
+    let parsed = post::<MessagesResponse>(credential, to_bytes(&request).unwrap())?;
     spent.add_request(&parsed.usage);
     return Ok(text_of(&parsed.content));
 }
@@ -186,14 +190,14 @@ pub fn ask(
 /// `model`'s reply to `user`, read as the one JSON object it holds. What the
 /// reply took is added to `spent`.
 pub fn ask_json<T: Deserialize>(
-    api_key: &String,
+    credential: &mut Credential,
     model: String,
     system: String,
     user: String,
     max_tokens: i32,
     spent: &mut Usage,
-) -> Result<T, String> with Client {
-    let text = ask(*api_key, model, system, user, max_tokens, spent)?;
+) -> Result<T, String> with (Client, MonotonicClock) {
+    let text = ask(credential, model, system, user, max_tokens, spent)?;
     return json_object::<T>(&text);
 }
 
@@ -215,7 +219,7 @@ pub fn json_object<T: Deserialize>(text: &String) -> Result<T, String> {
 /// `model`'s next turn in `messages`. With `use_tools` false the model must
 /// answer in text, though the conversation may hold earlier tool calls.
 pub fn converse(
-    api_key: String,
+    credential: &mut Credential,
     model: String,
     system: String,
     tools: &List<Tool>,
@@ -223,7 +227,7 @@ pub fn converse(
     messages: &List<Value>,
     max_tokens: i32,
     effort: String,
-) -> Result<Turn, String> with Client {
+) -> Result<Turn, String> with (Client, MonotonicClock) {
     let request = ConverseRequest {
         model,
         max_tokens,
@@ -234,76 +238,32 @@ pub fn converse(
         cache_control: Kind { kind: "ephemeral" },
         output_config: OutputConfig { effort },
     };
-    return post::<Turn>(api_key, to_bytes(&request).unwrap());
+    return post::<Turn>(credential, to_bytes(&request).unwrap());
 }
 
-fn post<T: Deserialize>(api_key: String, request: ByteSlice) -> Result<T, String> with Client {
-    let resp = send("api.anthropic.com", "/v1/messages", [
-        ["authorization", `Bearer ${api_key}`],
-        ["anthropic-version", "2023-06-01"],
-        ["content-type", "application/json"],
-    ], request)?;
-    let status = resp.get_status_code() as i32;
-    let body = read_body(resp)?;
-    if status != 200 {
-        return Err(`HTTP ${status}: ${String::from_utf8_lossy(body)}`);
+/// A request refused for its key is sent once more with a renewed one, where
+/// the credential can renew it.
+fn post<T: Deserialize>(
+    credential: &mut Credential,
+    request: ByteSlice,
+) -> Result<T, String> with (Client, MonotonicClock) {
+    let mut renewed = false;
+    loop {
+        let [status, body] = fetch(Method::Post, "api.anthropic.com", "/v1/messages", [
+            ["authorization", `Bearer ${credential.key()?}`],
+            ["anthropic-version", "2023-06-01"],
+            ["content-type", "application/json"],
+        ], request)?;
+        if status == 401 && !renewed && credential.renew()? {
+            renewed = true;
+            continue;
+        }
+        if status != 200 {
+            return Err(`HTTP ${status}: ${String::from_utf8_lossy(body)}`);
+        }
+        return match from_bytes::<T, ByteList>(body) {
+            Ok(r) => Ok(r),
+            Err(e) => Err(`unparsed response: ${e:?}`),
+        };
     }
-    return match from_bytes::<T, ByteList>(body) {
-        Ok(r) => Ok(r),
-        Err(e) => Err(`unparsed response: ${e:?}`),
-    };
-}
-
-fn send<B: AsByteSlice>(
-    authority: String,
-    path: String,
-    headers: List<[String, String]>,
-    body: B,
-) -> Result<Response, String> with Client {
-    let [body_rx, body_tx] = Stream::<u8>::new();
-    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let fields = Headers::new();
-    for let [name, value] of headers {
-        fields.append(name as FieldName, value.bytes().collect() as FieldValue);
-    }
-    let [req, sent] = Request::new(fields, Option::<Stream<u8>>::Some(body_rx), trailers_rx, null);
-    req.set_method(Method::Post);
-    req.set_scheme(Option::<Scheme>::Some(Scheme::Https));
-    req.set_authority(Option::<String>::Some(authority));
-    req.set_path_with_query(Option::<String>::Some(path));
-
-    // The host consumes the body stream once the send starts, so the writes
-    // below rendezvous with it rather than deadlock.
-    let subtask = Client::send(req);
-    body_tx.write_raw_all(body.as_byte_slice() as Slice<u8>);
-    body_tx.drop();
-    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
-    let resp = match subtask.wait() {
-        Ok(resp) => resp,
-        Err(e) => {
-            return Err(`HTTP request failed: ${e:?}`);
-        },
-    };
-    done(sent, "HTTP request")?;
-    return Ok(resp);
-}
-
-fn read_body(resp: Response) -> Result<ByteList, String> {
-    let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
-    let [body_stream_rx, received] = Response::consume_body(resp, res_rx);
-    let buf = body_stream_rx.read_to_end_bytes();
-    body_stream_rx.drop();
-    res_tx.write(Result::Ok(()));
-    done(received, "HTTP response body")?;
-    return Ok(buf);
-}
-
-/// Whether `transfer`, the future a `wasi:http` transfer resolves once it
-/// ends, reports success.
-fn done<affine T>(transfer: Future<Result<T, ErrorCode>>, what: String) -> Result<(), String> {
-    let outcome = transfer.read();
-    if !outcome matches { Some(Ok(_)) } {
-        return Err(`${what} failed: ${outcome:?}`);
-    }
-    return Ok(());
 }
