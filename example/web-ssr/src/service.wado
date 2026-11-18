@@ -1,7 +1,7 @@
 use { Request, Response, ErrorCode, FieldValue, Headers, Trailers } from "wasi:http";
 use { render_html } from "./app.wado";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Request, Response) {
     let html = render_html(request.get_path_with_query().unwrap_or("/"));
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();

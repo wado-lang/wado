@@ -2653,7 +2653,13 @@ fn pick_resource_wrapper(
     call_type_args: &[TypeId],
     ctx: &RewriteCtx<'_>,
 ) -> Option<String> {
-    let candidates = ctx.cm_to_wrappers.get(&(resource, cm_name.to_string()))?;
+    // `Child::inherited(&c)` names the child, and the operation is keyed under
+    // the ancestor declaring it.
+    let candidates = ctx
+        .type_table
+        .borrow()
+        .resource_chain(resource)
+        .find_map(|declaring| ctx.cm_to_wrappers.get(&(declaring, cm_name.to_string())))?;
     // Exact instantiation match first.
     if let Some((_, name)) = candidates.iter().find(|(args, _)| args == call_type_args) {
         return Some(name.clone());

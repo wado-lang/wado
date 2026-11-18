@@ -2,7 +2,7 @@
 // point, which then delivers its response as `handle` would.
 use { Service, Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
 
-export(Service::handle) async fn serve(request: Request) -> Result<Response, ErrorCode> {
+export(Service::handle) async fn serve(request: Request) -> Result<Response, ErrorCode> with Response {
     let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [response, _sent] = Response::new(Headers::new(), null, trailers);
     assert response.set_status_code(204) matches { Ok(_) };

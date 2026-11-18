@@ -10,7 +10,7 @@ fn drain(list: &mut List<Fields>) {
     }
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     let mut list: List<Fields> = [Fields::new(), Fields::new()];
     drain(&mut list);
     assert list.is_empty();

@@ -59,7 +59,7 @@ fn send<B: AsByteSlice>(
     return resp;
 }
 
-pub fn read_body(resp: Response) -> ByteList {
+pub fn read_body(resp: Response) -> ByteList with Response {
     let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream_rx, received] = Response::consume_body(resp, res_rx);
 
@@ -72,7 +72,7 @@ pub fn read_body(resp: Response) -> ByteList {
 
 /// Panics unless `done`, the future a `wasi:http` transfer resolves once it
 /// ends, reports success.
-pub fn expect_done<affine T>(done: Future<Result<T, ErrorCode>>, what: String) {
+pub fn expect_done<affine T>(done: Future<Result<T, ErrorCode>>, what: String) with Future {
     let outcome = done.read();
     if !outcome matches { Some(Ok(_)) } {
         panic(`${what} failed: ${outcome:?}`);

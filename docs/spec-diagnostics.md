@@ -33,6 +33,7 @@ The lints are:
 | [`hex_suffix_lookalike`](#the-hex_suffix_lookalike-lint)   | a hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64`                       |
 | [`undecided_effects`](#the-undecided_effects-lint)         | a trait head that writes no `with` clause                                       |
 | [`undeclared_effects`](#the-undeclared_effects-lint)       | an `#[ambient]` in a program                                                    |
+| [`unhandled_operation`](#the-unhandled_operation-lint)     | a handler scope that leaves out part of a resource family its body reaches      |
 | [`dead_code`](#the-dead_code-lint)                         | an unused or test-only free function or global                                  |
 | [`unused_imports`](#the-unused_imports-lint)               | a `use` bringing in a name its module never refers to                           |
 | [`unused_variables`](#the-unused_variables-lint)           | a variable or parameter nothing reads                                           |
@@ -249,6 +250,50 @@ fn seeded() -> i32 {
 > Provisional: the rule stands until use cases show where the attribute
 > belongs outside the standard library. It may become an error, or admit some
 > uses without a warning.
+
+## The `unhandled_operation` Lint
+
+A family of resources under `extends` is
+[one effect](./spec-effects.md#implied-resources), so a signature holding one
+member says nothing of which members its body calls. A handler answers only the
+operations its own resource declares. A test double for the family must handle
+each member whose operations the code under test reaches, and the signature does
+not say which.
+
+The `unhandled_operation` lint warns at a `with … => … do` block whose body
+reaches an operation of a resource in the family of one it handles, where no
+handler installed by the block or by a block around it in the same body answers
+it. The body reaches what it calls, and what each function it calls reaches,
+transitively, past the handlers they install themselves. Such a call passes the
+double by, to the next handler out or to the host.
+
+<!-- {"fixture":"effects_handler_scope_leaves_out_family_member.wado", "assert": false} -->
+
+```wado
+// `tag` is `EventTarget`'s, which `with Node` holds through the family.
+fn describe(n: Node) -> String with Node {
+    return `${n.name()}:${n.tag()}`;
+}
+
+#[allow(dead_code)]
+fn leaves_out() -> String {
+    with Node => &Mock {} do {                            // warns: `EventTarget`
+        return describe(Node::backed_by(Mock {}));
+    }
+}
+
+fn both() -> String {
+    with EventTarget => &Mock {}, Node => &Mock {} do {
+        return describe(Node::backed_by(Mock {}));
+    }
+}
+```
+
+A handler installed by a caller is out of the lint's sight, so a block relying
+on one warns. Waive it there.
+
+Rationale:
+[WEP: Resources Are Held Only by `with`](./wep-2026-11-17-resources-held-by-with.md).
 
 ## The `dead_code` Lint
 

@@ -1,0 +1,18 @@
+// A resource's release is ambient, but a `drop` that keeps the handle is an
+// ordinary operation, and calling it demands the resource.
+#[cm("test:dom/thing", linearity = "unrestricted", repr = "externref")]
+resource Thing {
+    fn drop(&self);
+}
+
+fn sneaky(t: &Thing) {
+    t.drop();
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":9:5: analysis error: missing resource 'Thing' required by 'drop'",
+    "compile_error_codes": ["MISSING_EFFECT"]
+}

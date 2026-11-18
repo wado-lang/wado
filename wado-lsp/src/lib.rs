@@ -139,12 +139,14 @@ impl Snapshot {
             &self.sem,
             wado_compiler::hashmap::IndexSet::default(),
             None,
+            wado_compiler::Lints::default(),
         );
         let mut out: Vec<CompilerDiagnostic> = checked
             .effects
             .into_iter()
             .map(Into::into)
             .chain(checked.purity.into_iter().map(Into::into))
+            .chain(checked.unhandled.into_iter().map(Into::into))
             .collect();
         out.extend(
             wado_compiler::check_affine_moves_semantic(&self.sem)

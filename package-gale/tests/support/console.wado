@@ -40,7 +40,7 @@ impl Console {
     }
 
     /// Ends each future a write handed out, since an end dropped unwritten traps.
-    pub fn end_writes(&mut self) {
+    pub fn end_writes(&mut self) with FutureWritable {
         while let Some(end) = self.ends.pop() {
             end.write(Result::Ok(()));
         }
@@ -61,7 +61,7 @@ impl Console {
         return true;
     }
 
-    fn console_future(&mut self, data: Stream<u8>, to_stderr: bool) -> Future<Result<(), ErrorCode>> {
+    fn console_future(&mut self, data: Stream<u8>, to_stderr: bool) -> Future<Result<(), ErrorCode>> with Future {
         self.to_stderr[ResourceId::of(&data)] = to_stderr;
         self.captured.push(data);
         let [future, end] = Future::<Result<(), ErrorCode>>::new();
@@ -71,7 +71,7 @@ impl Console {
 }
 
 impl Stream<u8> for Console {
-    fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] {
+    fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] with Stream {
         let [rx, tx] = Stream::<u8>::new();
         self.readers[ResourceId::of(&tx)] = ResourceId::of(&rx);
         resume [rx, tx];
@@ -81,7 +81,7 @@ impl Stream<u8> for Console {
 }
 
 impl StreamWritable<u8> for Console {
-    fn write_raw_all(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
+    fn write_raw_all(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult with StreamWritable {
         if self.capture(ResourceId::of(this), &data.to_list()) {
             resume CopyResult::Completed;
         }

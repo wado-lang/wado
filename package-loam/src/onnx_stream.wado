@@ -28,14 +28,14 @@ global TENSOR_RAW_DATA: u64 = grog::tag_of(9, grog::WireType::Len);
 
 /// The model `content` holds, its weights' payloads left in the file. Drops
 /// `content`.
-pub fn leave_weights(content: Stream<u8>) -> Result<Slim, String> {
+pub fn leave_weights(content: Stream<u8>) -> Result<Slim, String> with Stream {
     let mut c = Cursor { content: Option::Some(content), chunk: [], at: 0, before: 0, ended: false };
     let walked = walk_model(&mut c);
     c.content.take().unwrap().drop();
     return walked;
 }
 
-fn walk_model(c: &mut Cursor) -> Result<Slim, String> {
+fn walk_model(c: &mut Cursor) -> Result<Slim, String> with Stream {
     let mut model: ByteList = [];
     let mut ranges = TreeMap::<String, [i32, i32]>::new();
     while c.more() {
@@ -54,7 +54,11 @@ fn walk_model(c: &mut Cursor) -> Result<Slim, String> {
     return Result::Ok(Slim { model, ranges, len: len as i32 });
 }
 
-fn walk_graph(c: &mut Cursor, end: i64, ranges: &mut TreeMap<String, [i32, i32]>) -> Result<ByteList, String> {
+fn walk_graph(
+    c: &mut Cursor,
+    end: i64,
+    ranges: &mut TreeMap<String, [i32, i32]>,
+) -> Result<ByteList, String> with Stream {
     let mut graph: ByteList = [];
     while c.pos() < end {
         let tag = c.varint()?;
@@ -71,7 +75,11 @@ fn walk_graph(c: &mut Cursor, end: i64, ranges: &mut TreeMap<String, [i32, i32]>
 /// A `TensorProto` up to `end`, its `raw_data` left in the file where its
 /// `data_type` is a weight's. A `raw_data` ahead of the `data_type` saying so
 /// is copied, as a constant's must be.
-fn walk_tensor(c: &mut Cursor, end: i64, ranges: &mut TreeMap<String, [i32, i32]>) -> Result<ByteList, String> {
+fn walk_tensor(
+    c: &mut Cursor,
+    end: i64,
+    ranges: &mut TreeMap<String, [i32, i32]>,
+) -> Result<ByteList, String> with Stream {
     let mut tensor: ByteList = [];
     let mut weight = false;
     let mut name = "";
@@ -110,7 +118,7 @@ fn walk_tensor(c: &mut Cursor, end: i64, ranges: &mut TreeMap<String, [i32, i32]
 }
 
 /// The field `tag` opens, copied to `out` as it stands.
-fn copy_field(c: &mut Cursor, tag: u64, out: &mut ByteList) -> Result<(), String> {
+fn copy_field(c: &mut Cursor, tag: u64, out: &mut ByteList) -> Result<(), String> with Stream {
     grog::push_varint(out, tag);
     let Some(wire_type) = grog::wire_type_of(tag & 7) else {
         return Result::Err(`wire type ${tag & 7} at byte ${c.pos()}, which protobuf does not define`);
@@ -155,7 +163,7 @@ impl Cursor {
     }
 
     /// Whether a byte follows, reading on once the chunk is spent.
-    fn more(&mut self) -> bool {
+    fn more(&mut self) -> bool with Stream {
         while self.at == self.chunk.len() && !self.ended {
             let [content, read] = self.content.take().unwrap().start_read(READ_CHUNK).finish();
             self.content = Option::Some(content);
@@ -167,7 +175,7 @@ impl Cursor {
         return self.at < self.chunk.len();
     }
 
-    fn varint(&mut self) -> Result<u64, String> {
+    fn varint(&mut self) -> Result<u64, String> with Stream {
         let mut decoder = grog::VarintDecoder::new();
         loop {
             if let Some(read) = decoder.feed(self.next(1)?[0]) {
@@ -186,7 +194,7 @@ impl Cursor {
     }
 
     /// Where the message whose length prefix comes next ends.
-    fn end_of_message(&mut self) -> Result<i64, String> {
+    fn end_of_message(&mut self) -> Result<i64, String> with Stream {
         let length = self.varint()?;
         return self.end_of(length);
     }
@@ -200,7 +208,7 @@ impl Cursor {
     }
 
     /// Up to `n` of the bytes next, and no fewer than one.
-    fn next(&mut self, n: i64) -> Result<Slice<u8>, String> {
+    fn next(&mut self, n: i64) -> Result<Slice<u8>, String> with Stream {
         if !self.more() {
             return Result::Err(`the model ends at byte ${self.pos()}, inside a field`);
         }
@@ -210,7 +218,7 @@ impl Cursor {
         return Result::Ok(piece);
     }
 
-    fn copy(&mut self, n: i64, out: &mut ByteList) -> Result<(), String> {
+    fn copy(&mut self, n: i64, out: &mut ByteList) -> Result<(), String> with Stream {
         let mut rest = n;
         while rest > 0 {
             let piece = self.next(rest)?;
@@ -221,11 +229,11 @@ impl Cursor {
     }
 
     /// The `length` bytes a length prefix gave, copied to `out`.
-    fn copy_len(&mut self, length: u64, out: &mut ByteList) -> Result<(), String> {
+    fn copy_len(&mut self, length: u64, out: &mut ByteList) -> Result<(), String> with Stream {
         return self.copy(self.end_of(length)? - self.pos(), out);
     }
 
-    fn skip(&mut self, n: i64) -> Result<(), String> {
+    fn skip(&mut self, n: i64) -> Result<(), String> with Stream {
         let mut rest = n;
         while rest > 0 {
             rest -= self.next(rest)?.len() as i64;

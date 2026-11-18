@@ -9,7 +9,7 @@
 use { println, Stdout } from "core:cli";
 use { TcpSocket } from "wasi:sockets";
 
-fn abandon(sockets: Stream<TcpSocket>) {
+fn abandon(sockets: Stream<TcpSocket>) with Stream {
     builtin::drop(sockets.start_read(4));
 }
 

@@ -21,7 +21,7 @@ fn hold(depth: i32) with Fields {
     let wrapped = Wrap { inner: Fields::new() };
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     hold(0);
     hold(3);
     let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();

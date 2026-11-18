@@ -21,7 +21,7 @@ use predicates::prelude::*;
 /// the grammar as Wado and gets the same result.
 const PASSTHROUGH_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
 
-export fn generate(req: Request) -> Result<Response, Error> {
+export fn generate(req: Request) -> Result<Response, Error> with Stream {
     let origin = req.origin();
     return Result::Ok(Response {
         files: [OutputFile {
@@ -97,7 +97,7 @@ fn two_modules_sharing_one_schema_both_redirect() {
         root.join("src/gen.wado"),
         r#"use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
 
-export fn generate(req: Request) -> Result<Response, Error> {
+export fn generate(req: Request) -> Result<Response, Error> with Stream {
     let origin = req.origin();
     return Result::Ok(Response {
         files: [OutputFile {

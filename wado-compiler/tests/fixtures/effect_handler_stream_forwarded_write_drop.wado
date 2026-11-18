@@ -19,12 +19,12 @@ impl Proxy {
 }
 
 impl StreamWritable<u8> for Proxy {
-    fn begin_write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StartedWrite<u8> {
+    fn begin_write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StartedWrite<u8> with StreamWritable {
         let _ = this;
         resume self.inner().begin_write(data);
     }
 
-    fn cancel_write(&mut self, this: &StreamWritable<u8>) -> u32 {
+    fn cancel_write(&mut self, this: &StreamWritable<u8>) -> u32 with StreamWritable {
         let _ = this;
         resume self.inner().cancel_write();
     }

@@ -1,0 +1,17 @@
+// A resource reached through `&self` is not held: a host call on it needs `with`.
+use { Fields } from "wasi:http";
+
+affine struct Wrap { f: Fields }
+
+impl Wrap {
+    fn touch(&self) {
+        let _ = self.f.set("x", [b"1"]);
+    }
+}
+
+test {
+    Wrap { f: Fields::new() }.touch();
+}
+
+__DATA__
+{"compile_error":":8:17: analysis error: missing resource 'Fields' required by 'set'"}

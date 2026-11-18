@@ -2,7 +2,7 @@
 // delivered, so a test can check a service's answer directly.
 use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Request, Response) {
     if request.get_path_with_query() != Some("/") {
         task return Result::<Response, ErrorCode>::Err(ErrorCode::HttpRequestDenied);
     } else {
@@ -13,7 +13,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     }
 }
 
-fn request_for(path: String) -> [Request, FutureWritable<Result<Option<Trailers>, ErrorCode>>] {
+fn request_for(path: String) -> [Request, FutureWritable<Result<Option<Trailers>, ErrorCode>>] with Request {
     let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [request, _sent] = Request::new(Headers::new(), null, trailers, null);
     let _ = request.set_path_with_query(Some(path));

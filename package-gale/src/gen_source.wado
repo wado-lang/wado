@@ -138,7 +138,7 @@ internal fn absolute_path_hint<S: AsStrSlice>(path: S) -> String
 /// Read a file to EOF. The stream's completion future is consumed so a
 /// mid-stream error surfaces as `Err` instead of being silently treated as
 /// EOF (truncated input).
-fn read_all(file: &Descriptor) -> Result<ByteList, ErrorCode> {
+fn read_all(file: &Descriptor) -> Result<ByteList, ErrorCode> with Descriptor {
     let [read_stream, done] = file.read_via_stream(0 as Filesize);
     let result = read_stream.read_to_end_bytes();
     read_stream.drop();

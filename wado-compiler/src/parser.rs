@@ -1926,6 +1926,11 @@ impl Parser {
                     self.advance();
                     AttrArg::Number(value)
                 }
+                // `#[ambient(_)]`: every effect, as `with _` is every row.
+                (None, TokenKind::Underscore) => {
+                    self.advance();
+                    AttrArg::Ident("_".to_string())
+                }
                 (None, _) => break,
             };
             args.push(arg);

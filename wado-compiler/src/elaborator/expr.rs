@@ -19,7 +19,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
-use super::call::{CaseSite, DefaultTypeBinding, DefaultWalk, WalkedDefault, slot_type_bindings};
+use super::call::{CaseSite, DefaultWalk, WalkedDefault, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, is_numeric_literal_target, range_endpoint_order};
 use super::exhaustiveness::{self, Case, DomainKind, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
@@ -4019,7 +4019,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let expected_args = expected_type
             .and_then(instance_args)
             .or_else(|| spread_base_type.and_then(instance_args));
-        let annotated_args = expected_args.clone();
         let resolved_struct_fields: Option<Vec<(String, TypeId)>> =
             self.struct_fields_of_written_decl(struct_decl).map(|info| {
                 let params = info.type_param_type_ids.clone();
@@ -4215,8 +4214,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => (Vec::new(), IndexMap::default()),
         };
         let mut omitted_hidden: Vec<String> = Vec::new();
+        let mut omitted_defaults: Vec<(usize, ast::Expr)> = Vec::new();
         if !struct_field_types.is_empty() && struct_lit.spreads.is_empty() {
-            let mut omitted_defaults: Vec<(usize, ast::Expr)> = Vec::new();
             for (idx, (expected_name, _)) in struct_field_types.iter().enumerate() {
                 if provided_names.contains(expected_name) {
                     continue;
@@ -4230,48 +4229,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         struct_name: display_name.clone(),
                         field_name: expected_name.clone(),
                         span: struct_lit.span,
-                    });
-                }
-            }
-            if !omitted_defaults.is_empty() {
-                let (bindings, settled_params) = self.field_default_type_bindings(
-                    struct_decl,
-                    annotated_args.as_deref(),
-                    &fields,
-                );
-                // The declared type still names the struct's own parameters
-                // where no annotation pinned them, and the default answers in
-                // the settled ones.
-                let defaults = omitted_defaults
-                    .iter()
-                    .map(|(idx, expr)| WalkedDefault {
-                        binds: None,
-                        expr: expr.clone(),
-                        expected: settled_params.substitute(
-                            struct_field_types[*idx].1,
-                            &mut self.tysys.type_table.borrow_mut(),
-                        ),
-                        check_at: Some(struct_lit.span),
-                    })
-                    .collect();
-                // The default is the struct module's AST, and its scope, its
-                // import aliases and the vantage its visibility is judged from
-                // are all that module's.
-                let walk = DefaultWalk {
-                    site: Some(struct_lit.id),
-                    home: Some(struct_module_source),
-                    self_binding: None,
-                    bindings,
-                    written: Vec::new(),
-                    defaults,
-                };
-                let resolved = self.walk_defaults(walk, ctx);
-                for ((idx, expr), type_id) in omitted_defaults.into_iter().zip(resolved) {
-                    fields.push(ResolvedField {
-                        name: struct_field_types[idx].0.clone(),
-                        type_id,
-                        field_index: idx as u32,
-                        span: expr.span(),
                     });
                 }
             }
@@ -4307,6 +4264,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &fields,
                 expected_type.or(spread_base_type),
                 struct_lit.span,
+            );
+            self.walk_field_defaults(
+                struct_decl,
+                &type_args,
+                &struct_field_types,
+                omitted_defaults,
+                struct_module_source,
+                struct_lit,
+                ctx,
             );
 
             // Substitute type parameters in field value types.
@@ -4413,6 +4379,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             (struct_type, mangled_name, fields)
         } else {
+            self.walk_field_defaults(
+                struct_decl,
+                &[],
+                &struct_field_types,
+                omitted_defaults,
+                struct_module_source,
+                struct_lit,
+                ctx,
+            );
             let defined_at = self
                 .struct_fields_of_written_decl(struct_decl)
                 .map(|info| info.defined_at);
@@ -4755,57 +4730,100 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// What this literal settles the struct's own type parameters to: the
-    /// bindings a field default naming one (`b: T = T::default()`) resolves
-    /// against, and the same answer as a substitution for the declared field
-    /// types those defaults are checked against.
-    ///
-    /// Answered from the annotation and from the fields the literal wrote. Full
-    /// inference has not run yet — it reads the defaults this is for — and a
-    /// parameter neither source mentions settles to nothing rather than to
-    /// itself, which would send the default down the abstract path with no
-    /// caller to monomorphize it.
-    fn field_default_type_bindings(
-        &self,
+    /// Walk the defaults of the fields a literal left out, against the type
+    /// arguments inference answered from the fields it wrote. A default is no
+    /// evidence for a slot: it is checked against the slot's answer. An answer
+    /// that is the slot itself, which inference leaves for a phantom, binds
+    /// nothing, so a default naming one is not sent down the abstract path with
+    /// no caller to monomorphize it.
+    #[allow(clippy::too_many_arguments)]
+    fn walk_field_defaults(
+        &mut self,
         struct_decl: Option<DefId>,
-        expected_args: Option<&[TypeId]>,
-        fields: &[ResolvedField],
-    ) -> (Vec<DefaultTypeBinding>, SubstitutionContext) {
-        let Some(info) = self.struct_fields_of_written_decl(struct_decl) else {
-            return (Vec::new(), SubstitutionContext::new());
+        type_args: &[TypeId],
+        struct_field_types: &[(String, TypeId)],
+        omitted: Vec<(usize, ast::Expr)>,
+        home: ModuleSource,
+        struct_lit: &ast::StructLiteralExpr,
+        ctx: &mut FunctionContext,
+    ) {
+        if omitted.is_empty() {
+            return;
+        }
+        let (declared, struct_name) = self
+            .struct_fields_of_written_decl(struct_decl)
+            .map(|info| (info.type_param_type_ids.clone(), info.name.clone()))
+            .unwrap_or_default();
+        let scope_params = self.scope_type_param_ids();
+        let (slots, args): (Vec<TypeId>, Vec<TypeId>) = {
+            let table = self.tysys.type_table.borrow();
+            declared
+                .iter()
+                .copied()
+                .zip(self.apply_infer_holes_each(type_args))
+                .filter(|&(slot, arg)| arg != slot || scope_params.owns(&table, arg))
+                .unzip()
         };
-        let mut settled: IndexMap<TypeId, TypeId> = IndexMap::default();
-        // The annotation names the whole instantiation, so it answers for every
-        // parameter — including one no field mentions.
-        if let Some(args) = expected_args.filter(|a| a.len() == info.type_param_type_ids.len()) {
-            settled.extend(
-                info.type_param_type_ids
-                    .iter()
-                    .copied()
-                    .zip(args.iter().copied()),
-            );
+        // Inference reported the slot it answered with `error`.
+        if args.contains(&TypeTable::ERROR) {
+            return;
         }
-        for field in fields {
-            let Some((_, declared, _)) = info.fields.iter().find(|(n, _, _)| *n == field.name)
-            else {
+        // A hole a later use may solve has no type to walk a default at yet;
+        // one a pending literal answers defers the walk below instead.
+        let mut holes: Vec<TypeId> = Vec::new();
+        let mut names: Vec<String> = Vec::new();
+        for (&slot, &arg) in slots.iter().zip(&args) {
+            let open: Vec<TypeId> = self
+                .tysys
+                .type_table
+                .borrow()
+                .infer_vars_in(arg)
+                .into_iter()
+                .filter(|&var| self.pending_owner_index(var).is_none())
+                .collect();
+            if open.is_empty() {
                 continue;
-            };
-            unify(
-                &self.tysys.type_table,
-                *declared,
-                field.type_id,
-                &mut settled,
-            );
+            }
+            holes.extend(open);
+            let table = self.tysys.type_table.borrow();
+            let name =
+                util::bound_param_name(&table, slot).expect("a struct slot is a type parameter");
+            names.push(name.to_string());
         }
-        let (slots, args): (Vec<TypeId>, Vec<TypeId>) = info
-            .type_param_type_ids
-            .iter()
-            .filter_map(|slot| settled.get(slot).map(|&arg| (*slot, arg)))
-            .unzip();
-        (
-            slot_type_bindings(&self.tysys.type_table, &slots, &args),
-            SubstitutionContext::new().bind(&slots, &args),
-        )
+        if !holes.is_empty() {
+            let message = TypeError::cannot_infer_message(
+                &names,
+                &format!("struct `{struct_name}`"),
+                &format!("`{struct_name}::<...> {{ … }}`"),
+            );
+            self.leave_defaults_unwalked(holes, struct_lit.span, message);
+            return;
+        }
+        let settled = SubstitutionContext::new().bind(&slots, &args);
+        let defaults = omitted
+            .into_iter()
+            .map(|(idx, expr)| WalkedDefault {
+                binds: None,
+                expr,
+                expected: settled.substitute(
+                    struct_field_types[idx].1,
+                    &mut self.tysys.type_table.borrow_mut(),
+                ),
+                check_at: Some(struct_lit.span),
+            })
+            .collect();
+        // The default is the struct module's AST, and its scope, its import
+        // aliases and the vantage its visibility is judged from are all that
+        // module's.
+        let walk = DefaultWalk {
+            site: Some(struct_lit.id),
+            home: Some(home),
+            self_binding: None,
+            bindings: slot_type_bindings(&self.tysys.type_table, &slots, &args),
+            written: Vec::new(),
+            defaults,
+        };
+        self.walk_defaults(walk, ctx);
     }
 
     /// A struct literal's own variables for the declaration's slots.

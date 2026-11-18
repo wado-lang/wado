@@ -1,0 +1,16 @@
+// `#[ambient(_)]` on a global admits every effect in its initializer, as it
+// does on a function.
+
+use { InsecureSeed } from "wasi:random";
+
+fn seeded() -> i32 with InsecureSeed {
+    let [_, _] = InsecureSeed::get_insecure_seed();
+    return 7;
+}
+
+#[ambient(_)]
+global SEVEN: i32 = seeded();
+
+test {
+    assert SEVEN == 7;
+}

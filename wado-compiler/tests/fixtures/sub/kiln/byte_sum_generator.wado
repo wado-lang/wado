@@ -2,7 +2,7 @@
 
 use { Request, Response, OutputFile, Error, read_all } from "core:kiln";
 
-export fn generate(req: Request) -> Result<Response, Error> {
+export fn generate(req: Request) -> Result<Response, Error> with Stream {
     let origin = req.origin();
     let mut sum = 0;
     for let b of read_all(req.primary.content) as List<u8> {

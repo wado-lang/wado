@@ -1,4 +1,5 @@
-// A closure holds the resources the types of its captures mention.
+// A closure holds nothing it captured: an operation it calls on a captured
+// handle, narrowed or not, is in its row.
 
 #[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
 resource Node {}
@@ -9,13 +10,13 @@ resource HtmlInputElement extends Node {
     fn value(&self) -> String;
 }
 
-fn call(f: fn() -> String) -> String {
+fn call(f: fn() -> String with _) -> String with _ {
     return f();
 }
 
-fn describe(n: Node) -> String {
-    return call(|| match n {                       // captures a Node, so holds it
-        input: HtmlInputElement => input.value(),  // and what it narrows to
+fn describe(n: Node) -> String with HtmlInputElement {
+    return call(|| match n {                       // performs HtmlInputElement
+        input: HtmlInputElement => input.value(),
         _ => "",
     });
 }

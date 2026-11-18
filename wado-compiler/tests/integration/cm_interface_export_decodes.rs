@@ -14,7 +14,7 @@ const SERVICE_WORLD: &str = "wasi:http/service";
 const SERVICE_SOURCE: &str = r#"
 use { Request, Response, ErrorCode, Fields, Headers, Trailers, StatusCode } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();
     let [response, _tx_future] = Response::new(

@@ -9,7 +9,7 @@ use wado_compiler::{CompilerOptions, OptLevel};
 /// The dependency's `async func(stream<u32>) -> stream<u32>`. It `task return`s
 /// before copying, so the caller's writes rendezvous instead of deadlocking.
 const DOUBLE_STREAM: &str = r#"
-export async fn double_stream(v: Stream<u32>) -> Stream<u32> {
+export async fn double_stream(v: Stream<u32>) -> Stream<u32> with Stream {
     let [rx, tx] = Stream::<u32>::new();
     task return rx;
     let mut out: List<u32> = [];
@@ -129,7 +129,7 @@ fn a_generic_body_binds_its_stream_read_per_instance() {
 use { double_stream } from "./dep.wasm" with { type: "wasm" };
 use { println, Stdout } from "core:cli";
 
-fn read_once<T>(s: Stream<T>) -> [Stream<T>, StreamChunk<T>] {
+fn read_once<T>(s: Stream<T>) -> [Stream<T>, StreamChunk<T>] with Stream {
     return s.start_read(16).finish();
 }
 
@@ -154,7 +154,7 @@ export fn run() with Stdout {
 fn future_round_trips_through_an_imported_world_function() {
     let stdout = run_against_dep(
         r#"
-export fn triple_future(v: Future<u32>) -> Future<u32> {
+export fn triple_future(v: Future<u32>) -> Future<u32> with Future {
     let value = v.read();
     let [rx, tx] = Future::<u32>::new();
     if let Some(x) = value {
@@ -167,7 +167,7 @@ export fn triple_future(v: Future<u32>) -> Future<u32> {
 use { triple_future } from "./dep.wasm" with { type: "wasm" };
 use { println, Stdout } from "core:cli";
 
-export fn run() with Stdout {
+export fn run() with (Stdout, Future) {
     let [rx, tx] = Future::<u32>::new();
     tx.write(7);
     let out = triple_future(rx);

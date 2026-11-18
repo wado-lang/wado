@@ -67,7 +67,7 @@ fn build_router() -> Router<Handler> {
 
 global ROUTER: Router<Handler> = build_router();
 
-fn dispatch(request: Request) -> RouteResponse {
+fn dispatch(request: Request) -> RouteResponse with Request {
     if let Some(m) = ROUTER.match_request(&request) {
         return (m.handler)(request, m.params);
     }
@@ -94,7 +94,7 @@ test "routes" {
     }
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Request, Response) {
     let resp = dispatch(request);
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();

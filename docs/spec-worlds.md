@@ -420,7 +420,7 @@ handler writes the body and resolves the trailers after `task return`:
 ```wado
 use { Request, Response, ErrorCode, Headers, Trailers, FieldName } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     let headers = Headers::new();
     assert headers.append("content-type" as FieldName, b"text/plain") matches { Ok(_) };
 
@@ -451,7 +451,7 @@ A request carries its method, its path and query, and its headers.
 ```wado
 use { Request, Response, ErrorCode, Headers, Trailers, FieldName } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Request, Response) {
     let is_post = request.get_method() matches { Post };
     let path = request.get_path_with_query().unwrap_or("/");
     let headers = request.get_headers();
@@ -490,7 +490,7 @@ trailers follow:
 ```wado
 use { Request, Response, ErrorCode } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Request {
     let path = request.get_path_with_query();
     assert path == Some("/broken");
     task return Result::<Response, ErrorCode>::Err(ErrorCode::InternalError(Some("no backend")));
@@ -520,7 +520,7 @@ trailers) or clean up.
 <!-- {"fixture":"spec_components_task_return.wado"} -->
 
 ```wado
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
@@ -624,7 +624,7 @@ so it may call a command's `run` and a service's `handle`. The call returns what
 <!-- {"fixture":"spec_worlds_test_handler.wado"} -->
 
 ```wado
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Request, Response) {
     if request.get_path_with_query() != Some("/") {
         task return Result::<Response, ErrorCode>::Err(ErrorCode::HttpRequestDenied);
     } else {
@@ -635,7 +635,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     }
 }
 
-fn request_for(path: String) -> [Request, FutureWritable<Result<Option<Trailers>, ErrorCode>>] {
+fn request_for(path: String) -> [Request, FutureWritable<Result<Option<Trailers>, ErrorCode>>] with Request {
     let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [request, _sent] = Request::new(Headers::new(), null, trailers, null);
     let _ = request.set_path_with_query(Some(path));

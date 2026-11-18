@@ -65,10 +65,35 @@ impl View {
         when: fn mut() -> bool with Track,
         render: fn mut() -> View with (Track, Dom),
     ) -> View with (Track, Dom) {
-        let mut when = when;
+        let mut render = render;
+        return self.place(when, |visible| visible, |_| render());
+    }
+
+    /// Shows what `render` makes for the key `key` answers, at this point
+    /// among the element's children. It keeps that subtree while the key stays
+    /// equal, and disposes of it for the next one when the key changes.
+    pub fn switch<K: Eq>(
+        &self,
+        key: fn mut() -> K with Track,
+        render: fn mut(K) -> View with (Track, Dom),
+    ) -> View with (Track, Dom) {
+        return self.place(key, |_| true, render);
+    }
+
+    /// Shows what `render` makes for the key, for a key `shows` admits, at this
+    /// point among the element's children.
+    fn place<K: Eq>(
+        &self,
+        key: fn mut() -> K with Track,
+        shows: fn(K) -> bool,
+        render: fn mut(K) -> View with (Track, Dom),
+    ) -> View with (Track, Dom) {
+        let mut key = key;
+        let mut render = render;
         // Holds the place, so siblings added later stay after the subtree.
         let anchor = Dom::document().create_text_node("");
         self.node.append_child(anchor);
+        let mut shown_for: Option<K> = null;
         let mut shown: Option<Rendered> = null;
         let mut disposed = false;
         on_cleanup(|| {
@@ -77,16 +102,28 @@ impl View {
             detach(anchor);
         });
         observe(|| {
-            let visible = when();
-            if visible == shown matches { Some(_) } {
+            let mut current = key();
+            if let Some(was) = shown_for && was == current {
                 return;
             }
-            if !visible {
+            if shown matches { Some(_) } {
                 hide(&mut shown);
+                // A cleanup of what was shown may have written what `key`
+                // reads.
+                if !disposed {
+                    current = key();
+                }
+            }
+            // `key` or a cleanup may have disposed of the binding's owner.
+            if disposed {
                 return;
             }
-            let made = render_owned(render);
-            // `render` may have disposed of the binding's owner.
+            shown_for = Option::Some(current);
+            if !shows(current) {
+                return;
+            }
+            let made = render_owned(|| render(current));
+            // So may `render`.
             if disposed {
                 remove(made);
                 return;
