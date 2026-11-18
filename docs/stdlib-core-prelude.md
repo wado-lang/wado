@@ -112,6 +112,8 @@ only an affine type implements it.
 
 #### `fn drop(self)`
 
+`#[ambient(_)]`
+
 ### `pub trait Reflect with ()`
 
 A type's identity: the root every reflected kind sits under. Sealed and
@@ -4543,7 +4545,7 @@ Dropping one in flight cancels it, and drops a value it had read.
 
 _Fields are private._
 
-#### `pub fn finish(self) -> Option<T>`
+#### `pub fn finish(self) -> Option<T> with Future`
 
 The value, or None where the writer dropped without writing. Waits for a
 read that has not settled, so a read never inserted into a set finishes
@@ -4620,7 +4622,7 @@ Dropping one in flight cancels it, and drops what it had copied.
 
 _Fields are private._
 
-#### `pub fn finish(self) -> [Stream<T>, StreamChunk<T>]`
+#### `pub fn finish(self) -> [Stream<T>, StreamChunk<T>] with Stream`
 
 The end and what the copy moved. Waits for a copy that has not settled,
 so a copy never inserted into a set finishes as well.
@@ -4685,6 +4687,8 @@ _Fields are private._
 
 #### `pub fn new() -> WaitableSet<W>`
 
+`#[ambient(RawWaitableSet)]`
+
 #### `pub fn insert(&mut self, member: W)`
 
 Moves `member` into the set. A member is in one set at a time, so
@@ -4692,11 +4696,15 @@ whether the host has an event left for it is settled here.
 
 #### `pub fn wait(&mut self) -> Ready<W>`
 
+`#[ambient(RawWaitableSet)]`
+
 Blocks until a member is ready, and moves it out: a copy once it
 settled, a call once it resolved. A member ready without the host comes
 first. Traps on an empty set.
 
 #### `pub fn poll(&mut self) -> Option<Ready<W>>`
+
+`#[ambient(RawWaitableSet)]`
 
 The member that is ready, as `wait` means it, moved out, or None where
 none is yet.
