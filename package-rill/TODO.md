@@ -7,8 +7,6 @@ already measured, not how to close it. Closed work belongs in commit history.
 
 - [ ] A tracked read dispatches an effect operation, and each run of a
   computation installs a handler. What either costs is not measured.
-- [ ] A memo does not compare its new value with the old one, so its dependents
-  rerun even when the value came out the same.
 - [ ] A memo owns nothing. Registering a cleanup inside one traps, and so does
   making an effect or another memo there.
 - [ ] Disposing of a scope stops its bindings, takes its rows out of an `each`,

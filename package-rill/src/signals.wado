@@ -16,13 +16,22 @@ pub interface Track {
     }
 }
 
-/// Who reads a signal or a memo.
+/// Who reads a signal or a memo, and how many times its value changed.
 struct Readers {
     observers: List<Observer>,
+    version: i32,
+    // The memo whose value this is; `None` for a signal.
+    memo: Option<&mut MemoCore>,
 }
 
 pub struct Dep {
     readers: &mut Readers,
+}
+
+/// A dependency as a computation read it.
+struct Seen {
+    dep: Dep,
+    version: i32,
 }
 
 variant Observer {
@@ -30,12 +39,21 @@ variant Observer {
     Effect(&mut EffectCore),
 }
 
+enum Freshness {
+    Fresh,
+    // A dependency may have changed.
+    Check,
+    // Never computed, or no longer listening.
+    Stale,
+}
+
 /// The part of a memo that does not depend on its value's type.
 struct MemoCore {
     id: i32,
-    fresh: bool,
+    freshness: Freshness,
     dep: Dep,
-    deps: List<Dep>,
+    deps: List<Seen>,
+    recompute: fn mut(),
 }
 
 struct EffectCore {
@@ -43,7 +61,7 @@ struct EffectCore {
     disposed: bool,
     running: bool,
     body: fn mut() with (Track, Dom),
-    deps: List<Dep>,
+    deps: List<Seen>,
     owned: List<fn mut() with Dom>,
 }
 
@@ -56,8 +74,37 @@ fn next_observer_id() -> i32 {
 }
 
 fn new_dep() -> Dep {
-    let mut readers = Readers { observers: [] };
+    let mut readers = Readers { observers: [], version: 0, memo: null };
     return Dep { readers: &mut readers };
+}
+
+/// Whether every dependency still holds what was read, bringing each memo
+/// among them up to date first.
+fn unchanged(deps: &List<Seen>) -> bool {
+    for let seen of deps {
+        if let Some(core) = seen.dep.readers.memo {
+            refresh(core);
+        }
+        if seen.dep.readers.version != seen.version {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn refresh(core: &mut MemoCore) {
+    match core.freshness {
+        Fresh => {
+        },
+        Check => {
+            if unchanged(&core.deps) {
+                core.freshness = Freshness::Fresh;
+            } else {
+                (core.recompute)();
+            }
+        },
+        Stale => (core.recompute)(),
+    }
 }
 
 fn id_of(observer: &Observer) -> i32 {
@@ -79,24 +126,27 @@ fn subscribe(dep: Dep, observer: Observer) -> bool {
     return true;
 }
 
-fn unsubscribe_all(deps: List<Dep>, id: i32) {
-    for let dep of deps {
+fn unsubscribe_all(deps: List<Seen>, id: i32) {
+    for let seen of deps {
+        let readers = seen.dep.readers;
         let mut rest: List<Observer> = [];
-        for let subscribed of dep.readers.observers {
+        for let subscribed of readers.observers {
             if id_of(&subscribed) != id {
                 rest.push(subscribed);
             }
         }
-        dep.readers.observers = rest;
+        readers.observers = rest;
     }
 }
 
+/// Marks what reads `dep`. A memo's readers learn only that it may have
+/// changed: whether it did is known once someone asks for it.
 fn notify(dep: Dep) {
     for let observer of dep.readers.observers {
         match observer {
             Memo(core) => {
-                if core.fresh {
-                    core.fresh = false;
+                if core.freshness matches { Fresh } {
+                    core.freshness = Freshness::Check;
                     notify(core.dep);
                 }
             },
@@ -112,7 +162,7 @@ fn notify(dep: Dep) {
 struct Computation {
     // `None` leaves the reads untracked.
     observer: Option<Observer>,
-    deps: List<Dep>,
+    deps: List<Seen>,
     owns: bool,
     owned: List<fn mut() with Dom>,
 }
@@ -122,7 +172,7 @@ impl Track for Computation {
     // makes to what it already read marks it.
     fn read(&mut self, dep: Dep) {
         if let Some(observer) = self.observer && subscribe(dep, observer) {
-            self.deps.push(dep);
+            self.deps.push(Seen { dep, version: dep.readers.version });
         }
         resume ();
     }
@@ -168,6 +218,7 @@ impl<T> Signal<T> {
 
     pub fn set(&self, value: T) {
         self.cell.value = value;
+        self.cell.dep.readers.version += 1;
         notify(self.cell.dep);
     }
 }
@@ -179,51 +230,62 @@ struct MemoState<T> {
 }
 
 /// A value computed from others, again only when one of them changed and
-/// someone asks. It stops listening when the computation that made it is
-/// disposed of, and listens again if it is read after that.
+/// someone asks. A value equal to the last one changes nothing for its
+/// readers. It stops listening when the computation that made it is disposed
+/// of, and listens again if it is read after that.
 pub struct Memo<T> {
     state: &mut MemoState<T>,
 }
 
-pub fn memo<T>(compute: fn mut() -> T with Track) -> Memo<T> with Track {
+pub fn memo<T: Eq>(compute: fn mut() -> T with Track) -> Memo<T> with Track {
     let mut core = MemoCore {
         id: next_observer_id(),
-        fresh: false,
+        freshness: Freshness::Stale,
         dep: new_dep(),
         deps: [],
+        recompute: || {
+        },
     };
+    core.dep.readers.memo = Option::Some(&mut core);
     let mut state = MemoState { core: &mut core, cached: null, compute };
+    core.recompute = || recompute(&mut state);
     Track::own(|| {
-        core.fresh = false;
+        core.freshness = Freshness::Stale;
         unsubscribe_all(core.deps, core.id);
         core.deps = [];
     });
     return Memo { state: &mut state };
 }
 
+fn recompute<T: Eq>(state: &mut MemoState<T>) {
+    let core = state.core;
+    unsubscribe_all(core.deps, core.id);
+    // Before the run, so a write during it leaves the value stale.
+    core.freshness = Freshness::Fresh;
+    let mut computation = Computation {
+        observer: Option::Some(Observer::Memo(core)),
+        deps: [],
+        owns: false,
+        owned: [],
+    };
+    let mut compute = state.compute;
+    let value = with Track => &mut computation do {
+        compute();
+    };
+    core.deps = computation.deps;
+    if let Some(was) = state.cached && was == value {
+        return;
+    }
+    state.cached = Option::Some(value);
+    core.dep.readers.version += 1;
+}
+
 impl<T> Memo<T> {
     pub fn get(&self) -> T with Track {
         let core = self.state.core;
+        refresh(core);
         Track::read(core.dep);
-        if core.fresh && let Some(value) = self.state.cached {
-            return value;
-        }
-        unsubscribe_all(core.deps, core.id);
-        // Before the run, so a write during it leaves the value stale.
-        core.fresh = true;
-        let mut computation = Computation {
-            observer: Option::Some(Observer::Memo(core)),
-            deps: [],
-            owns: false,
-            owned: [],
-        };
-        let mut compute = self.state.compute;
-        let value = with Track => &mut computation do {
-            compute();
-        };
-        core.deps = computation.deps;
-        self.state.cached = Option::Some(value);
-        return value;
+        return self.state.cached.unwrap();
     }
 }
 
@@ -319,6 +381,10 @@ pub fn flush() with Dom {
                 continue;
             }
             ran.push(marked.id);
+            // Marked through a memo that came out the same.
+            if unchanged(&marked.deps) {
+                continue;
+            }
             run(marked);
         }
     }

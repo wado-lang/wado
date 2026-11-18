@@ -60,7 +60,8 @@ closures, effect handlers, and resources.
   state behind a reference, so a copy of a signal is the same signal, and
   reading or writing one calls no function value.
 - A memo is a value computed from others. It recomputes only when one of them
-  was written and someone then reads it.
+  was written and someone then reads it. A value equal to the last one changes
+  nothing for its readers.
 - An effect, made by `observe`, runs once and again whenever something it read
   was written. `effect` is a keyword, which is why the function has another
   name.
@@ -79,10 +80,12 @@ that reads needs no handler above it.
 
 ### Updates
 
-A write only marks. A memo that is marked forgets its value and marks its own
-dependents, and an effect that is marked joins a queue. `flush` then reruns each
-queued effect once, until none is marked, and a memo recomputes when one of
-them reads it.
+A write only marks. A memo that is marked marks its own dependents, and an
+effect that is marked joins a queue. `flush` then reruns each queued effect
+once, until none is marked, and a memo recomputes when one of them reads it.
+Each signal and memo counts the changes to its value, and a computation keeps
+the counts it read. A queued effect, or a marked memo, whose counts all still
+hold skips its run: it was marked only through a memo that came out the same.
 
 So a write performs no effect, and several writes are one batch. An effect
 never sees half of a batch, and never sees one memo updated beside another that
@@ -107,8 +110,6 @@ not to the language.
   installs a handler. What either costs is not measured.
 - The library lives in `example/web-signals`. Nothing publishes it as a
   package.
-- A memo does not compare its new value with the old one, so its dependents
-  rerun even when the value came out the same.
 - A memo owns nothing. Registering a cleanup inside one traps, and so does
   making an effect or another memo there.
 - Disposing of a scope leaves its listeners attached.

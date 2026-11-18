@@ -1,4 +1,4 @@
-use { flush, memo, observe, on_cleanup, scope, signal } from "./signals.wado";
+use { Memo, flush, memo, observe, on_cleanup, scope, signal } from "./signals.wado";
 use { Dom, SurfaceDom } from "wado-lang:web";
 
 test "an effect reruns once for a batch of writes" {
@@ -228,5 +228,66 @@ test "an effect that flushes inside its own run keeps every cleanup" {
         flush();
         dispose();
         assert cleaned == 3;
+    };
+}
+
+test "a memo that comes out the same reruns none of its dependents" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(1);
+        let parity = memo(|| count.get() % 2);
+        let mut labelled = 0;
+        let label = memo(|| {
+            labelled += 1;
+            return if parity.get() == 0 { "even" } else { "odd" };
+        });
+        let mut seen: List<String> = [];
+        observe(|| seen.push(label.get()));
+
+        count.set(3);
+        flush();
+        assert seen == ["odd"];
+        assert labelled == 1;
+
+        count.set(4);
+        flush();
+        assert seen == ["odd", "even"];
+        assert labelled == 2;
+    };
+}
+
+test "an effect that read a memo and a signal reruns for the signal alone" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(1);
+        let name = signal("a");
+        let parity = memo(|| count.get() % 2);
+        let mut seen: List<String> = [];
+        observe(|| seen.push(`${name.get()}${parity.get()}`));
+
+        count.set(3);
+        name.set("b");
+        flush();
+        assert seen == ["a1", "b1"];
+    };
+}
+
+test "a disposed memo listens again when it is read" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(1);
+        let mut doubled: Option<Memo<i32>> = null;
+        let mut dispose = scope(|| doubled = Option::Some(memo(|| count.get() * 2)));
+        let doubled = doubled.unwrap();
+        assert doubled.get() == 2;
+        dispose();
+
+        count.set(2);
+        assert doubled.get() == 4;
+        let mut seen: List<i32> = [];
+        observe(|| seen.push(doubled.get()));
+        count.set(3);
+        flush();
+        assert seen == [4, 6];
     };
 }
