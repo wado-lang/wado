@@ -4823,12 +4823,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else {
                 continue;
             };
+            let mut answers: IndexMap<TypeId, TypeId> = IndexMap::default();
             unify(
                 &self.tysys.type_table,
                 *declared,
                 field.type_id,
-                &mut settled,
+                &mut answers,
             );
+            // A field still typed by an unsolved variable, as `null` is by
+            // `Option<$T>`, settles nothing, and leaves the slot to a later
+            // field.
+            let table = self.tysys.type_table.borrow();
+            for (slot, answer) in answers {
+                if !table.contains_undecided(answer) {
+                    settled.entry(slot).or_insert(answer);
+                }
+            }
         }
         let (slots, args): (Vec<TypeId>, Vec<TypeId>) = info
             .type_param_type_ids
