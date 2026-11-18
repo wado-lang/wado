@@ -253,9 +253,9 @@ test "switch shows the subtree render makes for the key, and swaps it when the k
         let mode = signal("view");
         let mut cleanups: List<String> = [];
         let mut renders = 0;
-        let _dispose = scope(|| {
+        let mut dispose = scope(|| {
             box
-                .switch(|| mode.get(), |key: String| {
+                .switch(|| mode.get(), |key| {
                     renders += 1;
                     on_cleanup(|| cleanups.push(key));
                     return element(if key == "edit" { "input" } else { "span" });
@@ -272,6 +272,40 @@ test "switch shows the subtree render makes for the key, and swaps it when the k
         flush();
         assert box.node.get_html() == "[<input>]";
         assert cleanups == ["view"];
+
+        mode.set("view");
+        flush();
+        assert renders == 3;
+        assert box.node.get_html() == "[<span></span>]";
+
+        dispose();
+        assert cleanups == ["view", "edit", "view"];
+        assert box.node.get_html() == "[]";
+    };
+}
+
+test "switch renders no next subtree once the last one's cleanup disposed of its owner" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div");
+        let mode = signal(1);
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        let mut renders = 0;
+        dispose_owner = scope(|| {
+            box.switch(|| mode.get(), |key| {
+                renders += 1;
+                if key == 1 {
+                    on_cleanup(|| dispose_owner());
+                }
+                return element("p");
+            });
+        });
+
+        mode.set(2);
+        flush();
+        assert renders == 1;
+        assert !box.node.has_child_nodes();
     };
 }
 
