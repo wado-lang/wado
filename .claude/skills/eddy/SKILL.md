@@ -35,7 +35,9 @@ reviewed. It also writes tests into that checkout and runs them with `cargo`,
    ```
 
    In a Claude Code cloud session the git proxy serves no wiki, so the push
-   carries the session's token itself:
+   carries a token itself. The maintainer's cloud environment sets
+   `GITHUB_TOKEN` to a personal access token for this; another environment
+   has none unless its owner provides one:
    `git -C scratchpad/wiki -c http.extraheader="Authorization: Basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" push -q`.
 5. Answer the findings with the `code-review-response` skill. With no findings,
    say so and stop.
