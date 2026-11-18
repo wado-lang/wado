@@ -1716,18 +1716,17 @@ WS : [ \\t]+ -> skip ;";
     assert got == "if IF iF x => IF:if IF:IF IF:iF STRICT:x\nX => error:X\n";
 }
 
-// The repeat `F?` calls a rule, so its plan is the plain greedy loop, which
-// never hands back the `>` the suffix needs.
-#[TODO]
-test "an optional element backs off for the element after it in its group" {
-    // `F` takes `>` too, so `>5` matches only with `F` skipped; the jar lexes
-    // it as one `X`.
+test "a repeat over a fragment backs off for the element after it" {
+    // `F` takes `>` too, so `>5` matches only with `F` skipped, and `G*` must
+    // hand back the `ab` the suffix needs. The jar lexes each as one token.
     let input = "lexer grammar Test;
 X : (F? [<>])? [0-9]* ;
+Y : '.' G* 'ab' 'c' ;
 fragment F : ~[ ] ;
+fragment G : 'a' 'b' ;
 WS : ' ' -> skip ;";
-    let got = lexes(input, [">5", "a>5", "5"]);
-    assert got == ">5 => X:>5\na>5 => X:a>5\n5 => X:5\n";
+    let got = lexes(input, [">5", "a>5", "5", ".abababc", ".abc"]);
+    assert got == ">5 => X:>5\na>5 => X:a>5\n5 => X:5\n.abababc => Y:.abababc\n.abc => Y:.abc\n";
 }
 
 test "a first-char dispatch whose arms claim every char compiles without a `_` arm" {

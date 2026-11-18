@@ -1256,7 +1256,7 @@ RAW_STRING_QUOTE
 mode FORMAT;
 
 FORMAT_SPEC
-    : (FORMAT_FILL [<^>] | [<^>])? '+'? '#'? '0'? [0-9]* ('.' [0-9]+)? [boxXeEf?]?
+    : (FORMAT_FILL? [<^>])? '+'? '#'? '0'? [0-9]* ('.' [0-9]+)? [boxXeEf?]?
     ;
 
 FORMAT_CLOSE

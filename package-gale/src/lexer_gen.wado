@@ -2209,7 +2209,7 @@ pub fn lexer_repeat_emit(alt: &LexerAlternative, index: i32, all_rules: &List<Le
     if index + 1 >= alt.elements.len() && !predicate_follows {
         return LexerRepeatEmit::PlainNoSuffix;
     }
-    if !lexer_element_one_path(&rep.element) {
+    if !lexer_element_one_path(&rep.element, all_rules) {
         return LexerRepeatEmit::PlainInnerChooses;
     }
     if !predicate_follows && !lexer_repeat_can_eat_suffix(&rep.element, &lexer_alt_suffix(alt, index), all_rules, ci) {
@@ -3267,14 +3267,25 @@ fn ranges_intersect(a: &List<[i32, i32]>, b: &List<[i32, i32]>) -> List<[i32, i3
 /// lookahead-aware repeat records where each iteration ends, so an inner that
 /// could end one in two places (`'a' | 'ab'`, a nested repeat, a rule call)
 /// would leave the scan a choice it does not make.
-fn lexer_element_one_path(elem: &LexerElement) -> bool {
+fn lexer_element_one_path(elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
     return match elem {
         Literal(text) => !text.is_empty(),
-        Group(alts) && alts.len() == 1 => {
-            !alts[0].elements.is_empty() && alts[0].elements.iter_ref().all(|e| lexer_element_one_path(e));
+        Group(alts) => lexer_alts_one_path(alts, all_rules),
+        // A fragment is its body inlined, as the jar reads it.
+        RuleRef(name) => match find_fragment(all_rules, name) {
+            Some(f) => !fragment_is_recursive(f, all_rules) && lexer_alts_one_path(&f.body, all_rules),
+            None => false,
         },
         _ => lexer_element_can_consume_simple(elem),
     };
+}
+
+fn lexer_alts_one_path(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> bool {
+    if alts.len() != 1 {
+        return !alts.is_empty()
+            && alts.iter_ref().all(|a| a.elements.len() == 1 && lexer_element_can_consume_simple(&a.elements[0]));
+    }
+    return !alts[0].elements.is_empty() && alts[0].elements.iter_ref().all(|e| lexer_element_one_path(e, all_rules));
 }
 
 /// Whether `elem` consumes exactly one char.
@@ -3376,7 +3387,7 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
 
     if let Some(accept) = &accept_var {
         // The accept position alone says how many iterations the match kept.
-        assert lexer_element_one_path(&rep.element), "a lookahead-aware repeat's inner matches each iteration along one path";
+        assert lexer_element_one_path(&rep.element, e.all_rules), "a lookahead-aware repeat's inner matches each iteration along one path";
         w.line(`pos = la_start_${id};`);
         gen_lexer_replay_to(w, &rep.element, inner, e, accept);
         gen_lexer_alt_seq(w, alt, plan, from, e, fail_action, ea, /*replay=*/ true);
