@@ -3082,6 +3082,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         required_trait: Option<&RequiredTrait>,
     ) -> (Option<Ordered>, Unsettled) {
+        // The probe that let a receiver wait for a pending call's literals
+        // names the one impl it found, its slots bound to those literals.
+        if let Some(receiver) = receiver_type_id
+            && type_key.ref_kind().is_none()
+            && required_trait.is_none()
+            && self.names_pending_var(receiver)
+            && let [(def, _)] = self
+                .open_receiver_candidates(receiver, method_name, ImplKind::Trait, &|_, _| true)
+                .as_slice()
+        {
+            return (Some(Ordered::One(Some(*def))), Unsettled::Open);
+        }
         let required = match required_trait.map(|r| r.decl) {
             Some(Resolution::Def(def)) => Some(def),
             // A qualified trait that resolved to nothing is already reported.
@@ -3113,10 +3125,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 unsettled,
             )
         };
-        // A receiver still holding a variable is asked which impls may apply,
-        // as a qualified call omitting the type's arguments is.
+        // A receiver whose head is known but whose arguments still hold a
+        // variable is asked which impls may apply, as a qualified call
+        // omitting the type's arguments is. A bare variable is no head: every
+        // impl may apply to it.
+        let headed_open = || {
+            let tt = self.tysys.type_table.borrow();
+            let receiver = self.apply_infer_holes(receiver);
+            tt.contains_infer_var(receiver)
+                && !matches!(tt.get(receiver), ResolvedType::InferVar(_))
+        };
         match select(Unsettled::Open) {
-            None if self.type_has_infer_hole(receiver) => (select(Unsettled::Var), Unsettled::Var),
+            None if headed_open() => (select(Unsettled::Var), Unsettled::Var),
             order => (order, Unsettled::Open),
         }
     }

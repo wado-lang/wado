@@ -95,9 +95,11 @@ at a type holding one therefore names the impls that may apply, through blankets
 as deep as they go. An inference variable lowers to `Var` for two questions:
 
 - the one that decides the kind of a qualified call;
-- the order of a method call whose receiver still holds a variable, where the
-  order at the receiver as it stands names nothing. The chosen trait is
-  checked again against the receiver's answer. A receiver nothing answers
-  reports the variable it holds, not a missing method.
+- the order of a method call whose receiver names its type but still holds a
+  variable among the arguments, where the order at the receiver as it stands
+  names nothing. The chosen trait is checked again against the receiver's
+  answer. A receiver nothing answers reports the variable it holds, not a
+  missing method. A receiver that is itself a variable names no type, and
+  every impl would apply to it, so it is not asked this way.
 
 Every other question waits for the variable to settle, as before.
