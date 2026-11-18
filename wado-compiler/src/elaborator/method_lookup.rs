@@ -2472,16 +2472,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
             | None => {}
         }
-        let selected =
+        let mut selected =
             self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe)?;
-        // Chosen among the impls that may apply, so the receiver's answer is
-        // held to the trait.
-        if unsettled == Unsettled::Var
-            && let Some(receiver) = receiver_type_id
-        {
-            self.defer_trait_to_answer(receiver, &selected.trait_name, span);
+        if unsettled == Unsettled::Var {
+            // The receiver's answer is held to the trait at these arguments,
+            // which a parameter of the block leaves unsaid.
+            let tt = self.tysys.type_table.borrow();
+            if selected
+                .trait_args
+                .iter()
+                .any(|&arg| tt.contains_type_param(arg))
+            {
+                return None;
+            }
+            selected.confirm_at_answer = true;
         }
         Some(selected)
+    }
+
+    /// Hold what `subject`, the type `found`'s impl was asked of, becomes to
+    /// the trait, where `found` was chosen before the receiver was answered.
+    /// Only a call building on `found` asks it, so a match a probe or a
+    /// caller discards holds the receiver to nothing.
+    pub(super) fn commit_trait_match(
+        &mut self,
+        found: &TraitMethodMatch,
+        subject: TypeId,
+        span: Span,
+    ) {
+        if found.confirm_at_answer {
+            self.defer_trait_to_answer(subject, &found.trait_name, span);
+        }
     }
 
     /// The matches the named impls yield for `method_name`: read off each
@@ -2915,6 +2936,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 impl_struct_fq: impl_struct_fq.clone(),
                 is_blanket_ref_impl,
                 ref_impl_target,
+                confirm_at_answer: false,
             });
             method_found = true;
         }
@@ -2967,6 +2989,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_struct_fq,
                     is_blanket_ref_impl,
                     ref_impl_target,
+                    confirm_at_answer: false,
                 });
             }
         }
@@ -3105,6 +3128,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (Some(bridge), Some(receiver)) = (self.tysys.solver.as_ref(), receiver_type_id) else {
             return (None, Unsettled::Open);
         };
+        // What is answered already is asked as answered.
+        let receiver = self.apply_infer_holes(receiver);
+        // A receiver whose head is known but whose arguments still hold a
+        // variable may be asked which impls may apply, as a qualified call
+        // omitting the type's arguments is. A bare variable is no head: every
+        // impl may apply to it.
+        let headed_open = {
+            let tt = self.tysys.type_table.borrow();
+            tt.contains_infer_var(receiver)
+                && !matches!(tt.get(receiver), ResolvedType::InferVar(_))
+        };
         let bridge = bridge.borrow();
         // A reference receiver arrives peeled, its `&` carried by `type_key`.
         // The order reads the reference as a level of the receiver's chain, so
@@ -3125,18 +3159,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 unsettled,
             )
         };
-        // A receiver whose head is known but whose arguments still hold a
-        // variable is asked which impls may apply, as a qualified call
-        // omitting the type's arguments is. A bare variable is no head: every
-        // impl may apply to it.
-        let headed_open = || {
-            let tt = self.tysys.type_table.borrow();
-            let receiver = self.apply_infer_holes(receiver);
-            tt.contains_infer_var(receiver)
-                && !matches!(tt.get(receiver), ResolvedType::InferVar(_))
-        };
+        // Only one impl that may apply is an answer: of several, the
+        // receiver's answer chooses, which is not known yet.
         match select(Unsettled::Open) {
-            None if headed_open() => (select(Unsettled::Var), Unsettled::Var),
+            None if headed_open => match select(Unsettled::Var) {
+                one @ Some(Ordered::One(_)) => (one, Unsettled::Var),
+                _ => (None, Unsettled::Open),
+            },
             order => (order, Unsettled::Open),
         }
     }
@@ -4137,6 +4166,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(&mut probe),
             )
         {
+            self.commit_trait_match(&trait_match, output_type, method_call.span);
             method_trait_name = Some(trait_match.trait_name);
             method_info = Some(trait_match.method_info);
             method_trait_impl_source = Some(trait_match.impl_module_source);

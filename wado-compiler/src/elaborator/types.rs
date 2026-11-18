@@ -4429,6 +4429,10 @@ pub(super) struct TraitMethodMatch {
     /// `Inner`). A reference impl buckets by kind, so nothing else names the
     /// link a newtype inherits it through.
     pub(super) ref_impl_target: Option<TypeId>,
+    /// Chosen among the impls that may apply to a receiver still holding a
+    /// variable, so a call committing to it holds the receiver's answer to
+    /// the trait.
+    pub(super) confirm_at_answer: bool,
 }
 
 impl TraitMethodMatch {

@@ -607,6 +607,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(trait_match) = result
                 && !trait_match.is_blanket_ref_impl
             {
+                let subject = subject.expect("a reference kind names its reference");
+                self.commit_trait_match(&trait_match, subject, span);
                 let owner = trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
                 matched_impl_decl = trait_match.impl_struct_fq.head().def();
                 trait_impl_struct_name = Some(trait_match.impl_struct_fq);
@@ -673,6 +675,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(&mut probe),
             )
         {
+            self.commit_trait_match(&trait_match, base_type_id, span);
             let mut info = trait_match.method_info;
             // A blanket answers a parameter's call only until the instance
             // names its type, where an impl written for that type outranks it.
@@ -1513,9 +1516,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // A trait the call site cannot name answers only where nothing it can
         // name does, so an import it lacks never hides what it reaches.
-        let mut supplied = self.trait_answer(receiver, method_name, Reach::InScope);
+        let spelled = self.spelled_type(receiver);
+        let mut supplied = self.trait_answer(receiver, spelled, method_name, Reach::InScope);
         if supplied.is_none() && own.iter().all(Option::is_none) {
-            supplied = self.trait_answer(receiver, method_name, Reach::OutOfScope);
+            supplied = self.trait_answer(receiver, spelled, method_name, Reach::OutOfScope);
         }
         let supplied = supplied.map(|(link, blocks)| ((link, true), blocks, false));
         let Some((_, blocks, takes_receiver)) = own
@@ -1586,20 +1590,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         unreachable!("a chain ends")
     }
 
-    /// The link of the spelled type's chain where trait impls answer
-    /// `method_name`, and those impls. The order asks the type itself, by
-    /// value and through each reference, so a blanket answers where its
-    /// bounds may hold; an argument the spelling omits is a variable, so the
-    /// impls named are those that may apply. The blocks written for its head
-    /// answer besides.
+    /// The link of `spelled`'s chain where trait impls answer `method_name`,
+    /// and those impls. The order asks the type itself, by value and through
+    /// each reference, so a blanket answers where its bounds may hold; an
+    /// argument the spelling omits is a variable, so the impls named are
+    /// those that may apply. The blocks written for `receiver`'s head answer
+    /// besides.
     fn trait_answer(
         &mut self,
         receiver: &ReceiverId,
+        spelled: Option<TypeId>,
         method_name: &str,
         reach: Reach,
     ) -> Option<(u32, Vec<DefId>)> {
-        let mut found: Vec<(u32, Vec<DefId>)> = self
-            .spelled_type(receiver)
+        let mut found: Vec<(u32, Vec<DefId>)> = spelled
             .and_then(|ty| self.ordered_impls(ty, method_name, reach))
             .into_iter()
             .collect();
@@ -1779,8 +1783,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Where the spelling writes the type's arguments, they are the
             // receiver's too, but for one left to inference (`_`).
             let args_agree = |ty| match (
-                table.nominal_type_args(ty),
-                table.nominal_type_args(pointee),
+                table.declared_type_args(ty),
+                table.declared_type_args(pointee),
             ) {
                 (Some(written), Some(held)) => {
                     written.len() == held.len()

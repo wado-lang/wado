@@ -954,7 +954,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn open_omitted_args(&mut self, ty: TypeId) -> TypeId {
         let (def, args) = {
             let table = self.tysys.type_table.borrow();
-            match (table.nominal_def(ty), table.nominal_type_args(ty)) {
+            match (table.nominal_def(ty), table.declared_type_args(ty)) {
                 (Some(def), Some(args)) if args.contains(&TypeTable::UNKNOWN) => {
                     (def, args.to_vec())
                 }

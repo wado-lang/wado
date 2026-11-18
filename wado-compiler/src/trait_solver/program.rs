@@ -73,6 +73,30 @@ pub struct Pin {
 }
 
 impl SolverType {
+    /// Whether `self` and `other` may be one type: equal but where either
+    /// holds a [`Var`](Self::Var), which may be anything.
+    #[must_use]
+    pub fn may_equal(&self, other: &Self) -> bool {
+        let each = |a: &[Self], b: &[Self]| {
+            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.may_equal(b))
+        };
+        match (self, other) {
+            (Self::Var, _) | (_, Self::Var) => true,
+            (Self::Decl(head, args), Self::Decl(other_head, other_args)) => {
+                head == other_head && each(args, other_args)
+            }
+            (Self::Tuple(elems), Self::Tuple(other_elems)) => each(elems, other_elems),
+            (
+                Self::Ref { is_mut, inner },
+                Self::Ref {
+                    is_mut: other_mut,
+                    inner: other_inner,
+                },
+            ) => is_mut == other_mut && inner.may_equal(other_inner),
+            _ => self == other,
+        }
+    }
+
     /// Whether a [`Param`](Self::Param) or [`Pack`](Self::Pack) in `self`
     /// satisfies `pred`.
     #[must_use]

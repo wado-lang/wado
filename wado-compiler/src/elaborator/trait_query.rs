@@ -3918,6 +3918,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_struct_fq,
             is_blanket_ref_impl: false,
             ref_impl_target: None,
+            confirm_at_answer: false,
         })
     }
 }

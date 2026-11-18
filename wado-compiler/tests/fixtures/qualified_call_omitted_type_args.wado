@@ -35,6 +35,7 @@ test "a generic newtype whose base the impl is written for" {
     let g: G<i32> = { a: 1, b: 2 };
     assert g.m() == "blanket";
     assert G::m(&g) == "blanket";
+    assert G::<_>::m(&g) == "blanket";
 }
 
 test "two links down the chain" {

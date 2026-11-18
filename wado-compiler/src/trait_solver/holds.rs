@@ -557,7 +557,7 @@ impl Query<'_> {
             };
             let actual = self.normalized(&actual);
             match self.at_bindings(&pin.ty, bindings) {
-                Some(expected) if expected != actual => return false,
+                Some(expected) if !expected.may_equal(&actual) => return false,
                 Some(_) => {}
                 None => {
                     let from = deferred.len();
@@ -1223,8 +1223,8 @@ fn match_target(
                     *slot = Some(Binding::One(ty.clone()));
                     true
                 }
-                Some(_) if *ty == SolverType::Var => true,
-                Some(bound) => *bound == Binding::One(ty.clone()),
+                Some(Binding::One(bound)) => bound.may_equal(ty),
+                Some(Binding::Pack(_)) => false,
                 None => {
                     *slot = Some(Binding::One(ty.clone()));
                     true
