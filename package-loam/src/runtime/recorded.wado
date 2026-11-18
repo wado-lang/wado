@@ -480,7 +480,7 @@ impl Graph for Recorder {
     ) -> List<Any<Recorder>> with _ {
         let outer = self.current;
         self.current = Region::empty();
-        let step =self.added(Operation::Carried, [], ElementKind::I64, []);
+        let step = self.added(Operation::Carried, [], ElementKind::I64, []);
         let mut carried: List<i32> = [];
         for let start of initial {
             let node = &self.nodes[node_of(start)];
@@ -1427,7 +1427,11 @@ impl<affine G: Backend> Running<G> {
                 },
                 Branch(branch) => {
                     let pred = self.value_of(branch.pred, weights);
-                    let taken = if g.download(&typed::<G, bool, []>(g, &pred)).data[0] { &branch.then } else { &branch.otherwise };
+                    let taken = if g.download(&typed::<G, bool, []>(g, &pred)).data[0] {
+                        &branch.then;
+                    } else {
+                        &branch.otherwise;
+                    };
                     self.ran(g, &taken.stages, weights, host);
                     self.set(&branch.results, self.values_of(&taken.yielded, weights));
                 },

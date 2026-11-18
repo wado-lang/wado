@@ -513,20 +513,31 @@ test "a loop holding a host step runs on the host, each run reading the weights 
         extents: [3],
     };
     for let runs of [3, 0] as List<i64> {
-        let count = Tensor::<i64, []> { data: [runs], extents: [] };
+        let count = Tensor::<i64, []> {
+            data: [runs],
+            extents: [],
+        };
         let mut cpu = Cpu {};
         let mut programs = Programs::<Cpu>::new();
         let mut steps = 0;
         let got = programs.run(&mut cpu, [
             [3],
-        ], stepped_loop, || [host_of(&x), host_of(&count)], || [host_of(&w)], |step, read, weights| {
+        ], stepped_loop, || [
+            host_of(&x),
+            host_of(&count),
+        ], || [host_of(&w)], |step, read, weights| {
             assert step == 3;
             return hundred_more(&mut steps, read, weights);
         });
         assert steps == runs as i32;
         // Each run adds 100 and twice the weight its own step wrote: 1, 2, 3.
         let want: List<f32> = if runs == 0 { x.data } else { [313.0, 314.0, 315.0] };
-        assert got == [host_of(&Tensor::<f32, [A]> { data: want, extents: [3] })] as List<Any<Cpu>>;
+        assert got == [
+            host_of(&Tensor::<f32, [A]> {
+                data: want,
+                extents: [3],
+            }),
+        ] as List<Any<Cpu>>;
     }
 }
 
@@ -552,13 +563,19 @@ test "a branch holding a host step runs on the host, the step only where it is t
         extents: [3],
     };
     for let taken of [true, false] as List<bool> {
-        let pred = Tensor::<bool, []> { data: [taken], extents: [] };
+        let pred = Tensor::<bool, []> {
+            data: [taken],
+            extents: [],
+        };
         let mut cpu = Cpu {};
         let mut programs = Programs::<Cpu>::new();
         let mut steps = 0;
         let got = programs.run(&mut cpu, [
             [3],
-        ], stepped_branch, || [host_of(&x), host_of(&pred)], || [], |step, read, _| {
+        ], stepped_branch, || [
+            host_of(&x),
+            host_of(&pred),
+        ], || [], |step, read, _| {
             assert step == 5;
             steps += 1;
             let given = *typed::<Cpu, f32, [A]>(&Cpu {}, &read[0]).value();
@@ -571,7 +588,12 @@ test "a branch holding a host step runs on the host, the step only where it is t
         });
         assert steps == if taken { 1 } else { 0 };
         let want: List<f32> = if taken { [101.0, 102.0, 103.0] } else { x.data };
-        assert got == [host_of(&Tensor::<f32, [A]> { data: want, extents: [3] })] as List<Any<Cpu>>;
+        assert got == [
+            host_of(&Tensor::<f32, [A]> {
+                data: want,
+                extents: [3],
+            }),
+        ] as List<Any<Cpu>>;
     }
 }
 

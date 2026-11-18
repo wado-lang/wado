@@ -649,11 +649,11 @@ fn stacked_pass(r: &mut Recorder, extents: &List<List<i32>>, stacking: Stacking)
                 let y = layers(&typed::<Recorder, f32, [A, B]>(r, &state[0]));
                 return [Any::F32(r.relabeled::<f32, [A, B], Untyped>(&y))];
             });
-            typed::<Recorder, f32, [A, B]>(r, &last[0])
+            typed::<Recorder, f32, [A, B]>(r, &last[0]);
         },
         Branched => {
             let positive = r.compare(Comparison::Gt, &count, &scalar(r, 0 as i64));
-            r.conditional(&positive, || r.yielded(&layers(&x)), || r.yielded(&x))
+            r.conditional(&positive, || r.yielded(&layers(&x)), || r.yielded(&x));
         },
     };
     return r.finished([out.id]);
@@ -666,7 +666,11 @@ pub global STACKINGS: List<Stacking> = [Stacking::Straight, Stacking::Looped, St
 /// every expert it picks, which 5 slots hold only by giving way to the other
 /// layer's; 1 token runs its picks. A budget of 8 experts holds both layers.
 /// A count of 0 runs no loop and takes no branch.
-pub global STACKED_RUNS: List<[i32, i64]> = [[3, 2], [1, 0], [3, 1]];
+pub global STACKED_RUNS: List<[i32, i64]> = [
+    [3, 2],
+    [1, 0],
+    [3, 1],
+];
 
 /// `stacked_pass` over pools within a budget of `slots` experts, its layers
 /// where `stacking` puts them, run once for each `[tokens, count]` of `runs`;

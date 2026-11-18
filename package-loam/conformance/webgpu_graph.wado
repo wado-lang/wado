@@ -295,7 +295,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         for let [k, ran] of cases::stacked_runs(&mut gpu, 5, stacking, cases::STACKED_RUNS).into_iter().enumerate() {
             let fetched = typed::<WebGpuBackend, f32, Untyped>(&gpu, &ran);
             println(
-                `experts fetched ${stacking}, run ${k} ${apart(&mut gpu, &fetched, &typed::<Cpu, f32, Untyped>(cpu, &resident[k]))}`,
+                `experts fetched ${stacking}, run ${k} ${apart(&mut gpu, &fetched, &typed::<Cpu, f32, Untyped>(
+                    cpu,
+                    &resident[k],
+                ))}`,
             );
         }
     }
