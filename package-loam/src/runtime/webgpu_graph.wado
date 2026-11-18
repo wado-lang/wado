@@ -816,7 +816,7 @@ impl Graph for WebGpuBackend {
 
 /// `view` as a matrix of its last axis, its other axes one: what a quantized
 /// product multiplies, and computes.
-fn as_rows(g: &mut WebGpuBackend, view: &DeviceTensor) -> DeviceTensor {
+fn as_rows(g: &mut WebGpuBackend, view: &DeviceTensor) -> DeviceTensor with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let last = view.extents.len() - 1;
     let inner = view.extents[last];
     return g.reshaped(view, &([element_count(&view.extents) / inner, inner] as List<i32>));
