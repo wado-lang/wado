@@ -1,0 +1,19 @@
+use g from "./grammars/lexer_arm_ends_in_alternation.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            output_dir: "./generated/lexer_arm_ends_in_alternation",
+        },
+    };
+
+test "the fragment's arm is chosen against the suffix" {
+    assert g::parse("{0}").ok();
+    assert g::parse("{80}").ok();
+    assert g::parse("{1f600}").ok();
+    assert g::parse("{10ffff}").ok();
+    assert g::parse("{0080}").ok();
+}
+
+test "what no arm spells is refused" {
+    assert !g::parse("{110000}").ok();
+}

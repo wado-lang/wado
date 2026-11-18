@@ -1157,6 +1157,9 @@ fn splice_alt(alt: &mut LexerAlternative, scope: &SpliceScope) {
     // nested group's own last element may now be followed by.
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         splice_within(&mut alt.elements[i], scope);
+        if i + 1 < alt.elements.len() && let Group(arms) = &mut alt.elements[i] {
+            *arms = distribute_contested_ends(arms, scope);
+        }
         if i + 1 == alt.elements.len() && !is_spliced_token_ref(&alt.elements[i], scope) {
             continue;
         }
@@ -1193,6 +1196,63 @@ fn splice_within(elem: &mut LexerElement, scope: &SpliceScope) {
         _ => {
         },
     }
+}
+
+/// The arms of a group a suffix follows, with each arm that ends in a contested
+/// alternation split into one arm per alternative (`(x | y (a | ab)) 'b'` is
+/// `(x | y a | y ab) 'b'`). An arm commits to one end before the suffix is
+/// scored, so an alternation inside it would choose blind to the suffix. An arm
+/// carrying actions keeps its shape: they are placed by element index.
+fn distribute_contested_ends(arms: &List<LexerAlternative>, scope: &SpliceScope) -> List<LexerAlternative> {
+    let mut out: List<LexerAlternative> = [];
+    for let arm of arms {
+        let n = arm.elements.len();
+        let ends = if n == 0 || !arm.actions.is_empty() {
+            null
+        } else {
+            match spliced_elements(&arm.elements[n - 1], scope) {
+                Some(inner) => Option::Some(inner),
+                None => match &arm.elements[n - 1] {
+                    Group(g) && lexer_alts_contested(g, &scope.rules, Casing::Unknown) => {
+                        Option::Some([arm.elements[n - 1]] as List<LexerElement>)
+                    },
+                    _ => null,
+                },
+            }
+        };
+        let Some(ends) = ends else {
+            out.push(*arm);
+            continue;
+        };
+        let mut head = arm.elements;
+        head.pop();
+        head.extend(&ends);
+        let last = head.pop().unwrap();
+        let mut split: List<LexerAlternative> = match last {
+            Group(inner) && inner.len() >= 2 && inner.iter_ref().all(|a| a.actions.is_empty()) => {
+                inner.iter_ref().map(|a| {
+                    let mut elements = head;
+                    elements.extend(&a.elements);
+                    return LexerAlternative { elements, actions: [] };
+                }).collect()
+            },
+            _ => {
+                head.push(last);
+                [LexerAlternative { elements: head, actions: [] }]
+            },
+        };
+        // What the splice brought in is a rule body as written, which the
+        // rule-by-rule pass has not reached in this copy.
+        for let a of &mut split {
+            splice_alt(a, scope);
+        }
+        if split.len() == 1 {
+            out.extend(&split);
+        } else {
+            out.extend(&distribute_contested_ends(&split, scope));
+        }
+    }
+    return out;
 }
 
 /// The elements `elem` stands for in its sequence, when a contested alternation
