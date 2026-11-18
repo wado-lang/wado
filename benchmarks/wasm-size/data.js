@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794973281326,
+  "lastUpdate": 1794974353682,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79257,6 +79257,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e68383a239fae8987dc8431e130e25af2eb615e3"
         },
         "date": 1794973280020,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b9ffb15a967d52d2bbb97674693fa781bc0ec714",
+          "message": "Merge pull request #2679 from wado-lang/eddy-same-commit\n\nfix(eddy): run only an Eddy that matches the workflow",
+          "timestamp": "2026-11-18T12:25:05+09:00",
+          "tree_id": "c18c7bc7298e69e0d129b99f76a36a5122ee0f45",
+          "url": "https://github.com/wado-lang/wado/commit/b9ffb15a967d52d2bbb97674693fa781bc0ec714"
+        },
+        "date": 1794974353216,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
