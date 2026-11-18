@@ -38,14 +38,16 @@ test "a token whose other logits are -inf runs its one expert once, in either fo
 fn slots_within(budget: i64) -> Result<List<i32>, LoadError> {
     let layout = |layers: i32, weight: i32| ExpertLayout {
         weights: [weight],
-        layers: (0..<layers).map(|_| [
-            StoredExperts {
-                file: "w",
-                start: 0,
-                kind: ElementKind::U8,
-                extents: [2],
-            },
-        ] as List<StoredExperts>).collect(),
+        layers: (0..<layers)
+            .map(|_| [
+                StoredExperts {
+                    file: "w",
+                    start: 0,
+                    kind: ElementKind::U8,
+                    extents: [2],
+                },
+            ] as List<StoredExperts>)
+            .collect(),
         steps: (0..<layers).collect(),
         experts: 4,
     };

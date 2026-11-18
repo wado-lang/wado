@@ -77,9 +77,13 @@ impl ExpertPlan {
             if node.op != QMOE {
                 continue;
             }
-            let weights: List<String> = EXPERT_OPERANDS.into_iter().filter(|i| node.has_operand(i)).map(
-                |i| node.inputs[i],
-            ).collect();
+            let weights: List<String> = EXPERT_OPERANDS
+                .into_iter()
+                .filter(|i| node.has_operand(i))
+                .map(
+                    |i| node.inputs[i],
+                )
+                .collect();
             if !weights.into_iter().all(|w| initializers.contains(w) && !elsewhere.contains(w)) {
                 continue;
             }

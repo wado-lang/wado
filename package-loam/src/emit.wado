@@ -500,11 +500,16 @@ fn emit_weights(
         hosts[vi.name] = `HostWeight::of(&self.${names.get(&vi.name)})`;
     }
     w.line("/// These weights as tensors of the graph `backend` builds.");
-<<<<<<< HEAD
-    FnSpec::new("params", Vis::Pub).add_generic(BACKEND_BOUND).set_receiver("&self").add_param(
-        "backend",
-        `&mut ${BACKEND_PARAM}`,
-    ).set_return_type(PARAMS_TYPE).add_effect("_").emit_begin(w);
+    FnSpec::new("params", Vis::Pub)
+        .add_generic(BACKEND_BOUND)
+        .set_receiver("&self")
+        .add_param(
+            "backend",
+            `&mut ${BACKEND_PARAM}`,
+        )
+        .set_return_type(PARAMS_TYPE)
+        .add_effect("_")
+        .emit_begin(w);
     let pools = if experts.groups.is_empty() {
         "[]";
     } else {
@@ -517,22 +522,6 @@ fn emit_weights(
     };
     emit_held_call(w, graph, experts, &hosts, false, pools);
     w.line("return weights;");
-||||||| 4dd84a0e6dc
-    FnSpec::new("params", Vis::Pub).add_generic(GRAPH_BOUND).set_receiver("&self").add_param(
-        "backend",
-        `&mut ${BACKEND_PARAM}`,
-    ).set_return_type(PARAMS_TYPE).add_effect("_").emit_begin(w);
-    emit_held_call(w, graph, &hosts, false);
-=======
-    FnSpec::new("params", Vis::Pub)
-        .add_generic(GRAPH_BOUND)
-        .set_receiver("&self")
-        .add_param("backend", `&mut ${BACKEND_PARAM}`)
-        .set_return_type(PARAMS_TYPE)
-        .add_effect("_")
-        .emit_begin(w);
-    emit_held_call(w, graph, &hosts, false);
->>>>>>> origin/main
     w.end();
     w.end();
     w.blank();
@@ -677,12 +666,16 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         };
         let pooled = !experts.groups.is_empty();
         w.line(`/// The weights, those the graph does not carry read from ${doc}.`);
-<<<<<<< HEAD
         let mut load = FnSpec::new("load", Vis::Pub);
-        load.add_generic(SOURCE_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(
-            "source",
-            `&${SOURCE_PARAM}`,
-        ).set_return_type(`Result<${PARAMS_TYPE}, LoadError>`).add_effect("_");
+        load
+            .add_generic(SOURCE_BOUND)
+            .add_param("backend", `&mut ${BACKEND_PARAM}`)
+            .add_param(
+                "source",
+                `&${SOURCE_PARAM}`,
+            )
+            .set_return_type(`Result<${PARAMS_TYPE}, LoadError>`)
+            .add_effect("_");
         if pooled {
             w.line("/// Its pools hold every expert.");
             load.emit_begin(w);
@@ -691,35 +684,25 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
             w.blank();
             w.line(`/// The weights, those the graph does not carry read from ${doc}, and the`);
             w.line("/// experts their pools hold within `budget` bytes.");
-            FnSpec::new("loaded").add_generic(SOURCE_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(
-                "source",
-                `&${SOURCE_PARAM}`,
-            ).add_param("budget", "i64").set_return_type(`Result<[${PARAMS_TYPE}, HeldExperts], LoadError>`).add_effect(
-                "_",
-            ).emit_begin(w);
+            FnSpec::new("loaded")
+                .add_generic(SOURCE_BOUND)
+                .add_param("backend", `&mut ${BACKEND_PARAM}`)
+                .add_param(
+                    "source",
+                    `&${SOURCE_PARAM}`,
+                )
+                .add_param("budget", "i64")
+                .set_return_type(`Result<[${PARAMS_TYPE}, HeldExperts], LoadError>`)
+                .add_effect(
+                    "_",
+                )
+                .emit_begin(w);
         } else {
             load.emit_begin(w);
         }
-||||||| 4dd84a0e6dc
-        FnSpec::new("load", Vis::Pub).add_generic(`affine ${SOURCE_PARAM}: WeightSource`).add_param(
-            "backend",
-            `&mut ${BACKEND_PARAM}`,
-        ).add_param("source", `&${SOURCE_PARAM}`).set_return_type(`Result<${PARAMS_TYPE}, LoadError>`).add_effect(
-            "_",
-        ).emit_begin(w);
-=======
-        FnSpec::new("load", Vis::Pub)
-            .add_generic(`affine ${SOURCE_PARAM}: WeightSource`)
-            .add_param("backend", `&mut ${BACKEND_PARAM}`)
-            .add_param("source", `&${SOURCE_PARAM}`)
-            .set_return_type(`Result<${PARAMS_TYPE}, LoadError>`)
-            .add_effect("_")
-            .emit_begin(w);
->>>>>>> origin/main
         for let line of firsts {
             w.line(line);
         }
-<<<<<<< HEAD
         let pools = if pooled {
             w.begin("let mut experts = HeldExperts::within(expert_layouts(|at| Result::Ok(match at");
             for let [at, vi] of pooled_initializers(graph, experts) {
@@ -749,21 +732,6 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
             );
         }
         return;
-||||||| 4dd84a0e6dc
-    } else {
-        w.line("/// The weights the graph carries.");
-        FnSpec::new("embedded", Vis::Pub).add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(
-            PARAMS_TYPE,
-        ).add_effect("_").emit_begin(w);
-=======
-    } else {
-        w.line("/// The weights the graph carries.");
-        FnSpec::new("embedded", Vis::Pub)
-            .add_param("backend", `&mut ${BACKEND_PARAM}`)
-            .set_return_type(PARAMS_TYPE)
-            .add_effect("_")
-            .emit_begin(w);
->>>>>>> origin/main
     }
     w.line("/// The weights the graph carries.");
     let mut embedded = FnSpec::new("embedded", Vis::Pub);
@@ -785,10 +753,16 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
     w.blank();
     w.line("/// The weights the graph carries, the experts as many as `experts` holds,");
     w.line("/// read from `files`.");
-    FnSpec::new("embedded_within").add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(
-        "experts",
-        "&mut HeldExperts",
-    ).add_param("files", `&${EMBEDDED_SOURCE}`).set_return_type(PARAMS_TYPE).add_effect("_").emit_begin(w);
+    FnSpec::new("embedded_within")
+        .add_param("backend", `&mut ${BACKEND_PARAM}`)
+        .add_param(
+            "experts",
+            "&mut HeldExperts",
+        )
+        .add_param("files", `&${EMBEDDED_SOURCE}`)
+        .set_return_type(PARAMS_TYPE)
+        .add_effect("_")
+        .emit_begin(w);
     w.line("let pools = experts.pools(backend, files);");
     emit_held_call(w, graph, experts, &held_hosts(graph, checked, placement, experts), false, "pools");
     w.line("return weights;");
@@ -1069,9 +1043,13 @@ fn emit_compute(
         lines.push(`return ${read_back(&returned[0], typed_result(checked, &returned[0], 0))?};`);
         tensor_type(checked, &returned[0]);
     };
-    compute.add_generic(SOURCE_BOUND).add_param("model", `&mut ${MODEL_TYPE}`).set_return_type(returned_type).add_effect(
-        "_",
-    );
+    compute
+        .add_generic(SOURCE_BOUND)
+        .add_param("model", `&mut ${MODEL_TYPE}`)
+        .set_return_type(returned_type)
+        .add_effect(
+            "_",
+        );
     emit_model(w);
     w.blank();
     w.line("/// [`build`] over inputs on the host, each length padded to a capacity, its");
@@ -1453,32 +1431,15 @@ fn emit_decode(
     lines.push(
         `return ${DECODED_TYPE} { tokens: resized(&backend.download(&tokens), [rows, steps]), cache: ${cache_from_results(
             1,
-<<<<<<< HEAD
         )} };`,
     );
-    decode.add_generic(SOURCE_BOUND).add_param("model", `&mut ${MODEL_TYPE}`).set_return_type(
-        `${DECODED_TYPE}<${BACKEND_PARAM}>`,
-    ).add_effect("_");
-||||||| 4dd84a0e6dc
-        )}],`,
-    );
-    lines.push(`    None => ${DECODED}(${arguments.join(", ")}),`);
-    lines.push("};");
-    lines.push(`return ${DECODED_TYPE} { tokens: resized(&backend.download(&tokens), [rows, steps]), cache };`);
-    decode.add_param("model", `&mut ${MODEL}<${BACKEND_PARAM}>`).set_return_type(`${DECODED_TYPE}<${BACKEND_PARAM}>`).add_effect(
-        "_",
-    );
-=======
-        )}],`,
-    );
-    lines.push(`    None => ${DECODED}(${arguments.join(", ")}),`);
-    lines.push("};");
-    lines.push(`return ${DECODED_TYPE} { tokens: resized(&backend.download(&tokens), [rows, steps]), cache };`);
     decode
-        .add_param("model", `&mut ${MODEL}<${BACKEND_PARAM}>`)
-        .set_return_type(`${DECODED_TYPE}<${BACKEND_PARAM}>`)
+        .add_generic(SOURCE_BOUND)
+        .add_param("model", `&mut ${MODEL_TYPE}`)
+        .set_return_type(
+            `${DECODED_TYPE}<${BACKEND_PARAM}>`,
+        )
         .add_effect("_");
->>>>>>> origin/main
 
     if !apart {
         let mut decoded_type = StructSpec::new(DECODED_TYPE, Vis::Pub);
@@ -1879,38 +1840,24 @@ fn emit_held(
     let mut block = ImplSpec::new(PARAMS_TYPE);
     block.add_generic(BACKEND_BOUND);
     block.emit_begin(w);
-<<<<<<< HEAD
     w.line("/// The initializers `Params` holds as they are, `load(at)` the `at`th on the");
     w.line("/// host, as `backend` keeps them for the pass that reads them, the folded");
     w.line("/// literals, and `pools`.");
-    FnSpec::new("held").add_generic("Er").add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(
-        "load",
-        "fn(i32) -> Result<HostWeight, Er> with _",
-    ).add_param("pools", `List<Any<${BACKEND_PARAM}>>`).set_return_type(`Result<${PARAMS_TYPE}, Er>`).add_effect(
-        "_",
-    ).emit_begin(w);
-    let held = held_initializers(graph, experts).len();
-    let count = held + kept.len();
-||||||| 4dd84a0e6dc
-    w.line("/// The initializers, `load(at)` the `at`th on the host, as `backend` keeps");
-    w.line("/// them for the pass that reads them, and the folded literals.");
-    FnSpec::new("held").add_generic("Er").add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(
-        "load",
-        "fn(i32) -> Result<HostWeight, Er> with _",
-    ).set_return_type(`Result<${PARAMS_TYPE}, Er>`).add_effect("_").emit_begin(w);
-    let count = graph.initializers.len() + kept.len();
-=======
-    w.line("/// The initializers, `load(at)` the `at`th on the host, as `backend` keeps");
-    w.line("/// them for the pass that reads them, and the folded literals.");
     FnSpec::new("held")
         .add_generic("Er")
         .add_param("backend", `&mut ${BACKEND_PARAM}`)
-        .add_param("load", "fn(i32) -> Result<HostWeight, Er> with _")
+        .add_param(
+            "load",
+            "fn(i32) -> Result<HostWeight, Er> with _",
+        )
+        .add_param("pools", `List<Any<${BACKEND_PARAM}>>`)
         .set_return_type(`Result<${PARAMS_TYPE}, Er>`)
-        .add_effect("_")
+        .add_effect(
+            "_",
+        )
         .emit_begin(w);
-    let count = graph.initializers.len() + kept.len();
->>>>>>> origin/main
+    let held = held_initializers(graph, experts).len();
+    let count = held + kept.len();
     if kept.is_empty() {
         w.line(`let mut weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, load)?;`);
     } else {
