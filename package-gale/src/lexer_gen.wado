@@ -754,8 +754,9 @@ struct LexerEmit {
     all_rules: &List<LexerRule>,
     ci: bool,
     hm: bool,
-    /// A replay queues each action with its cursor rather than running it, so
-    /// a predicate the replay re-evaluates sees the state the match saw.
+    /// A replay queues each action with its cursor and runs the queue once the
+    /// walk ends, as ANTLR4 runs a lexer's actions once the token is matched,
+    /// so a predicate the replay re-evaluates sees the state the match saw.
     defers_actions: bool = false,
 }
 
@@ -1585,7 +1586,8 @@ fn lexer_rule_run_actions(rule: &LexerRule, all_rules: &List<LexerRule>) -> List
 /// fragment's body, both of which the replay walks into).
 fn collect_lexer_run_actions(alt: &LexerAlternative, all_rules: &List<LexerRule>, out: &mut List<AltAction>) {
     for let a of &alt.actions {
-        if a.kind matches { Action } && !out.iter_ref().any(|seen: &AltAction| seen.source.action_id == a.source.action_id) {
+        if a.kind matches { Action }
+            && !out.iter_ref().any(|seen: &AltAction| seen.source.action_id == a.source.action_id) {
             out.push(*a);
         }
     }
@@ -1659,7 +1661,7 @@ fn gen_mode_constants(w: &mut CodeWriter, mode_names: &List<String>) {
 /// called post-tournament for the winner only, so a losing candidate's actions
 /// never run. Bodies arrive staged (`stage_lexer_bodies`).
 ///
-/// The rule re-runs its own match with the actions dropped in at their cursors —
+/// The rule re-runs its own match with the actions at their cursors —
 /// every emit the match can take replays, restructured repeats included.
 fn gen_lexer_apply_fns<S: AsStrSlice>(
     w: &mut CodeWriter,
@@ -1706,8 +1708,6 @@ fn gen_lexer_apply_replay_body(
     // nothing to select, so it never re-evaluates a predicate.
     let plan = lexer_rule_plan(rule, all_rules, grammar_opts);
     let ea = plan matches { Alts(_) };
-    // ANTLR4 runs a lexer's actions once the token is matched, so no predicate
-    // sees what an action wrote.
     let defers_actions = rule.body.iter_ref().any(|a: &LexerAlternative| lexer_alt_has_predicate_below(a, all_rules));
     if defers_actions {
         w.line(`let mut ${DEFERRED_ACTIONS}: List<[i32, i32]> = [];`);
@@ -2828,8 +2828,8 @@ fn gen_lexer_repeat_step<S: AsStrSlice>(
     return false;
 }
 
-/// Emit the `{ ... }` actions positioned at `before` as statements, in source
-/// order. Only reached on the replay path, where `pos` is the live match cursor,
+/// Emit the `{ ... }` actions positioned at `before` as statements, or queue
+/// them (`LexerEmit.defers_actions`), in source order. Only reached on the replay path, where `pos` is the live match cursor,
 /// so a body reading the matched text sees exactly what ANTLR4's would.
 fn gen_lexer_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, e: &LexerEmit) {
     for let a of actions {
