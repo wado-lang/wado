@@ -2840,14 +2840,8 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                 .collect();
             for info in &iterators {
                 for func_ref in [&info.into_iter, &info.next] {
-                    let (resolved, resource) = dispatch_effects(
-                        self.sem,
-                        self.index,
-                        func_ref,
-                        false,
-                        &[],
-                        &self.rows,
-                    );
+                    let (resolved, resource) =
+                        dispatch_effects(self.sem, self.index, func_ref, false, &[], &self.rows);
                     let callee = func_ref
                         .method_info
                         .as_ref()
