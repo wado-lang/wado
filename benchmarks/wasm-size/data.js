@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794984091528,
+  "lastUpdate": 1794992912403,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79433,6 +79433,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4154dc241243e708112e998044b35496b6cf2333"
         },
         "date": 1794984090723,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "824132f6d31bb3ad1276cdd04dd1b1340748aa3d",
+          "message": "Merge pull request #2683 from wado-lang/ccr-5a053762-2x7vni\n\nfeat(rill): show a subtree only while a condition holds",
+          "timestamp": "2026-11-18T17:48:26+09:00",
+          "tree_id": "f2fbdc8a3b243fc8af6ad4ee7ef5764f663ecaba",
+          "url": "https://github.com/wado-lang/wado/commit/824132f6d31bb3ad1276cdd04dd1b1340748aa3d"
+        },
+        "date": 1794992911064,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
