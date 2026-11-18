@@ -95,6 +95,11 @@ impl HostWeight {
         return &self.bytes;
     }
 
+    /// The bytes, as a checkpoint stores them, in the guest's heap.
+    pub fn stored_bytes(&self) -> ByteList {
+        return self.bytes.to_byte_list(self.bytes.len()) as ByteList;
+    }
+
     /// Element `i` as the f32 that holds it exactly: a float's value, or a
     /// `u8` or a bool as a number.
     pub fn value(&self, i: i32) -> f32

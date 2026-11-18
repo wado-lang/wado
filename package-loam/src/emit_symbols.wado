@@ -4,6 +4,7 @@
 //! are spelled.
 
 use { HashMap, HashSet } from "core:collections";
+use { PlacedExperts } from "./emit_experts.wado";
 use { Extent, Solved, solved } from "./extent.wado";
 use { Graph, Node } from "./graph.wado";
 use { BACKEND_PARAM, is_bound, module_idents } from "./idents.wado";
@@ -242,6 +243,8 @@ internal struct Operands {
     /// The tensors each row's lengths computed, held with the rows of
     /// `[Slots]` ahead of their axes.
     internal lifted: HashSet<String> = HashSet::new(),
+    /// Where each pooled `QMoE` reads its experts, by its first output.
+    internal experts: HashMap<String, PlacedExperts> = HashMap::new(),
 }
 
 impl Operands {

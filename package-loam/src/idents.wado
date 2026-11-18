@@ -59,12 +59,13 @@ pub global RECORDED_DECODED: String = "recorded_decoded";
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 pub global RUNTIME_NAMES: List<String> = [
-    "Any", "Attention", "Backend", "Binary", "Convolution", "Cpu", "Decoding", "DotDims", "Expected", "Experts",
-    "GatherDims", "Graph", "Holds", "HostWeight", "LoadError", "Merged", "One", "Picks", "Programs", "Quantized",
-    "Recorded", "Recorder", "Sampler", "Sampling", "Slots", "Tensor", "Unary", "Untyped", "WeightSource", "WindowReduce",
+    "Any", "Attention", "Backend", "Binary", "Convolution", "Cpu", "Decoding", "DotDims", "ElementKind", "Expected",
+    "ExpertLayout", "Experts", "GatherDims", "Graph", "HeldExperts", "HeldFiles", "Holds", "HostWeight", "LoadError", "Merged", "One",
+    "Picks", "Programs", "Quantized", "Recorded", "Recorder", "Sampler", "Sampling", "Slots", "StoredExperts", "Tensor",
+    "Unary", "Unread", "Untyped", "WeightSource", "WindowReduce",
     "assembled", "axis_mismatch", "branched", "capacity_of", "erased_fields", "expect_holds", "expect_len",
     "extent_mismatch", "extents_mismatch", "fitted", "fitted_fields", "from_end", "from_end_indices", "full",
-    "input_mismatch", "joined_at", "lifted", "masked", "mixture_of_experts", "no_host_step", "opened", "payload_at",
+    "input_mismatch", "joined_at", "lifted", "masked", "mixture_of_experts", "opened", "payload_at",
     "quotient", "range_i64", "read_headers", "recorded_fields", "reduce_mean", "refuse", "resized", "restored_fields",
     "retain_fields", "row_binary", "row_from_end", "row_quotient", "row_range", "scalar", "shared", "softmax",
     "softmax_flattened", "stepped", "strided_gather", "to_extent", "typed", "unmet", "written_at", "written_fields",
@@ -121,6 +122,13 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert("embedded");
     reserved.insert("held");
     reserved.insert("embedded_data");
+    // What a graph whose experts are pooled declares and binds besides.
+    for let name of [
+        "budget", "embedded_experts", "embedded_within", "expert_layouts", "experts", "files", "loaded",
+        "pools", "source",
+    ] as List<String> {
+        reserved.insert(name);
+    }
     reserved.insert("backend");
     reserved.insert(BACKEND_PARAM);
     reserved.insert(SOURCE_PARAM);

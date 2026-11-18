@@ -1,0 +1,198 @@
+//! The `QMoE` layers whose expert weights `Params` holds in pools: one pool for
+//! each expert weight of a layout, its first axis the slots, shared by every
+//! layer laid out alike. A budget at load sets the slots.
+
+use { HashMap, HashSet } from "core:collections";
+use { Graph, Node, QMOE } from "./graph.wado";
+use { Checked, QMOE_DOWN, QMOE_DOWN_ZERO_POINTS, QMOE_UP, QMOE_UP_ZERO_POINTS } from "./infer.wado";
+use { branches_of } from "./lowering.wado";
+use { is_bound, module_idents } from "./idents.wado";
+
+/// The operands of a `QMoE` indexed by expert, in the order a pool holds them.
+global EXPERT_OPERANDS: List<i32> = [
+    QMOE_UP, QMOE_UP + 1, QMOE_UP + 2, QMOE_UP_ZERO_POINTS, QMOE_DOWN, QMOE_DOWN + 1, QMOE_DOWN + 2, QMOE_DOWN_ZERO_POINTS,
+];
+
+/// The layers of one layout: each layer's expert weights in pool order, the
+/// host step that fetches each layer's experts, and the marker naming the
+/// pools' slots.
+internal struct ExpertGroup {
+    internal layers: List<List<String>>,
+    internal steps: List<i32>,
+    internal slots: String,
+}
+
+impl ExpertGroup {
+    /// The weight standing for each pool: the first layer's, whose name and
+    /// axes past the first the pool takes.
+    internal fn pools(&self) -> List<String> {
+        return self.layers[0];
+    }
+}
+
+/// Where one pooled `QMoE` reads its experts: its layer among those sharing
+/// its pools, the host step fetching them, the pools' slot marker, and the
+/// weight standing for the pool of each expert weight it reads.
+internal struct PlacedExperts {
+    internal layer: i32,
+    internal layers: i32,
+    internal step: i32,
+    internal slots: String,
+    internal pools: HashMap<String, String>,
+}
+
+/// The pools of a graph, and where each pooled `QMoE` reads them.
+internal struct ExpertPlan {
+    internal groups: List<ExpertGroup>,
+    /// Each pooled `QMoE`, by its first output: its group and layer.
+    placed: HashMap<String, [i32, i32]>,
+    /// Each pooled weight, and the weight standing for its pool.
+    pooled: HashMap<String, String>,
+}
+
+impl ExpertPlan {
+    /// The pools of `graph`, each slot marker named past every name the module
+    /// binds and `axes`. A `QMoE` is pooled where each expert weight it reads
+    /// is an initializer nothing else reads, read from where the graph's other
+    /// weights are: a checkpoint where one holds some, the graph otherwise.
+    internal fn of(graph: &Graph, checked: &Checked, axes: &List<String>) -> ExpertPlan {
+        let elsewhere = read_twice(graph, checked);
+        let loads = graph.initializers.into_iter().any(|vi| vi.data matches { None });
+        let mut initializers = HashSet::<String>::new();
+        for let vi of &graph.initializers {
+            if vi.data matches { None } == loads {
+                initializers.insert(vi.name);
+            }
+        }
+        let mut plan = ExpertPlan { groups: [], placed: HashMap::new(), pooled: HashMap::new() };
+        let mut layouts: List<String> = [];
+        let mut taken = module_idents();
+        for let axis of *axes {
+            taken.insert(axis);
+        }
+        for let node of &graph.nodes {
+            if node.op != QMOE {
+                continue;
+            }
+            let weights: List<String> = EXPERT_OPERANDS.into_iter().filter(|i| node.has_operand(i)).map(|i| node.inputs[i]).collect();
+            if !weights.into_iter().all(|w| initializers.contains(w) && !elsewhere.contains(w)) {
+                continue;
+            }
+            let layout = layout_of(node, checked);
+            let at = match layouts.into_iter().position(|l| l == layout) {
+                Some(at) => at,
+                None => {
+                    let mut slots = "ExpertSlots";
+                    while is_bound(&taken, &slots) {
+                        slots = `${slots}_`;
+                    }
+                    taken.insert(slots);
+                    layouts.push(layout);
+                    plan.groups.push(ExpertGroup { layers: [], steps: [], slots });
+                    plan.groups.len() - 1;
+                },
+            };
+            let step = plan.placed.len();
+            let group = &mut plan.groups[at];
+            plan.placed[node.outputs[0]] = [at, group.layers.len()];
+            group.layers.push(weights);
+            group.steps.push(step);
+            for let [i, w] of weights.into_iter().enumerate() {
+                plan.pooled[w] = group.layers[0][i];
+            }
+        }
+        return plan;
+    }
+
+    /// Whether `weight` is held in a pool.
+    internal fn is_pooled(&self, weight: &String) -> bool {
+        return self.pooled.contains_key(*weight);
+    }
+
+    /// The weight standing for the pool that holds `weight`.
+    internal fn pool_of(&self, weight: &String) -> String {
+        return self.pooled[*weight];
+    }
+
+    /// Where each pooled `QMoE` reads its experts, by its first output.
+    internal fn placements(&self) -> HashMap<String, PlacedExperts> {
+        let mut placements = HashMap::<String, PlacedExperts>::new();
+        for let [output, [at, layer]] of self.placed.entries() {
+            let group = &self.groups[*at];
+            let mut pools = HashMap::<String, String>::new();
+            for let [i, w] of group.layers[*layer].into_iter().enumerate() {
+                pools[w] = group.layers[0][i];
+            }
+            placements[*output] = PlacedExperts {
+                layer: *layer,
+                layers: group.layers.len(),
+                step: group.steps[*layer],
+                slots: group.slots,
+                pools,
+            };
+        }
+        return placements;
+    }
+
+    /// The weight standing for each pool, group by group, in the order
+    /// `Params` holds the pools.
+    internal fn pools(&self) -> List<String> {
+        let mut pools: List<String> = [];
+        for let group of &self.groups {
+            pools.extend(&group.pools());
+        }
+        return pools;
+    }
+
+    /// The axes of the pool `pool` stands for: its group's slots, then the
+    /// axes of `pool` past its first.
+    internal fn pool_axes(&self, checked: &Checked, pool: &String) -> String {
+        let group = self.groups.into_iter().find(|g| g.pools().contains(pool)).unwrap();
+        let axes = checked.shapes[*pool].axes;
+        let rest: List<String> = axes[1..<axes.len()].into_iter().map(|a| a.name).collect();
+        let mut all: List<String> = [group.slots];
+        all.extend(&rest);
+        return all.join(", ");
+    }
+}
+
+/// What makes two `QMoE`s share pools: each expert weight's element and
+/// extents, in pool order.
+fn layout_of(node: &Node, checked: &Checked) -> String {
+    let mut parts: List<String> = [];
+    for let i of EXPERT_OPERANDS {
+        if node.has_operand(i) {
+            let t = node.inputs[i];
+            parts.push(`${i}:${checked.primitives[t]}:${checked.shapes[t].polys():?}`);
+        }
+    }
+    return parts.join(" ");
+}
+
+/// The tensors read but once by one operand of `graph`'s own nodes: those two
+/// operands read, a branch reads, or the graph returns.
+fn read_twice(graph: &Graph, checked: &Checked) -> HashSet<String> {
+    let mut seen = HashSet::<String>::new();
+    let mut twice = HashSet::<String>::new();
+    for let node of &graph.nodes {
+        for let t of node.inputs {
+            if !t.is_empty() && !seen.insert(t) {
+                twice.insert(t);
+            }
+        }
+    }
+    for let vi of &graph.outputs {
+        twice.insert(vi.name);
+    }
+    for let [branch, scope] of branches_of(graph, checked) {
+        for let t of read_twice(&branch, &scope) {
+            twice.insert(t);
+        }
+        for let node of &branch.nodes {
+            for let t of node.inputs {
+                twice.insert(t);
+            }
+        }
+    }
+    return twice;
+}

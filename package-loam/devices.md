@@ -456,7 +456,8 @@ and a program for each shape class it has met. The caller owns it, and
   together. A backend holds nothing past a call, so one backend serves any
   number of models without a key to tell their programs apart.
 - `Model` is shared by every request; `Cache` is one request's, or a row each
-  in `Requests`. The weights an expert routing loads stay in the model.
+  in `Requests`. The experts a routing loads stay in the model, beside the
+  source it reads them from.
 - On `Cpu` a program is the recording and the values of its nodes that read no
   argument.
 

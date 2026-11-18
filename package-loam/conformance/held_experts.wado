@@ -1,0 +1,44 @@
+//! Two `QMoE` layers whose pools hold half their experts, which a device
+//! computes as it does with every expert held. `operators_test.wado` holds the
+//! same model to the operator's definition on `Cpu`.
+
+use { Backend, Tensor } from "lib:loam";
+use { deviation } from "lib:loam/example/webgpu/compare.wado";
+use layers from "./operators/QMoeLayers.onnx"
+    with {
+        type: "onnx",
+        generator: { module: "lib:loam" },
+    };
+
+/// The bytes one expert stores: its two packed products, their scales and
+/// their biases.
+global EXPERT_BYTES: i64 = 64 * 16 + 64 * 4 + 64 * 4 + 32 * 16 + 32 * 4 + 32 * 4;
+
+/// How far each of `passes` passes on `device`, its pools holding half the
+/// experts, sits from the same pass with every expert held.
+pub fn experts_apart<affine Bk: Backend>(device: &mut Bk, passes: i32) -> List<f32> with _ {
+    let mut held = layers::Model::embedded(device, 4 * EXPERT_BYTES).unwrap();
+    let mut whole = layers::Model::new(layers::Params::embedded(device));
+    let mut apart: List<f32> = [];
+    for let pass of 0..<passes {
+        let x = Tensor::<f32, [layers::X0, layers::X1]> {
+            data: (0..<96).map(|i| (((i + pass) * 7 % 13) - 6) as f32 / 2.0).collect(),
+            extents: [3, 32],
+        };
+        let r = logits::<layers::R1>(pass);
+        let q = logits::<layers::R11>(pass + 1);
+        let got = layers::compute(device, &x, &r, &q, &mut held);
+        let want = layers::compute(device, &x, &r, &q, &mut whole);
+        apart.push(deviation(&got.data, &want.data));
+    }
+    return apart;
+}
+
+/// A router's logits over 4 experts for 3 tokens, apart in each row so no
+/// pick is left to a tie, and differing with `shift`.
+fn logits<Experts>(shift: i32) -> Tensor<f32, [layers::X0, Experts]> {
+    return Tensor {
+        data: (0..<12).map(|i| ((i + shift) * 5 % 11) as f32 / 2.0 + i as f32 / 64.0).collect(),
+        extents: [3, 4],
+    };
+}

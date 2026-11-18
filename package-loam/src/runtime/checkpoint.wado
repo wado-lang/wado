@@ -55,6 +55,10 @@ impl WeightSource for HashMap<String, ByteList> {
     }
 }
 
+/// Files the guest holds whole, as a generated module names them without
+/// importing a collection whose name a graph's tensor may take.
+pub type HeldFiles = HashMap<String, ByteList>;
+
 fn given(files: &HashMap<String, ByteList>, file: &String) -> Result<&ByteList, LoadError> {
     return files.get_ref_str(file).ok_or(LoadError { reason: `${*file}: not given` });
 }
@@ -300,10 +304,17 @@ impl Headers {
         file: String,
         e: &Expected,
     ) -> Result<HostWeight, LoadError> with _
-        contract self.headers.contains_key(file), "`file` must be one `read_headers` read"
         contract e.width == stored_width(U::kind())
     {
-        let [start, end] = self.headers[file].range(e).map_err(|err| LoadError { reason: `${file}: ${err}` })?;
+        let [start, end] = self.range(file, e)?;
         return payload_at::<U, Src>(source, file, e.tensor, e.extents, start, end);
+    }
+
+    /// The bytes of `file` holding `e`, once its header states it as the
+    /// build compiled it.
+    pub fn range(&self, file: String, e: &Expected) -> Result<[i32, i32], LoadError>
+        contract self.headers.contains_key(file), "`file` must be one `read_headers` read"
+    {
+        return self.headers[file].range(e).map_err(|err| LoadError { reason: `${file}: ${err}` });
     }
 }

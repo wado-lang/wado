@@ -3,11 +3,12 @@
 //! Smaller ones are filled at each host step with the experts the tokens pick,
 //! the slot used longest ago giving way.
 
-use { WeightSource } from "./checkpoint.wado";
+use { LoadError, WeightSource } from "./checkpoint.wado";
 use { Backend } from "./hlo.wado";
 use { Any, Untyped, typed } from "./recorded.wado";
 use { ElementKind, Tensor, element_count } from "./tensor.wado";
 use { HostWeight, stored_width } from "./weight.wado";
+use { LinearArray } from "core:linear";
 
 /// One weight of a layer's experts as a checkpoint stores it: each expert's
 /// slice of `extents` in `kind`, back to back from byte `start` of `file`.
@@ -25,73 +26,96 @@ impl StoredExperts {
 }
 
 /// The layers whose experts share one pool per weight.
-pub struct ExpertPools {
+pub struct ExpertLayout {
     /// Where each pool is among the weights a pass reads.
     pub weights: List<i32>,
     /// Each layer's weights, one per pool, and the host step that fetches its
     /// experts.
     pub layers: List<List<StoredExperts>>,
     pub steps: List<i32>,
-    /// The experts of one layer, and the slots of each pool.
+    /// The experts of one layer.
     pub experts: i32,
-    pub slots: i32,
 }
 
-impl ExpertPools {
-    /// Whether each expert of every layer has a slot of its own.
-    pub fn resident(&self) -> bool {
-        return self.slots == self.layers.len() * self.experts;
+impl ExpertLayout {
+    /// The bytes a checkpoint stores one expert of these pools in.
+    fn slot_bytes(&self) -> i64 {
+        return self.layers[0].into_iter().map(|w| w.slice_bytes() as i64).sum().unwrap();
+    }
+
+    fn every_slot(&self) -> i32 {
+        return self.layers.len() * self.experts;
     }
 }
 
-/// What each group's slots hold, and when each was used last.
-struct Slots {
-    /// The expert held as `layer · experts + expert`, or -1.
+/// One layout's pools: how many slots each holds, the expert in each slot as
+/// `layer · experts + expert` or -1, and when each slot was used last.
+struct Pools {
+    layout: ExpertLayout,
+    slots: i32,
     held: List<i32>,
     used: List<i64>,
 }
 
-/// Every group of pools a model reads, and what their slots hold.
+impl Pools {
+    fn resident(&self) -> bool {
+        return self.slots == self.layout.every_slot();
+    }
+}
+
+/// Every layout's pools a model reads, and what their slots hold.
 pub struct HeldExperts {
-    groups: List<ExpertPools>,
-    slots: List<Slots>,
+    groups: List<Pools>,
     clock: i64,
 }
 
 impl HeldExperts {
-    pub fn new(groups: List<ExpertPools>) -> HeldExperts {
-        let mut slots: List<Slots> = [];
-        for let group of &groups {
-            assert group.experts <= group.slots <= group.layers.len() * group.experts, "a pool holds one layer's experts";
-            assert group.layers.len() == group.steps.len();
-            slots.push(Slots {
-                held: List::filled(group.slots, -1),
-                used: List::filled(group.slots, -1),
-            });
+    /// Pools of `layouts` within `budget` bytes, as a checkpoint stores them:
+    /// one layer's experts each, then the rest shared by each pool's bytes, so
+    /// that a budget past every expert holds them all.
+    pub fn within(layouts: List<ExpertLayout>, budget: i64) -> Result<HeldExperts, LoadError> {
+        let least = layouts.into_iter().map(|l| l.experts as i64 * l.slot_bytes()).sum().unwrap_or(0);
+        if budget < least {
+            return Result::Err(LoadError { reason: `a budget of ${budget} bytes holds less than one layer's experts of each pool, ${least} bytes` });
         }
-        return HeldExperts { groups, slots, clock: 0 };
+        let rest = layouts.into_iter().map(|l| (l.every_slot() - l.experts) as i64 * l.slot_bytes()).sum().unwrap_or(0);
+        let spare = i64::min(budget - least, rest);
+        let mut groups: List<Pools> = [];
+        for let layout of layouts {
+            assert layout.layers.len() == layout.steps.len();
+            let others = layout.every_slot() - layout.experts;
+            let extra = if spare == rest { others } else { (others as i64 * spare / rest) as i32 };
+            let slots = layout.experts + extra;
+            groups.push(Pools { layout, slots, held: List::filled(slots, -1), used: List::filled(slots, -1) });
+        }
+        return Result::Ok(HeldExperts { groups, clock: 0 });
     }
 
-    /// Each group's pools, in the order of its `weights`: those whose slots
-    /// hold every expert filled from `source`, the others empty.
-    pub fn pools<affine G: Backend, affine Src: WeightSource>(&mut self, g: &mut G, source: &Src) -> List<List<Any<G>>> with _ {
-        let mut made: List<List<Any<G>>> = [];
+    /// Pools of `layouts` that hold every expert.
+    pub fn resident(layouts: List<ExpertLayout>) -> HeldExperts {
+        return HeldExperts::within(layouts, i64::MAX).unwrap();
+    }
+
+    /// Each layout's pools in turn, in the order of its `weights`: those whose
+    /// slots hold every expert filled from `source`, the others empty.
+    pub fn pools<affine G: Backend, affine Src: WeightSource>(&mut self, g: &mut G, source: &Src) -> List<Any<G>> with _ {
+        let mut made: List<Any<G>> = [];
         for let at of 0..<self.groups.len() {
             let group = &self.groups[at];
-            let mut pools: List<Any<G>> = group.layers[0].into_iter().map(|w| {
+            let first = made.len();
+            for let w of group.layout.layers[0] {
                 let mut extents: List<i32> = [group.slots];
                 extents.extend(&w.extents);
-                return g.pool(w.kind, extents);
-            }).collect();
+                made.push(g.pool(w.kind, extents));
+            }
             if group.resident() {
-                let all: List<i32> = (0..<pools.len()).collect();
-                for let layer of 0..<group.layers.len() {
-                    for let expert of 0..<group.experts {
-                        self.placed(g, source, at, layer, expert, layer * group.experts + expert, &mut pools, &all);
+                let these: List<i32> = (first..<made.len()).collect();
+                for let layer of 0..<group.layout.layers.len() {
+                    for let expert of 0..<group.layout.experts {
+                        self.placed(g, source, at, layer, expert, layer * group.layout.experts + expert, &mut made, &these);
                     }
                 }
             }
-            made.push(pools);
         }
         return made;
     }
@@ -108,7 +132,7 @@ impl HeldExperts {
         weights: &mut List<Any<G>>,
     ) -> List<Any<G>> with _ {
         let [at, layer] = self.step_of(step);
-        let experts = self.groups[at].experts;
+        let experts = self.groups[at].layout.experts;
         let picks = g.download(&typed::<G, i64, [Tokens, Picks]>(g, &read[0]));
         let mut order: List<i64> = [];
         for let pick of picks.data {
@@ -144,7 +168,7 @@ impl HeldExperts {
     /// The group and layer whose experts the host step `step` fetches.
     fn step_of(&self, step: i32) -> [i32, i32] {
         for let [at, group] of self.groups.into_iter().enumerate() {
-            for let [layer, s] of group.steps.into_iter().enumerate() {
+            for let [layer, s] of group.layout.steps.into_iter().enumerate() {
                 if s == step {
                     return [at, layer];
                 }
@@ -156,11 +180,11 @@ impl HeldExperts {
     /// The slot of group `at` that holds `layer`'s expert `expert`, marked
     /// used now.
     fn holding(&mut self, at: i32, layer: i32, expert: i32) -> Option<i32> {
-        let key = layer * self.groups[at].experts + expert;
-        let slots = &mut self.slots[at];
-        for let s of 0..<slots.held.len() {
-            if slots.held[s] == key {
-                slots.used[s] = self.clock;
+        let group = &mut self.groups[at];
+        let key = layer * group.layout.experts + expert;
+        for let s of 0..<group.held.len() {
+            if group.held[s] == key {
+                group.used[s] = self.clock;
                 return Option::Some(s);
             }
         }
@@ -178,17 +202,17 @@ impl HeldExperts {
         expert: i32,
         weights: &mut List<Any<G>>,
     ) -> i32 with _ {
-        let slots = &mut self.slots[at];
+        let group = &mut self.groups[at];
         let mut slot = 0;
-        for let s of 1..<slots.used.len() {
-            if slots.used[s] < slots.used[slot] {
+        for let s of 1..<group.used.len() {
+            if group.used[s] < group.used[slot] {
                 slot = s;
             }
         }
-        assert slots.used[slot] < self.clock, "a pool holds one layer's experts";
-        self.placed(g, source, at, layer, expert, slot, weights, &self.groups[at].weights);
-        slots.held[slot] = layer * self.groups[at].experts + expert;
-        slots.used[slot] = self.clock;
+        assert group.used[slot] < self.clock, "a pool holds one layer's experts";
+        self.placed(g, source, at, layer, expert, slot, weights, &group.layout.weights);
+        group.held[slot] = layer * group.layout.experts + expert;
+        group.used[slot] = self.clock;
         return slot;
     }
 
@@ -205,7 +229,7 @@ impl HeldExperts {
         values: &mut List<Any<G>>,
         pools: &List<i32>,
     ) with _ {
-        for let [i, stored] of self.groups[at].layers[layer].into_iter().enumerate() {
+        for let [i, stored] of self.groups[at].layout.layers[layer].into_iter().enumerate() {
             let bytes = stored.slice_bytes();
             let start = stored.start + expert * bytes;
             let read = match source.read(&stored.file, start, start + bytes) {
@@ -216,6 +240,20 @@ impl HeldExperts {
             g.written(&mut pool, slot, HostWeight::stored(stored.kind, stored.extents, read));
             values[pools[i]] = pool;
         }
+    }
+}
+
+/// The source of a model whose experts are all held, which nothing reads.
+pub struct Unread {
+}
+
+impl WeightSource for Unread {
+    fn read(&self, _file: &String, _start: i32, _end: i32) -> Result<LinearArray<u8>, LoadError> {
+        unreachable();
+    }
+
+    fn len(&self, _file: &String) -> Result<i64, LoadError> {
+        unreachable();
     }
 }
 

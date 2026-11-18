@@ -22,6 +22,7 @@ use {
 use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
 use { decoded_tokens, requests_apart, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
+use { experts_apart } from "./held_experts.wado";
 use gated from "./gated.onnxtext"
     with {
         type: "onnxtext",
@@ -102,6 +103,9 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
     let resident = cases::stacked_runs(cpu, 8, runs);
     for let [k, fetched] of cases::stacked_runs(device, 5, runs).into_iter().enumerate() {
         note(`experts fetched, run ${k}`, apart(device, &fetched, &typed::<Cpu, f32, Untyped>(cpu, &resident[k])));
+    }
+    for let [pass, off] of experts_apart(device, 2).into_iter().enumerate() {
+        note(`compiled experts held by half, pass ${pass}`, off);
     }
 
     let [ex, ey] = cases::elementwise_inputs();

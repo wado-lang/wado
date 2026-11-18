@@ -19,9 +19,9 @@ use {
 } from "./hlo.wado";
 use { Any, Programs, Recorded, Recorder, Untyped, Value, typed } from "./recorded.wado";
 use { Experts, mixture_of_experts } from "./experts.wado";
-use { ExpertPools, HeldExperts, StoredExperts } from "./held_experts.wado";
+use { ExpertLayout, HeldExperts, StoredExperts } from "./held_experts.wado";
 use { HashMap } from "core:collections";
-use { HostWeight } from "./weight.wado";
+use { HostWeight, stored_width } from "./weight.wado";
 use { Attention, ElementKind, Float, Tensor, element_count } from "./tensor.wado";
 use { noise } from "../../example/webgpu/compare.wado";
 
@@ -629,14 +629,16 @@ fn stacked_pass(r: &mut Recorder, extents: &List<List<i32>>) -> Recorded {
     return r.finished([mixing(r, &first, &routers.1, &up, &down, 1, 2).id]);
 }
 
-/// `stacked_pass` over pools of `slots` slots, run once for each count of
-/// tokens in `runs`; each run's result, of `f32` over `[A, B]`.
+/// `stacked_pass` over pools within a budget of `slots` experts, run once for
+/// each count of tokens in `runs`; each run's result, of `f32` over `[A, B]`.
 pub fn stacked_runs<affine G: Backend>(g: &mut G, slots: i32, runs: List<i32>) -> List<Any<G>> with _ {
     let [files, layers] = stacked_experts();
-    let mut store = HeldExperts::new([
-        ExpertPools { weights: (0..<6).collect(), layers, steps: [0, 1], experts: 4, slots },
-    ]);
-    let pools = store.pools(g, &files)[0];
+    let expert_bytes = layers[0].into_iter().map(|w| element_count(&w.extents) * stored_width(w.kind)).sum().unwrap();
+    let mut store = HeldExperts::within(
+        [ExpertLayout { weights: (0..<6).collect(), layers, steps: [0, 1], experts: 4 }],
+        (slots * expert_bytes) as i64,
+    ).unwrap();
+    let pools = store.pools(g, &files);
     let mut programs = Programs::<G>::new();
     let mut results: List<Any<G>> = [];
     for let tokens of runs {

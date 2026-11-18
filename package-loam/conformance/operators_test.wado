@@ -69,8 +69,9 @@ impl Case {
 
 /// What Loam computes from `model` on the case's inputs, as an `output` line
 /// spells it, through the graph `build` adds to on `Cpu`, or why it computes
-/// nothing: the build's refusal, or how the run stopped.
-fn computed(model: ByteList, case: &Case) -> String with EvalHost {
+/// nothing: the build's refusal, or how the run stopped. With a `budget`, it
+/// computes through a `Model` whose pools hold the experts that many bytes hold.
+fn computed(model: ByteList, case: &Case, budget: Option<i64>) -> String with EvalHost {
     let graph = read(model).unwrap();
     let source = match generated(&graph) {
         Ok(source) => source,
@@ -78,19 +79,23 @@ fn computed(model: ByteList, case: &Case) -> String with EvalHost {
             return `refused: ${reason}`;
         },
     };
-    let mut held = "";
+    let mut inputs = "";
     for let input of case.inputs {
-        held.push_str(
-            `&cpu.upload(&Tensor { data: ${input.literal()} as List<${input.element}>, extents: ${input.extents} }), `,
-        );
+        let host = `&Tensor { data: ${input.literal()} as List<${input.element}>, extents: ${input.extents} }`;
+        inputs.push_str(if budget matches { Some(_) } { `${host}, ` } else { `&cpu.upload(${host}), ` });
     }
+    let passed = match budget {
+        Some(bytes) => `let mut model = Model::embedded(&mut cpu, ${bytes}).unwrap();
+    printed(&compute(&mut cpu, ${inputs}&mut model));`,
+        None => `let params = Params::embedded(&mut cpu);
+    printed(&build(&mut cpu, ${inputs}&params));`,
+    };
     let element = case.output.element;
     let shown = if element == "f32" { "v.to_bits()" } else { "v" };
     let program = `${program_over(&source)}
 export fn run() with Stdout {
     let mut cpu = Cpu {};
-    let params = Params::embedded(&mut cpu);
-    printed(&build(&mut cpu, ${held}&params));
+    ${passed}
 }
 
 fn printed<Axes>(got: &Tensor<${element}, Axes>) with Stdout {
@@ -103,11 +108,12 @@ fn printed<Axes>(got: &Tensor<${element}, Axes>) with Stdout {
 }
 
 /// Loam computes from `model` what onnxruntime did, which `oracle` states: the
-/// same elements, a float within `tolerance` of onnxruntime's.
-fn assert_agrees(model: ByteList, oracle: String, tolerance: f32 = TOLERANCE) with EvalHost {
+/// same elements, a float within `tolerance` of onnxruntime's, its experts
+/// held within `budget` bytes where it names one.
+fn assert_agrees(model: ByteList, oracle: String, tolerance: f32 = TOLERANCE, budget: Option<i64> = null) with EvalHost {
     let case = Case::of(&oracle);
     let want = case.output;
-    let got = computed(model, &case);
+    let got = computed(model, &case, budget);
     let fields: List<String> = got.split_whitespace().map(|f| f.to_string()).collect();
     // A refusal or a trap is no output line, and shows as it stands.
     assert fields.len() == 4 && fields[0] == "output", got;
@@ -814,6 +820,24 @@ test "QMoE of halves over more picks than experts" {
 
 test "QMoE of one token of halves" {
     assert_agrees(#include_bytes("./operators/QMoeHalfStep.onnx"), #include_str("./operators/QMoeHalfStep.txt"));
+}
+
+/// The bytes one expert of `QMoeLayers` stores: its two packed products, their
+/// scales and their biases.
+global QMOE_EXPERT_BYTES: i64 = 64 * 16 + 64 * 4 + 64 * 4 + 32 * 16 + 32 * 4 + 32 * 4;
+
+/// Over two `QMoE` layers onnxruntime sits up to 4e-4 from the value computed
+/// in f64, so `QMoeLayers` holds Loam to that value, from which Loam's f32 sits
+/// up to 6.5e-6.
+global QMOE_LAYERS_TOLERANCE: f32 = 1e-5;
+
+test "QMoE layers sharing pools that hold half their experts" {
+    assert_agrees(
+        #include_bytes("./operators/QMoeLayers.onnx"),
+        #include_str("./operators/QMoeLayers.txt"),
+        QMOE_LAYERS_TOLERANCE,
+        Option::Some(4 * QMOE_EXPERT_BYTES),
+    );
 }
 
 test "GatherBlockQuantized dequantizes the rows it takes, an index past the table reading zeros" {

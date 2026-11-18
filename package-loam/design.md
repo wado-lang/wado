@@ -366,3 +366,31 @@ pool does not hold into the slot used longest ago, among those the layer does
 not need. Each backend writes a slot in place, as it laid the weight out. It
 gives the layer each distinct expert it picked and the slot holding it, and
 the layer runs those experts alone.
+
+`HeldExperts` keeps that store on the host. It counts the budget at the widths
+the checkpoint stores. Each pool group first gets one layer's slots, and the
+rest of the budget is shared in proportion to the bytes of the layers that
+group still lacks. A budget below one layer per group is a `LoadError`. Where
+a group's slots hold every layer, the slot of a layer's expert is fixed, so the
+pass takes no host step for it.
+
+#### What the generator pools
+
+A `QMoE` is pooled where each expert weight it reads is an initializer that no
+other operand, branch or output reads, stored where the graph's other weights
+are. `Params` then holds a pool in place of those weights, and the layers whose
+weights have the same elements and extents share it. `Model::load` and
+`Model::embedded` take the budget; `Params::load` and `Params::embedded` hold
+every expert.
+
+A program after a host step must not read a weight the step has since written.
+So `split` computes a value that reads only weights again in each program that
+reads it, rather than passing it across the step.
+
+`conformance/operators_test.wado`'s `QMoeLayers` runs two layers that share
+pools holding half their experts, on `Cpu`. Over two layers onnxruntime sits up
+to 4e-4 from the value computed in f64, so the case holds Loam to that value.
+`held_experts.wado` holds each device's run of it to the same device's run with
+every expert held. Its second token is ill-conditioned: a device parts from
+`Cpu` there by as much as onnxruntime does, and the order in which a held run
+sums its experts moves it by up to 6.3e-5.

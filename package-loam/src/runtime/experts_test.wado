@@ -2,7 +2,11 @@
 //! experts held in pools of every slot or fetched into fewer.
 
 use { A, B, C, experts_case, mixing, stacked_runs } from "./graph_cases.wado";
-use { typed } from "./recorded.wado";
+use { Untyped, typed } from "./recorded.wado";
+use { LoadError } from "./checkpoint.wado";
+use { ExpertLayout, HeldExperts, StoredExperts } from "./held_experts.wado";
+use { ElementKind } from "./tensor.wado";
+use { HashMap } from "core:collections";
 use { Cpu, Tensor } from "./tensor.wado";
 
 test "a token whose other logits are -inf runs its one expert once, in either form" {
@@ -29,9 +33,34 @@ test "a token whose other logits are -inf runs its one expert once, in either fo
     assert by_picks.data == by_experts.data[0..<32].to_list();
 }
 
+/// The slots of each pool `HeldExperts::within` makes of a layout of 3 layers
+/// and one of 2, each of 4 experts of 2 bytes, within `budget` bytes.
+fn slots_within(budget: i64) -> Result<List<i32>, LoadError> {
+    let layout = |layers: i32, weight: i32| ExpertLayout {
+        weights: [weight],
+        layers: (0..<layers).map(|_| [StoredExperts { file: "w", start: 0, kind: ElementKind::U8, extents: [2] }] as List<StoredExperts>).collect(),
+        steps: (0..<layers).collect(),
+        experts: 4,
+    };
+    let mut held = HeldExperts::within([layout(3, 0), layout(2, 1)], budget)?;
+    let mut files = HashMap::<String, ByteList>::new();
+    files["w"] = List::<u8>::filled(8, 0) as ByteList;
+    let pools = held.pools(&mut Cpu {}, &files);
+    return Result::Ok(pools.into_iter().map(|p| typed::<Cpu, u8, Untyped>(&Cpu {}, &p).extents[0]).collect());
+}
+
+test "a budget holds one layer's experts of each pool, then shares the rest by each pool's bytes" {
+    assert slots_within(15) matches { Err(_) };
+    assert slots_within(16).unwrap() == [4, 4] as List<i32>;
+    assert slots_within(28).unwrap() == [8, 6] as List<i32>;
+    assert slots_within(40).unwrap() == [12, 8] as List<i32>;
+    assert slots_within(i64::MAX).unwrap() == [12, 8] as List<i32>;
+}
+
 test "experts fetched into pools of fewer slots compute what pools of every slot do" {
     // Each layer of 3 tokens runs every expert it picks, which 5 slots hold
-    // only by giving way to the other layer's; 1 token runs its picks.
+    // only by giving way to the other layer's; 1 token runs its picks. A
+    // budget of 8 experts holds both layers.
     let runs: List<i32> = [3, 1, 3];
     let resident = stacked_runs(&mut Cpu {}, 8, runs);
     let fetched = stacked_runs(&mut Cpu {}, 5, runs);
