@@ -1572,8 +1572,17 @@ fn lexer_rule_executed_action_ids(grammar: &Grammar, grammar_executes: bool, rul
     }
 }
 
-/// The actions that run for `rule`, once each, though an inlined fragment
-/// repeats its own.
+/// Remove every `{ ... }` action written in a fragment, predicates kept: the
+/// jar runs only the actions of the rule that matched the token.
+pub fn drop_fragment_actions(rules: &mut List<LexerRule>) {
+    for let rule of &mut *rules {
+        if rule.is_fragment {
+            rule.body = without_actions(&rule.body);
+        }
+    }
+}
+
+/// The actions that run for `rule`.
 fn lexer_rule_run_actions(rule: &LexerRule, all_rules: &List<LexerRule>) -> List<AltAction> {
     let mut out: List<AltAction> = [];
     for let alt of &rule.body {
@@ -1582,13 +1591,12 @@ fn lexer_rule_run_actions(rule: &LexerRule, all_rules: &List<LexerRule>) -> List
     return out;
 }
 
-/// The actions that run for `alt`: its own top-level actions, and those of
-/// everything the emit inlines below it (a `Group`'s arms and a non-recursive
-/// fragment's body, both of which the replay walks into).
+/// The actions that run for `alt`: its own top-level actions, and those of the
+/// `Group` arms below it, which the replay walks into. A fragment carries none
+/// (`drop_fragment_actions`).
 fn collect_lexer_run_actions(alt: &LexerAlternative, all_rules: &List<LexerRule>, out: &mut List<AltAction>) {
     for let a of &alt.actions {
-        if a.kind matches { Action }
-            && !out.iter_ref().any(|seen: &AltAction| seen.source.action_id == a.source.action_id) {
+        if a.kind matches { Action } {
             out.push(*a);
         }
     }

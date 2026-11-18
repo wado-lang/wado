@@ -22,6 +22,7 @@ use {
     gen_lexer,
     lexer_rule_executes_actions,
     lexer_grammar_executes_actions,
+    drop_fragment_actions,
     collect_unhandled_lexer_alt_action_ids,
     collect_lexer_predicate_ids,
     vocab_display_names,
@@ -290,6 +291,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         },
         &mut diagnostics,
     );
+    drop_fragment_actions(&mut grammar.lexer_rules);
     // Read off the `.g4` bodies, which staging is about to translate away.
     let mode_use = lexer_mode_attr_use(grammar);
     // Stage the lexer bodies into Wado on exactly the grammars whose lexer

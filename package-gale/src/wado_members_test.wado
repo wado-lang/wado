@@ -82,6 +82,24 @@ g: fn(i32, i32) -> i32 = /* sum */ |a: i32, b: i32| a + b";
     assert m.fields[2].init == "/* sum */ |a: i32, b: i32| a + b";
 }
 
+test "translate_wado_members ends a field at a separator on a line of its own" {
+    for let src of ["a: i32 = 0\n;\nb: i32 = 1", "a: i32 = 0\n,\nb: i32 = 1"] {
+        let m = translate_wado_members(src).unwrap();
+        assert m.fields.len() == 2 && m.fields[0].init == "0" && m.fields[1].init == "1", src;
+    }
+    assert translate_wado_members("a: i32\n;\nb: i32 = 1") matches { Err(e) && e.contains("field 'a' needs an initializer") };
+}
+
+test "translate_wado_members keeps every closure parameter list whole" {
+    let src = "f: fn() -> fn(i32, i32) -> i32 = || |a: i32, b: i32| a + b,
+g: bool = x || y, h: i32 = 1 | 2, n: i32 = 0";
+    let m = translate_wado_members(&src).unwrap();
+    assert m.fields.len() == 4;
+    assert m.fields[0].init == "|| |a: i32, b: i32| a + b";
+    assert m.fields[1].init == "x || y";
+    assert m.fields[2].init == "1 | 2";
+}
+
 test "translate_wado_members reads an initializer spread over lines" {
     let m = translate_wado_members("xs: List<i32> = [\n    1,\n    2,\n];\nn: i32 = 1\n    + 2").unwrap();
     assert m.fields.len() == 2;

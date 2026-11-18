@@ -1795,15 +1795,27 @@ WS : ' ' -> skip ;";
 }
 
 test "no predicate sees what an action of the same token wrote" {
-    // The jar runs the actions once the token is matched, so `on` holds for
-    // every iteration of `F*`.
+    // The jar runs the actions once the token is matched: `on` holds for every
+    // iteration of the first `S`, and is off for the second.
     let got = lexes("lexer grammar L;
 options { language = Wado; }
 @lexer::members { on: bool = true, }
-S : 'x' F* 'a' 'c' ;
-fragment F : { lx.on }? 'a' { lx.on = false; } | 'b' ;
-", ["xabac", "xaabac"]);
-    assert got == "xabac => S:xabac\nxaabac => S:xaabac\n";
+S : 'x' ({ lx.on }? 'a' { lx.on = false; } | 'b')* 'a' 'c' ;
+A : 'a' ;
+C : 'c' ;
+X : 'x' ;
+WS : ' ' -> skip ;
+", ["xaabac xaac"]);
+    assert got == "xaabac xaac => S:xaabac X:x A:a A:a C:c\n";
+}
+
+test "an action written in a fragment never runs" {
+    // The jar runs only the actions of the rule that matched the token.
+    let input = "lexer grammar L;
+@lexer::members { int count = 0; }
+D : F+ { System.out.println(count); } ;
+fragment F : 'd' { count += 1; } ;";
+    assert lexes(input, ["ddd"]) == "ddd => D:ddd [0\n]\n";
 }
 
 test "a first-char dispatch whose arms claim every char compiles without a `_` arm" {

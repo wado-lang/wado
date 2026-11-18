@@ -183,7 +183,7 @@ fn parse_field(src: &StrSlice, start: i32, n: i32, fields: &mut List<MemberField
         return Result::Err(`gale: Wado @members: field '${name}' has no type`);
     }
     let init_start = ty_end + 1;
-    let init_end = scan_to(src, closure_params_end(src, init_start, n), n, b';');
+    let init_end = scan_to(src, init_start, n, b';');
     let init = src.slice(init_start, init_end).trim();
     if init.is_empty() {
         return Result::Err(`gale: Wado @members: field '${name}' has an empty initializer`);
@@ -200,39 +200,61 @@ fn parse_field(src: &StrSlice, start: i32, n: i32, fields: &mut List<MemberField
 }
 
 /// Whether the `\n` or `,` at `i` ends a member: the next member follows it, or
-/// for a `,`, the end of the block does.
+/// for a `,`, the end of the block does. A separator after a line break ends
+/// the member itself.
 fn ends_member(src: &StrSlice, i: i32, n: i32) -> bool {
+    if src.byte_at(i) == b'\n' {
+        let next = skip_trivia(src, i + 1, n);
+        return next < n && is_member_start(src, next, n);
+    }
     let next = skip_separators(src, i + 1, n).0;
-    return if next >= n { src.byte_at(i) == b',' } else { is_member_start(src, next, n) };
+    return next >= n || is_member_start(src, next, n);
 }
 
-/// Just past a closure's parameter list when the text at `start` opens one, so
-/// the commas between the parameters do not end the initializer.
-fn closure_params_end(src: &StrSlice, start: i32, n: i32) -> i32 {
-    let mut open = skip_ws(src, start, n);
-    while let Some(end) = comment_end(src, open, n) {
-        open = skip_ws(src, end, n);
+/// Past whitespace and comments.
+fn skip_trivia(src: &StrSlice, start: i32, n: i32) -> i32 {
+    let mut i = skip_ws(src, start, n);
+    while let Some(end) = comment_end(src, i, n) {
+        i = skip_ws(src, end, n);
     }
-    if !text_at(src, open, n, "|") {
-        return start;
-    }
-    let mut i = open + 1;
-    while i < n && src.byte_at(i) != b'|' {
-        i = skip_span(src, i, n);
-    }
-    return i32::min(i + 1, n);
+    return i;
 }
 
-/// Where `target` sits outside any bracket, or the separator or line break
-/// before the next member when the text runs into one first.
+/// Where `target` or a `;` sits outside any bracket, or the separator or line
+/// break before the next member when the text runs into one first. A `|` where
+/// an operand starts opens a closure's parameter list, whose commas separate
+/// nothing.
 fn scan_to(src: &StrSlice, start: i32, n: i32, target: u8) -> i32 {
     let mut i = start;
     let mut depth = 0;
+    let mut operand_starts = true;
     while i < n {
         let b = src.byte_at(i);
-        if depth == 0 && (b == target || b matches { b'\n' | b',' } && ends_member(src, i, n)) {
+        if depth == 0 && (b == target || b == b';' || b matches { b'\n' | b',' } && ends_member(src, i, n)) {
             return i;
         }
+        if b.is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if let Some(end) = comment_end(src, i, n) {
+            i = end;
+            continue;
+        }
+        if text_at(src, i, n, "||") {
+            i += 2;
+            operand_starts = true;
+            continue;
+        }
+        if b == b'|' && operand_starts {
+            i += 1;
+            while i < n && src.byte_at(i) != b'|' {
+                i = skip_span(src, i, n);
+            }
+            i += 1;
+            continue;
+        }
+        operand_starts = b matches { b'=' | b'(' | b'[' | b'{' | b',' };
         if b matches { b'(' | b'[' | b'{' } {
             depth += 1;
             i += 1;
