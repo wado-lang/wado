@@ -125,6 +125,16 @@ pub fn wado_opaque_end(src: &StrSlice, i: i32, n: i32) -> Option<i32> {
     };
 }
 
+/// The end of the inert span starting at `i` — a string, a comment, or a
+/// template's literal text — with the `${ ... }` code spans inside it.
+pub fn inert_at(src: &StrSlice, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
+    if src.byte_at(i) == b'`' {
+        return scan_template(src, i, n);
+    }
+    let none: List<[i32, i32]> = [];
+    return [wado_opaque_end(src, i, n).unwrap_or(i), none];
+}
+
 /// In Wado code, the offset just past the delimiter matching the `open_b` at
 /// `open`, or `null` when it never closes.
 pub fn match_delim(src: &StrSlice, open: i32, n: i32, open_b: u8, close_b: u8) -> Option<i32> {
@@ -352,15 +362,11 @@ pub fn calls_method<S: AsStrSlice>(src: &StrSlice, name: S) -> bool {
     let n = src.len();
     let mut i = 0;
     while i < n {
-        if src.byte_at(i) == b'`' {
-            let [end, holes] = scan_template(src, i, n);
-            if holes.iter_ref().any(|h: &[i32, i32]| calls_method(&src.slice(h.0, h.1), method)) {
+        let [end, spans] = inert_at(src, i, n);
+        if end > i {
+            if spans.iter_ref().any(|s: &[i32, i32]| calls_method(&src.slice(s.0, s.1), method)) {
                 return true;
             }
-            i = end;
-            continue;
-        }
-        if let Some(end) = wado_opaque_end(src, i, n) {
             i = end;
             continue;
         }

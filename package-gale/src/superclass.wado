@@ -29,7 +29,7 @@ use {
     scan_string,
     comment_end,
     scan_template,
-    wado_opaque_end,
+    inert_at,
     match_delim,
     split_top_level_commas,
     skip_ws,
@@ -226,16 +226,6 @@ pub fn body_names_word<S: AsStrSlice>(body: S, word: &String) -> bool {
         i += 1;
     }
     return false;
-}
-
-/// The end of the inert span starting at `i` — a string, a comment, or a
-/// template's literal text — with the `${ ... }` code spans inside it.
-fn inert_at(src: &StrSlice, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
-    if src.byte_at(i) == b'`' {
-        return scan_template(src, i, n);
-    }
-    let none: List<[i32, i32]> = [];
-    return [wado_opaque_end(src, i, n).unwrap_or(i), none];
 }
 
 /// The arguments the call spanning `[start, close)` passes, split on its
