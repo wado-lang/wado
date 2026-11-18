@@ -102,15 +102,19 @@ impl View {
             detach(anchor);
         });
         observe(|| {
-            let current = key();
-            if let Some(was) = shown_for && was == current {
+            if let Some(was) = shown_for && was == key() {
                 return;
             }
-            shown_for = Option::Some(current);
             hide(&mut shown);
             // `key` or a cleanup of what was shown may have disposed of the
             // binding's owner.
-            if disposed || !shows(current) {
+            if disposed {
+                return;
+            }
+            // A cleanup may also have written what `key` reads.
+            let current = key();
+            shown_for = Option::Some(current);
+            if !shows(current) {
                 return;
             }
             let made = render_owned(|| render(current));

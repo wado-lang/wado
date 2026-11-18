@@ -284,6 +284,28 @@ test "switch shows the subtree render makes for the key, and swaps it when the k
     };
 }
 
+test "switch renders the key a cleanup of the last subtree wrote" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div");
+        let mode = signal(1);
+        let mut rendered: List<i32> = [];
+        let _dispose = scope(|| {
+            box.switch(|| mode.get(), |key| {
+                rendered.push(key);
+                if key == 1 {
+                    on_cleanup(|| mode.set(3));
+                }
+                return element("p");
+            });
+        });
+
+        mode.set(2);
+        flush();
+        assert rendered == [1, 3];
+    };
+}
+
 test "switch renders no next subtree once the last one's cleanup disposed of its owner" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
