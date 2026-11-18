@@ -723,7 +723,7 @@ fn emit_compute(
     lines.push(
         `let results = model.programs.run(backend, [${class.join(", ")}], ${record}, || [${erased.join(
             ", ",
-        )}], || ${ERASED_WEIGHTS});`,
+        )}], || ${ERASED_WEIGHTS}, no_host_step);`,
     );
     let mut read_back = |tensor: &String, place: String| -> Result<String, EmitError> {
         let downloaded = `backend.download(&${place})`;
@@ -1126,7 +1126,7 @@ fn emit_decode(
     lines.push(`    let mut all: List<Any<${BACKEND_PARAM}>> = [${erased.join(", ")}];`);
     lines.push("    all.extend(&decoding.erased(backend));");
     lines.push("    return all;");
-    lines.push(`}, || ${ERASED_WEIGHTS});`);
+    lines.push(`}, || ${ERASED_WEIGHTS}, no_host_step);`);
     lines.push(`let tokens = typed::<${BACKEND_PARAM}, i64, [Slots, Picks]>(backend, &results[0]);`);
     lines.push(
         `return ${DECODED_TYPE} { tokens: resized(&backend.download(&tokens), [rows, steps]), cache: ${cache_from_results(

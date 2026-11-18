@@ -130,11 +130,10 @@ impl Backend for WebGpuBackend {
     /// neither one only other constants read nor one a kernel writes in.
     fn compiled(
         &mut self,
-        record: fn(&mut Recorder) -> Recorded with _,
+        recorded: Recorded,
         weights: &List<Any<WebGpuBackend>>,
         earlier: &List<&WebGpuProgram>,
     ) -> WebGpuProgram with _ {
-        let recorded = record(&mut Recorder::new());
         let folded = constants(&recorded);
         let splats = splats_of(&folded);
         let serial = self.program_serial(structure_of(&recorded));

@@ -408,13 +408,17 @@ impl Holds for PjrtBackend {
 impl Backend for PjrtBackend {
     type Program = PjrtProgram;
 
+    /// XLA fuses a composite's decomposition itself.
+    fn recorder(&self) -> Recorder {
+        return Recorder::decomposing();
+    }
+
     fn compiled(
         &mut self,
-        record: fn(&mut Recorder) -> Recorded with _,
+        recorded: Recorded,
         weights: &List<Any<PjrtBackend>>,
         earlier: &List<&PjrtProgram>,
-    ) -> PjrtProgram with (_, PjrtHost) {
-        let recorded = record(&mut Recorder::decomposing());
+    ) -> PjrtProgram with PjrtHost {
         let returned: List<Returned> = recorded.body.results.into_iter().map(|id| {
             let node = &recorded.nodes[id];
             return Returned { kind: node.kind, extents: node.extents };

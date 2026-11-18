@@ -330,3 +330,39 @@ four experts of `graph_cases.wado`'s `experts_case`, through
 | ---------------------------- | --------------- |
 | Each pick, a step of 1 token | 409,600         |
 | Each expert, a prompt of 3   | 262,144         |
+
+### Experts Held on Demand
+
+A model's experts may not fit the device: gpt-oss-20b's take most of its
+weights. `Model::load` takes a budget in bytes for them. Where every expert
+fits, they are weights like any other, and nothing below happens. Otherwise the
+device holds as many as fit, and each pass loads the ones the tokens route to
+that it does not hold.
+
+#### The host reads back the routing
+
+Which experts a layer needs is known only once its router has run. The pass
+records a host step there: `Graph::fetched` names the values the host reads and
+the ones it gives back. `Programs::run` splits a recording at each host step
+into programs of its own. It runs a program, reads the values the step names,
+runs the step, and passes what the step gives to the programs after it. Only
+the pass's own region may hold a host step, not a branch or a loop.
+
+So a pass waits for the host once a layer, which
+[WEP: Loam § The MVP Is Tier 1 Only](../docs/wep-2026-09-20-loam.md#the-mvp-is-tier-1-only)
+says a `QMoE` spares it. That holds only where every expert fits, which a TPU
+chip does for gpt-oss-20b and a GPU of 8 GB does not.
+
+#### The pool
+
+An expert is one slice along the first axis of each `QMoE` input indexed by
+expert. The layers whose experts are laid out alike share a pool: one weight
+for each of those inputs, whose first axis is the pool's slots, so a slot holds
+one expert in each. The budget sets the number of slots, and each pool must
+hold one layer's experts, since one prompt may route to all of them.
+
+The host step of a layer reads its picks back, and loads each picked expert the
+pool does not hold into the slot used longest ago, among those the layer does
+not need. Each backend writes a slot in place, as it laid the weight out. It
+gives the layer each distinct expert it picked and the slot holding it, and
+the layer runs those experts alone.

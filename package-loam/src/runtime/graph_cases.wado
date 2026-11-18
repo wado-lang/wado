@@ -2,6 +2,7 @@
 //! device's conformance program compute on `Cpu` to compare against.
 
 use {
+    Backend,
     Binary,
     Comparison,
     Convolution,
@@ -27,6 +28,16 @@ pub struct A {
 pub struct B {
 }
 pub struct C {
+}
+
+/// What `g` compiles of the pass `record` records.
+pub fn compiled_from<affine G: Backend>(
+    g: &mut G,
+    record: fn(&mut Recorder) -> Recorded with _,
+    weights: &List<Any<G>>,
+    earlier: &List<&G::Program>,
+) -> G::Program with _ {
+    return g.compiled(record(&mut g.recorder()), weights, earlier);
 }
 
 /// Every operation but the windowed ones and the composite, over `x` of

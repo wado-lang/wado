@@ -13,10 +13,9 @@ export fn run() with PjrtHost {
         data: [1.0],
         extents: [1],
     };
-    let program = device.compiled(|r| {
-        let rx = r.parameter::<f32, [A]>(x.extents);
-        return r.finished([rx.id]);
-    }, &[], &[]);
+    let mut r = device.recorder();
+    let rx = r.parameter::<f32, [A]>(x.extents);
+    let program = device.compiled(r.finished([rx.id]), &[], &[]);
     let argument = device.relabeled(&device.upload(&x));
     let first = device.executed(&program, &[Any::F32(argument)], &[]);
     device.begin();
