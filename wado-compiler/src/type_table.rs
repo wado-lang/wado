@@ -1602,7 +1602,24 @@ impl TypeTable {
             ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
             ResolvedType::Unit | ResolvedType::Never => Some(ModuleSource::primitive()),
             ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
-            _ => self.nominal_head(id).map(|(_, module)| module),
+            ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Tuple(_) => self.nominal_head(id).map(|(_, module)| module),
+            ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_)
+            | ResolvedType::Function { .. }
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
+            | ResolvedType::AssocParam(_)
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => None,
         }
     }
 

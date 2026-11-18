@@ -5094,7 +5094,9 @@ fn test_format_keeps_arguments_on_the_call_line_around_a_block() {
     let source = concat!(
         "fn wire(button: View) -> View {\n",
         "    return button.on(\"click\", |_: Event| {\n",
-        "        if first_condition_that_is_rather_long && second_condition_that_is_rather_long && third_one {\n",
+        "        if first_condition_that_is_rather_long\n",
+        "            && second_condition_that_is_rather_long\n",
+        "            && third_condition_that_is_rather_long_enough_to_wrap_the_chain {\n",
         "            go();\n",
         "        }\n",
         "    });\n",

@@ -491,13 +491,11 @@ fn write_back(flat: &mut FlatPackage, temp_module: TirModule) {
 /// The module a concrete type's trait impls are sought in, when a
 /// `T^Trait::method` receiver is substituted.
 fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Option<ModuleSource> {
-    match type_table.get(type_id) {
-        // An inherited instance lives in the base type's module.
-        ResolvedType::Newtype { base_type, .. } => {
-            module_source_for_trait_impl(type_table, *base_type)
-        }
-        _ => type_table.impl_home(type_id),
+    // An inherited instance lives in the base type's module.
+    if let ResolvedType::Newtype { base_type, .. } = type_table.get(type_id) {
+        return module_source_for_trait_impl(type_table, *base_type);
     }
+    type_table.impl_home(type_id)
 }
 
 impl Monomorphizer {
