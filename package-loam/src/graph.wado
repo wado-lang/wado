@@ -680,7 +680,10 @@ fn unpacked_attention(node: &Node) -> Result<List<Node>, String> {
     let kv_heads = node.required_int_attr("kv_num_heads").map_err(|e| at_node(node, e))?;
     let mut body = FunctionBody { prefix: node.outputs[0], x: node.inputs[0], nodes: [] };
     let by_head = body.node("Reshape", [node.inputs[0], body.ints([0, 0, heads + 2 * kv_heads, -1])], []);
-    let parts: List<String> = (["query", "key", "value"] as List<String>).into_iter().map(|p| `${body.prefix}/${p}_heads`).collect();
+    let parts: List<String> = (["query", "key", "value"] as List<String>)
+        .into_iter()
+        .map(|p| `${body.prefix}/${p}_heads`)
+        .collect();
     body.nodes.push(Node {
         op: "Split",
         inputs: [by_head, body.ints([heads, kv_heads, kv_heads])],

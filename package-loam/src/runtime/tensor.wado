@@ -1650,6 +1650,14 @@ impl<E: Element, Axes> CpuTensor<E, Axes> {
         };
         return t;
     }
+
+    /// `value`, taken out of this.
+    pub fn into_value(self) -> Tensor<E, Axes> {
+        let Value(t) = self else {
+            panic("a kept weight is read through the Cpu that keeps it");
+        };
+        return t;
+    }
 }
 
 impl Cpu {
@@ -1657,7 +1665,10 @@ impl Cpu {
     pub fn held<E: Element, Axes>(&self, t: &CpuTensor<E, Axes>) -> &Tensor<E, Axes> {
         return match t {
             Value(v) => v,
-            Kept(k) => &Tensor { data: E::loaded(self.weight(k).bytes(), 0, element_count(&k.extents)), extents: k.extents },
+            Kept(k) => &Tensor {
+                data: E::loaded(self.weight(k).bytes(), 0, element_count(&k.extents)),
+                extents: k.extents,
+            },
         };
     }
 

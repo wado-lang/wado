@@ -24,7 +24,7 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Attention, Cpu, CpuTensor, Graph,Holds, Placed, Slots, Tensor, WebGpuBackend, element_count } from "lib:loam";
+use { Attention, Cpu, CpuTensor, Graph, Holds, Placed, Slots, Tensor, WebGpuBackend, element_count } from "lib:loam";
 use { deviation, noise } from "lib:loam/example/webgpu/compare.wado";
 
 struct Batch {
@@ -417,7 +417,10 @@ fn step(
         gpu.download(&on_gpu.2),
     ];
     return Stepped {
-        on_cpu: [*on_cpu.1.value(), *on_cpu.2.value()],
+        on_cpu: [
+            *on_cpu.1.value(),
+            *on_cpu.2.value(),
+        ],
         on_gpu: [on_gpu.1, on_gpu.2],
         deviation: furthest([out.data, present_k.data, present_v.data], [
             on_cpu.0.value().data,

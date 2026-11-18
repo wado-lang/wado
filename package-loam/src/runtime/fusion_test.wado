@@ -68,7 +68,10 @@ fn centered(rows: i32, width: i32) -> Recorded {
 }
 
 fn replanned_from(was: &Recorded, now: &Recorded) -> Option<Plan> {
-    return replanned(was, &plan_of(was), &splats_of(&constants(&mut Cpu {}, was)), now, &splats_of(&constants(&mut Cpu {}, now)));
+    return replanned(was, &plan_of(was), &splats_of(&constants(&mut Cpu {}, was)), now, &splats_of(&constants(
+        &mut Cpu {},
+        now,
+    )));
 }
 
 test "a plan reused at other extents is the one planning them gives" {

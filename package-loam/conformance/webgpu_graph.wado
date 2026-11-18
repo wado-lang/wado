@@ -47,7 +47,7 @@ use {
     WebGpuBackend,
 } from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
-use { deviation } from "lib:loam/example/webgpu/compare.wado";
+use { deviation, widened } from "lib:loam/example/webgpu/compare.wado";
 use { decoded_tokens, requests_apart, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
 use { experts_apart } from "./held_experts.wado";
 use gated from "./gated.onnxtext"
@@ -235,7 +235,9 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     println(`row runs ${apart(&mut gpu, &taken_runs, &row_runs)}`);
 
     let w = cases::windowed_input();
-    println(`windowed ${apart(&mut gpu, &cases::windowed(&mut gpu, &gpu.upload(&w)), &cases::windowed(cpu, &cpu.upload(&w)))}`);
+    println(`windowed ${apart(&mut gpu, &cases::windowed(&mut gpu, &gpu.upload(&w)), &cases::windowed(cpu, &cpu.upload(
+        &w,
+    )))}`);
 
     let [held_a, held_ids, want_quantized] = quantized_in::<f32>(&mut gpu, "");
     for let [words, device] of [
@@ -320,7 +322,11 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     // side, and a gate with what it gates as one more.
     let cpu_layer_weights = cases::quantized_layer_weights()
         .into_iter()
-        .map(|layer| [cpu.upload(&layer.0), cpu.upload(&layer.1), cpu.upload(&layer.2)])
+        .map(|layer| [
+            cpu.upload(&layer.0),
+            cpu.upload(&layer.1),
+            cpu.upload(&layer.2),
+        ])
         .collect();
     let layer_want = cases::quantized_layer(cpu, &cpu.upload(&q.a), &cpu_layer_weights);
     let layer_weights = gpu.kept_weights(cases::quantized_layer_pass, 1, 12, cases::quantized_layer_weight).unwrap();
@@ -346,8 +352,16 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             cpu,
             &cpu.upload(&c.x),
             &cpu.upload(&c.router),
-            &[cpu.upload(&c.up.0), cpu.upload(&c.up.1), cpu.upload(&c.up.2)],
-            &[cpu.upload(&c.down.0), cpu.upload(&c.down.1), cpu.upload(&c.down.2)],
+            &[
+                cpu.upload(&c.up.0),
+                cpu.upload(&c.up.1),
+                cpu.upload(&c.up.2),
+            ],
+            &[
+                cpu.upload(&c.down.0),
+                cpu.upload(&c.down.1),
+                cpu.upload(&c.down.2),
+            ],
         );
         println(`experts ${tokens} ${apart(&mut gpu, &output, &expected)}`);
     }
@@ -656,7 +670,11 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             Any::F32(gpu.relabeled::<f32, [cases::A, cases::A], Untyped>(&gpu.upload(&square))),
         ], &[]);
         let turned = typed::<WebGpuBackend, f32, [cases::A, cases::A]>(&gpu, &viewed[0]);
-        println(`repeated view ${times} ${apart(&mut gpu, &turned, &cases::repeating_view(cpu, &cpu.upload(&turns), &cpu.upload(&square)))}`);
+        println(`repeated view ${times} ${apart(&mut gpu, &turned, &cases::repeating_view(
+            cpu,
+            &cpu.upload(&turns),
+            &cpu.upload(&square),
+        ))}`);
     }
 
     let [runs, query, key, value, looped_past] = cases::repeating_attention_inputs(3);
@@ -769,8 +787,15 @@ fn quantized_in<E: Float>(
     let computed = cases::quantizing::<Cpu, E>(
         cpu,
         &CpuTensor::Value(a),
-        &[CpuTensor::Value(q.weight), CpuTensor::Value(scales), CpuTensor::Value(q.zero_points)],
-        &[CpuTensor::Value(q.table), CpuTensor::Value(table_scales)],
+        &[
+            CpuTensor::Value(q.weight),
+            CpuTensor::Value(scales),
+            CpuTensor::Value(q.zero_points),
+        ],
+        &[
+            CpuTensor::Value(q.table),
+            CpuTensor::Value(table_scales),
+        ],
         &CpuTensor::Value(q.ids),
     );
     let want = [
@@ -828,9 +853,20 @@ fn attention_in<E: Float>(
     let cpu = &mut Cpu {};
     let computed = cases::attending::<Cpu, E>(
         cpu,
-        &[CpuTensor::Value(inputs.0), CpuTensor::Value(inputs.1), CpuTensor::Value(inputs.2)],
-        &[CpuTensor::Value(past.0), CpuTensor::Value(past.1), CpuTensor::Value(past.2)],
-        &[CpuTensor::Value(rotation.0), CpuTensor::Value(rotation.1)],
+        &[
+            CpuTensor::Value(inputs.0),
+            CpuTensor::Value(inputs.1),
+            CpuTensor::Value(inputs.2),
+        ],
+        &[
+            CpuTensor::Value(past.0),
+            CpuTensor::Value(past.1),
+            CpuTensor::Value(past.2),
+        ],
+        &[
+            CpuTensor::Value(rotation.0),
+            CpuTensor::Value(rotation.1),
+        ],
         &CpuTensor::Value(bias),
         &CpuTensor::Value(sinks),
         &case.options,
@@ -943,10 +979,6 @@ fn rows_of<Axes>(rows: i32, positions: i32) -> Tensor<f32, Axes> {
 /// `t`'s elements cast to `B`, as `Cpu`'s `convert` casts them.
 fn cast<B: Element, A: Element, Axes>(t: &Tensor<A, Axes>) -> Tensor<B, Axes> {
     return Tensor { data: t.data.into_iter().map(|v| v.cast_to::<B>()).collect(), extents: t.extents };
-}
-
-fn widened<E: Element, Axes>(t: &Tensor<E, Axes>) -> Tensor<f32, Axes> {
-    return cast::<f32, E, Axes>(t);
 }
 
 /// How far `got` sits from `want`, what `Cpu` computed.

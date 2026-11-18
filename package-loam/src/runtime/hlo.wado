@@ -26,16 +26,7 @@ use {
     walked,
 } from "./tensor.wado";
 use { HashMap } from "core:collections";
-use {
-    Any,
-    Recorded,
-    Recorder,
-    Run,
-    Untyped,
-    assert_carries,
-    constants,
-    kept_any,
-} from "./recorded.wado";
+use { Any, Recorded, Recorder, Run, Untyped, assert_carries, constants, kept_any } from "./recorded.wado";
 use { HostWeight } from "./weight.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
@@ -1526,7 +1517,10 @@ impl Graph for Cpu {
         a: &CpuTensor<E, Axes>,
         b: &CpuTensor<E, Axes>,
     ) -> CpuTensor<E, Axes> {
-        let [a, b] = [self.held(a), self.held(b)];
+        let [a, b] = [
+            self.held(a),
+            self.held(b),
+        ];
         let extents = elementwise_extents([a.extents, b.extents]);
         let mut data = List::<E>::with_capacity(a.data.len());
         if E::is_float() {
@@ -1547,7 +1541,10 @@ impl Graph for Cpu {
         a: &CpuTensor<E, Axes>,
         b: &CpuTensor<E, Axes>,
     ) -> CpuTensor<bool, Axes> {
-        let [a, b] = [self.held(a), self.held(b)];
+        let [a, b] = [
+            self.held(a),
+            self.held(b),
+        ];
         let extents = elementwise_extents([a.extents, b.extents]);
         let mut data = List::<bool>::with_capacity(a.data.len());
         for let i of 0..<a.data.len() {
@@ -1566,7 +1563,11 @@ impl Graph for Cpu {
         on_true: &CpuTensor<E, Axes>,
         on_false: &CpuTensor<E, Axes>,
     ) -> CpuTensor<E, Axes> {
-        let [pred, on_true, on_false] = [self.held(pred), self.held(on_true), self.held(on_false)];
+        let [pred, on_true, on_false] = [
+            self.held(pred),
+            self.held(on_true),
+            self.held(on_false),
+        ];
         let extents = elementwise_extents([pred.extents, on_true.extents, on_false.extents]);
         let mut data = List::<E>::with_capacity(pred.data.len());
         for let i of 0..<pred.data.len() {
@@ -1630,7 +1631,10 @@ impl Graph for Cpu {
         b: &CpuTensor<E, B>,
         dimension: i32,
     ) -> CpuTensor<E, Out> {
-        let [a, b] = [self.held(a), self.held(b)];
+        let [a, b] = [
+            self.held(a),
+            self.held(b),
+        ];
         let extents = joined_extents(&a.extents, &b.extents, dimension);
         let outer = element_count(&a.extents[0..<dimension].to_list());
         let [a_run, b_run] = [
@@ -1680,7 +1684,10 @@ impl Graph for Cpu {
         rhs: &CpuTensor<E, B>,
         dims: &DotDims,
     ) -> CpuTensor<E, Out> {
-        let [lhs, rhs] = [self.held(lhs), self.held(rhs)];
+        let [lhs, rhs] = [
+            self.held(lhs),
+            self.held(rhs),
+        ];
         let extents = dot_extents(&lhs.extents, &rhs.extents, dims);
         let lhs_free = free_axes(lhs.extents.len(), &dims.lhs_batch, &dims.lhs_contracting);
         let rhs_free = free_axes(rhs.extents.len(), &dims.rhs_batch, &dims.rhs_contracting);
@@ -1763,7 +1770,11 @@ impl Graph for Cpu {
         updates: &CpuTensor<E, U>,
         dims: &ScatterDims,
     ) -> CpuTensor<E, D> {
-        let [operand, indices, updates] = [self.held(operand), self.held(indices), self.held(updates)];
+        let [operand, indices, updates] = [
+            self.held(operand),
+            self.held(indices),
+            self.held(updates),
+        ];
         let rank = operand.extents.len();
         let window_axes: List<i32> = (0..<rank).filter(|a| !dims.inserted_window_dims.contains(&a)).collect();
         let index_axes: List<i32> = (0..<indices.extents.len()).filter(|i| i != dims.index_vector_dim).collect();
@@ -1811,7 +1822,10 @@ impl Graph for Cpu {
         kernel: &CpuTensor<E, K>,
         conv: &Convolution,
     ) -> CpuTensor<E, Out> {
-        let [x, kernel] = [self.held(x), self.held(kernel)];
+        let [x, kernel] = [
+            self.held(x),
+            self.held(kernel),
+        ];
         let window = conv_window(&x.extents, &kernel.extents, conv);
         let t = conv_grouped::<Batch, Feature, Feature, Feature, [Spatial], [Spatial], [Spatial]>(
             &Tensor { data: f32s_of(&x.data), extents: x.extents },
@@ -1873,7 +1887,11 @@ impl Graph for Cpu {
         zero_points: Option<&CpuTensor<u8, [N, Z]>>,
         quantized: &Quantized,
     ) -> CpuTensor<E, Out> {
-        let [a, packed, scales] = [self.held(a), self.held(packed), self.held(scales)];
+        let [a, packed, scales] = [
+            self.held(a),
+            self.held(packed),
+            self.held(scales),
+        ];
         let zero_points = zero_points.map(|z| self.held(z));
         let mut extents = a.extents;
         let last = extents.len() - 1;
@@ -1905,7 +1923,11 @@ impl Graph for Cpu {
         zero_points: Option<&CpuTensor<u8, [R, Z]>>,
         quantized: &Quantized,
     ) -> CpuTensor<E, Out> {
-        let [packed, indices, scales] = [self.held(packed), self.held(indices), self.held(scales)];
+        let [packed, indices, scales] = [
+            self.held(packed),
+            self.held(indices),
+            self.held(scales),
+        ];
         let zero_points = zero_points.map(|z| self.held(z));
         let [rows, bytes] = [packed.extents[0], packed.extents[1]];
         let width = bytes * (8 / quantized.bits);

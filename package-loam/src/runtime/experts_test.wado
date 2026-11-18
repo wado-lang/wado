@@ -17,8 +17,16 @@ test "a token whose other logits are -inf runs its one expert once, in either fo
     let mut rows = c.x;
     rows.data = c.x.data[0..<32].to_list();
     rows.data.extend(&rows.data);
-    let up = [cpu.upload(&c.up.0), cpu.upload(&c.up.1), cpu.upload(&c.up.2)];
-    let down = [cpu.upload(&c.down.0), cpu.upload(&c.down.1), cpu.upload(&c.down.2)];
+    let up = [
+        cpu.upload(&c.up.0),
+        cpu.upload(&c.up.1),
+        cpu.upload(&c.up.2),
+    ];
+    let down = [
+        cpu.upload(&c.down.0),
+        cpu.upload(&c.down.1),
+        cpu.upload(&c.down.2),
+    ];
     let by_experts = mixing(cpu, &cpu.upload(&rows), &cpu.upload(&Tensor::<f32, [A, C]> {
         data: twice,
         extents: [2, 4],

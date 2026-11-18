@@ -374,11 +374,8 @@ impl PjrtBackend {
 }
 
 /// What `Cpu` computed, held on the host.
-fn hosted<E, Axes>(t: CpuTensor<E, Axes>) -> Located<E, Axes> {
-    let Value(v) = t else {
-        unreachable();
-    };
-    return Located::Host(v);
+fn hosted<E: Element, Axes>(t: CpuTensor<E, Axes>) -> Located<E, Axes> {
+    return Located::Host(t.into_value());
 }
 
 impl Holds for PjrtBackend {

@@ -1740,7 +1740,10 @@ test "QMoE layers of one layout read one set of pools, each at its own host step
 test "a QMoE whose biases the graph carries pools them beside the weights a checkpoint holds" {
     let zeros = |n: i32| (0..<n).map(|_| "0").collect().join(", ");
     let source = QMOE_LAYERS
-        .replace("float[4, 32, 1] S2,", `float[4, 32, 1] S2, float[4, 64] B1 = {${zeros(256)}}, float[4, 32] B2 = {${zeros(128)}},`)
+        .replace(
+            "float[4, 32, 1] S2,",
+            `float[4, 32, 1] S2, float[4, 64] B1 = {${zeros(256)}}, float[4, 32] B2 = {${zeros(128)}},`,
+        )
         .replace("(X, R, W1, S1, \"\", W2, S2, \"\")", "(X, R, W1, S1, B1, W2, S2, B2)");
     let out = generate(source).unwrap();
     assert out.contains("pub B1: Bk::Tensor<f32, [ExpertSlots, ");

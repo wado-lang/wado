@@ -110,7 +110,10 @@ test "a recorded graph over halves stores each result in its half, as the CPU do
     let narrow = halved::<Recorder, f16>(&mut r, &rx, &redges);
     let wide = halved::<Recorder, bf16>(&mut r, &rx, &redges);
     let recorded = r.finished([narrow.0.id, narrow.1.id, narrow.2.id, wide.0.id, wide.1.id, wide.2.id]);
-    let [cx, cedges] = [CpuTensor::Value(x), CpuTensor::Value(edges)];
+    let [cx, cedges] = [
+        CpuTensor::Value(x),
+        CpuTensor::Value(edges),
+    ];
     let want_narrow = halved::<Cpu, f16>(cpu, &cx, &cedges);
     let want_wide = halved::<Cpu, bf16>(cpu, &cx, &cedges);
     assert want_narrow.0.value().data != want_wide.0.value().data, "each half rounds its own way";
@@ -286,8 +289,16 @@ test "a recorded mixture of experts computes the CPU's, by its picks and by its 
     let cpu = &mut Cpu {};
     for let tokens of [1, 3] {
         let c = experts_case(tokens);
-        let up = [CpuTensor::Value(c.up.0), CpuTensor::Value(c.up.1), CpuTensor::Value(c.up.2)];
-        let down = [CpuTensor::Value(c.down.0), CpuTensor::Value(c.down.1), CpuTensor::Value(c.down.2)];
+        let up = [
+            CpuTensor::Value(c.up.0),
+            CpuTensor::Value(c.up.1),
+            CpuTensor::Value(c.up.2),
+        ];
+        let down = [
+            CpuTensor::Value(c.down.0),
+            CpuTensor::Value(c.down.1),
+            CpuTensor::Value(c.down.2),
+        ];
         let want = mixing(cpu, &CpuTensor::Value(c.x), &CpuTensor::Value(c.router), &up, &down);
         let mut r = Recorder::new();
         let recorded = mixing_pass(&mut r, tokens);
@@ -298,8 +309,15 @@ test "a recorded mixture of experts computes the CPU's, by its picks and by its 
 test "a recorded quantized product and gather compute the CPU's, as composites and decomposed" {
     let case = quantized_case();
     let cpu = &mut Cpu {};
-    let weight = [CpuTensor::Value(case.weight), CpuTensor::Value(case.scales), CpuTensor::Value(case.zero_points)];
-    let table = [CpuTensor::Value(case.table), CpuTensor::Value(case.table_scales)];
+    let weight = [
+        CpuTensor::Value(case.weight),
+        CpuTensor::Value(case.scales),
+        CpuTensor::Value(case.zero_points),
+    ];
+    let table = [
+        CpuTensor::Value(case.table),
+        CpuTensor::Value(case.table_scales),
+    ];
     let want = quantizing(cpu, &CpuTensor::Value(case.a), &weight, &table, &CpuTensor::Value(case.ids));
     for let mut r of [
         Recorder::new(),
@@ -330,9 +348,20 @@ fn recorded_attention(case: &AttentionCase) {
     let cpu = &mut Cpu {};
     let want = attending(
         cpu,
-        &[CpuTensor::Value(q), CpuTensor::Value(k), CpuTensor::Value(v)],
-        &[CpuTensor::Value(past_k), CpuTensor::Value(past_v), CpuTensor::Value(length)],
-        &[CpuTensor::Value(cos), CpuTensor::Value(sin)],
+        &[
+            CpuTensor::Value(q),
+            CpuTensor::Value(k),
+            CpuTensor::Value(v),
+        ],
+        &[
+            CpuTensor::Value(past_k),
+            CpuTensor::Value(past_v),
+            CpuTensor::Value(length),
+        ],
+        &[
+            CpuTensor::Value(cos),
+            CpuTensor::Value(sin),
+        ],
         &CpuTensor::Value(case.bias),
         &CpuTensor::Value(case.sinks),
         &case.options,

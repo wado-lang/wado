@@ -21,7 +21,7 @@ use {
     typed,
 } from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
-use { deviation } from "lib:loam/example/webgpu/compare.wado";
+use { deviation, widened } from "lib:loam/example/webgpu/compare.wado";
 use { decoded_tokens, requests_apart, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
 use { experts_apart } from "./held_experts.wado";
 use gated from "./gated.onnxtext"
@@ -165,8 +165,15 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
     let want_quantized = cases::quantizing(
         cpu,
         &cpu.upload(&q.a),
-        &[cpu.upload(&q.weight), cpu.upload(&q.scales), cpu.upload(&q.zero_points)],
-        &[cpu.upload(&q.table), cpu.upload(&q.table_scales)],
+        &[
+            cpu.upload(&q.weight),
+            cpu.upload(&q.scales),
+            cpu.upload(&q.zero_points),
+        ],
+        &[
+            cpu.upload(&q.table),
+            cpu.upload(&q.table_scales),
+        ],
         &cpu.upload(&q.ids),
     );
     note("quantized product", apart(device, &dequantized[0], &want_quantized.0));
@@ -180,8 +187,16 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
             cpu,
             &cpu.upload(&c.x),
             &cpu.upload(&c.router),
-            &[cpu.upload(&c.up.0), cpu.upload(&c.up.1), cpu.upload(&c.up.2)],
-            &[cpu.upload(&c.down.0), cpu.upload(&c.down.1), cpu.upload(&c.down.2)],
+            &[
+                cpu.upload(&c.up.0),
+                cpu.upload(&c.up.1),
+                cpu.upload(&c.up.2),
+            ],
+            &[
+                cpu.upload(&c.down.0),
+                cpu.upload(&c.down.1),
+                cpu.upload(&c.down.2),
+            ],
         );
         note(`experts ${tokens}`, apart(device, &mixed[0], &want_mixed));
     }
@@ -197,7 +212,10 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
             Any::Bool(untyped(device, &device.upload(&pred))),
             Any::F32(untyped(device, &device.upload(&bx))),
         ], &[]);
-        note(`branching ${p}`, apart(device, &branched[0], &cases::branching(cpu, &cpu.upload(&pred), &cpu.upload(&bx))));
+        note(
+            `branching ${p}`,
+            apart(device, &branched[0], &cases::branching(cpu, &cpu.upload(&pred), &cpu.upload(&bx))),
+        );
     }
 
     let ranked = Tensor::<f32, [cases::A, cases::B]> {
@@ -370,9 +388,20 @@ pub fn ragged_attention(device: &mut PjrtBackend, mut note: fn mut(String, f32) 
     let rows = cases::attention_rows([1, 2]);
     let want = cases::attending(
         cpu,
-        &[cpu.upload(&rows.inputs.0), cpu.upload(&rows.inputs.1), cpu.upload(&rows.inputs.2)],
-        &[cpu.upload(&rows.past.0), cpu.upload(&rows.past.1), cpu.upload(&rows.past.2)],
-        &[cpu.upload(&rows.rotation.0), cpu.upload(&rows.rotation.1)],
+        &[
+            cpu.upload(&rows.inputs.0),
+            cpu.upload(&rows.inputs.1),
+            cpu.upload(&rows.inputs.2),
+        ],
+        &[
+            cpu.upload(&rows.past.0),
+            cpu.upload(&rows.past.1),
+            cpu.upload(&rows.past.2),
+        ],
+        &[
+            cpu.upload(&rows.rotation.0),
+            cpu.upload(&rows.rotation.1),
+        ],
         &cpu.upload(&rows.bias),
         &cpu.upload(&rows.sinks),
         &rows.options,
@@ -446,8 +475,4 @@ fn apart<E: Element, Axes>(g: &mut PjrtBackend, got: &Any<PjrtBackend>, want: &C
         return f32::NAN;
     }
     return deviation(&read.data, &widened(want.value()).data);
-}
-
-fn widened<E: Element, Axes>(t: &Tensor<E, Axes>) -> Tensor<f32, Axes> {
-    return Tensor { data: t.data.into_iter().map(|v| v.cast_to::<f32>()).collect(), extents: t.extents };
 }

@@ -29,7 +29,18 @@ use {
     reduced_extents,
     sliced_extents,
 } from "./hlo.wado";
-use { Attention, Cpu, CpuTensor, Element, ElementKind, Float, Holds, Tensor, element_count, optional } from "./tensor.wado";
+use {
+    Attention,
+    Cpu,
+    CpuTensor,
+    Element,
+    ElementKind,
+    Float,
+    Holds,
+    Tensor,
+    element_count,
+    optional,
+} from "./tensor.wado";
 
 /// A tensor's elements, whichever element it holds.
 pub variant Data {
@@ -831,7 +842,10 @@ pub fn zeros_on_host(kind: ElementKind, extents: List<i32>) -> Any<Cpu> {
 }
 
 fn zeros_of<E: Erasable>(extents: List<i32>) -> Any<Cpu> {
-    return E::any::<Cpu>(CpuTensor::Value(Tensor { data: List::filled(element_count(&extents), E::from_i64(0)), extents }));
+    return E::any::<Cpu>(CpuTensor::Value(Tensor {
+        data: List::filled(element_count(&extents), E::from_i64(0)),
+        extents,
+    }));
 }
 
 /// `value`, a value on the host, as `h` holds it for this pass.

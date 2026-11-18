@@ -1,10 +1,11 @@
 //! Byte-pair encoding (Sennrich et al. 2016) in the two spellings Hugging Face
 //! tokenizers write down. GPT-2's (Radford et al. 2019, § 2.2) splits text by
-//! its pattern, or by o200k's as gpt-oss does, and spells each piece as bytes. SentencePiece's (Kudo and
-//! Richardson 2018), as Gemma uses it, spells each space as `▁`, takes the
-//! whole text as one piece, and spells a character the vocabulary lacks as its
-//! UTF-8 bytes, each a `<0xXX>` token. A generated tokenizer builds one from the
-//! vocabulary and merges its `tokenizer.json` names.
+//! its pattern, or by o200k's as gpt-oss does, and spells each piece as bytes.
+//! SentencePiece's (Kudo and Richardson 2018), as Gemma uses it, spells each
+//! space as `▁`, takes the whole text as one piece, and spells a character the
+//! vocabulary lacks as its UTF-8 bytes, each a `<0xXX>` token. A generated
+//! tokenizer builds one from the vocabulary and merges its `tokenizer.json`
+//! names.
 
 use { HashMap } from "core:collections";
 use icu from "core:icu";

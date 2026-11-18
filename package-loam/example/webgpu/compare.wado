@@ -1,6 +1,8 @@
 //! What a program comparing two backends' outputs shares: inputs the same on
 //! every run, and how far one output sits from the other.
 
+use { Element, Tensor } from "lib:loam";
+
 /// `count` values in [-scale, scale), the same on every run.
 pub fn noise(count: i32, seed: u32, scale: f32) -> List<f32> {
     let mut state = seed;
@@ -25,6 +27,11 @@ pub fn deviation(a: &List<f32>, b: &List<f32>) -> f32 {
         }
     }
     return worst;
+}
+
+/// `t`'s elements as f32, which `deviation` compares.
+pub fn widened<E: Element, Axes>(t: &Tensor<E, Axes>) -> Tensor<f32, Axes> {
+    return Tensor { data: t.data.into_iter().map(|v| v.cast_to::<f32>()).collect(), extents: t.extents };
 }
 
 test "equal outputs deviate by nothing, an infinity or a NaN among them" {

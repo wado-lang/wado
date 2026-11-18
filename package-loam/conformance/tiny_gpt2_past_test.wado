@@ -107,11 +107,16 @@ test "the prompt returns the logits it did without the cache, and a key and valu
     assert logits.extents == want_extents;
     assert_close(&logits.data, &want);
     let presents: List<List<i32>> = [
-        cpu.extents_of(&c.past_key_values_0_key), cpu.extents_of(&c.past_key_values_0_value),
-        cpu.extents_of(&c.past_key_values_1_key), cpu.extents_of(&c.past_key_values_1_value),
-        cpu.extents_of(&c.past_key_values_2_key), cpu.extents_of(&c.past_key_values_2_value),
-        cpu.extents_of(&c.past_key_values_3_key), cpu.extents_of(&c.past_key_values_3_value),
-        cpu.extents_of(&c.past_key_values_4_key), cpu.extents_of(&c.past_key_values_4_value),
+        cpu.extents_of(&c.past_key_values_0_key),
+        cpu.extents_of(&c.past_key_values_0_value),
+        cpu.extents_of(&c.past_key_values_1_key),
+        cpu.extents_of(&c.past_key_values_1_value),
+        cpu.extents_of(&c.past_key_values_2_key),
+        cpu.extents_of(&c.past_key_values_2_value),
+        cpu.extents_of(&c.past_key_values_3_key),
+        cpu.extents_of(&c.past_key_values_3_value),
+        cpu.extents_of(&c.past_key_values_4_key),
+        cpu.extents_of(&c.past_key_values_4_value),
     ];
     for let extents of presents {
         assert extents == [1, 4, 4, 8] as List<i32>;

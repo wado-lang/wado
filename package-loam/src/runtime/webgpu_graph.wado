@@ -907,11 +907,8 @@ internal fn contracted_axes(recorded: &Recorded, first: i32, count: i32) -> List
 }
 
 /// What `Cpu` computed, which is never a weight it keeps.
-fn hosted<E, Axes>(t: CpuTensor<E, Axes>) -> Placed<E, Axes> {
-    let Value(v) = t else {
-        unreachable();
-    };
-    return Placed::Host(v);
+fn hosted<E: Element, Axes>(t: CpuTensor<E, Axes>) -> Placed<E, Axes> {
+    return Placed::Host(t.into_value());
 }
 
 /// The products of each `Joined` and `Paired` launch `recorded` plans into,

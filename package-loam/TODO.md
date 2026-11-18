@@ -303,8 +303,9 @@ every other element type stops the build naming it. So does a `CastLike`
 of a value computed at run, since it converts only a tensor the build knows.
 `i64` and `i32` compute `ReduceSum` and the binary arithmetic but `Pow`, and
 every other operator over them stops the build. Arithmetic in `double` and the
-other integer types is a second instantiation of the same kernels. Wado has a primitive for nearly every ONNX element type, so what
-a step adds is kernels that compute in one, never the mapping.
+other integer types is a second instantiation of the same kernels. Wado has a
+primitive for nearly every ONNX element type, so what a step adds is kernels
+that compute in one, never the mapping.
 
 A half graph computes at the precision its exporter chose, and a caller cannot
 keep a node's output in f32 instead. An exporter that keeps a softmax or a norm
