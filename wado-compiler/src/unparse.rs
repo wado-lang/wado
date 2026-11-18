@@ -351,8 +351,7 @@ pub struct Unparser<'a> {
     /// How many blocks enclose what is being written.
     block_depth: usize,
     /// The block depth of each operator or method chain that broke across
-    /// lines, so a call can tell that one of its arguments broke outside any
-    /// block and give each argument a line.
+    /// lines; `chain_broke_since` reads it.
     chain_breaks: Vec<usize>,
     /// `(output position, columns)`: what the caller will append to the line
     /// the construct starting at that position ends on — the ` {` after an
