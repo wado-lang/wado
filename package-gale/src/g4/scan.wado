@@ -336,6 +336,28 @@ pub fn word_at<S: AsStrSlice>(src: &StrSlice, i: i32, n: i32, word: S) -> bool {
     return ident_start(src, i) == i && ident_end(src, i + w.len(), n) == i + w.len();
 }
 
+/// Whether the Wado source `src` calls a method `name` (`.name(`, spaces
+/// allowed), outside its comments and literals.
+pub fn calls_method<S: AsStrSlice>(src: &StrSlice, name: S) -> bool {
+    let method = name.as_str_slice();
+    let n = src.len();
+    let mut i = 0;
+    while i < n {
+        if let Some(end) = wado_opaque_end(src, i, n) {
+            i = end;
+            continue;
+        }
+        if src.byte_at(i) == b'.' {
+            let at = skip_ws(src, i + 1, n);
+            if word_at(src, at, n, method) && text_at(src, skip_ws(src, at + method.len(), n), n, "(") {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    return false;
+}
+
 /// ANTLR4's `NameStartChar` (`vendor/antlr4/doc/lexicon.md`), which is XML's:
 /// a fixed range list rather than a Unicode property, so it is written out
 /// rather than asked of `core:icu`.

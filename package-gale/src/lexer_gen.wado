@@ -33,6 +33,7 @@ use {
     super_emit_hook_expr,
 } from "./superclass.wado";
 use { MemberDecls, MemberMethod, members_present } from "./java2wado/jmembers.wado";
+use { calls_method } from "./g4/scan.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
 use { clip_to_scalars, complement_code_points, scalar_count, SCALAR_COUNT } from "./g4/unicode.wado";
 use { is_ident_char } from "./text.wado";
@@ -444,7 +445,7 @@ pub fn lexer_surface(
 fn members_call(members: &MemberDecls, names: List<String>) -> bool {
     return members.methods
         .iter_ref()
-        .any(|m: &MemberMethod| names.iter_ref().any(|name: &String| m.source.contains(`.${*name}(`)));
+        .any(|m: &MemberMethod| names.iter_ref().any(|name: &String| calls_method(&m.source.as_str_slice(), name)));
 }
 
 fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSurface) {
