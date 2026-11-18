@@ -33,7 +33,7 @@ pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, Str
 /// predicate cannot reach, since it holds `&Lexer`. A Wado member writes its own
 /// receiver, so the source says which those are.
 fn method_head(src: &StrSlice, start: i32, paren: i32, n: i32) -> [String, bool] {
-    let i = skip_ws(src, after_pub(src, start, n) + 2, n);
+    let i = method_name_start(src, start, n);
     let name = src.slice(i, ident_end(src, i, n)).to_string();
     let mut r = skip_ws(src, paren + 1, n);
     if !word_at(src, r, n, "&mut") {
@@ -82,8 +82,17 @@ fn after_pub(src: &StrSlice, start: i32, n: i32) -> i32 {
     return if word_at(src, i, n, "pub") { skip_ws(src, i + 3, n) } else { i };
 }
 
+/// A named `fn`: a function type such as `fn(i32)` is part of a field's type.
 fn is_method_start(src: &StrSlice, i: i32, n: i32) -> bool {
-    return word_at(src, after_pub(src, i, n), n, "fn");
+    if !word_at(src, after_pub(src, i, n), n, "fn") {
+        return false;
+    }
+    let name = method_name_start(src, i, n);
+    return ident_end(src, name, n) > name;
+}
+
+fn method_name_start(src: &StrSlice, start: i32, n: i32) -> i32 {
+    return skip_ws(src, after_pub(src, start, n) + 2, n);
 }
 
 /// A method, or a field's `name:` (not a path's `name::`).
@@ -200,7 +209,10 @@ fn ends_member(src: &StrSlice, i: i32, n: i32) -> bool {
 /// Just past a closure's parameter list when the text at `start` opens one, so
 /// the commas between the parameters do not end the initializer.
 fn closure_params_end(src: &StrSlice, start: i32, n: i32) -> i32 {
-    let open = skip_ws(src, start, n);
+    let mut open = skip_ws(src, start, n);
+    while let Some(end) = comment_end(src, open, n) {
+        open = skip_ws(src, end, n);
+    }
     if !text_at(src, open, n, "|") {
         return start;
     }

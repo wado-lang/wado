@@ -5652,7 +5652,7 @@ test "a Java char literal is its code point, and its character in a string" {
     for let body of ["System.out.println(\"a\" + 'b');", "System.out.println(\"a\" + ('b'));"] {
         assert java_action(body, "a : ID ;", false).contains("`ab\\n`"), body;
     }
-    for let bad of ["'ab'", "'\\u-041'", "'\\u00é'", "'\\u12'"] {
+    for let bad of ["'ab'", "'\\u-041'", "'\\u00é'", "'\\u12'", "'''", "'\n'", "'\r'"] {
         assert java_pred_res(`_input.LA(1) == ${bad}`, "a : ID ;", false) matches { Err(_) }, bad;
     }
 }

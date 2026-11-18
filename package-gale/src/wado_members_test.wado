@@ -70,6 +70,18 @@ n: i32 = 0";
     assert m.fields[1].init == "|a: i32, b: i32| a + b";
 }
 
+test "translate_wado_members tells a function type from a method, and a comment from an initializer" {
+    let src = "m: TreeMap<String, fn(i32) -> i32> = TreeMap::<String, fn(i32) -> i32>::new(),
+f:
+fn(i32) -> i32 = |x: i32| x,
+g: fn(i32, i32) -> i32 = /* sum */ |a: i32, b: i32| a + b";
+    let m = translate_wado_members(&src).unwrap();
+    assert m.fields.len() == 3 && m.methods.is_empty();
+    assert m.fields[0].ty == "TreeMap<String, fn(i32) -> i32>";
+    assert m.fields[1].ty == "fn(i32) -> i32";
+    assert m.fields[2].init == "/* sum */ |a: i32, b: i32| a + b";
+}
+
 test "translate_wado_members reads an initializer spread over lines" {
     let m = translate_wado_members("xs: List<i32> = [\n    1,\n    2,\n];\nn: i32 = 1\n    + 2").unwrap();
     assert m.fields.len() == 2;

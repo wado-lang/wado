@@ -131,6 +131,8 @@ fn scan_char_literal(src: &StrSlice, i: i32, n: i32) -> Result<[i32, i32], Strin
             },
         };
         j += 1;
+    } else if src.byte_at(j) matches { b'\'' | b'\n' | b'\r' } {
+        return Result::Err(bad);
     } else {
         j = src.ceil_char_boundary(j + 1);
     }

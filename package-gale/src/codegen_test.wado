@@ -1794,6 +1794,18 @@ WS : ' ' -> skip ;";
     assert got == ">5 => X:>5\na>5 => X:a>5\n5 => X:5\n.abababc => Y:.abababc\n.abc => Y:.abc\n";
 }
 
+test "no predicate sees what an action of the same token wrote" {
+    // The jar runs the actions once the token is matched, so `on` holds for
+    // every iteration of `F*`.
+    let got = lexes("lexer grammar L;
+options { language = Wado; }
+@lexer::members { on: bool = true, }
+S : 'x' F* 'a' 'c' ;
+fragment F : { lx.on }? 'a' { lx.on = false; } | 'b' ;
+", ["xabac", "xaabac"]);
+    assert got == "xabac => S:xabac\nxaabac => S:xaabac\n";
+}
+
 test "a first-char dispatch whose arms claim every char compiles without a `_` arm" {
     let input = "lexer grammar Test;
 A : 'a' ;
@@ -1820,6 +1832,12 @@ NOT_SPACE : ~[ a-zα-ω]+ ;
 WS : ' ' -> skip ;";
     let got = lexes(input, ["café caf αβγ abc 日本 .é"]);
     assert got == "café caf αβγ abc 日本 .é => CAFE:café ID:caf GREEK:αβγ ID:abc NOT_SPACE:日本 DOT:.é\n";
+}
+
+test "a Java char appended to a string prints as itself" {
+    let input = "lexer grammar L;
+A : 'a' { System.out.println(\"<\" + '\\\\' + \"n\" + '$' + \"{x}\" + '`' + '\\r' + \">\"); } ;";
+    assert lexes(input, ["a"]) == "a => A:a [<\\n${x}`\r>\n]\n";
 }
 
 // Pins "Positions an action reads are byte offsets" in antlr4-compatibility.md:

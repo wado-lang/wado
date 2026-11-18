@@ -754,6 +754,9 @@ struct LexerEmit {
     all_rules: &List<LexerRule>,
     ci: bool,
     hm: bool,
+    /// A replay queues each action with its cursor rather than running it, so
+    /// a predicate the replay re-evaluates sees the state the match saw.
+    defers_actions: bool = false,
 }
 
 /// Emit `rule`'s body under `plan` and close the matcher, returning the end.
@@ -1562,23 +1565,33 @@ fn lexer_rule_executed_action_ids(grammar: &Grammar, grammar_executes: bool, rul
     if !lexer_rule_executes_actions(grammar_executes, rule) {
         return;
     }
-    for let alt of &rule.body {
-        collect_lexer_run_action_ids(alt, &grammar.lexer_rules, out);
+    for let a of &lexer_rule_run_actions(rule, &grammar.lexer_rules) {
+        out.push(a.source.action_id);
     }
 }
 
-/// The action ids that run for `alt`: its own top-level actions, and those of
+/// The actions that run for `rule`, once each, though an inlined fragment
+/// repeats its own.
+fn lexer_rule_run_actions(rule: &LexerRule, all_rules: &List<LexerRule>) -> List<AltAction> {
+    let mut out: List<AltAction> = [];
+    for let alt of &rule.body {
+        collect_lexer_run_actions(alt, all_rules, &mut out);
+    }
+    return out;
+}
+
+/// The actions that run for `alt`: its own top-level actions, and those of
 /// everything the emit inlines below it (a `Group`'s arms and a non-recursive
 /// fragment's body, both of which the replay walks into).
-fn collect_lexer_run_action_ids(alt: &LexerAlternative, all_rules: &List<LexerRule>, out: &mut List<i32>) {
+fn collect_lexer_run_actions(alt: &LexerAlternative, all_rules: &List<LexerRule>, out: &mut List<AltAction>) {
     for let a of &alt.actions {
-        if a.kind matches { Action } {
-            out.push(a.source.action_id);
+        if a.kind matches { Action } && !out.iter_ref().any(|seen: &AltAction| seen.source.action_id == a.source.action_id) {
+            out.push(*a);
         }
     }
     for let e of &alt.elements {
         for let inner of &inlined_alts_of(e, all_rules) {
-            collect_lexer_run_action_ids(inner, all_rules, out);
+            collect_lexer_run_actions(inner, all_rules, out);
         }
     }
 }
@@ -1693,9 +1706,30 @@ fn gen_lexer_apply_replay_body(
     // nothing to select, so it never re-evaluates a predicate.
     let plan = lexer_rule_plan(rule, all_rules, grammar_opts);
     let ea = plan matches { Alts(_) };
-    let e = LexerEmit { all_rules, ci, hm: has_members };
+    // ANTLR4 runs a lexer's actions once the token is matched, so no predicate
+    // sees what an action wrote.
+    let defers_actions = rule.body.iter_ref().any(|a: &LexerAlternative| lexer_alt_has_predicate_below(a, all_rules));
+    if defers_actions {
+        w.line(`let mut ${DEFERRED_ACTIONS}: List<[i32, i32]> = [];`);
+    }
+    let e = LexerEmit { all_rules, ci, hm: has_members, defers_actions };
     gen_lexer_body(w, &rule.body, &plan, &e, "return", ea, true);
+    if defers_actions {
+        w.begin(`for let [action, at] of ${DEFERRED_ACTIONS}`);
+        w.line("pos = at;");
+        w.begin("match action");
+        for let a of &lexer_rule_run_actions(rule, all_rules) {
+            w.begin(`${a.source.action_id} =>`);
+            emit_lexer_action_stmt(w, &a.source.text);
+            w.end_with(",");
+        }
+        w.line("_ => unreachable(),");
+        w.end();
+        w.end();
+    }
 }
+
+global DEFERRED_ACTIONS: String = "deferred_actions";
 
 /// Emit a staged lexer-action body as a statement, normalizing the trailing
 /// separator so a body written with or without `;` yields exactly one.
@@ -1767,7 +1801,7 @@ fn gen_lexer_action_replay(
 }
 
 /// Collect the `Action`-kind ids in `alt` that codegen does not run — the exact
-/// complement of `collect_lexer_run_action_ids`. `executes` is true for an alt of
+/// complement of `collect_lexer_run_actions`. `executes` is true for an alt of
 /// an executing rule. An action the replay cannot reach — one under a `~`, or in
 /// a recursive fragment the emit calls rather than inlines — is unhandled.
 /// Drives the loud safety net (`warn_unhandled_lexer_actions` in `codegen`).
@@ -2719,7 +2753,7 @@ fn gen_lexer_alt_seq<S: AsStrSlice>(
         // fragment gates its boundary predicates.
         gen_lexer_rule_predicates(w, &alt.actions, i, ea, fail_action);
         if replay {
-            gen_lexer_alt_actions_at(w, &alt.actions, i);
+            gen_lexer_alt_actions_at(w, &alt.actions, i, e);
         }
         match &plan.steps[i] {
             Repeat(rp) => {
@@ -2751,7 +2785,7 @@ fn gen_lexer_alt_seq<S: AsStrSlice>(
     }
     gen_lexer_rule_predicates(w, &alt.actions, alt.elements.len(), ea, fail_action);
     if replay {
-        gen_lexer_alt_actions_at(w, &alt.actions, alt.elements.len());
+        gen_lexer_alt_actions_at(w, &alt.actions, alt.elements.len(), e);
     }
 }
 
@@ -2797,10 +2831,14 @@ fn gen_lexer_repeat_step<S: AsStrSlice>(
 /// Emit the `{ ... }` actions positioned at `before` as statements, in source
 /// order. Only reached on the replay path, where `pos` is the live match cursor,
 /// so a body reading the matched text sees exactly what ANTLR4's would.
-fn gen_lexer_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32) {
+fn gen_lexer_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, e: &LexerEmit) {
     for let a of actions {
         if a.kind matches { Action } && a.before_index == before {
-            emit_lexer_action_stmt(w, &a.source.text);
+            if e.defers_actions {
+                w.line(`${DEFERRED_ACTIONS}.push([${a.source.action_id}, pos]);`);
+            } else {
+                emit_lexer_action_stmt(w, &a.source.text);
+            }
         }
     }
 }

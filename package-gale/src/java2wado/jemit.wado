@@ -1369,7 +1369,13 @@ fn append_part(
             let Ok(c) = char::try_from(*code as u32) else {
                 return Result::Err("java2wado: a lone surrogate char has no text to print");
             };
-            out.push_str(&escape_template(&c.to_string()));
+            // Decoded, unlike a `Str`'s text, so a `\` or a control char is the
+            // character itself and is escaped to stay one.
+            if c == '\\' || c < ' ' {
+                out.push_str(`\\u{${*code:x}}`);
+            } else {
+                out.push_str(&escape_template(&c.to_string()));
+            }
             Result::Ok(());
         },
         Binary(b) && b.op == "+" => {
