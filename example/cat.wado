@@ -49,28 +49,10 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Stdin, Exit) {
     }
 }
 
-<<<<<<< HEAD
 fn cat_file(dir: &Descriptor, path: String) -> Result<(), String> with (Stdout, Descriptor) {
-    let open_result = dir.open_at(
-        PathFlags::none(),
-        path,
-        OpenFlags::none(),
-        DescriptorFlags::Read,
-    ).wait();
-||||||| 76e27019c
-fn cat_file(dir: &Descriptor, path: String) -> Result<(), String> with Stdout {
-    let open_result = dir.open_at(
-        PathFlags::none(),
-        path,
-        OpenFlags::none(),
-        DescriptorFlags::Read,
-    ).wait();
-=======
-fn cat_file(dir: &Descriptor, path: String) -> Result<(), String> with Stdout {
     let open_result = dir
         .open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read)
         .wait();
->>>>>>> origin/main
     let file = match open_result {
         Ok(f) => f,
         Err(e) => {

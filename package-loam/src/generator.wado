@@ -92,22 +92,10 @@ fn generate_graph(
     module: &ModuleSpec,
     spelling: Spelling,
     runtime: &String,
-<<<<<<< HEAD
 ) -> Result<Response, KilnError> with Stream {
-    if let Some(input) = req.inputs.iter_ref().find(
-        |input| !input.type matches { Some("safetensors") | Some("safetensors-index") },
-    ) {
-||||||| 76e27019c
-) -> Result<Response, KilnError> {
-    if let Some(input) = req.inputs.iter_ref().find(
-        |input| !input.type matches { Some("safetensors") | Some("safetensors-index") },
-    ) {
-=======
-) -> Result<Response, KilnError> {
     if let Some(input) = req.inputs
         .iter_ref()
         .find(|input| !input.type matches { Some("safetensors") | Some("safetensors-index") }) {
->>>>>>> origin/main
         let reason = `loam: '${input.path}' is given ${given(&input.type)}; a checkpoint is \`type: "safetensors"\`, and the index of a sharded one \`type: "safetensors-index"\``;
         return refused(req, KilnError::Unsupported(reason));
     }
