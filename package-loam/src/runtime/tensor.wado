@@ -730,6 +730,7 @@ pub enum ElementKind {
     /// What a packed int4 weight is stored in.
     U8,
     I64,
+    I32,
     Bool,
 }
 
@@ -839,6 +840,29 @@ impl Element for i64 {
     }
 
     fn from_bool(v: bool) -> i64 {
+        return if v { 1 } else { 0 };
+    }
+}
+
+impl Element for i32 {
+    fn kind() -> ElementKind {
+        return ElementKind::I32;
+    }
+
+    fn cast_to<T: Element>(&self) -> T {
+        return T::from_i64(*self as i64);
+    }
+
+    fn from_f32(v: f32) -> i32 {
+        return v as i32;
+    }
+
+    /// The low 32 bits, as ONNX's `Cast` from int64 keeps them.
+    fn from_i64(v: i64) -> i32 {
+        return v as i32;
+    }
+
+    fn from_bool(v: bool) -> i32 {
         return if v { 1 } else { 0 };
     }
 }

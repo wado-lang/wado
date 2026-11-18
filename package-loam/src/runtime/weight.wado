@@ -22,6 +22,7 @@ pub fn stored_width(kind: ElementKind) -> i32 {
         F16 | BF16 => 2,
         U8 | Bool => 1,
         I64 => 8,
+        I32 => 4,
     };
 }
 
@@ -71,6 +72,11 @@ impl HostWeight {
                     bytes.store_at::<i64>(8 * i, values[i]);
                 }
             },
+            I32(values) => {
+                for let i of 0..<count {
+                    bytes.store_at::<i32>(4 * i, values[i]);
+                }
+            },
             Bool(values) => {
                 for let i of 0..<count {
                     bytes[i] = values[i] as u8;
@@ -103,14 +109,14 @@ impl HostWeight {
     /// Element `i` as the f32 that holds it exactly: a float's value, or a
     /// `u8` or a bool as a number.
     pub fn value(&self, i: i32) -> f32
-        contract !self.kind matches { I64 }
+        contract !self.kind matches { I64 | I32 }
     {
         return match self.kind {
             F32 => f32::from_bits(self.bytes.load_at::<u32>(4 * i)),
             F16 => f16::from_bits(self.bytes.load_at::<u16>(2 * i)) as f32,
             BF16 => bf16::from_bits(self.bytes.load_at::<u16>(2 * i)) as f32,
             U8 | Bool => self.bytes[i] as f32,
-            I64 => unreachable(),
+            I64 | I32 => unreachable(),
         };
     }
 
@@ -124,6 +130,7 @@ impl HostWeight {
             BF16 => Any::BF16(Tensor::<bf16, Untyped> { data: self.bytes.to_list_of::<bf16>(0, 2 * n), extents }),
             U8 => Any::U8(Tensor::<u8, Untyped> { data: self.bytes.to_list_of::<u8>(0, n), extents }),
             I64 => Any::I64(Tensor::<i64, Untyped> { data: self.bytes.to_list_of::<i64>(0, 8 * n), extents }),
+            I32 => Any::I32(Tensor::<i32, Untyped> { data: self.bytes.to_list_of::<i32>(0, 4 * n), extents }),
             Bool => Any::Bool(Tensor::<bool, Untyped> {
                 data: self.bytes.to_list_of::<u8>(0, n).into_iter().map(|b| b != 0).collect(),
                 extents,

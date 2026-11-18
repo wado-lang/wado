@@ -503,13 +503,17 @@ impl Graph for WebGpuBackend {
 
     /// The row kernel where `init` is the fold's identity, so the fold from it
     /// is the fold of the elements alone.
-    fn reduce<E: Float, In, Out>(
+    fn reduce<E: Element, In, Out>(
         &mut self,
         x: &Placed<E, In>,
         op: Binary,
         init: f32,
         dims: List<i32>,
     ) -> Placed<E, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        // WGSL holds no 64-bit integer, so an integer stays on the host.
+        if !E::is_float() {
+            return Placed::Host(self.cpu.reduce(&self.host(x), op, init, dims));
+        }
         let fold = match op {
             Add && init.to_bits() == 0 => Option::Some(operand(0).row_sum(null)),
             Maximum && init == f32::NEG_INFINITY => Option::Some(operand(0).row(RowOp::Max)),
@@ -1027,7 +1031,7 @@ fn kept_plain(g: &mut WebGpuBackend, w: &HostWeight) -> Any<WebGpuBackend> with 
         g.write_bytes(&bytes, |i| w.bytes()[i] as u32);
         return Any::U8(Placed::Device(bytes));
     }
-    if w.kind matches { I64 } {
+    if w.kind matches { I64 | I32 } {
         return kept_any(g, &w.decoded());
     }
     return of_kind(g, w.kind, Placed::Device(g.kept_values(w)));
@@ -1442,7 +1446,7 @@ fn apart(
 /// The view `value` is, where it is on the device.
 fn on_device(value: &Any<WebGpuBackend>) -> Option<&DeviceTensor> {
     return match value {
-        F32(Device(d)) | F16(Device(d)) | BF16(Device(d)) | U8(Device(d)) | I64(Device(d)) | Bool(Device(d)) => Option::Some(
+        F32(Device(d)) | F16(Device(d)) | BF16(Device(d)) | U8(Device(d)) | I64(Device(d)) | I32(Device(d)) | Bool(Device(d)) => Option::Some(
             d,
         ),
         _ => null,
@@ -1462,6 +1466,7 @@ fn viewing(value: &Any<WebGpuBackend>, view: DeviceTensor) -> Any<WebGpuBackend>
         BF16(_) => Any::BF16(Placed::Device(view)),
         U8(_) => Any::U8(Placed::Device(view)),
         I64(_) => Any::I64(Placed::Device(view)),
+        I32(_) => Any::I32(Placed::Device(view)),
         Bool(_) => Any::Bool(Placed::Device(view)),
     };
 }
@@ -1710,7 +1715,7 @@ fn quantized_on(
         F32 => quantized_apart::<f32>(g, &rows, q),
         F16 => quantized_apart::<f16>(g, &rows, q),
         BF16 => quantized_apart::<bf16>(g, &rows, q),
-        U8 | I64 | Bool => unreachable(),
+        U8 | I64 | I32 | Bool => unreachable(),
     };
     let mut computed = [as_rows(g, &product)] as List<DeviceTensor>;
     for let o of &then.operands {
@@ -2013,7 +2018,7 @@ fn any_view(g: &mut WebGpuBackend, value: &Any<WebGpuBackend>) -> DeviceTensor w
         BF16(t) => g.device_view(t),
         Bool(t) => g.device_view(t),
         U8(t) => g.device_view(t),
-        I64(_) => unreachable(),
+        I64(_) | I32(_) => unreachable(),
     };
 }
 
@@ -2024,7 +2029,7 @@ fn of_kind(g: &mut WebGpuBackend, kind: ElementKind, computed: Placed<f32, Untyp
         F16 => Any::F16(as_element(g, computed)),
         BF16 => Any::BF16(as_element(g, computed)),
         Bool => Any::Bool(as_element(g, computed)),
-        U8 | I64 => unreachable(),
+        U8 | I64 | I32 => unreachable(),
     };
 }
 

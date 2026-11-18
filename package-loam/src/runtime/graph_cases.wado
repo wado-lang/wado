@@ -92,12 +92,19 @@ pub fn compiled_from<affine G: Backend>(
 }
 
 /// Every operation but the windowed ones and the composite, over `x` of
-/// extents [2, 3] and `ids` of extents [2].
+/// extents [2, 3] and `ids` of extents [2], an integer sum among them.
 pub fn mixed<affine G: Graph>(
     g: &mut G,
     x: &G::Tensor<f32, [A, B]>,
     ids: &G::Tensor<i64, [C]>,
-) -> [G::Tensor<f32, [A, A]>, G::Tensor<f32, [A, B]>, G::Tensor<f32, [C]>, G::Tensor<bool, [A, B]>, G::Tensor<i64, [C]>] with _ {
+) -> [
+    G::Tensor<f32, [A, A]>,
+    G::Tensor<f32, [A, B]>,
+    G::Tensor<f32, [C]>,
+    G::Tensor<bool, [A, B]>,
+    G::Tensor<i64, [C]>,
+    G::Tensor<i32, []>,
+] with _ {
     let turned = g.unary(Unary::Tanh, x);
     let scaled = g.binary(Binary::Multiply, x, &turned);
     let counted = g.iota::<f32, [A, B]>([2, 3], 1);
@@ -145,7 +152,9 @@ pub fn mixed<affine G: Graph>(
     );
     let widened: G::Tensor<f32, [C]> = g.convert(ids);
     let twice = g.binary(Binary::Add, ids, ids);
-    return [product, placed, widened, above, twice];
+    let total: G::Tensor<i64, []> = g.reduce(&twice, Binary::Add, 0.0, [0]);
+    let narrowed: G::Tensor<i32, []> = g.convert(&total);
+    return [product, placed, widened, above, twice, narrowed];
 }
 
 /// Every `Unary` and `Binary`, and every `Comparison` of each element type, one

@@ -65,7 +65,7 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
         let rx = r.parameter::<f32, [cases::A, cases::B]>(x.extents);
         let rids = r.parameter::<i64, [cases::C]>(ids.extents);
         let got = cases::mixed(r, &rx, &rids);
-        return r.finished([got.0.id, got.1.id, got.2.id, got.3.id, got.4.id]);
+        return r.finished([got.0.id, got.1.id, got.2.id, got.3.id, got.4.id, got.5.id]);
     }, &[], &[]);
     let got = device.executed(&program, &[
         Any::F32(untyped(device, &device.upload(&x))),
@@ -76,6 +76,7 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
     note("mixed converted", apart(device, &got[2], &want.2));
     note("mixed compared", apart(device, &got[3], &want.3));
     note("mixed i64", apart(device, &got[4], &want.4));
+    note("mixed i32 sum", apart(device, &got[5], &want.5));
 
     // The same graph over a weight the device holds in bf16.
     let kept = device
@@ -413,6 +414,7 @@ fn apart<E: Element, Axes>(g: &mut PjrtBackend, got: &Any<PjrtBackend>, want: &T
     let read = match got {
         F32(t) => g.download(t),
         I64(t) => cpu.convert::<i64, f32, Untyped>(&g.download(t)),
+        I32(t) => cpu.convert::<i32, f32, Untyped>(&g.download(t)),
         Bool(t) => cpu.convert::<bool, f32, Untyped>(&g.download(t)),
         F16(t) => cpu.convert::<f16, f32, Untyped>(&g.download(t)),
         BF16(t) => cpu.convert::<bf16, f32, Untyped>(&g.download(t)),

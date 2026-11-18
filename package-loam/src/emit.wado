@@ -2006,6 +2006,7 @@ fn any_case(primitive: &String) -> String {
         "bf16" => "BF16",
         "u8" => "U8",
         "i64" => "I64",
+        "i32" => "I32",
         "bool" => "Bool",
         _ => unreachable(),
     };
@@ -2791,8 +2792,7 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
         operands.push(exprs.reference(&node.inputs[i]));
     }
     operands.push(symbols.length_operand(&past.axes[2].extent.poly(), &q)?);
-    // A causal attention reads no padding, whose hidden score is infinite.
-    operands.push("null");
+    operands.push(reach_of_lengths(node, checked, exprs, symbols, &q)?);
     // The caches are read only where the attribute asks for rotation.
     for let index of [ROTARY_COS, ROTARY_SIN] {
         operands.push(if options.rotary { exprs.optional(node, index) } else { "null" });
@@ -2801,6 +2801,29 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     operands.push(exprs.optional(node, HEAD_SINK));
     operands.push(attention);
     return Result::Ok(`backend.group_query_attention::<${turbofish.join(", ")}>(${operands.join(", ")})`);
+}
+
+/// The `reach` a `GroupQueryAttention` passes its composite: none where the
+/// build knows `seqlens_k`, which infer holds to every position, and otherwise
+/// each row's length one past it, as i64 over `[Slots]`, past which a key is
+/// padding.
+fn reach_of_lengths(
+    node: &Node,
+    checked: &Checked,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+    q: &Shape,
+) -> Result<String, EmitError> {
+    let lengths = node.inputs[5];
+    if checked.known.contains_key(lengths) {
+        return Result::Ok("null");
+    }
+    let axes = axis_list(&checked.shapes[lengths]);
+    let rows = `[${symbols.spell_extent(&q.axes[0].extent.poly())?}]`;
+    let wide = `backend.convert::<${checked.primitives[lengths]}, i64, [${axes}]>(${exprs.reference(&lengths)})`;
+    let flat = `backend.reshape::<i64, [${axes}], [Slots]>(&${wide}, ${rows})`;
+    let one = `full::<${BACKEND_PARAM}, i64, [Slots]>(backend, 1 as i64, ${rows})`;
+    return Result::Ok(`Option::Some(&backend.binary::<i64, [Slots]>(Binary::Add, &${flat}, &${one}))`);
 }
 
 /// An attention spelled in parts as the composite's call, computing what the

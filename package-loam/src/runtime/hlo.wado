@@ -238,9 +238,10 @@ pub affine trait Graph: Holds with _ {
         dimension: i32,
     ) -> Self::Tensor<E, Out>;
     /// StableHLO's `reduce` whose body is `op`, from `init`. The result drops
-    /// the axes `dims`. It accumulates in f32 whatever `E` is, as every sum
-    /// below does: a long sum in a half loses its small terms.
-    fn reduce<E: Float, In, Out>(
+    /// the axes `dims`. A float accumulates in f32 whatever `E` is, as every
+    /// sum below does: a long sum in a half loses its small terms. An integer
+    /// accumulates exactly in i64, from `init` as an integer.
+    fn reduce<E: Element, In, Out>(
         &mut self,
         x: &Self::Tensor<E, In>,
         op: Binary,
@@ -1432,6 +1433,7 @@ impl Backend for Cpu {
             BF16(t) => spliced::<bf16>(t, slot, &decoded),
             U8(t) => spliced::<u8>(t, slot, &decoded),
             I64(t) => spliced::<i64>(t, slot, &decoded),
+            I32(t) => spliced::<i32>(t, slot, &decoded),
             Bool(t) => spliced::<bool>(t, slot, &decoded),
         }
     }
@@ -1595,7 +1597,7 @@ impl Graph for Cpu {
         return Tensor { data, extents };
     }
 
-    fn reduce<E: Float, In, Out>(&mut self, x: &Tensor<E, In>, op: Binary, init: f32, dims: List<i32>) -> Tensor<E, Out> {
+    fn reduce<E: Element, In, Out>(&mut self, x: &Tensor<E, In>, op: Binary, init: f32, dims: List<i32>) -> Tensor<E, Out> {
         let kept = kept_axes(x.extents.len(), &dims);
         let mut perm = kept;
         perm.extend(&(0..<x.extents.len()).filter(|i| dims.contains(&i)).collect());
@@ -1605,11 +1607,12 @@ impl Graph for Cpu {
         let width = if rows == 0 { 0 } else { laid.data.len() / rows };
         let mut data = List::<E>::with_capacity(rows);
         for let r of 0..<rows {
-            let mut acc = init;
-            for let j of 0..<width {
-                acc = binary_f32(op, acc, laid.data[r * width + j].cast_to::<f32>());
+            let row = laid.data[r * width..<(r + 1) * width];
+            if E::is_float() {
+                data.push(E::from_f32(row.into_iter().fold(init, |acc, v| binary_f32(op, acc, v.cast_to::<f32>()))));
+            } else {
+                data.push(E::from_i64(row.into_iter().fold(init as i64, |acc, v| binary_i64(op, acc, v.cast_to::<i64>()))));
             }
-            data.push(E::from_f32(acc));
         }
         return Tensor { data, extents };
     }

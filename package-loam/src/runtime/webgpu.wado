@@ -4,8 +4,8 @@
 //! writes it there until `compute` downloads it, and so does a `bool` one, as
 //! 1.0 and 0.0. A kernel computes in f32 and rounds what it stores to a half
 //! tensor's half, which it stores as f16s on a device with `shader-f16`, and
-//! as the f32 equal to each otherwise. An `i64` tensor
-//! stays on the host, since WGSL stores none, and a gather writes its indices
+//! as the f32 equal to each otherwise. An `i64` or `i32` tensor
+//! stays on the host, since WGSL stores no `i64` and the host computes both, and a gather writes its indices
 //! to the device as `u32` when it runs, but for the index `arg_max` leaves on
 //! the device as an f32, which a gather reads there. A weight kept for
 //! products and gathers alone is held in bf16 or f16 where one loses nothing,

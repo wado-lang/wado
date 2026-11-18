@@ -92,6 +92,16 @@ pub fn is_float(primitive: &String) -> bool {
     return *primitive == "f32" || *primitive == "f16" || *primitive == "bf16";
 }
 
+/// Whether `op` computes on a signed integer as ONNX defines it, which a kernel
+/// computes exactly in i64, wrapping to the element.
+pub fn computes_integers(op: &String) -> bool {
+    return *op == "ReduceSum" || binary_operator(op) matches { Some(b) && !b matches { Pow } };
+}
+
+pub fn is_signed_integer(primitive: &String) -> bool {
+    return *primitive == "i64" || *primitive == "i32";
+}
+
 /// The `TensorProto.DataType` an attribute's number names, as `Cast`'s `to`
 /// carries one. `None` for a number the enum does not declare.
 pub fn data_type(number: i64) -> Option<onnx::TensorProtoDataType> {
@@ -110,6 +120,7 @@ pub fn element_of(dtype: &String) -> Option<Element> {
         "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, stored: "BF16" }),
         "uint8" => Option::Some(Element { primitive: "u8", width: 1, stored: "U8" }),
         "int64" => Option::Some(Element { primitive: "i64", width: 8, stored: "I64" }),
+        "int32" => Option::Some(Element { primitive: "i32", width: 4, stored: "I32" }),
         "bool" => Option::Some(Element { primitive: "bool", width: 1, stored: "BOOL" }),
         _ => null,
     };

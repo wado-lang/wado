@@ -369,7 +369,7 @@ fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
 /// program under each kind of sampler, alone and for requests in slots.
 #[test]
 fn loams_webgpu_graph_computes_what_its_cpu_graph_does() {
-    assert_loam_conformance("webgpu_graph.wado", 124);
+    assert_loam_conformance("webgpu_graph.wado", 125);
 }
 
 /// A whole model's `compute` stays on the device: each sequence length reads

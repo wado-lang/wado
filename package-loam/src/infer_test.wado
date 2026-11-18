@@ -840,11 +840,26 @@ test "a Cast without `to` stops the build, folded or not" {
     }
 }
 
-test "arithmetic on an int64 tensor stops the build" {
-    let source = `g (int64[4] M) => (int64[4] Y) {
-        Y = Add(M, M)
+test "arithmetic ONNX defines on integers keeps an int64 operand's element" {
+    let source = `g (int64[4] M, int32[4] N) => (int64[1] Y, int32[4] Z) {
+        S = Sub(M, M)
+        Y = ReduceSum<keepdims = 1>(S)
+        Z = Mul(N, N)
     }`;
-    assert y_axes(source).unwrap_err() == "Y = Add: operand M is i64, and Add computes in a float";
+    let checked = infer(&read(&source).unwrap()).unwrap();
+    assert checked.primitives["Y"] == "i64";
+    assert checked.primitives["Z"] == "i32";
+}
+
+test "a float operator on an int64 tensor, or two integers mixed, stops the build" {
+    let float_only = `g (int64[4] M) => (int64[4] Y) {
+        Y = Pow(M, M)
+    }`;
+    assert y_axes(float_only).unwrap_err() == "Y = Pow: operand M is i64, and Pow computes in a float";
+    let mixed = `g (int64[4] M, int32[4] N) => (int64[4] Y) {
+        Y = Add(M, N)
+    }`;
+    assert y_axes(mixed).unwrap_err() == "Y = Add: operand N is i32 and M is i64, and Add computes in one element";
 }
 
 test "a kernel computes in its operands' float, and Cast names another" {
@@ -865,7 +880,7 @@ test "operands of two floats stop the build" {
     let source = `g (float16[4] X, float[4] W) => (float16[4] Y) {
         Y = Add(X, W)
     }`;
-    assert y_axes(source).unwrap_err() == "Y = Add: operand W is f32 and X is f16, and Add computes in one float";
+    assert y_axes(source).unwrap_err() == "Y = Add: operand W is f32 and X is f16, and Add computes in one element";
 }
 
 test "Where broadcasts its three operands and takes its branches' element" {

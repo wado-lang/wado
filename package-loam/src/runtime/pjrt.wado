@@ -119,6 +119,7 @@ fn element_type(kind: ElementKind) -> ElementType {
         BF16 => ElementType::Bfloat16,
         U8 => ElementType::Uint8,
         I64 => ElementType::Int64,
+        I32 => ElementType::Int32,
         Bool => ElementType::Pred,
     };
 }
@@ -136,6 +137,7 @@ fn elements_of<E: Element>(bytes: ByteList) -> List<E> {
         BF16 => widened(bytes),
         U8 => bytes.into_iter().map(|b| b.cast_to::<E>()).collect(),
         I64 => List::<i64>::from_le_bytes(bytes).into_iter().map(|v| E::from_i64(v)).collect(),
+        I32 => List::<i32>::from_le_bytes(bytes).into_iter().map(|v| E::from_i64(v as i64)).collect(),
         Bool => bytes.into_iter().map(|b| E::from_bool(b != 0)).collect(),
     };
 }
@@ -168,6 +170,7 @@ fn returned_at(kind: ElementKind, on: DeviceBuffer) -> Any<PjrtBackend> {
         BF16 => Any::BF16(Located::Device(on)),
         U8 => Any::U8(Located::Device(on)),
         I64 => Any::I64(Located::Device(on)),
+        I32 => Any::I32(Located::Device(on)),
         Bool => Any::Bool(Located::Device(on)),
     };
 }
@@ -314,6 +317,7 @@ impl PjrtBackend {
             BF16 => Any::BF16(Located::Device(d)),
             U8 => Any::U8(Located::Device(d)),
             I64 => Any::I64(Located::Device(d)),
+            I32 => Any::I32(Located::Device(d)),
             Bool => Any::Bool(Located::Device(d)),
         };
     }
@@ -321,7 +325,7 @@ impl PjrtBackend {
     /// The slot of `value`, sent to the device for this pass if it is on the host.
     fn on_device(&mut self, value: &Any<PjrtBackend>) -> i32 with PjrtHost {
         let host = match value {
-            F32(Device(d)) | F16(Device(d)) | BF16(Device(d)) | U8(Device(d)) | I64(Device(d)) | Bool(Device(d)) => {
+            F32(Device(d)) | F16(Device(d)) | BF16(Device(d)) | U8(Device(d)) | I64(Device(d)) | I32(Device(d)) | Bool(Device(d)) => {
                 return self.slot_of(d);
             },
             F32(Host(t)) => self.sent(t),
@@ -329,6 +333,7 @@ impl PjrtBackend {
             BF16(Host(t)) => self.sent(t),
             U8(Host(t)) => self.sent(t),
             I64(Host(t)) => self.sent(t),
+            I32(Host(t)) => self.sent(t),
             Bool(Host(t)) => self.sent(t),
         };
         self.pass.push(host);
@@ -535,7 +540,7 @@ impl Backend for PjrtBackend {
         if self.topology matches { Some(_) } {
             return;
         }
-        let F32(Device(d)) | F16(Device(d)) | BF16(Device(d)) | U8(Device(d)) | I64(Device(d)) | Bool(Device(d)) = pool else {
+        let F32(Device(d)) | F16(Device(d)) | BF16(Device(d)) | U8(Device(d)) | I64(Device(d)) | I32(Device(d)) | Bool(Device(d)) = pool else {
             unreachable();
         };
         let kind = kind_of(pool);
@@ -558,6 +563,7 @@ fn zeros_pass(kind: ElementKind, extents: List<i32>) -> Recorded {
         BF16 => zeros_of::<bf16>(extents),
         U8 => zeros_of::<u8>(extents),
         I64 => zeros_of::<i64>(extents),
+        I32 => zeros_of::<i32>(extents),
         Bool => zeros_of::<bool>(extents),
     };
 }
@@ -578,6 +584,7 @@ fn slot_pass(kind: ElementKind, extents: List<i32>) -> Recorded {
         BF16 => slot_of::<bf16>(extents),
         U8 => slot_of::<u8>(extents),
         I64 => slot_of::<i64>(extents),
+        I32 => slot_of::<i32>(extents),
         Bool => slot_of::<bool>(extents),
     };
 }
@@ -673,7 +680,7 @@ impl Graph for PjrtBackend {
         return Located::Host(self.cpu.concatenate(&self.host(a), &self.host(b), dimension));
     }
 
-    fn reduce<E: Float, In, Out>(
+    fn reduce<E: Element, In, Out>(
         &mut self,
         x: &Located<E, In>,
         op: Binary,

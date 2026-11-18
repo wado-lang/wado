@@ -156,7 +156,7 @@ pub fn splats_of(constants: &HashMap<i32, Any<Cpu>>) -> HashMap<i32, Option<f32>
             F16(t) => splat(&t.data.into_iter().map(|v| f32::from(v)).collect()),
             BF16(t) => splat(&t.data.into_iter().map(|v| f32::from(v)).collect()),
             Bool(t) => splat(&t.data.into_iter().map(|b| if b { 1.0 as f32 } else { 0.0 }).collect()),
-            U8(_) | I64(_) => null,
+            U8(_) | I64(_) | I32(_) => null,
         };
     }
     return splats;

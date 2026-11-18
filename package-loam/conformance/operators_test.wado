@@ -506,6 +506,14 @@ test "ReduceSum with noop_with_empty_axes and no axes is the input" {
     assert_agrees(#include_bytes("./operators/ReduceSumNoop.onnx"), #include_str("./operators/ReduceSumNoop.txt"));
 }
 
+test "ReduceSum over int64 sums exactly" {
+    assert_agrees(#include_bytes("./operators/ReduceSumInt64.onnx"), #include_str("./operators/ReduceSumInt64.txt"));
+}
+
+test "Sub over int64 subtracts exactly" {
+    assert_agrees(#include_bytes("./operators/SubInt64.onnx"), #include_str("./operators/SubInt64.txt"));
+}
+
 test "ArgMax keeps its axis at extent 1" {
     assert_agrees(#include_bytes("./operators/ArgMaxKept.onnx"), #include_str("./operators/ArgMaxKept.txt"));
 }
@@ -568,7 +576,6 @@ test "Cast of bool to int64 is 1 or 0" {
     assert_agrees(#include_bytes("./operators/CastBoolToInt64.onnx"), #include_str("./operators/CastBoolToInt64.txt"));
 }
 
-#[TODO]
 test "Cast to int32 truncates toward 0" {
     assert_agrees(#include_bytes("./operators/CastToInt32.onnx"), #include_str("./operators/CastToInt32.txt"));
 }
@@ -700,6 +707,14 @@ test "Expand keeps the operand's extent where the target's is 1" {
 
 test "GroupQueryAttention over a prompt with no past" {
     assert_agrees(#include_bytes("./operators/GqaPrompt.onnx"), #include_str("./operators/GqaPrompt.txt"));
+}
+
+test "GroupQueryAttention reads its lengths from a mask's values" {
+    assert_agrees(#include_bytes("./operators/GqaMaskedLengths.onnx"), #include_str("./operators/GqaMaskedLengths.txt"));
+}
+
+test "GroupQueryAttention reads no key past the length a padded mask gives" {
+    assert_agrees(#include_bytes("./operators/GqaMaskedPadding.onnx"), #include_str("./operators/GqaMaskedPadding.txt"));
 }
 
 test "GroupQueryAttention of one position after a past" {

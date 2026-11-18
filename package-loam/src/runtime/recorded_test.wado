@@ -49,7 +49,7 @@ test "a recorded graph run on the CPU computes what the CPU computes as each ope
     let rx = r.parameter::<f32, [A, B]>(x.extents);
     let rids = r.parameter::<i64, [C]>(ids.extents);
     let got = mixed(&mut r, &rx, &rids);
-    let recorded = r.finished([got.0.id, got.1.id, got.2.id, got.3.id, got.4.id]);
+    let recorded = r.finished([got.0.id, got.1.id, got.2.id, got.3.id, got.4.id, got.5.id]);
     assert recorded.nodes[got.0.id].extents == want.0.extents;
     assert run(cpu, &recorded, &[
         host_of(&x),
@@ -60,6 +60,7 @@ test "a recorded graph run on the CPU computes what the CPU computes as each ope
         host_of(&want.2),
         host_of(&want.3),
         host_of(&want.4),
+        host_of(&want.5),
     ] as List<Any<Cpu>>;
 }
 

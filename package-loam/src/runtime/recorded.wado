@@ -38,6 +38,7 @@ pub variant Data {
     BF16(List<bf16>),
     U8(List<u8>),
     I64(List<i64>),
+    I32(List<i32>),
     Bool(List<bool>),
 }
 
@@ -239,6 +240,7 @@ internal fn data_of<E: Element>(v: &List<E>) -> Data {
         BF16 => Data::BF16(v.into_iter().map(|x| x.cast_to::<bf16>()).collect()),
         U8 => Data::U8(v.into_iter().map(|x| x.cast_to::<u8>()).collect()),
         I64 => Data::I64(v.into_iter().map(|x| x.cast_to::<i64>()).collect()),
+        I32 => Data::I32(v.into_iter().map(|x| x.cast_to::<i32>()).collect()),
         Bool => Data::Bool(v.into_iter().map(|x| x.cast_to::<bool>()).collect()),
     };
 }
@@ -349,7 +351,7 @@ impl Graph for Recorder {
         return self.value(Operation::Concatenate(dimension), [a.id, b.id], E::kind(), extents);
     }
 
-    fn reduce<E: Float, In, Out>(&mut self, x: &Value<E, In>, op: Binary, init: f32, dims: List<i32>) -> Value<E, Out> {
+    fn reduce<E: Element, In, Out>(&mut self, x: &Value<E, In>, op: Binary, init: f32, dims: List<i32>) -> Value<E, Out> {
         let extents = reduced_extents(&self.extents(x.id), &dims);
         return self.value(Operation::Reduce([op, init, dims]), [x.id], E::kind(), extents);
     }
@@ -664,6 +666,7 @@ fn node_of(a: &Any<Recorder>) -> i32 {
         BF16(v) => v.id,
         U8(v) => v.id,
         I64(v) => v.id,
+        I32(v) => v.id,
         Bool(v) => v.id,
     };
 }
@@ -676,6 +679,7 @@ fn any_at(kind: ElementKind, id: i32) -> Any<Recorder> {
         BF16 => Any::BF16(Value { id }),
         U8 => Any::U8(Value { id }),
         I64 => Any::I64(Value { id }),
+        I32 => Any::I32(Value { id }),
         Bool => Any::Bool(Value { id }),
     };
 }
@@ -693,6 +697,7 @@ pub variant Any<affine G: Holds> {
     BF16(G::Tensor<bf16, Untyped>),
     U8(G::Tensor<u8, Untyped>),
     I64(G::Tensor<i64, Untyped>),
+    I32(G::Tensor<i32, Untyped>),
     Bool(G::Tensor<bool, Untyped>),
 }
 
@@ -704,6 +709,7 @@ pub fn kind_of<affine G: Holds>(a: &Any<G>) -> ElementKind {
         BF16(_) => ElementKind::BF16,
         U8(_) => ElementKind::U8,
         I64(_) => ElementKind::I64,
+        I32(_) => ElementKind::I32,
         Bool(_) => ElementKind::Bool,
     };
 }
@@ -775,6 +781,19 @@ impl Erasable for i64 {
     }
 }
 
+impl Erasable for i32 {
+    fn any<affine G: Holds>(t: G::Tensor<i32, Untyped>) -> Any<G> {
+        return Any::I32(t);
+    }
+
+    fn of_any<affine G: Holds>(a: &Any<G>) -> &G::Tensor<i32, Untyped> {
+        let I32(t) = a else {
+            unreachable();
+        };
+        return t;
+    }
+}
+
 impl Erasable for bool {
     fn any<affine G: Holds>(t: G::Tensor<bool, Untyped>) -> Any<G> {
         return Any::Bool(t);
@@ -793,6 +812,7 @@ pub fn host_of<E: Element, Axes>(t: &Tensor<E, Axes>) -> Any<Cpu> {
         BF16(data) => Any::BF16(Tensor { data, extents: t.extents }),
         U8(data) => Any::U8(Tensor { data, extents: t.extents }),
         I64(data) => Any::I64(Tensor { data, extents: t.extents }),
+        I32(data) => Any::I32(Tensor { data, extents: t.extents }),
         Bool(data) => Any::Bool(Tensor { data, extents: t.extents }),
     };
 }
@@ -805,6 +825,7 @@ pub fn zeros_on_host(kind: ElementKind, extents: List<i32>) -> Any<Cpu> {
         BF16 => zeros_of::<bf16>(extents),
         U8 => zeros_of::<u8>(extents),
         I64 => zeros_of::<i64>(extents),
+        I32 => zeros_of::<i32>(extents),
         Bool => zeros_of::<bool>(extents),
     };
 }
@@ -821,6 +842,7 @@ pub fn uploaded_any<affine H: Holds>(h: &mut H, value: &Any<Cpu>) -> Any<H> with
         BF16(t) => Any::BF16(h.upload(t)),
         U8(t) => Any::U8(h.upload(t)),
         I64(t) => Any::I64(h.upload(t)),
+        I32(t) => Any::I32(h.upload(t)),
         Bool(t) => Any::Bool(h.upload(t)),
     };
 }
@@ -833,6 +855,7 @@ pub fn kept_any<affine H: Holds>(h: &mut H, value: &Any<Cpu>) -> Any<H> with _ {
         BF16(t) => Any::BF16(h.keep(t)),
         U8(t) => Any::U8(h.keep(t)),
         I64(t) => Any::I64(h.keep(t)),
+        I32(t) => Any::I32(h.keep(t)),
         Bool(t) => Any::Bool(h.keep(t)),
     };
 }
@@ -850,6 +873,7 @@ fn extents_of_any<affine G: Graph>(g: &G, a: &Any<G>) -> List<i32> with _ {
         BF16(t) => g.extents_of(t),
         U8(t) => g.extents_of(t),
         I64(t) => g.extents_of(t),
+        I32(t) => g.extents_of(t),
         Bool(t) => g.extents_of(t),
     };
 }
@@ -1439,6 +1463,7 @@ impl<affine G: Graph> Run<G> {
                 BF16(v) => Any::BF16(g.upload(&Tensor::<bf16, Untyped> { data: *v, extents: node.extents })),
                 U8(v) => Any::U8(g.upload(&Tensor::<u8, Untyped> { data: *v, extents: node.extents })),
                 I64(v) => Any::I64(g.upload(&Tensor::<i64, Untyped> { data: *v, extents: node.extents })),
+                I32(v) => Any::I32(g.upload(&Tensor::<i32, Untyped> { data: *v, extents: node.extents })),
                 Bool(v) => Any::Bool(g.upload(&Tensor::<bool, Untyped> { data: *v, extents: node.extents })),
             };
         }
@@ -1447,12 +1472,12 @@ impl<affine G: Graph> Run<G> {
         } else {
             node.kind;
         };
-        if node.op matches { Unary(_) | Reduce(_) | DotGeneral(_) | Convolution(_) | ReduceWindow(_) | ArgMax(_) | Attention(_) | QuantizedProduct(_) | QuantizedGather(_) } {
+        if node.op matches { Unary(_) | DotGeneral(_) | Convolution(_) | ReduceWindow(_) | ArgMax(_) | Attention(_) | QuantizedProduct(_) | QuantizedGather(_) } {
             return match over {
                 F32 => self.computed_in::<f32>(g, id, node),
                 F16 => self.computed_in::<f16>(g, id, node),
                 BF16 => self.computed_in::<bf16>(g, id, node),
-                U8 | I64 | Bool => unreachable(),
+                U8 | I64 | I32 | Bool => unreachable(),
             };
         }
         return match over {
@@ -1461,6 +1486,7 @@ impl<affine G: Graph> Run<G> {
             BF16 => self.computed_of::<bf16>(g, node),
             U8 => self.computed_of::<u8>(g, node),
             I64 => self.computed_of::<i64>(g, node),
+            I32 => self.computed_of::<i32>(g, node),
             Bool => self.computed_of::<bool>(g, node),
         };
     }
@@ -1475,8 +1501,15 @@ impl<affine G: Graph> Run<G> {
                 BF16 => Any::BF16(g.convert::<E, bf16, Untyped>(self.of::<E>(node, 0))),
                 U8 => Any::U8(g.convert::<E, u8, Untyped>(self.of::<E>(node, 0))),
                 I64 => Any::I64(g.convert::<E, i64, Untyped>(self.of::<E>(node, 0))),
+                I32 => Any::I32(g.convert::<E, i32, Untyped>(self.of::<E>(node, 0))),
                 Bool => Any::Bool(g.convert::<E, bool, Untyped>(self.of::<E>(node, 0))),
             },
+            Reduce([op, init, dims]) => E::any::<G>(g.reduce::<E, Untyped, Untyped>(
+                self.of::<E>(node, 0),
+                *op,
+                *init,
+                *dims,
+            )),
             Binary(op) => E::any::<G>(g.binary::<E, Untyped>(*op, self.of::<E>(node, 0), self.of::<E>(node, 1))),
             Compare(direction) => Any::Bool(g.compare::<E, Untyped>(
                 *direction,
@@ -1517,12 +1550,6 @@ impl<affine G: Graph> Run<G> {
     fn computed_in<E: Erasable + Float>(&mut self, g: &mut G, id: i32, node: &RecordedNode) -> Any<G> with _ {
         return match &node.op {
             Unary(op) => E::any::<G>(g.unary::<E, Untyped>(*op, self.of::<E>(node, 0))),
-            Reduce([op, init, dims]) => E::any::<G>(g.reduce::<E, Untyped, Untyped>(
-                self.of::<E>(node, 0),
-                *op,
-                *init,
-                *dims,
-            )),
             DotGeneral(dims) => E::any::<G>(g.dot_general::<E, Untyped, Untyped, Untyped>(
                 self.of::<E>(node, 0),
                 self.of::<E>(node, 1),
