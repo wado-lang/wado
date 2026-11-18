@@ -20,7 +20,7 @@ use {
 use { Any, Recorded, Recorder, Untyped, Value, typed } from "./recorded.wado";
 use { Experts, mixture_of_experts } from "./experts.wado";
 use { HostWeight } from "./weight.wado";
-use { Attention, Float, Tensor, element_count } from "./tensor.wado";
+use { Attention, ElementKind, Float, Tensor, element_count } from "./tensor.wado";
 use { noise } from "../../example/webgpu/compare.wado";
 
 pub struct A {
@@ -28,6 +28,55 @@ pub struct A {
 pub struct B {
 }
 pub struct C {
+}
+
+/// A pool of halves and one of bytes, each slot written, one of them twice.
+pub fn written_pools<affine G: Backend>(g: &mut G) -> [Any<G>, Any<G>] with _ {
+    let mut halves = g.pool(ElementKind::F16, [3, 2]);
+    for let [slot, row] of [
+        [
+            2,
+            [1.5, -2.0],
+        ],
+        [
+            0,
+            [3.0, 4.0],
+        ],
+        [
+            1,
+            [0.25, 7.0],
+        ],
+        [
+            2,
+            [5.0, 6.0],
+        ],
+    ] as List<[i32, List<f16>]> {
+        g.written(&mut halves, slot, HostWeight::of(&Tensor::<f16, [B]> {
+            data: row,
+            extents: [2],
+        }));
+    }
+    let mut bytes = g.pool(ElementKind::U8, [3, 4]);
+    for let [slot, row] of [
+        [
+            1,
+            [1, 2, 3, 255],
+        ],
+        [
+            0,
+            [0, 128, 64, 32],
+        ],
+        [
+            2,
+            [9, 8, 7, 6],
+        ],
+    ] as List<[i32, List<u8>]> {
+        g.written(&mut bytes, slot, HostWeight::of(&Tensor::<u8, [B]> {
+            data: row,
+            extents: [4],
+        }));
+    }
+    return [halves, bytes];
 }
 
 /// What `g` compiles of the pass `record` records.

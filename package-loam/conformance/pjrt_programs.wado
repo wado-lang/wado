@@ -17,6 +17,7 @@ use {
     Slots,
     Tensor,
     Untyped,
+    typed,
 } from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
@@ -92,6 +93,11 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
     let halved = device.executed(&over_half, &[Any::I64(untyped(device, &device.upload(&ids)))], &kept);
     note("halved product", apart(device, &halved[0], &want.0));
     note("halved scattered", apart(device, &halved[1], &want.1));
+
+    let [want_halves, want_bytes] = cases::written_pools(cpu);
+    let pools = cases::written_pools(device);
+    note("pool of halves", apart(device, &pools.0, &typed::<Cpu, f16, Untyped>(cpu, &want_halves)));
+    note("pool of bytes", apart(device, &pools.1, &typed::<Cpu, u8, Untyped>(cpu, &want_bytes)));
 
     let [ex, ey] = cases::elementwise_inputs();
     let every = cases::compiled_from(device, |r| {

@@ -6,19 +6,33 @@ use { HashMap, HashSet } from "core:collections";
 use { LinearArray } from "core:linear";
 use { Analysis, Buffer, ElementType, Executable, PjrtHost } from "core:pjrt";
 use {
+    Backend,
     Binary,
     Comparison,
     Convolution,
     DotDims,
-    Backend,
     GatherDims,
     Graph,
     ScatterDims,
+    Slots,
     Unary,
     WindowReduce,
+    full,
+    written_at,
 } from "./hlo.wado";
 use { Cpu, Element, ElementKind, Float, Holds, Tensor, element_count } from "./tensor.wado";
-use { Any, Erasable, Recorded, Recorder, data_of, kept_any } from "./recorded.wado";
+use {
+    Any,
+    Erasable,
+    Recorded,
+    Recorder,
+    Untyped,
+    data_of,
+    kept_any,
+    kind_of,
+    uploaded_any,
+    zeros_on_host,
+} from "./recorded.wado";
 use { in_place, le_bytes, module_of } from "./stablehlo.wado";
 use { HostWeight } from "./weight.wado";
 
@@ -77,6 +91,9 @@ pub affine struct PjrtBackend {
     /// Where each donated slot's cache went.
     moved: HashMap<i32, i32>,
     executables: List<Executable>,
+    /// The executables of `pool` and `written`, by the element and extents
+    /// they are of.
+    helpers: HashMap<String, i32>,
     /// The topology a program compiles for, instead of running on a device.
     topology: Option<String>,
     analyses: List<Analysis>,
@@ -144,22 +161,6 @@ pub fn summary(analysis: &Analysis) -> String {
     return line;
 }
 
-fn zeros(returned: &Returned) -> Any<PjrtBackend> {
-    return match returned.kind {
-        F32 => zeros_of::<f32>(returned.extents),
-        F16 => zeros_of::<f16>(returned.extents),
-        BF16 => zeros_of::<bf16>(returned.extents),
-        U8 => zeros_of::<u8>(returned.extents),
-        I64 => zeros_of::<i64>(returned.extents),
-        Bool => zeros_of::<bool>(returned.extents),
-    };
-}
-
-fn zeros_of<E: Erasable>(extents: List<i32>) -> Any<PjrtBackend> {
-    let data = List::filled(element_count(&extents), E::from_i64(0));
-    return E::any::<PjrtBackend>(Located::Host(Tensor { data, extents }));
-}
-
 /// The buffer `slot` holds as a program returned it, of an element of `kind`.
 fn returned_at(kind: ElementKind, on: DeviceBuffer) -> Any<PjrtBackend> {
     return match kind {
@@ -183,6 +184,7 @@ impl PjrtBackend {
             retaining: HashSet::new(),
             moved: HashMap::new(),
             executables: [],
+            helpers: HashMap::new(),
             topology: null,
             analyses: [],
             reads: 0,
@@ -250,6 +252,16 @@ impl PjrtBackend {
         assert d.slot >= 0, "a backend compiling for a topology holds no weight";
         assert self.generations[d.slot] == d.generation, "a tensor of a pass that has ended is no longer held";
         return d.slot;
+    }
+
+    /// The executable of `recorded`, compiled once for its `key`.
+    fn compiled_once(&mut self, key: String, recorded: fn() -> Recorded) -> i32 with PjrtHost {
+        if let Some(at) = self.helpers.get(key) {
+            return at;
+        }
+        self.executables.push(done(PjrtHost::compile(module_of(&recorded(), &HashSet::new()))));
+        self.helpers[key] = self.executables.len() - 1;
+        return self.executables.len() - 1;
     }
 
     fn sent<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> i32 with PjrtHost {
@@ -473,7 +485,7 @@ impl Backend for PjrtBackend {
     ) -> List<Any<PjrtBackend>> with PjrtHost {
         self.runs += 1;
         if self.topology matches { Some(_) } {
-            return program.returned.into_iter().map(|r| zeros(&r)).collect();
+            return program.returned.into_iter().map(|r| uploaded_any(self, &zeros_on_host(r.kind, r.extents))).collect();
         }
         let slots: List<i32> = arguments.into_iter().chain(weights.into_iter()).map(|a| self.on_device(a)).collect();
         let currents: List<i32> = slots.into_iter().map(|slot| self.current(slot)).collect();
@@ -507,6 +519,81 @@ impl Backend for PjrtBackend {
         }
         return values;
     }
+
+    /// A program's zeros, which the backend keeps.
+    fn pool(&mut self, kind: ElementKind, extents: List<i32>) -> Any<PjrtBackend> with PjrtHost {
+        if self.topology matches { Some(_) } {
+            return kept_any(self, &zeros_on_host(kind, extents));
+        }
+        let at = self.compiled_once(`zeros ${kind:?} ${extents:?}`, || zeros_pass(kind, extents));
+        let zeros = done(self.executables[at].execute([], [])).pop().unwrap();
+        let on = self.device_buffer(self.stored(zeros), extents, false);
+        return returned_at(kind, on);
+    }
+
+    /// A program that writes the slot over the pool it is given, in place.
+    fn written(&mut self, pool: &mut Any<PjrtBackend>, slot: i32, row: HostWeight) with PjrtHost {
+        if self.topology matches { Some(_) } {
+            return;
+        }
+        let F32(Device(d)) | F16(Device(d)) | BF16(Device(d)) | U8(Device(d)) | I64(Device(d)) | Bool(Device(d)) = pool else {
+            unreachable();
+        };
+        let kind = kind_of(pool);
+        let at = self.compiled_once(`slot ${kind:?} ${d.extents:?}`, || slot_pass(kind, d.extents));
+        let held = self.slot_of(d);
+        let mut one = d.extents;
+        one[0] = 1;
+        let given = done(PjrtHost::upload(element_type(kind), buffer_extents(&one), row.bytes()));
+        let index = done(PjrtHost::upload(ElementType::Int64, [1], le_bytes(&data_of(&([slot as i64] as List<i64>)))));
+        let updated = done(self.executables[at].execute([self.buffer_at(held), &given, &index], [])).pop().unwrap();
+        self.buffers[held] = Option::Some(updated);
+    }
+}
+
+/// A pass of no parameters that returns zeros of `kind` and `extents`.
+fn zeros_pass(kind: ElementKind, extents: List<i32>) -> Recorded {
+    return match kind {
+        F32 => zeros_of::<f32>(extents),
+        F16 => zeros_of::<f16>(extents),
+        BF16 => zeros_of::<bf16>(extents),
+        U8 => zeros_of::<u8>(extents),
+        I64 => zeros_of::<i64>(extents),
+        Bool => zeros_of::<bool>(extents),
+    };
+}
+
+fn zeros_of<E: Element>(extents: List<i32>) -> Recorded {
+    let mut r = Recorder::new();
+    let zeros = full::<Recorder, E, Untyped>(&mut r, E::from_i64(0), extents);
+    return r.finished([zeros.id]);
+}
+
+/// A pass that writes its second parameter, one slice along the first axis
+/// of a pool of `kind` and `extents`, over the slot its third names in the
+/// pool its first holds, which becomes the result.
+fn slot_pass(kind: ElementKind, extents: List<i32>) -> Recorded {
+    return match kind {
+        F32 => slot_of::<f32>(extents),
+        F16 => slot_of::<f16>(extents),
+        BF16 => slot_of::<bf16>(extents),
+        U8 => slot_of::<u8>(extents),
+        I64 => slot_of::<i64>(extents),
+        Bool => slot_of::<bool>(extents),
+    };
+}
+
+fn slot_of<E: Element>(extents: List<i32>) -> Recorded {
+    let mut r = Recorder::new();
+    let pool = r.parameter::<E, Untyped>(extents);
+    let mut one = extents;
+    one[0] = 1;
+    let row = r.parameter::<E, Untyped>(one);
+    let at = r.parameter::<i64, [Slots]>([1]);
+    let written = written_at::<Recorder, E, Untyped, Untyped>(&mut r, &pool, &row, 0, &at, null);
+    let mut recorded = r.finished([written.id]);
+    recorded.appended.push([pool.id, written.id]);
+    return recorded;
 }
 
 impl Graph for PjrtBackend {

@@ -286,6 +286,22 @@ impl Backend for WebGpuBackend {
             _ => r,
         }).collect();
     }
+
+    fn pool(
+        &mut self,
+        kind: ElementKind,
+        extents: List<i32>,
+    ) -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuBuffer) {
+        let d = self.pooled(kind, extents);
+        if kind matches { U8 } {
+            return Any::U8(Placed::Device(d));
+        }
+        return of_kind(self, kind, Placed::Device(d));
+    }
+
+    fn written(&mut self, pool: &mut Any<WebGpuBackend>, slot: i32, row: HostWeight) with (GpuQueue, GpuBuffer) {
+        self.written_slot(on_device(pool).unwrap(), slot, &row);
+    }
 }
 
 impl Graph for WebGpuBackend {

@@ -148,8 +148,10 @@ pub struct Recorded {
     pub nodes: List<RecordedNode>,
     pub body: Region,
     pub parameters: i32,
-    /// Each decomposed attention's past over a shared buffer, and the present
-    /// that buffer becomes: the same positions, and more of them valid.
+    /// Each value whose buffer a later one may take over, and that value: a
+    /// decomposed attention's past over a shared buffer and its present, the
+    /// same positions with more of them valid, or a pool and the pool with a
+    /// slot written.
     pub appended: List<[i32, i32]>,
 }
 
@@ -792,6 +794,34 @@ pub fn host_of<E: Element, Axes>(t: &Tensor<E, Axes>) -> Any<Cpu> {
         U8(data) => Any::U8(Tensor { data, extents: t.extents }),
         I64(data) => Any::I64(Tensor { data, extents: t.extents }),
         Bool(data) => Any::Bool(Tensor { data, extents: t.extents }),
+    };
+}
+
+/// Zeros of `kind` and `extents`, as `Cpu` holds them.
+pub fn zeros_on_host(kind: ElementKind, extents: List<i32>) -> Any<Cpu> {
+    return match kind {
+        F32 => zeros_of::<f32>(extents),
+        F16 => zeros_of::<f16>(extents),
+        BF16 => zeros_of::<bf16>(extents),
+        U8 => zeros_of::<u8>(extents),
+        I64 => zeros_of::<i64>(extents),
+        Bool => zeros_of::<bool>(extents),
+    };
+}
+
+fn zeros_of<E: Erasable>(extents: List<i32>) -> Any<Cpu> {
+    return E::any::<Cpu>(Tensor { data: List::filled(element_count(&extents), E::from_i64(0)), extents });
+}
+
+/// `value`, held on the host, as `h` holds it for this pass.
+pub fn uploaded_any<affine H: Holds>(h: &mut H, value: &Any<Cpu>) -> Any<H> with _ {
+    return match value {
+        F32(t) => Any::F32(h.upload(t)),
+        F16(t) => Any::F16(h.upload(t)),
+        BF16(t) => Any::BF16(h.upload(t)),
+        U8(t) => Any::U8(h.upload(t)),
+        I64(t) => Any::I64(h.upload(t)),
+        Bool(t) => Any::Bool(h.upload(t)),
     };
 }
 

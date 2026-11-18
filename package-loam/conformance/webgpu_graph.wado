@@ -271,6 +271,13 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     println(`quantized kept product ${apart(&mut gpu, &kept_product, &want_quantized.0)}`);
     println(`quantized kept gather ${apart(&mut gpu, &kept_gather, &want_quantized.1)}`);
 
+    let [want_halves, want_bytes] = cases::written_pools(cpu);
+    let [halves, bytes] = cases::written_pools(&mut gpu);
+    let pooled_halves = typed::<WebGpuBackend, f16, Untyped>(&gpu, &halves);
+    let pooled_bytes = typed::<WebGpuBackend, u8, Untyped>(&gpu, &bytes);
+    println(`pool of halves ${apart(&mut gpu, &pooled_halves, &typed::<Cpu, f16, Untyped>(cpu, &want_halves))}`);
+    println(`pool of bytes ${apart(&mut gpu, &pooled_bytes, &typed::<Cpu, u8, Untyped>(cpu, &want_bytes))}`);
+
     // A quantized product computes what follows it in its own dispatch.
     let q = cases::quantized_case();
     let then_want = cases::quantized_then(cpu, &q.a, &[q.weight, q.scales, q.zero_points]);
