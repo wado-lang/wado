@@ -67,8 +67,9 @@ pub(super) enum NewtypePeel {
 }
 
 /// What a derived method is asked of: an instance, whose bound must hold, or a
-/// generic declaration at its own parameters, which the call's arguments have
-/// yet to settle and which answers the name alone.
+/// type the call has yet to settle — a generic declaration at its own
+/// parameters, or an instance holding variables — which answers the name
+/// alone.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum DerivedAt {
     Instance,

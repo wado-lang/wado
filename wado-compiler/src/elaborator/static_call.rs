@@ -18,7 +18,7 @@ use super::method_call::{MethodSignatureFacts, StaticReceiver, primitive_receive
 use super::method_lookup::narrow_to_reaching;
 use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
-use super::solver_bridge::Ordered;
+use super::solver_bridge::{Ordered, Unsettled};
 use super::synth::ArgClass;
 use super::trait_env::{ImplHeader, ImplTargetKey};
 use super::trait_query::{DerivedAt, NewtypePeel};
@@ -1438,6 +1438,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method,
             Some(trait_decl),
             &[],
+            Unsettled::Open,
         )
     }
 

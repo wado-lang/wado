@@ -1,0 +1,25 @@
+// A derived method on a receiver whose type arguments nothing settles is
+// found, and the arguments are what the call reports: the method exists at
+// every instance the receiver may become.
+variant Tree<T> { Leaf(T), Empty }
+
+test "a method call" {
+    assert Tree::Empty.eq(&Tree::Empty);
+}
+
+test "a qualified call" {
+    assert Tree::eq(&Tree::Empty, &Tree::Empty);
+}
+
+fn mk<T>() -> Tree<T> {
+    return Tree::Empty;
+}
+
+test "a receiver a generic call returns" {
+    assert !mk().eq(&Tree::Leaf(1));
+}
+
+__DATA__
+{
+    "compile_error": ":7:12: analysis error: cannot infer type parameter of variant `Tree`; add a turbofish (`Tree::<...>::…`) or a type annotation; 7:28: cannot infer type parameter of variant `Tree`; add a turbofish (`Tree::<...>::…`) or a type annotation; 11:22: cannot infer type parameter of variant `Tree`; add a turbofish (`Tree::<...>::…`) or a type annotation; 11:36: cannot infer type parameter of variant `Tree`; add a turbofish (`Tree::<...>::…`) or a type annotation; 19:13: cannot infer type parameter `T` of function `mk`; add a turbofish (`mk::<...>()`) or a type annotation"
+}

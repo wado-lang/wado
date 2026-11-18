@@ -153,8 +153,8 @@ impl ParamKind {
 }
 
 /// What an inference variable still in a type lowers to.
-#[derive(Clone, Copy)]
-enum Unsettled {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Unsettled {
     /// Unsaid: the question waits for the variable to settle.
     Open,
     /// The solver's `Var`, for a question asking which impls may apply.
@@ -2431,6 +2431,7 @@ impl SolverBridge {
         method_name: &str,
         required_trait: Option<DefId>,
         required_args: &[TypeId],
+        unsettled: Unsettled,
     ) -> Option<Ordered> {
         let (found, _) = self.call_candidates(
             tysys,
@@ -2441,7 +2442,7 @@ impl SolverBridge {
             method_name,
             required_trait,
             required_args,
-            Unsettled::Open,
+            unsettled,
         )?;
         let named = |live: &[usize]| {
             live.iter()

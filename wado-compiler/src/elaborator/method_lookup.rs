@@ -50,7 +50,7 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::scope;
 use crate::elaborator::scope::param_decl;
 use crate::elaborator::sem::types::{DesugarKind, OperatorDispatch};
-use crate::elaborator::solver_bridge::Ordered;
+use crate::elaborator::solver_bridge::{Ordered, Unsettled};
 use crate::elaborator::types::{
     ImplMemberKind, OverloadedCallForm, RequiredTrait, TraitMethodMatch,
 };
@@ -2387,7 +2387,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .to_string();
         // The order names the impls; the matches are read off those blocks and
         // nothing else (`docs/wep-2026-09-01-trait-resolution.md`).
-        let order = self.order_for_call(type_key, receiver_type_id, method_name, required_trait);
+        let (order, unsettled) =
+            self.order_for_call(type_key, receiver_type_id, method_name, required_trait);
         let named: &[Option<DefId>] = match &order {
             Some(Ordered::One(def)) => std::slice::from_ref(def),
             Some(
@@ -2412,12 +2413,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(Ordered::Nothing) | None => &[],
         };
         let asked = required_trait.and_then(|wanted| wanted.args.as_deref());
+        let derived_at = match unsettled {
+            Unsettled::Open => DerivedAt::Instance,
+            Unsettled::Var => DerivedAt::Declaration,
+        };
         let mut found_traits: Vec<TraitMethodMatch> = self.materialize_matches(
             named,
             method_name,
             receiver_type_args,
             receiver_type_id,
             asked,
+            derived_at,
         );
         // A named block declares the method, or its trait does, so it yields a
         // match; none means the block and the lowering disagree on the name.
@@ -2466,13 +2472,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
             | None => {}
         }
-        self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe)
+        let selected =
+            self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe)?;
+        // Chosen among the impls that may apply, so the receiver's answer is
+        // held to the trait.
+        if unsettled == Unsettled::Var
+            && let Some(receiver) = receiver_type_id
+        {
+            self.defer_trait_to_answer(receiver, &selected.trait_name, span);
+        }
+        Some(selected)
     }
 
     /// The matches the named impls yield for `method_name`: read off each
     /// block, or for a body the compiler supplies with no block (`None`), off
-    /// the derived template. `asked` is the trait arguments a qualified call
-    /// names.
+    /// the derived template, asked `derived_at`. `asked` is the trait
+    /// arguments a qualified call names.
     fn materialize_matches(
         &mut self,
         named: &[Option<DefId>],
@@ -2480,6 +2495,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
         asked: Option<&[TypeId]>,
+        derived_at: DerivedAt,
     ) -> Vec<TraitMethodMatch> {
         let mut found = Vec::new();
         // An impl the order names at two levels of the chain is one block.
@@ -2501,7 +2517,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         found.extend(self.try_auto_derived_method_match(
                             method_name,
                             recv_id,
-                            DerivedAt::Instance,
+                            derived_at,
                         ));
                     }
                 }
@@ -3065,44 +3081,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_id: Option<TypeId>,
         method_name: &str,
         required_trait: Option<&RequiredTrait>,
-    ) -> Option<Ordered> {
-        // The solver has no way to say a variable still to be answered, so the
-        // probe that let such a receiver wait names the one impl it found.
-        if let Some(receiver) = receiver_type_id
-            && type_key.ref_kind().is_none()
-            && required_trait.is_none()
-            && self.names_pending_var(receiver)
-            && let [(def, _)] = self
-                .open_receiver_candidates(receiver, method_name, ImplKind::Trait, &|_, _| true)
-                .as_slice()
-        {
-            return Some(Ordered::One(Some(*def)));
-        }
-        let bridge = self.tysys.solver.as_ref()?.borrow();
+    ) -> (Option<Ordered>, Unsettled) {
         let required = match required_trait.map(|r| r.decl) {
             Some(Resolution::Def(def)) => Some(def),
             // A qualified trait that resolved to nothing is already reported.
             Some(Resolution::Binder(_) | Resolution::Projection(_) | Resolution::Unresolved) => {
-                return None;
+                return (None, Unsettled::Open);
             }
             None => None,
         };
+        let (Some(bridge), Some(receiver)) = (self.tysys.solver.as_ref(), receiver_type_id) else {
+            return (None, Unsettled::Open);
+        };
+        let bridge = bridge.borrow();
         // A reference receiver arrives peeled, its `&` carried by `type_key`.
         // The order reads the reference as a level of the receiver's chain, so
         // it has to be put back.
         let through_ref = type_key.ref_kind().map(|kind| kind == RefKind::Mut);
-        bridge.select(
-            &self.tysys,
-            &self.annotate_ctx,
-            self.frame_module(),
-            receiver_type_id?,
-            through_ref,
-            method_name,
-            required,
-            required_trait
-                .and_then(|r| r.args.as_deref())
-                .unwrap_or_default(),
-        )
+        let select = |unsettled| {
+            bridge.select(
+                &self.tysys,
+                &self.annotate_ctx,
+                self.frame_module(),
+                receiver,
+                through_ref,
+                method_name,
+                required,
+                required_trait
+                    .and_then(|r| r.args.as_deref())
+                    .unwrap_or_default(),
+                unsettled,
+            )
+        };
+        // A receiver still holding a variable is asked which impls may apply,
+        // as a qualified call omitting the type's arguments is.
+        match select(Unsettled::Open) {
+            None if self.type_has_infer_hole(receiver) => (select(Unsettled::Var), Unsettled::Var),
+            order => (order, Unsettled::Open),
+        }
     }
 
     /// The winner among the matches the order named: the call's arguments

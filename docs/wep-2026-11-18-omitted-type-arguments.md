@@ -92,6 +92,12 @@ inference broke as soon as a second impl was written elsewhere.
 The trait solver has a type `Var`. It matches any impl target, binding what the
 target leaves open to `Var` in turn, and every bound holds of it. The order run
 at a type holding one therefore names the impls that may apply, through blankets
-as deep as they go. An inference variable lowers to `Var` only for the question
-that decides the kind of a qualified call. Every other question waits for the
-variable to settle, as before.
+as deep as they go. An inference variable lowers to `Var` for two questions:
+
+- the one that decides the kind of a qualified call;
+- the order of a method call whose receiver still holds a variable, where the
+  order at the receiver as it stands names nothing. The chosen trait is
+  checked again against the receiver's answer. A receiver nothing answers
+  reports the variable it holds, not a missing method.
+
+Every other question waits for the variable to settle, as before.
