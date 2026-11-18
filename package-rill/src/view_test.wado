@@ -155,6 +155,63 @@ test "show survives a cleanup in its subtree disposing of its owner" {
     };
 }
 
+test "show disposes of what render made after render disposed of its owner" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = element("div");
+        let visible = signal(false);
+        let label = signal("a");
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        let mut made: Option<Element> = null;
+        dispose_owner = scope(|| {
+            box.show(|| visible.get(), || {
+                dispose_owner();
+                let p = element("p").bind_attribute("title", || Option::Some(label.get()));
+                made = Option::Some(p.node);
+                return p;
+            });
+        });
+
+        visible.set(true);
+        flush();
+        label.set("b");
+        flush();
+        assert made.unwrap().get_attribute("title") == Option::Some("a");
+        assert !box.node.has_child_nodes();
+    };
+}
+
+test "each renders no further once render disposed of its owner, and disposes of what it made" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = element("ul");
+        let items: Signal<List<i32>> = signal([]);
+        let label = signal("a");
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        let mut made: List<Element> = [];
+        dispose_owner = scope(|| {
+            list.each(|| items.get(), |value: i32| {
+                dispose_owner();
+                let row = item(value).bind_attribute("title", || Option::Some(label.get()));
+                made.push(row.node);
+                return row;
+            });
+        });
+
+        items.set([1, 2]);
+        flush();
+        label.set("b");
+        flush();
+        assert made.len() == 1;
+        for let row of made {
+            assert row.get_attribute("title") == Option::Some("a");
+        }
+        assert !list.node.has_child_nodes();
+    };
+}
+
 test "each follows a new order with the nodes it had" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {

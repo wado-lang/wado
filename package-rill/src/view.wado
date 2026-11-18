@@ -70,7 +70,9 @@ impl View {
         let anchor = Dom::document().create_text_node("");
         self.node.append_child(anchor);
         let mut shown: Option<Rendered> = null;
+        let mut disposed = false;
         on_cleanup(|| {
+            disposed = true;
             hide(&mut shown);
             detach(anchor);
         });
@@ -84,6 +86,11 @@ impl View {
                 return;
             }
             let made = render_owned(render);
+            // `render` may have disposed of the binding's owner.
+            if disposed {
+                remove(made);
+                return;
+            }
             if let Some(holder) = anchor.parent_node() {
                 holder.insert_before(made.node, Option::Some(anchor as Node));
             }
@@ -187,7 +194,9 @@ fn each<T: Eq>(
     let mut items = items;
     let mut render = render;
     let mut rows: List<Row<T>> = [];
+    let mut disposed = false;
     on_cleanup(|| {
+        disposed = true;
         let removed = rows;
         rows = [];
         remove_rows(removed);
@@ -213,6 +222,15 @@ fn each<T: Eq>(
             }
             kept.push(Row { item, rendered: render_owned(|| render(item)) });
             was.push(-1);
+            if disposed {
+                break;
+            }
+        }
+        // `render` may have disposed of the binding's owner, whose cleanup
+        // removed only the rows not yet kept.
+        if disposed {
+            remove_rows(kept);
+            return;
         }
         remove_rows(rows);
         // `render` and the cleanups have run, and either may have moved a row.
