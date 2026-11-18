@@ -924,9 +924,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(table.make_generic_instance(def, args.to_vec()))
     }
 
-    /// The type a struct, resource, variant, enum or flags declaration `def` declares,
-    /// a generic one applied to its own parameters.
-    pub(super) fn declared_self_type(&self, def: DefId) -> Option<TypeId> {
+    /// The type a struct, resource, variant, enum, flags or newtype declaration
+    /// `def` declares, a generic one applied to its own parameters.
+    pub(super) fn declared_self_type(&mut self, def: DefId) -> Option<TypeId> {
+        if let Some(newtype) = self.newtype_self_type(def) {
+            return Some(newtype);
+        }
         let lookup = self.type_lookup();
         let mut table = self.tysys.type_table.borrow_mut();
         let ty = match lookup.declared_type_param_ids(def) {

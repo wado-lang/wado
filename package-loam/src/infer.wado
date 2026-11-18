@@ -1441,10 +1441,12 @@ pub fn split_parts(
         None => {
             let chunk = Poly::ceil_div(&whole, &Poly::constant(count as i64), &node.site());
             let mut equal = List::<Poly>::filled(count - 1, chunk);
-            let others = chunk.try_mul(&Poly::constant(count as i64 - 1)).ok_or(refusal(
-                node,
-                `${chunk} * ${count - 1} leaves i64`,
-            ))?;
+            let others = chunk
+                .try_mul(&Poly::constant(count as i64 - 1))
+                .ok_or(refusal(
+                    node,
+                    `${chunk} * ${count - 1} leaves i64`,
+                ))?;
             equal.push(difference(node, &whole, &others)?);
             equal;
         },

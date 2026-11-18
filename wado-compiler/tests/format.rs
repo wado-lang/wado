@@ -4973,3 +4973,150 @@ fn test_format_unchecked_operator() {
     assert_eq!(formatted, source);
     assert_format_preserves_ast(source);
 }
+
+#[test]
+fn test_format_keeps_a_method_chain_on_one_line_while_it_fits() {
+    let source = concat!(
+        "fn row(a: View, b: View) -> View {\n",
+        "    return element(\"li\").attribute(\"id\", \"x\").children([a, b]);\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+}
+
+#[test]
+fn test_format_wraps_every_link_of_a_chain_the_source_broke() {
+    let source = concat!(
+        "fn row(a: View, b: View) -> View {\n",
+        "    return element(\"li\").attribute(\"id\", \"x\")\n",
+        "        .children([a, b]);\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn row(a: View, b: View) -> View {\n",
+        "    return element(\"li\")\n",
+        "        .attribute(\"id\", \"x\")\n",
+        "        .children([a, b]);\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+#[test]
+fn test_format_wraps_a_chain_at_its_dots_before_its_arguments() {
+    let source = concat!(
+        "fn row(a: View, b: View) -> View {\n",
+        "    return element(\"li\").attribute(\"id\", \"a-fairly-long-identifier\").attribute(\"class\", \"another-long-value\").children([a, b]);\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn row(a: View, b: View) -> View {\n",
+        "    return element(\"li\")\n",
+        "        .attribute(\"id\", \"a-fairly-long-identifier\")\n",
+        "        .attribute(\"class\", \"another-long-value\")\n",
+        "        .children([a, b]);\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+#[test]
+fn test_format_wraps_the_arguments_an_operator_chain_breaks_across() {
+    let source = concat!(
+        "fn ends(starts: List<i32>, len: i32, width: i32) -> List<i32> {\n",
+        "    return starts.filter(|p| *p + width <= len && every_position_is_admitted_by_the_keyword_starting_at(*p, width, len, true));\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn ends(starts: List<i32>, len: i32, width: i32) -> List<i32> {\n",
+        "    return starts.filter(\n",
+        "        |p| *p + width <= len && every_position_is_admitted_by_the_keyword_starting_at(*p, width, len, true),\n",
+        "    );\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+#[test]
+fn test_format_wraps_the_fields_an_operator_chain_breaks_across() {
+    let source = concat!(
+        "fn make() -> Config {\n",
+        "    return Config { name: \"a_rather_long_name_value_here\", enabled: first_long_condition_name && second_long_condition_name_here_and_more };\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn make() -> Config {\n",
+        "    return Config {\n",
+        "        name: \"a_rather_long_name_value_here\",\n",
+        "        enabled: first_long_condition_name && second_long_condition_name_here_and_more,\n",
+        "    };\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+#[test]
+fn test_format_wraps_the_arguments_a_method_chain_breaks_across() {
+    let source = concat!(
+        "fn check(p: Poly) {\n",
+        "    assert product.agrees(&Poly::symbol(&\"heads\").try_mul(&Poly::constant(2)).unwrap().try_sub(&Poly::constant(1)).unwrap().try_neg().unwrap());\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn check(p: Poly) {\n",
+        "    assert product.agrees(\n",
+        "        &Poly::symbol(&\"heads\")\n",
+        "            .try_mul(&Poly::constant(2))\n",
+        "            .unwrap()\n",
+        "            .try_sub(&Poly::constant(1))\n",
+        "            .unwrap()\n",
+        "            .try_neg()\n",
+        "            .unwrap(),\n",
+        "    );\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+#[test]
+fn test_format_keeps_arguments_on_the_call_line_around_a_block() {
+    let source = concat!(
+        "fn wire(button: View) -> View {\n",
+        "    return button.on(\"click\", |_: Event| {\n",
+        "        if first_condition_that_is_rather_long\n",
+        "            && second_condition_that_is_rather_long\n",
+        "            && third_condition_that_is_rather_long_enough_to_wrap_the_chain {\n",
+        "            go();\n",
+        "        }\n",
+        "    });\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+}
+
+#[test]
+fn test_format_keeps_a_comment_between_wrapped_links() {
+    let source = concat!(
+        "fn row(a: View) -> View {\n",
+        "    return element(\"li\")\n",
+        "        // the row's own id\n",
+        "        .attribute(\"id\", \"x\")\n",
+        "        .child(a);\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}

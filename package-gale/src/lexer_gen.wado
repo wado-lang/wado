@@ -986,8 +986,9 @@ fn lexer_alt_offers_whole(alt: &LexerAlternative, name: &String) -> bool {
     }
     let offers = match &alt.elements[0] {
         RuleRef(n) => n == name,
-        Group(arms) => arms.iter_ref().any(|a| a.elements.len() == 1
-            && a.elements[0] matches { RuleRef(n) && n == *name }),
+        Group(arms) => arms
+            .iter_ref()
+            .any(|a| a.elements.len() == 1 && a.elements[0] matches { RuleRef(n) && n == *name }),
         _ => false,
     };
     let rest_optional = (1..<alt.elements.len()).all(
@@ -1108,9 +1109,9 @@ fn collect_lexer_calls(elem: &LexerElement, all_rules: &List<LexerRule>, out: &m
 /// Whether a non-recursive fragment can be reached through a `frag_` matcher:
 /// a predicate or an action reads the caller's `start`, so it must be inlined.
 fn fragment_is_callable(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
-    return !rule.body.iter_ref().any(
-        |a| lexer_alt_has_predicate_below(a, all_rules) || lexer_alt_has_any_action(a, all_rules),
-    );
+    return !rule.body
+        .iter_ref()
+        .any(|a| lexer_alt_has_predicate_below(a, all_rules) || lexer_alt_has_any_action(a, all_rules));
 }
 
 /// Rewrite each group or fragment reference hiding a contested alternation from
@@ -4231,12 +4232,16 @@ fn keyword_elem_ends(
     match elem {
         Literal(s) => {
             let classes: List<CharClass> = s.chars().map(|c| folded_class(c, c, ci)).collect();
-            return starts.iter_ref().filter(
-                |p| *p + classes.len() <= len
-                    && (0..<classes.len()).all(
-                        |i| keyword_chars_admitted(kw, *p + i, reading, |c| class_holds(&classes[i], c)),
-                    ),
-            ).map(|p| *p + classes.len()).collect();
+            return starts
+                .iter_ref()
+                .filter(
+                    |p| *p + classes.len() <= len
+                        && (0..<classes.len()).all(
+                            |i| keyword_chars_admitted(kw, *p + i, reading, |c| class_holds(&classes[i], c)),
+                        ),
+                )
+                .map(|p| *p + classes.len())
+                .collect();
         },
         RuleRef(name) => {
             let callee = find_lexer_rule(all_rules, name);
@@ -4291,23 +4296,31 @@ fn keyword_elem_ends(
         },
         CharRange(pair) => {
             let folded = folded_class(pair.0, pair.1, ci);
-            return starts.iter_ref().filter(
-                |p| *p < len && keyword_chars_admitted(kw, *p, reading, |c| class_holds(&folded, c)),
-            ).map(|p| *p + 1).collect();
+            return starts
+                .iter_ref()
+                .filter(|p| *p < len && keyword_chars_admitted(kw, *p, reading, |c| class_holds(&folded, c)))
+                .map(|p| *p + 1)
+                .collect();
         },
         CharClass(cc) => {
             let folded = folded_char_class(cc, ci);
             let admits = |c: char| class_holds(&folded, c);
-            return starts.iter_ref().filter(|p| *p < len && keyword_chars_admitted(kw, *p, reading, admits)).map(
-                |p| *p + 1,
-            ).collect();
+            return starts
+                .iter_ref()
+                .filter(|p| *p < len && keyword_chars_admitted(kw, *p, reading, admits))
+                .map(|p| *p + 1)
+                .collect();
         },
         AnyChar | Not(_) => {
             let mut no_refs: List<String> = [];
             let Some(set) = lexer_elem_leading_chars(elem, all_rules, casing_of(ci), false, &mut no_refs) else {
                 return unread_keyword_ends(kw, reading, starts);
             };
-            return starts.iter_ref().filter(|p| *p < len && keyword_chars_in(kw, *p, &set, reading)).map(|p| *p + 1).collect();
+            return starts
+                .iter_ref()
+                .filter(|p| *p < len && keyword_chars_in(kw, *p, &set, reading))
+                .map(|p| *p + 1)
+                .collect();
         },
     }
 }
@@ -4420,10 +4433,12 @@ fn keyword_carrier_kinds(
         }
         let kind = lexer_rule_token_kind(rule);
         let [first_chars, is_wildcard] = rule_first_chars(rule, lexer_rules, grammar_opts);
-        let carries = keywords.iter_ref().any(
-            |kw| keyword_first_char_covered(kw, &first_chars, is_wildcard)
-                && lexer_rule_matches_keyword(rule, lexer_rules, grammar_opts, kw, KeywordReading::Possible),
-        );
+        let carries = keywords
+            .iter_ref()
+            .any(
+                |kw| keyword_first_char_covered(kw, &first_chars, is_wildcard)
+                    && lexer_rule_matches_keyword(rule, lexer_rules, grammar_opts, kw, KeywordReading::Possible),
+            );
         if carries {
             push_unique(&mut kinds, kind);
         }
@@ -4576,9 +4591,11 @@ fn keyword_arms(group: &List<KeywordInfo>, pos: i32) -> List<KeywordArm> {
     chars.sort();
     let mut arms: List<KeywordArm> = [];
     for let c of &chars {
-        let members: List<KeywordInfo> = group.iter_ref().filter(|kw| keyword_accepts(kw, pos).contains(c)).map(
-            |kw| *kw,
-        ).collect();
+        let members: List<KeywordInfo> = group
+            .iter_ref()
+            .filter(|kw| keyword_accepts(kw, pos).contains(c))
+            .map(|kw| *kw)
+            .collect();
         let pattern = byte_lit(*c as u32);
         if let Some(i) = arms.iter_ref().position(|a| a.keywords == members) {
             arms[i].pattern.push_str(` | ${pattern}`);
@@ -4714,9 +4731,9 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bo
 }
 
 fn lit_try_fn_name(const_name: &String) -> String {
-    let suffix = const_name.strip_prefix("TK_LIT_").expect(
-        `lit_try_fn_name: \`${const_name}\` is not a literal's token name`,
-    );
+    let suffix = const_name
+        .strip_prefix("TK_LIT_")
+        .expect(`lit_try_fn_name: \`${const_name}\` is not a literal's token name`);
     return `try_lit_${suffix}`;
 }
 
@@ -4765,9 +4782,13 @@ fn lexer_rule_total_on_first_char(rule: &LexerRule, all_rules: &List<LexerRule>)
 /// its first character does ties the catch-all's one char or beats it.
 fn branch_catch_all_calls(calls: &List<TryCall>, members: &List<i32>) -> List<i32> {
     let last_resort = last_resort_calls(calls);
-    return (0..<calls.len()).filter(|c| calls[c].is_catch_all
-        && !last_resort.contains(&c)
-        && !members.iter_ref().all(|m| calls[*m].total_on_first_char && *m < c)).collect();
+    return (0..<calls.len())
+        .filter(
+            |c| calls[c].is_catch_all
+                && !last_resort.contains(&c)
+                && !members.iter_ref().all(|m| calls[*m].total_on_first_char && *m < c),
+        )
+        .collect();
 }
 
 /// The catch-alls declared after every other candidate: any other match ties
@@ -5397,7 +5418,10 @@ fn gen_second_char_dispatch(
     w.line("let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\\u{0}' };");
     w.begin("match second_char");
     for let arm of &arms {
-        let middle: List<i32> = arm.calls.iter_value().filter(|m| !leading.contains(&m) && !trailing.contains(&m)).collect();
+        let middle: List<i32> = arm.calls
+            .iter_value()
+            .filter(|m| !leading.contains(&m) && !trailing.contains(&m))
+            .collect();
         w.begin(`${arm.pattern} =>`);
         gen_group_calls(w, calls, &middle, needs_extras, has_actions, has_members);
         w.end_with(",");
@@ -5687,9 +5711,11 @@ fn gen_tokenize_fn<S: AsStrSlice>(
         w.line("let tok_start = start;");
     }
 
-    let skip_names: List<String> = lexer_rules.iter_ref().filter(|rule: &LexerRule| rule.skip).map(
-        |rule: &LexerRule| `TK_${rule.name}`,
-    ).collect();
+    let skip_names: List<String> = lexer_rules
+        .iter_ref()
+        .filter(|rule: &LexerRule| rule.skip)
+        .map(|rule: &LexerRule| `TK_${rule.name}`)
+        .collect();
     // An action's `lx.skip()` latches `best_act_skip`; OR it into the
     // command-derived skip decision so either route routes the token to trivia.
     let act_skip = if has_actions { " || best_act_skip" } else { "" };

@@ -24,9 +24,23 @@ reviewed. It also writes tests into that checkout and runs them with `cargo`,
    line of `scratchpad/eddy.log` that starts with `eddy:` gives the reason.
    The line that starts with `cost:` gives what the review cost, in total and
    for each model; tell the user.
-4. Commit the record the run wrote, `package-eddy/reviews/<head>.json`. It
-   holds every review of that commit, and Eddy later learns from which of its
-   findings were addressed.
+4. Push the record the run wrote, a file under `reviews/<head>/` in the wiki's
+   clone `scratchpad/wiki`. That directory holds every review of the commit,
+   and Eddy later learns from which of its findings were addressed. A rejected
+   push takes `git -C scratchpad/wiki pull --rebase` first: every review adds
+   its own file, so nothing conflicts.
+
+   ```sh
+   git -C scratchpad/wiki add reviews
+   git -C scratchpad/wiki commit -qm "Record Eddy's review of $(git rev-parse HEAD)"
+   git -C scratchpad/wiki push -q
+   ```
+
+   In a Claude Code cloud session the git proxy serves no wiki, so the push
+   carries a token itself. The maintainer's cloud environment sets
+   `GITHUB_TOKEN` to a personal access token for this; another environment
+   has none unless its owner provides one:
+   `git -C scratchpad/wiki -c http.extraheader="Authorization: Basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" push -q`.
 5. Answer the findings with the `code-review-response` skill. With no findings,
    say so and stop.
 

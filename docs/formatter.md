@@ -71,6 +71,29 @@ more than one arm, and `if` / `else` chains are always multi-line. A function's
 `contract` clauses each take a line of their own, indented under the signature,
 and its body's `{` then opens a line of its own too.
 
+A chain of two or more method calls stays on one line while it fits. A line
+break the source wrote before any of its dots asks for the wrapped form, and
+the request round-trips, as a trailing comma's does. So does a first line that
+would overflow or open a wrapped list. Wrapped, every call takes a line of its
+own, one level in, before any argument list wraps:
+
+```wado
+return element("li")
+    .attribute("id", `todo-${todo.id}`)
+    .children([title, remove]);
+```
+
+A call's arguments and a struct literal's fields stay on one line unless one of
+them breaks a `&&` or `||` chain or a method chain across lines. Then each takes
+a line of its own, where the chain may fit again. A chain that breaks
+inside a block, such as a closure's body, does not count:
+
+```wado
+return starts.filter(
+    |p| *p + width <= len && every_position_is_admitted_by_the_keyword_starting_at(*p, width, len, true),
+);
+```
+
 Blank lines follow the source: none stays none, one stays one, and a larger gap
 collapses to two.
 

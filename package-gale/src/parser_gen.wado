@@ -3688,21 +3688,23 @@ fn enter_alt_label_scope(
             continue;
         }
         let same: List<&LabelSite> = sites.iter_ref().filter(|s| s.binding.binds(b.is_token, &b.base)).collect();
-        let read_first = actions.iter_ref().any(
-            |a| a.before_index - first_element <= site.at && body_names_binding(&a.source.text, &b.base),
-        )
+        let read_first = actions
+            .iter_ref()
+            .any(|a| a.before_index - first_element <= site.at && body_names_binding(&a.source.text, &b.base))
             || (0..<site.at).any(|j| element_names_binding(&elements[first_element + j], &b.base))
-            || ctx.own_predicates_met_at(elements, actions, first_element + site.at).iter_ref().any(
-                |a| body_names_binding(&a.source.text, &b.base),
-            );
+            || ctx
+                .own_predicates_met_at(elements, actions, first_element + site.at)
+                .iter_ref()
+                .any(|a| body_names_binding(&a.source.text, &b.base));
         assert b.is_token || same.iter_ref().all(|s| s.binding.ref_name == b.ref_name), "a rule label calls one rule (ANTLR4 error 75)";
         if same.len() > 1 || same.iter_ref().any(|s| s.nested) || read_first {
             shared.push(AltBinding { ..*b, reach: LabelReach::Shared, capture: b.field });
         }
     }
-    let mut bindings: List<AltBinding> = collect_alt_bindings(ops).into_iter().filter(
-        |b| !shared.iter_ref().any(|s| s.binds(b.is_token, &b.base)),
-    ).collect();
+    let mut bindings: List<AltBinding> = collect_alt_bindings(ops)
+        .into_iter()
+        .filter(|b| !shared.iter_ref().any(|s| s.binds(b.is_token, &b.base)))
+        .collect();
     for let mut s of shared {
         let first = s.field;
         for let mut k = 2; bindings.iter_ref().any(|b| b.field == s.field); k += 1 {
@@ -3816,14 +3818,17 @@ fn leave_after_labels(w: &mut CodeWriter, ctx: &EmitContext) {
 /// The bindings `@after` reads in a rule of several alternatives: the fields
 /// each alternative left its labels in.
 fn after_label_bindings(ctx: &EmitContext) -> List<AltBinding> {
-    return ctx.plan.rule_captures(&ctx.current_rule_name()).labels.iter_ref().map(|label| AltBinding {
-        is_token: label.is_token,
-        base: label.base,
-        field: `${VALS_LOCAL}.${after_label_field(&label.base)}`,
-        ref_name: label.ref_name,
-        reach: LabelReach::Shared,
-        capture: label.base,
-    }).collect();
+    return ctx.plan.rule_captures(&ctx.current_rule_name()).labels
+        .iter_ref()
+        .map(|label| AltBinding {
+            is_token: label.is_token,
+            base: label.base,
+            field: `${VALS_LOCAL}.${after_label_field(&label.base)}`,
+            ref_name: label.ref_name,
+            reach: LabelReach::Shared,
+            capture: label.base,
+        })
+        .collect();
 }
 
 /// Group / single-alt-body internal walker. Mirrors `gen_alt_elements`
@@ -4918,9 +4923,9 @@ fn repeat_is_scan_guarded(r: &RepeatOp, ctx: &mut EmitContext) -> bool {
         || sets_overlap(&body_first, &r.caller_follow_first)
         || ctx.loop_exit_admits_any(r.atn_decision, &body_first);
     let body_scans_to_decide = match &r.body {
-        Group(g) => op_group_alt_decision(g, ctx) matches { Some(branches) && branches.iter_ref().any(
-            |b| b.alts.len() > 1,
-        ) },
+        Group(g) => op_group_alt_decision(g, ctx) matches { Some(branches) && branches
+            .iter_ref()
+            .any(|b| b.alts.len() > 1) },
         _ => false,
     };
     return r.body_scannable && (overlaps_follow || body_scans_to_decide || !r.duties.is_empty());

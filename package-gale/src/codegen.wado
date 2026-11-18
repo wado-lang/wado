@@ -203,9 +203,11 @@ pub fn install_action_context(
     // action languages name a member the one way the generated struct does.
     let gate_bodies = translate_gate_bodies(grammar, &settings);
     let declared = &settings.action_members.fields;
-    settings.scan_gate_fields = scan_gate_fields(grammar, &gate_bodies).iter_ref().filter(|f| declared.contains(f)).map(
-        |f| *f,
-    ).collect();
+    settings.scan_gate_fields = scan_gate_fields(grammar, &gate_bodies)
+        .iter_ref()
+        .filter(|f| declared.contains(f))
+        .map(|f| *f)
+        .collect();
     settings.scan_edge_field = scan_edge_field(&settings.scan_gate_fields);
     settings.gate_bodies = gate_bodies;
     return ActionContext { settings, lexer_members, parser_members };
@@ -617,7 +619,9 @@ fn gen_atn_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &H
         gen_sll_decide_fn(w, d, start, &forest, &ctx.analysis);
     }
     gen_sll_shared_fns(w, &forest, &ctx.analysis);
-    let lr_decisions: List<i32> = (0..<atn.decision_state.len()).filter(|d| used.contains(lr_decide_fn_name(d))).collect();
+    let lr_decisions: List<i32> = (0..<atn.decision_state.len())
+        .filter(|d| used.contains(lr_decide_fn_name(d)))
+        .collect();
     if !lr_decisions.is_empty() {
         let sim = lr_sim(atn);
         for let d of lr_decisions {

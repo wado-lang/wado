@@ -4724,19 +4724,7 @@ fn resolve_impl_module_via_env(
     trait_env: &TraitEnv,
     fallback: &ModuleSource,
 ) -> ModuleSource {
-    let type_module: Option<ModuleSource> = match tt.get(type_id) {
-        ResolvedType::Struct { .. }
-        | ResolvedType::Enum { .. }
-        | ResolvedType::Variant { .. }
-        | ResolvedType::Newtype { .. }
-        | ResolvedType::Flags { .. }
-        | ResolvedType::Tuple(_) => tt.nominal_head(type_id).map(|(_, m)| m),
-        ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
-        ResolvedType::Unit => Some(ModuleSource::primitive()),
-        ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
-        _ => None,
-    };
-
+    let type_module = tt.impl_home(type_id);
     if let Some(m) = trait_env.impl_module_for(
         ImplReceiver::Of(&tt.impl_receiver_key(type_id)),
         trait_name.canonical().expect(KEYED),
