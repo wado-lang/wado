@@ -1818,6 +1818,30 @@ fragment F : 'd' { count += 1; } ;";
     assert lexes(input, ["ddd"]) == "ddd => D:ddd [0\n]\n";
 }
 
+test "an action in a fragment arm copied into its caller never runs" {
+    // `'d'` and `'dd'` contest the suffix, so `F`'s arms are spliced into `D`.
+    let got = lexes("lexer grammar L;
+options { language = Wado; }
+D : F 'c' ;
+fragment F : 'd' { lx.emit(\"ran\"); } | 'dd' ;
+", ["dc"]);
+    assert got == "dc => D:dc\n";
+}
+
+test "a member method may drive the lexer where no rule runs an action" {
+    let got = lexes("lexer grammar L;
+options { language = Wado; }
+@lexer::members {
+fn quiet(&mut self) { self.skip(); }
+fn enter(&mut self) { self.push_mode(1); }
+}
+A : 'a' ;
+mode M;
+B : 'b' ;
+", ["a"]);
+    assert got == "a => A:a\n";
+}
+
 test "a first-char dispatch whose arms claim every char compiles without a `_` arm" {
     let input = "lexer grammar Test;
 A : 'a' ;
