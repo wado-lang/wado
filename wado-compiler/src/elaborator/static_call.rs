@@ -943,19 +943,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// variable per parameter: the type a spelling omitting the arguments
     /// names.
     pub(super) fn open_self_type(&mut self, def: DefId) -> Option<TypeId> {
-        let arity = self
-            .lookup_generic_newtype_of_decl(def)
-            .map(|newtype| newtype.type_params.len())
-            .or_else(|| {
-                self.type_lookup()
-                    .declared_type_param_ids(def)
-                    .map(<[_]>::len)
-            });
-        let Some(arity) = arity else {
+        let Some(arity) = self.bare_generic_type_arity(def) else {
             return self.declared_self_type(def);
         };
-        let vars = vec![TypeTable::UNKNOWN; arity];
-        Some(self.open_instance(def, vars))
+        Some(self.open_instance(def, vec![TypeTable::UNKNOWN; arity]))
     }
 
     /// `ty` with each argument a turbofish leaves to inference (`_`) a fresh
