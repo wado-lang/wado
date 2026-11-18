@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794975407170,
+  "lastUpdate": 1794983051349,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79345,6 +79345,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8c8d33b13484deadb98403ad431585a545d53bb3"
         },
         "date": 1794975406403,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "617d8c9734da5d3c0aacafe276d22321399699ff",
+          "message": "Merge pull request #2681 from wado-lang/eddy-wiki-records\n\nfeat(eddy): keep review records in the wiki",
+          "timestamp": "2026-11-18T15:08:18+09:00",
+          "tree_id": "68f000e54a1e09cd86b2968c63443de0392c3010",
+          "url": "https://github.com/wado-lang/wado/commit/617d8c9734da5d3c0aacafe276d22321399699ff"
+        },
+        "date": 1794983050584,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
