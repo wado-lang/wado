@@ -5638,10 +5638,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        // An `error` receiver was reported where it was answered.
-        if receiver.ty() == Some(TypeTable::ERROR) {
-            return TypeTable::ERROR;
-        }
         let method_id = ident.segments.last().map(|seg| seg.id);
         let method_type_args = self.resolve_turbofish_args(&call.type_args);
         if let Some(return_type) = self.resolve_named_type_blanket_static(
