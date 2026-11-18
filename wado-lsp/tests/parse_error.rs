@@ -201,7 +201,9 @@ fn bad_escape_is_reported_past_a_failed_load() {
         let diags = engine.diagnostics(&uri(), &host).await;
         let messages: Vec<&str> = errors(&diags).iter().map(|d| d.message.as_str()).collect();
         assert!(
-            messages.iter().any(|m| m.contains("invalid escape sequence")),
+            messages
+                .iter()
+                .any(|m| m.contains("invalid escape sequence")),
             "{messages:?}"
         );
     });

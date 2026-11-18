@@ -1778,8 +1778,8 @@ impl Parser {
         let TokenKind::StringLit { raw, quote } = token.kind else {
             unreachable!("the caller matched a string literal")
         };
-        // The lexer reported a text that denotes no string; the raw text
-        // stands in for it, since the compile stops before using it.
+        // The lexer reported a text that denotes no string, which fails the
+        // compile; the raw text stands in for it meanwhile.
         let value = string_value(&raw, quote).unwrap_or_else(|_| raw.clone());
         Ok(StrLit { value, raw, quote })
     }

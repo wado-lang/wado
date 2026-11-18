@@ -1142,7 +1142,12 @@ fn format_stdlib_error(
 
 fn parse_bind_stdlib(label: &str, source: &str) -> Module {
     let lex_result = lex(source);
-    if let Some(e) = lex_result.errors.iter().chain(&lex_result.invalid_literals).next() {
+    if let Some(e) = lex_result
+        .errors
+        .iter()
+        .chain(&lex_result.invalid_literals)
+        .next()
+    {
         // Bundled stdlib must always lex cleanly; a recovered lex error here
         // is a compiler bug, so fail loudly rather than degrade.
         panic!(
@@ -1574,8 +1579,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     }
 
     /// Report `ast`'s invalid literals as it joins the load, ahead of whatever
-    /// a later step fails on: the error count is the analysis's, which runs
-    /// on, and the module is never complete.
+    /// a later step fails on. They reach the host uncounted, since the
+    /// analysis runs on past them and bails at its logger's first error; the
+    /// module is never complete.
     fn report_invalid_literals(&self, ast: &Module, module_source: &ModuleSource) {
         let file = module_source.source_path();
         for e in ast.invalid_literals() {
