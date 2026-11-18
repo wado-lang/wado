@@ -30,13 +30,15 @@ delete globalThis.Float16Array;
  * last extent, `half` says the cache and the logits are float16, and
  * `feeds(seen, ort)` any input beyond the ids, the mask and the cache, built
  * with `ort`, onnxruntime-node, so that reading a decoder loads no runtime.
+ * `webgpu` false leaves WebGPU out, for a model larger than the device.
  */
-export async function writeGenerated({ dir, prompts, ends = [], decoder, name = 'generate.json', logits }) {
+export async function writeGenerated({ dir, prompts, ends = [], decoder, name = 'generate.json', logits, webgpu = true }) {
   const recorded = JSON.parse(readFileSync(join(dir, 'tokenize.json'), 'utf8')).tokenize;
   const cpu = await generate('cpu');
-  const webgpu = await generate('webgpu');
+  const onDevice = webgpu ? await generate('webgpu') : null;
   const generated = cpu.prompts.map((c, i) => {
-    const w = webgpu.prompts[i];
+    if (!onDevice) return c;
+    const w = onDevice.prompts[i];
     if (`${w.generated}` !== `${c.generated}`) {
       throw new Error(`WebGPU picks ${w.generated} after ${JSON.stringify(c.prompt)}, the CPU ${c.generated}`);
     }
@@ -47,9 +49,8 @@ export async function writeGenerated({ dir, prompts, ends = [], decoder, name = 
   if (logits) writeFileSync(join(dir, logits), Buffer.concat(cpu.firsts.map((f) => Buffer.from(f.buffer))));
   console.log(`smallest lead of a greedy pick over the runner-up: ${cpu.lead}`);
   for (const g of generated) {
-    console.log(
-      `${JSON.stringify(g.prompt)} -> ${g.generated} (${g.ms_per_token.toFixed(1)} ms a token on the CPU, ${g.webgpu_ms_per_token.toFixed(1)} on WebGPU)`,
-    );
+    const device = onDevice ? `, ${g.webgpu_ms_per_token.toFixed(1)} on WebGPU` : '';
+    console.log(`${JSON.stringify(g.prompt)} -> ${g.generated} (${g.ms_per_token.toFixed(1)} ms a token on the CPU${device})`);
   }
 
   /** Each prompt's tokens on `provider`, the time a token after the first, and the smallest lead. */
