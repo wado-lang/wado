@@ -1,7 +1,7 @@
 //! The two forms a mixture of experts takes compute one result, and so do its
 //! experts held in pools of every slot or fetched into fewer.
 
-use { A, B, C, experts_case, mixing, stacked_runs } from "./graph_cases.wado";
+use { A, B, C, STACKED_RUNS, STACKINGS, experts_case, mixing, stacked_runs } from "./graph_cases.wado";
 use { Untyped, typed } from "./recorded.wado";
 use { LoadError } from "./checkpoint.wado";
 use { ExpertBytes, ExpertLayout, HeldExperts, StoredExperts, Unread } from "./held_experts.wado";
@@ -76,21 +76,19 @@ test "a budget holds one layer's experts of each pool, then shares the rest by e
     assert slots_within(i64::MAX).unwrap() == [12, 8] as List<i32>;
 }
 
-test "experts fetched into pools of fewer slots compute what pools of every slot do" {
-    // Each layer of 3 tokens runs every expert it picks, which 5 slots hold
-    // only by giving way to the other layer's; 1 token runs its picks. A
-    // budget of 8 experts holds both layers.
-    let runs: List<i32> = [3, 1, 3];
+test "experts fetched into pools of fewer slots compute what pools of every slot do, in a loop or a branch too" {
     let mut cpu = Cpu {};
-    let resident = stacked_runs(&mut cpu, 8, runs);
-    let fetched = stacked_runs(&mut cpu, 5, runs);
-    for let [r, f] of resident.into_iter().zip(fetched.into_iter()) {
-        let [want, got] = [
-            cpu.download(&typed::<Cpu, f32, [A, B]>(&cpu, &r)),
-            cpu.download(&typed::<Cpu, f32, [A, B]>(&cpu, &f)),
-        ];
-        for let [a, b] of want.data.into_iter().zip(got.data.into_iter()) {
-            assert f32::abs(a - b) <= 1e-5 * f32::max(1.0, f32::abs(a));
+    for let stacking of STACKINGS {
+        let resident = stacked_runs(&mut cpu, 8, stacking, STACKED_RUNS);
+        let fetched = stacked_runs(&mut cpu, 5, stacking, STACKED_RUNS);
+        for let [r, f] of resident.into_iter().zip(fetched.into_iter()) {
+            let [want, got] = [
+                cpu.download(&typed::<Cpu, f32, [A, B]>(&cpu, &r)),
+                cpu.download(&typed::<Cpu, f32, [A, B]>(&cpu, &f)),
+            ];
+            for let [a, b] of want.data.into_iter().zip(got.data.into_iter()) {
+                assert f32::abs(a - b) <= 1e-5 * f32::max(1.0, f32::abs(a));
+            }
         }
     }
 }

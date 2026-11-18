@@ -351,8 +351,11 @@ Which experts a layer needs is known only once its router has run. The pass
 records a host step there: `Graph::fetched` names the values the host reads and
 the ones it gives back. `Programs::run` splits a recording at each host step
 into programs of its own. It runs a program, reads the values the step names,
-runs the step, and passes what the step gives to the programs after it. Only
-the pass's own region may hold a host step, not a branch or a loop.
+runs the step, and passes what the step gives to the programs after it. A loop
+or branch that holds a host step runs on the host instead. The host reads its
+count or predicate back, and runs each iteration or the branch it takes as
+programs split the same way. A loop or branch without a host step stays inside
+a program, so a device still runs it whole.
 
 So a pass waits for the host once a layer, which
 [WEP: Loam § The MVP Is Tier 1 Only](../docs/wep-2026-09-20-loam.md#the-mvp-is-tier-1-only)

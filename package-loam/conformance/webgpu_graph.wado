@@ -290,13 +290,14 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let cpu_bytes = cpu.download(&typed::<Cpu, u8, Untyped>(cpu, &want_bytes));
     println(`pool of halves ${apart(&mut gpu, &pooled_halves, &CpuTensor::Value(cpu_halves))}`);
     println(`pool of bytes ${apart(&mut gpu, &pooled_bytes, &CpuTensor::Value(cpu_bytes))}`);
-    let stacked: List<i32> = [3, 1, 3];
-    let resident = cases::stacked_runs(cpu, 8, stacked);
-    for let [k, ran] of cases::stacked_runs(&mut gpu, 5, stacked).into_iter().enumerate() {
-        let fetched = typed::<WebGpuBackend, f32, Untyped>(&gpu, &ran);
-        println(
-            `experts fetched, run ${k} ${apart(&mut gpu, &fetched, &typed::<Cpu, f32, Untyped>(cpu, &resident[k]))}`,
-        );
+    for let stacking of cases::STACKINGS {
+        let resident = cases::stacked_runs(cpu, 8, stacking, cases::STACKED_RUNS);
+        for let [k, ran] of cases::stacked_runs(&mut gpu, 5, stacking, cases::STACKED_RUNS).into_iter().enumerate() {
+            let fetched = typed::<WebGpuBackend, f32, Untyped>(&gpu, &ran);
+            println(
+                `experts fetched ${stacking}, run ${k} ${apart(&mut gpu, &fetched, &typed::<Cpu, f32, Untyped>(cpu, &resident[k]))}`,
+            );
+        }
     }
 
     // A quantized product computes what follows it in its own dispatch.

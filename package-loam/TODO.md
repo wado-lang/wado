@@ -373,13 +373,6 @@ its cost is known to be zero and the effect's is unmeasured. A device builds the
 graph once per shape class, so on one either cost falls only on a shape class's
 first call.
 
-### Experts held on demand
-
-- [ ] `decode` and `Requests` with fewer experts held than the layers route to.
-  Their steps run in a loop, and a host step is allowed only in the pass's own
-  region, so recording one traps. They run where the budget holds every
-  expert.
-
 ### Devices
 
 [Loam on TPU and WebGPU](./devices.md#known-gaps) lists the gaps of the device

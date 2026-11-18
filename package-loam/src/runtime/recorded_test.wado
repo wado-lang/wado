@@ -465,23 +465,114 @@ test "a pass split at a host step hands the host what it reads, and the programs
     ] as List<Any<Cpu>>;
 }
 
-/// A loop whose body reads its state back on the host.
-fn fetched_in_a_loop(r: &mut Recorder) {
-    let x = r.parameter::<f32, [A]>([3]);
-    let count = r.parameter::<i64, []>([]);
-    r.repeated(&count, &[Any::F32(r.relabeled::<f32, [A], Untyped>(&x))], |_, state| {
-        return r.fetched(0, state, &[
+/// `count` runs of a loop over `x` whose body hands its state to the host at
+/// step 3 and adds the weight doubled to what the host gives back. The weight
+/// is doubled before the loop, and the step writes it.
+fn stepped_loop(r: &mut Recorder, extents: &List<List<i32>>) -> Recorded {
+    let x = r.parameter::<f32, [A]>(extents[0]);
+    let count = r.parameter::<i64, []>(extents[1]);
+    let weight = r.parameter::<f32, [A]>(extents[2]);
+    let w = r.binary(Binary::Add, &weight, &weight);
+    let last = r.repeated(&count, &[Any::F32(r.relabeled::<f32, [A], Untyped>(&x))], |_, state| {
+        let fetched = r.fetched(3, state, &[
             [
                 ElementKind::F32,
                 [3],
             ],
         ]);
+        let given = typed::<Recorder, f32, [A]>(r, &fetched[0]);
+        return [Any::F32(r.relabeled::<f32, [A], Untyped>(&r.binary(Binary::Add, &given, &w)))];
     });
+    return r.finished([typed::<Recorder, f32, [A]>(r, &last[0]).id]);
 }
 
-#[expect_trap]
-test "a host step inside a loop is refused" {
-    fetched_in_a_loop(&mut Recorder::new());
+/// The host step of `stepped_loop`: 100 more than it reads, the weight written
+/// as how many steps have run.
+fn hundred_more(steps: &mut i32, read: &List<Any<Cpu>>, weights: &mut List<Any<Cpu>>) -> List<Any<Cpu>> {
+    *steps += 1;
+    weights[0] = host_of(&Tensor::<f32, [A]> {
+        data: List::<f32>::filled(3, *steps as f32),
+        extents: [3],
+    });
+    let state = *typed::<Cpu, f32, [A]>(&Cpu {}, &read[0]).value();
+    return [
+        host_of(&Tensor::<f32, [A]> {
+            data: state.data.into_iter().map(|v| v + 100.0).collect(),
+            extents: [3],
+        }),
+    ];
+}
+
+test "a loop holding a host step runs on the host, each run reading the weights the step wrote" {
+    let x = Tensor::<f32, [A]> {
+        data: [1.0, 2.0, 3.0],
+        extents: [3],
+    };
+    let w = Tensor::<f32, [A]> {
+        data: [10.0, 20.0, 30.0],
+        extents: [3],
+    };
+    for let runs of [3, 0] as List<i64> {
+        let count = Tensor::<i64, []> { data: [runs], extents: [] };
+        let mut cpu = Cpu {};
+        let mut programs = Programs::<Cpu>::new();
+        let mut steps = 0;
+        let got = programs.run(&mut cpu, [
+            [3],
+        ], stepped_loop, || [host_of(&x), host_of(&count)], || [host_of(&w)], |step, read, weights| {
+            assert step == 3;
+            return hundred_more(&mut steps, read, weights);
+        });
+        assert steps == runs as i32;
+        // Each run adds 100 and twice the weight its own step wrote: 1, 2, 3.
+        let want: List<f32> = if runs == 0 { x.data } else { [313.0, 314.0, 315.0] };
+        assert got == [host_of(&Tensor::<f32, [A]> { data: want, extents: [3] })] as List<Any<Cpu>>;
+    }
+}
+
+/// `x`, or where `pred` holds, what the host gives back for it at step 5.
+fn stepped_branch(r: &mut Recorder, extents: &List<List<i32>>) -> Recorded {
+    let x = r.parameter::<f32, [A]>(extents[0]);
+    let pred = r.parameter::<bool, []>(extents[1]);
+    let chosen = r.conditional(&pred, || {
+        let fetched = r.fetched(5, &[Any::F32(r.relabeled::<f32, [A], Untyped>(&x))], &[
+            [
+                ElementKind::F32,
+                [3],
+            ],
+        ]);
+        return r.yielded(&typed::<Recorder, f32, [A]>(r, &fetched[0]));
+    }, || r.yielded(&x));
+    return r.finished([chosen.id]);
+}
+
+test "a branch holding a host step runs on the host, the step only where it is taken" {
+    let x = Tensor::<f32, [A]> {
+        data: [1.0, 2.0, 3.0],
+        extents: [3],
+    };
+    for let taken of [true, false] as List<bool> {
+        let pred = Tensor::<bool, []> { data: [taken], extents: [] };
+        let mut cpu = Cpu {};
+        let mut programs = Programs::<Cpu>::new();
+        let mut steps = 0;
+        let got = programs.run(&mut cpu, [
+            [3],
+        ], stepped_branch, || [host_of(&x), host_of(&pred)], || [], |step, read, _| {
+            assert step == 5;
+            steps += 1;
+            let given = *typed::<Cpu, f32, [A]>(&Cpu {}, &read[0]).value();
+            return [
+                host_of(&Tensor::<f32, [A]> {
+                    data: given.data.into_iter().map(|v| v + 100.0).collect(),
+                    extents: [3],
+                }),
+            ];
+        });
+        assert steps == if taken { 1 } else { 0 };
+        let want: List<f32> = if taken { [101.0, 102.0, 103.0] } else { x.data };
+        assert got == [host_of(&Tensor::<f32, [A]> { data: want, extents: [3] })] as List<Any<Cpu>>;
+    }
 }
 
 test "a pool's slot holds the row written there, and the other slots what they held" {

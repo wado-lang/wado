@@ -100,10 +100,14 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
     let pooled_bytes = cpu.download(&typed::<Cpu, u8, Untyped>(cpu, &want_bytes));
     note("pool of halves", apart(device, &pools.0, &CpuTensor::Value(pooled_halves)));
     note("pool of bytes", apart(device, &pools.1, &CpuTensor::Value(pooled_bytes)));
-    let runs: List<i32> = [3, 1, 3];
-    let resident = cases::stacked_runs(cpu, 8, runs);
-    for let [k, fetched] of cases::stacked_runs(device, 5, runs).into_iter().enumerate() {
-        note(`experts fetched, run ${k}`, apart(device, &fetched, &typed::<Cpu, f32, Untyped>(cpu, &resident[k])));
+    for let stacking of cases::STACKINGS {
+        let resident = cases::stacked_runs(cpu, 8, stacking, cases::STACKED_RUNS);
+        for let [k, fetched] of cases::stacked_runs(device, 5, stacking, cases::STACKED_RUNS).into_iter().enumerate() {
+            note(
+                `experts fetched ${stacking}, run ${k}`,
+                apart(device, &fetched, &typed::<Cpu, f32, Untyped>(cpu, &resident[k])),
+            );
+        }
     }
     for let [pass, off] of experts_apart(device, 2).into_iter().enumerate() {
         note(`compiled experts held by half, pass ${pass}`, off);
