@@ -241,8 +241,9 @@ struct MemoState<T> {
 
 /// A value computed from others, again only when one of them changed and
 /// someone asks. A value `==` to the last one changes nothing for its readers,
-/// so a type whose `Eq` compares only a key hides a change outside the key. It stops listening when the computation that made it is disposed
-/// of, and listens again if it is read after that. `compute` writes no signal.
+/// so a type whose `Eq` compares only a key hides a change outside the key.
+/// It stops listening when the computation that made it is disposed of, and
+/// listens again if it is read after that. `compute` writes no signal.
 pub struct Memo<T> {
     state: &mut MemoState<T>,
 }
@@ -259,18 +260,18 @@ pub fn memo<T: Eq>(compute: fn mut() -> T with Track) -> Memo<T> with Track {
     core.dep.readers.memo = Option::Some(&mut core);
     let mut state = MemoState { core: &mut core, cached: null, compute };
     core.recompute = || recompute(&mut state);
+    // Its readers still read it, and no write reaches them through it now.
     Track::own(|| {
         core.freshness = Freshness::Stale;
         unsubscribe_all(core.deps, core.id);
         core.deps = [];
+        notify(core.dep);
     });
     return Memo { state: &mut state };
 }
 
 fn recompute<T: Eq>(state: &mut MemoState<T>) {
     let core = state.core;
-    // A memo stopped listening still has readers, and nothing marked them.
-    let restarted = core.freshness matches { Stale };
     unsubscribe_all(core.deps, core.id);
     let mut computation = Computation {
         observer: Option::Some(Observer::Memo(core)),
@@ -294,9 +295,6 @@ fn recompute<T: Eq>(state: &mut MemoState<T>) {
     }
     state.cached = Option::Some(value);
     core.dep.readers.version += 1;
-    if restarted {
-        notify(core.dep);
-    }
 }
 
 /// Two memos are equal when they are the same memo.
