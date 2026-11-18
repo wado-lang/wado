@@ -85,10 +85,10 @@ pub(crate) fn template_segment_value(text: &str, quote: Quote) -> Result<String,
     decode_text(text, quote, unescape_template_string)
 }
 
-/// [`template_segment_value`] past the body walk, which is the phase that
-/// rejects a malformed escape; no later one has a diagnostic channel for it.
+/// [`template_segment_value`] past the body walk, whose template gate keeps a
+/// segment the lexer rejected from reaching here.
 pub(crate) fn checked_template_segment(text: &str, quote: Quote) -> String {
-    template_segment_value(text, quote).expect("the body walk rejects a malformed template escape")
+    template_segment_value(text, quote).expect("the body walk gates a malformed template escape")
 }
 
 /// The `String` the raw content of a string literal denotes, or why it denotes

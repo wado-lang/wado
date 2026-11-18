@@ -352,7 +352,11 @@ impl Module {
     }
 
     pub(crate) fn set_invalid_literals(&mut self, errors: Vec<crate::lexer::LexError>) {
-        assert!(errors.iter().all(crate::lexer::LexError::leaves_tokens_sound));
+        assert!(
+            errors
+                .iter()
+                .all(crate::lexer::LexError::leaves_tokens_sound)
+        );
         self.invalid_literals = errors;
     }
 

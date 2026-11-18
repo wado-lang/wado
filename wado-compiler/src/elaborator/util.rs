@@ -107,7 +107,9 @@ fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, Unnamed> {
             owner: None,
             shown: format!("b'{raw}'"),
         }),
-        Literal::Char(raw) => unescape_char(raw).map(PatternLiteral::Char).map_err(|_| None),
+        Literal::Char(raw) => unescape_char(raw)
+            .map(PatternLiteral::Char)
+            .map_err(|_| None),
         Literal::Bool(b) => Ok(PatternLiteral::Bool(*b)),
         _ => unreachable!("the caller judges a {lit:?} pattern itself"),
     }
@@ -193,7 +195,11 @@ pub(super) fn range_pattern(
             end,
             inclusive,
         }),
-        (start, end) => Err([start.err(), end.err()].into_iter().flatten().flatten().collect()),
+        (start, end) => Err([start.err(), end.err()]
+            .into_iter()
+            .flatten()
+            .flatten()
+            .collect()),
     })
 }
 

@@ -355,10 +355,14 @@ fn literal_value_check(kind: &TokenKind) -> Result<(), String> {
         TokenKind::ByteStringLit { raw, quote } => escape::bytes_value(raw, *quote).map(drop),
         TokenKind::CharLit(raw) => escape::unescape_char(raw).map(drop),
         TokenKind::ByteCharLit(raw) => escape::unescape_byte(raw).map(drop),
-        TokenKind::TemplateStringLit { parts, quote } => parts.iter().try_for_each(|part| match part {
-            TemplateTokenPart::Literal(text) => escape::template_segment_value(text, *quote).map(drop),
-            TemplateTokenPart::Interpolation { .. } => Ok(()),
-        }),
+        TokenKind::TemplateStringLit { parts, quote } => {
+            parts.iter().try_for_each(|part| match part {
+                TemplateTokenPart::Literal(text) => {
+                    escape::template_segment_value(text, *quote).map(drop)
+                }
+                TemplateTokenPart::Interpolation { .. } => Ok(()),
+            })
+        }
         _ => Ok(()),
     }
 }
@@ -2229,7 +2233,10 @@ test data";
         let unterminated = lex(r#""\q"#);
         assert_matches!(
             unterminated.errors.as_slice(),
-            [LexError { kind: LexErrorKind::UnterminatedString, .. }]
+            [LexError {
+                kind: LexErrorKind::UnterminatedString,
+                ..
+            }]
         );
     }
 

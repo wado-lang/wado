@@ -1208,13 +1208,13 @@ fn distribute_contested_ends(arms: &List<LexerAlternative>, scope: &SpliceScope)
     for let arm of arms {
         let n = arm.elements.len();
         let ends = if n == 0 || !arm.actions.is_empty() {
-            null
+            null;
         } else {
             match spliced_elements(&arm.elements[n - 1], scope) {
                 Some(inner) => Option::Some(inner),
                 None => match &arm.elements[n - 1] {
                     Group(g) && lexer_alts_contested(g, &scope.rules, Casing::Unknown) => {
-                        Option::Some([arm.elements[n - 1]] as List<LexerElement>)
+                        Option::Some([arm.elements[n - 1]] as List<LexerElement>);
                     },
                     _ => null,
                 },
@@ -1234,11 +1234,13 @@ fn distribute_contested_ends(arms: &List<LexerAlternative>, scope: &SpliceScope)
                     let mut elements = head;
                     elements.extend(&a.elements);
                     return LexerAlternative { elements, actions: [] };
-                }).collect()
+                }).collect();
             },
             _ => {
                 head.push(last);
-                [LexerAlternative { elements: head, actions: [] }]
+                [
+                    LexerAlternative { elements: head, actions: [] },
+                ];
             },
         };
         // What the splice brought in is a rule body as written, which the
