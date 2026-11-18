@@ -66,11 +66,10 @@ impl View {
         render: fn mut() -> View with (Track, Dom),
     ) -> View with (Track, Dom) {
         let mut when = when;
-        let mut render = render;
         // Holds the place, so siblings added later stay after the subtree.
         let anchor = Dom::document().create_text_node("");
         self.node.append_child(anchor);
-        let mut shown: Option<Shown> = null;
+        let mut shown: Option<Rendered> = null;
         on_cleanup(|| {
             hide(&mut shown);
             detach(anchor);
@@ -84,13 +83,11 @@ impl View {
                 hide(&mut shown);
                 return;
             }
-            let mut node: Option<Element> = null;
-            let dispose = scope(|| node = Option::Some(render().node));
-            let made = node.unwrap();
+            let made = render_owned(render);
             if let Some(holder) = anchor.parent_node() {
-                holder.insert_before(made, Option::Some(anchor as Node));
+                holder.insert_before(made.node, Option::Some(anchor as Node));
             }
-            shown = Option::Some(Shown { node: made, dispose });
+            shown = Option::Some(made);
         });
         return *self;
     }
@@ -142,33 +139,43 @@ fn detach(node: Node) with Dom {
     }
 }
 
-struct Shown {
+/// A subtree and what disposes of what was made with it.
+struct Rendered {
     node: Element,
     dispose: fn mut() with Dom,
 }
 
-/// Clears `shown` before disposing of it, so a cleanup that reaches `shown`
-/// again finds nothing left to hide.
-fn hide(shown: &mut Option<Shown>) with Dom {
+fn render_owned(render: fn mut() -> View with (Track, Dom)) -> Rendered with Dom {
+    let mut render = render;
+    let mut node: Option<Element> = null;
+    let dispose = scope(|| node = Option::Some(render().node));
+    return Rendered { node: node.unwrap(), dispose };
+}
+
+fn remove(rendered: Rendered) with Dom {
+    let mut dispose = rendered.dispose;
+    dispose();
+    detach(rendered.node);
+}
+
+/// Clears `shown` before removing it, so a cleanup that reaches `shown` again
+/// finds nothing left to hide.
+fn hide(shown: &mut Option<Rendered>) with Dom {
     let Some(current) = *shown else {
         return;
     };
     *shown = null;
-    let mut dispose = current.dispose;
-    dispose();
-    detach(current.node);
+    remove(current);
 }
 
 struct Row<T> {
     item: T,
-    node: Element,
-    dispose: fn mut() with Dom,
+    rendered: Rendered,
 }
 
-fn remove_rows<T>(parent: Element, rows: List<Row<T>>) with Dom {
-    for let mut row of rows {
-        (row.dispose)();
-        parent.remove_child(row.node);
+fn remove_rows<T>(rows: List<Row<T>>) with Dom {
+    for let row of rows {
+        remove(row.rendered);
     }
 }
 
@@ -183,7 +190,7 @@ fn each<T: Eq>(
     on_cleanup(|| {
         let removed = rows;
         rows = [];
-        remove_rows(parent, removed);
+        remove_rows(removed);
     });
     observe(|| {
         let mut kept: List<Row<T>> = [];
@@ -204,12 +211,10 @@ fn each<T: Eq>(
             if found {
                 continue;
             }
-            let mut node: Option<Element> = null;
-            let dispose = scope(|| node = Option::Some(render(item).node));
-            kept.push(Row { item, node: node.unwrap(), dispose });
+            kept.push(Row { item, rendered: render_owned(|| render(item)) });
             was.push(-1);
         }
-        remove_rows(parent, rows);
+        remove_rows(rows);
         // `render` and the cleanups have run, and either may have moved a row.
         // Nothing runs from here on, so the DOM now is the DOM the moves meet.
         let mut before: List<Option<Element>> = [];
@@ -218,7 +223,7 @@ fn each<T: Eq>(
         }
         for let i of 0..<kept.len() {
             if was[i] >= 0 {
-                before[was[i]] = Option::Some(kept[i].node);
+                before[was[i]] = Option::Some(kept[i].rendered.node);
             }
         }
         if !holds_in_order(parent, &before) {
@@ -231,7 +236,7 @@ fn each<T: Eq>(
         let stay = longest_increasing(&was);
         let mut next: Option<Node> = null;
         for let mut i = kept.len() - 1; i >= 0; i -= 1 {
-            let node = kept[i].node;
+            let node = kept[i].rendered.node;
             if !stay[i] {
                 parent.insert_before(node, next);
             }
