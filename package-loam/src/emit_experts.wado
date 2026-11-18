@@ -10,7 +10,8 @@ use { is_bound, module_idents } from "./idents.wado";
 
 /// The operands of a `QMoE` indexed by expert, in the order a pool holds them.
 global EXPERT_OPERANDS: List<i32> = [
-    QMOE_UP, QMOE_UP + 1, QMOE_UP + 2, QMOE_UP_ZERO_POINTS, QMOE_DOWN, QMOE_DOWN + 1, QMOE_DOWN + 2, QMOE_DOWN_ZERO_POINTS,
+    QMOE_UP, QMOE_UP + 1, QMOE_UP + 2, QMOE_UP_ZERO_POINTS, QMOE_DOWN, QMOE_DOWN + 1, QMOE_DOWN + 2,
+    QMOE_DOWN_ZERO_POINTS,
 ];
 
 /// The layers of one layout: each layer's expert weights in pool order, the
@@ -31,14 +32,12 @@ impl ExpertGroup {
 }
 
 /// Where one pooled `QMoE` reads its experts: its layer among those sharing
-/// its pools, the host step fetching them, the pools' slot marker, and the
-/// weight standing for the pool of each expert weight it reads.
+/// its pools, the host step fetching them, and the pools' slot marker.
 internal struct PlacedExperts {
     internal layer: i32,
     internal layers: i32,
     internal step: i32,
     internal slots: String,
-    internal pools: HashMap<String, String>,
 }
 
 /// The pools of a graph, and where each pooled `QMoE` reads them.
@@ -47,7 +46,7 @@ internal struct ExpertPlan {
     /// Each pooled `QMoE`, by its first output: its group and layer.
     placed: HashMap<String, [i32, i32]>,
     /// Each pooled weight, and the weight standing for its pool.
-    pooled: HashMap<String, String>,
+    internal pooled: HashMap<String, String>,
 }
 
 impl ExpertPlan {
@@ -64,7 +63,11 @@ impl ExpertPlan {
                 initializers.insert(vi.name);
             }
         }
-        let mut plan = ExpertPlan { groups: [], placed: HashMap::new(), pooled: HashMap::new() };
+        let mut plan = ExpertPlan {
+            groups: [],
+            placed: HashMap::new(),
+            pooled: HashMap::new(),
+        };
         let mut layouts: List<String> = [];
         let mut taken = module_idents();
         for let axis of *axes {
@@ -74,7 +77,9 @@ impl ExpertPlan {
             if node.op != QMOE {
                 continue;
             }
-            let weights: List<String> = EXPERT_OPERANDS.into_iter().filter(|i| node.has_operand(i)).map(|i| node.inputs[i]).collect();
+            let weights: List<String> = EXPERT_OPERANDS.into_iter().filter(|i| node.has_operand(i)).map(
+                |i| node.inputs[i],
+            ).collect();
             if !weights.into_iter().all(|w| initializers.contains(w) && !elsewhere.contains(w)) {
                 continue;
             }
@@ -109,9 +114,10 @@ impl ExpertPlan {
         return self.pooled.contains_key(*weight);
     }
 
-    /// The weight standing for the pool that holds `weight`.
-    internal fn pool_of(&self, weight: &String) -> String {
-        return self.pooled[*weight];
+    /// The weight `Params` holds `weight` in: the one standing for its pool,
+    /// or `weight` itself.
+    internal fn held_in(&self, weight: &String) -> String {
+        return self.pooled.get(*weight).unwrap_or(*weight);
     }
 
     /// Where each pooled `QMoE` reads its experts, by its first output.
@@ -119,16 +125,11 @@ impl ExpertPlan {
         let mut placements = HashMap::<String, PlacedExperts>::new();
         for let [output, [at, layer]] of self.placed.entries() {
             let group = &self.groups[*at];
-            let mut pools = HashMap::<String, String>::new();
-            for let [i, w] of group.layers[*layer].into_iter().enumerate() {
-                pools[w] = group.layers[0][i];
-            }
             placements[*output] = PlacedExperts {
                 layer: *layer,
                 layers: group.layers.len(),
                 step: group.steps[*layer],
                 slots: group.slots,
-                pools,
             };
         }
         return placements;

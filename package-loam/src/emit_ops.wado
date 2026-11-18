@@ -566,10 +566,7 @@ fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     let placed = exprs.experts.get(node.outputs[0]);
     let shape_of = |at: i32| -> Shape {
         let read = node.inputs[at];
-        return checked.shapes[match &placed {
-            Some(p) => p.pools.get(read).unwrap_or(read),
-            None => read,
-        }];
+        return checked.shapes[exprs.pooled.get(read).unwrap_or(read)];
     };
     let [slots, layer, layers, step] = match &placed {
         Some(p) => [p.slots, `${p.layer}`, `${p.layers}`, `${p.step}`],
@@ -592,11 +589,7 @@ fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     ] {
         let weight = shape_of(at);
         let scales = shape_of(at + 1);
-        let zero_axis = if node.has_operand(zeros) {
-            shape_of(zeros).axes[2].name;
-        } else {
-            scales.axes[2].name;
-        };
+        let zero_axis = if node.has_operand(zeros) { shape_of(zeros).axes[2].name } else { scales.axes[2].name };
         turbofish.extend(&([weight.axes[1].name, weight.axes[2].name, scales.axes[2].name, zero_axis] as List<String>));
         operands.extend(&([
             exprs.reference(&node.inputs[at]),

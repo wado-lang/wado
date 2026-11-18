@@ -4,7 +4,8 @@
 //! the slot used longest ago giving way.
 
 use { LoadError, WeightSource } from "./checkpoint.wado";
-use { Backend } from "./hlo.wado";
+use { Picked, Pool, Tokens } from "./experts.wado";
+use { Backend, One } from "./hlo.wado";
 use { Any, Untyped, typed } from "./recorded.wado";
 use { ElementKind, Tensor, element_count } from "./tensor.wado";
 use { HostWeight, stored_width } from "./weight.wado";
@@ -76,7 +77,9 @@ impl HeldExperts {
     pub fn within(layouts: List<ExpertLayout>, budget: i64) -> Result<HeldExperts, LoadError> {
         let least = layouts.into_iter().map(|l| l.experts as i64 * l.slot_bytes()).sum().unwrap_or(0);
         if budget < least {
-            return Result::Err(LoadError { reason: `a budget of ${budget} bytes holds less than one layer's experts of each pool, ${least} bytes` });
+            return Result::Err(
+                LoadError { reason: `a budget of ${budget} bytes holds less than one layer's experts of each pool, ${least} bytes` },
+            );
         }
         let rest = layouts.into_iter().map(|l| (l.every_slot() - l.experts) as i64 * l.slot_bytes()).sum().unwrap_or(0);
         let spare = i64::min(budget - least, rest);
@@ -86,7 +89,12 @@ impl HeldExperts {
             let others = layout.every_slot() - layout.experts;
             let extra = if spare == rest { others } else { (others as i64 * spare / rest) as i32 };
             let slots = layout.experts + extra;
-            groups.push(Pools { layout, slots, held: List::filled(slots, -1), used: List::filled(slots, -1) });
+            groups.push(Pools {
+                layout,
+                slots,
+                held: List::filled(slots, -1),
+                used: List::filled(slots, -1),
+            });
         }
         return Result::Ok(HeldExperts { groups, clock: 0 });
     }
@@ -112,7 +120,16 @@ impl HeldExperts {
                 let these: List<i32> = (first..<made.len()).collect();
                 for let layer of 0..<group.layout.layers.len() {
                     for let expert of 0..<group.layout.experts {
-                        self.placed(g, source, at, layer, expert, layer * group.layout.experts + expert, &mut made, &these);
+                        self.placed(
+                            g,
+                            source,
+                            at,
+                            layer,
+                            expert,
+                            layer * group.layout.experts + expert,
+                            &mut made,
+                            &these,
+                        );
                     }
                 }
             }
@@ -133,7 +150,7 @@ impl HeldExperts {
     ) -> List<Any<G>> with _ {
         let [at, layer] = self.step_of(step);
         let experts = self.groups[at].layout.experts;
-        let picks = g.download(&typed::<G, i64, [Tokens, Picks]>(g, &read[0]));
+        let picks = g.download(&typed::<G, i64, [Tokens, Picked]>(g, &read[0]));
         let mut order: List<i64> = [];
         for let pick of picks.data {
             if !order.contains(&pick) {
@@ -161,7 +178,10 @@ impl HeldExperts {
         return [
             uploaded(g, Tensor::<i64, [Pool, One]> { data: slot_of, extents: column }),
             uploaded(g, Tensor::<i64, [Pool, One]> { data: order, extents: column }),
-            uploaded(g, Tensor::<i64, []> { data: [count as i64], extents: [] }),
+            uploaded(g, Tensor::<i64, []> {
+                data: [count as i64],
+                extents: [],
+            }),
         ];
     }
 
@@ -234,7 +254,7 @@ impl HeldExperts {
             let start = stored.start + expert * bytes;
             let read = match source.read(&stored.file, start, start + bytes) {
                 Ok(read) => read,
-                Err(e) => panic(`${stored.file}: ${e}`),
+                Err(e) => panic(`${e}`),
             };
             let mut pool = values[pools[i]];
             g.written(&mut pool, slot, HostWeight::stored(stored.kind, stored.extents, read));
@@ -255,16 +275,6 @@ impl WeightSource for Unread {
     fn len(&self, _file: &String) -> Result<i64, LoadError> {
         unreachable();
     }
-}
-
-/// The tokens and their picks, and the experts as a column.
-struct Tokens {
-}
-struct Picks {
-}
-struct Pool {
-}
-struct One {
 }
 
 fn uploaded<affine G: Backend, Axes>(g: &mut G, t: Tensor<i64, Axes>) -> Any<G> with _ {

@@ -38,11 +38,21 @@ test "a token whose other logits are -inf runs its one expert once, in either fo
 fn slots_within(budget: i64) -> Result<List<i32>, LoadError> {
     let layout = |layers: i32, weight: i32| ExpertLayout {
         weights: [weight],
-        layers: (0..<layers).map(|_| [StoredExperts { file: "w", start: 0, kind: ElementKind::U8, extents: [2] }] as List<StoredExperts>).collect(),
+        layers: (0..<layers).map(|_| [
+            StoredExperts {
+                file: "w",
+                start: 0,
+                kind: ElementKind::U8,
+                extents: [2],
+            },
+        ] as List<StoredExperts>).collect(),
         steps: (0..<layers).collect(),
         experts: 4,
     };
-    let mut held = HeldExperts::within([layout(3, 0), layout(2, 1)], budget)?;
+    let mut held = HeldExperts::within([
+        layout(3, 0),
+        layout(2, 1),
+    ], budget)?;
     let mut files = HashMap::<String, ByteList>::new();
     files["w"] = List::<u8>::filled(8, 0) as ByteList;
     let pools = held.pools(&mut Cpu {}, &files);
@@ -65,7 +75,10 @@ test "experts fetched into pools of fewer slots compute what pools of every slot
     let resident = stacked_runs(&mut Cpu {}, 8, runs);
     let fetched = stacked_runs(&mut Cpu {}, 5, runs);
     for let [r, f] of resident.into_iter().zip(fetched.into_iter()) {
-        let [want, got] = [typed::<Cpu, f32, [A, B]>(&Cpu {}, &r), typed::<Cpu, f32, [A, B]>(&Cpu {}, &f)];
+        let [want, got] = [
+            typed::<Cpu, f32, [A, B]>(&Cpu {}, &r),
+            typed::<Cpu, f32, [A, B]>(&Cpu {}, &f),
+        ];
         for let [a, b] of want.data.into_iter().zip(got.data.into_iter()) {
             assert f32::abs(a - b) <= 1e-5 * f32::max(1.0, f32::abs(a));
         }

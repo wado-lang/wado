@@ -22,7 +22,7 @@ pub fn experts_apart<affine Bk: Backend>(device: &mut Bk, passes: i32) -> List<f
     let mut apart: List<f32> = [];
     for let pass of 0..<passes {
         let x = Tensor::<f32, [layers::X0, layers::X1]> {
-            data: (0..<96).map(|i| (((i + pass) * 7 % 13) - 6) as f32 / 2.0).collect(),
+            data: (0..<96).map(|i| ((i + pass) * 7 % 13 - 6) as f32 / 2.0).collect(),
             extents: [3, 32],
         };
         let r = logits::<layers::R1>(pass);

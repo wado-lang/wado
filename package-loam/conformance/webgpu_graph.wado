@@ -282,7 +282,9 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let resident = cases::stacked_runs(cpu, 8, stacked);
     for let [k, ran] of cases::stacked_runs(&mut gpu, 5, stacked).into_iter().enumerate() {
         let fetched = typed::<WebGpuBackend, f32, Untyped>(&gpu, &ran);
-        println(`experts fetched, run ${k} ${apart(&mut gpu, &fetched, &typed::<Cpu, f32, Untyped>(cpu, &resident[k]))}`);
+        println(
+            `experts fetched, run ${k} ${apart(&mut gpu, &fetched, &typed::<Cpu, f32, Untyped>(cpu, &resident[k]))}`,
+        );
     }
 
     // A quantized product computes what follows it in its own dispatch.

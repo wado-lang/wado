@@ -2028,7 +2028,10 @@ test "decode refuses a past whose extent a pass changes uncounted" {
 
 test "decode checks its ids' token after their shape" {
     let out = decoded_from(DECODER).unwrap();
-    let body = out.substr_bytes(out.find("pub fn decode<affine Bk: Backend, affine Src: WeightSource>(").unwrap(), out.len());
+    let body = out.substr_bytes(
+        out.find("pub fn decode<affine Bk: Backend, affine Src: WeightSource>(").unwrap(),
+        out.len(),
+    );
     assert body.find("input_mismatch(input_ids").unwrap() < body.find("extent_mismatch(\"input_ids\"").unwrap();
 }
 

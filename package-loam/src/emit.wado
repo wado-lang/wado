@@ -501,10 +501,8 @@ fn emit_weights(
         "[]";
     } else {
         w.line(`let mut source = ${EMBEDDED_SOURCE}::new();`);
-        for let [at, vi] of graph.initializers.into_iter().enumerate() {
-            if experts.is_pooled(&vi.name) {
-                w.line(wado`source["${at}"] = ${hosts[vi.name]}.stored_bytes();`);
-            }
+        for let [at, vi] of pooled_initializers(graph, experts) {
+            w.line(wado`source["${at}"] = ${hosts[vi.name]}.stored_bytes();`);
         }
         w.line(`let pools = HeldExperts::resident(${BY_POSITION}).pools(backend, &source);`);
         "pools";
@@ -524,6 +522,11 @@ fn emit_weights(
 /// The initializers `Params` holds as they are: all but those pools hold.
 fn held_initializers(graph: &Graph, experts: &ExpertPlan) -> List<ValueInfo> {
     return graph.initializers.into_iter().filter(|vi| !experts.is_pooled(&vi.name)).collect();
+}
+
+/// The initializers pools hold, each by its position among them all.
+fn pooled_initializers(graph: &Graph, experts: &ExpertPlan) -> List<[i32, ValueInfo]> {
+    return graph.initializers.into_iter().enumerate().filter(|p| experts.is_pooled(&p.1.name)).collect();
 }
 
 /// The pools' layouts where each initializer is a file named by its position.
@@ -677,10 +680,8 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         }
         let pools = if pooled {
             w.begin("let mut experts = HeldExperts::within(expert_layouts(|at| Result::Ok(match at");
-            for let [at, vi] of graph.initializers.into_iter().enumerate() {
-                if experts.is_pooled(&vi.name) {
-                    w.line(`${at} => ${expert_place(&expected(&vi, &checked.shapes[vi.name]), placement)},`);
-                }
+            for let [at, vi] of pooled_initializers(graph, experts) {
+                w.line(`${at} => ${expert_place(&expected(&vi, &checked.shapes[vi.name]), placement)},`);
             }
             w.line("_ => unreachable(),");
             w.end_with("}))?, budget)?;");
@@ -699,7 +700,9 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
                 "load",
                 `the weights, those the graph does not carry read from ${doc}`,
                 SOURCE_PARAM,
-                [["source", SOURCE_PARAM]],
+                [
+                    ["source", SOURCE_PARAM],
+                ],
                 ["let [weights, experts] = Params::loaded(backend, &source, budget)?;"],
             );
         }
@@ -739,8 +742,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         [],
         [
             `let mut experts = HeldExperts::within(${BY_POSITION}, budget)?;`,
-            "let weights = Params::embedded_within(backend, &mut experts);",
-            "let source = embedded_experts();",
+            "let weights = Params::embedded_within(backend, &mut experts);", "let source = embedded_experts();",
         ],
     );
     w.blank();
@@ -748,10 +750,8 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
     w.line("/// among the initializers.");
     w.begin(`fn embedded_experts() -> ${EMBEDDED_SOURCE}`);
     w.line(`let mut files = ${EMBEDDED_SOURCE}::new();`);
-    for let [at, vi] of graph.initializers.into_iter().enumerate() {
-        if experts.is_pooled(&vi.name) {
-            w.line(wado`files["${at}"] = ${EMBEDDED_DATA}(${at});`);
-        }
+    for let [at, _] of pooled_initializers(graph, experts) {
+        w.line(wado`files["${at}"] = ${EMBEDDED_DATA}(${at});`);
     }
     w.line("return files;");
     w.end();
@@ -1987,7 +1987,9 @@ fn emit_model(w: &mut CodeWriter) {
     held.emit_begin(w);
     w.line("/// A model of `weights`, whose pools hold every expert.");
     w.line(`pub fn new(weights: ${PARAMS_TYPE}) -> ${MODEL}<${BACKEND_PARAM}> {`);
-    w.line(`    return ${MODEL} { weights, programs: Programs::new(), experts: HeldExperts::resident([]), source: Unread {} };`);
+    w.line(
+        `    return ${MODEL} { weights, programs: Programs::new(), experts: HeldExperts::resident([]), source: Unread {} };`,
+    );
     w.line("}");
     w.end();
 }
@@ -2235,7 +2237,7 @@ fn emit_entry(
     experts: &ExpertPlan,
 ) -> Result<List<String>, EmitError> {
     let shapes = &checked.shapes;
-    let mut exprs = Operands { experts: experts.placements() };
+    let mut exprs = Operands { experts: experts.placements(), pooled: experts.pooled };
     let mut entry = FnSpec::new("build", Vis::Pub);
     entry.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     // The pasts cross in one `Cache`, and the presents replace them in it.
@@ -2256,8 +2258,7 @@ fn emit_entry(
         entry.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
     }
     for let vi of &graph.initializers {
-        let held = if experts.is_pooled(&vi.name) { experts.pool_of(&vi.name) } else { vi.name };
-        exprs.values[vi.name] = `weights.${names.get(&held)}`;
+        exprs.values[vi.name] = `weights.${names.get(&experts.held_in(&vi.name))}`;
     }
     for let tensor of kept {
         exprs.values[*tensor] = `weights.${names.get(tensor)}`;

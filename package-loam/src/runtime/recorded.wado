@@ -998,7 +998,12 @@ fn weights_only(recorded: &Recorded, arguments: i32) -> List<bool> {
 
 /// `ids` and the nodes of the weights alone they read, but the parameters, in
 /// the order they are recorded.
-fn closed_over_weights(recorded: &Recorded, ids: &List<i32>, of_weights: &List<bool>, parameters: &HashMap<i32, i32>) -> List<i32> {
+fn closed_over_weights(
+    recorded: &Recorded,
+    ids: &List<i32>,
+    of_weights: &List<bool>,
+    parameters: &HashMap<i32, i32>,
+) -> List<i32> {
     let mut held = List::<bool>::filled(recorded.nodes.len(), false);
     let mut pending = *ids;
     while let Some(id) = pending.pop() {

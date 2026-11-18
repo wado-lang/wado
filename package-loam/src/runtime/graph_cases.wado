@@ -586,15 +586,16 @@ fn stacked_experts() -> [HashMap<String, ByteList>, List<List<StoredExperts>>] {
     for let i of 0..<weights.len() {
         let w = &weights[i];
         let experts = w.extents[0];
-        let size = w.bytes().len();
+        let first = w.stored_bytes();
+        let size = first.len();
         let slice = size / experts;
-        let mut stored = w.bytes().to_byte_list(size);
+        let mut stored = first;
         for let e of 0..<experts {
             let start = (experts - 1 - e) * slice;
-            stored.extend(&w.bytes().to_byte_list(size)[start..<start + slice].to_list());
+            stored.extend(&first[start..<start + slice].to_list());
         }
         let file = `w${i}`;
-        files[file] = stored as ByteList;
+        files[file] = stored;
         for let layer of 0..<2 {
             layers[layer].push(StoredExperts {
                 file,
@@ -635,7 +636,14 @@ pub fn stacked_runs<affine G: Backend>(g: &mut G, slots: i32, runs: List<i32>) -
     let [files, layers] = stacked_experts();
     let expert_bytes = layers[0].into_iter().map(|w| element_count(&w.extents) * stored_width(w.kind)).sum().unwrap();
     let mut store = HeldExperts::within(
-        [ExpertLayout { weights: (0..<6).collect(), layers, steps: [0, 1], experts: 4 }],
+        [
+            ExpertLayout {
+                weights: (0..<6).collect(),
+                layers,
+                steps: [0, 1],
+                experts: 4,
+            },
+        ],
         (slots * expert_bytes) as i64,
     ).unwrap();
     let pools = store.pools(g, &files);
@@ -644,7 +652,9 @@ pub fn stacked_runs<affine G: Backend>(g: &mut G, slots: i32, runs: List<i32>) -
     for let tokens of runs {
         let c = experts_case(tokens);
         let second = noisy::<[A, C]>(c.router.extents, 17);
-        let got = programs.run(g, [[tokens]], stacked_pass, || [
+        let got = programs.run(g, [
+            [tokens],
+        ], stacked_pass, || [
             Any::F32(g.relabeled::<f32, [A, B], Untyped>(&g.upload(&c.x))),
             Any::F32(g.relabeled::<f32, [A, C], Untyped>(&g.upload(&c.router))),
             Any::F32(g.relabeled::<f32, [A, C], Untyped>(&g.upload(&second))),
