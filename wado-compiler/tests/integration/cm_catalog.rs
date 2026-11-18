@@ -866,27 +866,27 @@ fn run_round_trips(opt_level: OptLevel) {
 /// which is why a plain `export fn` suffices here (unlike a consuming read, which
 /// would block and require an async task).
 const PRODUCER_SOURCE: &str = r#"
-export fn mk_future_string(s: String) -> Future<String> {
+export fn mk_future_string(s: String) -> Future<String> with Future {
     let [rx, tx] = Future::<String>::new();
     tx.write(s);
     return rx;
 }
-export fn mk_future_option(v: Option<u32>) -> Future<Option<u32>> {
+export fn mk_future_option(v: Option<u32>) -> Future<Option<u32>> with Future {
     let [rx, tx] = Future::<Option<u32>>::new();
     tx.write(v);
     return rx;
 }
-export fn mk_future_result(v: Result<u32, String>) -> Future<Result<u32, String>> {
+export fn mk_future_result(v: Result<u32, String>) -> Future<Result<u32, String>> with Future {
     let [rx, tx] = Future::<Result<u32, String>>::new();
     tx.write(v);
     return rx;
 }
-export fn mk_future_list(v: List<u32>) -> Future<List<u32>> {
+export fn mk_future_list(v: List<u32>) -> Future<List<u32>> with Future {
     let [rx, tx] = Future::<List<u32>>::new();
     tx.write(v);
     return rx;
 }
-export fn mk_future_tuple(v: [u32, String]) -> Future<[u32, String]> {
+export fn mk_future_tuple(v: [u32, String]) -> Future<[u32, String]> with Future {
     let [rx, tx] = Future::<[u32, String]>::new();
     tx.write(v);
     return rx;
@@ -1047,7 +1047,7 @@ fn cm_future_aggregate_producer_o2() {
 /// reads the produced elements back). `async` because the write blocks until
 /// the reader (the host) consumes.
 const STREAM_PRODUCER_SOURCE: &str = r#"
-export async fn mk_stream_u32(data: List<u32>) -> Stream<u32> {
+export async fn mk_stream_u32(data: List<u32>) -> Stream<u32> with Stream {
     let [rx, tx] = Stream::<u32>::new();
     task return rx;
     tx.write_all(data);
@@ -1160,7 +1160,7 @@ fn cm_stream_scalar_producer_o2() {
 /// number-type guard).
 fn future_identity_source(ty: &str, name: &str) -> String {
     format!(
-        "export async fn {name}(v: Future<{ty}>) -> Future<{ty}> {{\n\
+        "export async fn {name}(v: Future<{ty}>) -> Future<{ty}> with Future {{\n\
          \x20   let value = v.read();\n\
          \x20   let [rx, tx] = Future::<{ty}>::new();\n\
          \x20   task return rx;\n\
@@ -1271,7 +1271,7 @@ export struct Point {
     pub x: f64,
     pub y: f64,
 }
-export async fn id_future_point(v: Future<Point>) -> Future<Point> {
+export async fn id_future_point(v: Future<Point>) -> Future<Point> with Future {
     let value = v.read();
     let [rx, tx] = Future::<Point>::new();
     task return rx;
@@ -1330,7 +1330,7 @@ export struct Point {
     pub x: f64,
     pub y: f64,
 }
-export async fn id_stream_point(mut v: Stream<Point>) -> Stream<Point> {
+export async fn id_stream_point(mut v: Stream<Point>) -> Stream<Point> with Stream {
     let [rx, tx] = Stream::<Point>::new();
     task return rx;
     loop {
@@ -1459,7 +1459,7 @@ export flags Perms {
     Write,
     Execute,
 }
-export async fn id_future_color(v: Future<Color>) -> Future<Color> {
+export async fn id_future_color(v: Future<Color>) -> Future<Color> with Future {
     let value = v.read();
     let [rx, tx] = Future::<Color>::new();
     task return rx;
@@ -1467,7 +1467,7 @@ export async fn id_future_color(v: Future<Color>) -> Future<Color> {
         tx.write(x);
     }
 }
-export async fn id_future_shape(v: Future<Shape>) -> Future<Shape> {
+export async fn id_future_shape(v: Future<Shape>) -> Future<Shape> with Future {
     let value = v.read();
     let [rx, tx] = Future::<Shape>::new();
     task return rx;
@@ -1475,7 +1475,7 @@ export async fn id_future_shape(v: Future<Shape>) -> Future<Shape> {
         tx.write(x);
     }
 }
-export async fn id_future_perms(v: Future<Perms>) -> Future<Perms> {
+export async fn id_future_perms(v: Future<Perms>) -> Future<Perms> with Future {
     let value = v.read();
     let [rx, tx] = Future::<Perms>::new();
     task return rx;
@@ -1483,7 +1483,7 @@ export async fn id_future_perms(v: Future<Perms>) -> Future<Perms> {
         tx.write(x);
     }
 }
-export async fn id_stream_color(mut v: Stream<Color>) -> Stream<Color> {
+export async fn id_stream_color(mut v: Stream<Color>) -> Stream<Color> with Stream {
     let [rx, tx] = Stream::<Color>::new();
     task return rx;
     loop {
@@ -1497,7 +1497,7 @@ export async fn id_stream_color(mut v: Stream<Color>) -> Stream<Color> {
     v.drop();
     tx.drop();
 }
-export async fn id_stream_shape(mut v: Stream<Shape>) -> Stream<Shape> {
+export async fn id_stream_shape(mut v: Stream<Shape>) -> Stream<Shape> with Stream {
     let [rx, tx] = Stream::<Shape>::new();
     task return rx;
     loop {
@@ -1511,7 +1511,7 @@ export async fn id_stream_shape(mut v: Stream<Shape>) -> Stream<Shape> {
     v.drop();
     tx.drop();
 }
-export async fn id_stream_perms(mut v: Stream<Perms>) -> Stream<Perms> {
+export async fn id_stream_perms(mut v: Stream<Perms>) -> Stream<Perms> with Stream {
     let [rx, tx] = Stream::<Perms>::new();
     task return rx;
     loop {
@@ -1689,7 +1689,7 @@ fn cm_stream_named_identity_o2() {
 /// payloads. `async` because both halves block until the peer makes progress.
 fn stream_identity_source(ty: &str, name: &str) -> String {
     format!(
-        "export async fn {name}(mut v: Stream<{ty}>) -> Stream<{ty}> {{\n\
+        "export async fn {name}(mut v: Stream<{ty}>) -> Stream<{ty}> with Stream {{\n\
          \x20   let [rx, tx] = Stream::<{ty}>::new();\n\
          \x20   task return rx;\n\
          \x20   loop {{\n\
@@ -1812,7 +1812,7 @@ fn cm_lib_rejects_an_unclassifiable_future_payload() {
 fn cm_lib_rejects_an_unclassifiable_future_new() {
     // The parameter brings the `Future` resource into the world.
     let err = try_compile_lib(
-        "export fn make(v: Future<u32>) -> u32 {\n    \
+        "export fn make(v: Future<u32>) -> u32 with Future {\n    \
          v.drop();\n    \
          let [rx, tx] = Future::<()>::new();\n    \
          rx.drop();\n    tx.drop();\n    return 1;\n}\n",
@@ -1830,7 +1830,7 @@ fn cm_lib_accepts_newtype_future_payloads() {
     for ty in ["Meters", "Option<Meters>", "List<Meters>", "[Meters, u32]"] {
         let source = format!(
             "export type Meters = f64;\n\
-             export async fn id(v: Future<{ty}>) -> Future<{ty}> {{\n    \
+             export async fn id(v: Future<{ty}>) -> Future<{ty}> with Future {{\n    \
              let value = v.read();\n    \
              let [rx, tx] = Future::<{ty}>::new();\n    \
              task return rx;\n    \
@@ -1846,7 +1846,7 @@ fn cm_lib_accepts_newtype_future_payloads() {
 fn cm_lib_builds_a_type_whose_cm_name_collides_with_wasi() {
     try_compile_lib(
         "export enum ErrorCode {\n    Io,\n    Timeout,\n}\n\
-         export async fn id(v: Future<ErrorCode>) -> Future<ErrorCode> {\n    \
+         export async fn id(v: Future<ErrorCode>) -> Future<ErrorCode> with Future {\n    \
          let value = v.read();\n    \
          let [rx, tx] = Future::<ErrorCode>::new();\n    \
          task return rx;\n    \

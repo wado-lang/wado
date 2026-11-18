@@ -15,7 +15,7 @@ fn held(bytes: &ByteList) -> LinearBuffer {
 }
 
 /// The symbols of `indexes`, each added as the encoded file `load` reads.
-fn index_of(indexes: List<scip::Index>) -> SymbolIndex {
+fn index_of(indexes: List<scip::Index>) -> SymbolIndex with Stream {
     let mut symbols = empty_index();
     for let index of indexes {
         symbols.add(held(&grog::encode(&index))).unwrap();
@@ -78,7 +78,7 @@ fn shapes() -> scip::Index {
     };
 }
 
-fn workspace() -> Workspace {
+fn workspace() -> Workspace with Stream {
     return Workspace { root: "src", symbols: Some(index_of([shapes()])) };
 }
 

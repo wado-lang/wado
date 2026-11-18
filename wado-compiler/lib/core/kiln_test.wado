@@ -109,7 +109,7 @@ impl Stream<u8> for ScriptedInput {
 
 /// A real handle for the scripted reads to answer, made outside the
 /// handler's `with`, which traps on `new`.
-fn scripted_stream() -> Stream<u8> {
+fn scripted_stream() -> Stream<u8> with Stream {
     let [rx, tx] = Stream::<u8>::new();
     tx.drop();
     return rx;

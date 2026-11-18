@@ -9,7 +9,7 @@
 
 use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     // Regression case: only the writable end is used; `_rx` is unused.
     // The i32 future's tx.write doesn't block, so the handler completes.
     let [_rx, tx] = Future::<i32>::new();

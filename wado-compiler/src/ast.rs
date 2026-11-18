@@ -1913,6 +1913,9 @@ pub mod lint {
     pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
     /// An `#[ambient]` outside the standard library.
     pub const UNDECLARED_EFFECTS: &str = "undeclared_effects";
+    /// A handler scope leaving out an operation its body reaches through the
+    /// `extends` family of a resource it handles.
+    pub const UNHANDLED_OPERATION: &str = "unhandled_operation";
     /// A comparison of an expression with itself: `x == x`.
     pub const SELF_COMPARISON: &str = "self_comparison";
     /// Integer literals alone overflowing their type, `200 as u8 + 100`, or a

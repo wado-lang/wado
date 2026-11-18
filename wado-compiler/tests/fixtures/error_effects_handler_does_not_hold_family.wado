@@ -1,0 +1,29 @@
+// A handler holds what its effect's operations mention, not the effect's
+// `extends` family: a handler of `Node` calling an operation `EventTarget`
+// declares still declares `EventTarget`, or it would reach the host from a
+// function that holds nothing.
+#[cm("test:dom/event-target", linearity = "unrestricted", repr = "externref")]
+resource EventTarget {
+    fn tag(&self) -> String;
+}
+
+#[cm("test:dom/node", linearity = "unrestricted", repr = "externref")]
+resource Node extends EventTarget {
+    fn a(&self) -> String;
+}
+
+struct Tagging {}
+
+impl Node for Tagging {
+    fn a(&mut self, this: &Node) -> String {
+        resume this.tag();
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":19:16: analysis error: missing resource 'EventTarget' required by 'tag'",
+    "compile_error_codes": ["MISSING_EFFECT"]
+}

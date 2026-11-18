@@ -626,7 +626,7 @@ fn "resource_result_unwrap_extract.wado/$cm_export__handle"($p_0) {
     "resource_result_unwrap_extract.wado/$cm_task_entry__handle"($p_0);
 }
 
-fn "resource_result_unwrap_extract.wado/$cm_task_entry__handle"(request) {
+fn "resource_result_unwrap_extract.wado/$cm_task_entry__handle"(request) with Response {
     let $cm_pair_184: i64;
     let $pattern_temp_1: ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let self: ref null "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>";
@@ -1369,7 +1369,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

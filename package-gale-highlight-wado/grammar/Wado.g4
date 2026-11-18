@@ -131,6 +131,7 @@ attrArgs
 
 attrArg
     : identifier ('=' attrValue)?
+    | '_'
     | STRING_LITERAL
     | number
     ;

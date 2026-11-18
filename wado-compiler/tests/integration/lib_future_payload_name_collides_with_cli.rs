@@ -18,7 +18,7 @@ export struct ErrorCode {
     pub b: i64,
 }
 
-export fn sum_of(rx: Future<ErrorCode>) -> i64 {
+export fn sum_of(rx: Future<ErrorCode>) -> i64 with Future {
     if let Some(v) = rx.read() {
         return v.a + v.b;
     }

@@ -49,7 +49,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Stdin, Exit) {
     }
 }
 
-fn cat_file(dir: &Descriptor, path: String) -> Result<(), String> with Stdout {
+fn cat_file(dir: &Descriptor, path: String) -> Result<(), String> with (Stdout, Descriptor) {
     let open_result = dir
         .open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read)
         .wait();

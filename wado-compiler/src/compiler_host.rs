@@ -215,6 +215,9 @@ pub enum Code {
     UndecidedEffects,
     /// A program hides an effect from its callers with `#[ambient]`.
     UndeclaredEffects,
+    /// A handler scope leaves out an operation its body reaches through the
+    /// `extends` family of a resource it handles.
+    UnhandledOperation,
     /// A comparison of an expression with itself, which has one answer: `x == x`.
     SelfComparison,
     /// Integer literals alone overflow their type, `200 as u8 + 100`, or a
@@ -371,6 +374,7 @@ impl std::fmt::Display for Code {
             Code::ShadowedName => "SHADOWED_NAME",
             Code::UndecidedEffects => "UNDECIDED_EFFECTS",
             Code::UndeclaredEffects => "UNDECLARED_EFFECTS",
+            Code::UnhandledOperation => "UNHANDLED_OPERATION",
             Code::SelfComparison => "SELF_COMPARISON",
             Code::ArithmeticOverflow => "ARITHMETIC_OVERFLOW",
             Code::UnconditionalTrap => "UNCONDITIONAL_TRAP",

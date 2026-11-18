@@ -31,7 +31,7 @@ fn send_request(path: String) -> Response with Client {
     };
 }
 
-fn read_body(resp: Response) -> String {
+fn read_body(resp: Response) -> String with Response {
     let [res_future, res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Response::consume_body(resp, res_future);
 

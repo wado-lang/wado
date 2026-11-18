@@ -330,8 +330,9 @@ pub affine trait Drop with () {
 - `builtin::drop(value)` drops any value where it is called.
 
 A drop's effects are ambient: a function declares no effect for a drop it
-performs, written or implicit. A `drop` that performs an effect other than its
-own resource's names it with [`#[ambient(E)]`](./spec-effects.md#ambient-functions).
+performs, written or implicit. `Drop::drop` is declared
+[`#[ambient(_)]`](./spec-effects.md#ambient-functions), so an impl's body
+performs what its release needs without declaring it.
 
 ## References into Affine Values
 

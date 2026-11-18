@@ -13,12 +13,12 @@ affine struct Holder {
 }
 
 impl Holder {
-    fn dup(&self) -> Fields {
+    fn dup(&self) -> Fields with Fields {
         return Fields::new();
     }
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     let h = Holder { headers: Fields::new() };
     let headers = h.dup();
 

@@ -100,7 +100,7 @@ fn sent(url: &Url) -> Response with Client {
     return resp;
 }
 
-fn body(resp: Response) -> ByteList {
+fn body(resp: Response) -> ByteList with Response {
     let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [stream, received] = Response::consume_body(resp, res_rx);
     let bytes = stream.read_to_end_bytes();
@@ -112,7 +112,7 @@ fn body(resp: Response) -> ByteList {
 
 /// Panics unless `transfer`, the future a `wasi:http` transfer resolves once
 /// it ends, reports success.
-fn done<affine T>(transfer: Future<Result<T, ErrorCode>>, what: String) {
+fn done<affine T>(transfer: Future<Result<T, ErrorCode>>, what: String) with Future {
     let outcome = transfer.read();
     assert outcome matches { Some(Ok(_)) }, `${what} failed: ${outcome:?}`;
 }

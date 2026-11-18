@@ -23,7 +23,7 @@ fn discard() with Fields {
     assert held.is_empty();
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     discard();
     let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [response, _sent] = Response::new(Headers::new(), null, trailers);

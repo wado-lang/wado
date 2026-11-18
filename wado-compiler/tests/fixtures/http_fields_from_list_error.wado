@@ -5,7 +5,7 @@
 
 use { Request, Response, ErrorCode, Fields, Headers, FieldName, FieldValue, HeaderError, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     // Valid from_list → Ok
     let valid_entries: List<[FieldName, FieldValue]> = [
         ["x-valid" as FieldName, "value".bytes().collect() as FieldValue],

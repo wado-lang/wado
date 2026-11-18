@@ -1,0 +1,28 @@
+// A handler of a resource that extends another still declares the resource
+// when it delegates to it: the resource does not imply itself through its
+// ancestor.
+#[cm("test:dom/event-target", linearity = "unrestricted", repr = "externref")]
+resource EventTarget {
+    fn tag(&self) -> String;
+}
+
+#[cm("test:dom/node", linearity = "unrestricted", repr = "externref")]
+resource Node extends EventTarget {
+    fn a(&self) -> String;
+}
+
+struct Passthrough {}
+
+impl Node for Passthrough {
+    fn a(&mut self, this: &Node) -> String {
+        resume this.a();
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":18:16: analysis error: missing resource 'Node' required by 'a'",
+    "compile_error_codes": ["MISSING_EFFECT"]
+}

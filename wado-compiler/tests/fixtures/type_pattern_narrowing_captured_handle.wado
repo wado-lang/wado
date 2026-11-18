@@ -1,6 +1,6 @@
-// A closure holds the resources the types of its captures name, as a function
-// holds those its signature names. So a closure narrowing a handle it captured,
-// or capturing a narrowed one, performs nothing for it.
+// A closure narrowing a handle it captured, or capturing a narrowed one, reads
+// the narrowed handle. It holds nothing it captured, so it performs what it
+// calls on one, and its function declares that.
 
 #[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=2")]
 resource Node {}
@@ -23,11 +23,7 @@ resource HtmlInputElement extends Element {
     fn files(&self) -> FileList;
 }
 
-fn call(f: fn() -> String) -> String {
-    return f();
-}
-
-fn call_through(f: fn() -> String with _) -> String with _ {
+fn call(f: fn() -> String with _) -> String with _ {
     return f();
 }
 
@@ -39,14 +35,14 @@ fn call_with(f: fn(Node) -> i32, n: Node) -> i32 {
     return f(n);
 }
 
-fn by_match(n: Node) -> String {
+fn by_match(n: Node) -> String with HtmlInputElement {
     return call(|| match n {
         input: HtmlInputElement => input.value(),
         _ => "",
     });
 }
 
-fn by_let_else(n: Node) -> String {
+fn by_let_else(n: Node) -> String with HtmlInputElement {
     return call(|| {
         let input: HtmlInputElement = n else {
             return "";
@@ -55,7 +51,7 @@ fn by_let_else(n: Node) -> String {
     });
 }
 
-fn nested(n: Node) -> String {
+fn nested(n: Node) -> String with HtmlInputElement {
     return call(|| call(|| {
         let input: HtmlInputElement = n else {
             return "";
@@ -65,7 +61,7 @@ fn nested(n: Node) -> String {
 }
 
 // The capture is a resource in the middle of the chain.
-fn mid_chain(n: Node) -> String {
+fn mid_chain(n: Node) -> String with HtmlInputElement {
     let e: Element = n else {
         return "";
     };
@@ -76,14 +72,14 @@ fn mid_chain(n: Node) -> String {
 }
 
 // The handle is narrowed before the closure captures it.
-fn captured_narrowed(n: Node) -> String {
+fn captured_narrowed(n: Node) -> String with HtmlInputElement {
     let input: HtmlInputElement = n else {
         return "";
     };
     return call(|| input.value());
 }
 
-fn called_here(n: Node) -> String {
+fn called_here(n: Node) -> String with HtmlInputElement {
     let read = || {
         let input: HtmlInputElement = n else {
             return "";
@@ -93,22 +89,15 @@ fn called_here(n: Node) -> String {
     return read();
 }
 
-// A resource an operation of the narrowed one hands out is held with it.
-fn handed_out(n: Node) -> String {
+// A resource an operation of the narrowed one hands out is implied by it.
+fn handed_out(n: Node) -> String with HtmlInputElement {
     return call(|| match n {
         input: HtmlInputElement => `${input.files().length()}`,
         _ => "",
     });
 }
 
-fn through_effect_parameter(n: Node) -> String {
-    return call_through(|| match n {
-        input: HtmlInputElement => input.value(),
-        _ => "",
-    });
-}
-
-fn through_iterator(nodes: List<Node>) -> List<String> {
+fn through_iterator(nodes: List<Node>) -> List<String> with HtmlInputElement {
     return nodes.into_iter().map(|n| match n {
         input: HtmlInputElement => input.value(),
         _ => "",
@@ -137,7 +126,6 @@ test {
         assert captured_narrowed(an_input()) == "typed";
         assert called_here(an_input()) == "typed";
         assert handed_out(an_input()) == "3";
-        assert through_effect_parameter(an_input()) == "typed";
         assert through_iterator([an_input(), a_node()]) == ["typed", ""];
     }
     assert is_input(an_input()) && !is_input(a_node());
@@ -151,7 +139,7 @@ impl HtmlInputElement for Typed {
         resume "typed"
     }
 
-    fn files(&self, this: &HtmlInputElement) -> FileList {
+    fn files(&self, this: &HtmlInputElement) -> FileList with FileList {
         resume FileList::backed_by(Typed {})
     }
 }

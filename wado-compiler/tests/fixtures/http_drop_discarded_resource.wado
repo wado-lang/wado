@@ -5,7 +5,7 @@
 
 use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     // Produced and discarded — must be dropped, not leaked.
     Fields::new();
     let _ = Fields::new();

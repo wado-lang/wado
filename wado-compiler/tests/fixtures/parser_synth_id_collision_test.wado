@@ -294,7 +294,7 @@ variant Triage {
     Skip(String),  // reason
 }
 
-fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorCode> {
+fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorCode> with Descriptor {
     let opened = match dir.open_at(
         PathFlags::none(),
         *path,
@@ -316,7 +316,7 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
     };
 }
 
-fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> {
+fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> with Descriptor {
     let file = match dir.open_at(
         PathFlags::none(),
         *path,

@@ -21,7 +21,7 @@ struct MockResponse {
     body: String,
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Request, Response) {
     let mut headers: List<[String, String]> = [];
     for let [name, value] of request.get_headers().copy_all() {
         headers.push([name as String, String::from_utf8_lossy(value)]);
@@ -61,7 +61,7 @@ fn method_name(m: Method) -> String {
     };
 }
 
-fn read_body(request: Request) -> String {
+fn read_body(request: Request) -> String with Request {
     let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Request::consume_body(request, res_future);
     let body = String::from_utf8_lossy(body_stream.read_to_end_bytes());

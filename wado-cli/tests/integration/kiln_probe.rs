@@ -16,7 +16,7 @@ use predicates::prelude::*;
 /// below it never reaches the generated source.
 const HEADER_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
 
-export fn probe(path: String, mut content: Stream<u8>) -> Result<u64, Error> {
+export fn probe(path: String, mut content: Stream<u8>) -> Result<u64, Error> with Stream {
     let mut n: u64 = 0;
     loop {
         let [end, chunk] = content.start_read(1).finish();
@@ -35,7 +35,7 @@ export fn probe(path: String, mut content: Stream<u8>) -> Result<u64, Error> {
     return Result::Ok(n);
 }
 
-export fn generate(req: Request) -> Result<Response, Error> {
+export fn generate(req: Request) -> Result<Response, Error> with Stream {
     let origin = req.origin();
     let head = read_text(req.primary.content).unwrap();
     return Result::Ok(Response {

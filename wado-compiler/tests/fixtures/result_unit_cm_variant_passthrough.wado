@@ -49,7 +49,7 @@ use { Stdout } from "core:cli";
 use { Preopens, Descriptor, DescriptorFlags, PathFlags, OpenFlags, Filesize } from "wasi:filesystem";
 use { ErrorCode } from "wasi:filesystem/types.wado";
 
-fn write_helper(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> {
+fn write_helper(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> with Descriptor {
     let opened = dir.open_at(
         PathFlags::none(),
         *path,
