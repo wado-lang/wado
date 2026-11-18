@@ -43,6 +43,15 @@ test "a view builds its element's attributes, text and children in call order" {
     };
 }
 
+test "a view of an element made elsewhere builds on that element" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = Dom::document().create_element("main");
+        View::of(root).child(element("h1").text("Todos"));
+        assert root.get_html() == "<h1>Todos</h1>";
+    };
+}
+
 test "each follows a new order with the nodes it had" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {

@@ -59,7 +59,7 @@ pub fn mount(root: Element) -> fn mut() with Dom with Dom {
         let input: HtmlInputElement = field.node else {
             unreachable();
         };
-        View { node: root }.children([
+        View::of(root).children([
             field,
             element("button").attribute("id", "add").text("Add").on("click", |_: Event| {
                 let title = input.value();

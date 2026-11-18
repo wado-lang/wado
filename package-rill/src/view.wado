@@ -17,6 +17,11 @@ pub fn element(tag: String) -> View with Dom {
 }
 
 impl View {
+    /// Builds on an element made elsewhere, such as the one a page mounts in.
+    pub fn of(node: Element) -> View {
+        return View { node };
+    }
+
     pub fn attribute(&self, name: String, value: String) -> View with Dom {
         self.node.set_attribute(name, value);
         return *self;
