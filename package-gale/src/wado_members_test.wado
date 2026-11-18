@@ -87,7 +87,9 @@ test "translate_wado_members ends a field at a separator on a line of its own" {
         let m = translate_wado_members(src).unwrap();
         assert m.fields.len() == 2 && m.fields[0].init == "0" && m.fields[1].init == "1", src;
     }
-    assert translate_wado_members("a: i32\n;\nb: i32 = 1") matches { Err(e) && e.contains("field 'a' needs an initializer") };
+    assert translate_wado_members("a: i32\n;\nb: i32 = 1") matches { Err(e) && e.contains(
+        "field 'a' needs an initializer",
+    ) };
 }
 
 test "translate_wado_members keeps every closure parameter list whole" {
