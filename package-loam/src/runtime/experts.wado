@@ -3,7 +3,7 @@
 //! between two block-quantized products, the results weighed by the router's
 //! softmax.
 
-use { Float, element_count, optional } from "./tensor.wado";
+use { ElementKind, Float, element_count, optional } from "./tensor.wado";
 use { Binary, Comparison, Graph, One, Quantized, Unary, full, rows_at, scalar, softmax } from "./hlo.wado";
 use { Any, Untyped, typed } from "./recorded.wado";
 
@@ -20,14 +20,23 @@ pub struct Experts {
     pub beta: f32,
     pub limit: f32,
     pub quantized: Quantized,
+    /// The layer these experts are, among the `layers` that share the pools,
+    /// and the id of the host step that fetches their weights where the pools
+    /// are too few to hold them all.
+    pub layer: i32,
+    pub layers: i32,
+    pub step: i32,
 }
 
-/// The tokens, the experts, a row of one expert's weights laid flat, the rows
-/// an expert runs, the hidden width, a projection's width, the SwiGLU's width,
-/// a gate and up pair, and a token's picks.
+/// The tokens, the experts, the slots the pools hold an expert in, a row of
+/// one expert's weights laid flat, the rows an expert runs, the hidden width,
+/// a projection's width, the SwiGLU's width, a gate and up pair, and a token's
+/// picks.
 struct Tokens {
 }
 struct Pool {
+}
+struct Slots {
 }
 struct Flat {
 }
@@ -48,10 +57,10 @@ struct Picks {
 /// ones. The scales and the bias stay in `E`, so a run widens to f32 only the
 /// expert it reads.
 struct Projection<affine G: Graph, E: Float> {
-    packed: G::Tensor<u8, [Pool, Flat]>,
-    scales: G::Tensor<E, [Pool, Flat]>,
-    bias: Option<G::Tensor<E, [Pool, Flat]>>,
-    zero_points: Option<G::Tensor<u8, [Pool, Flat]>>,
+    packed: G::Tensor<u8, [Slots, Flat]>,
+    scales: G::Tensor<E, [Slots, Flat]>,
+    bias: Option<G::Tensor<E, [Slots, Flat]>>,
+    zero_points: Option<G::Tensor<u8, [Slots, Flat]>>,
     /// One expert's weight as `quantized_product` takes it: its rows, its
     /// blocks, each block's bytes, and the bytes of a row's zero points.
     rows: i32,
@@ -67,25 +76,31 @@ struct Projection<affine G: Graph, E: Float> {
 /// reads its weight as `Graph::quantized_product` does, and adds its bias.
 /// The experts compute in f32, and the result rounds once to `E`.
 ///
+/// The weights are pools of slots, each holding one expert. Pools of a slot
+/// for every expert of every layer hold layer `l`'s expert `e` at
+/// `l · experts + e`. Smaller pools hold what a host step puts in them: it
+/// reads the picks, writes their experts into slots, and answers where each
+/// expert is.
+///
 /// Where a token's picks are fewer than the experts, each pick runs its expert
 /// on its token's row, so only the experts the tokens route to are read.
-/// Otherwise each expert runs on every row, and a row it is not picked for adds
-/// nothing, so no temporary grows with the picks.
-pub fn mixture_of_experts<affine G: Graph, E: Float, In, T, X, N, P, Blocks, Z, H, P2, Blocks2, Z2>(
+/// Otherwise each expert picked runs on every row, and a row it is not picked
+/// for adds nothing, so no temporary grows with the picks.
+pub fn mixture_of_experts<affine G: Graph, E: Float, In, T, X, S, N, P, Blocks, Z, H, P2, Blocks2, Z2>(
     g: &mut G,
     x: &G::Tensor<E, In>,
     router: &G::Tensor<E, [T, X]>,
-    up: &G::Tensor<u8, [X, N, P]>,
-    up_scales: &G::Tensor<E, [X, N, Blocks]>,
-    up_bias: Option<&G::Tensor<E, [X, N]>>,
-    up_zero_points: Option<&G::Tensor<u8, [X, N, Z]>>,
-    down: &G::Tensor<u8, [X, H, P2]>,
-    down_scales: &G::Tensor<E, [X, H, Blocks2]>,
-    down_bias: Option<&G::Tensor<E, [X, H]>>,
-    down_zero_points: Option<&G::Tensor<u8, [X, H, Z2]>>,
+    up: &G::Tensor<u8, [S, N, P]>,
+    up_scales: &G::Tensor<E, [S, N, Blocks]>,
+    up_bias: Option<&G::Tensor<E, [S, N]>>,
+    up_zero_points: Option<&G::Tensor<u8, [S, N, Z]>>,
+    down: &G::Tensor<u8, [S, H, P2]>,
+    down_scales: &G::Tensor<E, [S, H, Blocks2]>,
+    down_bias: Option<&G::Tensor<E, [S, H]>>,
+    down_zero_points: Option<&G::Tensor<u8, [S, H, Z2]>>,
     experts: &Experts,
 ) -> G::Tensor<E, In> with _
-    contract 0 < experts.k
+    contract 0 < experts.k, 0 <= experts.layer < experts.layers
 {
     let extents = g.extents_of(x);
     let hidden = extents[extents.len() - 1];
@@ -95,22 +110,76 @@ pub fn mixture_of_experts<affine G: Graph, E: Float, In, T, X, N, P, Blocks, Z, 
     assert tokens * hidden == element_count(&extents), "the router holds a row for each token";
     let rows: G::Tensor<f32, [Picked, Hidden]> = g.convert(&g.reshape::<E, In, [Picked, Hidden]>(x, [tokens, hidden]));
     let ffn = [
-        projection_of::<G, E, X, N, P, Blocks, Z>(g, up, up_scales, up_bias, up_zero_points),
-        projection_of::<G, E, X, H, P2, Blocks2, Z2>(g, down, down_scales, down_bias, down_zero_points),
+        projection_of::<G, E, S, N, P, Blocks, Z>(g, up, up_scales, up_bias, up_zero_points),
+        projection_of::<G, E, S, H, P2, Blocks2, Z2>(g, down, down_scales, down_bias, down_zero_points),
     ];
     let [gates, picks, weights] = routed::<G, E, T, X>(g, router, experts);
+    let held = held_experts(g, &picks, g.extents_of(up)[0], pool, experts);
     let result = if tokens * experts.k < pool {
-        by_picks(g, &ffn, &rows, &picks, &weights, experts);
+        by_picks(g, &ffn, &held, &rows, &picks, &weights, experts);
     } else {
-        by_experts(g, &ffn, &rows, &gates, experts);
+        by_experts(g, &ffn, &held, &rows, &gates, experts);
     };
     return g.reshape(&g.convert::<f32, E, [Picked, Hidden]>(&result), extents);
+}
+
+/// Where the pools hold the experts of one layer: each expert's slot, the
+/// experts the tokens pick in the order they run, and how many of them run.
+struct Held<affine G: Graph> {
+    slots: G::Tensor<i64, [Pool, One]>,
+    order: G::Tensor<i64, [Pool, One]>,
+    count: G::Tensor<i64, []>,
+}
+
+impl<affine G: Graph> Held<G> {
+    /// The slot that holds the expert `expert`.
+    fn slot_of(&self, g: &mut G, expert: &G::Tensor<i64, [One]>) -> G::Tensor<i64, [One]> with _ {
+        return g.reshape(&rows_at::<G, i64, Pool, One, One>(g, &self.slots, expert), [1]);
+    }
+}
+
+/// The experts `picks` reach and their slots: fixed where the pools hold
+/// every layer's experts, else what the host step `experts.step` answers once
+/// it has put them in.
+fn held_experts<affine G: Graph>(
+    g: &mut G,
+    picks: &G::Tensor<i64, [Tokens, Picks]>,
+    slots: i32,
+    pool: i32,
+    experts: &Experts,
+) -> Held<G> with _ {
+    let column: List<i32> = [pool, 1];
+    if slots == experts.layers * pool {
+        let order: G::Tensor<i64, [Pool, One]> = g.iota(column, 0);
+        let base = full::<G, i64, [Pool, One]>(g, (experts.layer * pool) as i64, column);
+        return Held {
+            slots: g.binary(Binary::Add, &order, &base),
+            order,
+            count: scalar(g, pool as i64),
+        };
+    }
+    assert pool <= slots < experts.layers * pool, "the pools hold one layer's experts";
+    let fetched = g.fetched(
+        experts.step,
+        &[Any::I64(g.relabeled::<i64, [Tokens, Picks], Untyped>(picks))],
+        &[
+            [ElementKind::I64, column],
+            [ElementKind::I64, column],
+            [ElementKind::I64, []],
+        ],
+    );
+    return Held {
+        slots: typed::<G, i64, [Pool, One]>(g, &fetched[0]),
+        order: typed::<G, i64, [Pool, One]>(g, &fetched[1]),
+        count: typed::<G, i64, []>(g, &fetched[2]),
+    };
 }
 
 /// Each pick's expert run on its token's row, times its weight.
 fn by_picks<affine G: Graph, E: Float>(
     g: &mut G,
     ffn: &[Projection<G, E>, Projection<G, E>],
+    held: &Held<G>,
     rows: &G::Tensor<f32, [Picked, Hidden]>,
     picks: &G::Tensor<i64, [Tokens, Picks]>,
     weights: &G::Tensor<f32, [Tokens, Picks]>,
@@ -126,7 +195,7 @@ fn by_picks<affine G: Graph, E: Float>(
     let picked_weights: G::Tensor<f32, [Picks, One]> = g.reshape(weights, [count, 1]);
     let token_rows: G::Tensor<i64, [Picked, Hidden]> = g.iota(plane, 0);
     let zero = full::<G, f32, [Picked, Hidden]>(g, 0.0, plane);
-    return summed(g, count, &zero, |run| {
+    return summed(g, &scalar(g, count as i64), &zero, |run| {
         let of = |t: &G::Tensor<i64, [Picks, One]>| -> G::Tensor<i64, [One]> {
             return g.reshape(&rows_at::<G, i64, Picks, One, One>(g, t, run), [1]);
         };
@@ -138,7 +207,7 @@ fn by_picks<affine G: Graph, E: Float>(
             &rows_at::<G, f32, Picked, Hidden, One>(g, rows, &token),
         );
         let out: G::Tensor<f32, [Picked, Hidden]> = g.broadcast_in_dim(
-            &expert_output(g, ffn, &expert, &row, experts),
+            &expert_output(g, ffn, &held.slot_of(g, &expert), &row, experts),
             plane,
             [0, 1],
         );
@@ -156,10 +225,11 @@ fn by_picks<affine G: Graph, E: Float>(
     });
 }
 
-/// Each expert run on every row, times each row's weight for it.
+/// Each expert `held` runs, run on every row, times each row's weight for it.
 fn by_experts<affine G: Graph, E: Float>(
     g: &mut G,
     ffn: &[Projection<G, E>, Projection<G, E>],
+    held: &Held<G>,
     rows: &G::Tensor<f32, [Picked, Hidden]>,
     gates: &G::Tensor<f32, [Picked, Pool]>,
     experts: &Experts,
@@ -167,9 +237,10 @@ fn by_experts<affine G: Graph, E: Float>(
     let plane = g.extents_of(rows);
     let columns: G::Tensor<f32, [Pool, Picked]> = g.transpose(gates, [1, 0]);
     let zero = full::<G, f32, [Picked, Hidden]>(g, 0.0, plane);
-    return summed(g, g.extents_of(gates)[1], &zero, |run| {
-        let out = expert_output(g, ffn, run, rows, experts);
-        let column = rows_at::<G, f32, Pool, Picked, One>(g, &columns, run);
+    return summed(g, &held.count, &zero, |run| {
+        let expert: G::Tensor<i64, [One]> = g.reshape(&rows_at::<G, i64, Pool, One, One>(g, &held.order, run), [1]);
+        let out = expert_output(g, ffn, &held.slot_of(g, &expert), rows, experts);
+        let column = rows_at::<G, f32, Pool, Picked, One>(g, &columns, &expert);
         let weight: G::Tensor<f32, [Picked, Hidden]> = g.broadcast_in_dim(
             &g.reshape::<f32, [One, Picked], [Picked]>(&column, [plane[0]]),
             plane,
@@ -194,12 +265,12 @@ fn weighed<affine G: Graph>(
 /// The sum over `runs` runs of what `added` gives for each, from `zero`.
 fn summed<affine G: Graph>(
     g: &mut G,
-    runs: i32,
+    runs: &G::Tensor<i64, []>,
     zero: &G::Tensor<f32, [Picked, Hidden]>,
     added: fn(&G::Tensor<i64, [One]>) -> G::Tensor<f32, [Picked, Hidden]> with _,
 ) -> G::Tensor<f32, [Picked, Hidden]> with _ {
     let last = g.repeated(
-        &scalar(g, runs as i64),
+        runs,
         &([Any::F32(g.relabeled::<f32, [Picked, Hidden], Untyped>(zero))] as List<Any<G>>),
         |at, state| {
             let total = typed::<G, f32, [Picked, Hidden]>(g, &state[0]);
@@ -279,20 +350,20 @@ fn routed<affine G: Graph, E: Float, T, X>(
 
 /// The product `packed`, `scales`, `bias` and `zero_points` hold one expert's
 /// weight of, each expert's tensors laid flat as a row.
-fn projection_of<affine G: Graph, E: Float, X, N, P, Blocks, Z>(
+fn projection_of<affine G: Graph, E: Float, S, N, P, Blocks, Z>(
     g: &mut G,
-    packed: &G::Tensor<u8, [X, N, P]>,
-    scales: &G::Tensor<E, [X, N, Blocks]>,
-    bias: Option<&G::Tensor<E, [X, N]>>,
-    zero_points: Option<&G::Tensor<u8, [X, N, Z]>>,
+    packed: &G::Tensor<u8, [S, N, P]>,
+    scales: &G::Tensor<E, [S, N, Blocks]>,
+    bias: Option<&G::Tensor<E, [S, N]>>,
+    zero_points: Option<&G::Tensor<u8, [S, N, Z]>>,
 ) -> Projection<G, E> with _ {
     let weight = g.extents_of(packed);
-    let [pool, rows, bytes] = [weight[0], weight[1], weight[2]];
+    let [slots, rows, bytes] = [weight[0], weight[1], weight[2]];
     let blocks = g.extents_of(scales)[2];
     assert bytes % blocks == 0, "a row's bytes are whole blocks";
-    let flat = |extents: List<i32>| [pool, element_count(&extents) / pool] as List<i32>;
+    let flat = |extents: List<i32>| [slots, element_count(&extents) / slots] as List<i32>;
     return Projection {
-        packed: g.reshape(packed, [pool, rows * bytes]),
+        packed: g.reshape(packed, [slots, rows * bytes]),
         scales: g.reshape(scales, flat(g.extents_of(scales))),
         bias: match bias {
             Some(b) => Option::Some(g.reshape(b, flat(g.extents_of(b)))),
@@ -312,8 +383,8 @@ fn projection_of<affine G: Graph, E: Float, X, N, P, Blocks, Z>(
     };
 }
 
-/// `rows` through the expert `at`: its first projection, the SwiGLU, then its
-/// second.
+/// `rows` through the expert in the slot `at`: its first projection, the
+/// SwiGLU, then its second.
 fn expert_output<affine G: Graph, E: Float>(
     g: &mut G,
     ffn: &[Projection<G, E>, Projection<G, E>],
@@ -325,7 +396,8 @@ fn expert_output<affine G: Graph, E: Float>(
     return g.relabeled(&projected::<G, E, Inner>(g, &ffn.1, at, &gated, &experts.quantized));
 }
 
-/// `rows` times the transpose of the expert `at`'s weight of `p`, plus its bias.
+/// `rows` times the transpose of the weight of `p` in the slot `at`, plus its
+/// bias.
 fn projected<affine G: Graph, E: Float, C>(
     g: &mut G,
     p: &Projection<G, E>,
@@ -334,15 +406,15 @@ fn projected<affine G: Graph, E: Float, C>(
     quantized: &Quantized,
 ) -> G::Tensor<f32, [Picked, Width]> with _ {
     let packed: G::Tensor<u8, [Width, Flat, Pair]> = g.reshape(
-        &rows_at::<G, u8, Pool, Flat, One>(g, &p.packed, at),
+        &rows_at::<G, u8, Slots, Flat, One>(g, &p.packed, at),
         [p.rows, p.blocks, p.blob],
     );
     let scales: G::Tensor<f32, [Width, Flat]> = g.reshape(
-        &g.convert::<E, f32, [One, Flat]>(&rows_at::<G, E, Pool, Flat, One>(g, &p.scales, at)),
+        &g.convert::<E, f32, [One, Flat]>(&rows_at::<G, E, Slots, Flat, One>(g, &p.scales, at)),
         [p.rows, p.blocks],
     );
     let zero_points: Option<G::Tensor<u8, [Width, Pair]>> = match &p.zero_points {
-        Some(z) => Option::Some(g.reshape(&rows_at::<G, u8, Pool, Flat, One>(g, z, at), [p.rows, p.zero_bytes])),
+        Some(z) => Option::Some(g.reshape(&rows_at::<G, u8, Slots, Flat, One>(g, z, at), [p.rows, p.zero_bytes])),
         None => null,
     };
     let product = g.quantized_product::<f32, [Picked, C], Width, Flat, Pair, Pair, [Picked, Width]>(
@@ -356,7 +428,7 @@ fn projected<affine G: Graph, E: Float, C>(
         return product;
     };
     let extents = g.extents_of(&product);
-    let bias = g.convert::<E, f32, [One, Flat]>(&rows_at::<G, E, Pool, Flat, One>(g, b, at));
+    let bias = g.convert::<E, f32, [One, Flat]>(&rows_at::<G, E, Slots, Flat, One>(g, b, at));
     return g.binary(Binary::Add, &product, &g.broadcast_in_dim(&bias, extents, [0, 1]));
 }
 

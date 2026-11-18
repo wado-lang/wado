@@ -360,10 +360,12 @@ fn recorded_attention(case: &AttentionCase) {
 }
 
 /// `x + x`, then what the host gives back for it at step 7, plus the weight
-/// read after the step, plus `x + x` again; and `x` itself.
+/// doubled, plus `x + x` again; and `x` itself. The weight is doubled before
+/// the step, which writes it.
 fn stepped_pass(r: &mut Recorder, extents: &List<List<i32>>) -> Recorded {
     let x = r.parameter::<f32, [A]>(extents[0]);
-    let w = r.parameter::<f32, [A]>(extents[1]);
+    let weight = r.parameter::<f32, [A]>(extents[1]);
+    let w = r.binary(Binary::Add, &weight, &weight);
     let doubled = r.binary(Binary::Add, &x, &x);
     let fetched = r.fetched(7, &[Any::F32(r.relabeled::<f32, [A], Untyped>(&doubled))], &[
         [
@@ -377,6 +379,7 @@ fn stepped_pass(r: &mut Recorder, extents: &List<List<i32>>) -> Recorded {
 }
 
 test "a pass split at a host step hands the host what it reads, and the programs after it what the host gives and writes" {
+    // The weight doubled reads the 1s the host writes, not the 10s before.
     let x = Tensor::<f32, [A]> {
         data: [1.0, 2.0, 3.0],
         extents: [3],
@@ -409,7 +412,7 @@ test "a pass split at a host step hands the host what it reads, and the programs
     assert steps == 1;
     assert got == [
         host_of(&Tensor::<f32, [A]> {
-            data: [105.0, 109.0, 113.0],
+            data: [106.0, 110.0, 114.0],
             extents: [3],
         }),
         host_of(&x),

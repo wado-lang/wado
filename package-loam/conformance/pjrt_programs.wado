@@ -98,6 +98,11 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
     let pools = cases::written_pools(device);
     note("pool of halves", apart(device, &pools.0, &typed::<Cpu, f16, Untyped>(cpu, &want_halves)));
     note("pool of bytes", apart(device, &pools.1, &typed::<Cpu, u8, Untyped>(cpu, &want_bytes)));
+    let runs: List<i32> = [3, 1, 3];
+    let resident = cases::stacked_runs(cpu, 8, runs);
+    for let [k, fetched] of cases::stacked_runs(device, 5, runs).into_iter().enumerate() {
+        note(`experts fetched, run ${k}`, apart(device, &fetched, &typed::<Cpu, f32, Untyped>(cpu, &resident[k])));
+    }
 
     let [ex, ey] = cases::elementwise_inputs();
     let every = cases::compiled_from(device, |r| {

@@ -277,6 +277,12 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     let pooled_bytes = typed::<WebGpuBackend, u8, Untyped>(&gpu, &bytes);
     println(`pool of halves ${apart(&mut gpu, &pooled_halves, &typed::<Cpu, f16, Untyped>(cpu, &want_halves))}`);
     println(`pool of bytes ${apart(&mut gpu, &pooled_bytes, &typed::<Cpu, u8, Untyped>(cpu, &want_bytes))}`);
+    let tokens: List<i32> = [3, 1, 3];
+    let resident = cases::stacked_runs(cpu, 8, tokens);
+    for let [k, got] of cases::stacked_runs(&mut gpu, 5, tokens).into_iter().enumerate() {
+        let fetched = typed::<WebGpuBackend, f32, Untyped>(&gpu, &got);
+        println(`experts fetched, run ${k} ${apart(&mut gpu, &fetched, &typed::<Cpu, f32, Untyped>(cpu, &resident[k]))}`);
+    }
 
     // A quantized product computes what follows it in its own dispatch.
     let q = cases::quantized_case();

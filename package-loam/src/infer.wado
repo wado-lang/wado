@@ -1794,7 +1794,7 @@ fn quantized_product(
     }
     // A symbol could be padded past K, which no packed row holds.
     let last = a.axes[a.rank() - 1].extent;
-    if !last matches { Static(n) && n == k } {
+    if !last matches { Static(extent) && extent == k } {
         return Result::Err(refusal(node, `the input's last axis is ${last} long, and K is ${k}`));
     }
     let [blocks, zero_bytes] = blocks_of(k, &q);

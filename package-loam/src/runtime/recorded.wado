@@ -923,11 +923,32 @@ pub fn split(recorded: &Recorded, weights: i32) -> [List<Recorded>, Cuts] {
             },
         ];
     }
+    let arguments = recorded.parameters - weights;
+    // A value of the weights alone is computed again in each program that
+    // reads it, since a host step before that program may write the weights.
+    let of_weights = weights_only(recorded, arguments);
+    let last = segments.len() - 1;
     let mut takes: List<List<i32>> = [];
-    for let [s, nodes] of segments.into_iter().enumerate() {
+    for let s of 0..<segments.len() {
+        let mut read = read_by(recorded, &segments[s]);
+        if s < steps.len() {
+            read.extend(&steps[s].reads);
+        }
+        if s == last {
+            read.extend(&recorded.body.results);
+        }
+        let mut again: List<i32> = [];
+        for let id of read {
+            if home[id] < 2 * s && of_weights[id] {
+                again.push(id);
+            }
+        }
+        let mut redone = closed_over_weights(recorded, &again, &of_weights, &parameters);
+        redone.extend(&segments[s]);
+        segments[s] = redone;
         let mut taken: List<i32> = [];
-        for let id of read_by(recorded, &nodes) {
-            if home[id] < 2 * s && !parameters.contains_key(id) && !taken.contains(&id) {
+        for let id of read_by(recorded, &segments[s]) {
+            if home[id] < 2 * s && !of_weights[id] && !parameters.contains_key(id) && !taken.contains(&id) {
                 taken.push(id);
             }
         }
@@ -943,14 +964,14 @@ pub fn split(recorded: &Recorded, weights: i32) -> [List<Recorded>, Cuts] {
         let mut given: List<i32> = [];
         for let ids of &later {
             for let id of ids {
-                if home[*id] == 2 * s && !parameters.contains_key(*id) && !given.contains(id) {
+                let computed = home[*id] == 2 * s || of_weights[*id] && segments[s].contains(id);
+                if computed && !parameters.contains_key(*id) && !given.contains(id) {
                     given.push(*id);
                 }
             }
         }
         gives.push(given);
     }
-    let arguments = recorded.parameters - weights;
     let mut programs: List<Recorded> = [];
     for let [s, nodes] of segments.into_iter().enumerate() {
         programs.push(cut(recorded, &nodes, &takes[s], &gives[s], arguments, weights));
@@ -959,6 +980,36 @@ pub fn split(recorded: &Recorded, weights: i32) -> [List<Recorded>, Cuts] {
         programs,
         Cuts { takes, gives, steps, results: recorded.body.results, parameters },
     ];
+}
+
+/// Whether each node of `recorded` reads the weights and constants alone, the
+/// parameters from the `arguments`th on being the weights.
+fn weights_only(recorded: &Recorded, arguments: i32) -> List<bool> {
+    let mut only: List<bool> = [];
+    for let node of &recorded.nodes {
+        only.push(match &node.op {
+            Parameter(i) => *i >= arguments,
+            Fetched(_) | Carried | Yield | Repeat(_) | Case(_) | Attention(_) | Part(_) => false,
+            _ => node.operands.into_iter().all(|o| only[o]),
+        });
+    }
+    return only;
+}
+
+/// `ids` and the nodes of the weights alone they read, but the parameters, in
+/// the order they are recorded.
+fn closed_over_weights(recorded: &Recorded, ids: &List<i32>, of_weights: &List<bool>, parameters: &HashMap<i32, i32>) -> List<i32> {
+    let mut held = List::<bool>::filled(recorded.nodes.len(), false);
+    let mut pending = *ids;
+    while let Some(id) = pending.pop() {
+        if held[id] || parameters.contains_key(id) {
+            continue;
+        }
+        assert of_weights[id];
+        held[id] = true;
+        pending.extend(&recorded.nodes[id].operands);
+    }
+    return (0..<held.len()).filter(|id| held[id]).collect();
 }
 
 /// Sets `home` of `id`, and of every node a branch or loop of it holds.
@@ -974,13 +1025,7 @@ fn homed(recorded: &Recorded, id: i32, segment: i32, home: &mut List<i32>) {
             inner(first);
             inner(second);
         },
-        Repeat(repeat) => {
-            home[repeat.step] = segment;
-            for let c of repeat.carried {
-                home[c] = segment;
-            }
-            inner(&repeat.body);
-        },
+        Repeat(repeat) => inner(&repeat.body),
         _ => {
         },
     }
@@ -1081,9 +1126,9 @@ impl Cut {
                 self.region(second),
             ]),
             Repeat(repeat) => {
-                let step = self.copied(repeat.step);
-                let carried: List<i32> = repeat.carried.into_iter().map(|c| self.copied(c)).collect();
-                Operation::Repeat(Repeat { body: self.region(&repeat.body), step, carried });
+                let body = self.region(&repeat.body);
+                let carried: List<i32> = repeat.carried.into_iter().map(|c| self.at[c]).collect();
+                Operation::Repeat(Repeat { body, step: self.at[repeat.step], carried });
             },
             _ => node.op,
         };

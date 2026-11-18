@@ -17,8 +17,10 @@ use {
     scalar,
     shared,
 } from "./hlo.wado";
-use { Any, Recorded, Recorder, Untyped, Value, typed } from "./recorded.wado";
+use { Any, Programs, Recorded, Recorder, Untyped, Value, typed } from "./recorded.wado";
 use { Experts, mixture_of_experts } from "./experts.wado";
+use { ExpertPools, HeldExperts, StoredExperts } from "./held_experts.wado";
+use { HashMap } from "core:collections";
 use { HostWeight } from "./weight.wado";
 use { Attention, ElementKind, Float, Tensor, element_count } from "./tensor.wado";
 use { noise } from "../../example/webgpu/compare.wado";
@@ -56,7 +58,7 @@ pub fn written_pools<affine G: Backend>(g: &mut G) -> [Any<G>, Any<G>] with _ {
             extents: [2],
         }));
     }
-    let mut bytes = g.pool(ElementKind::U8, [3, 4]);
+    let mut octets = g.pool(ElementKind::U8, [3, 4]);
     for let [slot, row] of [
         [
             1,
@@ -71,12 +73,12 @@ pub fn written_pools<affine G: Backend>(g: &mut G) -> [Any<G>, Any<G>] with _ {
             [9, 8, 7, 6],
         ],
     ] as List<[i32, List<u8>]> {
-        g.written(&mut bytes, slot, HostWeight::of(&Tensor::<u8, [B]> {
+        g.written(&mut octets, slot, HostWeight::of(&Tensor::<u8, [B]> {
             data: row,
             extents: [4],
         }));
     }
-    return [halves, bytes];
+    return [halves, octets];
 }
 
 /// What `g` compiles of the pass `record` records.
@@ -529,15 +531,18 @@ pub fn experts_case(tokens: i32) -> ExpertsCase {
 }
 
 /// `x` through the experts `router` picks, as a `QMoE` of `ExpertsCase`'s
-/// shape computes it.
+/// shape computes it, the experts layer `layer` of `layers` sharing the pools
+/// `up` and `down`.
 pub fn mixing<affine G: Graph, E: Float = f32>(
     g: &mut G,
     x: &G::Tensor<E, [A, B]>,
     router: &G::Tensor<E, [A, C]>,
     up: &[G::Tensor<u8, [C, Rows, Blob]>, G::Tensor<E, [C, Rows, Blocks]>, G::Tensor<E, [C, Rows]>],
     down: &[G::Tensor<u8, [C, B, Blob]>, G::Tensor<E, [C, B, Blocks]>, G::Tensor<E, [C, B]>],
+    layer: i32 = 0,
+    layers: i32 = 1,
 ) -> G::Tensor<E, [A, B]> with _ {
-    return mixture_of_experts::<G, E, [A, B], A, C, Rows, Blob, Blocks, Blocks, B, Blob, Blocks, Blocks>(
+    return mixture_of_experts::<G, E, [A, B], A, C, C, Rows, Blob, Blocks, Blocks, B, Blob, Blocks, Blocks>(
         g,
         x,
         router,
@@ -556,8 +561,95 @@ pub fn mixing<affine G: Graph, E: Float = f32>(
             beta: 1.0,
             limit: 7.0,
             quantized: Quantized { bits: 4, block: 32 },
+            layer,
+            layers,
+            step: layer,
         },
     );
+}
+
+/// `experts_case`'s experts as two layers a checkpoint stores, the second
+/// holding them in reverse: a file per weight, each layer's experts back to
+/// back.
+fn stacked_experts() -> [HashMap<String, ByteList>, List<List<StoredExperts>>] {
+    let c = experts_case(1);
+    let weights: List<HostWeight> = [
+        HostWeight::of(&c.up.0),
+        HostWeight::of(&c.up.1),
+        HostWeight::of(&c.up.2),
+        HostWeight::of(&c.down.0),
+        HostWeight::of(&c.down.1),
+        HostWeight::of(&c.down.2),
+    ];
+    let mut files = HashMap::<String, ByteList>::new();
+    let mut layers: List<List<StoredExperts>> = [[], []];
+    for let i of 0..<weights.len() {
+        let w = &weights[i];
+        let experts = w.extents[0];
+        let size = w.bytes().len();
+        let slice = size / experts;
+        let mut stored = w.bytes().to_byte_list(size);
+        for let e of 0..<experts {
+            let start = (experts - 1 - e) * slice;
+            stored.extend(&w.bytes().to_byte_list(size)[start..<start + slice].to_list());
+        }
+        let file = `w${i}`;
+        files[file] = stored as ByteList;
+        for let layer of 0..<2 {
+            layers[layer].push(StoredExperts {
+                file,
+                start: layer * size,
+                kind: w.kind,
+                extents: w.extents[1..<w.extents.len()].to_list(),
+            });
+        }
+    }
+    return [files, layers];
+}
+
+/// The layers of `stacked_experts` in turn, each `mixing` by its own router,
+/// over the input, the routers, then the pools.
+fn stacked_pass(r: &mut Recorder, extents: &List<List<i32>>) -> Recorded {
+    let x = r.parameter::<f32, [A, B]>(extents[0]);
+    let routers = [
+        r.parameter::<f32, [A, C]>(extents[1]),
+        r.parameter::<f32, [A, C]>(extents[2]),
+    ];
+    let up = [
+        r.parameter::<u8, [C, Rows, Blob]>(extents[3]),
+        r.parameter::<f32, [C, Rows, Blocks]>(extents[4]),
+        r.parameter::<f32, [C, Rows]>(extents[5]),
+    ];
+    let down = [
+        r.parameter::<u8, [C, B, Blob]>(extents[6]),
+        r.parameter::<f32, [C, B, Blocks]>(extents[7]),
+        r.parameter::<f32, [C, B]>(extents[8]),
+    ];
+    let first = mixing(r, &x, &routers.0, &up, &down, 0, 2);
+    return r.finished([mixing(r, &first, &routers.1, &up, &down, 1, 2).id]);
+}
+
+/// `stacked_pass` over pools of `slots` slots, run once for each count of
+/// tokens in `runs`; each run's result, of `f32` over `[A, B]`.
+pub fn stacked_runs<affine G: Backend>(g: &mut G, slots: i32, runs: List<i32>) -> List<Any<G>> with _ {
+    let [files, layers] = stacked_experts();
+    let mut store = HeldExperts::new([
+        ExpertPools { weights: (0..<6).collect(), layers, steps: [0, 1], experts: 4, slots },
+    ]);
+    let pools = store.pools(g, &files)[0];
+    let mut programs = Programs::<G>::new();
+    let mut results: List<Any<G>> = [];
+    for let tokens of runs {
+        let c = experts_case(tokens);
+        let second = noisy::<[A, C]>(c.router.extents, 17);
+        let got = programs.run(g, [[tokens]], stacked_pass, || [
+            Any::F32(g.relabeled::<f32, [A, B], Untyped>(&g.upload(&c.x))),
+            Any::F32(g.relabeled::<f32, [A, C], Untyped>(&g.upload(&c.router))),
+            Any::F32(g.relabeled::<f32, [A, C], Untyped>(&g.upload(&second))),
+        ], || pools, |step, read, weights| store.fetched(g, &files, step, read, weights));
+        results.push(got[0]);
+    }
+    return results;
 }
 
 /// `mixing` of `experts_case(tokens)` recorded, its input and router then its

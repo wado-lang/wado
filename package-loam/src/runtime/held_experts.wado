@@ -1,0 +1,234 @@
+//! A mixture of experts' weights held in pools of slots, each slot one expert.
+//! Pools of a slot for every expert of every layer they serve are filled once.
+//! Smaller ones are filled at each host step with the experts the tokens pick,
+//! the slot used longest ago giving way.
+
+use { WeightSource } from "./checkpoint.wado";
+use { Backend } from "./hlo.wado";
+use { Any, Untyped, typed } from "./recorded.wado";
+use { ElementKind, Tensor, element_count } from "./tensor.wado";
+use { HostWeight, stored_width } from "./weight.wado";
+
+/// One weight of a layer's experts as a checkpoint stores it: each expert's
+/// slice of `extents` in `kind`, back to back from byte `start` of `file`.
+pub struct StoredExperts {
+    pub file: String,
+    pub start: i32,
+    pub kind: ElementKind,
+    pub extents: List<i32>,
+}
+
+impl StoredExperts {
+    fn slice_bytes(&self) -> i32 {
+        return element_count(&self.extents) * stored_width(self.kind);
+    }
+}
+
+/// The layers whose experts share one pool per weight.
+pub struct ExpertPools {
+    /// Where each pool is among the weights a pass reads.
+    pub weights: List<i32>,
+    /// Each layer's weights, one per pool, and the host step that fetches its
+    /// experts.
+    pub layers: List<List<StoredExperts>>,
+    pub steps: List<i32>,
+    /// The experts of one layer, and the slots of each pool.
+    pub experts: i32,
+    pub slots: i32,
+}
+
+impl ExpertPools {
+    /// Whether each expert of every layer has a slot of its own.
+    pub fn resident(&self) -> bool {
+        return self.slots == self.layers.len() * self.experts;
+    }
+}
+
+/// What each group's slots hold, and when each was used last.
+struct Slots {
+    /// The expert held as `layer · experts + expert`, or -1.
+    held: List<i32>,
+    used: List<i64>,
+}
+
+/// Every group of pools a model reads, and what their slots hold.
+pub struct HeldExperts {
+    groups: List<ExpertPools>,
+    slots: List<Slots>,
+    clock: i64,
+}
+
+impl HeldExperts {
+    pub fn new(groups: List<ExpertPools>) -> HeldExperts {
+        let mut slots: List<Slots> = [];
+        for let group of &groups {
+            assert group.experts <= group.slots <= group.layers.len() * group.experts, "a pool holds one layer's experts";
+            assert group.layers.len() == group.steps.len();
+            slots.push(Slots {
+                held: List::filled(group.slots, -1),
+                used: List::filled(group.slots, -1),
+            });
+        }
+        return HeldExperts { groups, slots, clock: 0 };
+    }
+
+    /// Each group's pools, in the order of its `weights`: those whose slots
+    /// hold every expert filled from `source`, the others empty.
+    pub fn pools<affine G: Backend, affine Src: WeightSource>(&mut self, g: &mut G, source: &Src) -> List<List<Any<G>>> with _ {
+        let mut made: List<List<Any<G>>> = [];
+        for let at of 0..<self.groups.len() {
+            let group = &self.groups[at];
+            let mut pools: List<Any<G>> = group.layers[0].into_iter().map(|w| {
+                let mut extents: List<i32> = [group.slots];
+                extents.extend(&w.extents);
+                return g.pool(w.kind, extents);
+            }).collect();
+            if group.resident() {
+                let all: List<i32> = (0..<pools.len()).collect();
+                for let layer of 0..<group.layers.len() {
+                    for let expert of 0..<group.experts {
+                        self.placed(g, source, at, layer, expert, layer * group.experts + expert, &mut pools, &all);
+                    }
+                }
+            }
+            made.push(pools);
+        }
+        return made;
+    }
+
+    /// The host step `step`: the experts `read[0]` picks, each written into a
+    /// slot of `weights`' pools unless one holds it already; then each expert's
+    /// slot, the picked experts in order, and how many they are.
+    pub fn fetched<affine G: Backend, affine Src: WeightSource>(
+        &mut self,
+        g: &mut G,
+        source: &Src,
+        step: i32,
+        read: &List<Any<G>>,
+        weights: &mut List<Any<G>>,
+    ) -> List<Any<G>> with _ {
+        let [at, layer] = self.step_of(step);
+        let experts = self.groups[at].experts;
+        let picks = g.download(&typed::<G, i64, [Tokens, Picks]>(g, &read[0]));
+        let mut order: List<i64> = [];
+        for let pick of picks.data {
+            if !order.contains(&pick) {
+                order.push(pick);
+            }
+        }
+        self.clock += 1;
+        // Those held already first, so that no expert this step runs gives way.
+        let mut slot_of = List::<i64>::filled(experts, -1);
+        for let expert of &order {
+            if let Some(slot) = self.holding(at, layer, *expert as i32) {
+                slot_of[*expert as i32] = slot as i64;
+            }
+        }
+        for let expert of &order {
+            if slot_of[*expert as i32] < 0 {
+                slot_of[*expert as i32] = self.fetched_into_slot(g, source, at, layer, *expert as i32, weights) as i64;
+            }
+        }
+        let count = order.len();
+        while order.len() < experts {
+            order.push(0);
+        }
+        let column: List<i32> = [experts, 1];
+        return [
+            uploaded(g, Tensor::<i64, [Pool, One]> { data: slot_of, extents: column }),
+            uploaded(g, Tensor::<i64, [Pool, One]> { data: order, extents: column }),
+            uploaded(g, Tensor::<i64, []> { data: [count as i64], extents: [] }),
+        ];
+    }
+
+    /// The group and layer whose experts the host step `step` fetches.
+    fn step_of(&self, step: i32) -> [i32, i32] {
+        for let [at, group] of self.groups.into_iter().enumerate() {
+            for let [layer, s] of group.steps.into_iter().enumerate() {
+                if s == step {
+                    return [at, layer];
+                }
+            }
+        }
+        panic(`no layer's experts are fetched at host step ${step}`);
+    }
+
+    /// The slot of group `at` that holds `layer`'s expert `expert`, marked
+    /// used now.
+    fn holding(&mut self, at: i32, layer: i32, expert: i32) -> Option<i32> {
+        let key = layer * self.groups[at].experts + expert;
+        let slots = &mut self.slots[at];
+        for let s of 0..<slots.held.len() {
+            if slots.held[s] == key {
+                slots.used[s] = self.clock;
+                return Option::Some(s);
+            }
+        }
+        return null;
+    }
+
+    /// The slot of group `at` used longest ago, and not now, which comes to
+    /// hold `layer`'s expert `expert`.
+    fn fetched_into_slot<affine G: Backend, affine Src: WeightSource>(
+        &mut self,
+        g: &mut G,
+        source: &Src,
+        at: i32,
+        layer: i32,
+        expert: i32,
+        weights: &mut List<Any<G>>,
+    ) -> i32 with _ {
+        let slots = &mut self.slots[at];
+        let mut slot = 0;
+        for let s of 1..<slots.used.len() {
+            if slots.used[s] < slots.used[slot] {
+                slot = s;
+            }
+        }
+        assert slots.used[slot] < self.clock, "a pool holds one layer's experts";
+        self.placed(g, source, at, layer, expert, slot, weights, &self.groups[at].weights);
+        slots.held[slot] = layer * self.groups[at].experts + expert;
+        slots.used[slot] = self.clock;
+        return slot;
+    }
+
+    /// The pools of group `at`, `values[pools[i]]` the `i`th, with their slot
+    /// `slot` holding `layer`'s expert `expert`.
+    fn placed<affine G: Backend, affine Src: WeightSource>(
+        &self,
+        g: &mut G,
+        source: &Src,
+        at: i32,
+        layer: i32,
+        expert: i32,
+        slot: i32,
+        values: &mut List<Any<G>>,
+        pools: &List<i32>,
+    ) with _ {
+        for let [i, stored] of self.groups[at].layers[layer].into_iter().enumerate() {
+            let bytes = stored.slice_bytes();
+            let start = stored.start + expert * bytes;
+            let read = match source.read(&stored.file, start, start + bytes) {
+                Ok(read) => read,
+                Err(e) => panic(`${stored.file}: ${e}`),
+            };
+            let mut pool = values[pools[i]];
+            g.written(&mut pool, slot, HostWeight::stored(stored.kind, stored.extents, read));
+            values[pools[i]] = pool;
+        }
+    }
+}
+
+/// The tokens and their picks, and the experts as a column.
+struct Tokens {
+}
+struct Picks {
+}
+struct Pool {
+}
+struct One {
+}
+
+fn uploaded<affine G: Backend, Axes>(g: &mut G, t: Tensor<i64, Axes>) -> Any<G> with _ {
+    return Any::I64(g.relabeled::<i64, Axes, Untyped>(&g.upload(&t)));
+}

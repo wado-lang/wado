@@ -568,6 +568,7 @@ fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
         element,
         `[${axis_list(&shapes[node.inputs[0]])}]`,
         axis_list(&shapes[node.inputs[1]]),
+        shapes[node.inputs[QMOE_UP]].axes[0].name,
     ];
     let mut operands: List<String> = [
         exprs.reference(&node.inputs[0]),
@@ -584,7 +585,7 @@ fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
         } else {
             scales.axes[2].name;
         };
-        // The experts' axis is the router's, which the turbofish spells already.
+        // The slots' axis is the up weight's, which the turbofish spells already.
         turbofish.extend(&([weight.axes[1].name, weight.axes[2].name, scales.axes[2].name, zero_axis] as List<String>));
         operands.extend(&([
             exprs.reference(&node.inputs[at]),
@@ -596,7 +597,7 @@ fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     operands.push(
         `&Experts { k: ${options.k}, normalized: ${options.normalized}, alpha: ${f32_literal(options.alpha)}, beta: ${f32_literal(
             options.beta,
-        )}, limit: ${f32_literal(options.limit)}, quantized: Quantized { bits: ${q.bits}, block: ${q.block} } }`,
+        )}, limit: ${f32_literal(options.limit)}, quantized: Quantized { bits: ${q.bits}, block: ${q.block} }, layer: 0, layers: 1, step: 0 }`,
     );
     return `mixture_of_experts::<${turbofish.join(", ")}>(backend, ${operands.join(", ")})`;
 }
