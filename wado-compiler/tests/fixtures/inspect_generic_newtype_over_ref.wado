@@ -1,0 +1,18 @@
+// A generic newtype over a reference renders with `:?` as a non-generic one
+// does. Its base has no module of its own, so what is derived for it is homed
+// at the newtype's declaration.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+type R<T> = &Pair<T, i32>;
+type S = &Pair<i32, i32>;
+
+test {
+    let p: Pair<i32, i32> = { a: 1, b: 2 };
+    let r = &p as R<i32>;
+    let s = &p as S;
+    assert `${r:?}` == "&Pair { a: 1, b: 2 } as R";
+    assert `${s:?}` == "&Pair { a: 1, b: 2 } as S";
+}
