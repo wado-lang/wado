@@ -13,8 +13,8 @@ resource Widget extends Target {
     fn label(&self) -> Option<String>;
 }
 
-fn use_it(w: Widget) with Widget {
-    w.add_listener("click");   // inherited, no cast
+fn use_it(w: Widget) with Target {
+    w.add_listener("click");   // inherited, no cast; Target declares it
     let t: Target = w;         // upcast is implicit
 }
 
