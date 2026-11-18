@@ -480,7 +480,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     assert gpu.kept_bytes() == idle_bytes, "a call leaves nothing once its launches idle";
 
     // `compute` begins a pass, so it runs where no earlier pass's tensor is read.
-    for let [pass, off] of experts_apart(&mut gpu).into_iter().enumerate() {
+    for let [pass, off] of experts_apart(&mut gpu, 2).into_iter().enumerate() {
         println(`compiled experts held by half, pass ${pass} ${off}`);
     }
 

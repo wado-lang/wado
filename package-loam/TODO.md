@@ -374,6 +374,10 @@ first call.
   Their steps run in a loop, and a host step is allowed only in the pass's own
   region, so recording one traps. They run where the budget holds every
   expert.
+- [ ] `conformance/held_experts.wado` on an input that is not ill-conditioned
+  and that still reaches every product. Its second token moves by 1.7e-4 with
+  the order a held pass sums in, so the device tests hold it to 4e-4 rather
+  than to `LOAM_TOLERANCE`.
 
 ### Devices
 
