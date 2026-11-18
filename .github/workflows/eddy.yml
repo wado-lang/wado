@@ -26,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      contents: read
     outputs:
       pr: ${{ steps.pr.outputs.pr }}
       sha: ${{ steps.pr.outputs.sha }}
@@ -67,17 +68,29 @@ jobs:
       # builds no second target directory beside the reviewer's. Eddy is taken
       # from the commit that run built, so the two match. A docs-only run
       # builds nothing, so the newest run with the binary is the one taken.
+      # That commit may predate this workflow's, so it is taken only where
+      # what this workflow runs from it is the same as in this workflow's.
       - id: eddy
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          run_from() {
+            gh api "repos/$REPO/contents?ref=$1" \
+              --jq '.[] | select(.name | IN("package-eddy", "mise.toml", "scripts")) | "\(.name) \(.sha)"'
+            gh api "repos/$REPO/contents/.github?ref=$1" --jq '.[] | select(.name == "actions") | .sha'
+          }
+          wanted="$(run_from "$GITHUB_SHA")"
           runs="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=20" \
             --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')"
           while read -r run sha; do
             if [ -n "$(gh api "repos/$REPO/actions/runs/$run/artifacts" \
               --jq '.artifacts[] | select(.name == "prebuilt-wado" and (.expired | not)) | .id')" ]; then
+              if [ "$(run_from "$sha")" != "$wanted" ]; then
+                echo "::error::main's CI has not yet built a wado for Eddy as of ${GITHUB_SHA:0:9}; ask again once it has"
+                exit 1
+              fi
               echo "run=$run" >> "$GITHUB_OUTPUT"
               echo "sha=$sha" >> "$GITHUB_OUTPUT"
               exit 0
