@@ -239,11 +239,10 @@ test "a file not given is named" {
 
 test "a tensor its file lacks names itself and the file" {
     let given = two_shards();
-    let e = read_headers(&given, [FIRST, SECOND]).unwrap().payload::<f32, HashMap<String, ByteList>>(
-        &given,
-        FIRST,
-        &b(),
-    ).unwrap_err();
+    let e = read_headers(&given, [FIRST, SECOND])
+        .unwrap()
+        .payload::<f32, HashMap<String, ByteList>>(&given, FIRST, &b())
+        .unwrap_err();
     assert `${e}` == `${FIRST}: b: the checkpoint has no such tensor`;
 }
 

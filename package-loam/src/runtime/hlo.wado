@@ -1626,7 +1626,9 @@ impl Graph for Cpu {
         let rank = operand.extents.len();
         let window_axes: List<i32> = (0..<rank).filter(|a| !dims.inserted_window_dims.contains(&a)).collect();
         let index_axes: List<i32> = (0..<indices.extents.len()).filter(|i| i != dims.index_vector_dim).collect();
-        let scatter_axes: List<i32> = (0..<updates.extents.len()).filter(|d| !dims.update_window_dims.contains(&d)).collect();
+        let scatter_axes: List<i32> = (0..<updates.extents.len())
+            .filter(|d| !dims.update_window_dims.contains(&d))
+            .collect();
         let own = row_major_strides(&operand.extents);
         let index_strides = row_major_strides(&indices.extents);
         let vector_stride = if dims.index_vector_dim == indices.extents.len() {
@@ -2021,9 +2023,10 @@ pub fn dot_extents(lhs: &List<i32>, rhs: &List<i32>, dims: &DotDims) -> List<i32
 /// slice size where `offset_dims` places it, the indices' batch axes between.
 pub fn gathered_extents(indices: &List<i32>, dims: &GatherDims) -> List<i32> {
     let batch: List<i32> = (0..<indices.len()).filter(|i| i != dims.index_vector_dim).map(|i| indices[i]).collect();
-    let offsets: List<i32> = (0..<dims.slice_sizes.len()).filter(|a| !dims.collapsed_slice_dims.contains(&a)).map(
-        |a| dims.slice_sizes[a],
-    ).collect();
+    let offsets: List<i32> = (0..<dims.slice_sizes.len())
+        .filter(|a| !dims.collapsed_slice_dims.contains(&a))
+        .map(|a| dims.slice_sizes[a])
+        .collect();
     let mut extents: List<i32> = [];
     let [mut b, mut o] = [0, 0];
     for let d of 0..<batch.len() + offsets.len() {

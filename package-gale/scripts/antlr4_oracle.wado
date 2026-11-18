@@ -645,9 +645,10 @@ internal fn compile(recognizer: &Recognizer) -> Option<Ran> with (Process, Preop
 
     // `-Xexact-output-dir` keeps every output in `work` whatever the grammar's
     // own path, and `-lib` is where the parser finds its lexer's `.tokens`.
-    let codegen = Command::new("java").args([
-        "-jar", jar.path, "-Dlanguage=Java", "-no-listener", "-Xexact-output-dir", "-o", *work, "-lib", *work,
-    ]).args(grammars).output();
+    let codegen = Command::new("java")
+        .args(["-jar", jar.path, "-Dlanguage=Java", "-no-listener", "-Xexact-output-dir", "-o", *work, "-lib", *work])
+        .args(grammars)
+        .output();
     match codegen {
         Ok(out) && succeeded(&out) => {
         },
@@ -660,7 +661,11 @@ internal fn compile(recognizer: &Recognizer) -> Option<Ran> with (Process, Preop
     }
 
     let java_files = match fs::read_dir(work) {
-        Ok(entries) => entries.into_iter().filter(|e| e.name.ends_with(".java")).map(|e| fs::join(work, e.name)).collect(),
+        Ok(entries) => entries
+            .into_iter()
+            .filter(|e| e.name.ends_with(".java"))
+            .map(|e| fs::join(work, e.name))
+            .collect(),
         Err(e) => {
             return Some(failed(`oracle: ${e}\n`));
         },
@@ -687,9 +692,11 @@ internal fn parse<T: AsByteSlice>(recognizer: &Recognizer, input: &T) -> Ran wit
             Tokens => ["tokens", "-tokens"],
         };
         let classpath = `${jar.path}:${*work}`;
-        return match Command::new("java").args(props).args([
-            "-cp", classpath, "org.antlr.v4.gui.TestRig", request.testrig_name, start, flag, input_path,
-        ]).capture_limit(TREE_CAPTURE_LIMIT).output() {
+        return match Command::new("java")
+            .args(props)
+            .args(["-cp", classpath, "org.antlr.v4.gui.TestRig", request.testrig_name, start, flag, input_path])
+            .capture_limit(TREE_CAPTURE_LIMIT)
+            .output() {
             Ok(out) => Ok(out),
             Err(e) => Err(`oracle: ${e}\n`),
         };

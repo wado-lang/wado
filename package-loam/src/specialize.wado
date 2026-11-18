@@ -275,11 +275,13 @@ fn cut_last(graph: &mut Graph, checked: &Checked, output: &String, axis: i32) {
             }
             let read = readers.get(o).unwrap_or([]);
             return !read.is_empty()
-                && read.into_iter().all(|r| cut.get(r) matches { Some(p) && reads_only_at_position(
-                    &graph.nodes[r],
-                    &p,
-                    &o,
-                ) });
+                && read
+                    .into_iter()
+                    .all(|r| cut.get(r) matches { Some(p) && reads_only_at_position(
+                        &graph.nodes[r],
+                        &p,
+                        &o,
+                    ) });
         });
         if kept {
             cut[i] = positional;

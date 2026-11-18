@@ -438,12 +438,9 @@ fn unquote<S: AsStrSlice>(s: S) -> String {
 // ===== File system helpers =====
 
 fn read_file_to_string<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<String, ErrorCode> {
-    let opened = match dir.open_at(
-        PathFlags::none(),
-        path.to_string(),
-        OpenFlags::none(),
-        DescriptorFlags::Read,
-    ).wait() {
+    let opened = match dir
+        .open_at(PathFlags::none(), path.to_string(), OpenFlags::none(), DescriptorFlags::Read)
+        .wait() {
         Ok(file) => file,
         Err(e) => {
             return Result::Err(e);
@@ -465,12 +462,14 @@ fn read_file_to_string<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<Strin
 }
 
 fn write_file_string<S: AsStrSlice, S1: AsStrSlice>(dir: &Descriptor, path: S, content: S1) -> Result<(), ErrorCode> {
-    let file = match dir.open_at(
-        PathFlags::none(),
-        path.to_string(),
-        OpenFlags::Create | OpenFlags::Truncate,
-        DescriptorFlags::Read | DescriptorFlags::Write,
-    ).wait() {
+    let file = match dir
+        .open_at(
+            PathFlags::none(),
+            path.to_string(),
+            OpenFlags::Create | OpenFlags::Truncate,
+            DescriptorFlags::Read | DescriptorFlags::Write,
+        )
+        .wait() {
         Ok(f) => f,
         Err(e) => {
             return Result::Err(e);
@@ -516,22 +515,21 @@ fn remove_stale<S: AsStrSlice>(dir: &Descriptor, path: S) with (Stderr, Exit) {
 fn ensure_dir<S: AsStrSlice>(parent: &Descriptor, name: S) -> Result<Descriptor, ErrorCode> {
     // Ignore "exists" — we just want the directory to be present.
     let _ = parent.create_directory_at(name.to_string()).wait();
-    return parent.open_at(
-        PathFlags::none(),
-        name.to_string(),
-        OpenFlags::Directory,
-        DescriptorFlags::Read | DescriptorFlags::MutateDirectory,
-    ).wait();
+    return parent
+        .open_at(
+            PathFlags::none(),
+            name.to_string(),
+            OpenFlags::Directory,
+            DescriptorFlags::Read | DescriptorFlags::MutateDirectory,
+        )
+        .wait();
 }
 
 fn open_dir<S: AsStrSlice>(parent: &Descriptor, name: S, mutate: bool) -> Result<Descriptor, ErrorCode> {
     let flags = if mutate { DescriptorFlags::Read | DescriptorFlags::MutateDirectory } else { DescriptorFlags::Read };
-    return parent.open_at(
-        PathFlags::none(),
-        name.to_string(),
-        OpenFlags::Directory,
-        flags,
-    ).wait();
+    return parent
+        .open_at(PathFlags::none(), name.to_string(), OpenFlags::Directory, flags)
+        .wait();
 }
 
 fn list_files_with_suffix<S: AsStrSlice>(dir: &Descriptor, suffix: S) -> List<String> {

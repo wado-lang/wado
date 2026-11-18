@@ -143,8 +143,11 @@ pub fn rows_judged(graph: &Graph, checked: &Checked) -> Result<Option<String>, E
 /// The lengths `build` pads to a capacity: each one no node refuses and an
 /// input carries.
 fn padded_symbols(graph: &Graph, checked: &Checked, carriers: &List<Carrier>) -> List<String> {
-    return padding(graph, checked).into_iter().filter(|j| j.refused matches { None }
-        && carriers.into_iter().any(|c| c.solved.symbol == j.symbol)).map(|j| j.symbol).collect();
+    return padding(graph, checked)
+        .into_iter()
+        .filter(|j| j.refused matches { None } && carriers.into_iter().any(|c| c.solved.symbol == j.symbol))
+        .map(|j| j.symbol)
+        .collect();
 }
 
 /// What `emit` writes the module from but `build`: the graph's names, and the
@@ -183,7 +186,11 @@ impl Prepared {
         let kept = kept_literals(&literals, checked);
         let grown = grown_lengths(checked, &crossing, &carriers)?;
         let padded = padded_symbols(graph, checked, &carriers);
-        let inputs: List<String> = graph.inputs.into_iter().map(|vi| vi.name).filter(|t| !crossing.cached.contains(t)).collect();
+        let inputs: List<String> = graph.inputs
+            .into_iter()
+            .map(|vi| vi.name)
+            .filter(|t| !crossing.cached.contains(t))
+            .collect();
         let conditions = held_conditions(graph, checked, &inputs);
         return Result::Ok(
             Prepared { axes, literals, crossing, carriers, names, kept, grown, padded, conditions },
@@ -462,10 +469,13 @@ fn emit_weights(
         hosts[vi.name] = `HostWeight::of(&self.${names.get(&vi.name)})`;
     }
     w.line("/// These weights as tensors of the graph `backend` builds.");
-    FnSpec::new("params", Vis::Pub).add_generic(GRAPH_BOUND).set_receiver("&self").add_param(
-        "backend",
-        `&mut ${BACKEND_PARAM}`,
-    ).set_return_type(PARAMS_TYPE).add_effect("_").emit_begin(w);
+    FnSpec::new("params", Vis::Pub)
+        .add_generic(GRAPH_BOUND)
+        .set_receiver("&self")
+        .add_param("backend", `&mut ${BACKEND_PARAM}`)
+        .set_return_type(PARAMS_TYPE)
+        .add_effect("_")
+        .emit_begin(w);
     emit_held_call(w, graph, &hosts, false);
     w.end();
     w.end();
@@ -548,20 +558,23 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
             },
         };
         w.line(`/// The weights, those the graph does not carry read from ${doc}.`);
-        FnSpec::new("load", Vis::Pub).add_generic(`affine ${SOURCE_PARAM}: WeightSource`).add_param(
-            "backend",
-            `&mut ${BACKEND_PARAM}`,
-        ).add_param("source", `&${SOURCE_PARAM}`).set_return_type(`Result<${PARAMS_TYPE}, LoadError>`).add_effect(
-            "_",
-        ).emit_begin(w);
+        FnSpec::new("load", Vis::Pub)
+            .add_generic(`affine ${SOURCE_PARAM}: WeightSource`)
+            .add_param("backend", `&mut ${BACKEND_PARAM}`)
+            .add_param("source", `&${SOURCE_PARAM}`)
+            .set_return_type(`Result<${PARAMS_TYPE}, LoadError>`)
+            .add_effect("_")
+            .emit_begin(w);
         for let line of firsts {
             w.line(line);
         }
     } else {
         w.line("/// The weights the graph carries.");
-        FnSpec::new("embedded", Vis::Pub).add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(
-            PARAMS_TYPE,
-        ).add_effect("_").emit_begin(w);
+        FnSpec::new("embedded", Vis::Pub)
+            .add_param("backend", `&mut ${BACKEND_PARAM}`)
+            .set_return_type(PARAMS_TYPE)
+            .add_effect("_")
+            .emit_begin(w);
     }
     let mut hosts = HashMap::<String, String>::new();
     for let [at, vi] of graph.initializers.into_iter().enumerate() {
@@ -1168,9 +1181,10 @@ fn emit_decode(
     lines.push(`    None => ${DECODED}(${arguments.join(", ")}),`);
     lines.push("};");
     lines.push(`return ${DECODED_TYPE} { tokens: resized(&backend.download(&tokens), [rows, steps]), cache };`);
-    decode.add_param("model", `&mut ${MODEL}<${BACKEND_PARAM}>`).set_return_type(`${DECODED_TYPE}<${BACKEND_PARAM}>`).add_effect(
-        "_",
-    );
+    decode
+        .add_param("model", `&mut ${MODEL}<${BACKEND_PARAM}>`)
+        .set_return_type(`${DECODED_TYPE}<${BACKEND_PARAM}>`)
+        .add_effect("_");
 
     if !apart {
         let mut decoded_type = StructSpec::new(DECODED_TYPE, Vis::Pub);
@@ -1262,7 +1276,11 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
         empties.push(`[${extents.join(", ")}]`);
         grown_indices.push(`${grown}`);
     }
-    let taken: List<String> = graph.inputs.into_iter().map(|vi| vi.name).filter(|t| !crossing.cached.contains(t)).collect();
+    let taken: List<String> = graph.inputs
+        .into_iter()
+        .map(|vi| vi.name)
+        .filter(|t| !crossing.cached.contains(t))
+        .collect();
     let mut place_params: List<String> = [];
     let mut compute_args: List<String> = [];
     let mut decode_params: List<String> = [];
@@ -1560,10 +1578,13 @@ fn emit_held(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kept: &List<S
     block.emit_begin(w);
     w.line("/// The initializers, `load(at)` the `at`th on the host, as `backend` keeps");
     w.line("/// them for the pass that reads them, and the folded literals.");
-    FnSpec::new("held").add_generic("Er").add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(
-        "load",
-        "fn(i32) -> Result<HostWeight, Er> with _",
-    ).set_return_type(`Result<${PARAMS_TYPE}, Er>`).add_effect("_").emit_begin(w);
+    FnSpec::new("held")
+        .add_generic("Er")
+        .add_param("backend", `&mut ${BACKEND_PARAM}`)
+        .add_param("load", "fn(i32) -> Result<HostWeight, Er> with _")
+        .set_return_type(`Result<${PARAMS_TYPE}, Er>`)
+        .add_effect("_")
+        .emit_begin(w);
     let count = graph.initializers.len() + kept.len();
     if kept.is_empty() {
         w.line(`let weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, load)?;`);

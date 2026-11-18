@@ -95,9 +95,9 @@ pub fn check_shards(
                 },
             );
         };
-        header.range(&expected(vi, &shapes.get(vi.name).unwrap())).map_err(
-            |e| ShardRefusal { path: paths[shard], reason: `${e}` },
-        )?;
+        header
+            .range(&expected(vi, &shapes.get(vi.name).unwrap()))
+            .map_err(|e| ShardRefusal { path: paths[shard], reason: `${e}` })?;
     }
     return Result::Ok(());
 }
