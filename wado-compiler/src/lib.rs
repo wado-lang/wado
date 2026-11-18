@@ -2765,15 +2765,15 @@ pub async fn dump_with_options<H: CompilerHost>(
     };
 
     // === Phase 1: Lexer ===
-    let mut lex_result = {
+    let lex_result = {
         let _span = logger.span("lex");
         lexer::lex(source)
     };
     let tokens_for_dump = lex_result.tokens.clone();
-    // Batch path is fail-fast: report any recovered lex error before parsing
-    // so the wire format keeps the `lexer error: …` prefix.
-    if !lex_result.errors.is_empty() {
-        let _ = logger.error_in(&entry_source, lex_result.errors.remove(0));
+    // Batch path is fail-fast: report a lex error that broke the token stream
+    // before parsing. The load below reports the rest with the analysis.
+    if let Some(e) = lex_result.errors.iter().find(|e| !e.leaves_tokens_sound()) {
+        let _ = logger.error_in(&entry_source, e.clone());
         return Err(Bail);
     }
 
@@ -2864,10 +2864,10 @@ pub async fn dump_with_options<H: CompilerHost>(
 /// Format Wado source code canonically, preserving comments and the `__DATA__`
 /// section.
 pub fn format(source: &str) -> Result<String, CompileError> {
-    // Formatting requires a clean parse — the first recovered lex error
-    // becomes a `CompileError::Lexer`.
+    // Formatting requires a clean parse — the first lex error that broke the
+    // token stream becomes a `CompileError::Lexer`. A bad escape is kept as written.
     let lex_result = lexer::lex(source);
-    if let Some(e) = lex_result.errors.first() {
+    if let Some(e) = lex_result.errors.iter().find(|e| !e.leaves_tokens_sound()) {
         return Err(CompileError::from_lex_error(e, None));
     }
     let mut parser = Parser::from_lex(lex_result);

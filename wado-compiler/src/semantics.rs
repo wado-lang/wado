@@ -1584,6 +1584,16 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     let space_modules = ParseModules::of(&load_result.modules);
     logger.register_parses(&space_modules);
     logger.register_asset_origins(std::mem::take(&mut load_result.asset_origins));
+    // Past the error count: an analysis bails once its logger counts an error,
+    // and a literal's type does not depend on its text, so analysis runs on as
+    // over a clean source. `is_complete` stays false below.
+    for (source, module) in &load_result.modules {
+        for e in module.invalid_literals() {
+            logger
+                .host()
+                .emit_diagnostic(e.diagnostic(Some(&source.source_path())));
+        }
+    }
 
     // Wrap the loader's interner in `Rc<RefCell<>>` so analyze and the
     // per-module elaborators can each `borrow_mut()` it from `&self`
@@ -1719,7 +1729,10 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // A recovered syntax error anywhere in the loaded set means the parse was
     // partial (covers block-internal errors that leave no `Item::Error` node),
     // so the result is never "complete" even if later phases ran clean.
-    let no_syntax_errors = load_result.modules.values().all(|m| !m.has_syntax_errors());
+    let no_syntax_errors = load_result
+        .modules
+        .values()
+        .all(|m| !m.has_syntax_errors() && m.invalid_literals().is_empty());
 
     // Source-level liveness was computed inside `build_tir_from_state`
     // (between `annotate_bodies` and `reify`, so reify can gate on it). Move

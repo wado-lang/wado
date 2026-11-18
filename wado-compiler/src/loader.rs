@@ -2470,10 +2470,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         module_source: &ModuleSource,
         skip_generated_bodies: bool,
     ) -> Result<(Module, Option<Parser>), LoadError> {
-        let lex_result = lex(source);
-        if let Some(e) = lex_result.errors.first() {
+        let mut lex_result = lex(source);
+        if let Some(e) = lex_result.errors.iter().find(|e| !e.leaves_tokens_sound()) {
             return Err(LoadError::from_lex_error(e, module_source.clone()));
         }
+        let invalid_literals = std::mem::take(&mut lex_result.errors);
 
         let mut parser = Parser::from_lex_no_trivia(lex_result);
         if skip_generated_bodies {
@@ -2481,10 +2482,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
         // Batch loading is fail-fast: report the first recovered syntax error
         // as a load error so compilation never proceeds on a partial AST.
-        let ast = parser.parse();
+        let mut ast = parser.parse();
         if let Some(e) = parser.take_errors().first() {
             return Err(LoadError::from_parse_error(e, module_source.clone()));
         }
+        ast.set_invalid_literals(invalid_literals);
         Ok((ast, parser.skipped_bodies().then_some(parser)))
     }
 

@@ -57,9 +57,13 @@ fn saturated_value(magnitude: u128, negated: bool) -> i128 {
     }
 }
 
+/// Why a literal pattern names nothing, or `None` where its text denotes no
+/// value, which the lexer reported.
+pub(super) type Unnamed = Option<String>;
+
 /// What a number, byte, char or bool literal pattern names, or why it names
 /// nothing: a value, or the one float a literal names that no integer is.
-pub(super) fn literal_pattern(lit: &Literal) -> Result<InstancePattern, String> {
+pub(super) fn literal_pattern(lit: &Literal) -> Result<InstancePattern, Unnamed> {
     match lit {
         Literal::Number(repr) => number_bound(repr).map(|bound| match bound {
             RangeBound::Discrete(value) => InstancePattern::Literal(value),
@@ -72,7 +76,7 @@ pub(super) fn literal_pattern(lit: &Literal) -> Result<InstancePattern, String> 
 /// The number literal `repr` as a pattern or range bound. An exponent literal
 /// names an integer where its value is one, as it does where an integer is
 /// expected, and a float otherwise.
-fn number_bound(repr: &str) -> Result<RangeBound, String> {
+fn number_bound(repr: &str) -> Result<RangeBound, Unnamed> {
     let (negated, digits) = repr
         .strip_prefix('-')
         .map_or((false, repr), |digits| (true, digits));
@@ -90,20 +94,20 @@ fn number_bound(repr: &str) -> Result<RangeBound, String> {
             },
             shown: repr.to_string(),
         })),
-        Err(error) => Err(error),
+        Err(error) => Err(Some(error)),
     }
 }
 
-/// The value a byte, char or bool literal pattern names, or why it names none.
-fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
+/// The value a byte, char or bool literal pattern names.
+fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, Unnamed> {
     match lit {
         Literal::Byte(raw) => Ok(PatternLiteral::Int {
-            magnitude: unescape_byte(raw)?.into(),
+            magnitude: unescape_byte(raw).map_err(|_| None)?.into(),
             negated: false,
             owner: None,
             shown: format!("b'{raw}'"),
         }),
-        Literal::Char(raw) => unescape_char(raw).map(PatternLiteral::Char),
+        Literal::Char(raw) => unescape_char(raw).map(PatternLiteral::Char).map_err(|_| None),
         Literal::Bool(b) => Ok(PatternLiteral::Bool(*b)),
         _ => unreachable!("the caller judges a {lit:?} pattern itself"),
     }
@@ -115,7 +119,7 @@ fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
 pub(super) fn range_bound(
     pattern: &Pattern,
     resolutions: &Resolutions,
-) -> Option<Result<RangeBound, String>> {
+) -> Option<Result<RangeBound, Unnamed>> {
     match pattern {
         Pattern::Literal(Literal::Number(repr)) => Some(number_bound(repr)),
         Pattern::Literal(lit @ (Literal::Byte(_) | Literal::Char(_))) => {
@@ -189,7 +193,7 @@ pub(super) fn range_pattern(
             end,
             inclusive,
         }),
-        (start, end) => Err([start.err(), end.err()].into_iter().flatten().collect()),
+        (start, end) => Err([start.err(), end.err()].into_iter().flatten().flatten().collect()),
     })
 }
 

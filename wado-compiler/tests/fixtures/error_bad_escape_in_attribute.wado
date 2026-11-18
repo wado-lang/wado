@@ -1,0 +1,12 @@
+// An attribute's string is decoded by the parser, an expression's by the
+// elaborator, and a bad escape in either is the lexer's error alike.
+#[unavailable("write \q instead")]
+pub fn gone();
+
+test {}
+
+__DATA__
+{
+    "compile_error": ":3:15: lexer error: invalid escape sequence: \\q",
+    "compile_errors_not_contains": ["parse error"]
+}

@@ -51,16 +51,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let ty = self.apply_infer_holes(ty);
                     holes.push((ty, format.as_ref().map(|f| f.spec.clone())));
                 }
-                // The gate reify relies on: it decodes these segments with no
-                // diagnostic channel of its own.
+                // The gate reify relies on: it decodes these segments, and the
+                // lexer has reported one that denotes no text.
                 ast::TemplatePart::String(raw) => {
-                    if let Err(message) = template_segment_value(raw, template.quote) {
-                        let _ = self.emit(TypeError::InvalidLiteral {
-                            message,
-                            span: template.span,
-                        });
-                        sound = false;
-                    }
+                    sound &= template_segment_value(raw, template.quote).is_ok();
                 }
             }
         }

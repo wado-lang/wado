@@ -14,6 +14,7 @@ use crate::ast::AstIdSpace;
 use crate::comment::{Comment, CommentKind};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::float_literal::FloatFormat;
+use crate::escape;
 use crate::primitive::PrimitiveType;
 use crate::token;
 use crate::token::{Delimiter, Position, Quote, Span, TemplateTokenPart, Token, TokenKind};
@@ -254,7 +255,7 @@ pub(crate) struct Lexer<'a> {
 }
 
 /// Structured lexer error. Pair with [`LexError::span`] for source location.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LexError {
     pub kind: LexErrorKind,
     pub span: Span,
@@ -299,6 +300,9 @@ pub enum LexErrorKind {
     InvalidRadixDigit { digit: char, literal: &'static str },
     /// A CR inside a literal that no LF follows.
     BareCarriageReturn,
+    /// A well-delimited literal whose text denotes no value (a bad escape, a
+    /// char literal of two characters), with why. The token stays sound.
+    InvalidLiteral(String),
 }
 
 impl std::fmt::Display for LexError {
@@ -338,7 +342,24 @@ impl std::fmt::Display for LexError {
             LexErrorKind::BareCarriageReturn => {
                 write!(f, "a bare CR in a literal is not a line break; write `\\r`")
             }
+            LexErrorKind::InvalidLiteral(why) => f.write_str(why),
         }
+    }
+}
+
+/// Whether a literal token's text denotes a value, and why not. A template's
+/// holes are lexed again where they are parsed, so only its segments are here.
+fn literal_value_check(kind: &TokenKind) -> Result<(), String> {
+    match kind {
+        TokenKind::StringLit { raw, quote } => escape::string_value(raw, *quote).map(drop),
+        TokenKind::ByteStringLit { raw, quote } => escape::bytes_value(raw, *quote).map(drop),
+        TokenKind::CharLit(raw) => escape::unescape_char(raw).map(drop),
+        TokenKind::ByteCharLit(raw) => escape::unescape_byte(raw).map(drop),
+        TokenKind::TemplateStringLit { parts, quote } => parts.iter().try_for_each(|part| match part {
+            TemplateTokenPart::Literal(text) => escape::template_segment_value(text, *quote).map(drop),
+            TemplateTokenPart::Interpolation { .. } => Ok(()),
+        }),
+        _ => Ok(()),
     }
 }
 
@@ -449,6 +470,12 @@ impl Radix {
 }
 
 impl LexError {
+    /// Whether the token stream around this error is what the source means,
+    /// so a batch compile may parse on and report the errors after it.
+    pub fn leaves_tokens_sound(&self) -> bool {
+        matches!(self.kind, LexErrorKind::InvalidLiteral(_))
+    }
+
     /// The diagnostic for this error, attributed to `file` when the caller
     /// knows one.
     pub fn diagnostic(&self, file: Option<&str>) -> Diagnostic {
@@ -490,7 +517,17 @@ impl<'a> Lexer<'a> {
 
         let mut tokens = Vec::new();
         loop {
+            let errors = self.errors.len();
             let token = self.next_token();
+            // A literal already in error reports that one, not what its text lacks.
+            if self.errors.len() == errors
+                && let Err(why) = literal_value_check(&token.kind)
+            {
+                self.errors.push(LexError {
+                    kind: LexErrorKind::InvalidLiteral(why),
+                    span: token.span,
+                });
+            }
             let is_eof = token.kind == TokenKind::Eof;
             tokens.push(token);
             if is_eof {
@@ -2140,12 +2177,24 @@ test data";
         assert_matches!(tokens[0].kind, TokenKind::Hash);
     }
 
+    /// The tokens of `source`, whose one error is a literal's text, at `column`.
+    fn tokens_past_invalid_literal(source: &str, column: usize) -> Vec<Token> {
+        let r = lex(source);
+        assert_matches!(
+            r.errors.as_slice(),
+            [e] if e.leaves_tokens_sound() && e.span.column == column,
+            "{:?}",
+            r.errors
+        );
+        r.tokens
+    }
+
     /// A malformed escape must not consume the delimiter that follows it: the
-    /// literal still terminates and the bad escape is reported where a plain
-    /// string's is — by the unescaper, not as "unterminated".
+    /// literal still terminates, and the bad escape is reported on its own
+    /// literal, not as "unterminated".
     #[test]
     fn test_template_malformed_unicode_escape_keeps_delimiter() {
-        let short = tokens(r"`\u12`");
+        let short = tokens_past_invalid_literal(r"`\u12`", 1);
         assert_matches!(
             &short[0].kind,
             TokenKind::TemplateStringLit { parts, .. }
@@ -2154,7 +2203,7 @@ test data";
 
         // `\u{…}` scans hex digits only, so an unclosed brace stops at the
         // backtick instead of running to EOF.
-        let unclosed = tokens(r"`\u{12` + 1");
+        let unclosed = tokens_past_invalid_literal(r"`\u{12` + 1", 1);
         assert_matches!(
             &unclosed[0].kind,
             TokenKind::TemplateStringLit { parts, .. }
@@ -2163,9 +2212,25 @@ test data";
         assert_matches!(unclosed[1].kind, TokenKind::Plus);
 
         // A plain string behaves the same way.
-        let plain = tokens(r#""\u{12" + 1"#);
+        let plain = tokens_past_invalid_literal(r#""\u{12" + 1"#, 1);
         assert_matches!(&plain[0].kind, TokenKind::StringLit { raw, .. } if raw == r"\u{12");
         assert_matches!(plain[1].kind, TokenKind::Plus);
+    }
+
+    /// Each literal whose text denotes no value is reported where it opens, and
+    /// a literal already in error reports only that.
+    #[test]
+    fn test_invalid_literal_text_is_reported_per_literal() {
+        let r = lex(r#"'ab' b'\u{41}' "ok" b"é" `\q${x}` "\u{110000}""#);
+        let columns: Vec<usize> = r.errors.iter().map(|e| e.span.column).collect();
+        assert_eq!(columns, [1, 6, 21, 26, 35], "{:?}", r.errors);
+        assert!(r.errors.iter().all(LexError::leaves_tokens_sound));
+
+        let unterminated = lex(r#""\q"#);
+        assert_matches!(
+            unterminated.errors.as_slice(),
+            [LexError { kind: LexErrorKind::UnterminatedString, .. }]
+        );
     }
 
     /// The expression source and format specifier the interpolation scanner

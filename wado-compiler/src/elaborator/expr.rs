@@ -47,7 +47,7 @@ use crate::elaborator::sem::types::{
 use crate::elaborator::types::{
     ImplMemberKind, RealTypeParams, StructFieldInfo, newtype_member_owner,
 };
-use crate::escape::{self, unescape_byte, unescape_char};
+use crate::escape::{unescape_byte, unescape_char};
 use crate::lexer::defaults_to_float;
 use crate::primitive::PrimitiveType;
 use crate::tir::StructDef;
@@ -1061,44 +1061,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             Literal::Bool(_) => TypeTable::BOOL,
-            Literal::Char(raw) => {
-                if let Err(message) = escape::unescape_char(raw) {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message,
-                        span: lit.span,
-                    });
-                }
-                TypeTable::CHAR
-            }
-            Literal::String(raw, quote) => {
-                let string_type = self.get_string_struct_type();
-                if let Err(message) = escape::string_value(raw, *quote) {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message,
-                        span: lit.span,
-                    });
-                }
-                string_type
-            }
-            Literal::Bytes(raw, quote) => {
-                let byte_list_type = self.tysys.type_table.borrow_mut().make_byte_list();
-                if let Err(message) = escape::bytes_value(raw, *quote) {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message,
-                        span: lit.span,
-                    });
-                }
-                byte_list_type
-            }
-            Literal::Byte(raw) => {
-                if let Err(message) = escape::unescape_byte(raw) {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message,
-                        span: lit.span,
-                    });
-                }
-                TypeTable::U8
-            }
+            // The lexer reported a literal whose text denotes no value.
+            Literal::Char(_) => TypeTable::CHAR,
+            Literal::String(..) => self.get_string_struct_type(),
+            Literal::Bytes(..) => self.tysys.type_table.borrow_mut().make_byte_list(),
+            Literal::Byte(_) => TypeTable::U8,
             // `Option` of the bottom type: a value of every `Option<T>` and of
             // no other type. `Unknown` here would instead defer every check it
             // meets, which is how a `null` used to reach a non-nullable slot.

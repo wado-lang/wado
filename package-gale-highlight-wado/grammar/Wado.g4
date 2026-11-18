@@ -1092,9 +1092,11 @@ fragment DIGITS
     : [0-9] ('_'? [0-9])*
     ;
 
-// In literal text a CR is the line break of a CRLF and nothing else.
+// In literal text a CR is the line break of a CRLF and nothing else. A byte
+// string is ASCII, escaped by `\xNN` where a string takes `\u`.
 STRING_LITERAL
-    : 'b'? '"' ('\\' ~[\r] | '\\'? '\r\n' | ~["\\\r])* '"'
+    : '"' (~["\\\r] | '\r\n' | SIMPLE_ESCAPE | UNICODE_ESCAPE)* '"'
+    | 'b"' (~["\\\r\u0080-\u{10FFFF}] | '\r\n' | SIMPLE_ESCAPE | HEX_ESCAPE)* '"'
     ;
 
 // A raw string is one STRING_LITERAL, as a cooked one is: `more` carries the
@@ -1105,7 +1107,7 @@ RAW_STRING_OPEN
     ;
 
 RAW_BYTES_OPEN
-    : 'b' '#'+ '"' { lx.raw_hashes.push(pos - start - 2) } -> more, pushMode(RAW_STRING)
+    : 'b' '#'+ '"' { lx.raw_hashes.push(pos - start - 2) } -> more, pushMode(RAW_BYTES)
     ;
 
 LBRACE
@@ -1158,17 +1160,43 @@ RAW_OPEN
     : '#'+ '`' { lx.raw_hashes.push(pos - start - 1) } -> pushMode(RAW_TEMPLATE)
     ;
 
+// One character, or one ASCII byte; a line break may be it.
 CHAR_LITERAL
-    : 'b'? '\'' (UNICODE_ESCAPE | HEX_ESCAPE | '\\' ~[\r] | ~['\\\r\n])+ '\''
+    : '\'' (~['\\\r\n] | '\r'? '\n' | SIMPLE_ESCAPE | UNICODE_ESCAPE) '\''
+    | 'b\'' (~['\\\r\n\u0080-\u{10FFFF}] | '\r'? '\n' | SIMPLE_ESCAPE | HEX_ESCAPE) '\''
+    ;
+
+fragment SIMPLE_ESCAPE
+    : '\\' [ntr\\"'/bf0]
     ;
 
 fragment HEX_ESCAPE
-    : '\\' 'x' [0-9a-fA-F] [0-9a-fA-F]
+    : '\\' 'x' HEX HEX
     ;
 
+// A scalar value: `\u{…}` up to 10FFFF, or `\uHHHH`, where a surrogate is
+// only the high half of a pair whose low half follows.
 fragment UNICODE_ESCAPE
-    : '\\' 'u' '{' [0-9a-fA-F]+ '}'
-    | '\\' 'u' [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]
+    : '\\' 'u' '{' ('0'+ | '0'* SCALAR_DIGITS) '}'
+    | '\\' 'u' BMP_UNIT
+    | '\\' 'u' [dD] [89abAB] HEX HEX '\\' 'u' [dD] [c-fC-F] HEX HEX
+    ;
+
+fragment SCALAR_DIGITS
+    : [1-9a-fA-F] HEX? HEX?
+    | BMP_UNIT
+    | [1-9a-fA-F] HEX HEX HEX HEX
+    | '10' HEX HEX HEX HEX
+    ;
+
+// Four hex digits, past a leading zero, naming no surrogate.
+fragment BMP_UNIT
+    : [0-9a-cA-Ce-fE-F] HEX HEX HEX
+    | [dD] [0-7] HEX HEX
+    ;
+
+fragment HEX
+    : [0-9a-fA-F]
     ;
 
 // `_` alone lexes as the wildcard token '_', defined ahead of this rule.
@@ -1198,8 +1226,9 @@ WS
 
 mode TEMPLATE;
 
+// A template also escapes its delimiter and the hole's syntax.
 TEMPLATE_TEXT
-    : ('\\' ~[\r] | '\\'? '\r\n' | ~[`$\\\r])+
+    : (~[`$\\\r] | '\r\n' | SIMPLE_ESCAPE | '\\' [`${}] | UNICODE_ESCAPE)+
     ;
 
 INTERP_OPEN
@@ -1250,6 +1279,23 @@ RAW_STRING_TEXT
     ;
 
 RAW_STRING_QUOTE
+    : '"' -> more
+    ;
+
+// RAW_STRING over ASCII.
+mode RAW_BYTES;
+
+RAW_BYTES_CLOSE
+    : '"' ({ pos - start <= lx.raw_hashes.last().unwrap() }? '#')+
+      { pos - start == lx.raw_hashes.last().unwrap() + 1 }?
+      { lx.raw_hashes.pop() } -> type(STRING_LITERAL), popMode
+    ;
+
+RAW_BYTES_TEXT
+    : (~["\r\u0080-\u{10FFFF}] | '\r\n')+ -> more
+    ;
+
+RAW_BYTES_QUOTE
     : '"' -> more
     ;
 
