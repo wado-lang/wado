@@ -1,7 +1,7 @@
 // A blanket's static reached through a namespace: `lib::S::mk()` takes the
 // blanket, and `lib::N::mk()` takes it too, since its bound holds at `N` itself
-// and so outranks `Base`'s own `mk` a link below. `lib::Pair::mk()` writes no
-// arguments, and takes the one instance the blanket's bound holds of.
+// and so outranks `Base`'s own `mk` a link below. `lib::Pair::<i32, i32>::mk()`
+// takes it at the instance the blanket's bound holds of.
 use lib from "./sub/blanket_static_through_namespace_lib.wado";
 use { T2 } from "./sub/blanket_static_through_namespace_lib.wado";
 
@@ -9,7 +9,7 @@ test {
     assert lib::S::mk() == 20;
     assert lib::N::mk() == 20;
     assert lib::Base::mk() == 1;
-    assert lib::Pair::mk() == 20;
+    assert lib::Pair::<i32, i32>::mk() == 20;
 }
 
 __DATA__
