@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794974353682,
+  "lastUpdate": 1794975407170,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79301,6 +79301,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b9ffb15a967d52d2bbb97674693fa781bc0ec714"
         },
         "date": 1794974353216,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8c8d33b13484deadb98403ad431585a545d53bb3",
+          "message": "Merge pull request #2678 from wado-lang/gfx/ecstatic-bell-fm3yag\n\nfix: let `N::m(&x)` on a newtype select a blanket impl",
+          "timestamp": "2026-11-18T12:53:27+09:00",
+          "tree_id": "c1b5e2be2b9933a627fb1b0987aa898f86b427f5",
+          "url": "https://github.com/wado-lang/wado/commit/8c8d33b13484deadb98403ad431585a545d53bb3"
+        },
+        "date": 1794975406403,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
