@@ -592,7 +592,7 @@ fn stacked_experts() -> [HashMap<String, ByteList>, List<List<StoredExperts>>] {
         let mut stored = first;
         for let e of 0..<experts {
             let start = (experts - 1 - e) * slice;
-            stored.extend(&first[start..<start + slice].to_list());
+            stored.extend(&(first[start..<start + slice].to_list() as ByteList));
         }
         let file = `w${i}`;
         files[file] = stored;
