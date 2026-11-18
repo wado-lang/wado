@@ -78,5 +78,4 @@ rules were tried and each let a call escape its check:
 A body holding a narrowed resource after a type pattern narrowed a held handle
 to it is gone with them. A narrowing grants nothing, and a function calling an
 operation on the narrowed handle declares its resource. In exchange, a function
-using inherited operations lists each declaring resource: `with (EventTarget,
-Node)` where it calls both `tag` and `text`.
+using inherited operations lists each declaring resource: `with (EventTarget, Node)` where it calls both `tag` and `text`.
