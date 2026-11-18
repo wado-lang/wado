@@ -18,6 +18,7 @@ use {
     GpuComputePassEncoder,
 } from "wasi:webgpu";
 use {
+    Backend,
     Binary,
     Comparison,
     Convolution,
@@ -121,15 +122,8 @@ struct Replay {
     reads: List<i32>,
 }
 
-impl Graph for WebGpuBackend {
+impl Backend for WebGpuBackend {
     type Program = WebGpuProgram;
-
-    fn relabeled<E: Element, In, Out>(&self, t: &Placed<E, In>) -> Placed<E, Out> {
-        return match t {
-            Host(h) => Placed::Host(Tensor { data: h.data, extents: h.extents }),
-            Device(d) => Placed::Device(*d),
-        };
-    }
 
     /// A program takes the plan of an earlier one of its structure where the
     /// extents let it. A constant is kept only where a launch reads it, so
@@ -139,7 +133,7 @@ impl Graph for WebGpuBackend {
         record: fn(&mut Recorder) -> Recorded with _,
         weights: &List<Any<WebGpuBackend>>,
         earlier: &List<&WebGpuProgram>,
-    ) -> Option<WebGpuProgram> with _ {
+    ) -> WebGpuProgram with _ {
         let recorded = record(&mut Recorder::new());
         let folded = constants(&recorded);
         let splats = splats_of(&folded);
@@ -165,7 +159,7 @@ impl Graph for WebGpuBackend {
         }
         let mut replays = HashMap::<i32, Replay>::new();
         keyed(self, &recorded, serial, &plan, &mut replays);
-        return Option::Some(WebGpuProgram { recorded, plan, splats, constants: kept, serial, replays });
+        return WebGpuProgram { recorded, plan, splats, constants: kept, serial, replays };
     }
 
     /// A weight read only as products' right matrix, or as a gather's rows, is
@@ -292,6 +286,15 @@ impl Graph for WebGpuBackend {
             Some(d) && moved.contains_key(d.slot) => at_slot(&r, moved[d.slot]),
             _ => r,
         }).collect();
+    }
+}
+
+impl Graph for WebGpuBackend {
+    fn relabeled<E: Element, In, Out>(&self, t: &Placed<E, In>) -> Placed<E, Out> {
+        return match t {
+            Host(h) => Placed::Host(Tensor { data: h.data, extents: h.extents }),
+            Device(d) => Placed::Device(*d),
+        };
     }
 
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Placed<E, Axes> {

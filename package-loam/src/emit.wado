@@ -423,6 +423,10 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 /// `build` adds its operations to: a backend may own device resources.
 global GRAPH_BOUND: String = `affine ${BACKEND_PARAM}: Graph`;
 
+/// The same parameter where code runs what a backend compiled or keeps its
+/// weights: `compute`, `decode`, `Model` and the weights' constructors.
+global BACKEND_BOUND: String = `affine ${BACKEND_PARAM}: Backend`;
+
 /// The same parameter where code only holds tensors: `Cache` and `Passed`,
 /// which a recording graph serves too.
 global HOLDS_BOUND: String = `affine ${BACKEND_PARAM}: Holds`;
@@ -462,7 +466,7 @@ fn emit_weights(
         hosts[vi.name] = `HostWeight::of(&self.${names.get(&vi.name)})`;
     }
     w.line("/// These weights as tensors of the graph `backend` builds.");
-    FnSpec::new("params", Vis::Pub).add_generic(GRAPH_BOUND).set_receiver("&self").add_param(
+    FnSpec::new("params", Vis::Pub).add_generic(BACKEND_BOUND).set_receiver("&self").add_param(
         "backend",
         `&mut ${BACKEND_PARAM}`,
     ).set_return_type(PARAMS_TYPE).add_effect("_").emit_begin(w);
@@ -503,7 +507,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
     }
     w.blank();
     let mut block = ImplSpec::new(PARAMS_TYPE);
-    block.add_generic(GRAPH_BOUND);
+    block.add_generic(BACKEND_BOUND);
     block.emit_begin(w);
     if loads {
         // Where the weights are, and what `load` checks of its files before
@@ -704,43 +708,23 @@ fn emit_compute(
     if room matches { Some(_) } {
         compute.add_param("room", "i32");
     }
-    let Entry { lines: mut lines, symbols: mut symbols, arguments: mut arguments, taken_args, first_weight, class, chosen, cache_fits } = entry;
-    // `build` and `recorded` take the branches where they take the lengths.
+    let Entry { lines: mut lines, symbols: mut symbols, taken_args, first_weight, class, chosen, cache_fits } = entry;
+    // `recorded` takes the branches where it takes the lengths.
     let [record, least] = if chosen.is_empty() {
         [RECORDED, `${RECORDED}(recorder, &${LEAST_EXTENTS}())`];
     } else {
-        arguments.push("&chosen");
         let unchosen: List<String> = chosen.into_iter().map(|c| `${c}: null`).collect();
         [
             `|recorder, extents| ${RECORDED}(recorder, extents, &chosen)`,
             `${RECORDED}(recorder, &${LEAST_EXTENTS}(), &${CHOSEN} { ${unchosen.join(", ")} })`,
         ];
     };
-    arguments.push("&model.weights");
     let erased = erased_arguments(&taken_args, first_weight);
-    let results = if crossing.several() {
-        let mut fields: List<String> = [];
-        for let [at, output] of returned.into_iter().enumerate() {
-            fields.push(`${names.get(&output)}: ${typed_result(checked, &output, at)}`);
-        }
-        if has_cache {
-            fields.push(`cache: ${cache_from_results(returned.len())}`);
-        }
-        `${PASSED} { ${fields.join(", ")} }`;
-    } else {
-        typed_result(checked, &returned[0], 0);
-    };
-    // Bound by a pattern, the run reads the `cache` the pattern shadows.
-    let mut bind_run = |pattern: String| {
-        lines.push(
-            `let ${pattern} = match model.programs.run(backend, [${class.join(", ")}], ${record}, || [${erased.join(
-                ", ",
-            )}], || ${ERASED_WEIGHTS}) {`,
-        );
-        lines.push(`    Some(results) => ${results},`);
-        lines.push(`    None => build(${arguments.join(", ")}),`);
-        lines.push("};");
-    };
+    lines.push(
+        `let results = model.programs.run(backend, [${class.join(", ")}], ${record}, || [${erased.join(
+            ", ",
+        )}], || ${ERASED_WEIGHTS});`,
+    );
     let mut read_back = |tensor: &String, place: String| -> Result<String, EmitError> {
         let downloaded = `backend.download(&${place})`;
         let shape = shapes[*tensor];
@@ -748,18 +732,14 @@ fn emit_compute(
         return Result::Ok(if cut { `resized(&${downloaded}, ${symbols.spell_shape(&shape)?})` } else { downloaded });
     };
     let returned_type = if crossing.several() {
-        let mut idents: List<String> = [];
         let mut fields: List<String> = [];
-        for let output of returned {
-            let ident = names.get(&output);
-            idents.push(ident);
-            fields.push(`${ident}: ${read_back(&output, ident)?}`);
+        for let [at, output] of returned.into_iter().enumerate() {
+            fields.push(`${names.get(&output)}: ${read_back(&output, typed_result(checked, &output, at))?}`);
         }
         if has_cache {
-            idents.push("cache");
-            fields.push(`cache: fitted_fields(backend, &cache, ${cache_fits})`);
+            lines.push(`let presents: ${CACHE}<${BACKEND_PARAM}> = ${cache_from_results(returned.len())};`);
+            fields.push(`cache: fitted_fields(backend, &presents, ${cache_fits})`);
         }
-        bind_run(`${PASSED} { ${idents.join(", ")} }`);
         lines.push(`return ${OUTPUTS} { ${fields.join(", ")} };`);
         if has_cache {
             `${OUTPUTS}<${BACKEND_PARAM}>`;
@@ -767,8 +747,7 @@ fn emit_compute(
             OUTPUTS;
         }
     } else {
-        bind_run("passed");
-        lines.push(`return ${read_back(&returned[0], "passed")?};`);
+        lines.push(`return ${read_back(&returned[0], typed_result(checked, &returned[0], 0))?};`);
         tensor_type(checked, &returned[0]);
     };
     compute.add_param("model", `&mut ${MODEL}<${BACKEND_PARAM}>`).set_return_type(returned_type).add_effect("_");
@@ -818,13 +797,12 @@ struct EntryContext {
 }
 
 /// What an entry has made by the time it can run its program: its `lines`, the
-/// lengths, what `build` is passed, what the program takes, its weights from
-/// `first_weight` on, what tells its programs apart, the fields of `chosen`,
-/// and what `fitted_fields` fits the cache to the capacities by.
+/// lengths, what the program takes, its weights from `first_weight` on, what
+/// tells its programs apart, the fields of `chosen`, and what `fitted_fields`
+/// fits the cache to the capacities by.
 struct Entry {
     lines: List<String>,
     symbols: Symbols,
-    arguments: List<String>,
     taken_args: List<ProgramArgument>,
     first_weight: i32,
     class: List<String>,
@@ -855,7 +833,7 @@ fn prepared_entry(
     // The cache holds a past at a capacity, so its length is what the graph
     // owes it to be, given the other inputs'.
     symbols.derive_owed(owed);
-    spec.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
+    spec.add_generic(BACKEND_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     let mut lines: List<String> = [];
     let taken: List<ValueInfo> = graph.inputs.into_iter().filter(|vi| !crossing.cached.contains(vi.name)).collect();
     // Every symbolic axis is its symbols' arithmetic over the lengths, but for
@@ -922,18 +900,15 @@ fn prepared_entry(
         lines.push("retain_fields(backend, cache);");
     }
     lines.push("backend.begin();");
-    let mut arguments: List<String> = ["backend"];
     for let vi of &taken {
         let ident = names.get(&vi.name);
         let padded_to = `&resized(${ident}, ${capacities.spell_shape(&shapes[vi.name])?})`;
         lines.push(`let ${ident} = backend.upload(${padded_to});`);
-        arguments.push(`&${ident}`);
     }
     // The cache at the capacities, both as the pass takes it and as it returns it.
     let cache_fits = fits_at_capacities(crossing, owed, padded, &mut capacities)?;
     if has_cache {
         lines.push(`let cache = fitted_fields(backend, cache, ${cache_fits});`);
-        arguments.push("&cache");
     }
     // A capacity reads its length, and an unpadded symbol is its own capacity.
     symbols.use_what(&capacities);
@@ -983,7 +958,6 @@ fn prepared_entry(
             });
         }
         lines.push(`let lengths = ${LENGTHS}::<${BACKEND_PARAM}> { ${fields.join(", ")} };`);
-        arguments.push("&lengths");
         // A program holds as many rows of lengths as it was recorded with.
         class.push(`backend.extents_of(&lengths.${symbols.ident(&read[0])})`);
     }
@@ -994,7 +968,6 @@ fn prepared_entry(
     return Result::Ok(Entry {
         lines,
         symbols,
-        arguments,
         taken_args,
         first_weight,
         class,
@@ -1138,12 +1111,6 @@ fn emit_decode(
     };
     lines.push(`let decoding = Decoding::new(backend, sampling, ended, steps, ${at});`);
     lines.push("let sampler = sampling.sampler();");
-    let mut arguments = entry.arguments;
-    if chooses {
-        arguments.push("&chosen");
-    }
-    arguments.push("&model.weights");
-    arguments.push("&decoding");
     let mut class = entry.class;
     class.push("sampler.key()");
     class.push("backend.extents_of(&decoding.tokens)");
@@ -1152,22 +1119,20 @@ fn emit_decode(
     let erased = erased_arguments(&taken, entry.first_weight);
     let chosen_argument = if chooses { ", &chosen" } else { "" };
     lines.push(
-        `let [tokens, cache]: [${BACKEND_PARAM}::Tensor<i64, [Slots, Picks]>, ${CACHE}<${BACKEND_PARAM}>] = match model.programs.run(backend, [${class.join(
+        `let results = model.programs.run(backend, [${class.join(
             ", ",
         )}], |recorder, extents| ${RECORDED_DECODED}(recorder, extents, &sampler${chosen_argument}), || {`,
     );
     lines.push(`    let mut all: List<Any<${BACKEND_PARAM}>> = [${erased.join(", ")}];`);
     lines.push("    all.extend(&decoding.erased(backend));");
     lines.push("    return all;");
-    lines.push(`}, || ${ERASED_WEIGHTS}) {`);
+    lines.push(`}, || ${ERASED_WEIGHTS});`);
+    lines.push(`let tokens = typed::<${BACKEND_PARAM}, i64, [Slots, Picks]>(backend, &results[0]);`);
     lines.push(
-        `    Some(results) => [typed::<${BACKEND_PARAM}, i64, [Slots, Picks]>(backend, &results[0]), ${cache_from_results(
+        `return ${DECODED_TYPE} { tokens: resized(&backend.download(&tokens), [rows, steps]), cache: ${cache_from_results(
             1,
-        )}],`,
+        )} };`,
     );
-    lines.push(`    None => ${DECODED}(${arguments.join(", ")}),`);
-    lines.push("};");
-    lines.push(`return ${DECODED_TYPE} { tokens: resized(&backend.download(&tokens), [rows, steps]), cache };`);
     decode.add_param("model", `&mut ${MODEL}<${BACKEND_PARAM}>`).set_return_type(`${DECODED_TYPE}<${BACKEND_PARAM}>`).add_effect(
         "_",
     );
@@ -1302,7 +1267,7 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     requests.emit(w);
     w.blank();
     let mut held = ImplSpec::new(`${REQUESTS}<${bk}>`);
-    held.add_generic(GRAPH_BOUND);
+    held.add_generic(BACKEND_BOUND);
     held.emit_begin(w);
     w.line("/// `slots` empty slots of `capacity` positions, each a capacity of its own.");
     w.line(`pub fn new(backend: &mut ${bk}, slots: i32, capacity: i32) -> ${REQUESTS}<${bk}> with _ {`);
@@ -1556,7 +1521,7 @@ fn emit_least_extents(
 fn emit_held(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kept: &List<String>, first: i32, least: String) {
     w.blank();
     let mut block = ImplSpec::new(PARAMS_TYPE);
-    block.add_generic(GRAPH_BOUND);
+    block.add_generic(BACKEND_BOUND);
     block.emit_begin(w);
     w.line("/// The initializers, `load(at)` the `at`th on the host, as `backend` keeps");
     w.line("/// them for the pass that reads them, and the folded literals.");
@@ -1728,7 +1693,7 @@ fn weight_names(graph: &Graph, kept: &List<String>) -> List<String> {
 /// are private, since the programs hold them as the first call erased them.
 fn emit_model(w: &mut CodeWriter) {
     let mut model = StructSpec::new(MODEL, Vis::Pub);
-    model.add_generic(GRAPH_BOUND);
+    model.add_generic(BACKEND_BOUND);
     model.add_field("weights", PARAMS_TYPE);
     model.add_pub_field("programs", `Programs<${BACKEND_PARAM}>`);
     w.blank();
@@ -1737,7 +1702,7 @@ fn emit_model(w: &mut CodeWriter) {
     model.emit(w);
     w.blank();
     let mut held = ImplSpec::new(`${MODEL}<${BACKEND_PARAM}>`);
-    held.add_generic(GRAPH_BOUND);
+    held.add_generic(BACKEND_BOUND);
     held.emit_begin(w);
     w.line(`pub fn new(weights: ${PARAMS_TYPE}) -> ${MODEL}<${BACKEND_PARAM}> {`);
     w.line(`    return ${MODEL} { weights, programs: Programs::new() };`);

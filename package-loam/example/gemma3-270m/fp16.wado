@@ -6,7 +6,7 @@
 
 use { eprintln, Stderr, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
-use { FileSource, Graph, Sampling, Tensor } from "lib:loam";
+use { Backend, FileSource, Sampling, Tensor } from "lib:loam";
 use { deviation, recorded, reported } from "./checks.wado";
 /// The graph alone: its weights are external data in `model_fp16.onnx_data`.
 use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resolve/2dbbfdb1b59bd034eb959428c6a7da9dd7ea27f0/onnx/model_fp16.onnx"
@@ -26,7 +26,7 @@ use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resol
 
 /// Continues each prompt on `backend`: the prompt in one pass, then every token
 /// after its first in one call.
-pub fn checked<affine Bk: Graph>(backend: Bk) with (_, Stdout, Stderr, Preopens) {
+pub fn checked<affine Bk: Backend>(backend: Bk) with (_, Stdout, Stderr, Preopens) {
     let Some([generate, expected]) = recorded("generate_fp16.json", "build/logits_fp16.bin") else {
         return;
     };

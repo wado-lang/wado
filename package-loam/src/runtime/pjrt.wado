@@ -5,7 +5,18 @@
 use { HashMap, HashSet } from "core:collections";
 use { LinearArray } from "core:linear";
 use { Analysis, Buffer, ElementType, Executable, PjrtHost } from "core:pjrt";
-use { Binary, Comparison, Convolution, DotDims, GatherDims, Graph, ScatterDims, Unary, WindowReduce } from "./hlo.wado";
+use {
+    Binary,
+    Comparison,
+    Convolution,
+    DotDims,
+    Backend,
+    GatherDims,
+    Graph,
+    ScatterDims,
+    Unary,
+    WindowReduce,
+} from "./hlo.wado";
 use { Cpu, Element, ElementKind, Float, Holds, Tensor, element_count } from "./tensor.wado";
 use { Any, Erasable, Recorded, Recorder, data_of, kept_any } from "./recorded.wado";
 use { in_place, le_bytes, module_of } from "./stablehlo.wado";
@@ -394,22 +405,15 @@ impl Holds for PjrtBackend {
     }
 }
 
-impl Graph for PjrtBackend {
+impl Backend for PjrtBackend {
     type Program = PjrtProgram;
-
-    fn relabeled<E: Element, In, Out>(&self, t: &Located<E, In>) -> Located<E, Out> {
-        return match t {
-            Host(h) => Located::Host(Tensor { data: h.data, extents: h.extents }),
-            Device(d) => Located::Device(*d),
-        };
-    }
 
     fn compiled(
         &mut self,
         record: fn(&mut Recorder) -> Recorded with _,
         weights: &List<Any<PjrtBackend>>,
         earlier: &List<&PjrtProgram>,
-    ) -> Option<PjrtProgram> with (_, PjrtHost) {
+    ) -> PjrtProgram with (_, PjrtHost) {
         let recorded = record(&mut Recorder::decomposing());
         let returned: List<Returned> = recorded.body.results.into_iter().map(|id| {
             let node = &recorded.nodes[id];
@@ -425,14 +429,14 @@ impl Graph for PjrtBackend {
         let module = module_of(&recorded, &halved);
         if let Some(topology) = self.topology {
             self.analyses.push(done(PjrtHost::analyzed(module, topology)));
-            return Option::Some(PjrtProgram { at: -1, returned, in_place: [] });
+            return PjrtProgram { at: -1, returned, in_place: [] };
         }
         self.executables.push(done(PjrtHost::compile(module)));
-        return Option::Some(PjrtProgram {
+        return PjrtProgram {
             at: self.executables.len() - 1,
             returned,
             in_place: in_place(&recorded),
-        });
+        };
     }
 
     fn kept_weights<Er>(
@@ -498,6 +502,15 @@ impl Graph for PjrtBackend {
             self.donated += 1;
         }
         return values;
+    }
+}
+
+impl Graph for PjrtBackend {
+    fn relabeled<E: Element, In, Out>(&self, t: &Located<E, In>) -> Located<E, Out> {
+        return match t {
+            Host(h) => Located::Host(Tensor { data: h.data, extents: h.extents }),
+            Device(d) => Located::Device(*d),
+        };
     }
 
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Located<E, Axes> {

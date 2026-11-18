@@ -5,6 +5,7 @@
 use { PjrtHost } from "core:pjrt";
 use {
     Any,
+    Backend,
     Cpu,
     Element,
     Graph,
@@ -63,7 +64,7 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
         let rids = r.parameter::<i64, [cases::C]>(ids.extents);
         let got = cases::mixed(r, &rx, &rids);
         return r.finished([got.0.id, got.1.id, got.2.id, got.3.id, got.4.id]);
-    }, &[], &[]).unwrap();
+    }, &[], &[]);
     let got = device.executed(&program, &[
         Any::F32(untyped(device, &device.upload(&x))),
         Any::I64(untyped(device, &device.upload(&ids))),
@@ -87,7 +88,7 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
         let rx = r.parameter::<f32, [cases::A, cases::B]>(x.extents);
         let graph = cases::mixed(r, &rx, &rids);
         return r.finished([graph.0.id, graph.1.id]);
-    }, &kept, &[]).unwrap();
+    }, &kept, &[]);
     let halved = device.executed(&over_half, &[Any::I64(untyped(device, &device.upload(&ids)))], &kept);
     note("halved product", apart(device, &halved[0], &want.0));
     note("halved scattered", apart(device, &halved[1], &want.1));
@@ -97,7 +98,7 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
         let rx = r.parameter::<f32, [cases::A]>(ex.extents);
         let ry = r.parameter::<f32, [cases::A]>(ey.extents);
         return r.finished([cases::elementwise(r, &rx, &ry).id]);
-    }, &[], &[]).unwrap();
+    }, &[], &[]);
     let computed = device.executed(&every, &[
         Any::F32(untyped(device, &device.upload(&ex))),
         Any::F32(untyped(device, &device.upload(&ey))),
@@ -111,7 +112,7 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
         let narrow = cases::halved::<Recorder, f16>(r, &rx, &redges);
         let wide = cases::halved::<Recorder, bf16>(r, &rx, &redges);
         return r.finished([narrow.0.id, narrow.1.id, narrow.2.id, wide.0.id, wide.1.id, wide.2.id]);
-    }, &[], &[]).unwrap();
+    }, &[], &[]);
     let in_halves = device.executed(&halves, &[
         Any::F32(untyped(device, &device.upload(&hx))),
         Any::F32(untyped(device, &device.upload(&edges))),
@@ -129,14 +130,14 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
     let windowed = device.compiled(|r| {
         let rw = r.parameter::<f32, [cases::A, cases::B, cases::C]>(w.extents);
         return r.finished([cases::windowed(r, &rw).id]);
-    }, &[], &[]).unwrap();
+    }, &[], &[]);
     let slid = device.executed(&windowed, &[Any::F32(untyped(device, &device.upload(&w)))], &[]);
     note("windowed", apart(device, &slid[0], &cases::windowed(cpu, &w)));
 
     // The packed weights a model keeps, as it keeps them.
     let q = cases::quantized_case();
     let packed = device.kept_weights(cases::quantized_pass, 2, 5, cases::quantized_weight).unwrap();
-    let quantizing = device.compiled(cases::quantized_pass, &packed, &[]).unwrap();
+    let quantizing = device.compiled(cases::quantized_pass, &packed, &[]);
     let dequantized = device.executed(&quantizing, &[
         Any::F32(untyped(device, &device.upload(&q.a))),
         Any::I64(untyped(device, &device.upload(&q.ids))),
@@ -153,7 +154,7 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
 
     for let tokens of [1, 3] as List<i32> {
         let c = cases::experts_case(tokens);
-        let mixing = device.compiled(|r| cases::mixing_pass(r, tokens), &[], &[]).unwrap();
+        let mixing = device.compiled(|r| cases::mixing_pass(r, tokens), &[], &[]);
         let mixed = device.executed(&mixing, &cases::mixing_arguments(device, tokens), &[]);
         note(`experts ${tokens}`, apart(device, &mixed[0], &cases::mixing(cpu, &c.x, &c.router, &c.up, &c.down)));
     }
@@ -164,7 +165,7 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
             let rp = r.parameter::<bool, [cases::C]>(pred.extents);
             let rx = r.parameter::<f32, [cases::A]>(bx.extents);
             return r.finished([cases::branching(r, &rp, &rx).id]);
-        }, &[], &[]).unwrap();
+        }, &[], &[]);
         let branched = device.executed(&branching, &[
             Any::Bool(untyped(device, &device.upload(&pred))),
             Any::F32(untyped(device, &device.upload(&bx))),
@@ -179,7 +180,7 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
     let arg_max = device.compiled(|r| {
         let rx = r.parameter::<f32, [cases::A, cases::B]>(ranked.extents);
         return r.finished([r.arg_max(&rx, 1).id]);
-    }, &[], &[]).unwrap();
+    }, &[], &[]);
     let first = device.executed(&arg_max, &[Any::F32(untyped(device, &device.upload(&ranked)))], &[]);
     note("arg max", apart(device, &first[0], &cpu.arg_max(&ranked, 1)));
 
@@ -312,7 +313,7 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
             let rids = r.parameter::<i64, [cases::A]>(tallies.extents);
             let outputs = cases::repeating(r, &rcount, &rx, &rids);
             return r.finished([outputs.0.id, outputs.1.id]);
-        }, &[], &[]).unwrap();
+        }, &[], &[]);
         let ran = device.executed(&repeated, &[
             Any::I64(untyped(device, &device.upload(&count))),
             Any::F32(untyped(device, &device.upload(&xs))),
@@ -360,7 +361,7 @@ pub fn ragged_attention(device: &mut PjrtBackend, mut note: fn mut(String, f32) 
         let sinks = r.parameter::<f32, [cases::Qt]>(rows.sinks.extents);
         let attended = cases::attending(r, &inputs, &past, &rotation, &bias, &sinks, &rows.options);
         return r.finished([attended.0.id, attended.1.id, attended.2.id]);
-    }, &[], &[]).unwrap();
+    }, &[], &[]);
     let got = device.executed(&attending, &[
         Any::F32(untyped(device, &device.upload(&rows.inputs.0))),
         Any::F32(untyped(device, &device.upload(&rows.inputs.1))),

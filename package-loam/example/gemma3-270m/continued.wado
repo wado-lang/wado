@@ -7,7 +7,7 @@ use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { from_string } from "core:json";
 use { MonotonicClock } from "wasi:clocks";
-use { FileSource, Graph } from "lib:loam";
+use { Backend, FileSource } from "lib:loam";
 use { Model } from "./model.wado";
 
 /// How many tokens a call picks on a device: a read back each, then one for all.
@@ -31,7 +31,7 @@ struct Oracle {
 pub global WEIGHTS: FileSource = FileSource { dir: "build" };
 
 /// Gemma with its weights loaded onto `backend`, or `None` where they cannot be read.
-pub fn loaded<affine Bk: Graph>(backend: Bk) -> Option<Model<Bk>> with (_, Stderr, Preopens) {
+pub fn loaded<affine Bk: Backend>(backend: Bk) -> Option<Model<Bk>> with (_, Stderr, Preopens) {
     return match Model::load(backend, &WEIGHTS) {
         Ok(model) => Option::Some(model),
         Err(e) => {

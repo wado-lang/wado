@@ -1,6 +1,6 @@
 //! The graph a pass is built as. Its operations take their meaning from the
 //! StableHLO specification, so a compiler of the graph lowers each one to one
-//! operation, and `Cpu` computes each as it is added.
+//! operation, and `Cpu` computes each as its `Graph` method is called.
 
 use {
     Attention,
@@ -22,7 +22,8 @@ use {
     stretched_strides,
     walked,
 } from "./tensor.wado";
-use { Any, Recorded, Recorder, Untyped, assert_carries, kept_any } from "./recorded.wado";
+use { HashMap } from "core:collections";
+use { Any, Recorded, Recorder, Run, Untyped, assert_carries, constants, kept_any } from "./recorded.wado";
 use { HostWeight } from "./weight.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
@@ -115,22 +116,14 @@ pub struct Quantized {
     pub block: i32,
 }
 
-/// A pass built as a graph. Each method adds one operation and returns the
-/// tensor it computes. An operation whose output axes are not its operands'
-/// takes them as `Out`, which the caller spells.
-///
-/// A device records the pass once per shape class and compiles it, and
-/// `compute` then runs the program it compiled.
-pub affine trait Graph: Holds with _ {
+/// What runs a pass: it records the pass once per shape class and compiles
+/// it, and `compute` then runs the program it compiled.
+pub affine trait Backend: Graph with _ {
     /// What [`Self::compiled`] makes of a recorded pass.
     type Program;
 
-    /// `t` under the axes `Out`: how a program's arguments and results cross
-    /// the generated module, each `Untyped`.
-    fn relabeled<E: Element, In, Out>(&self, t: &Self::Tensor<E, In>) -> Self::Tensor<E, Out> with ();
-    /// The pass `record` records, compiled to run on this, or `None` where
-    /// this computes each operation as `build` adds it. `weights` are what its
-    /// last parameters will be given, as [`Self::kept_weights`] kept them.
+    /// The pass `record` records, compiled to run on this. `weights` are what
+    /// its last parameters will be given, as [`Self::kept_weights`] kept them.
     /// `earlier` holds the programs this compiled of the same graph at other
     /// extents, which compiling may build on.
     fn compiled(
@@ -138,9 +131,7 @@ pub affine trait Graph: Holds with _ {
         record: fn(&mut Recorder) -> Recorded with _,
         weights: &List<Any<Self>>,
         earlier: &List<&Self::Program>,
-    ) -> Option<Self::Program> with _ {
-        return null;
-    }
+    ) -> Self::Program with _;
     /// `program` over `arguments` and then `weights`, in the order the
     /// recorded pass took its parameters: what it returns, in that order.
     fn executed(
@@ -148,10 +139,7 @@ pub affine trait Graph: Holds with _ {
         program: &Self::Program,
         arguments: &List<Any<Self>>,
         weights: &List<Any<Self>>,
-    ) -> List<Any<Self>> {
-        // Only a backend whose `compiled` returns a program is given one.
-        unreachable();
-    }
+    ) -> List<Any<Self>>;
     /// The `count` weights a pass reads, `load(at)` the `at`th on the host,
     /// which the parameters `record` records take from its `first` on: each
     /// laid out from its stored bytes for the operations the recorded pass
@@ -169,6 +157,15 @@ pub affine trait Graph: Holds with _ {
         }
         return Result::Ok(kept);
     }
+}
+
+/// A pass built as a graph. Each method adds one operation and returns the
+/// tensor it computes. An operation whose output axes are not its operands'
+/// takes them as `Out`, which the caller spells.
+pub affine trait Graph: Holds with _ {
+    /// `t` under the axes `Out`: how a program's arguments and results cross
+    /// the generated module, each `Untyped`.
+    fn relabeled<E: Element, In, Out>(&self, t: &Self::Tensor<E, In>) -> Self::Tensor<E, Out> with ();
 
     /// StableHLO's `iota`: each element its index along `dimension`.
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Self::Tensor<E, Axes>;
@@ -1368,11 +1365,38 @@ fn attention_mask<affine G: Graph, B, N, S, T>(
     return g.broadcast_in_dim(&hidden, *extents, [0, 2, 3]);
 }
 
-/// `Cpu` compiles nothing: it computes each operation as `build` adds it, the
-/// reference a device's program is held to.
-impl Graph for Cpu {
-    type Program = ();
+/// What `Cpu` runs of a pass: the recording, each node computed as `Cpu`'s
+/// `Graph` computes it, and the nodes that read no argument, computed once.
+pub struct CpuProgram {
+    recorded: Recorded,
+    constants: HashMap<i32, Any<Cpu>>,
+}
 
+/// `Cpu` runs the pass it recorded node by node: the reference a device's
+/// program is held to.
+impl Backend for Cpu {
+    type Program = CpuProgram;
+
+    fn compiled(
+        &mut self,
+        record: fn(&mut Recorder) -> Recorded with _,
+        weights: &List<Any<Cpu>>,
+        earlier: &List<&CpuProgram>,
+    ) -> CpuProgram with _ {
+        let recorded = record(&mut Recorder::new());
+        return CpuProgram { constants: constants(&recorded), recorded };
+    }
+
+    fn executed(&mut self, program: &CpuProgram, arguments: &List<Any<Cpu>>, weights: &List<Any<Cpu>>) -> List<Any<Cpu>> {
+        return Run::<Cpu>::new(&program.recorded, arguments, weights, &program.constants).region(
+            self,
+            &program.recorded,
+            &program.recorded.body,
+        );
+    }
+}
+
+impl Graph for Cpu {
     fn relabeled<E: Element, In, Out>(&self, t: &Tensor<E, In>) -> Tensor<E, Out> {
         return Tensor { data: t.data, extents: t.extents };
     }

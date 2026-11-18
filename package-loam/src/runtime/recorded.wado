@@ -9,6 +9,7 @@ use {
     Convolution,
     DotDims,
     GatherDims,
+    Backend,
     Graph,
     Quantized,
     ScatterDims,
@@ -245,8 +246,6 @@ impl Holds for Recorder {
 }
 
 impl Graph for Recorder {
-    type Program = ();
-
     fn relabeled<E: Element, In, Out>(&self, t: &Value<E, In>) -> Value<E, Out> {
         return Value { id: t.id };
     }
@@ -804,12 +803,12 @@ pub fn assert_carries<affine G: Graph>(g: &G, held: &List<Any<G>>, returned: &Li
 /// The programs a backend compiled, one for each shape class: the extents of
 /// the arguments that vary between calls. The weights the programs take
 /// after those are one model's, the same on every call, and erased once.
-pub struct Programs<affine G: Graph> {
+pub struct Programs<affine G: Backend> {
     held: HashMap<List<List<i32>>, G::Program>,
     weights: Option<List<Any<G>>>,
 }
 
-impl<affine G: Graph> Programs<G> {
+impl<affine G: Backend> Programs<G> {
     pub fn new() -> Programs<G> {
         return Programs { held: HashMap::new(), weights: null };
     }
@@ -821,8 +820,7 @@ impl<affine G: Graph> Programs<G> {
 
     /// What the program of `class` returns over `arguments()` and the
     /// `weights()` of the first call, compiled from what `record` records
-    /// over their extents where none is held yet; `None` where `g` compiles
-    /// nothing, and builds itself.
+    /// over their extents where none is held yet.
     pub fn run(
         &mut self,
         g: &mut G,
@@ -830,7 +828,7 @@ impl<affine G: Graph> Programs<G> {
         record: fn(&mut Recorder, &List<List<i32>>) -> Recorded,
         arguments: fn() -> List<Any<G>> with _,
         weights: fn() -> List<Any<G>> with _,
-    ) -> Option<List<Any<G>>> with _ {
+    ) -> List<Any<G>> with _ {
         if self.weights matches { None } {
             self.weights = Option::Some(weights());
         }
@@ -842,18 +840,15 @@ impl<affine G: Graph> Programs<G> {
             for let c of self.held.keys() {
                 earlier.push(&self.held[*c]);
             }
-            let Some(program) = g.compiled(|r| {
+            self.held[class] = g.compiled(|r| {
                 let mut extents: List<List<i32>> = arguments().into_iter().map(|a| extents_of_any(g, &a)).collect();
                 for let w of erased {
                     extents.push(extents_of_any(g, w));
                 }
                 return record(r, &extents);
-            }, erased, &earlier) else {
-                return null;
-            };
-            self.held[class] = program;
+            }, erased, &earlier);
         }
-        return Option::Some(g.executed(&self.held[class], &arguments(), erased));
+        return g.executed(&self.held[class], &arguments(), erased);
     }
 }
 
@@ -968,7 +963,7 @@ impl<affine G: Graph> Run<G> {
     }
 
     /// Runs `region`'s nodes, and returns what it yields.
-    fn region(&mut self, g: &mut G, recorded: &Recorded, region: &Region) -> List<Any<G>> with _ {
+    internal fn region(&mut self, g: &mut G, recorded: &Recorded, region: &Region) -> List<Any<G>> with _ {
         for let id of region.nodes {
             let node = &recorded.nodes[id];
             if let Case([first, second]) = &node.op {
