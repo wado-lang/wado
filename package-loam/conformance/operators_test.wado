@@ -7,7 +7,7 @@
 //! part.
 
 use { read } from "lib:loam/src/onnx_proto.wado";
-use { TOLERANCE, assert_close, generated, program_over, ran } from "./oracle.wado";
+use { QMOE_LAYERS_EXPERT_BYTES, TOLERANCE, assert_close, generated, program_over, ran } from "./oracle.wado";
 use { EvalHost } from "core:eval";
 
 /// One tensor a case's text spells, each part as written: `f32` or `i64`, the
@@ -822,10 +822,6 @@ test "QMoE of one token of halves" {
     assert_agrees(#include_bytes("./operators/QMoeHalfStep.onnx"), #include_str("./operators/QMoeHalfStep.txt"));
 }
 
-/// The bytes one expert of `QMoeLayers` stores: its two packed products, their
-/// scales and their biases.
-global QMOE_EXPERT_BYTES: i64 = 64 * 16 + 64 * 4 + 64 * 4 + 32 * 16 + 32 * 4 + 32 * 4;
-
 /// Over two `QMoE` layers onnxruntime sits up to 4e-4 from the value computed
 /// in f64, so `QMoeLayers` holds Loam to that value, from which Loam's f32 sits
 /// up to 6.5e-6.
@@ -836,7 +832,7 @@ test "QMoE layers sharing pools that hold half their experts" {
         #include_bytes("./operators/QMoeLayers.onnx"),
         #include_str("./operators/QMoeLayers.txt"),
         QMOE_LAYERS_TOLERANCE,
-        Option::Some(4 * QMOE_EXPERT_BYTES),
+        Option::Some(4 * QMOE_LAYERS_EXPERT_BYTES),
     );
 }
 

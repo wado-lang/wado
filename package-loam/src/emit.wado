@@ -721,15 +721,18 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
     }
     w.line("/// Its pools hold every expert.");
     embedded.emit_begin(w);
-    w.line(`return Params::embedded_within(backend, &mut HeldExperts::resident(${BY_POSITION}));`);
+    w.line(
+        `return Params::embedded_within(backend, &mut HeldExperts::resident(${BY_POSITION}), &embedded_experts());`,
+    );
     w.end();
     w.blank();
-    w.line("/// The weights the graph carries, the experts as many as `experts` holds.");
+    w.line("/// The weights the graph carries, the experts as many as `experts` holds,");
+    w.line("/// read from `files`.");
     FnSpec::new("embedded_within").add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(
         "experts",
         "&mut HeldExperts",
-    ).set_return_type(PARAMS_TYPE).add_effect("_").emit_begin(w);
-    w.line("let pools = experts.pools(backend, &embedded_experts());");
+    ).add_param("files", `&${EMBEDDED_SOURCE}`).set_return_type(PARAMS_TYPE).add_effect("_").emit_begin(w);
+    w.line("let pools = experts.pools(backend, files);");
     emit_held_call(w, graph, experts, &held_hosts(graph, checked, placement, experts), false, "pools");
     w.line("return weights;");
     w.end();
@@ -742,7 +745,8 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         [],
         [
             `let mut experts = HeldExperts::within(${BY_POSITION}, budget)?;`,
-            "let weights = Params::embedded_within(backend, &mut experts);", "let source = embedded_experts();",
+            "let source = embedded_experts();",
+            "let weights = Params::embedded_within(backend, &mut experts, &source);",
         ],
     );
     w.blank();
@@ -875,7 +879,8 @@ fn checkpoint_payload(e: &Expected, primitive: &String, placement: &Placement) -
 }
 
 /// Where the source `load` was given holds a tensor of experts: its file and
-/// its first byte, checked against what the build compiled it as.
+/// its first byte. A header's entry is checked at load against what the build
+/// compiled the tensor as; a range the build found is that tensor's already.
 fn expert_place(e: &Expected, placement: &Placement) -> String {
     let file = match *placement {
         Unplaced => unreachable(),
@@ -883,6 +888,7 @@ fn expert_place(e: &Expected, placement: &Placement) -> String {
         Shards(placed) => placed[e.tensor],
         InPlace(in_place) => {
             let range = in_place.ranges[e.tensor];
+            assert range.end - range.start == e.elements * e.width, "a range the build found holds its tensor's bytes";
             return wado`["${range.file}", ${range.start}]`;
         },
     };
@@ -1013,8 +1019,8 @@ fn emit_compute(
     emit_model(w);
     w.blank();
     w.line("/// [`build`] over inputs on the host, each length padded to a capacity, its");
-    w.line("/// outputs read back cut to their lengths. A backend that compiles its");
-    w.line("/// pass runs the program it compiled for the capacities.");
+    w.line("/// outputs read back cut to their lengths, run as the program the backend");
+    w.line("/// compiled for the capacities.");
     if decoding matches { Some(_) } {
         w.line("/// The cache holds `room` positions past these, for the steps to come.");
     }
@@ -1327,8 +1333,8 @@ fn decoding_axes(
     return Result::Ok(DecodingAxes { ids: decode.ids, mask: decode.mask, logits: decode.logits, total });
 }
 
-/// `decode`: [`DECODED`] over inputs on the host, its tokens read back. A
-/// backend that compiles its pass runs the program `RECORDED_DECODED` records.
+/// `decode`: [`DECODED`] over inputs on the host, its tokens read back, run as
+/// the program `RECORDED_DECODED` records.
 /// `rows_past`, the length every row's past is, makes it `DECODE_ROWS`, each row
 /// at a past of its own, which the mask's extent holds with its steps, so no
 /// room moves the cache.

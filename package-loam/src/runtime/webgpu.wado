@@ -1417,7 +1417,6 @@ impl WebGpuBackend {
         };
     }
 
-    /// `w`, whose every element an f32 holds, kept in a buffer of its own.
     /// A buffer kept for a pool of `kind` and `extents`, as `kept_plain` lays
     /// a weight: four bytes to a word, or a float to a word.
     internal fn pooled(
@@ -1456,6 +1455,7 @@ impl WebGpuBackend {
         self.write(pool.slot, start, start + width, |i| row.value(i - start).to_bits());
     }
 
+    /// `w`, whose every element an f32 holds, kept in a buffer of its own.
     internal fn kept_values(&mut self, w: &HostWeight) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
         let slot = self.reserved(w.count(), true);
         self.write(slot, 0, w.count(), |i| w.value(i).to_bits());

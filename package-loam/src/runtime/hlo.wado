@@ -34,7 +34,6 @@ use {
     assert_carries,
     constants,
     kept_any,
-    kind_of,
     zeros_on_host,
 } from "./recorded.wado";
 use { HostWeight } from "./weight.wado";
@@ -1427,27 +1426,25 @@ impl Backend for Cpu {
 
     fn written(&mut self, pool: &mut Any<Cpu>, slot: i32, row: HostWeight) {
         let decoded = row.decoded();
-        *pool = match kind_of(pool) {
-            F32 => spliced::<f32>(pool, slot, &decoded),
-            F16 => spliced::<f16>(pool, slot, &decoded),
-            BF16 => spliced::<bf16>(pool, slot, &decoded),
-            U8 => spliced::<u8>(pool, slot, &decoded),
-            I64 => spliced::<i64>(pool, slot, &decoded),
-            Bool => spliced::<bool>(pool, slot, &decoded),
-        };
+        match pool {
+            F32(t) => spliced::<f32>(t, slot, &decoded),
+            F16(t) => spliced::<f16>(t, slot, &decoded),
+            BF16(t) => spliced::<bf16>(t, slot, &decoded),
+            U8(t) => spliced::<u8>(t, slot, &decoded),
+            I64(t) => spliced::<i64>(t, slot, &decoded),
+            Bool(t) => spliced::<bool>(t, slot, &decoded),
+        }
     }
 }
 
-/// `pool` with the elements of `row` in place of its slot `slot`.
-fn spliced<E: Erasable>(pool: &Any<Cpu>, slot: i32, row: &Any<Cpu>) -> Any<Cpu> {
-    let mut held = *E::of_any::<Cpu>(pool);
+/// The elements of `row` written over the slot `slot` of `held`.
+fn spliced<E: Erasable>(held: &mut Tensor<E, Untyped>, slot: i32, row: &Any<Cpu>) {
     let given = E::of_any::<Cpu>(row);
     let width = given.data.len();
     assert width * held.extents[0] == held.data.len() && 0 <= slot < held.extents[0], "a row fills one slot of the pool";
     for let at of 0..<width {
         held.data[slot * width + at] = given.data[at];
     }
-    return E::any::<Cpu>(held);
 }
 
 impl Graph for Cpu {

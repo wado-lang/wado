@@ -4,20 +4,17 @@
 
 use { Backend, Tensor } from "lib:loam";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
+use { QMOE_LAYERS_EXPERT_BYTES } from "./oracle.wado";
 use layers from "./operators/QMoeLayers.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
 
-/// The bytes one expert stores: its two packed products, their scales and
-/// their biases.
-global EXPERT_BYTES: i64 = 64 * 16 + 64 * 4 + 64 * 4 + 32 * 16 + 32 * 4 + 32 * 4;
-
 /// How far each of `passes` passes on `device`, its pools holding half the
 /// experts, sits from the same pass with every expert held.
 pub fn experts_apart<affine Bk: Backend>(device: &mut Bk, passes: i32) -> List<f32> with _ {
-    let mut held = layers::Model::embedded(device, 4 * EXPERT_BYTES).unwrap();
+    let mut held = layers::Model::embedded(device, 4 * QMOE_LAYERS_EXPERT_BYTES).unwrap();
     let mut whole = layers::Model::new(layers::Params::embedded(device));
     let mut apart: List<f32> = [];
     for let pass of 0..<passes {
