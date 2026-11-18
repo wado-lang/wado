@@ -249,7 +249,7 @@ pub fn check() -> Vec<Drift> {
         ("identifier", NAME_KEYWORDS),
         ("memberName", &member_names[..]),
     ] {
-        let accepted = rule_literals(&grammar, rule);
+        let accepted = rule_literals(grammar, rule);
         for text in words {
             if !accepted.iter().any(|literal| literal == text) {
                 drift.push(Drift::MissingFromNameRule {
