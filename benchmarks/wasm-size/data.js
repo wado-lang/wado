@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794992912403,
+  "lastUpdate": 1794994872010,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79477,6 +79477,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/824132f6d31bb3ad1276cdd04dd1b1340748aa3d"
         },
         "date": 1794992911064,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3f1db20a83ccdb5e543ae90e8c26e7c6bc7ec375",
+          "message": "Merge pull request #2684 from wado-lang/loam/experts-on-demand\n\nfeat(loam): hold a mixture of experts within a device budget",
+          "timestamp": "2026-11-18T17:48:45+09:00",
+          "tree_id": "db9086f8eea1169950740c4b9a5e02be6c4459f9",
+          "url": "https://github.com/wado-lang/wado/commit/3f1db20a83ccdb5e543ae90e8c26e7c6bc7ec375"
+        },
+        "date": 1794994870955,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
