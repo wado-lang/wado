@@ -286,11 +286,7 @@ fn recompute<T: Eq>(state: &mut MemoState<T>) {
     let value = with Track => &mut computation do {
         compute();
     };
-    let same = if let Some(was) = state.cached && was == value {
-        true;
-    } else {
-        false;
-    };
+    let same = state.cached matches { Some(was) && was == value };
     COMPUTING_MEMOS -= 1;
     core.deps = computation.deps;
     if same {
