@@ -125,6 +125,16 @@ pub fn wado_opaque_end(src: &StrSlice, i: i32, n: i32) -> Option<i32> {
     };
 }
 
+/// The end of the inert span starting at `i` — a string, a comment, or a
+/// template's literal text — with the `${ ... }` code spans inside it.
+pub fn inert_at(src: &StrSlice, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
+    if src.byte_at(i) == b'`' {
+        return scan_template(src, i, n);
+    }
+    let none: List<[i32, i32]> = [];
+    return [wado_opaque_end(src, i, n).unwrap_or(i), none];
+}
+
 /// In Wado code, the offset just past the delimiter matching the `open_b` at
 /// `open`, or `null` when it never closes.
 pub fn match_delim(src: &StrSlice, open: i32, n: i32, open_b: u8, close_b: u8) -> Option<i32> {
@@ -334,6 +344,41 @@ pub fn word_at<S: AsStrSlice>(src: &StrSlice, i: i32, n: i32, word: S) -> bool {
         return false;
     }
     return ident_start(src, i) == i && ident_end(src, i + w.len(), n) == i + w.len();
+}
+
+/// Past the whitespace and comments from `start`, stopping at `n`.
+pub fn skip_trivia(src: &StrSlice, start: i32, n: i32) -> i32 {
+    let mut i = skip_ws(src, start, n);
+    while i < n && let Some(end) = comment_end(src, i, n) {
+        i = skip_ws(src, end, n);
+    }
+    return i;
+}
+
+/// Whether the Wado source `src` calls a method `name` (`.name(`, trivia
+/// allowed between the tokens), in its code or a template's holes.
+pub fn calls_method<S: AsStrSlice>(src: &StrSlice, name: S) -> bool {
+    let method = name.as_str_slice();
+    let n = src.len();
+    let mut i = 0;
+    while i < n {
+        let [end, spans] = inert_at(src, i, n);
+        if end > i {
+            if spans.iter_ref().any(|s: &[i32, i32]| calls_method(&src.slice(s.0, s.1), method)) {
+                return true;
+            }
+            i = end;
+            continue;
+        }
+        if src.byte_at(i) == b'.' {
+            let at = skip_trivia(src, i + 1, n);
+            if word_at(src, at, n, method) && text_at(src, skip_trivia(src, at + method.len(), n), n, "(") {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    return false;
 }
 
 /// ANTLR4's `NameStartChar` (`vendor/antlr4/doc/lexicon.md`), which is XML's:

@@ -1039,6 +1039,7 @@ impl Lexer {
 fn apply_WORD1_actions(lx: &mut Lexer, start: i32, end: i32) {
     let src = &lx.src;
     let mut pos = start;
+    let mut deferred_actions: List<[i32, i32]> = [];
     if !(char_pos_in_line(src, pos) < 2) { return; }
     if pos >= src.len() { return; }
     if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' }) { return; }
@@ -1057,12 +1058,22 @@ fn apply_WORD1_actions(lx: &mut Lexer, start: i32, end: i32) {
         pos = rep_saved_0;
         break;
     }
-    lx.emit(`${span_text(src, start, pos)}\n`);
+    deferred_actions.push([0, pos]);
+    for let [action, at] of deferred_actions {
+        pos = at;
+        match action {
+            0 => {
+                lx.emit(`${span_text(src, start, pos)}\n`);
+            },
+            _ => unreachable(),
+        }
+    }
 }
 
 fn apply_WORD2_actions(lx: &mut Lexer, start: i32, end: i32) {
     let src = &lx.src;
     let mut pos = start;
+    let mut deferred_actions: List<[i32, i32]> = [];
     if !(char_pos_in_line(src, pos) >= 2) { return; }
     if pos >= src.len() { return; }
     if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' }) { return; }
@@ -1081,7 +1092,16 @@ fn apply_WORD2_actions(lx: &mut Lexer, start: i32, end: i32) {
         pos = rep_saved_2;
         break;
     }
-    lx.emit(`${span_text(src, start, pos)}\n`);
+    deferred_actions.push([1, pos]);
+    for let [action, at] of deferred_actions {
+        pos = at;
+        match action {
+            1 => {
+                lx.emit(`${span_text(src, start, pos)}\n`);
+            },
+            _ => unreachable(),
+        }
+    }
 }
 
 fn try_WORD1(src: &StrSlice, start: i32) -> i32 {

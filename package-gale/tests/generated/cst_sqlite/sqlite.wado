@@ -4192,105 +4192,133 @@ fn try_NUMERIC_LITERAL(src: &StrSlice, start: i32) -> i32 {
     alts_done_7: {
         alts_7_0: {
             pos = alts_saved_7;
+            let mut la_end_8: i32 = -1;
             if pos >= src.len() { break alts_7_0; }
             if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break alts_7_0; }
             pos += 1;
             loop {
-                rep_8: {
-                    if pos >= src.len() { break rep_8; }
-                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_8; }
+                let mut la_tot_9: i32 = -1;
+                let peek_save_10 = pos;
+                let opt_saved_11 = pos;
+                let mut opt_ok_11 = false;
+                opt_11: {
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break opt_11; }
+                    pos += 1;
+                    loop {
+                        rep_12: {
+                            if pos >= src.len() { break rep_12; }
+                            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_12; }
+                            pos += 1;
+                            continue;
+                        }
+                        break;
+                    }
+                    opt_ok_11 = true;
+                }
+                if !opt_ok_11 { pos = opt_saved_11; }
+                let opt_saved_13 = pos;
+                let mut opt_ok_13 = false;
+                opt_13: {
+                    if pos >= src.len() { break opt_13; }
+                    if !(unchecked src.byte_at(pos) matches { b'E' | b'e' }) { break opt_13; }
+                    pos += 1;
+                    opt_14: {
+                        if pos >= src.len() { break opt_14; }
+                        if !(unchecked src.byte_at(pos) matches { b'-' | b'+' }) { break opt_14; }
+                        pos += 1;
+                    }
+                    if pos >= src.len() { break opt_13; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_13; }
+                    pos += 1;
+                    loop {
+                        rep_15: {
+                            if pos >= src.len() { break rep_15; }
+                            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_15; }
+                            pos += 1;
+                            continue;
+                        }
+                        break;
+                    }
+                    opt_ok_13 = true;
+                }
+                if !opt_ok_13 { pos = opt_saved_13; }
+                la_tot_9 = pos;
+                pos = peek_save_10;
+                if la_tot_9 >= 0 && la_tot_9 >= la_end_8 {
+                    la_end_8 = la_tot_9;
+                }
+                let la_saved_8 = pos;
+                la_rep_8: {
+                    if pos >= src.len() { break la_rep_8; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break la_rep_8; }
                     pos += 1;
                     continue;
                 }
+                pos = la_saved_8;
                 break;
             }
-            let opt_saved_10 = pos;
-            let mut opt_ok_10 = false;
-            opt_10: {
-                if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break opt_10; }
-                pos += 1;
-                loop {
-                    rep_11: {
-                        if pos >= src.len() { break rep_11; }
-                        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_11; }
-                        pos += 1;
-                        continue;
-                    }
-                    break;
-                }
-                opt_ok_10 = true;
+            if la_end_8 < 0 {
+                break alts_7_0;
             }
-            if !opt_ok_10 { pos = opt_saved_10; }
-            let opt_saved_12 = pos;
-            let mut opt_ok_12 = false;
-            opt_12: {
-                if pos >= src.len() { break opt_12; }
-                if !(unchecked src.byte_at(pos) matches { b'E' | b'e' }) { break opt_12; }
-                pos += 1;
-                opt_13: {
-                    if pos >= src.len() { break opt_13; }
-                    if !(unchecked src.byte_at(pos) matches { b'-' | b'+' }) { break opt_13; }
-                    pos += 1;
-                }
-                if pos >= src.len() { break opt_12; }
-                if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_12; }
-                pos += 1;
-                loop {
-                    rep_14: {
-                        if pos >= src.len() { break rep_14; }
-                        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_14; }
-                        pos += 1;
-                        continue;
-                    }
-                    break;
-                }
-                opt_ok_12 = true;
-            }
-            if !opt_ok_12 { pos = opt_saved_12; }
+            pos = la_end_8;
             break alts_done_7;
         }
         alts_7_1: {
             pos = alts_saved_7;
             if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break alts_7_1; }
             pos += 1;
+            let mut la_end_17: i32 = -1;
             if pos >= src.len() { break alts_7_1; }
             if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break alts_7_1; }
             pos += 1;
             loop {
-                rep_16: {
-                    if pos >= src.len() { break rep_16; }
-                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_16; }
+                let mut la_tot_18: i32 = -1;
+                let peek_save_19 = pos;
+                let opt_saved_20 = pos;
+                let mut opt_ok_20 = false;
+                opt_20: {
+                    if pos >= src.len() { break opt_20; }
+                    if !(unchecked src.byte_at(pos) matches { b'E' | b'e' }) { break opt_20; }
+                    pos += 1;
+                    opt_21: {
+                        if pos >= src.len() { break opt_21; }
+                        if !(unchecked src.byte_at(pos) matches { b'-' | b'+' }) { break opt_21; }
+                        pos += 1;
+                    }
+                    if pos >= src.len() { break opt_20; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_20; }
+                    pos += 1;
+                    loop {
+                        rep_22: {
+                            if pos >= src.len() { break rep_22; }
+                            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_22; }
+                            pos += 1;
+                            continue;
+                        }
+                        break;
+                    }
+                    opt_ok_20 = true;
+                }
+                if !opt_ok_20 { pos = opt_saved_20; }
+                la_tot_18 = pos;
+                pos = peek_save_19;
+                if la_tot_18 >= 0 && la_tot_18 >= la_end_17 {
+                    la_end_17 = la_tot_18;
+                }
+                let la_saved_17 = pos;
+                la_rep_17: {
+                    if pos >= src.len() { break la_rep_17; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break la_rep_17; }
                     pos += 1;
                     continue;
                 }
+                pos = la_saved_17;
                 break;
             }
-            let opt_saved_18 = pos;
-            let mut opt_ok_18 = false;
-            opt_18: {
-                if pos >= src.len() { break opt_18; }
-                if !(unchecked src.byte_at(pos) matches { b'E' | b'e' }) { break opt_18; }
-                pos += 1;
-                opt_19: {
-                    if pos >= src.len() { break opt_19; }
-                    if !(unchecked src.byte_at(pos) matches { b'-' | b'+' }) { break opt_19; }
-                    pos += 1;
-                }
-                if pos >= src.len() { break opt_18; }
-                if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_18; }
-                pos += 1;
-                loop {
-                    rep_20: {
-                        if pos >= src.len() { break rep_20; }
-                        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_20; }
-                        pos += 1;
-                        continue;
-                    }
-                    break;
-                }
-                opt_ok_18 = true;
+            if la_end_17 < 0 {
+                break alts_7_1;
             }
-            if !opt_ok_18 { pos = opt_saved_18; }
+            pos = la_end_17;
             break alts_done_7;
         }
         return -1;
@@ -4300,31 +4328,31 @@ fn try_NUMERIC_LITERAL(src: &StrSlice, start: i32) -> i32 {
 
 fn try_BIND_PARAMETER(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_22 = pos;
-    alts_done_22: {
-        alts_22_0: {
-            pos = alts_saved_22;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'?' { break alts_22_0; }
+    let alts_saved_24 = pos;
+    alts_done_24: {
+        alts_24_0: {
+            pos = alts_saved_24;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'?' { break alts_24_0; }
             pos += 1;
             loop {
-                rep_23: {
-                    if pos >= src.len() { break rep_23; }
-                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_23; }
+                rep_25: {
+                    if pos >= src.len() { break rep_25; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_25; }
                     pos += 1;
                     continue;
                 }
                 break;
             }
-            break alts_done_22;
+            break alts_done_24;
         }
-        alts_22_1: {
-            pos = alts_saved_22;
-            if pos >= src.len() { break alts_22_1; }
-            if !(unchecked src.byte_at(pos) matches { b':' | b'@' | b'$' }) { break alts_22_1; }
+        alts_24_1: {
+            pos = alts_saved_24;
+            if pos >= src.len() { break alts_24_1; }
+            if !(unchecked src.byte_at(pos) matches { b':' | b'@' | b'$' }) { break alts_24_1; }
             pos += 1;
             pos = try_IDENTIFIER(src, pos);
-            if pos < 0 { break alts_22_1; }
-            break alts_done_22;
+            if pos < 0 { break alts_24_1; }
+            break alts_done_24;
         }
         return -1;
     }
@@ -4336,30 +4364,30 @@ fn try_STRING_LITERAL(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_24 = pos;
-        rep_24: {
-            let alts_saved_25 = pos;
-            alts_done_25: {
-                alts_25_0: {
-                    pos = alts_saved_25;
-                    if pos >= src.len() { break alts_25_0; }
-                    if (unchecked src.byte_at(pos) matches { b'\'' }) { break alts_25_0; }
+        let rep_saved_26 = pos;
+        rep_26: {
+            let alts_saved_27 = pos;
+            alts_done_27: {
+                alts_27_0: {
+                    pos = alts_saved_27;
+                    if pos >= src.len() { break alts_27_0; }
+                    if (unchecked src.byte_at(pos) matches { b'\'' }) { break alts_27_0; }
                     pos = src.ceil_char_boundary(pos + 1);
-                    break alts_done_25;
+                    break alts_done_27;
                 }
-                alts_25_1: {
-                    pos = alts_saved_25;
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { break alts_25_1; }
+                alts_27_1: {
+                    pos = alts_saved_27;
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { break alts_27_1; }
                     pos += 1;
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { break alts_25_1; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { break alts_27_1; }
                     pos += 1;
-                    break alts_done_25;
+                    break alts_done_27;
                 }
-                break rep_24;
+                break rep_26;
             }
             continue;
         }
-        pos = rep_saved_24;
+        pos = rep_saved_26;
         break;
     }
     if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
@@ -4384,9 +4412,9 @@ fn try_SINGLE_LINE_COMMENT(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'-' { return -1; }
     pos += 1;
     loop {
-        rep_26: {
-            if pos >= src.len() { break rep_26; }
-            if (unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break rep_26; }
+        rep_28: {
+            if pos >= src.len() { break rep_28; }
+            if (unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break rep_28; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
@@ -4402,32 +4430,32 @@ fn try_MULTILINE_COMMENT(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'*' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_27 = pos;
-        let mut ng_exit_27 = false;
-        ng_27: {
-            let alts_saved_28 = pos;
-            alts_done_28: {
-                alts_28_0: {
-                    pos = alts_saved_28;
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'*' { break alts_28_0; }
+        let ng_saved_29 = pos;
+        let mut ng_exit_29 = false;
+        ng_29: {
+            let alts_saved_30 = pos;
+            alts_done_30: {
+                alts_30_0: {
+                    pos = alts_saved_30;
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'*' { break alts_30_0; }
                     pos += 1;
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_28_0; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_30_0; }
                     pos += 1;
-                    break alts_done_28;
+                    break alts_done_30;
                 }
-                alts_28_1: {
-                    pos = alts_saved_28;
-                    if pos < src.len() { break alts_28_1; }
-                    break alts_done_28;
+                alts_30_1: {
+                    pos = alts_saved_30;
+                    if pos < src.len() { break alts_30_1; }
+                    break alts_done_30;
                 }
-                break ng_27;
+                break ng_29;
             }
-            ng_exit_27 = true;
+            ng_exit_29 = true;
         }
-        if ng_exit_27 {
+        if ng_exit_29 {
             break;
         }
-        pos = ng_saved_27;
+        pos = ng_saved_29;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }

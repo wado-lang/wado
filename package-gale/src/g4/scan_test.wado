@@ -1,4 +1,5 @@
 use {
+    calls_method,
     comment_end,
     scan_string,
     scan_char_class,
@@ -146,4 +147,19 @@ test "word_at reads a multi-byte name char as part of the word" {
     let s = "éthis this".as_str_slice();
     assert !word_at(&s, 2, s.len(), "this");
     assert word_at(&s, 7, s.len(), "this");
+}
+
+test "calls_method finds a call however it is spaced, and none in a comment or a literal" {
+    assert calls_method(&"self.skip();".as_str_slice(), "skip");
+    assert calls_method(&"self . skip ();".as_str_slice(), "skip");
+    assert !calls_method(&"self.skipped();".as_str_slice(), "skip");
+    assert !calls_method(&"// self.skip()\nlet s = \".skip()\";".as_str_slice(), "skip");
+    assert !calls_method(&"self.skip".as_str_slice(), "skip");
+}
+
+test "calls_method reads past a comment before the call and into a template hole" {
+    assert calls_method(&"self /* c */ . skip /* c */ ();".as_str_slice(), "skip");
+    assert calls_method(&"let s = `at ${self.mode()}`;".as_str_slice(), "mode");
+    assert calls_method(&"let s = `${`${self.mode()}`}`;".as_str_slice(), "mode");
+    assert !calls_method(&"let s = `.mode()`;".as_str_slice(), "mode");
 }

@@ -1,0 +1,13 @@
+// A `Self` binding closes a trait's turbofish: the trait's own arguments
+// come before it.
+
+trait Mk with () {
+    fn tag() -> i32;
+}
+
+export fn run() {
+    let n = Mk::<Self = i32, i64>::tag();
+}
+
+__DATA__
+{"compile_error": ":9:18: parse error: a `Self` binding closes a trait's turbofish"}

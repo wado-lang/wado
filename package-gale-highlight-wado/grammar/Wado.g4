@@ -5,8 +5,60 @@ grammar Wado;
 
 options { language = Wado; }
 
+// A hole's specifier follows its first `:` outside brackets. Each open hole
+// counts its own braces apart from its parentheses and brackets, as the
+// compiler's scanner does: only a `}` closes the hole.
 @lexer::members {
-    raw_hashes: List<i32> = []
+    raw_hashes: List<i32> = [];
+    hole_braces: List<i32> = [];
+    hole_brackets: List<i32> = [];
+
+    fn open_hole(&mut self) {
+        self.hole_braces.push(0);
+        self.hole_brackets.push(0);
+    }
+
+    fn close_brace(&mut self) {
+        let Some(depth) = self.hole_braces.last() else {
+            return;
+        };
+        if depth > 0 {
+            self.hole_braces[self.hole_braces.len() - 1] = depth - 1;
+        } else {
+            self.close_hole();
+        }
+    }
+
+    fn close_hole(&mut self) {
+        self.hole_braces.pop();
+        self.hole_brackets.pop();
+    }
+
+    fn open_brace(&mut self) {
+        if let Some(depth) = self.hole_braces.last() {
+            self.hole_braces[self.hole_braces.len() - 1] = depth + 1;
+        }
+    }
+
+    fn open_bracket(&mut self) {
+        if let Some(depth) = self.hole_brackets.last() {
+            self.hole_brackets[self.hole_brackets.len() - 1] = depth + 1;
+        }
+    }
+
+    fn close_bracket(&mut self) {
+        if let Some(depth) = self.hole_brackets.last() && depth > 0 {
+            self.hole_brackets[self.hole_brackets.len() - 1] = depth - 1;
+        }
+    }
+
+    fn at_hole_top(&self) -> bool {
+        return self.hole_braces.last() == Some(0) && self.hole_brackets.last() == Some(0);
+    }
+
+    fn ends_name(&self, c: i32) -> bool {
+        return c >= 0 && c < 128 && ((c as u8).is_ascii_alphanumeric() || c == b'_' as i32);
+    }
 }
 
 sourceFile
@@ -374,7 +426,7 @@ typeArgs
     ;
 
 typeArg
-    : (IDENTIFIER | 'Self') '=' typeRef
+    : IDENTIFIER '=' typeRef
     | IDENTIFIER ':' traitBounds
     | typeRef
     ;
@@ -708,6 +760,7 @@ atom
     | 'self'
     | compileTimeExpr
     | taggedTemplate
+    | selfBoundCall
     | exprPath
     | tupleOrArrayLiteral
     | closure
@@ -731,6 +784,14 @@ braceLiteral
 // spells with its `(`.
 exprPath
     : (identifier | 'Self') ('::' pathSegment)* ('::' typeArgs ('::' pathSegment)*)?
+    ;
+
+// `Trait::<Self = T>::method(…)` binds the receiver of a trait's static
+// method. The binding closes the trait's own arguments, and a call follows. A
+// namespace is as much qualification as the trait takes.
+selfBoundCall
+    : identifier ('::' pathSegment)? '::' '<' (typeRef ',')* 'Self' '=' typeRef '>'
+      '::' pathSegment ('::' typeArgs)? '(' argumentList? ')'
     ;
 
 // A template literal directly after a path tags it (WEP 2026-01-10). A gap
@@ -761,8 +822,15 @@ pathSegment
     : memberName
     ;
 
+// The name is an identifier read by its spelling, so a predicate checks it,
+// after the name: prediction reads the tokens alone and takes the first arm
+// that can match. `#file("a")` matches the include, so it is refused here and
+// parsed by the compiler. An include's path is a text string, never bytes.
 compileTimeExpr
-    : '#' IDENTIFIER ('(' argumentList? ')')?
+    : '#' ( IDENTIFIER { p.token_text(p.lt(-1)) matches { "include_str" | "include_bytes" } }?
+            '(' { !p.token_text(p.lt(1)).starts_with("b") }? STRING_LITERAL ')'
+          | IDENTIFIER { p.token_text(p.lt(-1)) matches { "file" | "line" | "function" | "data" } }?
+          )
     ;
 
 // `expression`'s levels where a brace opens the block that follows, as in a
@@ -1001,16 +1069,7 @@ interpolationEnd
     ;
 
 formatSpec
-    : ':' formatSpecAtom*
-    ;
-
-// The fill is any character the interpolation scanner does not read as
-// structure, so this lists the punctuation the lexer already tokenizes,
-// minus the quotes, braces and `/`. NON_ASCII covers a multi-byte fill.
-formatSpecAtom
-    : IDENTIFIER | INTEGER | FLOAT | NON_ASCII
-    | '.' | '<' | '>' | '^' | '+' | '-' | '#' | '?' | '_' | '*'
-    | '!' | '%' | '&' | '(' | ')' | ',' | ';' | '=' | '[' | ']' | '|' | '~' | '$'
+    : ':' FORMAT_SPEC
     ;
 
 // An `_` stands between two digits. A float with an exponent is its own token,
@@ -1051,24 +1110,43 @@ RAW_BYTES_OPEN
     ;
 
 LBRACE
-    : '{' -> pushMode(DEFAULT_MODE)
+    : '{' { lx.open_brace() } -> pushMode(DEFAULT_MODE)
     ;
 
 RBRACE
-    : '}' -> popMode
+    : '}' { lx.close_brace() } -> popMode
+    ;
+
+LPAREN
+    : '(' { lx.open_bracket() }
+    ;
+
+RPAREN
+    : ')' { lx.close_bracket() }
+    ;
+
+LBRACKET
+    : '[' { lx.open_bracket() }
+    ;
+
+RBRACKET
+    : ']' { lx.close_bracket() }
+    ;
+
+// The specifier replaces the hole's mode, so its `}` returns to the template.
+COLON
+    : ':' { if lx.at_hole_top() { lx.set_mode(MODE_FORMAT); } }
     ;
 
 // A template touching the name before it is tagged. Whitespace never reaches
 // the parser, so the lexer tells the touching opener apart. Ahead of
 // `BACKTICK` and `RAW_OPEN`, which it otherwise ties.
 TAG_BACKTICK
-    : '`' { start > 0 && (lx.src.byte_at(start - 1).is_ascii_alphanumeric() || lx.src.byte_at(start - 1) == b'_') }?
-      -> pushMode(TEMPLATE)
+    : { lx.ends_name(view.la(-1)) }? '`' -> pushMode(TEMPLATE)
     ;
 
 TAG_RAW_OPEN
-    : '#'+ '`' { start > 0 && (lx.src.byte_at(start - 1).is_ascii_alphanumeric() || lx.src.byte_at(start - 1) == b'_') }?
-      { lx.raw_hashes.push(pos - start - 1) } -> pushMode(RAW_TEMPLATE)
+    : { lx.ends_name(view.la(-1)) }? '#'+ '`' { lx.raw_hashes.push(pos - start - 1) } -> pushMode(RAW_TEMPLATE)
     ;
 
 BACKTICK
@@ -1119,14 +1197,6 @@ WS
     : [ \t\r\n\f]+ -> skip
     ;
 
-// A format specifier's fill character when it is not ASCII: `${x:あ>8}`.
-// Every other token is ASCII-only and a bare non-ASCII character is legal
-// nowhere else, so this steals nothing: a string, char literal or comment
-// containing one matches its own rule from an ASCII delimiter.
-NON_ASCII
-    : ~[\u0000-\u007F]
-    ;
-
 mode TEMPLATE;
 
 TEMPLATE_TEXT
@@ -1134,7 +1204,7 @@ TEMPLATE_TEXT
     ;
 
 INTERP_OPEN
-    : '${' -> pushMode(DEFAULT_MODE)
+    : '${' { lx.open_hole() } -> pushMode(DEFAULT_MODE)
     ;
 
 DOLLAR_TEXT
@@ -1157,7 +1227,7 @@ RAW_CLOSE
     ;
 
 RAW_INTERP_OPEN
-    : '${' -> type(INTERP_OPEN), pushMode(DEFAULT_MODE)
+    : '${' { lx.open_hole() } -> type(INTERP_OPEN), pushMode(DEFAULT_MODE)
     ;
 
 RAW_TEXT
@@ -1182,4 +1252,25 @@ RAW_STRING_TEXT
 
 RAW_STRING_QUOTE
     : '"' -> more
+    ;
+
+// `[[fill] align] ['+'] ['#'] ['0'] [width] ['.' precision] [kind]`, read by
+// character and trimmed. A fill is any character but a space, a brace or a
+// quote, which the hole's scanner reads as its own structure.
+mode FORMAT;
+
+FORMAT_SPEC
+    : (FORMAT_FILL? [<^>])? '+'? '#'? '0'? [0-9]* ('.' [0-9]+)? [boxXeEf?]?
+    ;
+
+FORMAT_CLOSE
+    : '}' { lx.close_hole() } -> type(RBRACE), popMode
+    ;
+
+FORMAT_WS
+    : [\p{White_Space}]+ -> skip
+    ;
+
+fragment FORMAT_FILL
+    : ~[{}'"`\p{White_Space}]
     ;

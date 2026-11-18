@@ -29,7 +29,7 @@ use {
     scan_string,
     comment_end,
     scan_template,
-    wado_opaque_end,
+    inert_at,
     match_delim,
     split_top_level_commas,
     skip_ws,
@@ -39,7 +39,8 @@ use {
     name_end,
 } from "./g4/scan.wado";
 use { CodeWriter } from "lib:wadopoet";
-use { to_snake_case } from "./ident.wado";
+use { to_snake_case, LEXER_VIEW_HERE, LEXER_VIEW_TYPE } from "./ident.wado";
+use { MemberDecls } from "./java2wado/jmembers.wado";
 
 /// One synthesized effect operation, from a distinct `this.<method>` call site.
 /// `is_predicate` distinguishes a `{...}?` predicate call from a `{...}` action.
@@ -202,34 +203,29 @@ pub fn find_this_calls<S: AsStrSlice>(body: S) -> List<SuperCall> {
 /// Whether the body names `this` at all — a call, a field read, or the bare
 /// word. Wado has no such name, so nothing here can be emitted as written.
 pub fn body_names_this<S: AsStrSlice>(body: S) -> bool {
+    return body_names_word(body, &"this");
+}
+
+/// Whether `word` appears in the body as code, outside strings and comments.
+pub fn body_names_word<S: AsStrSlice>(body: S, word: &String) -> bool {
     let src = body.as_str_slice();
     let n = src.len();
     let mut i = 0;
     while i < n {
         let [end, spans] = inert_at(&src, i, n);
         if end > i {
-            if spans.iter_ref().any(|s: &[i32, i32]| body_names_this(src.slice(s.0, s.1))) {
+            if spans.iter_ref().any(|s: &[i32, i32]| body_names_word(src.slice(s.0, s.1), word)) {
                 return true;
             }
             i = end;
             continue;
         }
-        if word_at(&src, i, n, "this") {
+        if word_at(&src, i, n, word) {
             return true;
         }
         i += 1;
     }
     return false;
-}
-
-/// The end of the inert span starting at `i` — a string, a comment, or a
-/// template's literal text — with the `${ ... }` code spans inside it.
-fn inert_at(src: &StrSlice, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
-    if src.byte_at(i) == b'`' {
-        return scan_template(src, i, n);
-    }
-    let none: List<[i32, i32]> = [];
-    return [wado_opaque_end(src, i, n).unwrap_or(i), none];
 }
 
 /// The arguments the call spanning `[start, close)` passes, split on its
@@ -662,10 +658,12 @@ fn rule_calls_super_with<S: AsStrSlice>(
 ) -> bool {
     let needle = `${base_name}::`;
     let mut visited: List<String> = [];
-    return rule_calls_super(rule, all_rules, &needle, actions, &mut visited);
+    return rule_bodies_contain(rule, all_rules, &needle, actions, &mut visited);
 }
 
-fn rule_calls_super<S: AsStrSlice>(
+/// Whether a body `rule` reaches holds `needle`: its predicates, and its
+/// actions too where `actions` says so.
+fn rule_bodies_contain<S: AsStrSlice>(
     rule: &LexerRule,
     all_rules: &List<LexerRule>,
     needle: S,
@@ -676,10 +674,10 @@ fn rule_calls_super<S: AsStrSlice>(
         return false;
     }
     visited.push(rule.name);
-    return rule.body.iter_ref().any(|alt| alt_calls_super(alt, all_rules, needle, actions, visited));
+    return rule.body.iter_ref().any(|alt| alt_bodies_contain(alt, all_rules, needle, actions, visited));
 }
 
-fn alt_calls_super<S: AsStrSlice>(
+fn alt_bodies_contain<S: AsStrSlice>(
     alt: &LexerAlternative,
     all_rules: &List<LexerRule>,
     needle: S,
@@ -694,10 +692,10 @@ fn alt_calls_super<S: AsStrSlice>(
             return true;
         }
     }
-    return alt.elements.iter_ref().any(|e| elem_calls_super(e, all_rules, needle, actions, visited));
+    return alt.elements.iter_ref().any(|e| elem_bodies_contain(e, all_rules, needle, actions, visited));
 }
 
-fn elem_calls_super<S: AsStrSlice>(
+fn elem_bodies_contain<S: AsStrSlice>(
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
     needle: S,
@@ -707,20 +705,20 @@ fn elem_calls_super<S: AsStrSlice>(
     match elem {
         Group(alts) => {
             for let alt of alts {
-                if alt_calls_super(alt, all_rules, needle, actions, visited) {
+                if alt_bodies_contain(alt, all_rules, needle, actions, visited) {
                     return true;
                 }
             }
         },
         Repeat(rep) => {
-            return elem_calls_super(&rep.element, all_rules, needle, actions, visited);
+            return elem_bodies_contain(&rep.element, all_rules, needle, actions, visited);
         },
         Not(n) => {
-            return elem_calls_super(&n.element, all_rules, needle, actions, visited);
+            return elem_bodies_contain(&n.element, all_rules, needle, actions, visited);
         },
         RuleRef(name) => {
             if let Some(r) = find_lexer_rule(all_rules, name) {
-                return rule_calls_super(r, all_rules, needle, actions, visited);
+                return rule_bodies_contain(r, all_rules, needle, actions, visited);
             }
         },
         _ => {
@@ -759,7 +757,16 @@ fn gen_super_hooks(w: &mut CodeWriter) {
 
 /// The tokenize-loop call to the `emit` hook, reading the loop's own locals.
 pub fn super_emit_hook_expr<S: AsStrSlice, S1: AsStrSlice>(base_name: S, channel: S1) -> String {
-    return `${base_name}::emit(LexerView { src: &lexer.src, start: tok_start, pos: best_end }, best_kind, ${channel})`;
+    return `${base_name}::emit(${LEXER_VIEW_TYPE} { src: &lexer.src, start: tok_start, pos: best_end }, best_kind, ${channel})`;
+}
+
+/// Whether a staged lexer body or a lexer member names `LexerView`, so the
+/// generated module must carry the type.
+pub fn lexer_names_view(rules: &List<LexerRule>, members: &MemberDecls) -> bool {
+    let mut visited: List<String> = [];
+    return rules.iter_ref().any(|r| rule_bodies_contain(r, rules, LEXER_VIEW_TYPE, true, &mut visited))
+        || members.fields.iter_ref().any(|f| f.ty.contains(LEXER_VIEW_TYPE) || f.init.contains(LEXER_VIEW_TYPE))
+        || members.methods.iter_ref().any(|m| m.source.contains(LEXER_VIEW_TYPE));
 }
 
 /// The ambient operation call for a call site, reading the locals in scope
@@ -771,8 +778,8 @@ pub fn super_call_expr<S: AsStrSlice, S1: AsStrSlice>(
     args: &List<String>,
 ) -> String {
     let recv = match site {
-        LexerPredicate => "LexerView { src, start, pos }",
-        LexerAction => "LexerView { src, start, pos }, lx",
+        LexerPredicate => LEXER_VIEW_HERE,
+        LexerAction => `${LEXER_VIEW_HERE}, lx`,
         ParserPredicate => "p",
     };
     return `${base_name}::${to_snake_case(method)}(${recv}${after_receiver(args)})`;

@@ -1046,6 +1046,7 @@ impl Lexer {
 fn apply_T_actions(lx: &mut Lexer, start: i32, end: i32) {
     let src = &lx.src;
     let mut pos = start;
+    let mut deferred_actions: List<[i32, i32]> = [];
     let la_saved_0 = pos;
     let mut la_reach_0: i32 = -1;
     let mut la_win_0: i32 = -1;
@@ -1089,25 +1090,47 @@ fn apply_T_actions(lx: &mut Lexer, start: i32, end: i32) {
     if la_win_0 == 0 {
         if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { return; }
         pos += 1;
-        lx.hits = 1;
+        deferred_actions.push([0, pos]);
     } else if la_win_0 == 1 {
         if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { return; }
         pos += 1;
         if pos >= src.len() || unchecked src.byte_at(pos) != b'b' { return; }
         pos += 1;
-        lx.hits = 10;
+        deferred_actions.push([2, pos]);
     }
     if pos >= src.len() { return; }
     if !(unchecked src.byte_at(pos) matches { b'b'..=b'z' }) { return; }
     pos += 1;
+    for let [action, at] of deferred_actions {
+        pos = at;
+        match action {
+            0 => {
+                lx.hits = 1;
+            },
+            2 => {
+                lx.hits = 10;
+            },
+            _ => unreachable(),
+        }
+    }
 }
 
 fn apply_MARK_actions(lx: &mut Lexer, start: i32, end: i32) {
     let src = &lx.src;
     let mut pos = start;
+    let mut deferred_actions: List<[i32, i32]> = [];
     if pos >= src.len() || unchecked src.byte_at(pos) != b'!' { return; }
     pos += 1;
-    lx.hits = 0;
+    deferred_actions.push([4, pos]);
+    for let [action, at] of deferred_actions {
+        pos = at;
+        match action {
+            4 => {
+                lx.hits = 0;
+            },
+            _ => unreachable(),
+        }
+    }
 }
 
 fn try_T(lx: &Lexer, start: i32) -> i32 {

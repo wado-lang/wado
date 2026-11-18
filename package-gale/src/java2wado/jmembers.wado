@@ -233,7 +233,7 @@ fn expr_mutates(e: &JExpr, scope: &List<String>, mutators: &List<String>) -> boo
         Cast(c) => expr_mutates(&c.operand, scope, mutators),
         Binary(b) => expr_mutates(&b.lhs, scope, mutators) || expr_mutates(&b.rhs, scope, mutators),
         Paren(p) => expr_mutates(&p.inner, scope, mutators),
-        Int(_) | Str(_) | Bool(_) | Attr(_) | Name(_) => false,
+        Int(_) | Char(_) | Str(_) | Bool(_) | Attr(_) | Name(_) => false,
     };
 }
 
