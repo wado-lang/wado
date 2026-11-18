@@ -1490,12 +1490,7 @@ impl Graph for Cpu {
     }
 
     fn convert<A: Element, B: Element, Axes>(&mut self, x: &CpuTensor<A, Axes>) -> CpuTensor<B, Axes> {
-        let x = self.held(x);
-        let mut data = List::<B>::with_capacity(x.data.len());
-        for let v of x.data {
-            data.push(v.cast_to::<B>());
-        }
-        return CpuTensor::Value(Tensor { data, extents: x.extents });
+        return CpuTensor::Value(self.held(x).converted::<B>());
     }
 
     fn unary<E: Float, Axes>(&mut self, op: Unary, x: &CpuTensor<E, Axes>) -> CpuTensor<E, Axes> {

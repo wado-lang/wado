@@ -7,6 +7,13 @@ pub struct Tensor<E, Axes> {
     pub extents: List<i32>,
 }
 
+impl<E: Element, Axes> Tensor<E, Axes> {
+    /// Each element cast to `B`, as StableHLO's `convert` casts it.
+    pub fn converted<B: Element>(&self) -> Tensor<B, Axes> {
+        return Tensor { data: self.data.into_iter().map(|v| v.cast_to::<B>()).collect(), extents: self.extents };
+    }
+}
+
 /// The elements `extents` hold, or `None` where its non-empty extents multiply
 /// past `i32::MAX`. A kernel counts sub-shapes, so every partial product must fit.
 pub fn checked_element_count(extents: &List<i32>) -> Option<i32> {

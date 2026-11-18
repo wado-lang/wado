@@ -21,7 +21,7 @@ use {
     typed,
 } from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
-use { deviation, widened } from "lib:loam/example/webgpu/compare.wado";
+use { deviation } from "lib:loam/example/webgpu/compare.wado";
 use { decoded_tokens, requests_apart, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
 use { experts_apart } from "./held_experts.wado";
 use gated from "./gated.onnxtext"
@@ -254,8 +254,8 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
             data: (0..<positions).map(|i| (i * 3 % 4) as i64).collect(),
             extents: [1, positions],
         };
-        let on_device = widened(&gated_f16::compute(device, &rows, &mut f16_device));
-        let reference = widened(&gated_f16::compute(cpu, &rows, &mut f16_cpu));
+        let on_device = gated_f16::compute(device, &rows, &mut f16_device).converted::<f32>();
+        let reference = gated_f16::compute(cpu, &rows, &mut f16_cpu).converted::<f32>();
         note(`compiled gated f16 ${positions}`, deviation(&on_device.data, &reference.data));
     }
 
@@ -464,15 +464,15 @@ fn untyped<E: Element, Axes>(g: &PjrtBackend, t: &Located<E, Axes>) -> Located<E
 fn apart<E: Element, Axes>(g: &mut PjrtBackend, got: &Any<PjrtBackend>, want: &CpuTensor<E, Axes>) -> f32 with PjrtHost {
     let read = match got {
         F32(t) => g.download(t),
-        I64(t) => widened(&g.download(t)),
-        I32(t) => widened(&g.download(t)),
-        Bool(t) => widened(&g.download(t)),
-        F16(t) => widened(&g.download(t)),
-        BF16(t) => widened(&g.download(t)),
-        U8(t) => widened(&g.download(t)),
+        I64(t) => g.download(t).converted::<f32>(),
+        I32(t) => g.download(t).converted::<f32>(),
+        Bool(t) => g.download(t).converted::<f32>(),
+        F16(t) => g.download(t).converted::<f32>(),
+        BF16(t) => g.download(t).converted::<f32>(),
+        U8(t) => g.download(t).converted::<f32>(),
     };
     if read.extents != want.value().extents {
         return f32::NAN;
     }
-    return deviation(&read.data, &widened(want.value()).data);
+    return deviation(&read.data, &want.value().converted::<f32>().data);
 }

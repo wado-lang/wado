@@ -47,7 +47,7 @@ use {
     WebGpuBackend,
 } from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
-use { deviation, widened } from "lib:loam/example/webgpu/compare.wado";
+use { deviation } from "lib:loam/example/webgpu/compare.wado";
 use { decoded_tokens, requests_apart, samplers, stepped_tokens, tokens_apart } from "./decoded.wado";
 use { experts_apart } from "./held_experts.wado";
 use gated from "./gated.onnxtext"
@@ -519,9 +519,9 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             data: (0..<positions).map(|i| (i * 3 % 4) as i64).collect(),
             extents: [1, positions],
         };
-        let on_device = widened(&gated_f16::compute(&mut gpu, &tokens, &mut f16_gpu)).data;
-        let in_words = widened(&gated_f16::compute(&mut plain, &tokens, &mut f16_plain)).data;
-        let reference = widened(&gated_f16::compute(cpu, &tokens, &mut f16_cpu)).data;
+        let on_device = gated_f16::compute(&mut gpu, &tokens, &mut f16_gpu).converted::<f32>().data;
+        let in_words = gated_f16::compute(&mut plain, &tokens, &mut f16_plain).converted::<f32>().data;
+        let reference = gated_f16::compute(cpu, &tokens, &mut f16_cpu).converted::<f32>().data;
         println(`compiled gated f16 ${positions} ${deviation(&on_device, &reference)}`);
         println(`compiled gated f16 in f32 words ${positions} ${deviation(&in_words, &reference)}`);
     }
@@ -780,9 +780,9 @@ fn quantized_in<E: Float>(
     name: String,
 ) -> [Placed<E, [cases::A, cases::B]>, Placed<i64, [cases::A]>, [Tensor<f32, [cases::A, cases::C]>, Tensor<f32, [cases::A, cases::B]>]] with (Stdout, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let q = cases::quantized_case();
-    let a = cast::<E, f32, [cases::A, cases::B]>(&q.a);
-    let scales = cast::<E, f32, [cases::C, cases::Blocks]>(&q.scales);
-    let table_scales = cast::<E, f32, [cases::Rows, cases::Blocks]>(&q.table_scales);
+    let a = q.a.converted::<E>();
+    let scales = q.scales.converted::<E>();
+    let table_scales = q.table_scales.converted::<E>();
     let cpu = &mut Cpu {};
     let computed = cases::quantizing::<Cpu, E>(
         cpu,
@@ -799,8 +799,8 @@ fn quantized_in<E: Float>(
         &CpuTensor::Value(q.ids),
     );
     let want = [
-        widened(computed.0.value()),
-        widened(computed.1.value()),
+        computed.0.value().converted::<f32>(),
+        computed.1.value().converted::<f32>(),
     ];
     let weight = [
         gpu.upload(&q.weight),
@@ -835,21 +835,21 @@ fn attention_in<E: Float>(
 ) with (Stdout, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let case = cases::attention_case();
     let inputs = [
-        cast::<E, f32, [cases::Bt, cases::St, cases::Qt]>(&case.inputs.0),
-        cast::<E, f32, [cases::Bt, cases::St, cases::Kt]>(&case.inputs.1),
-        cast::<E, f32, [cases::Bt, cases::St, cases::Kt]>(&case.inputs.2),
+        case.inputs.0.converted::<E>(),
+        case.inputs.1.converted::<E>(),
+        case.inputs.2.converted::<E>(),
     ];
     let past = [
-        cast::<E, f32, [cases::Bt, cases::Ht, cases::Pt, cases::Dt]>(&case.past.0),
-        cast::<E, f32, [cases::Bt, cases::Ht, cases::Pt, cases::Dt]>(&case.past.1),
+        case.past.0.converted::<E>(),
+        case.past.1.converted::<E>(),
         case.past.2,
     ];
     let rotation = [
-        cast::<E, f32, [cases::Pos, cases::Half]>(&case.rotation.0),
-        cast::<E, f32, [cases::Pos, cases::Half]>(&case.rotation.1),
+        case.rotation.0.converted::<E>(),
+        case.rotation.1.converted::<E>(),
     ];
-    let bias = cast::<E, f32, [cases::Bt, cases::Ht, cases::St, cases::Tt]>(&case.bias);
-    let sinks = cast::<E, f32, [cases::Qt]>(&case.sinks);
+    let bias = case.bias.converted::<E>();
+    let sinks = case.sinks.converted::<E>();
     let cpu = &mut Cpu {};
     let computed = cases::attending::<Cpu, E>(
         cpu,
@@ -872,9 +872,9 @@ fn attention_in<E: Float>(
         &case.options,
     );
     let want = [
-        widened(computed.0.value()),
-        widened(computed.1.value()),
-        widened(computed.2.value()),
+        computed.0.value().converted::<f32>(),
+        computed.1.value().converted::<f32>(),
+        computed.2.value().converted::<f32>(),
     ];
     let held_inputs = [
         gpu.upload(&inputs.0),
@@ -910,7 +910,7 @@ fn attention_in<E: Float>(
         ["present_k", got.1, want.1],
         ["present_v", got.2, want.2],
     ] {
-        let read = widened(&gpu.download(&present));
+        let read = gpu.download(&present).converted::<f32>();
         println(`attending ${part}${name} ${deviation(
             &leading(&read, valid).data,
             &leading(&reference, valid).data,
@@ -976,18 +976,13 @@ fn rows_of<Axes>(rows: i32, positions: i32) -> Tensor<f32, Axes> {
     };
 }
 
-/// `t`'s elements cast to `B`, as `Cpu`'s `convert` casts them.
-fn cast<B: Element, A: Element, Axes>(t: &Tensor<A, Axes>) -> Tensor<B, Axes> {
-    return Tensor { data: t.data.into_iter().map(|v| v.cast_to::<B>()).collect(), extents: t.extents };
-}
-
 /// How far `got` sits from `want`, what `Cpu` computed.
 fn apart<E: Element, Axes>(
     gpu: &mut WebGpuBackend,
     got: &Placed<E, Axes>,
     want: &CpuTensor<E, Axes>,
 ) -> f32 with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-    return apart_from(gpu, got, &widened(want.value()));
+    return apart_from(gpu, got, &want.value().converted::<f32>());
 }
 
 /// How far `got` sits from `want`, NaN where their extents differ.
@@ -996,7 +991,7 @@ fn apart_from<E: Element, Axes>(
     got: &Placed<E, Axes>,
     want: &Tensor<f32, Axes>,
 ) -> f32 with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-    let read = widened(&gpu.download(got));
+    let read = gpu.download(got).converted::<f32>();
     if read.extents != want.extents {
         return f32::NAN;
     }
