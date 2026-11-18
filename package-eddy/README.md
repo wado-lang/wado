@@ -83,8 +83,9 @@ A repository admin comments `@wado-bot review` on a pull request, or
 dispatches the `Eddy` workflow with its number. The workflow reviews the pull
 request's head and posts `review.md` as a comment. Eddy itself, `mise.toml`
 and every script come from the default branch, so the pull request's code runs
-only inside Eddy's confinement. The record and the patches stay in the run's
-artifact for 90 days, as `eddy-<pr>-<head>`.
+only inside Eddy's confinement. The record goes to `reviews/<head>.json` in
+the repository's wiki, and the patches stay in the run's artifact for 90
+days, as `eddy-<pr>-<head>`.
 
 The workflow holds no API key. With `ANTHROPIC_FEDERATION_RULE_ID` and the
 rest of a Workload Identity Federation rule in its environment, Eddy trades
