@@ -286,9 +286,11 @@ impl ModuleSourceInterner {
             {
                 let interned = self.intern(&root);
                 if self.root_dir.as_ref() == Some(&root) {
-                    self.placed_libs.insert(lib.clone(), self.root_package.clone());
+                    self.placed_libs
+                        .insert(lib.clone(), self.root_package.clone());
                 } else if self.undeclared_packages.contains_key(&interned) {
-                    self.placed_libs.insert(lib.clone(), PackageId::Path(interned));
+                    self.placed_libs
+                        .insert(lib.clone(), PackageId::Path(interned));
                 }
                 self.dependency_roots.insert(root, lib);
             }

@@ -1599,11 +1599,7 @@ impl Graph for Cpu {
     }
 
     fn transpose<E: Element, In, Out>(&mut self, x: &CpuTensor<E, In>, perm: List<i32>) -> CpuTensor<E, Out> {
-        let x = self.held(x);
-        if is_identity(&perm) {
-            return CpuTensor::Value(Tensor { data: x.data, extents: x.extents });
-        }
-        return CpuTensor::Value(permute(x, perm));
+        return CpuTensor::Value(transposed(self.held(x), perm));
     }
 
     fn slice<E: Element, In, Out>(
@@ -1660,7 +1656,7 @@ impl Graph for Cpu {
         let kept = kept_axes(x.extents.len(), &dims);
         let mut perm = kept;
         perm.extend(&(0..<x.extents.len()).filter(|i| dims.contains(&i)).collect());
-        let laid = if is_identity(&perm) { *x } else { permute::<E, In, In>(x, perm) };
+        let laid: Tensor<E, In> = transposed(x, perm);
         let extents = picked(&x.extents, &kept);
         let rows = element_count(&extents);
         let width = if rows == 0 { 0 } else { laid.data.len() / rows };
@@ -2053,6 +2049,15 @@ fn compared_i64(direction: Comparison, a: i64, b: i64) -> bool {
 /// steps by zero, which reads the same elements.
 fn row_major_strides(extents: &List<i32>) -> List<i32> {
     return stretched_strides(extents, extents.len());
+}
+
+/// `x` with input axis `perm[i]` moved to output axis `i`, copied as it is
+/// where `perm` moves none.
+fn transposed<E, In, Out>(x: &Tensor<E, In>, perm: List<i32>) -> Tensor<E, Out> {
+    if is_identity(&perm) {
+        return Tensor { data: x.data, extents: x.extents };
+    }
+    return permute(x, perm);
 }
 
 fn is_identity(perm: &List<i32>) -> bool {

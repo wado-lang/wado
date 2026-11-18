@@ -703,7 +703,11 @@ fn the_entry_package_reached_back_as_a_dependency_is_one_package() {
     let tmp = tempfile::tempdir().unwrap();
     let app = tmp.path().join("app");
     library(&app, "", "pub use { Token } from \"./token.wado\";\n");
-    fs::write(app.join("src/token.wado"), "pub struct Token { pub v: i32 }\n").unwrap();
+    fs::write(
+        app.join("src/token.wado"),
+        "pub struct Token { pub v: i32 }\n",
+    )
+    .unwrap();
     library(
         &app.join("side"),
         "\"lib:app\" = { path = \"..\" }\n",
