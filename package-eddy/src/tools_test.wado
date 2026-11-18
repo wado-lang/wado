@@ -27,9 +27,10 @@ test "Write creates the file and its directories inside the root" {
     let ws = Workspace { root, runner: Some(runner) };
     assert ws.call(&"Write", &tool_input(`{"file_path": "/a/b.txt", "content": "hi\\n"}`)).unwrap() == "Wrote /a/b.txt";
     assert fs::read_to_string("build/tools-test/a/b.txt").unwrap() == "hi\n";
-    assert ws.call(&"Write", &tool_input(`{"file_path": "../escape.txt", "content": ""}`)).unwrap_err().contains(
-        "outside the repository",
-    );
+    assert ws
+        .call(&"Write", &tool_input(`{"file_path": "../escape.txt", "content": ""}`))
+        .unwrap_err()
+        .contains("outside the repository");
 }
 
 /// Whether Grep and Glob can run here. A test of them returns early on a machine
@@ -52,9 +53,10 @@ test "Read numbers the lines of the range it reads" {
 
 test "a path that leaves the root is refused" {
     let ws = Workspace { root: "src" };
-    assert ws.call(&"Read", &tool_input(`{"file_path": "../wado.toml"}`)).unwrap_err().contains(
-        "outside the repository",
-    );
+    assert ws
+        .call(&"Read", &tool_input(`{"file_path": "../wado.toml"}`))
+        .unwrap_err()
+        .contains("outside the repository");
 }
 
 test "Grep and Glob answer with paths from the root" {
@@ -90,9 +92,10 @@ test "Run runs its runner's programs and no other" {
         programs: ["cargo", "mise", "node"],
     };
     let ws = Workspace { root: "src", runner: Some(runner) };
-    assert ws.call(&"Run", &tool_input(`{"program": "sh", "args": ["-c", "true"]}`)).unwrap_err().contains(
-        "one of: cargo, mise, node",
-    );
+    assert ws
+        .call(&"Run", &tool_input(`{"program": "sh", "args": ["-c", "true"]}`))
+        .unwrap_err()
+        .contains("one of: cargo, mise, node");
     assert ws.run_command(&["sh", "-c", "true"], 1).is_err() && ws.run_command(&[], 1).is_err();
     let run = ws.tools().into_iter().filter(|t| t.name == "Run").collect()[0];
     assert `${run.input_schema:?}`.contains("node") && run.description.contains("task runner");
@@ -130,9 +133,11 @@ test "a limit past the end reads the rest" {
     if !has_rg() {
         return;
     }
-    let rest = ws.call(&"Grep", &tool_input(
-        `{"pattern": "^pub fn", "glob": "*.wado", "offset": 1, "head_limit": 2147483647}`,
-    )).unwrap();
+    let rest = ws
+        .call(&"Grep", &tool_input(
+            `{"pattern": "^pub fn", "glob": "*.wado", "offset": 1, "head_limit": 2147483647}`,
+        ))
+        .unwrap();
     assert !rest.is_empty();
 }
 

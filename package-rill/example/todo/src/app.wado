@@ -1,20 +1,7 @@
 //! A to-do list. `mount` runs once and builds the page; after that only the
 //! bindings run, each when a signal it read was written.
 
-use {
-    Memo,
-    Signal,
-    Track,
-    bind_attribute,
-    bind_text,
-    each,
-    element,
-    memo,
-    on,
-    scope,
-    signal,
-    text,
-} from "wado-lang:rill";
+use { Memo, Signal, Track, View, element, memo, scope, signal } from "wado-lang:rill";
 use { Dom, Element, Event, HtmlInputElement, SurfaceDom } from "wado-lang:web";
 
 struct Todo {
@@ -29,17 +16,16 @@ impl Eq for Todo {
     }
 }
 
-fn todo_row(todos: Signal<List<Todo>>, todo: Todo) -> Element with (Track, Dom) {
-    let row = element("li");
-    row.set_id(`todo-${todo.id}`);
-    bind_attribute(row, "class", || if todo.done.get() { Option::Some("done") } else { null });
+fn done_class(todo: &Todo) -> Option<String> with Track {
+    if todo.done.get() {
+        return Option::Some("done");
+    }
+    return null;
+}
 
-    let title = text("span", todo.title);
-    on(title, "click", |_: Event| todo.done.set(!todo.done.get()));
-    row.append_child(title);
-
-    let remove = text("button", "×");
-    on(remove, "click", |_: Event| {
+fn todo_row(todos: Signal<List<Todo>>, todo: Todo) -> View with (Track, Dom) {
+    let title = element("span").text(todo.title).on("click", |_: Event| todo.done.set(!todo.done.get()));
+    let remove = element("button").text("×").on("click", |_: Event| {
         let mut rest: List<Todo> = [];
         for let other of todos.get() {
             if other != todo {
@@ -48,8 +34,8 @@ fn todo_row(todos: Signal<List<Todo>>, todo: Todo) -> Element with (Track, Dom) 
         }
         todos.set(rest);
     });
-    row.append_child(remove);
-    return row;
+    let row = element("li").attribute("id", `todo-${todo.id}`);
+    return row.bind_attribute("class", || done_class(&todo)).children([title, remove]);
 }
 
 /// Builds the list under `root`, and returns what stops its bindings and takes
@@ -69,34 +55,26 @@ pub fn mount(root: Element) -> fn mut() with Dom with Dom {
             return left;
         });
 
-        let input: HtmlInputElement = element("input") else {
+        let field = element("input").attribute("id", "title");
+        let input: HtmlInputElement = field.node else {
             unreachable();
         };
-        input.set_id("title");
-        root.append_child(input);
-
-        let add = text("button", "Add");
-        add.set_id("add");
-        on(add, "click", |_: Event| {
-            let title = input.value();
-            if title.is_empty() {
-                return;
-            }
-            let mut list = todos.get();
-            list.push(Todo { id: next_id, title, done: signal(false) });
-            next_id += 1;
-            todos.set(list);
-            input.set_value("");
-        });
-        root.append_child(add);
-
-        let list = element("ul");
-        each(list, || todos.get(), |todo: Todo| todo_row(todos, todo));
-        root.append_child(list);
-
-        let summary = element("p");
-        bind_text(summary, || `${remaining.get()} left`);
-        root.append_child(summary);
+        View::of(root).children([
+            field,
+            element("button").attribute("id", "add").text("Add").on("click", |_: Event| {
+                let title = input.value();
+                if title.is_empty() {
+                    return;
+                }
+                let mut list = todos.get();
+                list.push(Todo { id: next_id, title, done: signal(false) });
+                next_id += 1;
+                todos.set(list);
+                input.set_value("");
+            }),
+            element("ul").each(|| todos.get(), |todo: Todo| todo_row(todos, todo)),
+            element("p").bind_text(|| `${remaining.get()} left`),
+        ]);
     });
 }
 

@@ -134,6 +134,28 @@ test "a length merged behind the rows refuses it where a product's right operand
     assert judged(source) == ["S: refused at G = MatMul: it reads rows a regrouping merged"] as List<String>;
 }
 
+/// A `QMoE` of 4 experts over tokens of 32, of input `x` and router `router`.
+fn experts(x: String, router: String) -> String {
+    return `g (float[2, S, 32] X) => (float[2, S, 32] Y) <float[32, 4] Wr, int64[2] Flat = {-1, 32}, int64[3] Back = {2, -1, 32}, uint8[4, 64, 16] W1, float[4, 64, 1] S1, float[4, 64] B1, uint8[4, 32, 16] W2, float[4, 32, 1] S2> {
+        F = Reshape(X, Flat)
+        R = ${router}
+        M = com.microsoft.QMoE<k = 2, activation_type = "swiglu", swiglu_fusion = 1, activation_alpha = 1.702, activation_beta = 1.0, expert_weight_bits = 4, block_size = 32>(${x}, R, W1, S1, B1, W2, S2)
+        Y = Reshape(M, Back)
+    }`;
+}
+
+test "a length merged behind the rows keeps it padded where each token runs its own experts" {
+    // gpt-oss's: the rows and positions merged for the router's product and
+    // the experts, then split back.
+    assert judged(experts("F", "MatMul(F, Wr)")) == ["S: padded"] as List<String>;
+}
+
+test "a length merged behind the rows refuses it where the experts' router merges the rows and the input does not" {
+    assert judged(experts("X", "MatMul(F, Wr)")) == [
+        "S: refused at M = com.microsoft.QMoE: it reads rows a regrouping merged",
+    ] as List<String>;
+}
+
 test "a branch's merged tensors stay its own where its sibling reuses their names" {
     let source = `g (bool[1] C, float[2, S, 4] X, float[M, 4] Z) => (float[?, 4] Y) <int64[2] Flat = {-1, 4}, int64[3] Back = {2, -1, 4}> {
         Y = If <then_branch = merged () => (float[M, 4] U) {

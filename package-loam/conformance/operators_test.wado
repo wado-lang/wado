@@ -7,7 +7,7 @@
 //! part.
 
 use { read } from "lib:loam/src/onnx_proto.wado";
-use { assert_close, generated, program_over, ran } from "./oracle.wado";
+use { TOLERANCE, assert_close, generated, program_over, ran } from "./oracle.wado";
 use { EvalHost } from "core:eval";
 
 /// One tensor a case's text spells, each part as written: `f32` or `i64`, the
@@ -103,8 +103,8 @@ fn printed<Axes>(got: &Tensor<${element}, Axes>) with Stdout {
 }
 
 /// Loam computes from `model` what onnxruntime did, which `oracle` states: the
-/// same elements, a float within `TOLERANCE` of onnxruntime's.
-fn assert_agrees(model: ByteList, oracle: String) with EvalHost {
+/// same elements, a float within `tolerance` of onnxruntime's.
+fn assert_agrees(model: ByteList, oracle: String, tolerance: f32 = TOLERANCE) with EvalHost {
     let case = Case::of(&oracle);
     let want = case.output;
     let got = computed(model, &case);
@@ -114,7 +114,7 @@ fn assert_agrees(model: ByteList, oracle: String) with EvalHost {
     let found = Spelled::of(&fields);
     assert found.element == want.element && found.extents == want.extents;
     if want.element == "f32" {
-        assert_close(&found.floats(), &want.floats());
+        assert_close(&found.floats(), &want.floats(), tolerance);
     } else {
         assert found.values == want.values;
     }
@@ -637,6 +637,26 @@ test "SimplifiedLayerNormalization scales each row by the root of its mean squar
     );
 }
 
+test "SkipSimplifiedLayerNormalization normalizes the sum of its input and skip" {
+    assert_agrees(#include_bytes("./operators/SkipNorm.onnx"), #include_str("./operators/SkipNorm.txt"));
+}
+
+test "SkipSimplifiedLayerNormalization adds a bias before it normalizes" {
+    assert_agrees(#include_bytes("./operators/SkipNormBias.onnx"), #include_str("./operators/SkipNormBias.txt"));
+}
+
+test "SkipSimplifiedLayerNormalization gives the sum it normalizes as its fourth output" {
+    assert_agrees(#include_bytes("./operators/SkipNormSum.onnx"), #include_str("./operators/SkipNormSum.txt"));
+}
+
+test "SkipSimplifiedLayerNormalization of halves normalizes a sum past a half's range" {
+    assert_agrees(#include_bytes("./operators/SkipNormHalf.onnx"), #include_str("./operators/SkipNormHalf.txt"));
+}
+
+test "SkipSimplifiedLayerNormalization of halves rounds the sum it gives to a half" {
+    assert_agrees(#include_bytes("./operators/SkipNormHalfSum.onnx"), #include_str("./operators/SkipNormHalfSum.txt"));
+}
+
 test "Gelu approximated by tanh" {
     assert_agrees(#include_bytes("./operators/GeluTanh.onnx"), #include_str("./operators/GeluTanh.txt"));
 }
@@ -726,6 +746,18 @@ test "GroupQueryAttention rotates and adds its bias" {
     assert_agrees(#include_bytes("./operators/GqaRotaryBias.onnx"), #include_str("./operators/GqaRotaryBias.txt"));
 }
 
+test "GroupQueryAttention adds each head's sink to its softmax's denominator" {
+    assert_agrees(#include_bytes("./operators/GqaSink.onnx"), #include_str("./operators/GqaSink.txt"));
+}
+
+test "GroupQueryAttention with a sink over a window" {
+    assert_agrees(#include_bytes("./operators/GqaSinkWindow.onnx"), #include_str("./operators/GqaSinkWindow.txt"));
+}
+
+test "GroupQueryAttention of halves with a sink" {
+    assert_agrees(#include_bytes("./operators/GqaHalfSink.onnx"), #include_str("./operators/GqaHalfSink.txt"));
+}
+
 test "MatMulNBits reads each block less its packed zero point, times its scale, the last block cut short" {
     assert_agrees(#include_bytes("./operators/NBits.onnx"), #include_str("./operators/NBits.txt"));
 }
@@ -744,6 +776,44 @@ test "MatMulNBits over halves adds its bias before rounding once" {
 
 test "MatMulNBits of 8 bits holds a value in each byte" {
     assert_agrees(#include_bytes("./operators/NBits8.onnx"), #include_str("./operators/NBits8.txt"));
+}
+
+/// A `QMoE` around a zero point of 8 sums terms of either sign to values far
+/// smaller than the terms, so in f32 onnxruntime's sits up to 2.3e-6 from the
+/// value computed in f64, and Loam's up to 2.6e-6. Held to onnxruntime, Loam
+/// may part from it by their sum.
+global QMOE_TOLERANCE: f32 = 5e-6;
+
+test "QMoE over more picks than experts weighs each expert's rows" {
+    assert_agrees(
+        #include_bytes("./operators/QMoePrompt.onnx"),
+        #include_str("./operators/QMoePrompt.txt"),
+        QMOE_TOLERANCE,
+    );
+}
+
+test "QMoE of one token runs the experts it picks" {
+    assert_agrees(#include_bytes("./operators/QMoeStep.onnx"), #include_str("./operators/QMoeStep.txt"), QMOE_TOLERANCE);
+}
+
+test "QMoE without normalized routing weighs each pick by its softmax over every expert" {
+    assert_agrees(
+        #include_bytes("./operators/QMoeUnnormalized.onnx"),
+        #include_str("./operators/QMoeUnnormalized.txt"),
+        QMOE_TOLERANCE,
+    );
+}
+
+test "QMoE reads each block less its packed zero point" {
+    assert_agrees(#include_bytes("./operators/QMoeZeroPoints.onnx"), #include_str("./operators/QMoeZeroPoints.txt"));
+}
+
+test "QMoE of halves over more picks than experts" {
+    assert_agrees(#include_bytes("./operators/QMoeHalf.onnx"), #include_str("./operators/QMoeHalf.txt"));
+}
+
+test "QMoE of one token of halves" {
+    assert_agrees(#include_bytes("./operators/QMoeHalfStep.onnx"), #include_str("./operators/QMoeHalfStep.txt"));
 }
 
 test "GatherBlockQuantized dequantizes the rows it takes, an index past the table reading zeros" {

@@ -304,3 +304,29 @@ step of every prompt:
 | --------------------------------------- | ------------- |
 | `node generate.mjs generate_q4.json`    | 0.290         |
 | `node generate.mjs generate_q4f16.json` | 0.141         |
+
+### Mixture of Experts
+
+onnxruntime's `QMoE` runs each token through the `k` experts its row of router
+logits ranks highest. Each pick weighs its expert's output by its softmax over
+every expert, divided by the picks' sum where `normalize_routing_weights` is
+set. onnxruntime divides whether or not it is set, and Loam follows the
+definition. An expert is a SwiGLU between two `quantized_product`s, so
+`WebGpuBackend` runs both products in its kernels.
+
+`mixture_of_experts` in `runtime/experts.wado` takes one of two forms by the
+extents, computing in f32 and rounding once to the graph's element type. With
+fewer picks than experts, as in a decode step, it runs each pick on its token's
+row. With more, as over a prompt, it runs each expert over every row, weighted
+by a gate that is zero where the token did not pick it. Either form is a
+`repeated` loop that gathers one expert's slices of the weights at a time, so
+its temporaries hold one expert, never all of them.
+
+What `PjrtBackend::analyzing("v5e:1x1")` reports for the two forms, over the
+four experts of `graph_cases.wado`'s `experts_case`, through
+`conformance/pjrt_topology.wado` under `mise run test-pjrt`:
+
+| Form, over                   | Temporary bytes |
+| ---------------------------- | --------------- |
+| Each pick, a step of 1 token | 409,600         |
+| Each expert, a prompt of 3   | 262,144         |

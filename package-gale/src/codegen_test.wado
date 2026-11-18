@@ -1649,11 +1649,11 @@ r : A?? A B ;
 A : 'a' ;
 B : 'b' ;
 ", &LONGEST);
-    let refusals: List<String> = longest.diagnostics.iter_ref().filter(
-        |d: &Diagnostic| d.kind matches { SimulatorRequired },
-    ).map(
-        |d: &Diagnostic| `${d.owner.label()}: ${d.message}`,
-    ).collect();
+    let refusals: List<String> = longest.diagnostics
+        .iter_ref()
+        .filter(|d: &Diagnostic| d.kind matches { SimulatorRequired })
+        .map(|d: &Diagnostic| `${d.owner.label()}: ${d.message}`)
+        .collect();
     assert refusals == [
         "rule 'r': a non-greedy `??` only the ATN simulator decides, and `prediction: \"longest\"` refuses it",
     ];
@@ -1969,7 +1969,10 @@ B : [0-z] ;
 C options { caseInsensitive = false; } : [A-z] ;
 D : [\\p{L}_]+ ;
 E : 'A'..'\\u00AA' ;";
-    let messages: List<String> = gen(input).diagnostics.into_iter().map(|d| `${d.owner.label()}: ${d.message}`).collect();
+    let messages: List<String> = gen(input).diagnostics
+        .into_iter()
+        .map(|d| `${d.owner.label()}: ${d.message}`)
+        .collect();
     // `\\p{L}` holds runs such as Ø..ö, which no one wrote. `ª` is lowercase
     // with no case mapping.
     assert messages == [
@@ -6542,12 +6545,14 @@ impl Preopens for Grants {
         let cwd = Preopens::get_directories().remove(0).0;
         let mut granted: List<[Descriptor, String]> = [];
         for let dir of &self.dirs {
-            let opened = cwd.open_at(
-                PathFlags::none(),
-                *dir,
-                OpenFlags::Directory,
-                DescriptorFlags::Read | DescriptorFlags::MutateDirectory,
-            ).wait();
+            let opened = cwd
+                .open_at(
+                    PathFlags::none(),
+                    *dir,
+                    OpenFlags::Directory,
+                    DescriptorFlags::Read | DescriptorFlags::MutateDirectory,
+                )
+                .wait();
             granted.push([opened.unwrap(), *dir]);
         }
         resume granted;
@@ -7070,9 +7075,9 @@ test "a Kiln parse error says which input it is in" {
     let supplementary = kiln(["Expr.g4", bytes_of(EXPR)], [
         ["Broken.g4", broken, null],
     ], no_options());
-    assert supplementary.error().starts_with(
-        "invalid schema: gale: failed to parse supplementary grammar 'Broken.g4': ",
-    );
+    assert supplementary
+        .error()
+        .starts_with("invalid schema: gale: failed to parse supplementary grammar 'Broken.g4': ");
 }
 
 test "a Kiln grammar with unresolved references names the primary input" {

@@ -161,9 +161,9 @@ pub fn plan_parser(
         needs_atn,
         needs_lr_atn: marks.needs_lr_atn,
         rule_asks_simulator: marks.rule_asks_simulator,
-        rule_consults_simulator: (0..<rule_count).map(
-            |r| marks.rule_asks_simulator[r] || marks.rule_checks_simulator[r],
-        ).collect(),
+        rule_consults_simulator: (0..<rule_count)
+            .map(|r| marks.rule_asks_simulator[r] || marks.rule_checks_simulator[r])
+            .collect(),
         rule_reaches_simulator: close_over_callers(&analysis.scannable_callees(), marks.rule_asks_simulator),
         scan_memo: rescanned.contains(&true) || any_lr,
         lr_frames: lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(l) && l.mid_operand_gated() }),

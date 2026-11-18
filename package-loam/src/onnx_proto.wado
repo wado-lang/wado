@@ -441,10 +441,13 @@ fn read_model<S: AsByteSlice>(bytes: S, files: &HashMap<String, ByteList>) -> Re
         return Result::Err("a model without a graph");
     };
     let written = read_graph(graph, files)?;
-    let imports: List<[String, i64]> = model.opset_import.into_iter().map(|o| [
-        o.domain.unwrap_or(""),
-        o.version.unwrap_or(0),
-    ]).collect();
+    let imports: List<[String, i64]> = model.opset_import
+        .into_iter()
+        .map(|o| [
+            o.domain.unwrap_or(""),
+            o.version.unwrap_or(0),
+        ])
+        .collect();
     let opset = default_opset(&imports);
     return Result::Ok(Graph { ..written, nodes: upgraded(written.nodes, opset)?, opset });
 }

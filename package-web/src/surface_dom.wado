@@ -534,8 +534,10 @@ impl SurfaceDom {
             return null;
         };
         for let id of split_on_ascii_whitespace(&ids) {
-            let target = first_inclusive_descendant_where(root, |n| n.content matches { Element(_) }
-                && n.attributes.get("id") == Option::Some(id));
+            let target = first_inclusive_descendant_where(
+                root,
+                |n| n.content matches { Element(_) } && n.attributes.get("id") == Option::Some(id),
+            );
             if let Some(named) = element_of(target) {
                 found.push(named);
             }
@@ -680,8 +682,10 @@ impl Document for SurfaceDom {
 
     fn get_element_by_id(&mut self, this: &Document, element_id: String) -> Option<Element> {
         self.own(*this);
-        resume element_of(first_inclusive_descendant_where(self.document, |n| !element_id.is_empty()
-            && n.attributes.get("id") == Option::Some(element_id)));
+        resume element_of(first_inclusive_descendant_where(
+            self.document,
+            |n| !element_id.is_empty() && n.attributes.get("id") == Option::Some(element_id),
+        ));
     }
 
     fn title(&mut self, this: &Document) -> String {

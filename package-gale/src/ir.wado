@@ -649,10 +649,12 @@ fn lexer_element_holds_epsilon_closure(elem: &LexerElement, nullable: &HashMap<S
     return match elem {
         Literal(_) | CharRange(_) | CharClass(_) | AnyChar | RuleRef(_) => false,
         Not(n) => lexer_element_holds_epsilon_closure(&n.element, nullable),
-        Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_elements_hold_epsilon_closure(
-            &a.elements,
-            nullable,
-        )),
+        Group(alts) => alts
+            .iter_ref()
+            .any(|a: &LexerAlternative| lexer_elements_hold_epsilon_closure(
+                &a.elements,
+                nullable,
+            )),
         Repeat(rep) => {
             if rep.kind matches { Star | Plus } && lexer_element_nullable(&rep.element, nullable) {
                 true;
@@ -1061,7 +1063,11 @@ impl Alternative {
     /// The predicates prediction answers at the alternative's left edge, where
     /// a dispatch gates it: those placed there ahead of its first action.
     pub fn edge_gates(&self) -> List<AltAction> {
-        return self.prediction_guards().into_iter().filter(|a| a.before_index == 0 && a.kind matches { Predicate }).collect();
+        return self
+            .prediction_guards()
+            .into_iter()
+            .filter(|a| a.before_index == 0 && a.kind matches { Predicate })
+            .collect();
     }
 }
 

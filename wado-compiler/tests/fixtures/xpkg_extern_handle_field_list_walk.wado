@@ -1,0 +1,24 @@
+// A walk over a list of a struct whose field is another package's extern
+// handle reaches the handle's `Eq`, which that package defines.
+use { Handle } from "lib:dep";
+
+struct Holder {
+    handle: Handle,
+}
+
+fn count(holders: List<Holder>) -> i32 {
+    let mut n = 0;
+    for let _ of holders {
+        n += 1;
+    }
+    return n;
+}
+
+export fn run() {
+    assert count([]) == 0;
+}
+
+__DATA__
+{
+  "dependencies": { "lib:dep": "sub/xpkg_extern_handle_field_dep.wado" }
+}

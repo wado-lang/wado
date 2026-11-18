@@ -1,0 +1,98 @@
+//! One HTTPS request at a time over `wasi:http`, its body read whole.
+
+use {
+    Request,
+    RequestOptions,
+    Response,
+    ErrorCode,
+    Headers,
+    FieldName,
+    FieldValue,
+    Method,
+    Scheme,
+    Trailers,
+} from "wasi:http";
+use { Client } from "wasi:http";
+use { Duration } from "wasi:clocks";
+
+/// The status and the body `method` on `https://<authority><path>` answered.
+/// With a `timeout`, connecting, the first byte of the answer, and each gap
+/// between its bytes are each bounded by it.
+internal fn fetch<B: AsByteSlice>(
+    method: Method,
+    authority: String,
+    path: String,
+    headers: List<[String, String]>,
+    body: B,
+    timeout: Option<Duration> = null,
+) -> Result<[i32, ByteList], String> with Client {
+    let resp = send(method, authority, path, headers, body, timeout)?;
+    let status = resp.get_status_code() as i32;
+    return Ok([status, read_body(resp)?]);
+}
+
+fn send<B: AsByteSlice>(
+    method: Method,
+    authority: String,
+    path: String,
+    headers: List<[String, String]>,
+    body: B,
+    timeout: Option<Duration>,
+) -> Result<Response, String> with Client {
+    let options: Option<RequestOptions> = match timeout {
+        Some(t) => {
+            let options = RequestOptions::new();
+            options.set_connect_timeout(Some(t)).unwrap();
+            options.set_first_byte_timeout(Some(t)).unwrap();
+            options.set_between_bytes_timeout(Some(t)).unwrap();
+            Some(options);
+        },
+        None => null,
+    };
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let fields = Headers::new();
+    for let [name, value] of headers {
+        fields.append(name as FieldName, value.bytes().collect() as FieldValue);
+    }
+    let [req, sent] = Request::new(fields, Option::<Stream<u8>>::Some(body_rx), trailers_rx, options);
+    req.set_method(method);
+    req.set_scheme(Option::<Scheme>::Some(Scheme::Https));
+    req.set_authority(Option::<String>::Some(authority));
+    req.set_path_with_query(Option::<String>::Some(path));
+
+    // The host consumes the body stream once the send starts, so the writes
+    // below rendezvous with it rather than deadlock.
+    let subtask = Client::send(req);
+    body_tx.write_raw_all(body.as_byte_slice() as Slice<u8>);
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+    let resp = match subtask.wait() {
+        Ok(resp) => resp,
+        Err(e) => {
+            return Err(`HTTP request failed: ${e:?}`);
+        },
+    };
+    done(sent, "HTTP request")?;
+    return Ok(resp);
+}
+
+fn read_body(resp: Response) -> Result<ByteList, String> {
+    let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [body_stream_rx, received] = Response::consume_body(resp, res_rx);
+    let buf = body_stream_rx.read_to_end_bytes();
+    body_stream_rx.drop();
+    res_tx.write(Result::Ok(()));
+    done(received, "HTTP response body")?;
+    return Ok(buf);
+}
+
+/// Whether `transfer`, the future a `wasi:http` transfer resolves once it
+/// ends, reports success.
+fn done<affine T>(transfer: Future<Result<T, ErrorCode>>, what: String) -> Result<(), String> {
+    let outcome = transfer.read();
+    if !outcome matches { Some(Ok(_)) } {
+        return Err(`${what} failed: ${outcome:?}`);
+    }
+    return Ok(());
+}

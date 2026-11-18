@@ -1594,6 +1594,35 @@ impl TypeTable {
         self.require_compiler_item_def(CompilerItem::Tuple)
     }
 
+    /// The module a type's own trait impls live in: a nominal type's, or the
+    /// built-in module of a primitive, `()`, `!` or an array.
+    #[must_use]
+    pub fn impl_home(&self, id: TypeId) -> Option<ModuleSource> {
+        match self.get(id) {
+            ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
+            ResolvedType::Unit | ResolvedType::Never => Some(ModuleSource::primitive()),
+            ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
+            ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Tuple(_) => self.nominal_head(id).map(|(_, module)| module),
+            ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_)
+            | ResolvedType::Function { .. }
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
+            | ResolvedType::AssocParam(_)
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => None,
+        }
+    }
+
     /// What a nominal type's head renders to — for a diagnostic, a mangle, or
     /// a consumer still keyed on the pair. A rendering out of an identity, and
     /// never a way back to one.

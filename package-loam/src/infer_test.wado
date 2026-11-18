@@ -408,6 +408,38 @@ test "a MatMulNBits weight laid out apart from what K, N and its packing say sto
     assert input == "Y = com.microsoft.MatMulNBits: the input's last axis is 32 long, and K is 40";
 }
 
+/// A `QMoE` of 4 experts over tokens of 32, each picking 2, its first weight
+/// `up` and its attributes past the required ones `attrs`.
+fn experts(up: String, attrs: String) -> String {
+    return `g (float[T, 32] X, float[T, 4] R) => (float[T, 32] Y) <${up}, float[4, 64, 1] S1, uint8[4, 32, 16] W2, float[4, 32, 1] S2> {
+        Y = com.microsoft.QMoE<k = 2, activation_type = "swiglu", swiglu_fusion = 1, expert_weight_bits = 4, block_size = 32${attrs}>(X, R, W1, S1, "", W2, S2)
+    }`;
+}
+
+global SWIGLU: String = ", activation_alpha = 1.702, activation_beta = 1.0";
+
+test "QMoE gives each token back its hidden width" {
+    assert y_axes(experts("uint8[4, 64, 16] W1", SWIGLU)).unwrap() == "T=T,X1=32";
+}
+
+test "QMoE refuses what onnxruntime leaves open, and weights laid out apart from their packing" {
+    let alpha = y_axes(experts("uint8[4, 64, 16] W1", ", activation_beta = 1.0")).unwrap_err();
+    assert alpha == "Y = com.microsoft.QMoE: activation_alpha is absent, and onnxruntime documents no default";
+    let fusion = y_axes(experts("uint8[4, 64, 16] W1", SWIGLU).replace("swiglu_fusion = 1", "swiglu_fusion = 2")).unwrap_err();
+    assert fusion == "Y = com.microsoft.QMoE: swiglu_fusion is not 1, which alone is supported";
+    let k = y_axes(experts("uint8[4, 64, 16] W1", SWIGLU).replace("k = 2", "k = 5")).unwrap_err();
+    assert k == "Y = com.microsoft.QMoE: attribute k is 5, and there are 4 experts";
+    let short = y_axes(experts("uint8[4, 64, 8] W1", SWIGLU)).unwrap_err();
+    assert short == "Y = com.microsoft.QMoE: operand 2 is [4, 64, 8], and its packing makes it [4, 64, 16]";
+    let gate = y_axes(
+        experts("uint8[4, 64, 16] W1, uint8[4, 64, 16] W3", SWIGLU).replace(
+            "(X, R, W1, S1, \"\", W2, S2)",
+            "(X, R, W1, S1, \"\", W2, S2, \"\", W3)",
+        ),
+    ).unwrap_err();
+    assert gate == "Y = com.microsoft.QMoE: operand 8 is given, and separate gate weights, router weights and scales of other formats are not supported";
+}
+
 test "MatMulNBits packs 2, 4 or 8 bits in blocks of a power of two from 16" {
     let bits = y_axes(quantized_product(PACKED, ", bits = 3")).unwrap_err();
     assert bits == "Y = com.microsoft.MatMulNBits: attribute bits is 3, and a byte packs 2, 4 or 8";

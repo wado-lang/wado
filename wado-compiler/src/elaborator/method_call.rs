@@ -535,32 +535,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut probe = ArgProbe::new(args_ast, ctx, expected_type);
 
         // Where the receiver is declared, which is where its inherent methods live.
-        let struct_module = match self.tysys.type_table.borrow().get(base_type_id) {
-            // `v128` has no prelude impl block of its own, and lookup finds its
-            // `core:simd` methods by name from this key anyway.
-            ResolvedType::Primitive(prim) => ModuleSource::of_primitive(*prim),
-            // Unit type () has impl blocks in core:prelude/primitive
-            ResolvedType::Unit => ModuleSource::primitive(),
-            // Every nominal type is named by the declaration it carries.
-            ResolvedType::Struct { .. }
-            | ResolvedType::Tuple(_)
-            | ResolvedType::Enum { .. }
-            | ResolvedType::Variant { .. }
-            | ResolvedType::Resource { .. }
-            | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. } => {
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(base_type_id)
-                    .expect("a nominal type names a declaration")
-                    .1
-            }
-            // Raw GC array `Array<T>`: inherent methods live in
-            // `impl Array<T>` (core:prelude/array.wado).
-            ResolvedType::BuiltinArray(_) => ModuleSource::array(),
-            _ => self.current_module_source.clone(),
-        };
+        // `v128` has no prelude impl block of its own, and lookup finds its
+        // `core:simd` methods by name from this key anyway.
+        let struct_module = self
+            .tysys
+            .type_table
+            .borrow()
+            .impl_home(base_type_id)
+            .unwrap_or_else(|| self.current_module_source.clone());
 
         let receiver_type_args_for_trait = self.tysys.impl_position_args(base_type_id);
 
@@ -1401,26 +1383,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // that so cross-module inherent impls resolve.
             .or_else(|| inherent_impl_module.clone())
             .or_else(|| {
-                owner.inherited().and_then(|base_id| {
-                    match self.tysys.type_table.borrow().get(base_id) {
-                        ResolvedType::Struct { .. }
-                        | ResolvedType::Tuple(_)
-                        | ResolvedType::Enum { .. }
-                        | ResolvedType::Variant { .. }
-                        | ResolvedType::Newtype { .. }
-                        | ResolvedType::Flags { .. }
-                        | ResolvedType::Resource { .. } => self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .nominal_head(base_id)
-                            .map(|(_, m)| m),
-                        ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
-                        ResolvedType::Unit => Some(ModuleSource::primitive()),
-                        ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
-                        _ => None,
-                    }
-                })
+                owner
+                    .inherited()
+                    .and_then(|base_id| self.tysys.type_table.borrow().impl_home(base_id))
             })
             .unwrap_or_else(|| struct_module.clone());
 
@@ -1743,7 +1708,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The type `receiver` spells: the one the call settled, else its
     /// declaration's, a generic one at its own parameters.
-    fn spelled_type(&self, receiver: &ReceiverId) -> Option<TypeId> {
+    fn spelled_type(&mut self, receiver: &ReceiverId) -> Option<TypeId> {
         receiver.ty().or_else(|| match receiver.key() {
             ImplTargetKey::Decl(def) => self.declared_self_type(*def),
             ImplTargetKey::Builtin(name) => TypeTable::primitive_by_name(name),
@@ -3536,7 +3501,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The signature of the declaration a static resolution selected, read in
     /// the block supplying it: a trait default the block inherits is read
     /// there as [`Self::inherited_sig_in_block`] reads it.
-    fn selected_static_sig(&self, selected: &StaticMethodRef) -> Option<sig::MethodSig> {
+    fn selected_static_sig(&mut self, selected: &StaticMethodRef) -> Option<sig::MethodSig> {
         let Some(block) = selected.supplying_block else {
             return self
                 .tysys
@@ -3714,7 +3679,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn type_declared_by(&mut self, key: Option<&ImplTargetKey>) -> Option<TypeId> {
         let def = key?.decl()?;
         self.declared_self_type(def)
-            .or_else(|| self.newtype_self_type(def))
     }
 
     /// The trait impl blocks on `receiver` at `receiver_args`,

@@ -333,8 +333,10 @@ pub affine trait Graph: Holds with _ {
     /// be padding, which a causal mask keeps every valid query from reading.
     /// Where `reach` is given, no query reads a position at or past its row's,
     /// even one `options.hidden` leaves a finite score: the positions past
-    /// `reach` are padding.
-    fn group_query_attention<E: Float, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
+    /// `reach` are padding. Where `sinks` is given, each query head's sink is
+    /// a score every softmax of that head adds to its denominator, which weighs
+    /// no value.
+    fn group_query_attention<E: Float, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS, SH>(
         &mut self,
         q: &Self::Tensor<E, [B, S, Q]>,
         k: &Self::Tensor<E, [B, S, K]>,
@@ -346,11 +348,12 @@ pub affine trait Graph: Holds with _ {
         cos: Option<&Self::Tensor<E, [Pos, Half]>>,
         sin: Option<&Self::Tensor<E, [Pos, Half]>>,
         bias: Option<&Self::Tensor<E, [BB, BH, BS, T]>>,
+        sinks: Option<&Self::Tensor<E, [SH]>>,
         options: &Attention,
     ) -> [Self::Tensor<E, [B, S, Q]>, Self::Tensor<E, [B, H, T, D]>, Self::Tensor<E, [B, H, T, D]>]
         contract past_length matches { None } || options.causal, "a shared buffer's padding is masked causally"
     {
-        return decomposed_attention::<Self, E, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
+        return decomposed_attention::<Self, E, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS, SH>(
             self,
             q,
             k,
@@ -362,6 +365,7 @@ pub affine trait Graph: Holds with _ {
             cos,
             sin,
             bias,
+            sinks,
             options,
         );
     }
@@ -423,7 +427,7 @@ pub affine trait Graph: Holds with _ {
 
 /// `Graph::group_query_attention`'s decomposition, which a graph that runs
 /// some cases as a kernel of its own runs for the rest.
-pub fn decomposed_attention<affine G: Graph, E: Float, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
+pub fn decomposed_attention<affine G: Graph, E: Float, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS, SH>(
     g: &mut G,
     q: &G::Tensor<E, [B, S, Q]>,
     k: &G::Tensor<E, [B, S, K]>,
@@ -435,6 +439,7 @@ pub fn decomposed_attention<affine G: Graph, E: Float, B, S, Q, K, H, P, T, D, P
     cos: Option<&G::Tensor<E, [Pos, Half]>>,
     sin: Option<&G::Tensor<E, [Pos, Half]>>,
     bias: Option<&G::Tensor<E, [BB, BH, BS, T]>>,
+    sinks: Option<&G::Tensor<E, [SH]>>,
     options: &Attention,
 ) -> [G::Tensor<E, [B, S, Q]>, G::Tensor<E, [B, H, T, D]>, G::Tensor<E, [B, H, T, D]>] with _ {
     let [batch, s, past, d] = [
@@ -520,7 +525,11 @@ pub fn decomposed_attention<affine G: Graph, E: Float, B, S, Q, K, H, P, T, D, P
             f32::NEG_INFINITY,
         );
     }
-    let weights = softmax::<G, f32, [B, Heads, S, T]>(g, &scores, 3);
+    let sunk: Option<G::Tensor<f32, Rows>> = match sinks {
+        Some(h) => Option::Some(g.broadcast_in_dim(&g.convert::<E, f32, [SH]>(h), [batch, heads, s], [1])),
+        None => null,
+    };
+    let weights = softmax_over::<G, f32, [B, Heads, S, T]>(g, &scores, 3, optional(&sunk));
     let attend = DotDims {
         lhs_batch: [0, 1],
         rhs_batch: [0, 1],
@@ -632,10 +641,10 @@ pub fn decomposed_gather<affine G: Graph, E: Float, R, P, I, Blocks, Z, Out>(
     let count = element_count(&extents);
     let flat: G::Tensor<i64, [Rows]> = g.reshape(indices, [count]);
     let at = from_end_indices::<G, [Rows]>(g, &flat, &scalar(g, rows as i64));
-    let picked_packed = rows_at::<G, u8, R, P>(g, packed, &at);
-    let picked_scales = rows_at::<G, E, R, Blocks>(g, scales, &at);
+    let picked_packed = rows_at::<G, u8, R, P, Rows>(g, packed, &at);
+    let picked_scales = rows_at::<G, E, R, Blocks, Rows>(g, scales, &at);
     let picked_zeros: Option<G::Tensor<u8, [Rows, Z]>> = match zero_points {
-        Some(z) => Option::Some(rows_at::<G, u8, R, Z>(g, z, &at)),
+        Some(z) => Option::Some(rows_at::<G, u8, R, Z, Rows>(g, z, &at)),
         None => null,
     };
     let width = bytes * (8 / quantized.bits);
@@ -662,11 +671,11 @@ pub fn decomposed_gather<affine G: Graph, E: Float, R, P, I, Blocks, Z, Out>(
 }
 
 /// The rows of the matrix `x` that `at` names, each in range.
-fn rows_at<affine G: Graph, E: Element, R, C>(
+pub fn rows_at<affine G: Graph, E: Element, R, C, I>(
     g: &mut G,
     x: &G::Tensor<E, [R, C]>,
-    at: &G::Tensor<i64, [Rows]>,
-) -> G::Tensor<E, [Rows, C]> with _ {
+    at: &G::Tensor<i64, [I]>,
+) -> G::Tensor<E, [I, C]> with _ {
     let dims = GatherDims {
         offset_dims: [1],
         collapsed_slice_dims: [0],
@@ -775,6 +784,17 @@ pub fn softmax<affine G: Graph, E: Float, Axes>(
     x: &G::Tensor<E, Axes>,
     axis: i32,
 ) -> G::Tensor<E, Axes> with _ {
+    return softmax_over::<G, E, Axes>(g, x, axis, null);
+}
+
+/// `softmax` whose denominator also holds each row's `sink`, a score that
+/// weighs nothing, under the axes other than `axis`.
+fn softmax_over<affine G: Graph, E: Float, Axes>(
+    g: &mut G,
+    x: &G::Tensor<E, Axes>,
+    axis: i32,
+    sink: Option<&G::Tensor<f32, Rows>>,
+) -> G::Tensor<E, Axes> with _ {
     let extents = g.extents_of(x);
     let mut kept: List<i32> = [];
     for let i of 0..<extents.len() {
@@ -783,10 +803,16 @@ pub fn softmax<affine G: Graph, E: Float, Axes>(
         }
     }
     let wide: G::Tensor<f32, Axes> = g.convert::<E, f32, Axes>(x);
-    let top: G::Tensor<f32, Rows> = g.reduce(&wide, Binary::Maximum, f32::NEG_INFINITY, [axis]);
+    let mut top: G::Tensor<f32, Rows> = g.reduce(&wide, Binary::Maximum, f32::NEG_INFINITY, [axis]);
+    if let Some(s) = sink {
+        top = g.binary(Binary::Maximum, &top, s);
+    }
     let shifted = g.binary(Binary::Subtract, &wide, &g.broadcast_in_dim(&top, extents, kept));
     let e = g.unary(Unary::Exponential, &shifted);
-    let sum: G::Tensor<f32, Rows> = g.reduce(&e, Binary::Add, 0.0, [axis]);
+    let mut sum: G::Tensor<f32, Rows> = g.reduce(&e, Binary::Add, 0.0, [axis]);
+    if let Some(s) = sink {
+        sum = g.binary(Binary::Add, &sum, &g.unary(Unary::Exponential, &g.binary(Binary::Subtract, s, &top)));
+    }
     return g.convert::<f32, E, Axes>(&g.binary(Binary::Divide, &e, &g.broadcast_in_dim(&sum, extents, kept)));
 }
 
@@ -1600,7 +1626,9 @@ impl Graph for Cpu {
         let rank = operand.extents.len();
         let window_axes: List<i32> = (0..<rank).filter(|a| !dims.inserted_window_dims.contains(&a)).collect();
         let index_axes: List<i32> = (0..<indices.extents.len()).filter(|i| i != dims.index_vector_dim).collect();
-        let scatter_axes: List<i32> = (0..<updates.extents.len()).filter(|d| !dims.update_window_dims.contains(&d)).collect();
+        let scatter_axes: List<i32> = (0..<updates.extents.len())
+            .filter(|d| !dims.update_window_dims.contains(&d))
+            .collect();
         let own = row_major_strides(&operand.extents);
         let index_strides = row_major_strides(&indices.extents);
         let vector_stride = if dims.index_vector_dim == indices.extents.len() {
@@ -1995,9 +2023,10 @@ pub fn dot_extents(lhs: &List<i32>, rhs: &List<i32>, dims: &DotDims) -> List<i32
 /// slice size where `offset_dims` places it, the indices' batch axes between.
 pub fn gathered_extents(indices: &List<i32>, dims: &GatherDims) -> List<i32> {
     let batch: List<i32> = (0..<indices.len()).filter(|i| i != dims.index_vector_dim).map(|i| indices[i]).collect();
-    let offsets: List<i32> = (0..<dims.slice_sizes.len()).filter(|a| !dims.collapsed_slice_dims.contains(&a)).map(
-        |a| dims.slice_sizes[a],
-    ).collect();
+    let offsets: List<i32> = (0..<dims.slice_sizes.len())
+        .filter(|a| !dims.collapsed_slice_dims.contains(&a))
+        .map(|a| dims.slice_sizes[a])
+        .collect();
     let mut extents: List<i32> = [];
     let [mut b, mut o] = [0, 0];
     for let d of 0..<batch.len() + offsets.len() {

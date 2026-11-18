@@ -4,39 +4,91 @@
 use { Track, flush, observe, on_cleanup, scope, untracked } from "./signals.wado";
 use { Dom, Element, Event, EventTarget, Node } from "wado-lang:web";
 
-pub fn element(tag: String) -> Element with Dom {
-    return Dom::document().create_element(tag);
+/// An element under construction. Each method changes the element at once and
+/// returns the view, so a page is written as one expression that nests as the
+/// DOM does. A method that binds a signal must run inside a computation, which
+/// owns the binding.
+pub struct View {
+    pub node: Element,
 }
 
-pub fn text(tag: String, content: String) -> Element with Dom {
-    let made = element(tag);
-    made.set_text_content(Option::Some(content));
-    return made;
+pub fn element(tag: String) -> View with Dom {
+    return View::of(Dom::document().create_element(tag));
 }
 
-/// Appends a text node to `target` and keeps its text at what `content`
-/// answers. The element's other children stay where they are.
-pub fn bind_text(target: Element, content: fn mut() -> String with Track) with (Track, Dom) {
-    let mut content = content;
-    let shown = Dom::document().create_text_node("");
-    target.append_child(shown);
-    on_cleanup(|| {
-        if let Some(holder) = shown.parent_node() {
-            holder.remove_child(shown);
+impl View {
+    /// Builds on an element made elsewhere, such as the one a page mounts in.
+    pub fn of(node: Element) -> View {
+        return View { node };
+    }
+
+    pub fn attribute(&self, name: String, value: String) -> View with Dom {
+        self.node.set_attribute(name, value);
+        return *self;
+    }
+
+    /// Keeps the attribute at what `value` answers, absent for `None`.
+    pub fn bind_attribute(&self, name: String, value: fn mut() -> Option<String> with Track) -> View with (Track, Dom) {
+        let target = self.node;
+        let mut value = value;
+        observe(|| {
+            match value() {
+                Some(set) => target.set_attribute(name, set),
+                None => target.remove_attribute(name),
+            }
+        });
+        return *self;
+    }
+
+    /// Appends a text node holding `content`.
+    pub fn text(&self, content: String) -> View with Dom {
+        self.node.append_child(Dom::document().create_text_node(content));
+        return *self;
+    }
+
+    /// Appends a text node and keeps its text at what `content` answers,
+    /// taking it out when the binding is disposed of.
+    pub fn bind_text(&self, content: fn mut() -> String with Track) -> View with (Track, Dom) {
+        let mut content = content;
+        let shown = Dom::document().create_text_node("");
+        self.node.append_child(shown);
+        on_cleanup(|| {
+            if let Some(holder) = shown.parent_node() {
+                holder.remove_child(shown);
+            }
+        });
+        observe(|| shown.set_data(content()));
+        return *self;
+    }
+
+    pub fn child(&self, child: View) -> View with Dom {
+        self.node.append_child(child.node);
+        return *self;
+    }
+
+    pub fn children(&self, children: List<View>) -> View with Dom {
+        for let child of children {
+            self.child(child);
         }
-    });
-    observe(|| shown.set_data(content()));
-}
+        return *self;
+    }
 
-/// Keeps the attribute at what `value` answers, absent for `None`.
-pub fn bind_attribute(target: Element, name: String, value: fn mut() -> Option<String> with Track) with (Track, Dom) {
-    let mut value = value;
-    observe(|| {
-        match value() {
-            Some(set) => target.set_attribute(name, set),
-            None => target.remove_attribute(name),
-        }
-    });
+    pub fn on(&self, type: String, handler: fn mut(Event) with (Track, Dom)) -> View with Dom {
+        on(self.node, type, handler);
+        return *self;
+    }
+
+    /// Keeps the element's children at one per item, in the items' order. An
+    /// item equal to one already shown keeps its child, and whatever `render`
+    /// made for an item that left is disposed of.
+    pub fn each<T: Eq>(
+        &self,
+        items: fn mut() -> List<T> with Track,
+        render: fn mut(T) -> View with (Track, Dom),
+    ) -> View with (Track, Dom) {
+        each(self.node, items, render);
+        return *self;
+    }
 }
 
 /// Listens on `target`, and flushes once the handler returns: the handler's
@@ -62,13 +114,10 @@ fn remove_rows<T>(parent: Element, rows: List<Row<T>>) with Dom {
     }
 }
 
-/// Keeps `parent`'s children at one node per item, in the items' order. An
-/// item equal to one already shown keeps its node, and whatever `render` made
-/// for an item that left is disposed.
-pub fn each<T: Eq>(
+fn each<T: Eq>(
     parent: Element,
     items: fn mut() -> List<T> with Track,
-    render: fn mut(T) -> Element with (Track, Dom),
+    render: fn mut(T) -> View with (Track, Dom),
 ) with (Track, Dom) {
     let mut items = items;
     let mut render = render;
@@ -98,7 +147,7 @@ pub fn each<T: Eq>(
                 continue;
             }
             let mut node: Option<Element> = null;
-            let dispose = scope(|| node = Option::Some(render(item)));
+            let dispose = scope(|| node = Option::Some(render(item).node));
             kept.push(Row { item, node: node.unwrap(), dispose });
             was.push(-1);
         }

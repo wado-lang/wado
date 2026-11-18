@@ -48,6 +48,7 @@ pub struct AttentionNode {
     pub bounded: bool,
     pub rotary: bool,
     pub biased: bool,
+    pub sunk: bool,
 }
 
 /// What a quantized product or gather takes beside its operands: how the
@@ -477,7 +478,7 @@ impl Graph for Recorder {
         return region.results.into_iter().map(|id| any_at(self.nodes[id].kind, id)).collect();
     }
 
-    fn group_query_attention<E: Float, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
+    fn group_query_attention<E: Float, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS, SH>(
         &mut self,
         q: &Value<E, [B, S, Q]>,
         k: &Value<E, [B, S, K]>,
@@ -489,10 +490,11 @@ impl Graph for Recorder {
         cos: Option<&Value<E, [Pos, Half]>>,
         sin: Option<&Value<E, [Pos, Half]>>,
         bias: Option<&Value<E, [BB, BH, BS, T]>>,
+        sinks: Option<&Value<E, [SH]>>,
         options: &Attention,
     ) -> [Value<E, [B, S, Q]>, Value<E, [B, H, T, D]>, Value<E, [B, H, T, D]>] {
         if self.decomposes {
-            let attended = decomposed_attention::<Recorder, E, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS>(
+            let attended = decomposed_attention::<Recorder, E, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS, SH>(
                 self,
                 q,
                 k,
@@ -504,6 +506,7 @@ impl Graph for Recorder {
                 cos,
                 sin,
                 bias,
+                sinks,
                 options,
             );
             if past_length matches { Some(_) } {
@@ -513,7 +516,14 @@ impl Graph for Recorder {
             return attended;
         }
         let mut operands: List<i32> = [q.id, k.id, v.id, past_k.id, past_v.id];
-        let mut node = AttentionNode { options: *options, shared: false, bounded: false, rotary: false, biased: false };
+        let mut node = AttentionNode {
+            options: *options,
+            shared: false,
+            bounded: false,
+            rotary: false,
+            biased: false,
+            sunk: false,
+        };
         if let Some(l) = past_length {
             operands.push(l.id);
             node.shared = true;
@@ -530,6 +540,10 @@ impl Graph for Recorder {
         if let Some(b) = bias {
             operands.push(b.id);
             node.biased = true;
+        }
+        if let Some(h) = sinks {
+            operands.push(h.id);
+            node.sunk = true;
         }
         let mut present = self.extents(past_k.id);
         if !node.shared {
@@ -1206,11 +1220,17 @@ impl<affine G: Graph> Run<G> {
             [null, null];
         };
         let bias: Option<G::Tensor<E, [Untyped, Untyped, Untyped, Untyped]>> = if attention.biased {
+            next += 1;
+            Option::Some(self.at(g, node, next - 1));
+        } else {
+            null;
+        };
+        let sinks: Option<G::Tensor<E, [Untyped]>> = if attention.sunk {
             Option::Some(self.at(g, node, next));
         } else {
             null;
         };
-        let [a, k, v] = g.group_query_attention::<E, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
+        let [a, k, v] = g.group_query_attention::<E, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
             &self.at(g, node, 0),
             &self.at(g, node, 1),
             &self.at(g, node, 2),
@@ -1221,6 +1241,7 @@ impl<affine G: Graph> Run<G> {
             optional(&cos),
             optional(&sin),
             optional(&bias),
+            optional(&sinks),
             &attention.options,
         );
         return [

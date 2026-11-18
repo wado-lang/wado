@@ -461,6 +461,12 @@ run = """
 #!/usr/bin/env bash
 set -euo pipefail
 wado="$(scripts/dev-bin.sh --path wado)"
+# Eddy adds the review to its commit's record, which the wiki keeps.
+if [ -d scratchpad/wiki/.git ]; then
+    git -C scratchpad/wiki pull --quiet --rebase
+else
+    git clone --quiet https://github.com/wado-lang/wado.wiki.git scratchpad/wiki
+fi
 case " $* " in
     *" --no-run "*) set -- "$wado" run package-eddy/src/main.wado -- "$@" ;;
     # The reviewer builds with cargo, which would starve a test run and be

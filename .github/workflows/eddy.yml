@@ -26,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      contents: read
     outputs:
       pr: ${{ steps.pr.outputs.pr }}
       sha: ${{ steps.pr.outputs.sha }}
@@ -36,7 +37,7 @@ jobs:
       - id: token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: "${{ secrets.GH_APP_ID }}"
+          client-id: "${{ secrets.GH_APP_ID }}"
           private-key: "${{ secrets.GH_APP_PRIVATE_KEY }}"
       - id: pr
         env:
@@ -67,17 +68,29 @@ jobs:
       # builds no second target directory beside the reviewer's. Eddy is taken
       # from the commit that run built, so the two match. A docs-only run
       # builds nothing, so the newest run with the binary is the one taken.
+      # That commit may predate this workflow's, so it is taken only where the
+      # files the review runs from it are this workflow's commit's.
       - id: eddy
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          run_from() {
+            gh api "repos/$REPO/contents?ref=$1" \
+              --jq '.[] | select(.name | IN("package-eddy", "mise.toml", "scripts")) | "\(.name) \(.sha)"'
+            gh api "repos/$REPO/contents/.github?ref=$1" --jq '.[] | select(.name == "actions") | .sha'
+          }
+          wanted="$(run_from "$GITHUB_SHA")"
           runs="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=20" \
             --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')"
           while read -r run sha; do
             if [ -n "$(gh api "repos/$REPO/actions/runs/$run/artifacts" \
               --jq '.artifacts[] | select(.name == "prebuilt-wado" and (.expired | not)) | .id')" ]; then
+              if [ "$(run_from "$sha")" != "$wanted" ]; then
+                echo "::error::main's CI has not yet built a wado for Eddy as of ${GITHUB_SHA:0:9}; ask again once it has"
+                exit 1
+              fi
               echo "run=$run" >> "$GITHUB_OUTPUT"
               echo "sha=$sha" >> "$GITHUB_OUTPUT"
               exit 0
@@ -142,42 +155,21 @@ jobs:
           git worktree add --quiet --detach "$RUNNER_TEMP/head" "$SHA"
           (cd "$RUNNER_TEMP" && cargo "+$toolchain" fetch --locked --manifest-path head/Cargo.toml)
           git worktree remove --force "$RUNNER_TEMP/head"
-      # Workload Identity Federation, so no API key is stored. The rule accepts
-      # only this workflow on main, which only an admin's comment or dispatch
-      # starts. The token is minted here, in the one step that uses it, and
-      # Eddy does not see the means to mint another.
+      # Workload Identity Federation, so no API key is stored: Eddy mints its
+      # tokens from the job's identity. The rule accepts only this workflow on
+      # main, which only an admin's comment or dispatch starts.
       - id: eddy
+        env:
+          ANTHROPIC_FEDERATION_RULE_ID: fdrl_01N2UzGtpPyqSMQz3htMdLce
+          ANTHROPIC_ORGANIZATION_ID: b5accdd0-f052-4fe6-88e6-65bc34d1cba9
+          ANTHROPIC_SERVICE_ACCOUNT_ID: svac_01WVnWQoBfyRFsf4wyM7EHq7
+          ANTHROPIC_WORKSPACE_ID: wrkspc_01Ug39YtMABrbjfon1tEpoXy
         run: |
-          set -euo pipefail
           mkdir -p scratchpad
-          jwt="$(curl -sSf -G -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            --data-urlencode audience=https://api.anthropic.com "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)"
-          echo "::add-mask::$jwt"
-          # The claims a federation rule matches on, none of them secret: the
-          # exchange answers a mismatch with nothing but "Authentication failed".
-          jq -rR 'split(".")[1] | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson
-            | {iss, aud, sub, ref, event_name, repository_owner_id, repository_id, job_workflow_ref}' <<< "$jwt"
-          response="$(jq -n --arg jwt "$jwt" '{
-              grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-              assertion: $jwt,
-              federation_rule_id: "fdrl_01N2UzGtpPyqSMQz3htMdLce",
-              organization_id: "b5accdd0-f052-4fe6-88e6-65bc34d1cba9",
-              service_account_id: "svac_01WVnWQoBfyRFsf4wyM7EHq7",
-              workspace_id: "wrkspc_01Ug39YtMABrbjfon1tEpoXy"
-            }' | curl -sS https://api.anthropic.com/v1/oauth/token -H "content-type: application/json" --data @- 2>&1)" || true
-          token="$(jq -r '.access_token // empty' <<< "$response" 2> /dev/null)" || true
-          if [ -z "$token" ]; then
-            # The post job reads the reason from the log, as from Eddy's own.
-            echo "eddy: the token exchange failed: $(head -c 500 <<< "$response" | tr '\n' ' ')" | tee scratchpad/eddy.log
-            exit 1
-          fi
-          echo "::add-mask::$token"
           status=0
-          env -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL CLAUDE_API_KEY="$token" \
-            mise run eddy-review --head "$SHA" > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
+          mise run eddy-review --head "$SHA" > scratchpad/eddy.json 2> scratchpad/eddy.log || status=$?
           cat scratchpad/eddy.log
           exit "$status"
-      # The record is what Eddy later learns from; it outlives the run here.
       - if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -186,7 +178,7 @@ jobs:
             scratchpad/eddy.json
             scratchpad/eddy.log
             scratchpad/eddy/${{ env.SHA }}/
-            package-eddy/reviews/${{ env.SHA }}.json
+            scratchpad/wiki/reviews/${{ env.SHA }}/
           retention-days: 90
           if-no-files-found: warn
 
@@ -195,17 +187,20 @@ jobs:
     needs: [gate, review]
     if: always() && needs.gate.result == 'success'
     runs-on: ubuntu-latest
+    # The wiki, which holds the records, is written with the contents grant.
+    permissions:
+      contents: write
     steps:
       - id: token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: "${{ secrets.GH_APP_ID }}"
+          client-id: "${{ secrets.GH_APP_ID }}"
           private-key: "${{ secrets.GH_APP_PRIVATE_KEY }}"
       - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: eddy-${{ needs.gate.outputs.pr }}-${{ needs.gate.outputs.sha }}
-          path: eddy
+          path: scratchpad
       - env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           REPO: ${{ github.repository }}
@@ -215,7 +210,7 @@ jobs:
         run: |
           set -euo pipefail
           body="$RUNNER_TEMP/body.md"
-          comment="eddy/scratchpad/eddy/$SHA/review.md"
+          comment="scratchpad/eddy/$SHA/review.md"
           if [ -f "$comment" ]; then
             cp "$comment" "$body"
           else
@@ -224,17 +219,47 @@ jobs:
               echo "## Eddy"
               echo
               echo "The review of \`${SHA:0:9}\` did not finish."
-              if [ -f eddy/scratchpad/eddy.log ]; then
+              if [ -f scratchpad/eddy.log ]; then
                 echo
                 echo '```'
-                grep -E '^(eddy|cost):' eddy/scratchpad/eddy.log || true
+                grep -E '^(eddy|cost):' scratchpad/eddy.log || true
                 echo '```'
               fi
             } > "$body"
           fi
-          if [ -d eddy ]; then
-            printf '\n[The run](%s), and its artifact for the patches and the record.\n' "$RUN" >> "$body"
+          if [ -d scratchpad ]; then
+            printf '\n[The run](%s), and its artifact for the patches.\n' "$RUN" >> "$body"
           else
             printf '\n[The run](%s)\n' "$RUN" >> "$body"
           fi
           gh pr comment "$PR" --repo "$REPO" --body-file "$body"
+      - env:
+          SHA: ${{ needs.gate.outputs.sha }}
+          TOKEN: ${{ github.token }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+          record="scratchpad/wiki/reviews/$SHA"
+          if [ ! -d "$record" ]; then
+            exit 0
+          fi
+          git clone --quiet "https://x-access-token:$TOKEN@${GITHUB_SERVER_URL#https://}/$GITHUB_REPOSITORY.wiki.git" "$RUNNER_TEMP/wiki"
+          cd "$RUNNER_TEMP/wiki"
+          mkdir -p "reviews/$SHA"
+          cp "$GITHUB_WORKSPACE/$record"/*.json "reviews/$SHA/"
+          git add reviews
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit --quiet --message "Record Eddy's review of $SHA"
+          # Another review may have pushed meanwhile; each writes its own file.
+          for attempt in 1 2 3; do
+            if git push --quiet; then
+              exit 0
+            fi
+            git pull --quiet --rebase
+          done
+          exit 1

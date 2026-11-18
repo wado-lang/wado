@@ -1,0 +1,53 @@
+// `N::m(&x)` on a newtype selects a blanket impl, as `x.m()` and `Alpha::m(&x)`
+// do, whether the bound holds at the newtype or at its base, and whether the
+// base is generic (issue #2674).
+
+trait Alpha with () {
+    fn m(&self) -> String;
+}
+
+trait AtNewtype with () {}
+trait AtBase with () {}
+
+struct One {
+    a: i32,
+}
+type N = One;
+impl AtNewtype for N {}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+type P = Pair<i32, i32>;
+impl AtBase for Pair<i32, i32> {}
+
+impl<X: AtNewtype> Alpha for X {
+    fn m(&self) -> String {
+        return "newtype";
+    }
+}
+
+trait Beta with () {
+    fn m(&self) -> String;
+}
+
+impl<X: AtBase> Beta for X {
+    fn m(&self) -> String {
+        return "base";
+    }
+}
+
+test "bound held at the newtype" {
+    let x: N = { a: 1 };
+    assert x.m() == "newtype";
+    assert Alpha::m(&x) == "newtype";
+    assert N::m(&x) == "newtype";
+}
+
+test "bound held at a generic base" {
+    let p: P = { a: 1, b: 2 };
+    assert p.m() == "base";
+    assert Beta::m(&p) == "base";
+    assert P::m(&p) == "base";
+}
