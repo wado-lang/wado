@@ -58,10 +58,10 @@ review of a commit once more, which tries another reporter on the same
 findings.
 
 Each run is also recorded as a file of its own under `reviews/<head>/` in the
-repository's wiki, which holds every review of that commit: outcomes are what Eddy learns from, and
-an outcome needs the finding it answers. `mise run eddy-review` clones the
-wiki into `scratchpad/wiki` first and writes the record there; it pushes
-nothing, and the `eddy` skill's steps push the record.
+repository's wiki, which holds every review of that commit: outcomes are what
+Eddy learns from, and an outcome needs the finding it answers.
+`mise run eddy-review` clones the wiki into `scratchpad/wiki` and writes the
+record there. It pushes nothing; the `eddy` skill's steps push the record.
 
 A run ends by printing what it cost to stderr, the total and each model's
 share, in US dollars:
