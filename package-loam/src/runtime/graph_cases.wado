@@ -19,7 +19,7 @@ use {
 } from "./hlo.wado";
 use { Any, Programs, Recorded, Recorder, Untyped, Value, typed } from "./recorded.wado";
 use { Experts, mixture_of_experts } from "./experts.wado";
-use { ExpertLayout, HeldExperts, StoredExperts } from "./held_experts.wado";
+use { ExpertBytes, ExpertLayout, HeldExperts, StoredExperts } from "./held_experts.wado";
 use { HashMap } from "core:collections";
 use { HostWeight, stored_width } from "./weight.wado";
 use { Attention, ElementKind, Float, Tensor, element_count } from "./tensor.wado";
@@ -600,8 +600,7 @@ fn stacked_experts() -> [HashMap<String, ByteList>, List<List<StoredExperts>>] {
         files[file] = stored;
         for let layer of 0..<2 {
             layers[layer].push(StoredExperts {
-                file,
-                start: layer * size,
+                bytes: ExpertBytes::File([file, layer * size]),
                 kind: w.kind,
                 extents: w.extents[1..<w.extents.len()].to_list(),
             });

@@ -55,10 +55,6 @@ impl WeightSource for HashMap<String, ByteList> {
     }
 }
 
-/// Files the guest holds whole, as a generated module names them without
-/// importing a collection whose name a graph's tensor may take.
-pub type HeldFiles = HashMap<String, ByteList>;
-
 fn given(files: &HashMap<String, ByteList>, file: &String) -> Result<&ByteList, LoadError> {
     return files.get_ref_str(file).ok_or(LoadError { reason: `${*file}: not given` });
 }

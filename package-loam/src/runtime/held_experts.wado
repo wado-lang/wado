@@ -11,11 +11,18 @@ use { ElementKind, Tensor, element_count } from "./tensor.wado";
 use { HostWeight, stored_width } from "./weight.wado";
 use { LinearArray } from "core:linear";
 
-/// One weight of a layer's experts as a checkpoint stores it: each expert's
-/// slice of `extents` in `kind`, back to back from byte `start` of `file`.
+/// Where a layer's experts of one weight are stored, back to back: from a byte
+/// of a file the source reads, or in bytes the guest holds, such as those the
+/// graph carries.
+pub variant ExpertBytes {
+    File([String, i32]),
+    Held(ByteList),
+}
+
+/// One weight of a layer's experts as it is stored: each expert's slice of
+/// `extents` in `kind`, back to back in `bytes`.
 pub struct StoredExperts {
-    pub file: String,
-    pub start: i32,
+    pub bytes: ExpertBytes,
     pub kind: ElementKind,
     pub extents: List<i32>,
 }
@@ -23,6 +30,19 @@ pub struct StoredExperts {
 impl StoredExperts {
     fn slice_bytes(&self) -> i32 {
         return element_count(&self.extents) * stored_width(self.kind);
+    }
+
+    /// The bytes of expert `expert`.
+    fn expert<affine Src: WeightSource>(&self, source: &Src, expert: i32) -> LinearArray<u8> with _ {
+        let size = self.slice_bytes();
+        let read = match self.bytes {
+            File([file, first]) => source.read(&file, first + expert * size, first + (expert + 1) * size),
+            Held(bytes) => Result::Ok(LinearArray::<u8>::of_bytes(&bytes, expert * size, size)),
+        };
+        return match read {
+            Ok(read) => read,
+            Err(e) => panic(`${e}`),
+        };
     }
 }
 
@@ -250,14 +270,8 @@ impl HeldExperts {
         pools: &List<i32>,
     ) with _ {
         for let [i, stored] of self.groups[at].layout.layers[layer].into_iter().enumerate() {
-            let bytes = stored.slice_bytes();
-            let start = stored.start + expert * bytes;
-            let read = match source.read(&stored.file, start, start + bytes) {
-                Ok(read) => read,
-                Err(e) => panic(`${e}`),
-            };
             let mut pool = values[pools[i]];
-            g.written(&mut pool, slot, HostWeight::stored(stored.kind, stored.extents, read));
+            g.written(&mut pool, slot, HostWeight::stored(stored.kind, stored.extents, stored.expert(source, expert)));
             values[pools[i]] = pool;
         }
     }

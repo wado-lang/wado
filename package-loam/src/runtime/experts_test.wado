@@ -4,9 +4,8 @@
 use { A, B, C, experts_case, mixing, stacked_runs } from "./graph_cases.wado";
 use { Untyped, typed } from "./recorded.wado";
 use { LoadError } from "./checkpoint.wado";
-use { ExpertLayout, HeldExperts, StoredExperts } from "./held_experts.wado";
+use { ExpertBytes, ExpertLayout, HeldExperts, StoredExperts, Unread } from "./held_experts.wado";
 use { ElementKind } from "./tensor.wado";
-use { HashMap } from "core:collections";
 use { Cpu, Tensor } from "./tensor.wado";
 
 test "a token whose other logits are -inf runs its one expert once, in either form" {
@@ -41,8 +40,7 @@ fn slots_within(budget: i64) -> Result<List<i32>, LoadError> {
         layers: (0..<layers)
             .map(|_| [
                 StoredExperts {
-                    file: "w",
-                    start: 0,
+                    bytes: ExpertBytes::Held(List::<u8>::filled(8, 0) as ByteList),
                     kind: ElementKind::U8,
                     extents: [2],
                 },
@@ -55,9 +53,7 @@ fn slots_within(budget: i64) -> Result<List<i32>, LoadError> {
         layout(3, 0),
         layout(2, 1),
     ], budget)?;
-    let mut files = HashMap::<String, ByteList>::new();
-    files["w"] = List::<u8>::filled(8, 0) as ByteList;
-    let pools = held.pools(&mut Cpu {}, &files);
+    let pools = held.pools(&mut Cpu {}, &Unread {});
     return Result::Ok(pools.into_iter().map(|p| typed::<Cpu, u8, Untyped>(&Cpu {}, &p).extents[0]).collect());
 }
 

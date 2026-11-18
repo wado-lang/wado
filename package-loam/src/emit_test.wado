@@ -1114,7 +1114,7 @@ g (${dtype}[N, 2] X) => (${dtype}[N, 2] Y)
 }
 
 test "an element type the kernels cannot compute in names itself" {
-    assert refused_dtype("int32") == "X: no kernel holds int32";
+    assert refused_dtype("int16") == "X: no kernel holds int16";
     assert refused_dtype("double") == "X: no kernel holds double";
 }
 
@@ -1262,6 +1262,15 @@ test "a build reads the valid length where it sums, normalizes, contracts or joi
         "masked::<Bk, f32, [N, P1]>(backend, P, 0, &shared::<Bk>(backend, &lengths.dim_N), null, 0 as f32)",
     );
     assert built.contains("(backend, X, X, 0, &shared::<Bk>(backend, &lengths.dim_N), null)");
+}
+
+test "an integer sum along a padded axis reads its padding as an integer zero" {
+    let source = `g (int64[N] X) => (int64[] S) {
+        S = ReduceSum <keepdims = 0> (X)
+    }`;
+    assert build_of(&generate(source).unwrap()).contains(
+        "masked::<Bk, i64, [N]>(backend, X, 0, &shared::<Bk>(backend, &lengths.dim_N), null, 0 as i64)",
+    );
 }
 
 test "a build takes a padded past to its attention as a buffer of fixed capacity, with its valid length" {
@@ -1726,6 +1735,17 @@ test "QMoE layers of one layout read one set of pools, each at its own host step
     assert out.contains("layer: 0, layers: 2, step: 0 }");
     assert out.contains("layer: 1, layers: 2, step: 1 }");
     assert out.contains("budget: i64) -> Result<Model<Bk, Src>, LoadError> with _ {");
+}
+
+test "a QMoE whose biases the graph carries pools them beside the weights a checkpoint holds" {
+    let zeros = |n: i32| (0..<n).map(|_| "0").collect().join(", ");
+    let source = QMOE_LAYERS
+        .replace("float[4, 32, 1] S2,", `float[4, 32, 1] S2, float[4, 64] B1 = {${zeros(256)}}, float[4, 32] B2 = {${zeros(128)}},`)
+        .replace("(X, R, W1, S1, \"\", W2, S2, \"\")", "(X, R, W1, S1, B1, W2, S2, B2)");
+    let out = generate(source).unwrap();
+    assert out.contains("pub B1: Bk::Tensor<f32, [ExpertSlots, ");
+    assert out.contains(" => ExpertBytes::Held(embedded_data(");
+    assert out.contains(" => ExpertBytes::File(");
 }
 
 test "a QMoE whose expert weight another node reads keeps its experts out of the pools" {
