@@ -384,18 +384,19 @@ impl Workspace {
             runner.target_dir, runner.tool_path,
         ] as List<String>;
         args.extend(command);
-        let run = running_reviewed(Command::new("timeout").args(args), &self.root, &runner.target_dir).env(
-            "CARGO_HOME",
-            runner.cargo_home,
-        ).env(
-            "RUSTUP_HOME",
-            runner.rustup_home,
-        ).env("MISE_DATA_DIR", runner.mise_data_dir).env("MISE_YES", "1").env("CARGO_TERM_COLOR", "never").env(
-            // Each tree is built a few times at most, so the incremental cache
-            // would cost disk, gigabytes per toolchain, for no time saved.
-            "CARGO_INCREMENTAL",
-            "0",
-        ).output();
+        let run = running_reviewed(Command::new("timeout").args(args), &self.root, &runner.target_dir)
+            .env("CARGO_HOME", runner.cargo_home)
+            .env("RUSTUP_HOME", runner.rustup_home)
+            .env("MISE_DATA_DIR", runner.mise_data_dir)
+            .env("MISE_YES", "1")
+            .env("CARGO_TERM_COLOR", "never")
+            .env(
+                // Each tree is built a few times at most, so the incremental cache
+                // would cost disk, gigabytes per toolchain, for no time saved.
+                "CARGO_INCREMENTAL",
+                "0",
+            )
+            .output();
         let out = match run {
             Ok(out) => out,
             // It ran, so it is an answer and spends a run, not an error.

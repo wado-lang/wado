@@ -212,9 +212,11 @@ fn decode_content(
     body: ByteList,
     max_size: i32 = MAX_BODY_SIZE,
 ) -> Result<ByteList, BodyError> {
-    let mut codings: List<String> = content_encoding.split(",").map(|c| c.trim_ascii().to_ascii_lowercase()).filter(
-        |c| !c.is_empty(),
-    ).collect();
+    let mut codings: List<String> = content_encoding
+        .split(",")
+        .map(|c| c.trim_ascii().to_ascii_lowercase())
+        .filter(|c| !c.is_empty())
+        .collect();
     codings.reverse();
     if codings.is_empty() && body.len() > max_size {
         return Result::Err(BodyError::TooLarge);

@@ -85,6 +85,8 @@ struct Case {
     options: Attention,
     /// The positions attended, where fewer than all.
     reach: Option<i32> = null,
+    /// Whether each query head's sink joins its softmax.
+    sunk: bool = false,
 }
 
 fn tensor<Axes>(extents: List<i32>, seed: u32) -> Tensor<f32, Axes> {
@@ -178,6 +180,26 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
                 hidden: Option::Some(-2.0),
             },
         },
+        // A row's sink joins its parts, of which there are several.
+        Case {
+            name: "sunk",
+            seq: 3,
+            past: 140,
+            half: 2,
+            biased: true,
+            sunk: true,
+            options: Attention { heads: 2, kv_heads: 1, scale: 0.35, softcap: -1.0, window: -1, causal: true },
+        },
+        // A window hiding whole parts leaves the sink to the rest.
+        Case {
+            name: "sunk windowed",
+            seq: 1,
+            past: 150,
+            half: 0,
+            biased: false,
+            sunk: true,
+            options: Attention { heads: 4, kv_heads: 2, scale: 0.35, softcap: 2.0, window: 40, causal: true },
+        },
     ];
     for let c of cases {
         println(`${c.name} ${attended(&mut gpu, &c)}`);
@@ -247,6 +269,7 @@ fn attended(
     let cos: Tensor<f32, [Pos, Half]> = tensor([positions, c.half], 6);
     let sin: Tensor<f32, [Pos, Half]> = tensor([positions, c.half], 7);
     let bias: Tensor<f32, [One, One, Seq, Total]> = tensor([1, 1, c.seq, total], 8);
+    let sinks: Tensor<f32, [Query]> = tensor([c.options.heads], 9);
     let turned = c.half > 0;
     let positions_attended = Tensor::<i64, [Slots]> {
         data: [c.reach.unwrap_or(total) as i64],
@@ -263,9 +286,11 @@ fn attended(
         if turned { Option::Some(&cos) } else { null },
         if turned { Option::Some(&sin) } else { null },
         if c.biased { Option::Some(&bias) } else { null },
+        if c.sunk { Option::Some(&sinks) } else { null },
         &c.options,
     );
     gpu.begin();
+    let gsinks = gpu.upload(&sinks);
     let [gq, gk, gv, gpk, gpv, gcos, gsin, gbias] = [
         gpu.upload(&q),
         gpu.upload(&k),
@@ -288,6 +313,7 @@ fn attended(
         if turned { Option::Some(&gcos) } else { null },
         if turned { Option::Some(&gsin) } else { null },
         if c.biased { Option::Some(&gbias) } else { null },
+        if c.sunk { Option::Some(&gsinks) } else { null },
         &c.options,
     );
     let reads = gpu.read_backs();
@@ -325,7 +351,7 @@ fn step(
     let q: Tensor<f32, [Batch, Seq, Query]> = tensor([batch, seq, options.heads * d], seed);
     let k: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, seq, options.kv_heads * d], seed + 1);
     let v: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, seq, options.kv_heads * d], seed + 2);
-    let on_cpu = Cpu {}.group_query_attention::<f32, Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One, Seq>(
+    let on_cpu = Cpu {}.group_query_attention::<f32, Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One, Seq, Query>(
         &q,
         &k,
         &v,
@@ -335,6 +361,7 @@ fn step(
         null,
         Option::Some(cos),
         Option::Some(sin),
+        null,
         null,
         &options,
     );
@@ -354,7 +381,7 @@ fn step(
     let past_k = gpu.reshape::<f32, [Batch, KvHead, Cache, Dim], [Batch, KvHead, Cache, Dim]>(&before.on_gpu.0, extents);
     let past_v = gpu.reshape::<f32, [Batch, KvHead, Cache, Dim], [Batch, KvHead, Cache, Dim]>(&before.on_gpu.1, extents);
     let made = gpu.bind_groups();
-    let on_gpu = gpu.group_query_attention::<f32, Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One, Seq>(
+    let on_gpu = gpu.group_query_attention::<f32, Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One, Seq, Query>(
         &gq,
         &gk,
         &gv,
@@ -364,6 +391,7 @@ fn step(
         null,
         Option::Some(&gcos),
         Option::Some(&gsin),
+        null,
         null,
         &options,
     );

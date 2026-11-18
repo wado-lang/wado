@@ -20,10 +20,14 @@ use {
     branching_inputs,
     elementwise,
     elementwise_inputs,
+    experts_case,
     halved,
     halved_inputs,
     mixed,
     mixed_inputs,
+    mixing,
+    mixing_arguments,
+    mixing_pass,
     quantized_case,
     quantized_pass,
     quantizing,
@@ -270,6 +274,17 @@ test "a recorded attention composite computes the CPU's, its presents the buffer
     }
 }
 
+test "a recorded mixture of experts computes the CPU's, by its picks and by its experts" {
+    let cpu = &mut Cpu {};
+    for let tokens of [1, 3] {
+        let c = experts_case(tokens);
+        let want = mixing(cpu, &c.x, &c.router, &c.up, &c.down);
+        let mut r = Recorder::new();
+        let recorded = mixing_pass(&mut r, tokens);
+        assert run(cpu, &recorded, &mixing_arguments(cpu, tokens)) == [host_of(&want)] as List<Any<Cpu>>;
+    }
+}
+
 test "a recorded quantized product and gather compute the CPU's, as composites and decomposed" {
     let case = quantized_case();
     let cpu = &mut Cpu {};
@@ -303,7 +318,7 @@ fn recorded_attention(case: &AttentionCase) {
     let [past_k, past_v, length] = case.past;
     let [cos, sin] = case.rotation;
     let cpu = &mut Cpu {};
-    let want = attending(cpu, &case.inputs, &case.past, &case.rotation, &case.bias, &case.options);
+    let want = attending(cpu, &case.inputs, &case.past, &case.rotation, &case.bias, &case.sinks, &case.options);
     let mut r = Recorder::new();
     let inputs = [
         r.parameter::<f32, [Bt, St, Qt]>(q.extents),
@@ -320,7 +335,8 @@ fn recorded_attention(case: &AttentionCase) {
         r.parameter::<f32, [Pos, Half]>(sin.extents),
     ];
     let bias = r.parameter::<f32, [Bt, Ht, St, Tt]>(case.bias.extents);
-    let got = attending(&mut r, &inputs, &past, &rotation, &bias, &case.options);
+    let sinks = r.parameter::<f32, [Qt]>(case.sinks.extents);
+    let got = attending(&mut r, &inputs, &past, &rotation, &bias, &sinks, &case.options);
     let recorded = r.finished([got.0.id, got.1.id, got.2.id]);
     assert recorded.nodes[got.1.id].extents == want.1.extents;
     let arguments: List<Any<Cpu>> = [
@@ -333,6 +349,7 @@ fn recorded_attention(case: &AttentionCase) {
         host_of(&cos),
         host_of(&sin),
         host_of(&case.bias),
+        host_of(&case.sinks),
     ];
     assert run(cpu, &recorded, &arguments) == [
         host_of(&want.0),

@@ -32,6 +32,7 @@ use {
     GATHER_BLOCK_QUANTIZED,
     GROUP_QUERY_ATTENTION,
     MATMUL_NBITS,
+    QMOE,
     absent,
     data_type,
     dims_of,
@@ -859,7 +860,7 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
         }
         return Result::Ok(primitives.get(node.inputs[0]));
     }
-    if op == MATMUL_NBITS || op == GATHER_BLOCK_QUANTIZED {
+    if op == MATMUL_NBITS || op == GATHER_BLOCK_QUANTIZED || op == QMOE {
         return quantized_primitive(node, primitives);
     }
     if op == "Concat" {
@@ -914,21 +915,33 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
     return Result::Ok(element);
 }
 
-/// A quantized operator's element, its scales': the packed weight and the zero
+/// A quantized operator's element, its scales': the packed weights and the zero
 /// points are `u8`, a gather's indices `i64`, and every other operand that
 /// float.
 fn quantized_primitive(node: &Node, primitives: &HashMap<String, String>) -> Result<Option<String>, InferError> {
     let gathers = node.op == GATHER_BLOCK_QUANTIZED;
-    let scales = node.inputs[2];
+    let [packed, zero_points, scales_at]: [List<i32>, List<i32>, i32] = if node.op == QMOE {
+        [
+            [QMOE_UP, QMOE_DOWN],
+            [QMOE_UP_ZERO_POINTS, QMOE_DOWN_ZERO_POINTS],
+            QMOE_UP + 1,
+        ];
+    } else {
+        [
+            [if gathers { 0 } else { 1 }],
+            [3],
+            2,
+        ];
+    };
+    let scales = node.inputs[scales_at];
     let element = primitives.get(scales);
-    let packed = if gathers { 0 } else { 1 };
     for let [index, input] of node.inputs.into_iter().enumerate() {
         let Some(p) = primitives.get(input) else {
             continue;
         };
-        let [wanted, why] = if index == packed {
+        let [wanted, why] = if packed.contains(&index) {
             ["u8", "the weight is packed in"];
-        } else if index == 3 {
+        } else if zero_points.contains(&index) {
             ["u8", "zero points are packed in"];
         } else if gathers && index == 1 {
             ["i64", `${node.op} indexes with`];
@@ -1220,6 +1233,9 @@ fn infer_node(
     if op == GATHER_BLOCK_QUANTIZED {
         return quantized_gather(node, shapes, owed, classes);
     }
+    if op == QMOE {
+        return mixture(node, shapes, owed, classes);
+    }
     if op == "Gather" {
         let data = operand_at(node, shapes, 0);
         let indices = operand_at(node, shapes, 1);
@@ -1425,10 +1441,12 @@ pub fn split_parts(
         None => {
             let chunk = Poly::ceil_div(&whole, &Poly::constant(count as i64), &node.site());
             let mut equal = List::<Poly>::filled(count - 1, chunk);
-            let others = chunk.try_mul(&Poly::constant(count as i64 - 1)).ok_or(refusal(
-                node,
-                `${chunk} * ${count - 1} leaves i64`,
-            ))?;
+            let others = chunk
+                .try_mul(&Poly::constant(count as i64 - 1))
+                .ok_or(refusal(
+                    node,
+                    `${chunk} * ${count - 1} leaves i64`,
+                ))?;
             equal.push(difference(node, &whole, &others)?);
             equal;
         },
@@ -1654,11 +1672,13 @@ pub struct AttentionOptions {
 }
 
 /// The operands `GroupQueryAttention` reads past its first seven: the rotary
-/// caches, then the position ids, then the bias.
+/// caches, then the position ids, then the bias, then a logit per query head
+/// that joins each softmax's denominator.
 pub global ROTARY_COS: i32 = 7;
 pub global ROTARY_SIN: i32 = 8;
 global POSITION_IDS: i32 = 9;
 pub global ATTENTION_BIAS: i32 = 10;
+pub global HEAD_SINK: i32 = 11;
 
 /// A `GroupQueryAttention`'s options, refusing an attribute that asks for what
 /// the kernel does not compute.
@@ -1713,11 +1733,13 @@ pub struct Quantization {
 global MAX_BLOCK: i64 = 1 << 24;
 
 /// A quantized operator's `bits` and `block_size`, which onnxruntime defines
-/// for 2, 4 or 8 bits in blocks of a power of two from 16.
+/// for 2, 4 or 8 bits in blocks of a power of two from 16. A `QMoE` names its
+/// bits `expert_weight_bits`.
 pub fn quantization(node: &Node) -> Result<Quantization, InferError> {
-    let bits = int_attr(node, "bits", 4)?;
+    let named = if node.op == QMOE { "expert_weight_bits" } else { "bits" };
+    let bits = int_attr(node, named, 4)?;
     if !(bits == 2 || bits == 4 || bits == 8) {
-        return Result::Err(attribute_error(node, "bits", `is ${bits}, and a byte packs 2, 4 or 8`));
+        return Result::Err(attribute_error(node, named, `is ${bits}, and a byte packs 2, 4 or 8`));
     }
     // onnxruntime gathers in blocks of 128 where the node names none.
     let block = if node.op == GATHER_BLOCK_QUANTIZED {
@@ -1856,6 +1878,160 @@ fn quantized_gather(
     return Result::Ok(Shape { axes });
 }
 
+/// The operands a `QMoE` reads: its input and router, then each projection's
+/// packed weight, scales and bias, then the zero points. Operands past the
+/// second projection's zero points are refused.
+pub global QMOE_UP: i32 = 2;
+pub global QMOE_DOWN: i32 = 5;
+global QMOE_GATED: i32 = 8;
+pub global QMOE_UP_ZERO_POINTS: i32 = 11;
+pub global QMOE_DOWN_ZERO_POINTS: i32 = 12;
+
+/// What a `QMoE` computes beyond its operands, off its attributes.
+pub struct ExpertOptions {
+    pub k: i32,
+    pub normalized: bool,
+    pub alpha: f32,
+    pub beta: f32,
+    pub limit: f32,
+}
+
+/// A `QMoE`'s options, refusing an attribute that asks for what the
+/// decomposition does not compute: anything but integer weights in blocks
+/// through an interleaved SwiGLU, the one form onnxruntime's CPU kernel runs.
+pub fn expert_options(node: &Node) -> Result<ExpertOptions, InferError> {
+    for let [attr, fallback, wanted] of [
+        ["activation_type", "relu", "swiglu"],
+        ["quant_type", "int", "int"],
+    ] as List<[String, String, String]> {
+        let given = attr_read(node, node.string_attr(attr, fallback))?;
+        if given != wanted {
+            return Result::Err(refusal(node, `${attr} ${given} is not supported`));
+        }
+    }
+    for let [attr, wanted] of [
+        ["swiglu_fusion", 1],
+        ["use_sparse_mixer", 0],
+        ["swiglu_limit_after_activation", 0],
+    ] as List<[String, i64]> {
+        if int_attr(node, attr, 0)? != wanted {
+            return Result::Err(refusal(node, `${attr} is not ${wanted}, which alone is supported`));
+        }
+    }
+    if int_attr(node, "weights_prepacked", -1)? == 1 {
+        return Result::Err(refusal(node, "a weight laid out for one device is not supported"));
+    }
+    let bits = quantization(node)?.bits as i64;
+    for let attr of ["fc1_expert_weight_bits", "fc2_expert_weight_bits", "fc3_expert_weight_bits"] {
+        if int_attr(node, attr, bits)? != bits {
+            return Result::Err(refusal(node, `${attr} differs from expert_weight_bits, which is not supported`));
+        }
+    }
+    let k = attr_read(node, node.required_int_attr("k"))?;
+    if !(1 <= k <= i32::MAX as i64) {
+        return Result::Err(attribute_error(node, "k", `is ${k}, and a token picks at least one expert`));
+    }
+    let required = |attr: String| -> Result<f32, InferError> {
+        if node.attr(attr) matches { None } {
+            return Result::Err(refusal(node, `${attr} is absent, and onnxruntime documents no default`));
+        }
+        return float_attr(node, attr, 0.0);
+    };
+    return Result::Ok(ExpertOptions {
+        k: k as i32,
+        normalized: int_attr(node, "normalize_routing_weights", 0)? != 0,
+        alpha: required("activation_alpha")?,
+        beta: required("activation_beta")?,
+        limit: float_attr(node, "swiglu_limit", f32::INFINITY)?,
+    });
+}
+
+/// A `QMoE`'s output, its input's shape. The input is `[tokens, hidden]` or
+/// `[batch, sequence, hidden]`, and the router `[tokens, experts]`. Each
+/// expert's first projection gives a gate and an up value for each of `inner`
+/// values, interleaved, and its second gives `hidden` back, each packed as its
+/// operands' extents and the packing say.
+fn mixture(
+    node: &Node,
+    shapes: &HashMap<String, Shape>,
+    owed: &mut List<Condition>,
+    classes: &mut Axes,
+) -> Result<Shape, InferError> {
+    let options = expert_options(node)?;
+    let q = quantization(node)?;
+    for let index of [QMOE_UP + 1, QMOE_DOWN, QMOE_DOWN + 1] {
+        if !node.has_operand(index) {
+            return Result::Err(refusal(node, `operand ${index} is absent, which only a weight without scales leaves`));
+        }
+    }
+    for let index of (QMOE_GATED..<node.inputs.len()).filter(|i| i != QMOE_UP_ZERO_POINTS && i != QMOE_DOWN_ZERO_POINTS) {
+        if node.has_operand(index) {
+            return Result::Err(
+                refusal(
+                    node,
+                    `operand ${index} is given, and separate gate weights, router weights and scales of other formats are not supported`,
+                ),
+            );
+        }
+    }
+    let x = operand_at(node, shapes, 0);
+    if !(x.rank() == 2 || x.rank() == 3) {
+        return Result::Err(operand_rank(node, 0, x.rank(), 2));
+    }
+    let Static(hidden) = x.axes[x.rank() - 1].extent else {
+        return Result::Err(refusal(node, "the hidden width must be a number"));
+    };
+    let router = operand_at(node, shapes, 1);
+    if router.rank() != 2 {
+        return Result::Err(operand_rank(node, 1, router.rank(), 2));
+    }
+    if x.rank() == 2 {
+        agree_at(node, &router.axes[0], &x.axes[0], owed, classes)?;
+    } else {
+        let Some(tokens) = x.axes[0].extent.poly().try_mul(&x.axes[1].extent.poly()) else {
+            return Result::Err(refusal(node, "the tokens are more than a length holds"));
+        };
+        owe_equal(node, owed, &router.axes[0].extent.poly(), &tokens, "the router must hold a row for each token")?;
+    }
+    let Static(experts) = router.axes[1].extent else {
+        return Result::Err(refusal(node, "the experts must be a number"));
+    };
+    if options.k > experts {
+        return Result::Err(attribute_error(node, "k", `is ${options.k}, and there are ${experts} experts`));
+    }
+    let Static(gated) = operand_at(node, shapes, QMOE_UP).axes[1].extent else {
+        return Result::Err(refusal(node, "the experts' widths must be numbers"));
+    };
+    let inner = gated / 2;
+    if gated % 2 != 0 || hidden % q.block != 0 || inner % q.block != 0 {
+        return Result::Err(refusal(
+            node,
+            `a gate and up row of ${gated} into ${hidden} must be whole blocks of ${q.block}, and pairs`,
+        ));
+    }
+    for let [at, zeros, rows, width] of [
+        [QMOE_UP, QMOE_UP_ZERO_POINTS, gated, hidden],
+        [QMOE_DOWN, QMOE_DOWN_ZERO_POINTS, hidden, inner],
+    ] {
+        let [blocks, zero_bytes] = blocks_of(width, &q);
+        laid_out(node, shapes, at, [experts, rows, width * q.bits / 8])?;
+        let weight = operand_at(node, shapes, at);
+        laid_out(node, shapes, at + 1, [experts, rows, blocks])?;
+        shares_axes(node, shapes, at + 1, &weight.axes[0..<2].to_list(), owed, classes)?;
+        if node.has_operand(at + 2) {
+            laid_out(node, shapes, at + 2, [experts, rows])?;
+            shares_axes(node, shapes, at + 2, &weight.axes[0..<2].to_list(), owed, classes)?;
+        }
+        if node.has_operand(zeros) {
+            laid_out(node, shapes, zeros, [experts, rows, zero_bytes])?;
+            shares_axes(node, shapes, zeros, &weight.axes[0..<2].to_list(), owed, classes)?;
+        }
+    }
+    shares_axes(node, shapes, QMOE_UP, &[router.axes[1]], owed, classes)?;
+    shares_axes(node, shapes, QMOE_DOWN, &[router.axes[1], x.axes[x.rank() - 1]], owed, classes)?;
+    return Result::Ok(x);
+}
+
 /// Why operand `index` of a quantized operator is not of `extents`, which its
 /// packing makes it.
 fn laid_out(node: &Node, shapes: &HashMap<String, Shape>, index: i32, extents: List<i32>) -> Result<(), InferError> {
@@ -1882,7 +2058,8 @@ pub fn named_present(node: &Node) -> Option<String> {
 /// positions after the past ones, a new axis. The query,
 /// key and value are `[batch, sequence, heads × head]`, the past
 /// `[batch, key heads, past, head]`. The sequence lengths it is given must
-/// be the ones its shapes say, as must the rotary caches' and bias's extents.
+/// be the ones its shapes say, as must the rotary caches', the bias's and the
+/// sinks' extents.
 fn attention(
     node: &Node,
     shapes: &HashMap<String, Shape>,
@@ -1896,8 +2073,8 @@ fn attention(
             return Result::Err(refusal(node, `operand ${index} is absent, which only a packed or pastless form leaves`));
         }
     }
-    if node.has_operand(POSITION_IDS) || node.inputs.len() > ATTENTION_BIAS + 1 {
-        return Result::Err(refusal(node, "position ids, sinks, cache scales and norm weights are not supported"));
+    if node.has_operand(POSITION_IDS) || node.inputs.len() > HEAD_SINK + 1 {
+        return Result::Err(refusal(node, "position ids, cache scales and norm weights are not supported"));
     }
     let ranked = |index: i32, rank: i32| -> Result<Shape, InferError> {
         let shape = operand_at(node, shapes, index);
@@ -1994,6 +2171,9 @@ fn attention(
                 "the bias's second extent must be 1 or the heads'",
             )?;
         }
+    }
+    if node.has_operand(HEAD_SINK) {
+        stated(&ranked(HEAD_SINK, 1)?.axes[0], options.heads as i64, owed, classes)?;
     }
     let cache = Shape {
         axes: [past_k.axes[0], past_k.axes[1], positions, past_k.axes[3]],
@@ -2378,6 +2558,9 @@ fn required_operands(op: &String) -> Option<i32> {
     }
     if *op == MATMUL_NBITS || *op == GATHER_BLOCK_QUANTIZED {
         return Option::Some(3);
+    }
+    if *op == QMOE {
+        return Option::Some(QMOE_UP + 2);
     }
     return match op.as_str_slice() {
         "Constant" => Option::Some(0),

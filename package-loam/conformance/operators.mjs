@@ -2,7 +2,9 @@
 // operator Loam lowers, over static shapes and with the attributes and edge
 // values where an implementation's reading is least safe. Beside each goes
 // <case>.txt: the inputs the case fed, and what onnxruntime computed from
-// them, which operators_test.wado holds Loam to.
+// them, which operators_test.wado holds Loam to. A case onnxruntime departs
+// from the operator's definition on names in `exact` a function computing the
+// definition, which writes its output instead.
 //
 //   mise run loam-oracle-deps
 //   node operators.mjs <this directory>
@@ -443,6 +445,35 @@ const halfNorm = (floats) => overHalves({
 add('SimplifiedLayerNormalizationHalf', halfNorm(['A', 'C']));
 // The output takes the scale's element type, which may differ from the input's.
 add('SimplifiedLayerNormalizationMixed', halfNorm(['C']));
+
+// SkipSimplifiedLayerNormalization of A and its skip B, scaled by C and with a
+// bias D where `bias`. `output` names which result the case checks: the
+// normalization, 0, or the sum it normalizes, 3.
+const skipNorm = ({ a, b, bias = false, output = 0 }) => {
+  const inits = { C: float([3], [1, -0.5, 2]) };
+  const operands = ['A', 'B', 'C'];
+  if (bias) {
+    inits.D = float([3], [0.5, -1, 0.25]);
+    operands.push('D');
+  }
+  const outputs = ['O', '', '', 'Sum'];
+  outputs[output] = 'Y';
+  return {
+    inputs: { A: float([2, 3], a), B: float([2, 3], b) },
+    inits,
+    nodes: [node('com.microsoft.SkipSimplifiedLayerNormalization', operands, outputs, { epsilon: f32(1e-5) })],
+    opset: 17,
+    domains: { 'com.microsoft': 1 },
+  };
+};
+add('SkipNorm', skipNorm({}));
+add('SkipNormBias', skipNorm({ bias: true }));
+add('SkipNormSum', skipNorm({ bias: true, output: 3 }));
+// Sums past a half's range: whether the normalization reads the sum rounded to
+// a half or the one computed in f32.
+const pastHalf = { a: [60000, 1, 2, 3, -60000, 1], b: [60000, 0, 0, 0, -60000, 0] };
+add('SkipNormHalf', overHalves(skipNorm(pastHalf), ['A', 'B', 'C']));
+add('SkipNormHalfSum', overHalves(skipNorm({ ...pastHalf, output: 3 }), ['A', 'B', 'C']));
 add('GeluTanh', {
   inputs: { A: float([2, 3]) },
   nodes: [node('Gelu', ['A'], 'Y', { approximate: 'tanh' })],
@@ -463,9 +494,10 @@ add('ExpandBothWays', expand([2, 1], [1, 3]));
 // GroupQueryAttention over `s` new positions after `past` cached ones, `heads`
 // query heads sharing `kv` key and value heads of `dim` elements. `rotary`
 // feeds cos and sin caches of 8 positions; `bias` an additive mask; `output`
-// names which of the three results the case checks. onnxruntime rotates a head
-// of a multiple of 16 elements only.
-const gqa = ({ s, past, heads, kv, dim, attrs = {}, rotary = false, bias = null, output = 0 }) => {
+// names which of the three results the case checks; `sink` a logit per query
+// head, which joins each softmax's denominator. onnxruntime rotates a head of a
+// multiple of 16 elements only.
+const gqa = ({ s, past, heads, kv, dim, attrs = {}, rotary = false, bias = null, sink = null, output = 0 }) => {
   const total = past + s;
   const cache = (f) => {
     const half = dim / 2;
@@ -486,15 +518,25 @@ const gqa = ({ s, past, heads, kv, dim, attrs = {}, rotary = false, bias = null,
     L: tensor(INT32, [1], [total - 1]),
     T: tensor(INT32, [], [total]),
   };
+  // Each optional operand at its index, an absent one before it named ''.
   const operands = ['Q', 'K', 'V', 'PK', 'PV', 'L', 'T'];
+  const at = (index, name) => {
+    while (operands.length < index) operands.push('');
+    operands.push(name);
+  };
   if (rotary) {
     inits.C = cache(Math.cos);
     inits.N = cache(Math.sin);
-    operands.push('C', 'N');
+    at(7, 'C');
+    at(8, 'N');
   }
   if (bias) {
     inputs.B = float([1, 1, s, total], bias);
-    operands.push(...(rotary ? [] : ['', '']), '', 'B');
+    at(10, 'B');
+  }
+  if (sink) {
+    inits.H = float([heads], sink);
+    at(11, 'H');
   }
   const outputs = ['O', 'PKo', 'PVo'];
   outputs[output] = 'Y';
@@ -521,6 +563,11 @@ add('GqaBias', gqa({ s: 2, past: 1, heads: 2, kv: 1, dim: 16, bias: [0, -3.40282
 add('GqaRotaryBias', gqa({
   s: 2, past: 1, heads: 2, kv: 1, dim: 16, rotary: true, attrs: { do_rotary: 1 }, bias: [0, 0, -2, -3.4028234663852886e38, 0, 0],
 }));
+// A sink above every score takes most of each softmax and one below takes
+// little. Under a window, the sink joins the positions the window keeps.
+add('GqaSink', gqa({ s: 3, past: 1, heads: 2, kv: 1, dim: 16, sink: [4, -2] }));
+add('GqaSinkWindow', gqa({ s: 4, past: 2, heads: 2, kv: 1, dim: 16, attrs: { local_window_size: 2 }, sink: [0.5, 30] }));
+add('GqaHalfSink', overHalves(gqa({ s: 2, past: 2, heads: 2, kv: 1, dim: 16, sink: [1, -1] }), ['Q', 'K', 'V', 'PK', 'PV', 'H']));
 
 // Bytes spread over their range, apart for each `seed`, as packed weights.
 const bytes = (dims, seed) => tensor(
@@ -566,6 +613,132 @@ add('NBitsHalfBias', overHalves({
   nodes: [node('com.microsoft.MatMulNBits', ['A', 'B', 'W', '', '', 'C'], 'Y', { K: 16, N: 3, bits: 8, block_size: 16 })],
   domains: { 'com.microsoft': 1 },
 }, ['A', 'W', 'C']));
+
+// QMoE of `tokens` rows of 32 values over 4 experts, `k` to a token, each a
+// SwiGLU of 32 between two products in 4 bits and blocks of 32, its gate and
+// up rows interleaved. `zeros` packs zero points and `bias` adds biases. The
+// router's logits are apart in each row, so the experts a token picks are not
+// left to a tie.
+const qmoe = ({ tokens, k = 2, zeros = false, bias = true, attrs = {} }) => {
+  const [experts, hidden, inter] = [4, 32, 32];
+  const logits = Array.from({ length: tokens * experts }, (_, i) => ((i * 5) % 11) / 2 - 2.5 + i / 64);
+  // Zero points of 0 to 3 under values of 0 to 15 leave nearly every value
+  // positive, as the input and the scales are, so no sum cancels to a value
+  // that f32 rounds far from the exact one, and the zero points alone set it.
+  const rowScales = (dims) => zeros
+    ? float(dims, Array.from({ length: dims.reduce((a, b) => a * b, 1) }, (_, i) => ((i % 5) + 1) / 512))
+    : scales(dims);
+  const small = (dims, seed) => {
+    const t = bytes(dims, seed);
+    return { ...t, values: t.values.map((b) => b & 0xf3) };
+  };
+  const inits = {
+    W1: bytes([experts, 2 * inter, hidden / 2], 5),
+    S1: rowScales([experts, 2 * inter, 1]),
+    W2: bytes([experts, hidden, inter / 2], 6),
+    S2: rowScales([experts, hidden, 1]),
+  };
+  const operands = ['X', 'R', 'W1', 'S1', '', 'W2', 'S2', ''];
+  if (bias) {
+    inits.B1 = float([experts, 2 * inter], halves(experts * 2 * inter));
+    inits.B2 = float([experts, hidden], halves(experts * hidden).map((v) => v / 2));
+    operands[4] = 'B1';
+    operands[7] = 'B2';
+  }
+  if (zeros) {
+    inits.Z1 = small([experts, 2 * inter, 1], 7);
+    inits.Z2 = small([experts, hidden, 1], 8);
+    operands.push('', '', '', 'Z1', 'Z2');
+  }
+  const x = halves(tokens * hidden).map((v) => (zeros ? Math.abs(v) + 0.5 : v));
+  return {
+    inputs: { X: float([tokens, hidden], x), R: float([tokens, experts], logits) },
+    inits,
+    nodes: [node('com.microsoft.QMoE', operands, 'Y', {
+      k,
+      activation_type: 'swiglu',
+      swiglu_fusion: 1,
+      activation_alpha: f32(1.702),
+      activation_beta: f32(1),
+      swiglu_limit: f32(7),
+      normalize_routing_weights: 1,
+      expert_weight_bits: 4,
+      block_size: 32,
+      ...attrs,
+    })],
+    domains: { 'com.microsoft': 1 },
+  };
+};
+// The QMoE node of case `c` computed from its definition in f64, over the
+// tensors `given` names: each token's `k` largest logits pick its experts, and
+// each pick weighs its expert's output by its softmax over every expert,
+// divided by the picks' sum where `normalize_routing_weights` is set. Each
+// expert is a SwiGLU of interleaved gate and up rows between two products of
+// weights packed in blocks.
+const qmoeExact = (c, given) => {
+  const { inputs: ops, attrs } = c.nodes[0];
+  const operand = (i) => (ops[i] ? given[ops[i]] : null);
+  const number = (a, fallback) => (a === undefined ? fallback : (a.f32 ?? a));
+  const [x, router] = [operand(0), operand(1)];
+  const [bits, block, k] = [attrs.expert_weight_bits, attrs.block_size, attrs.k];
+  const [alpha, beta] = [number(attrs.activation_alpha), number(attrs.activation_beta)];
+  const limit = number(attrs.swiglu_limit, Infinity);
+  const [hidden, experts] = [x.dims.at(-1), router.dims.at(-1)];
+  const tokens = x.values.length / hidden;
+  const [per, mask] = [8 / bits, (1 << bits) - 1];
+  const packedAt = (values, at, i) => (values[at + Math.floor(i / per)] >> ((i % per) * bits)) & mask;
+  // `rows` rows of expert `e`'s weight at `w`, each `width` values, by `input`.
+  const product = (w, rows, width, e, input) => {
+    const [weight, scale, bias, zeros] = [operand(w), operand(w + 1), operand(w + 2), operand(w === 2 ? 11 : 12)];
+    const blocks = Math.ceil(width / block);
+    const zeroBytes = Math.ceil(blocks / per);
+    return Array.from({ length: rows }, (_, n) => {
+      const row = e * rows + n;
+      let sum = 0;
+      for (let i = 0; i < width; i++) {
+        const b = Math.floor(i / block);
+        const zero = zeros ? packedAt(zeros.values, row * zeroBytes, b) : 1 << (bits - 1);
+        const q = packedAt(weight.values, row * (width / per), i);
+        sum += input[i] * (q - zero) * scale.values[row * blocks + b];
+      }
+      return sum + (bias ? bias.values[row] : 0);
+    });
+  };
+  const inner = operand(2).dims[1] / 2;
+  const data = [];
+  for (let t = 0; t < tokens; t++) {
+    const logits = router.values.slice(t * experts, (t + 1) * experts);
+    const picks = [...logits.keys()].sort((a, b) => logits[b] - logits[a] || a - b).slice(0, k);
+    const top = Math.max(...logits);
+    const p = logits.map((l) => Math.exp(l - top));
+    const total = attrs.normalize_routing_weights ? picks.reduce((s, e) => s + p[e], 0) : p.reduce((s, v) => s + v);
+    const row = x.values.slice(t * hidden, (t + 1) * hidden);
+    const y = Array(hidden).fill(0);
+    for (const e of picks) {
+      const h = product(2, 2 * inner, hidden, e, row);
+      const a = Array.from({ length: inner }, (_, i) => {
+        const g = Math.min(h[2 * i], limit);
+        const u = Math.max(Math.min(h[2 * i + 1], limit), -limit);
+        return (g / (1 + Math.exp(-alpha * g))) * (u + beta);
+      });
+      product(5, hidden, inner, e, a).forEach((v, n) => {
+        y[n] += (p[e] / total) * v;
+      });
+    }
+    data.push(...y);
+  }
+  return { dims: x.dims, data };
+};
+// More picks than experts: each expert's rows, masked.
+add('QMoePrompt', qmoe({ tokens: 3 }));
+// One token picks fewer experts than there are: those experts alone.
+add('QMoeStep', qmoe({ tokens: 1 }));
+// onnxruntime weighs the picks as normalized whether or not
+// `normalize_routing_weights` is set, so the definition computes this one.
+add('QMoeUnnormalized', { ...qmoe({ tokens: 3, attrs: { normalize_routing_weights: 0 } }), exact: qmoeExact });
+add('QMoeZeroPoints', qmoe({ tokens: 3, zeros: true, bias: false }));
+add('QMoeHalf', overHalves(qmoe({ tokens: 3 }), ['X', 'R', 'S1', 'B1', 'S2', 'B2']));
+add('QMoeHalfStep', overHalves(qmoe({ tokens: 1 }), ['X', 'R', 'S1', 'B1', 'S2', 'B2']));
 
 // GatherBlockQuantized of a table of 5 rows of `width` values in blocks of
 // 32, by indices counting from the end and past it.
@@ -628,14 +801,21 @@ for (const c of cases) {
   writeFileSync(path, model(c));
   const lines = [];
   const feeds = {};
+  const given = { ...c.inits };
   for (const [i, t] of Object.entries(c.inputs)) {
     const count = t.dims.reduce((a, b) => a * b, 1);
     const values = t.values ?? halves(count);
     feeds[i] = feed(t.type, t.dims, values);
+    given[i] = { ...t, values };
     lines.push(line(['input', i, elementName[t.type], list(t.dims), list(spelled(t.type, values))]));
   }
-  const session = await ort.InferenceSession.create(c.oracle ? model({ ...c, ...c.oracle }) : path);
-  const y = (await session.run(feeds, ['Y'])).Y;
+  let y;
+  if (c.exact) {
+    y = c.exact(c, given);
+  } else {
+    const session = await ort.InferenceSession.create(c.oracle ? model({ ...c, ...c.oracle }) : path);
+    y = (await session.run(feeds, ['Y'])).Y;
+  }
   lines.push(line(['output', elementName[c.out], list(y.dims), list(spelled(c.out, y.data))]));
   writeFileSync(join(here, 'operators', `${c.name}.txt`), lines.join(''));
 }

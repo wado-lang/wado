@@ -1,6 +1,6 @@
 use { Signal, flush, observe, on_cleanup, scope, signal } from "./signals.wado";
-use { bind_text, each, element, text } from "./view.wado";
-use { Dom, Element, Node, SurfaceDom } from "wado-lang:web";
+use { View, element } from "./view.wado";
+use { Dom, Element, Event, Node, SurfaceDom } from "wado-lang:web";
 
 fn children_text(parent: Element) -> String with Dom {
     let mut out = "";
@@ -12,37 +12,80 @@ fn children_text(parent: Element) -> String with Dom {
     return out;
 }
 
+fn item(value: i32) -> View with Dom {
+    return element("li").text(`${value}`);
+}
+
+test "a view builds its element's attributes, text and children in call order" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let count = signal(1);
+        let mut clicks = 0;
+        let card = element("div").attribute("class", "card");
+        let _dispose = scope(|| {
+            card
+                .children([
+                    element("h2").text("Title"),
+                    element("p").text("Count: ").bind_text(|| `${count.get()}`),
+                    element("button").text("+").on("click", |_: Event| clicks += 1),
+                ])
+                .child(element("footer").bind_attribute("title", || Option::Some(`${count.get()}`)));
+        });
+        assert card.node.get_attribute("class") == Option::Some("card");
+        assert card.node.get_html() == "<h2>Title</h2><p>Count: 1</p><button>+</button><footer title=\"1\"></footer>";
+
+        count.set(2);
+        flush();
+        assert card.node.get_html() == "<h2>Title</h2><p>Count: 2</p><button>+</button><footer title=\"2\"></footer>";
+
+        card.node.last_child().unwrap().previous_sibling().unwrap().dispatch_event(Event::new("click"));
+        assert clicks == 1;
+    };
+}
+
+test "a view of an element made elsewhere builds on that element" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = Dom::document().create_element("main");
+        View::of(root).child(element("h1").text("Todos"));
+        assert root.get_html() == "<h1>Todos</h1>";
+    };
+}
+
 test "each follows a new order with the nodes it had" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let list = element("ul");
         let items: Signal<List<i32>> = signal([1, 2, 3]);
-        let _dispose = scope(|| each(list, || items.get(), |item: i32| text("li", `${item}`)));
-        let first = list.first_child().unwrap();
-        let last = list.last_child().unwrap();
+        let _dispose = scope(|| {
+            list.each(|| items.get(), item);
+        });
+        let first = list.node.first_child().unwrap();
+        let last = list.node.last_child().unwrap();
 
         items.set([3, 1, 2]);
         flush();
-        assert children_text(list) == "312";
-        assert list.first_child().unwrap() == last;
-        assert list.first_child().unwrap().next_sibling().unwrap() == first;
+        assert children_text(list.node) == "312";
+        assert list.node.first_child().unwrap() == last;
+        assert list.node.first_child().unwrap().next_sibling().unwrap() == first;
     };
 }
 
 test "bind_text owns one text node, and leaves the element's other children" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let label = element("p");
-        label.append_child(text("b", "Count: "));
+        let label = element("p").child(element("b").text("Count: "));
         let count = signal(0);
-        let _dispose = scope(|| bind_text(label, || `${count.get()}`));
-        let shown = label.last_child().unwrap();
-        assert label.get_html() == "<b>Count: </b>0";
+        let _dispose = scope(|| {
+            label.bind_text(|| `${count.get()}`);
+        });
+        let shown = label.node.last_child().unwrap();
+        assert label.node.get_html() == "<b>Count: </b>0";
 
         count.set(1);
         flush();
-        assert label.get_html() == "<b>Count: </b>1";
-        assert label.last_child().unwrap() == shown;
+        assert label.node.get_html() == "<b>Count: </b>1";
+        assert label.node.last_child().unwrap() == shown;
     };
 }
 
@@ -53,17 +96,17 @@ test "bind_text takes its text node out when it is disposed of" {
         let shown = signal(true);
         let _dispose = scope(|| observe(|| {
             if shown.get() {
-                bind_text(label, || "x");
+                label.bind_text(|| "x");
             }
         }));
-        assert label.get_html() == "x";
+        assert label.node.get_html() == "x";
 
         shown.set(true);
         flush();
-        assert label.get_html() == "x";
+        assert label.node.get_html() == "x";
         shown.set(false);
         flush();
-        assert label.get_html() == "";
+        assert label.node.get_html() == "";
     };
 }
 
@@ -91,21 +134,23 @@ test "each moves only the rows out of place" {
     with &mut dom do {
         let list = element("ul");
         let items: Signal<List<i32>> = signal([1, 2, 3, 4, 5]);
-        let _dispose = scope(|| each(list, || items.get(), |item: i32| text("li", `${item}`)));
+        let _dispose = scope(|| {
+            list.each(|| items.get(), item);
+        });
 
         let mut insertions = Insertions { count: 0 };
         with Node => &mut insertions do {
             items.set([2, 3, 4, 5, 1]);
             flush();
         };
-        assert children_text(list) == "23451";
+        assert children_text(list.node) == "23451";
         assert insertions.count == 1;
 
         with Node => &mut insertions do {
             items.set([1, 2, 3, 4, 5]);
             flush();
         };
-        assert children_text(list) == "12345";
+        assert children_text(list.node) == "12345";
         assert insertions.count == 2;
     };
 }
@@ -115,12 +160,14 @@ test "each takes back a row moved out of its parent" {
     with &mut dom do {
         let list = element("ul");
         let items: Signal<List<i32>> = signal([1, 2]);
-        let _dispose = scope(|| each(list, || items.get(), |item: i32| text("li", `${item}`)));
-        element("ol").append_child(list.last_child().unwrap());
+        let _dispose = scope(|| {
+            list.each(|| items.get(), item);
+        });
+        element("ol").node.append_child(list.node.last_child().unwrap());
 
         items.set([0, 1, 2]);
         flush();
-        assert children_text(list) == "012";
+        assert children_text(list.node) == "012";
     };
 }
 
@@ -129,16 +176,18 @@ test "each restores its order after render moved a row" {
     with &mut dom do {
         let list = element("ul");
         let items: Signal<List<i32>> = signal([1, 2]);
-        let _dispose = scope(|| each(list, || items.get(), |item: i32| {
-            if item == 0 {
-                list.append_child(list.first_child().unwrap());
-            }
-            return text("li", `${item}`);
-        }));
+        let _dispose = scope(|| {
+            list.each(|| items.get(), |value: i32| {
+                if value == 0 {
+                    list.node.append_child(list.node.first_child().unwrap());
+                }
+                return item(value);
+            });
+        });
 
         items.set([0, 1, 2]);
         flush();
-        assert children_text(list) == "012";
+        assert children_text(list.node) == "012";
     };
 }
 
@@ -147,12 +196,14 @@ test "each restores its order after a row moved within its parent" {
     with &mut dom do {
         let list = element("ul");
         let items: Signal<List<i32>> = signal([1, 2]);
-        let _dispose = scope(|| each(list, || items.get(), |item: i32| text("li", `${item}`)));
-        list.append_child(list.first_child().unwrap());
+        let _dispose = scope(|| {
+            list.each(|| items.get(), item);
+        });
+        list.node.append_child(list.node.first_child().unwrap());
 
         items.set([0, 1, 2]);
         flush();
-        assert children_text(list) == "012";
+        assert children_text(list.node) == "012";
     };
 }
 
@@ -162,14 +213,16 @@ test "each disposes of the row of an item that left" {
         let list = element("ul");
         let items: Signal<List<i32>> = signal([1, 2, 3]);
         let mut left: List<i32> = [];
-        let _dispose = scope(|| each(list, || items.get(), |item: i32| {
-            on_cleanup(|| left.push(item));
-            return text("li", `${item}`);
-        }));
+        let _dispose = scope(|| {
+            list.each(|| items.get(), |value: i32| {
+                on_cleanup(|| left.push(value));
+                return item(value);
+            });
+        });
 
         items.set([1, 3]);
         flush();
-        assert children_text(list) == "13";
+        assert children_text(list.node) == "13";
         assert left == [2];
     };
 }
@@ -179,11 +232,13 @@ test "each gives equal items a row each" {
     with &mut dom do {
         let list = element("ul");
         let items: Signal<List<i32>> = signal([1, 1]);
-        let _dispose = scope(|| each(list, || items.get(), |item: i32| text("li", `${item}`)));
-        assert children_text(list) == "11";
+        let _dispose = scope(|| {
+            list.each(|| items.get(), item);
+        });
+        assert children_text(list.node) == "11";
 
         items.set([1, 1, 1]);
         flush();
-        assert children_text(list) == "111";
+        assert children_text(list.node) == "111";
     };
 }

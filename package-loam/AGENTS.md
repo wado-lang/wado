@@ -57,3 +57,7 @@ its README's table.
 A case in `conformance/operators_test.wado` or `semantics_test.wado` where Loam
 does not match onnxruntime yet is a `#[TODO]` test, so the run lists where the
 two part.
+
+Loam does not reproduce a bug of onnxruntime's. It may part from onnxruntime
+for a plain and sound reason, such as computing closer to the exact value. The
+case then states that reason beside the bound it holds Loam to.

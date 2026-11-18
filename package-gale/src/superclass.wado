@@ -487,8 +487,9 @@ pub fn body_is_base_calls_only<S: AsStrSlice, S1: AsStrSlice>(body: S, base_name
 /// Whether every lexer `{ ... }` action body is base-calls-only, which is what
 /// lets a `language = Java` `superClass` grammar run its actions at all.
 pub fn lexer_action_bodies_are_base_calls<S: AsStrSlice>(grammar: &Grammar, base_name: S) -> bool {
-    return lexer_bodies(grammar).iter_ref().all(|b: &SuperBody| !b.kind matches { Action }
-        || body_is_base_calls_only(&b.text, base_name));
+    return lexer_bodies(grammar)
+        .iter_ref()
+        .all(|b: &SuperBody| !b.kind matches { Action } || body_is_base_calls_only(&b.text, base_name));
 }
 
 /// Whether a lexer body still names `this` after wiring, with nothing to receive
@@ -512,9 +513,9 @@ pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
 }
 
 fn grammar_has_lexer_members(grammar: &Grammar) -> bool {
-    return grammar.named_actions.iter_ref().any(
-        |a: &NamedAction| is_lexer_members(a, &grammar.kind) && !a.body.text.trim().is_empty(),
-    );
+    return grammar.named_actions
+        .iter_ref()
+        .any(|a: &NamedAction| is_lexer_members(a, &grammar.kind) && !a.body.text.trim().is_empty());
 }
 
 /// Why a lexer base cannot be wired, or empty when it can. The message names

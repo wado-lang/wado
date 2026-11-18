@@ -50,9 +50,11 @@ internal fn lr_table(sim: &AtnSim, decision: i32, kinds: i32, eof: i32) -> LrTab
         if t == eof {
             continue;
         }
-        let admitting: List<i32> = (0..<exit).filter(
-            |j| sim.tr_kind[s + j] == ATN_TR_PRECEDENCE && atn_state_cont_admits(sim, sim.tr_target[s + j], t, eof),
-        ).collect();
+        let admitting: List<i32> = (0..<exit)
+            .filter(
+                |j| sim.tr_kind[s + j] == ATN_TR_PRECEDENCE && atn_state_cont_admits(sim, sim.tr_target[s + j], t, eof),
+            )
+            .collect();
         if admitting.len() > 1 {
             contested.push(t);
         } else if admitting.len() == 1 {

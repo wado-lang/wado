@@ -272,7 +272,10 @@ fn mapped_kernel(k: &Kernel, to: &HashMap<i32, i32>) -> Kernel {
 }
 
 fn mapped_operands(operands: &List<KernelOperand>, to: &HashMap<i32, i32>) -> List<KernelOperand> {
-    return (*operands).into_iter().map(|o| KernelOperand { node: o.node, extents: mapped_extents(&o.extents, to) }).collect();
+    return (*operands)
+        .into_iter()
+        .map(|o| KernelOperand { node: o.node, extents: mapped_extents(&o.extents, to) })
+        .collect();
 }
 
 fn mapped_extents(extents: &List<i32>, to: &HashMap<i32, i32>) -> List<i32> {

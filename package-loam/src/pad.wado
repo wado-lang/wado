@@ -4,7 +4,7 @@
 //! devices.md § "An extent that varies is a capacity".
 
 use { HashMap } from "core:collections";
-use { GROUP_QUERY_ATTENTION, Graph, MATMUL_NBITS, Node } from "./graph.wado";
+use { GROUP_QUERY_ATTENTION, Graph, MATMUL_NBITS, Node, QMOE } from "./graph.wado";
 use {
     Checked,
     attention_options,
@@ -273,6 +273,25 @@ fn carried(
             if let Some(a) = agreed {
                 merges[k] = a;
             }
+        }
+        return Result::Ok(Option::Some(merges));
+    }
+    if op == QMOE {
+        // Each token runs apart, its experts picked by its own row of the
+        // router, so the token axes carry what the input and the router agree on.
+        let [x, router] = [shapes[node.inputs[0]], shapes[node.inputs[1]]];
+        if operands.into_iter().any(|o| o.0 > 1) || x.rank() != router.rank() {
+            return reads();
+        }
+        let own = |at: i32, k: i32| match merged.get(node.inputs[at]) {
+            Some(m) => m.merges[k],
+            None => null,
+        };
+        for let k of 0..<x.rank() - 1 {
+            if own(0, k) != own(1, k) {
+                return reads();
+            }
+            merges[k] = own(0, k);
         }
         return Result::Ok(Option::Some(merges));
     }

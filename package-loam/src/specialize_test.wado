@@ -142,9 +142,11 @@ fn cut(graph: &mut Graph, last: TreeMap<String, i32>) -> Result<String, OptionCo
         assert defined_before_read(graph);
         checked = infer(graph).unwrap();
     }
-    let nodes: List<String> = graph.nodes.into_iter().filter(|n| n.op != "Constant").map(
-        |n| `${n.outputs[0]}=${n.op}(${n.inputs[0..<i32::min(n.inputs.len(), 2)].to_list().join(",")})`,
-    ).collect();
+    let nodes: List<String> = graph.nodes
+        .into_iter()
+        .filter(|n| n.op != "Constant")
+        .map(|n| `${n.outputs[0]}=${n.op}(${n.inputs[0..<i32::min(n.inputs.len(), 2)].to_list().join(",")})`)
+        .collect();
     let out = checked.shapes.get("Y").unwrap();
     return Result::Ok(`${nodes.join(" ")} | Y ${out.names().join(",")}`);
 }
@@ -274,7 +276,10 @@ fn ranked(graph: &mut Graph, arg_max: TreeMap<String, i32>) -> Result<String, Op
         take_arg_max(graph, &infer(graph).unwrap(), output, *axis)?;
     }
     let checked = infer(graph).unwrap();
-    let nodes: List<String> = graph.nodes.into_iter().map(|n| `${n.outputs[0]}=${n.op}(${n.inputs.join(",")})`).collect();
+    let nodes: List<String> = graph.nodes
+        .into_iter()
+        .map(|n| `${n.outputs[0]}=${n.op}(${n.inputs.join(",")})`)
+        .collect();
     let out = checked.shapes.get("Y").unwrap();
     let axes: List<String> = out.axes.into_iter().map(|a| `${a.name}=${a.extent}`).collect();
     return Result::Ok(`${nodes.join(" ")} | Y ${checked.primitives["Y"]} ${axes.join(",")}`);

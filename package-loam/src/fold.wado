@@ -958,9 +958,9 @@ pub fn polys_at(
 }
 
 fn operand_known(node: &Node, known: &HashMap<String, Known>, index: i32) -> Result<Known, String> {
-    return known.get(node.inputs[index]).ok_or(
-        `operand ${node.inputs[index]} is computed at run time, and the build reads it`,
-    );
+    return known
+        .get(node.inputs[index])
+        .ok_or(`operand ${node.inputs[index]} is computed at run time, and the build reads it`);
 }
 
 fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, String> {

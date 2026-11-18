@@ -2563,6 +2563,8 @@ impl WebGpuBackend {
     /// `past_k` and `past_v` hold, and the cache holds every position they do:
     /// their buffer where they are `shared`, onnxruntime's shared buffer. A
     /// query of a row reads no position at or past the row's of `reaches`.
+    /// The join adds each query head's sink, of `sinks`, to its rows'
+    /// denominators.
     /// `None` where the operands outgrow what a dispatch binds.
     internal fn attended(
         &mut self,
@@ -2576,6 +2578,7 @@ impl WebGpuBackend {
         shared: bool,
         rotary: &Option<[DeviceTensor, DeviceTensor]>,
         bias: &Option<DeviceTensor>,
+        sinks: &Option<DeviceTensor>,
         options: &Attention,
         stored: Option<HalfFloat>,
     ) -> Option<[DeviceTensor, DeviceTensor, DeviceTensor]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder)
@@ -2636,7 +2639,7 @@ impl WebGpuBackend {
         for let b of 0..<batch {
             push_all(&mut attend_head, &([pasts[b], reaches[b]] as List<i32>));
         }
-        let join_head: List<u32> = [rows as u32, rx as u32, furthest.div_ceil(part) as u32, d as u32];
+        let join_head: List<u32> = [rows as u32, rx as u32, furthest.div_ceil(part) as u32, d as u32, heads as u32];
         let heads_of: List<List<u32>> = [append_head, attend_head, join_head];
         let grids: List<[i32, i32, i32]> = [
             [x, y, 1],
@@ -2650,6 +2653,9 @@ impl WebGpuBackend {
         }
         if let Some(b) = bias {
             reads.push(b);
+        }
+        if let Some(h) = sinks {
+            reads.push(h);
         }
         let present = |cache: i32| [
             DeviceTensor {
@@ -2708,7 +2714,11 @@ impl WebGpuBackend {
             let over = [batch, heads, s, b.extents[3]] as List<i32>;
             attend_operands.push(DeviceTensor { ..*b, strides: stretched(b, &over), extents: over });
         }
-        if !self.binds(&append_operands) || !self.binds(&attend_operands) {
+        let mut join_operands = [contiguous(PENDING, 0, [attended])] as List<DeviceTensor>;
+        if let Some(h) = sinks {
+            join_operands.push(*h);
+        }
+        if !self.binds(&append_operands) || !self.binds(&attend_operands) || !self.binds(&join_operands) {
             return null;
         }
 
@@ -2765,12 +2775,13 @@ impl WebGpuBackend {
         );
 
         let result = contiguous(self.allocated(rows * d, false), 0, [batch, s, heads * d]);
-        let joined = [contiguous(parts, 0, [attended])] as List<DeviceTensor>;
+        join_operands[0] = contiguous(parts, 0, [attended]);
+        let sunk = sinks matches { Some(_) };
         self.dispatch_bound(
-            &joined,
+            &join_operands,
             fresh(&result),
             heads_of[2],
-            |bindings| ShaderKey::AttendJoin([bindings, stored]),
+            |bindings| ShaderKey::AttendJoin([bindings, sunk, stored]),
             grids[2],
         );
         if let Some(replay) = key {
@@ -3822,7 +3833,7 @@ variant ShaderKey {
     /// [`attend_shader`]'s arguments.
     Attend([List<i32>, i32, bool, bool, i32, i32, Option<HalfFloat>]),
     /// [`attend_join_shader`]'s arguments.
-    AttendJoin([List<i32>, Option<HalfFloat>]),
+    AttendJoin([List<i32>, bool, Option<HalfFloat>]),
     /// [`arg_max_shader`]'s arguments.
     ArgMax([List<i32>, i32, ArgMaxStage]),
     /// [`quantized_product_shader`]'s arguments.
@@ -3896,7 +3907,7 @@ impl Shader {
                 *stored,
                 words,
             ),
-            AttendJoin([bindings, stored]) => attend_join_shader(bindings, *stored, words),
+            AttendJoin([bindings, sunk, stored]) => attend_join_shader(bindings, *sunk, *stored, words),
             ArgMax([bindings, rank, stage]) => arg_max_shader(bindings, *rank, *stage, words),
             QuantizedProduct([op, bindings, shape]) => quantized_product_shader(op, bindings, shape, words),
             QuantizedGather([bindings, bits, block, zero_points, half]) => quantized_gather_shader(
@@ -4212,10 +4223,17 @@ ${ELEMENTWISE_OPERATORS}`;
 /// The WGSL joining the parts `attend_shader` wrote of each row, one row per
 /// workgroup: each part's weighed values and weights' sum rescaled from its
 /// greatest score to the row's, the result rounded once to the `stored` half.
-/// Parameters: the rows, the workgroups per row of the grid, the parts of a
-/// row, the head's length, then the view of the parts.
-fn attend_join_shader(bindings: &List<i32>, stored: Option<HalfFloat>, words: &List<Words>) -> String {
-    let part = |c: String, at: String| `load${bindings[0]}(p[4] + (row * parts + ${c}) * (d + 2u) + ${at})`;
+/// Where `sunk`, the row's query head's sink is a score of the row's that
+/// weighs no value. Parameters: the rows, the workgroups per row of the grid,
+/// the parts of a row, the head's length, the heads, then the views of the
+/// parts and of the sinks.
+fn attend_join_shader(bindings: &List<i32>, sunk: bool, stored: Option<HalfFloat>, words: &List<Words>) -> String {
+    let part = |c: String, at: String| `load${bindings[0]}(p[5] + (row * parts + ${c}) * (d + 2u) + ${at})`;
+    let [sink, least, sunk_weight] = if sunk {
+        [`let sink = ${view_wgsl(bindings, 1, 7, ["row % p[4]"])};\n    `, "sink", "exp(sink - most)"];
+    } else {
+        ["", "none", "0.0"];
+    };
     return `${buffers_wgsl(words)}
 @compute @workgroup_size(${LANES})
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
@@ -4226,11 +4244,11 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     let parts = p[2];
     let d = p[3];
     let none = non_finite(0xff800000u);
-    var most = none;
+    ${sink}var most = ${least};
     for (var c = 0u; c < parts; c++) {
         most = max(most, ${part("c", "d")});
     }
-    var all = 0.0;
+    var all = ${sunk_weight};
     for (var c = 0u; c < parts; c++) {
         let top = ${part("c", "d")};
         all += select(exp(top - most), 0.0, top == none) * ${part("c", "d + 1u")};

@@ -174,12 +174,14 @@ fn create_granted<S: AsStrSlice>(path: S) -> Result<Descriptor, String> with Pre
     let mut dirs = Preopens::get_directories();
     assert !dirs.is_empty(), "cmd_gen read the grammars through a grant";
     let [root, grant] = dirs.remove(0);
-    let opened = root.open_at(
-        PathFlags::none(),
-        path.to_string(),
-        OpenFlags::Create | OpenFlags::Truncate,
-        DescriptorFlags::Read | DescriptorFlags::Write,
-    ).wait();
+    let opened = root
+        .open_at(
+            PathFlags::none(),
+            path.to_string(),
+            OpenFlags::Create | OpenFlags::Truncate,
+            DescriptorFlags::Read | DescriptorFlags::Write,
+        )
+        .wait();
     if let Ok(file) = opened {
         return Result::Ok(file);
     }

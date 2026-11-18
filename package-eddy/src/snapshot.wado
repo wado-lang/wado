@@ -51,9 +51,11 @@ impl Tree {
 /// where another run holds it. The host ends the child with the guest, so a
 /// run that dies leaves no lock behind.
 fn hold(path: &String) -> Result<Option<Child>, String> with Process {
-    let started = Command::new("flock").args([
-        "--nonblock", "--conflict-exit-code", "75", *path, "sh", "-c", "echo held && exec cat",
-    ]).stdin_piped().stdout_piped().spawn();
+    let started = Command::new("flock")
+        .args(["--nonblock", "--conflict-exit-code", "75", *path, "sh", "-c", "echo held && exec cat"])
+        .stdin_piped()
+        .stdout_piped()
+        .spawn();
     let mut child = match started {
         Ok(child) => child,
         Err(e) && e.kind matches { Spawn(NotFound) } => {
@@ -221,7 +223,10 @@ fn worktree_git_dir(repo: &String, root: &String) -> Option<String> with (Proces
     let common = git([
         "-C", *repo, "rev-parse", "--path-format=relative", "--git-common-dir", "--path-format=absolute",
         "--git-common-dir", "--show-toplevel",
-    ]).lines().map(|line| line.to_string()).collect();
+    ])
+        .lines()
+        .map(|line| line.to_string())
+        .collect();
     // git records a worktree by the absolute path of its `.git`, and only
     // `repo` can be asked for one: `root`'s is reached from where `repo` is.
     let repo_path = fs::normalize(repo).unwrap();
@@ -256,9 +261,10 @@ fn build_submodules(repo: &String, root: &String) -> List<[String, String]> with
     let manifest = tree_git(repo, root, ["show", "HEAD:Cargo.toml"]);
     // A path is matched to its end, or `vendor/wasm` would match
     // `vendor/wasmtime/...` too.
-    return submodules(repo, root).into_iter().filter(
-        |s| manifest.contains(`${s.0}/`) || manifest.contains(`${s.0}"`),
-    ).collect();
+    return submodules(repo, root)
+        .into_iter()
+        .filter(|s| manifest.contains(`${s.0}/`) || manifest.contains(`${s.0}"`))
+        .collect();
 }
 
 /// Every submodule HEAD of `root`, a worktree of `repo`, records, as path and
@@ -346,9 +352,12 @@ pub fn with_mise_tools(runner: Runner, root: &String) -> Runner with Process {
 
 /// The directories of the tools `mise` has installed for the tree at `root`.
 fn mise_bin_dirs(root: &String, data_dir: &String) -> Result<List<String>, String> with Process {
-    let out = Command::new("timeout").args([
-        "--kill-after=10", `${MISE_TIMEOUT}`, "sh", "-c", `${ENTER_TREE} && exec mise bin-paths`, *root,
-    ]).grant_read(*root).env("MISE_DATA_DIR", *data_dir).output().map_err(|e| `${e}`)?;
+    let out = Command::new("timeout")
+        .args(["--kill-after=10", `${MISE_TIMEOUT}`, "sh", "-c", `${ENTER_TREE} && exec mise bin-paths`, *root])
+        .grant_read(*root)
+        .env("MISE_DATA_DIR", *data_dir)
+        .output()
+        .map_err(|e| `${e}`)?;
     if out.status != Exited(0) {
         return Err(`${out.status:?}: ${String::from_utf8_lossy(out.stderr).trim()}`);
     }
@@ -424,10 +433,9 @@ pub fn index(root: &String, wado_path: &String) -> List<String> with (Process, E
         Command::new("rust-analyzer").args(["scip", *root, "--output", rust, "--exclude-vendored-libraries"]),
         root,
         &dir,
-    ).env(
-        "RUSTUP_HOME",
-        homes.rustup_home,
-    ).env("CARGO_HOME", homes.cargo_home);
+    )
+        .env("RUSTUP_HOME", homes.rustup_home)
+        .env("CARGO_HOME", homes.cargo_home);
     succeed(&analyzer);
     // The generated and fixture tests are most of the tree's Wado and use the
     // stdlib thousands of times over, which would bury a reference a reviewer

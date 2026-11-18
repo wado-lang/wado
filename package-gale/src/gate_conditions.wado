@@ -505,8 +505,12 @@ fn empties_freely(elem: &Element, analysis: &GrammarAnalysis, edges: &RuleLeftEd
 }
 
 fn any_alt_empties_freely(alts: &List<Alternative>, analysis: &GrammarAnalysis, edges: &RuleLeftEdges) -> bool {
-    return alts.iter_ref().any(|alt| !alt.actions.iter_ref().any(|a| a.kind matches { Action })
-        && alt.elements.iter_ref().all(|e| empties_freely(e, analysis, edges)));
+    return alts
+        .iter_ref()
+        .any(
+            |alt| !alt.actions.iter_ref().any(|a| a.kind matches { Action })
+                && alt.elements.iter_ref().all(|e| empties_freely(e, analysis, edges)),
+        );
 }
 
 /// An alt's gate conditions rendered against the scan's copy of the members,

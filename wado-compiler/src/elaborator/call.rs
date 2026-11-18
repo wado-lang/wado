@@ -4849,7 +4849,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// parameters, which the call infers as it does a block's, and the block's
     /// trait arguments are written in them.
     pub(super) fn inherited_default_method_sig(
-        &self,
+        &mut self,
         key: &ImplTargetKey,
         method_name: &str,
         choice: SigChoice,
@@ -4878,7 +4878,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// at its own parameters, behind the block's reference where it targets
     /// one.
     pub(super) fn inherited_sig_in_block(
-        &self,
+        &mut self,
         impl_def: DefId,
         mut sig: MethodSig,
     ) -> Option<MethodSig> {
@@ -5287,7 +5287,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::static_call_sig`], or the trait default the receiver inherits
     /// without overriding it, which no impl block lists.
     pub(super) fn static_call_sig_or_inherited(
-        &self,
+        &mut self,
         key: &ImplTargetKey,
         method_name: &str,
         choice: SigChoice,
