@@ -1057,7 +1057,7 @@ test "the attention composite decomposes to what the direct attention computes" 
             null,
             &options,
         );
-        let got = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+        let got = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St, Qt>(
             &mut Cpu {},
             &q,
             &k,
@@ -1068,6 +1068,7 @@ test "the attention composite decomposes to what the direct attention computes" 
             null,
             Option::Some(&cos),
             Option::Some(&sin),
+            null,
             null,
             &options,
         );
@@ -1128,7 +1129,7 @@ test "a past of fixed capacity takes the new positions at its valid length, and 
             hidden: Option::Some(-4.0),
         },
     ] as List<Attention> {
-        let want = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+        let want = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St, Qt>(
             g,
             &prefix(g, &q, 1, s),
             &prefix(g, &k, 1, s),
@@ -1140,9 +1141,10 @@ test "a past of fixed capacity takes the new positions at its valid length, and 
             Option::Some(&cos),
             Option::Some(&sin),
             null,
+            null,
             &options,
         );
-        let got = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+        let got = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St, Qt>(
             g,
             &q,
             &k,
@@ -1153,6 +1155,7 @@ test "a past of fixed capacity takes the new positions at its valid length, and 
             Option::Some(&each_row([(past + s) as i64])),
             Option::Some(&cos),
             Option::Some(&sin),
+            null,
             null,
             &options,
         );
@@ -1212,7 +1215,7 @@ test "each row attends over its own past, and writes its new positions after it"
             hidden: Option::Some(-4.0),
         },
     ] as List<Attention> {
-        let got = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+        let got = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St, Qt>(
             g,
             &q,
             &k,
@@ -1224,10 +1227,11 @@ test "each row attends over its own past, and writes its new positions after it"
             Option::Some(&cos),
             Option::Some(&sin),
             null,
+            null,
             &options,
         );
         for let r of 0..<batch {
-            let want = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+            let want = Graph::group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St, Qt>(
                 g,
                 &row_of(g, &q, r),
                 &row_of(g, &k, r),
@@ -1238,6 +1242,7 @@ test "each row attends over its own past, and writes its new positions after it"
                 Option::Some(&each_row([reaches[r]])),
                 Option::Some(&cos),
                 Option::Some(&sin),
+                null,
                 null,
                 &options,
             );

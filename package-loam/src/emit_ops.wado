@@ -9,6 +9,7 @@ use {
     GATHER_BLOCK_QUANTIZED,
     MATMUL_NBITS,
     Node,
+    QMOE,
     binary_operator,
     case_named,
     settled,
@@ -18,9 +19,14 @@ use { BACKEND_PARAM } from "./idents.wado";
 use {
     Checked,
     Cut,
+    QMOE_DOWN,
+    QMOE_DOWN_ZERO_POINTS,
+    QMOE_UP,
+    QMOE_UP_ZERO_POINTS,
     arg_max_axis,
     concat_axis,
     conv_group,
+    expert_options,
     gather_axis,
     gemm_options,
     has_bias,
@@ -85,6 +91,9 @@ internal fn built_call(
     }
     if op == MATMUL_NBITS || op == GATHER_BLOCK_QUANTIZED {
         return built_quantized(node, checked, exprs, symbols);
+    }
+    if op == QMOE {
+        return Result::Ok(built_experts(node, checked, exprs));
     }
     if op == "MaxPool" {
         return built_max_pool(node, &element, shapes, exprs, symbols);
@@ -511,7 +520,7 @@ fn built_quantized(node: &Node, checked: &Checked, exprs: &Operands, symbols: &m
     let q = settled(quantization(node));
     let scales = shapes[node.inputs[2]];
     let zeros = if node.has_operand(3) { shapes[node.inputs[3]].axes[1].name } else { scales.axes[1].name };
-    let zero_points = if node.has_operand(3) { `Option::Some(${exprs.reference(&node.inputs[3])})` } else { "null" };
+    let zero_points = exprs.optional(node, 3);
     let quantized = `&Quantized { bits: ${q.bits}, block: ${q.block} }`;
     let operands: List<String> = (0..<3).map(|i| exprs.reference(&node.inputs[i])).collect();
     if node.op == GATHER_BLOCK_QUANTIZED {
@@ -545,6 +554,51 @@ fn built_quantized(node: &Node, checked: &Checked, exprs: &Operands, symbols: &m
         call = `backend.binary::<${wide}, [${axis_list(&out)}]>(Binary::Add, &${call}, ${bias})`;
     }
     return Result::Ok(computed.result(call, &out));
+}
+
+/// A `QMoE` as its composite's call. An absent zero point's axes are spelled as
+/// its scales'.
+fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
+    let shapes = &checked.shapes;
+    let element = checked.primitives[node.outputs[0]];
+    let options = settled(expert_options(node));
+    let q = settled(quantization(node));
+    let mut turbofish: List<String> = [
+        BACKEND_PARAM,
+        element,
+        `[${axis_list(&shapes[node.inputs[0]])}]`,
+        axis_list(&shapes[node.inputs[1]]),
+    ];
+    let mut operands: List<String> = [
+        exprs.reference(&node.inputs[0]),
+        exprs.reference(&node.inputs[1]),
+    ];
+    for let [at, zeros] of [
+        [QMOE_UP, QMOE_UP_ZERO_POINTS],
+        [QMOE_DOWN, QMOE_DOWN_ZERO_POINTS],
+    ] {
+        let weight = shapes[node.inputs[at]];
+        let scales = shapes[node.inputs[at + 1]];
+        let zero_axis = if node.has_operand(zeros) {
+            shapes[node.inputs[zeros]].axes[2].name;
+        } else {
+            scales.axes[2].name;
+        };
+        // The experts' axis is the router's, which the turbofish spells already.
+        turbofish.extend(&([weight.axes[1].name, weight.axes[2].name, scales.axes[2].name, zero_axis] as List<String>));
+        operands.extend(&([
+            exprs.reference(&node.inputs[at]),
+            exprs.reference(&node.inputs[at + 1]),
+            exprs.optional(node, at + 2),
+            exprs.optional(node, zeros),
+        ] as List<String>));
+    }
+    operands.push(
+        `&Experts { k: ${options.k}, normalized: ${options.normalized}, alpha: ${f32_literal(options.alpha)}, beta: ${f32_literal(
+            options.beta,
+        )}, limit: ${f32_literal(options.limit)}, quantized: Quantized { bits: ${q.bits}, block: ${q.block} } }`,
+    );
+    return `mixture_of_experts::<${turbofish.join(", ")}>(backend, ${operands.join(", ")})`;
 }
 
 /// A `ReduceMean` or `ReduceSum` as `reduce`, which drops the reduced axes, and

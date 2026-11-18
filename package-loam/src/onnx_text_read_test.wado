@@ -323,6 +323,15 @@ test "a function short of the operands its body reads stops the read" {
     assert norm == "Y = SimplifiedLayerNormalization: reads 2 operands and was given 1";
 }
 
+test "a SkipSimplifiedLayerNormalization naming a training's output stops the read" {
+    let e = read(
+        `agraph (float[2] X, float[2] S, float[2] G) => (float[2] Y, float[2] M) {
+            Y, M = com.microsoft.SkipSimplifiedLayerNormalization(X, S, G)
+        }`,
+    ).unwrap_err().reason;
+    assert e == "Y = com.microsoft.SkipSimplifiedLayerNormalization: names a mean or an inverse deviation, which only training reads";
+}
+
 test "a negative dimension names the tensor, as the protobuf reader does" {
     let e = read(`agraph (float[2] X) => (float[2] Y) <float[-2] W = {1.0}> { Y = Add(X, W) }`).unwrap_err().reason;
     assert e == "W: dimension -2";

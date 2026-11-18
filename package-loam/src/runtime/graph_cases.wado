@@ -17,6 +17,7 @@ use {
     shared,
 } from "./hlo.wado";
 use { Any, Recorded, Recorder, Untyped, Value, typed } from "./recorded.wado";
+use { Experts, mixture_of_experts } from "./experts.wado";
 use { HostWeight } from "./weight.wado";
 use { Attention, Float, Tensor, element_count } from "./tensor.wado";
 use { noise } from "../../example/webgpu/compare.wado";
@@ -250,16 +251,18 @@ pub struct Half {
 }
 
 /// Attention over a past of `past.2` positions in each row of a shared buffer,
-/// turned by `rotation`, biased over the buffer's positions by `bias`.
+/// turned by `rotation`, biased over the buffer's positions by `bias`, each
+/// query head's softmax joined by its of `sinks`.
 pub fn attending<affine G: Graph, E: Float = f32>(
     g: &mut G,
     inputs: &[G::Tensor<E, [Bt, St, Qt]>, G::Tensor<E, [Bt, St, Kt]>, G::Tensor<E, [Bt, St, Kt]>],
     past: &[G::Tensor<E, [Bt, Ht, Pt, Dt]>, G::Tensor<E, [Bt, Ht, Pt, Dt]>, G::Tensor<i64, [Slots]>],
     rotation: &[G::Tensor<E, [Pos, Half]>, G::Tensor<E, [Pos, Half]>],
     bias: &G::Tensor<E, [Bt, Ht, St, Tt]>,
+    sinks: &G::Tensor<E, [Qt]>,
     options: &Attention,
 ) -> [G::Tensor<E, [Bt, St, Qt]>, G::Tensor<E, [Bt, Ht, Tt, Dt]>, G::Tensor<E, [Bt, Ht, Tt, Dt]>] with _ {
-    return g.group_query_attention::<E, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St>(
+    return g.group_query_attention::<E, Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht, St, Qt>(
         &inputs.0,
         &inputs.1,
         &inputs.2,
@@ -270,6 +273,7 @@ pub fn attending<affine G: Graph, E: Float = f32>(
         Option::Some(&rotation.0),
         Option::Some(&rotation.1),
         Option::Some(bias),
+        Option::Some(sinks),
         options,
     );
 }
@@ -327,6 +331,7 @@ pub struct AttentionCase {
     pub past: [Tensor<f32, [Bt, Ht, Pt, Dt]>, Tensor<f32, [Bt, Ht, Pt, Dt]>, Tensor<i64, [Slots]>],
     pub rotation: [Tensor<f32, [Pos, Half]>, Tensor<f32, [Pos, Half]>],
     pub bias: Tensor<f32, [Bt, Ht, St, Tt]>,
+    pub sinks: Tensor<f32, [Qt]>,
     pub options: Attention,
 }
 
@@ -365,6 +370,7 @@ pub fn attention_rows(pasts: List<i64>) -> AttentionCase {
             data: [0.25, -0.5, 0.0, 7.0, -0.75, 0.5, 0.3, 7.0],
             extents: [1, 1, s, capacity],
         },
+        sinks: noisy([heads], 8),
         options: Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true },
     };
 }
@@ -431,6 +437,101 @@ pub fn quantized_case() -> QuantizedCase {
             extents: [2],
         },
     };
+}
+
+/// `mixing`'s arguments: tokens of 32 values over 4 experts, a SwiGLU of 32
+/// between two products in 4 bits and blocks of 32.
+pub struct ExpertsCase {
+    pub x: Tensor<f32, [A, B]>,
+    pub router: Tensor<f32, [A, C]>,
+    pub up: [Tensor<u8, [C, Rows, Blob]>, Tensor<f32, [C, Rows, Blocks]>, Tensor<f32, [C, Rows]>],
+    pub down: [Tensor<u8, [C, B, Blob]>, Tensor<f32, [C, B, Blocks]>, Tensor<f32, [C, B]>],
+}
+
+/// `tokens` tokens, each picking 2 of the experts: 3 tokens run every expert
+/// on every row, and 1 runs its picks alone.
+pub fn experts_case(tokens: i32) -> ExpertsCase {
+    let [experts, hidden, inner] = [4, 32, 32];
+    return ExpertsCase {
+        x: noisy([tokens, hidden], 11),
+        router: noisy([tokens, experts], 12),
+        up: [
+            bytes([experts, 2 * inner, hidden / 2], 4),
+            noisy([experts, 2 * inner, 1], 13),
+            noisy([experts, 2 * inner], 14),
+        ],
+        down: [
+            bytes([experts, hidden, inner / 2], 5),
+            noisy([experts, hidden, 1], 15),
+            noisy([experts, hidden], 16),
+        ],
+    };
+}
+
+/// `x` through the experts `router` picks, as a `QMoE` of `ExpertsCase`'s
+/// shape computes it.
+pub fn mixing<affine G: Graph, E: Float = f32>(
+    g: &mut G,
+    x: &G::Tensor<E, [A, B]>,
+    router: &G::Tensor<E, [A, C]>,
+    up: &[G::Tensor<u8, [C, Rows, Blob]>, G::Tensor<E, [C, Rows, Blocks]>, G::Tensor<E, [C, Rows]>],
+    down: &[G::Tensor<u8, [C, B, Blob]>, G::Tensor<E, [C, B, Blocks]>, G::Tensor<E, [C, B]>],
+) -> G::Tensor<E, [A, B]> with _ {
+    return mixture_of_experts::<G, E, [A, B], A, C, Rows, Blob, Blocks, Blocks, B, Blob, Blocks, Blocks>(
+        g,
+        x,
+        router,
+        &up.0,
+        &up.1,
+        Option::Some(&up.2),
+        null,
+        &down.0,
+        &down.1,
+        Option::Some(&down.2),
+        null,
+        &Experts {
+            k: 2,
+            normalized: true,
+            alpha: 1.702,
+            beta: 1.0,
+            limit: 7.0,
+            quantized: Quantized { bits: 4, block: 32 },
+        },
+    );
+}
+
+/// `mixing` of `experts_case(tokens)` recorded, its input and router then its
+/// weights as parameters.
+pub fn mixing_pass(r: &mut Recorder, tokens: i32) -> Recorded {
+    let c = experts_case(tokens);
+    let x = r.parameter::<f32, [A, B]>(c.x.extents);
+    let router = r.parameter::<f32, [A, C]>(c.router.extents);
+    let up = [
+        r.parameter::<u8, [C, Rows, Blob]>(c.up.0.extents),
+        r.parameter::<f32, [C, Rows, Blocks]>(c.up.1.extents),
+        r.parameter::<f32, [C, Rows]>(c.up.2.extents),
+    ];
+    let down = [
+        r.parameter::<u8, [C, B, Blob]>(c.down.0.extents),
+        r.parameter::<f32, [C, B, Blocks]>(c.down.1.extents),
+        r.parameter::<f32, [C, B]>(c.down.2.extents),
+    ];
+    return r.finished([mixing(r, &x, &router, &up, &down).id]);
+}
+
+/// `experts_case(tokens)`'s tensors in `mixing_pass`'s order, held by `g`.
+pub fn mixing_arguments<affine G: Graph>(g: &mut G, tokens: i32) -> List<Any<G>> with _ {
+    let c = experts_case(tokens);
+    return [
+        Any::F32(g.relabeled::<f32, [A, B], Untyped>(&g.upload(&c.x))),
+        Any::F32(g.relabeled::<f32, [A, C], Untyped>(&g.upload(&c.router))),
+        Any::U8(g.relabeled::<u8, [C, Rows, Blob], Untyped>(&g.upload(&c.up.0))),
+        Any::F32(g.relabeled::<f32, [C, Rows, Blocks], Untyped>(&g.upload(&c.up.1))),
+        Any::F32(g.relabeled::<f32, [C, Rows], Untyped>(&g.upload(&c.up.2))),
+        Any::U8(g.relabeled::<u8, [C, B, Blob], Untyped>(&g.upload(&c.down.0))),
+        Any::F32(g.relabeled::<f32, [C, B, Blocks], Untyped>(&g.upload(&c.down.1))),
+        Any::F32(g.relabeled::<f32, [C, B], Untyped>(&g.upload(&c.down.2))),
+    ];
 }
 
 /// `quantizing` over its input and indices, then its weights, as
@@ -637,13 +738,14 @@ pub fn repeating_attention<affine G: Graph>(
             let keys = typed::<G, f32, [Bt, Ht, Pt, Dt]>(g, &state[1]);
             let values = typed::<G, f32, [Bt, Ht, Pt, Dt]>(g, &state[2]);
             let length = g.binary(Binary::Add, &first, step);
-            let [out, present_k, present_v] = g.group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Pt, Dt, Pos, Half, Bt, Ht, St>(
+            let [out, present_k, present_v] = g.group_query_attention::<f32, Bt, St, Qt, Kt, Ht, Pt, Pt, Dt, Pos, Half, Bt, Ht, St, Qt>(
                 &attended,
                 k,
                 v,
                 &keys,
                 &values,
                 Option::Some(&shared(g, &length)),
+                null,
                 null,
                 null,
                 null,

@@ -62,6 +62,7 @@ use { expected } from "./safetensors.wado";
 use {
     ATTENTION_BIAS,
     Checked,
+    HEAD_SINK,
     ROTARY_COS,
     ROTARY_SIN,
     attention_options,
@@ -2453,11 +2454,6 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     let k = shapes[node.inputs[1]];
     let past = shapes[node.inputs[3]];
     let total = shapes[named_present(node).unwrap()].axes[2].name;
-    let optional = |index: i32| if node.has_operand(index) {
-        `Option::Some(${exprs.reference(&node.inputs[index])})`;
-    } else {
-        "null";
-    };
     let [pos, half] = if node.has_operand(ROTARY_COS) {
         let cache = shapes[node.inputs[ROTARY_COS]];
         [cache.axes[0].name, cache.axes[1].name];
@@ -2470,10 +2466,15 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     } else {
         [q.axes[0].name, past.axes[1].name];
     };
+    let sink_heads = if node.has_operand(HEAD_SINK) {
+        shapes[node.inputs[HEAD_SINK]].axes[0].name;
+    } else {
+        q.axes[2].name;
+    };
     let turbofish = [
         checked.primitives[node.outputs[0]], q.axes[0].name, q.axes[1].name, q.axes[2].name, k.axes[2].name,
         past.axes[1].name, past.axes[2].name, total, past.axes[3].name, pos, half, bias_batch, bias_heads,
-        q.axes[1].name,
+        q.axes[1].name, sink_heads,
     ] as List<String>;
     let head = past.axes[3].static_extent();
     let scale = options.scale.unwrap_or(1.0 / f32::sqrt(head as f32));
@@ -2489,9 +2490,10 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     operands.push("null");
     // The caches are read only where the attribute asks for rotation.
     for let index of [ROTARY_COS, ROTARY_SIN] {
-        operands.push(if options.rotary { optional(index) } else { "null" });
+        operands.push(if options.rotary { exprs.optional(node, index) } else { "null" });
     }
-    operands.push(optional(ATTENTION_BIAS));
+    operands.push(exprs.optional(node, ATTENTION_BIAS));
+    operands.push(exprs.optional(node, HEAD_SINK));
     operands.push(attention);
     return Result::Ok(`backend.group_query_attention::<${turbofish.join(", ")}>(${operands.join(", ")})`);
 }
@@ -2583,6 +2585,8 @@ fn spelled_attention_call(
             [batch, heads, sequence] as List<String>;
         },
     };
+    // No sinks.
+    operands.push("null");
     operands.push(
         `&Attention { heads: ${a.heads}, kv_heads: ${a.heads}, scale: ${f32_literal(a.scale)}, divides: ${a.divides}, softcap: 0.0, window: -1, causal: true, hidden: Option::Some(${f32_literal(
             a.hidden,
@@ -2592,6 +2596,7 @@ fn spelled_attention_call(
         element, batch, sequence, q.axes[2].name, key_width, heads, positions, total, width, sequence, width,
     ] as List<String>;
     turbofish.extend(&bias_axes);
+    turbofish.push(heads);
     let attended = names.get(&node.outputs[0]);
     let present_key = match &a.present_key {
         Some(key) => names.get(key),
