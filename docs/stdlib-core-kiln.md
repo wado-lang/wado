@@ -16,13 +16,13 @@ typed argument in each generator's own world".
 
 ## Functions
 
-### `pub fn read_all(content: Stream<u8>) -> ByteList`
+### `pub fn read_all(content: Stream<u8>) -> ByteList with Stream`
 
 Read an input file's content to the end. A generator that needs the whole
 file calls this; one that needs a prefix reads `content` itself and drops
 it early.
 
-### `pub fn read_text(content: Stream<u8>) -> Result<String, Utf8Error>`
+### `pub fn read_text(content: Stream<u8>) -> Result<String, Utf8Error> with Stream`
 
 Read an input file's content to the end as text, decoding as it goes so no
 second copy of the file exists. `Err` is a malformed input, not a bug.

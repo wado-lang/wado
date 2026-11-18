@@ -240,28 +240,28 @@ Where `Command::stdout_piped` asked for it.
 
 Where `Command::stderr_piped` asked for it.
 
-#### `pub fn wait(self) -> Result<ExitStatus, ProcessError>`
+#### `pub fn wait(self) -> Result<ExitStatus, ProcessError> with Process`
 
 Wait for the child to end. Nothing can reach a stream still left in the
 `Child` once it is waited on, so `wait` closes each first: take a piped
 stream out to use it.
 
-#### `pub fn wait_timeout(&mut self, how_long: Duration) -> Result<Option<ExitStatus>, ProcessError> with MonotonicClock`
+#### `pub fn wait_timeout(&mut self, how_long: Duration) -> Result<Option<ExitStatus>, ProcessError> with (Process, MonotonicClock)`
 
 Wait at most `how_long` for the child to end: `None` where it has not.
 The streams stay open, so a child blocked on a pipe nobody reads waits
 out the time.
 
-#### `pub fn terminate(&self)`
+#### `pub fn terminate(&self) with Process`
 
 Ask the child and every process it started to end. A child may ignore
 it, so [`Child::stop`] follows it with a kill.
 
-#### `pub fn kill(&self)`
+#### `pub fn kill(&self) with Process`
 
 End the child and every process it started, now.
 
-#### `pub fn stop(self, grace: Duration) -> Result<ExitStatus, ProcessError> with MonotonicClock`
+#### `pub fn stop(self, grace: Duration) -> Result<ExitStatus, ProcessError> with (Process, MonotonicClock)`
 
 Ask the child to end, and end it if it has not after `grace`.
 
