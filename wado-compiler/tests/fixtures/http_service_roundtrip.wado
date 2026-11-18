@@ -2,7 +2,7 @@
 // out through the status, a header and the body of the response.
 use { Request, Response, ErrorCode, Headers, Trailers, FieldName, FieldValue } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Request, Response) {
     let method = if request.get_method() matches { Put } { "PUT" } else { "other" };
     let path = request.get_path_with_query().unwrap_or("/");
     let tags = request.get_headers().get("x-tag" as FieldName);

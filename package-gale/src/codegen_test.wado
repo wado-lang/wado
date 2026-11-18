@@ -6660,7 +6660,7 @@ struct Inputs {
 impl Inputs {
     /// A stream serving `content`, made before the handler is installed, since
     /// it traps on `new`.
-    fn serve(&mut self, content: ByteList) -> Stream<u8> {
+    fn serve(&mut self, content: ByteList) -> Stream<u8> with Stream {
         let [rx, tx] = Stream::<u8>::new();
         tx.drop();
         self.contents[ResourceId::of(&rx)] = content;
@@ -6715,7 +6715,7 @@ fn kiln(
     supplementary: List<[String, ByteList, Option<String>]>,
     options: Options,
     primary_type: Option<String> = null,
-) -> KilnRun with Log {
+) -> KilnRun with (Log, Stream) {
     let mut inputs = Inputs {};
     let mut files: List<InputFile> = [];
     for let [path, content, type_] of supplementary {

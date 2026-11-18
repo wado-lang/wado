@@ -89,13 +89,13 @@ impl SymbolIndex {
     /// time, out of linear memory: a tree's index decoded whole, or its bytes
     /// held in the GC heap, is a live set the GC copies on every cycle. On an
     /// error the index holds the documents read before it.
-    pub fn add(&mut self, input: LinearBuffer) -> Result<(), grog::DecodeError> {
+    pub fn add(&mut self, input: LinearBuffer) -> Result<(), grog::DecodeError> with Stream {
         let read = self.add_documents(input);
         self.index_names();
         return read;
     }
 
-    fn add_documents(&mut self, input: LinearBuffer) -> Result<(), grog::DecodeError> {
+    fn add_documents(&mut self, input: LinearBuffer) -> Result<(), grog::DecodeError> with Stream {
         for let doc of scip::Index::documents_of(input) {
             self.add_document(&doc?);
         }

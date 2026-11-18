@@ -180,7 +180,7 @@ writes each before reading it. The block at least doubles where it
 grows, so growing a byte at a time copies each byte a bounded number of
 times.
 
-#### `pub fn read_stream(stream: &Stream<u8>, expected: i32 = 0) -> LinearArray<u8>`
+#### `pub fn read_stream(stream: &Stream<u8>, expected: i32 = 0) -> LinearArray<u8> with Stream`
 
 - `contract expected >= 0`
 
@@ -189,7 +189,7 @@ in the array's own block, so no byte passes through the GC heap; a
 handler's items are copied in. The block takes `expected` bytes up
 front and grows only for a stream that runs past them.
 
-#### `pub fn read_stream_prefix(stream: &Stream<u8>, len: i32) -> LinearArray<u8>`
+#### `pub fn read_stream_prefix(stream: &Stream<u8>, len: i32) -> LinearArray<u8> with Stream`
 
 - `contract len >= 0`
 
@@ -239,7 +239,7 @@ The bytes read and not yet consumed.
 
 How far into the stream `start()` is.
 
-#### `pub fn fill(&mut self, n: i32) -> bool`
+#### `pub fn fill(&mut self, n: i32) -> bool with Stream`
 
 - `contract n >= 0`
 

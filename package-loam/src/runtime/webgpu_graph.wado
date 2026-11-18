@@ -133,7 +133,7 @@ impl Backend for WebGpuBackend {
         recorded: Recorded,
         weights: &List<Any<WebGpuBackend>>,
         earlier: &List<&WebGpuProgram>,
-    ) -> WebGpuProgram with _ {
+    ) -> WebGpuProgram with (_, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let folded = constants(&recorded);
         let splats = splats_of(&folded);
         let serial = self.program_serial(structure_of(&recorded));
@@ -174,7 +174,7 @@ impl Backend for WebGpuBackend {
         first: i32,
         count: i32,
         load: fn(i32) -> Result<HostWeight, Er> with _,
-    ) -> Result<List<Any<WebGpuBackend>>, Er> with _ {
+    ) -> Result<List<Any<WebGpuBackend>>, Er> with (_, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let recorded = record(&mut Recorder::new());
         let contracted = contracted_axes(&recorded, first, count);
         let joined = joined_products(&recorded, self.max_binding());
@@ -841,7 +841,10 @@ impl Graph for WebGpuBackend {
 
 /// `view` as a matrix of its last axis, its other axes one: what a quantized
 /// product multiplies, and computes.
-fn as_rows(g: &mut WebGpuBackend, view: &DeviceTensor) -> DeviceTensor {
+fn as_rows(
+    g: &mut WebGpuBackend,
+    view: &DeviceTensor,
+) -> DeviceTensor with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let last = view.extents.len() - 1;
     let inner = view.extents[last];
     return g.reshaped(view, &([element_count(&view.extents) / inner, inner] as List<i32>));

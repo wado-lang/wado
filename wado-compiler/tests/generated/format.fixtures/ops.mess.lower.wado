@@ -2563,7 +2563,7 @@ fn gc_array_to_memory(arr: &Array<u8>, src_start: i32, ptr: i32, len: i32) {
     }
 }
 
-fn write_string_to_stream(tx: core:prelude/types.wado/StreamWritable<u8>, message: core:prelude/string.wado/String, add_newline: bool) {
+fn write_string_to_stream(tx: core:prelude/types.wado/StreamWritable<u8>, message: core:prelude/string.wado/String, add_newline: bool) with StreamWritable {
     let len: i32 = message."core:prelude/string.wado/String::len"();
     if add_newline {
         let mut new_repr: Array<u8> = "core:builtin::core:builtin/array_new<u8>"((len + 1));

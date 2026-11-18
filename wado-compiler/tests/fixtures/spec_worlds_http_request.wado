@@ -2,7 +2,7 @@
 // from them.
 use { Request, Response, ErrorCode, Headers, Trailers, FieldName } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Request, Response) {
     let is_post = request.get_method() matches { Post };
     let path = request.get_path_with_query().unwrap_or("/");
     let headers = request.get_headers();

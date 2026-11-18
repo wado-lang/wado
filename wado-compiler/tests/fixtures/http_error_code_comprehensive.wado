@@ -55,7 +55,7 @@ fn error_tag(e: &ErrorCode) -> String {
     };
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     // Test no-payload variants
     assert error_tag(&ErrorCode::DnsTimeout) == "dns-timeout";
     assert error_tag(&ErrorCode::DestinationNotFound) == "destination-not-found";

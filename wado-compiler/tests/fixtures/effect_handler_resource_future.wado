@@ -20,7 +20,7 @@ struct MockFuture {
 }
 
 impl Future<i32> for MockFuture {
-    fn new(&mut self) -> [Future<i32>, FutureWritable<i32>] {
+    fn new(&mut self) -> [Future<i32>, FutureWritable<i32>] with Future {
         // A real pair, which the outer dispatch chain makes, since an integer
         // converts to no resource. Both ends share the MockFuture's `stored`
         // slot, so a write through the FutureWritable end is observed by a

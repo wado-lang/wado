@@ -14,7 +14,7 @@ affine struct MockClient {
 }
 
 impl MockClient {
-    fn end_writes(&mut self) {
+    fn end_writes(&mut self) with FutureWritable {
         while let Some(end) = self.ends.pop() {
             end.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
         }
@@ -51,11 +51,11 @@ fn fetch_upstream() -> Response with Client {
 }
 
 // Takes the response, so it is dropped before the mock ends its trailers.
-fn status_of(response: Response) -> i32 {
+fn status_of(response: Response) -> i32 with Response {
     return response.get_status_code() as i32;
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     let mut mock = MockClient { calls: 0 };
     let upstream = with Client => &mut mock do {
         let pass = PassClient {};

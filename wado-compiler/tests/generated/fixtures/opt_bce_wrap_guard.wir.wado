@@ -235,7 +235,7 @@ fn "opt_bce_wrap_guard.wado/get$spec0$dae[i]"($mv$arr$repr, $mv$arr$used) {
     return builtin::array_get_value<i32>($mv$arr$repr, 2147483647);
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

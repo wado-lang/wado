@@ -1,0 +1,96 @@
+// A handler scope warns when its body reaches an operation of a resource in
+// the `extends` family of one it handles and no handler in scope answers it:
+// holding the family says nothing of which members a test double must stand
+// in for, and the call passes the double by.
+use { println, Stdout } from "core:cli";
+
+#[cm("test:dom/dom#event-target", linearity = "unrestricted", repr = "externref", classes = "0..=2")]
+resource EventTarget {
+    #[cm("test:dom/dom#tag")]
+    fn tag(&self) -> String;
+}
+
+#[cm("test:dom/dom#node", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource Node extends EventTarget {
+    #[cm("test:dom/dom#name")]
+    fn name(&self) -> String;
+}
+
+#[cm("test:dom/dom#other", linearity = "unrestricted", repr = "externref", classes = "2..=2")]
+resource Other extends EventTarget {
+    #[cm("test:dom/dom#c")]
+    fn c(&self) -> String;
+}
+
+// `tag` is `EventTarget`'s, which `with Node` holds through the family.
+fn describe(n: Node) -> String with Node {
+    return `${n.name()}:${n.tag()}`;
+}
+
+#[allow(dead_code)]
+fn leaves_out() -> String {
+    with Node => &Mock {} do {                            // warns: `EventTarget`
+        return describe(Node::backed_by(Mock {}));
+    }
+}
+
+fn both() -> String {
+    with EventTarget => &Mock {}, Node => &Mock {} do {
+        return describe(Node::backed_by(Mock {}));
+    }
+}
+
+#[allow(dead_code)]
+fn describe_other(o: Other) -> String with Other {
+    return `${o.c()}:${o.tag()}`;
+}
+
+#[allow(dead_code, unhandled_operation)]
+fn deliberate() -> String {
+    with Other => &Mock {} do {
+        return describe_other(Other::backed_by(Mock {}));
+    }
+}
+
+fn enclosed() -> String with Stdout {
+    with EventTarget => &Mock {} do {
+        with Node => &Mock {} do {
+            println("enclosed");
+            return describe(Node::backed_by(Mock {}));
+        }
+    }
+}
+
+export fn run() with Stdout {
+    println(enclosed());
+    println(both());
+}
+
+struct Mock {}
+
+impl EventTarget for Mock {
+    fn tag(&self, this: &EventTarget) -> String {
+        resume "t"
+    }
+}
+
+impl Node for Mock {
+    fn name(&self, this: &Node) -> String {
+        resume "n"
+    }
+}
+
+impl Other for Mock {
+    fn c(&self, this: &Other) -> String {
+        resume "c"
+    }
+}
+
+__DATA__
+{
+    "stdout": "enclosed\nn:t\nn:t\n",
+    "warnings_contains": [
+        "the handlers installed here leave out `EventTarget`, whose operations the body reaches through the `extends` family of `Node`"
+    ],
+    "warnings_not_contains": ["family of `Other`", "family of `EventTarget`", "`Node`, `EventTarget`"]
+}

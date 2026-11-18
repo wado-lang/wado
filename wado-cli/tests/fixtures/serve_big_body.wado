@@ -6,7 +6,7 @@ use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
 // connection open) makes the host-side `frame_tx.send` block. Without an
 // idle timeout on the body pump that send blocks forever and pins the
 // worker's fiber stack.
-export async fn handle(_request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(_request: Request) -> Result<Response, ErrorCode> with Response {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();
     let headers = Headers::new();

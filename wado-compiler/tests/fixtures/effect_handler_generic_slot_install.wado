@@ -11,7 +11,7 @@ struct Counter<T> {
 }
 
 impl<T> Future<T> for Counter<T> {
-    fn new(&mut self) -> [Future<T>, FutureWritable<T>] {
+    fn new(&mut self) -> [Future<T>, FutureWritable<T>] with Future {
         resume Future::<T>::new()
     }
     fn read(&mut self, this: &Future<T>) -> Option<T> {

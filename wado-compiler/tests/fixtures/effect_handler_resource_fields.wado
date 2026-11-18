@@ -29,12 +29,12 @@ struct CountingFields {
 }
 
 impl Fields for CountingFields {
-    fn new(&self) -> Fields {
+    fn new(&self) -> Fields with Fields {
         new_count += 1;
         let real = Fields::new();
         resume real
     }
-    fn has(&self, this: &Fields, name: FieldName) -> bool {
+    fn has(&self, this: &Fields, name: FieldName) -> bool with Fields {
         has_count += 1;
         resume this.has(name)
     }
@@ -45,7 +45,7 @@ impl Fields for CountingFields {
     ..trap
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     let counter = CountingFields { _phantom: 0 };
     with Fields => &counter do {
         let f = Fields::new();

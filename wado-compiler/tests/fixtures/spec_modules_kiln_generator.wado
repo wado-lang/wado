@@ -6,7 +6,7 @@ export struct Options {
     pub emit_comments: bool = true,
 }
 
-export fn generate(req: Request<Options>) -> Result<Response, Error> {
+export fn generate(req: Request<Options>) -> Result<Response, Error> with Stream {
     let origin = req.origin();                  // before reading moves an input out
     let Ok(schema) = read_text(req.primary.content) else {
         return Result::Err(Error::InvalidSchema("not UTF-8"));

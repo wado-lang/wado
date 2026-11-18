@@ -542,7 +542,7 @@ fn "stream_http_response_body_string.wado/$cm_export__handle"($p_0) {
     "stream_http_response_body_string.wado/$cm_task_entry__handle"($p_0);
 }
 
-fn "stream_http_response_body_string.wado/$cm_task_entry__handle"(request) {
+fn "stream_http_response_body_string.wado/$cm_task_entry__handle"(request) with Response {
     let body_tx: i32;
     let _tx_future: ref null "core:prelude//$Resource";
     let $cm_pair_186: i64;
@@ -1178,7 +1178,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

@@ -163,7 +163,7 @@ The methods `match_path` would match `path` under, each once. A method
 only an `any` handler takes is not listed, so the list is empty on a 404
 and where only `any` handlers match.
 
-#### `pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>>`
+#### `pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>> with Request`
 
 Matches a `wasi:http` request: its method, and its path with the query
 and fragment stripped. A request without a path matches as `/`.

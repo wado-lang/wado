@@ -391,7 +391,7 @@ export struct Options {
     pub emit_comments: bool = true,
 }
 
-export fn generate(req: Request<Options>) -> Result<Response, Error> {
+export fn generate(req: Request<Options>) -> Result<Response, Error> with Stream {
     let origin = req.origin();                  // before reading moves an input out
     let Ok(schema) = read_text(req.primary.content) else {
         return Result::Err(Error::InvalidSchema("not UTF-8"));
@@ -415,7 +415,7 @@ A generator with no configuration declares no `Options` and writes
 <!-- {"source": "package-grog/src/generator.wado"} -->
 
 ```wado
-export fn generate(req: Request) -> Result<Response, Error> {
+export fn generate(req: Request) -> Result<Response, Error> with Stream {
     let module = ModuleSpec::from_origin(&req.origin());
     let path = req.primary.path;
     let source = match read_text(req.primary.content) {
@@ -507,7 +507,7 @@ Loam reads a checkpoint only as far as its header ends:
 <!-- {"source": "package-loam/src/compile.wado"} -->
 
 ```wado
-pub fn read_header(mut content: Stream<u8>) -> ByteList {
+pub fn read_header(mut content: Stream<u8>) -> ByteList with Stream {
     let mut prefix = ByteList::with_capacity(HEADER_CHUNK);
     loop {
         let [end, chunk] = content.start_read(HEADER_CHUNK).finish();
@@ -694,7 +694,7 @@ This probe says the first line decides everything:
 <!-- {"source": "wado-cli/tests/integration/kiln_probe.rs"} -->
 
 ```wado
-export fn probe(path: String, mut content: Stream<u8>) -> Result<u64, Error> {
+export fn probe(path: String, mut content: Stream<u8>) -> Result<u64, Error> with Stream {
     let mut n: u64 = 0;
     loop {
         let [end, chunk] = content.start_read(1).finish();

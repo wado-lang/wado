@@ -7,13 +7,13 @@
 
 use { Request, Response, ErrorCode, Fields, Headers, FieldName, FieldValue, Trailers } from "wasi:http";
 
-fn take_fields(f: Fields) {
+fn take_fields(f: Fields) with Fields {
     let name = "x" as FieldName;
     let value: List<u8> = [120 as u8];
     let _ = f.append(name, value as FieldValue);
 }
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     let mut i = 0;
     while i < 3 {
         let scratch = Fields::new();

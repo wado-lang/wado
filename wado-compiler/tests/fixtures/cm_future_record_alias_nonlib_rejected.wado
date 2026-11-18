@@ -9,7 +9,7 @@ struct Point {
 
 type Alias = Point;
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     let [rx, tx] = Future::<Alias>::new();
     tx.drop();
     rx.drop();

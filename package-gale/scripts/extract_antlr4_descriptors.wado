@@ -368,7 +368,7 @@ struct TriageMaps {
 ///   "Category/Name" = "reason text"
 /// The triage file, `null` where there is none. One that cannot be read exits:
 /// with no triage, every skip it records would be regenerated away.
-fn read_status_file(root: &Descriptor) -> Option<String> with (Stderr, Exit) {
+fn read_status_file(root: &Descriptor) -> Option<String> with (Stderr, Exit, Descriptor) {
     return match read_file_to_string(root, &status_file_path()) {
         Ok(text) => Some(text),
         Err(e) && e matches { NoEntry } => null,
@@ -437,7 +437,7 @@ fn unquote<S: AsStrSlice>(s: S) -> String {
 
 // ===== File system helpers =====
 
-fn read_file_to_string<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<String, ErrorCode> {
+fn read_file_to_string<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<String, ErrorCode> with Descriptor {
     let opened = match dir
         .open_at(PathFlags::none(), path.to_string(), OpenFlags::none(), DescriptorFlags::Read)
         .wait() {
@@ -461,7 +461,11 @@ fn read_file_to_string<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<Strin
     };
 }
 
-fn write_file_string<S: AsStrSlice, S1: AsStrSlice>(dir: &Descriptor, path: S, content: S1) -> Result<(), ErrorCode> {
+fn write_file_string<S: AsStrSlice, S1: AsStrSlice>(
+    dir: &Descriptor,
+    path: S,
+    content: S1,
+) -> Result<(), ErrorCode> with Descriptor {
     let file = match dir
         .open_at(
             PathFlags::none(),
@@ -504,7 +508,7 @@ fn expand_grammar_templates<S: AsStrSlice, S1: AsStrSlice>(key: S, grammar: S1) 
 /// Remove a file the corpus no longer holds, absent or not. A file left behind
 /// would stay committed as if this run had produced it, so any other failure
 /// ends the run.
-fn remove_stale<S: AsStrSlice>(dir: &Descriptor, path: S) with (Stderr, Exit) {
+fn remove_stale<S: AsStrSlice>(dir: &Descriptor, path: S) with (Stderr, Exit, Descriptor) {
     let path = path.to_string();
     if let Err(e) = dir.unlink_file_at(path).wait() && !e matches { NoEntry } {
         eprintln(`extract: cannot remove ${path}: ${e:?}`);
@@ -512,7 +516,7 @@ fn remove_stale<S: AsStrSlice>(dir: &Descriptor, path: S) with (Stderr, Exit) {
     }
 }
 
-fn ensure_dir<S: AsStrSlice>(parent: &Descriptor, name: S) -> Result<Descriptor, ErrorCode> {
+fn ensure_dir<S: AsStrSlice>(parent: &Descriptor, name: S) -> Result<Descriptor, ErrorCode> with Descriptor {
     // Ignore "exists" — we just want the directory to be present.
     let _ = parent.create_directory_at(name.to_string()).wait();
     return parent
@@ -525,14 +529,14 @@ fn ensure_dir<S: AsStrSlice>(parent: &Descriptor, name: S) -> Result<Descriptor,
         .wait();
 }
 
-fn open_dir<S: AsStrSlice>(parent: &Descriptor, name: S, mutate: bool) -> Result<Descriptor, ErrorCode> {
+fn open_dir<S: AsStrSlice>(parent: &Descriptor, name: S, mutate: bool) -> Result<Descriptor, ErrorCode> with Descriptor {
     let flags = if mutate { DescriptorFlags::Read | DescriptorFlags::MutateDirectory } else { DescriptorFlags::Read };
     return parent
         .open_at(PathFlags::none(), name.to_string(), OpenFlags::Directory, flags)
         .wait();
 }
 
-fn list_files_with_suffix<S: AsStrSlice>(dir: &Descriptor, suffix: S) -> List<String> {
+fn list_files_with_suffix<S: AsStrSlice>(dir: &Descriptor, suffix: S) -> List<String> with Descriptor {
     let mut out: List<String> = [];
     let [stream, done] = dir.read_directory();
     for let e of stream.read_to_end() {
@@ -546,7 +550,7 @@ fn list_files_with_suffix<S: AsStrSlice>(dir: &Descriptor, suffix: S) -> List<St
     return out;
 }
 
-fn list_subdirs(dir: &Descriptor) -> List<String> {
+fn list_subdirs(dir: &Descriptor) -> List<String> with Descriptor {
     let mut out: List<String> = [];
     let [stream, done] = dir.read_directory();
     for let e of stream.read_to_end() {
@@ -848,7 +852,7 @@ fn write_category_test_files<S: AsStrSlice, S1: AsStrSlice>(
     attr: S,
     category: S1,
     chunks: &List<TestChunk>,
-) -> i32 with (Stderr, Exit) {
+) -> i32 with (Stderr, Exit, Descriptor) {
     let mut written: List<String> = [];
     let mut failed = false;
     let mut index = 0;
@@ -2153,7 +2157,7 @@ fn write_oracle_pending_files<S: AsStrSlice, S1: AsStrSlice>(
     input_filename: S,
     start_filename: S1,
     parsed: &ParsedDescriptor,
-) -> Result<(), ErrorCode> with (Stderr, Exit) {
+) -> Result<(), ErrorCode> with (Stderr, Exit, Descriptor) {
     write_file_string(dir, input_filename, &parsed.input)?;
     if let Err(e) = write_file_string(dir, start_filename, &parsed.start) {
         remove_stale(dir, input_filename);
@@ -2169,7 +2173,7 @@ fn add_stage_b_oracle_chunks(
     root: &Descriptor,
     oracle_version: &String,
     outputs: &mut List<CategoryOutput>,
-) with (Stdout, Stderr, Exit) {
+) with (Stdout, Stderr, Exit, Descriptor) {
     let pending_root = match open_dir(root, "package-gale/tests/antlr4-compat/oracle-pending", false) {
         Ok(d) => d,
         Err(_) => {

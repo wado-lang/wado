@@ -1,7 +1,12 @@
-// A type pattern narrowing a handle to resource `R` holds `R` from then on.
+// An operation demands the resource declaring it, whatever resource the handle
+// is: `tag` demands `Node` on an input too, and `value` demands
+// `HtmlInputElement`, which `Node` does not imply.
 
 #[cm("example:demo/dom#node", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
-resource Node {}
+resource Node {
+    #[cm("example:demo/dom#node-tag")]
+    fn tag(&self) -> String;
+}
 
 #[cm("example:demo/dom#input", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
 resource HtmlInputElement extends Node {
@@ -9,21 +14,27 @@ resource HtmlInputElement extends Node {
     fn value(&self) -> String;
 }
 
-fn describe(n: Node) -> String {                // holds Node
+fn describe(n: Node) -> String with Node {
     return match n {
-        input: HtmlInputElement => input.value(), // holds HtmlInputElement too
-        _ => "",
+        input: HtmlInputElement => `${input.tag()}:${input.value()}`,
+        _ => n.tag(),
     };
 }
 
 test {
-    with HtmlInputElement => &Typed {} do {
-        assert describe(an_input()) == "typed";
-        assert describe(a_node()) == "";
+    with Node => &Typed {}, HtmlInputElement => &Typed {} do {
+        assert describe(an_input()) == "input:typed";
+        assert describe(a_node()) == "input";
     }
 }
 
 struct Typed {}
+
+impl Node for Typed {
+    fn tag(&self, this: &Node) -> String {
+        resume "input"
+    }
+}
 
 impl HtmlInputElement for Typed {
     fn value(&self, this: &HtmlInputElement) -> String {
