@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794983051349,
+  "lastUpdate": 1794984091528,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79389,6 +79389,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/617d8c9734da5d3c0aacafe276d22321399699ff"
         },
         "date": 1794983050584,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434915,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4154dc241243e708112e998044b35496b6cf2333",
+          "message": "Merge pull request #2680 from wado-lang/ccr-5a053762-2x7vni\n\nfeat(rill): build a page as one expression with the View builder",
+          "timestamp": "2026-11-18T15:13:03+09:00",
+          "tree_id": "5b62b73f44fc581546f773fd468e114b0ec8b29d",
+          "url": "https://github.com/wado-lang/wado/commit/4154dc241243e708112e998044b35496b6cf2333"
+        },
+        "date": 1794984090723,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
