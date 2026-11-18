@@ -1,7 +1,7 @@
 //! Gemma 3 (270M, instruction-tuned) as a library: its tokenizer, and the model
 //! that picks the next tokens, keeping the attention cache between calls.
 
-use { Graph, LoadError, Sampling, Tensor, WeightSource } from "lib:loam";
+use { Backend, LoadError, Sampling, Tensor, WeightSource } from "lib:loam";
 /// Gemma's SentencePiece-spelled BPE, which puts `<bos>` first.
 pub use {
     Tokenizer,
@@ -30,7 +30,7 @@ use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resol
 /// Gemma 3 with its weights loaded where `Bk` runs each operation of the graph
 /// `build` adds to, computed from inputs padded to capacities and a cache of
 /// fixed capacity.
-pub struct Model<affine Bk: Graph> {
+pub struct Model<affine Bk: Backend> {
     backend: Bk,
     model: gemma::Model<Bk>,
     /// The ids the cache holds the keys and values of.
@@ -38,7 +38,7 @@ pub struct Model<affine Bk: Graph> {
     cache: gemma::Cache<Bk>,
 }
 
-impl<affine Bk: Graph> Model<Bk> {
+impl<affine Bk: Backend> Model<Bk> {
     /// Loads the weights onto `backend` from `source`, which serves the
     /// `model.onnx_data` beside the `model.onnx` the build read.
     pub fn load<affine Src: WeightSource>(backend: Bk, source: &Src) -> Result<Model<Bk>, LoadError> with _ {

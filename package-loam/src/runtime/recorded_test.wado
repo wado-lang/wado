@@ -35,10 +35,11 @@ use {
     repeating_inputs,
     windowed,
     windowed_input,
+    written_pools,
 } from "./graph_cases.wado";
-use { Any, Recorder, Untyped, host_of, run, typed } from "./recorded.wado";
+use { Any, Programs, Recorded, Recorder, Untyped, host_of, run, typed } from "./recorded.wado";
 use { Binary, Graph, Slots, branched } from "./hlo.wado";
-use { Cpu, Holds, Tensor } from "./tensor.wado";
+use { Cpu, ElementKind, Holds, Tensor } from "./tensor.wado";
 
 test "a recorded graph run on the CPU computes what the CPU computes as each operation is added" {
     let [x, ids] = mixed_inputs();
@@ -356,4 +357,89 @@ fn recorded_attention(case: &AttentionCase) {
         host_of(&want.1),
         host_of(&want.2),
     ] as List<Any<Cpu>>;
+}
+
+/// `x + x`, then what the host gives back for it at step 7, plus the weight
+/// doubled, plus `x + x` again; and `x` itself. The weight is doubled before
+/// the step, which writes it.
+fn stepped_pass(r: &mut Recorder, extents: &List<List<i32>>) -> Recorded {
+    let x = r.parameter::<f32, [A]>(extents[0]);
+    let weight = r.parameter::<f32, [A]>(extents[1]);
+    let w = r.binary(Binary::Add, &weight, &weight);
+    let doubled = r.binary(Binary::Add, &x, &x);
+    let fetched = r.fetched(7, &[Any::F32(r.relabeled::<f32, [A], Untyped>(&doubled))], &[
+        [
+            ElementKind::F32,
+            [3],
+        ],
+    ]);
+    let given = typed::<Recorder, f32, [A]>(r, &fetched[0]);
+    let total = r.binary(Binary::Add, &r.binary(Binary::Add, &given, &w), &doubled);
+    return r.finished([total.id, x.id]);
+}
+
+test "a pass split at a host step hands the host what it reads, and the programs after it what the host gives and writes" {
+    // The weight doubled reads the 1s the host writes, not the 10s before.
+    let x = Tensor::<f32, [A]> {
+        data: [1.0, 2.0, 3.0],
+        extents: [3],
+    };
+    let w = Tensor::<f32, [A]> {
+        data: [10.0, 20.0, 30.0],
+        extents: [3],
+    };
+    let mut cpu = Cpu {};
+    let mut programs = Programs::<Cpu>::new();
+    let mut steps = 0;
+    let got = programs.run(&mut cpu, [
+        [3],
+    ], stepped_pass, || [host_of(&x)], || [host_of(&w)], |step, read, weights| {
+        assert step == 7;
+        steps += 1;
+        let doubled = typed::<Cpu, f32, [A]>(&Cpu {}, &read[0]);
+        assert doubled.data == [2.0, 4.0, 6.0] as List<f32>;
+        weights[0] = host_of(&Tensor::<f32, [A]> {
+            data: [1.0, 1.0, 1.0],
+            extents: [3],
+        });
+        return [
+            host_of(&Tensor::<f32, [A]> {
+                data: doubled.data.into_iter().map(|v| v + 100.0).collect(),
+                extents: [3],
+            }),
+        ];
+    });
+    assert steps == 1;
+    assert got == [
+        host_of(&Tensor::<f32, [A]> {
+            data: [106.0, 110.0, 114.0],
+            extents: [3],
+        }),
+        host_of(&x),
+    ] as List<Any<Cpu>>;
+}
+
+/// A loop whose body reads its state back on the host.
+fn fetched_in_a_loop(r: &mut Recorder) {
+    let x = r.parameter::<f32, [A]>([3]);
+    let count = r.parameter::<i64, []>([]);
+    r.repeated(&count, &[Any::F32(r.relabeled::<f32, [A], Untyped>(&x))], |_, state| {
+        return r.fetched(0, state, &[
+            [
+                ElementKind::F32,
+                [3],
+            ],
+        ]);
+    });
+}
+
+#[expect_trap]
+test "a host step inside a loop is refused" {
+    fetched_in_a_loop(&mut Recorder::new());
+}
+
+test "a pool's slot holds the row written there, and the other slots what they held" {
+    let [halves, bytes] = written_pools(&mut Cpu {});
+    assert typed::<Cpu, f16, [A, B]>(&Cpu {}, &halves).data == [3.0, 4.0, 0.25, 7.0, 5.0, 6.0] as List<f16>;
+    assert typed::<Cpu, u8, [A, B]>(&Cpu {}, &bytes).data == [0, 128, 64, 32, 1, 2, 3, 255, 9, 8, 7, 6] as List<u8>;
 }

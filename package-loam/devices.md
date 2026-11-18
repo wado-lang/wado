@@ -118,12 +118,14 @@ inputs, the weights and the cache as nodes of `G`, and returns the outputs.
 `Graph` is a trait whose methods are the operations below, each typed by its
 axes. A tensor is `G::Tensor<E, Axes>`, a node of the graph being built.
 
-- A device backend's `Graph` records the nodes. The runtime runs `build` once
-  per shape class and hands the recorded graph to the device's compiler.
-- `Cpu`'s `Graph` computes each node as it is added. So `Cpu` runs the same
-  body as the devices and stays the reference they are held to.
-- `WebGpuBackend` does both. It computes each node as it is added, through its
-  device kernels, and it records a pass to compile it.
+- `Recorder`'s `Graph` records the nodes. The runtime runs `build` once per
+  shape class into a `Recorder` and hands the recording to the backend, whose
+  `Backend` trait compiles and runs it.
+- `Cpu`'s `Graph` computes each node as it is called. `Cpu` runs a recording
+  node by node through it, so it runs the same recording as the devices and
+  stays the reference they are held to.
+- `WebGpuBackend`'s `Graph` computes each node through its device kernels, and
+  its compiler plans the launches of a recording.
 
 An operation whose output axes are not its operands' takes them as a type
 argument, as `reshape` does, and the generator spells them. Wado's packs cannot
@@ -454,9 +456,10 @@ and a program for each shape class it has met. The caller owns it, and
   together. A backend holds nothing past a call, so one backend serves any
   number of models without a key to tell their programs apart.
 - `Model` is shared by every request; `Cache` is one request's, or a row each
-  in `Requests`. The weights an expert routing loads stay in the model.
-- On `Cpu` a program is empty, since `Cpu` computes `build` directly and stays
-  the reference.
+  in `Requests`. The experts a routing loads stay in the model, beside the
+  source it reads them from.
+- On `Cpu` a program is the recording and the values of its nodes that read no
+  argument.
 
 ### What this changes
 
