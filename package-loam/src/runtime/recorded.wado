@@ -9,6 +9,7 @@ use {
     Convolution,
     DotDims,
     GatherDims,
+    Backend,
     Graph,
     Quantized,
     ScatterDims,
@@ -107,6 +108,10 @@ pub variant Operation {
     /// `Graph::quantized_gather` over its table, indices, scales and zero
     /// points.
     QuantizedGather(QuantizedNode),
+    /// The `k`th value the host gives back at step `step`, `[step, k]`,
+    /// having read the operands. A program holds none: [`split`] cuts a
+    /// recording at each step.
+    Fetched([i32, i32]),
 }
 
 /// A node: its operation, the nodes it reads, and what it holds.
@@ -143,8 +148,10 @@ pub struct Recorded {
     pub nodes: List<RecordedNode>,
     pub body: Region,
     pub parameters: i32,
-    /// Each decomposed attention's past over a shared buffer, and the present
-    /// that buffer becomes: the same positions, and more of them valid.
+    /// Each value whose buffer a later one may take over, and that value: a
+    /// decomposed attention's past over a shared buffer and its present, the
+    /// same positions with more of them valid, or a pool and the pool with a
+    /// slot written.
     pub appended: List<[i32, i32]>,
 }
 
@@ -168,15 +175,24 @@ pub struct Recorder {
     /// compiler with no operation for it.
     decomposes: bool,
     appended: List<[i32, i32]>,
+    /// How many branches and loops enclose the region being recorded.
+    nested: i32,
 }
 
 impl Recorder {
     pub fn new() -> Recorder {
-        return Recorder { nodes: [], current: Region::empty(), parameters: 0, decomposes: false, appended: [] };
+        return Recorder {
+            nodes: [],
+            current: Region::empty(),
+            parameters: 0,
+            decomposes: false,
+            appended: [],
+            nested: 0,
+        };
     }
 
     pub fn decomposing() -> Recorder {
-        return Recorder { nodes: [], current: Region::empty(), parameters: 0, decomposes: true, appended: [] };
+        return Recorder { ..Recorder::new(), decomposes: true };
     }
 
     /// The next argument of the run, of `extents`.
@@ -245,8 +261,6 @@ impl Holds for Recorder {
 }
 
 impl Graph for Recorder {
-    type Program = ();
-
     fn relabeled<E: Element, In, Out>(&self, t: &Value<E, In>) -> Value<E, Out> {
         return Value { id: t.id };
     }
@@ -419,6 +433,7 @@ impl Graph for Recorder {
         otherwise: fn() -> T with _,
     ) -> T with _ {
         let outer = self.current;
+        self.nested += 1;
         self.current = Region::empty();
         let taken = then();
         let first = self.current;
@@ -426,6 +441,7 @@ impl Graph for Recorder {
         otherwise();
         let second = self.current;
         self.current = outer;
+        self.nested -= 1;
         assert first.results.len() == second.results.len(), "both branches yield as many results";
         self.added(Operation::Case([first, second]), [pred.id], ElementKind::Bool, []);
         return taken;
@@ -454,6 +470,7 @@ impl Graph for Recorder {
         body: fn(&Value<i64, []>, &List<Any<Recorder>>) -> List<Any<Recorder>> with _,
     ) -> List<Any<Recorder>> with _ {
         let outer = self.current;
+        self.nested += 1;
         self.current = Region::empty();
         let step = self.added(Operation::Carried, [], ElementKind::I64, []);
         let mut carried: List<i32> = [];
@@ -470,12 +487,28 @@ impl Graph for Recorder {
         }
         let region = self.current;
         self.current = outer;
+        self.nested -= 1;
         let mut operands: List<i32> = [count.id];
         for let start of initial {
             operands.push(node_of(start));
         }
         self.added(Operation::Repeat(Repeat { body: region, step, carried }), operands, ElementKind::Bool, []);
         return region.results.into_iter().map(|id| any_at(self.nodes[id].kind, id)).collect();
+    }
+
+    fn fetched(
+        &mut self,
+        step: i32,
+        read: &List<Any<Recorder>>,
+        given: &List<[ElementKind, List<i32>]>,
+    ) -> List<Any<Recorder>> {
+        assert self.nested == 0, "a host step is in the pass's own region";
+        let operands: List<i32> = read.into_iter().map(|r| node_of(r)).collect();
+        let mut fetched: List<Any<Recorder>> = [];
+        for let [k, [kind, extents]] of given.into_iter().enumerate() {
+            fetched.push(any_at(*kind, self.added(Operation::Fetched([step, k]), operands, *kind, *extents)));
+        }
+        return fetched;
     }
 
     fn group_query_attention<E: Float, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS, SH>(
@@ -764,6 +797,34 @@ pub fn host_of<E: Element, Axes>(t: &Tensor<E, Axes>) -> Any<Cpu> {
     };
 }
 
+/// Zeros of `kind` and `extents`, as `Cpu` holds them.
+pub fn zeros_on_host(kind: ElementKind, extents: List<i32>) -> Any<Cpu> {
+    return match kind {
+        F32 => zeros_of::<f32>(extents),
+        F16 => zeros_of::<f16>(extents),
+        BF16 => zeros_of::<bf16>(extents),
+        U8 => zeros_of::<u8>(extents),
+        I64 => zeros_of::<i64>(extents),
+        Bool => zeros_of::<bool>(extents),
+    };
+}
+
+fn zeros_of<E: Erasable>(extents: List<i32>) -> Any<Cpu> {
+    return E::any::<Cpu>(Tensor { data: List::filled(element_count(&extents), E::from_i64(0)), extents });
+}
+
+/// `value`, held on the host, as `h` holds it for this pass.
+pub fn uploaded_any<affine H: Holds>(h: &mut H, value: &Any<Cpu>) -> Any<H> with _ {
+    return match value {
+        F32(t) => Any::F32(h.upload(t)),
+        F16(t) => Any::F16(h.upload(t)),
+        BF16(t) => Any::BF16(h.upload(t)),
+        U8(t) => Any::U8(h.upload(t)),
+        I64(t) => Any::I64(h.upload(t)),
+        Bool(t) => Any::Bool(h.upload(t)),
+    };
+}
+
 /// `value`, held on the host, as `h` keeps it.
 pub fn kept_any<affine H: Holds>(h: &mut H, value: &Any<Cpu>) -> Any<H> with _ {
     return match value {
@@ -801,15 +862,313 @@ pub fn assert_carries<affine G: Graph>(g: &G, held: &List<Any<G>>, returned: &Li
     }
 }
 
+/// A host step between two programs of a split pass: the step, the nodes of
+/// the whole recording it reads, and those its values give.
+struct HostStep {
+    step: i32,
+    reads: List<i32>,
+    fetched: List<i32>,
+}
+
+/// What crosses the cuts of a pass split at its host steps, each value named
+/// by its node in the whole recording: what each program takes past the
+/// pass's arguments and returns, the host step after each program but the
+/// last, the pass's results, and each parameter's node.
+pub struct Cuts {
+    takes: List<List<i32>>,
+    gives: List<List<i32>>,
+    steps: List<HostStep>,
+    results: List<i32>,
+    parameters: HashMap<i32, i32>,
+}
+
+/// `recorded`, whose last `weights` parameters are weights, cut at each of its
+/// host steps into programs of their own, which take the pass's arguments,
+/// then what they take of the programs and steps before, then the weights.
+pub fn split(recorded: &Recorded, weights: i32) -> [List<Recorded>, Cuts] {
+    let mut parameters = HashMap::<i32, i32>::new();
+    for let [id, node] of recorded.nodes.into_iter().enumerate() {
+        if let Parameter(i) = &node.op {
+            parameters[id] = *i;
+        }
+    }
+    // Each segment's nodes, and each node's home: segment `s` is `2s`, and
+    // the step before it `2s - 1`.
+    let mut segments: List<List<i32>> = [[]];
+    let mut steps: List<HostStep> = [];
+    let mut home = List::<i32>::filled(recorded.nodes.len(), -1);
+    for let id of recorded.body.nodes {
+        let node = &recorded.nodes[id];
+        if let Fetched([step, k]) = &node.op {
+            if *k == 0 {
+                steps.push(HostStep { step: *step, reads: node.operands, fetched: [] });
+                segments.push([]);
+            }
+            steps[steps.len() - 1].fetched.push(id);
+            home[id] = 2 * segments.len() - 3;
+            continue;
+        }
+        segments[segments.len() - 1].push(id);
+        homed(recorded, id, 2 * (segments.len() - 1), &mut home);
+    }
+    if steps.is_empty() {
+        return [
+            [*recorded],
+            Cuts {
+                takes: [[]],
+                gives: [recorded.body.results],
+                steps,
+                results: recorded.body.results,
+                parameters,
+            },
+        ];
+    }
+    let arguments = recorded.parameters - weights;
+    // A value of the weights alone is computed again in each program that
+    // reads it, since a host step before that program may write the weights.
+    let of_weights = weights_only(recorded, arguments);
+    let last = segments.len() - 1;
+    let mut takes: List<List<i32>> = [];
+    for let s of 0..<segments.len() {
+        let mut read = read_by(recorded, &segments[s]);
+        if s < steps.len() {
+            read.extend(&steps[s].reads);
+        }
+        if s == last {
+            read.extend(&recorded.body.results);
+        }
+        let mut again: List<i32> = [];
+        for let id of read {
+            if home[id] < 2 * s && of_weights[id] {
+                again.push(id);
+            }
+        }
+        let mut redone = closed_over_weights(recorded, &again, &of_weights, &parameters);
+        redone.extend(&segments[s]);
+        segments[s] = redone;
+        let mut taken: List<i32> = [];
+        for let id of read_by(recorded, &segments[s]) {
+            if home[id] < 2 * s && !of_weights[id] && !parameters.contains_key(id) && !taken.contains(&id) {
+                taken.push(id);
+            }
+        }
+        takes.push(taken);
+    }
+    let mut later: List<List<i32>> = takes[1..<takes.len()].to_list();
+    later.push(recorded.body.results);
+    for let step of &steps {
+        later.push(step.reads);
+    }
+    let mut gives: List<List<i32>> = [];
+    for let s of 0..<segments.len() {
+        let mut given: List<i32> = [];
+        for let ids of &later {
+            for let id of ids {
+                let computed = home[*id] == 2 * s || of_weights[*id] && segments[s].contains(id);
+                if computed && !parameters.contains_key(*id) && !given.contains(id) {
+                    given.push(*id);
+                }
+            }
+        }
+        gives.push(given);
+    }
+    let mut programs: List<Recorded> = [];
+    for let [s, nodes] of segments.into_iter().enumerate() {
+        programs.push(cut(recorded, &nodes, &takes[s], &gives[s], arguments, weights));
+    }
+    return [
+        programs,
+        Cuts { takes, gives, steps, results: recorded.body.results, parameters },
+    ];
+}
+
+/// Whether each node of `recorded` reads the weights and constants alone, the
+/// parameters from the `arguments`th on being the weights.
+fn weights_only(recorded: &Recorded, arguments: i32) -> List<bool> {
+    let mut only: List<bool> = [];
+    for let node of &recorded.nodes {
+        only.push(match &node.op {
+            Parameter(i) => *i >= arguments,
+            Fetched(_) | Carried | Yield | Repeat(_) | Case(_) | Attention(_) | Part(_) => false,
+            _ => node.operands.into_iter().all(|o| only[o]),
+        });
+    }
+    return only;
+}
+
+/// `ids` and the nodes of the weights alone they read, but the parameters, in
+/// the order they are recorded.
+fn closed_over_weights(
+    recorded: &Recorded,
+    ids: &List<i32>,
+    of_weights: &List<bool>,
+    parameters: &HashMap<i32, i32>,
+) -> List<i32> {
+    let mut held = List::<bool>::filled(recorded.nodes.len(), false);
+    let mut pending = *ids;
+    while let Some(id) = pending.pop() {
+        if held[id] || parameters.contains_key(id) {
+            continue;
+        }
+        assert of_weights[id];
+        held[id] = true;
+        pending.extend(&recorded.nodes[id].operands);
+    }
+    return (0..<held.len()).filter(|id| held[id]).collect();
+}
+
+/// Sets `home` of `id`, and of every node a branch or loop of it holds.
+fn homed(recorded: &Recorded, id: i32, segment: i32, home: &mut List<i32>) {
+    home[id] = segment;
+    let mut inner = |region: &Region| {
+        for let n of region.nodes {
+            homed(recorded, n, segment, home);
+        }
+    };
+    match &recorded.nodes[id].op {
+        Case([first, second]) => {
+            inner(first);
+            inner(second);
+        },
+        Repeat(repeat) => inner(&repeat.body),
+        _ => {
+        },
+    }
+}
+
+/// Every node `nodes` read, in a branch or loop of theirs too.
+fn read_by(recorded: &Recorded, nodes: &List<i32>) -> List<i32> {
+    let mut read: List<i32> = [];
+    for let id of *nodes {
+        let node = &recorded.nodes[id];
+        read.extend(&node.operands);
+        match &node.op {
+            Case([first, second]) => {
+                read.extend(&read_by(recorded, &first.nodes));
+                read.extend(&read_by(recorded, &second.nodes));
+            },
+            Repeat(repeat) => read.extend(&read_by(recorded, &repeat.body.nodes)),
+            _ => {
+            },
+        }
+    }
+    return read;
+}
+
+/// The program of `nodes`, which takes the pass's `arguments`, then `takes`,
+/// then its `weights`, and returns `gives`.
+fn cut(
+    recorded: &Recorded,
+    nodes: &List<i32>,
+    takes: &List<i32>,
+    gives: &List<i32>,
+    arguments: i32,
+    weights: i32,
+) -> Recorded {
+    let mut copy = Cut { recorded, nodes: [], at: HashMap::new() };
+    let mut body: List<i32> = [];
+    let mut originals = List::<i32>::filled(recorded.parameters, -1);
+    for let [id, node] of recorded.nodes.into_iter().enumerate() {
+        if let Parameter(i) = &node.op {
+            originals[*i] = id;
+        }
+    }
+    let mut parameter = |id: i32, at: i32| {
+        let node = &recorded.nodes[id];
+        let copied = copy.nodes.len();
+        copy.nodes.push(RecordedNode {
+            op: Operation::Parameter(at),
+            operands: [],
+            kind: node.kind,
+            extents: node.extents,
+        });
+        copy.at[id] = copied;
+        body.push(copied);
+    };
+    for let i of 0..<arguments {
+        parameter(originals[i], i);
+    }
+    for let [j, id] of takes.into_iter().enumerate() {
+        parameter(*id, arguments + j);
+    }
+    for let w of 0..<weights {
+        parameter(originals[arguments + w], arguments + takes.len() + w);
+    }
+    for let id of *nodes {
+        if !recorded.nodes[id].op matches { Parameter(_) } {
+            body.push(copy.copied(id));
+        }
+    }
+    let mut appended: List<[i32, i32]> = [];
+    for let [past, present] of recorded.appended {
+        if copy.at.contains_key(past) && copy.at.contains_key(present) {
+            appended.push([copy.at[past], copy.at[present]]);
+        }
+    }
+    return Recorded {
+        nodes: copy.nodes,
+        body: Region { nodes: body, results: gives.into_iter().map(|id| copy.at[*id]).collect() },
+        parameters: arguments + takes.len() + weights,
+        appended,
+    };
+}
+
+/// The nodes of a program being cut from `recorded`, and where each node of
+/// `recorded` it holds went.
+struct Cut {
+    recorded: &Recorded,
+    nodes: List<RecordedNode>,
+    at: HashMap<i32, i32>,
+}
+
+impl Cut {
+    /// Where node `id` goes, copied after every node it reads.
+    fn copied(&mut self, id: i32) -> i32 {
+        let node = &self.recorded.nodes[id];
+        let op = match &node.op {
+            Case([first, second]) => Operation::Case([
+                self.region(first),
+                self.region(second),
+            ]),
+            Repeat(repeat) => {
+                let body = self.region(&repeat.body);
+                let carried: List<i32> = repeat.carried.into_iter().map(|c| self.at[c]).collect();
+                Operation::Repeat(Repeat { body, step: self.at[repeat.step], carried });
+            },
+            _ => node.op,
+        };
+        let operands: List<i32> = node.operands.into_iter().map(|o| {
+            assert self.at.contains_key(o), "a program reads only what it takes or computes";
+            return self.at[o];
+        }).collect();
+        let copied = self.nodes.len();
+        self.nodes.push(RecordedNode { op, operands, kind: node.kind, extents: node.extents });
+        self.at[id] = copied;
+        return copied;
+    }
+
+    fn region(&mut self, region: &Region) -> Region {
+        let nodes: List<i32> = region.nodes.into_iter().map(|id| self.copied(id)).collect();
+        return Region { nodes, results: region.results.into_iter().map(|id| self.at[id]).collect() };
+    }
+}
+
+/// What a backend compiled of one shape class: a program between each two
+/// host steps, and what crosses the cuts.
+struct Compiled<affine G: Backend> {
+    programs: List<G::Program>,
+    cuts: Cuts,
+}
+
 /// The programs a backend compiled, one for each shape class: the extents of
 /// the arguments that vary between calls. The weights the programs take
 /// after those are one model's, the same on every call, and erased once.
-pub struct Programs<affine G: Graph> {
-    held: HashMap<List<List<i32>>, G::Program>,
+pub struct Programs<affine G: Backend> {
+    held: HashMap<List<List<i32>>, Compiled<G>>,
     weights: Option<List<Any<G>>>,
 }
 
-impl<affine G: Graph> Programs<G> {
+impl<affine G: Backend> Programs<G> {
     pub fn new() -> Programs<G> {
         return Programs { held: HashMap::new(), weights: null };
     }
@@ -819,10 +1178,11 @@ impl<affine G: Graph> Programs<G> {
         return self.held.len();
     }
 
-    /// What the program of `class` returns over `arguments()` and the
+    /// What the programs of `class` return over `arguments()` and the
     /// `weights()` of the first call, compiled from what `record` records
-    /// over their extents where none is held yet; `None` where `g` compiles
-    /// nothing, and builds itself.
+    /// over their extents where none is held yet. At each host step between
+    /// two programs, `host(step, read, weights)` gives back what the step
+    /// gives, and may write in the weights.
     pub fn run(
         &mut self,
         g: &mut G,
@@ -830,32 +1190,64 @@ impl<affine G: Graph> Programs<G> {
         record: fn(&mut Recorder, &List<List<i32>>) -> Recorded,
         arguments: fn() -> List<Any<G>> with _,
         weights: fn() -> List<Any<G>> with _,
-    ) -> Option<List<Any<G>>> with _ {
+        mut host: fn mut(i32, &List<Any<G>>, &mut List<Any<G>>) -> List<Any<G>> with _,
+    ) -> List<Any<G>> with _ {
         if self.weights matches { None } {
             self.weights = Option::Some(weights());
         }
-        let Some(erased) = &self.weights else {
+        let Some(erased) = &mut self.weights else {
             unreachable();
         };
+        let given = arguments();
         if !self.held.contains_key(class) {
-            let mut earlier: List<&G::Program> = [];
-            for let c of self.held.keys() {
-                earlier.push(&self.held[*c]);
+            let mut extents: List<List<i32>> = given.into_iter().map(|a| extents_of_any(g, &a)).collect();
+            for let at of 0..<erased.len() {
+                extents.push(extents_of_any(g, &erased[at]));
             }
-            let Some(program) = g.compiled(|r| {
-                let mut extents: List<List<i32>> = arguments().into_iter().map(|a| extents_of_any(g, &a)).collect();
-                for let w of erased {
-                    extents.push(extents_of_any(g, w));
+            let [recorded, cuts] = split(&record(&mut g.recorder(), &extents), erased.len());
+            let mut programs: List<G::Program> = [];
+            for let [k, r] of recorded.into_iter().enumerate() {
+                let mut earlier: List<&G::Program> = [];
+                for let c of self.held.keys() {
+                    if self.held[*c].programs.len() > k {
+                        earlier.push(&self.held[*c].programs[k]);
+                    }
                 }
-                return record(r, &extents);
-            }, erased, &earlier) else {
-                return null;
-            };
-            self.held[class] = program;
+                programs.push(g.compiled(r, erased, &earlier));
+            }
+            self.held[class] = Compiled { programs, cuts };
         }
-        return Option::Some(g.executed(&self.held[class], &arguments(), erased));
+        let compiled = &self.held[class];
+        let cuts = &compiled.cuts;
+        let mut values = HashMap::<i32, Any<G>>::new();
+        let value_of = |id: i32| -> Any<G> {
+            if let Some(i) = cuts.parameters.get(id) {
+                return if i < given.len() { given[i] } else { erased[i - given.len()] };
+            }
+            return values[id];
+        };
+        for let k of 0..<compiled.programs.len() {
+            let mut taken = given;
+            for let id of cuts.takes[k] {
+                taken.push(value_of(id));
+            }
+            for let [at, returned] of g.executed(&compiled.programs[k], &taken, erased).into_iter().enumerate() {
+                values[cuts.gives[k][at]] = returned;
+            }
+            if k < cuts.steps.len() {
+                let step = &cuts.steps[k];
+                let read: List<Any<G>> = step.reads.into_iter().map(|id| value_of(id)).collect();
+                let fetched = host(step.step, &read, erased);
+                assert fetched.len() == step.fetched.len(), "a host step gives each value it records";
+                for let [at, id] of step.fetched.into_iter().enumerate() {
+                    values[id] = fetched[at];
+                }
+            }
+        }
+        return cuts.results.into_iter().map(|id| value_of(id)).collect();
     }
 }
+
 
 /// `recorded` run on `g` over `arguments`, each node computed by `g`'s
 /// `Graph`. On `Cpu` it is what a device's compiled program must compute.
@@ -968,7 +1360,7 @@ impl<affine G: Graph> Run<G> {
     }
 
     /// Runs `region`'s nodes, and returns what it yields.
-    fn region(&mut self, g: &mut G, recorded: &Recorded, region: &Region) -> List<Any<G>> with _ {
+    internal fn region(&mut self, g: &mut G, recorded: &Recorded, region: &Region) -> List<Any<G>> with _ {
         for let id of region.nodes {
             let node = &recorded.nodes[id];
             if let Case([first, second]) = &node.op {

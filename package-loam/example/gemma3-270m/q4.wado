@@ -7,7 +7,7 @@
 
 use { eprintln, Stderr, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
-use { FileSource, Graph, LoadError, Sampling, Tensor } from "lib:loam";
+use { Backend, FileSource, LoadError, Sampling, Tensor } from "lib:loam";
 use { deviation, recorded, reported } from "./checks.wado";
 /// The graph alone: its weights are external data in `model_q4.onnx_data`.
 use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resolve/2dbbfdb1b59bd034eb959428c6a7da9dd7ea27f0/onnx/model_q4.onnx"
@@ -26,7 +26,7 @@ use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resol
     };
 
 /// Continues each prompt on `backend`, as `Q4Model::continued` does.
-pub fn checked<affine Bk: Graph>(backend: Bk) with (_, Stdout, Stderr, Preopens) {
+pub fn checked<affine Bk: Backend>(backend: Bk) with (_, Stdout, Stderr, Preopens) {
     let Some([generate, expected]) = recorded("generate_q4.json", "build/logits_q4.bin") else {
         return;
     };
@@ -45,12 +45,12 @@ pub fn checked<affine Bk: Graph>(backend: Bk) with (_, Stdout, Stderr, Preopens)
 }
 
 /// The export's weights, loaded from `build/` onto a backend.
-pub struct Q4Model<affine Bk: Graph> {
+pub struct Q4Model<affine Bk: Backend> {
     on: Bk,
     model: gemma::Model<Bk>,
 }
 
-impl<affine Bk: Graph> Q4Model<Bk> {
+impl<affine Bk: Backend> Q4Model<Bk> {
     pub fn load(backend: Bk) -> Result<Q4Model<Bk>, LoadError> with (_, Preopens) {
         let mut on = backend;
         let model = gemma::Model::new(gemma::Params::load(&mut on, &FileSource { dir: "build" })?);

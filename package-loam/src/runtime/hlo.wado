@@ -1,11 +1,12 @@
 //! The graph a pass is built as. Its operations take their meaning from the
 //! StableHLO specification, so a compiler of the graph lowers each one to one
-//! operation, and `Cpu` computes each as it is added.
+//! operation, and `Cpu` computes each as its `Graph` method is called.
 
 use {
     Attention,
     Cpu,
     Element,
+    ElementKind,
     Float,
     Holds,
     Tensor,
@@ -22,7 +23,19 @@ use {
     stretched_strides,
     walked,
 } from "./tensor.wado";
-use { Any, Recorded, Recorder, Untyped, assert_carries, kept_any } from "./recorded.wado";
+use { HashMap } from "core:collections";
+use {
+    Any,
+    Erasable,
+    Recorded,
+    Recorder,
+    Run,
+    Untyped,
+    assert_carries,
+    constants,
+    kept_any,
+    zeros_on_host,
+} from "./recorded.wado";
 use { HostWeight } from "./weight.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
@@ -115,32 +128,27 @@ pub struct Quantized {
     pub block: i32,
 }
 
-/// A pass built as a graph. Each method adds one operation and returns the
-/// tensor it computes. An operation whose output axes are not its operands'
-/// takes them as `Out`, which the caller spells.
-///
-/// A device records the pass once per shape class and compiles it, and
-/// `compute` then runs the program it compiled.
-pub affine trait Graph: Holds with _ {
+/// What runs a pass: it records the pass once per shape class and compiles
+/// it, and `compute` then runs the program it compiled.
+pub affine trait Backend: Graph with _ {
     /// What [`Self::compiled`] makes of a recorded pass.
     type Program;
 
-    /// `t` under the axes `Out`: how a program's arguments and results cross
-    /// the generated module, each `Untyped`.
-    fn relabeled<E: Element, In, Out>(&self, t: &Self::Tensor<E, In>) -> Self::Tensor<E, Out> with ();
-    /// The pass `record` records, compiled to run on this, or `None` where
-    /// this computes each operation as `build` adds it. `weights` are what its
-    /// last parameters will be given, as [`Self::kept_weights`] kept them.
-    /// `earlier` holds the programs this compiled of the same graph at other
-    /// extents, which compiling may build on.
+    /// What records a pass for [`Self::compiled`].
+    fn recorder(&self) -> Recorder with () {
+        return Recorder::new();
+    }
+    /// `recorded`, which [`Self::recorder`] recorded, compiled to run on
+    /// this. `weights` are what its last parameters will be given, as
+    /// [`Self::kept_weights`] kept them. `earlier` holds the programs this
+    /// compiled of the same graph at other extents, which compiling may build
+    /// on.
     fn compiled(
         &mut self,
-        record: fn(&mut Recorder) -> Recorded with _,
+        recorded: Recorded,
         weights: &List<Any<Self>>,
         earlier: &List<&Self::Program>,
-    ) -> Option<Self::Program> with _ {
-        return null;
-    }
+    ) -> Self::Program with _;
     /// `program` over `arguments` and then `weights`, in the order the
     /// recorded pass took its parameters: what it returns, in that order.
     fn executed(
@@ -148,10 +156,14 @@ pub affine trait Graph: Holds with _ {
         program: &Self::Program,
         arguments: &List<Any<Self>>,
         weights: &List<Any<Self>>,
-    ) -> List<Any<Self>> {
-        // Only a backend whose `compiled` returns a program is given one.
-        unreachable();
-    }
+    ) -> List<Any<Self>>;
+    /// A weight of `kind` and `extents`, each slice along its first axis a
+    /// slot that [`Self::written`] fills in place, and that holds nothing to
+    /// read until then.
+    fn pool(&mut self, kind: ElementKind, extents: List<i32>) -> Any<Self>;
+    /// `pool`, which [`Self::pool`] made, with its slot `slot` holding `row`:
+    /// one slice along the first axis, as a checkpoint stores it.
+    fn written(&mut self, pool: &mut Any<Self>, slot: i32, row: HostWeight);
     /// The `count` weights a pass reads, `load(at)` the `at`th on the host,
     /// which the parameters `record` records take from its `first` on: each
     /// laid out from its stored bytes for the operations the recorded pass
@@ -169,6 +181,15 @@ pub affine trait Graph: Holds with _ {
         }
         return Result::Ok(kept);
     }
+}
+
+/// A pass built as a graph. Each method adds one operation and returns the
+/// tensor it computes. An operation whose output axes are not its operands'
+/// takes them as `Out`, which the caller spells.
+pub affine trait Graph: Holds with _ {
+    /// `t` under the axes `Out`: how a program's arguments and results cross
+    /// the generated module, each `Untyped`.
+    fn relabeled<E: Element, In, Out>(&self, t: &Self::Tensor<E, In>) -> Self::Tensor<E, Out> with ();
 
     /// StableHLO's `iota`: each element its index along `dimension`.
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Self::Tensor<E, Axes>;
@@ -301,6 +322,13 @@ pub affine trait Graph: Holds with _ {
             state = returned;
         }
         return state;
+    }
+    /// What the host gives back at its step `step` of the pass, having read
+    /// `read`: a value of each element and extents `given` lists. A pass's
+    /// own region may hold one, not a branch or a loop.
+    fn fetched(&mut self, step: i32, read: &List<Any<Self>>, given: &List<[ElementKind, List<i32>]>) -> List<Any<Self>> {
+        // Only `Recorder` builds a pass that a host step reaches into.
+        unreachable();
     }
     /// `x` with `axis` grown to `extent`, what it holds past its own extent
     /// unspecified: a cache moved to a larger capacity, whose attention reads
@@ -1368,11 +1396,58 @@ fn attention_mask<affine G: Graph, B, N, S, T>(
     return g.broadcast_in_dim(&hidden, *extents, [0, 2, 3]);
 }
 
-/// `Cpu` compiles nothing: it computes each operation as `build` adds it, the
-/// reference a device's program is held to.
-impl Graph for Cpu {
-    type Program = ();
+/// What `Cpu` runs of a pass: the recording, each node computed as `Cpu`'s
+/// `Graph` computes it, and the nodes that read no argument, computed once.
+pub struct CpuProgram {
+    recorded: Recorded,
+    constants: HashMap<i32, Any<Cpu>>,
+}
 
+/// `Cpu` runs the pass it recorded node by node: the reference a device's
+/// program is held to.
+impl Backend for Cpu {
+    type Program = CpuProgram;
+
+    fn compiled(&mut self, recorded: Recorded, weights: &List<Any<Cpu>>, earlier: &List<&CpuProgram>) -> CpuProgram {
+        return CpuProgram { constants: constants(&recorded), recorded };
+    }
+
+    fn executed(&mut self, program: &CpuProgram, arguments: &List<Any<Cpu>>, weights: &List<Any<Cpu>>) -> List<Any<Cpu>> {
+        return Run::<Cpu>::new(&program.recorded, arguments, weights, &program.constants).region(
+            self,
+            &program.recorded,
+            &program.recorded.body,
+        );
+    }
+
+    fn pool(&mut self, kind: ElementKind, extents: List<i32>) -> Any<Cpu> {
+        return zeros_on_host(kind, extents);
+    }
+
+    fn written(&mut self, pool: &mut Any<Cpu>, slot: i32, row: HostWeight) {
+        let decoded = row.decoded();
+        match pool {
+            F32(t) => spliced::<f32>(t, slot, &decoded),
+            F16(t) => spliced::<f16>(t, slot, &decoded),
+            BF16(t) => spliced::<bf16>(t, slot, &decoded),
+            U8(t) => spliced::<u8>(t, slot, &decoded),
+            I64(t) => spliced::<i64>(t, slot, &decoded),
+            Bool(t) => spliced::<bool>(t, slot, &decoded),
+        }
+    }
+}
+
+/// The elements of `row` written over the slot `slot` of `held`.
+fn spliced<E: Erasable>(held: &mut Tensor<E, Untyped>, slot: i32, row: &Any<Cpu>) {
+    let given = E::of_any::<Cpu>(row);
+    let width = given.data.len();
+    assert width * held.extents[0] == held.data.len() && 0 <= slot < held.extents[0], "a row fills one slot of the pool";
+    for let at of 0..<width {
+        held.data[slot * width + at] = given.data[at];
+    }
+}
+
+impl Graph for Cpu {
     fn relabeled<E: Element, In, Out>(&self, t: &Tensor<E, In>) -> Tensor<E, Out> {
         return Tensor { data: t.data, extents: t.extents };
     }

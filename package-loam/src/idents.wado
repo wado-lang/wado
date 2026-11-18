@@ -50,7 +50,7 @@ pub global REQUESTS: String = "Requests";
 /// What `DECODE` returns.
 pub global DECODED_TYPE: String = "Decoded";
 
-/// `build`'s steps around a sampler, for `Cpu`, which compiles no program.
+/// `build`'s steps around a sampler.
 pub global DECODED: String = "decoded";
 
 /// `DECODED` recorded for a backend to compile.
@@ -59,16 +59,16 @@ pub global RECORDED_DECODED: String = "recorded_decoded";
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 pub global RUNTIME_NAMES: List<String> = [
-    "Any", "Attention", "Binary", "Convolution", "Cpu", "Decoding", "DotDims", "Expected", "Experts", "GatherDims",
-    "Graph", "Holds", "HostWeight", "LoadError", "Merged", "One", "Picks", "Programs", "Quantized", "Recorded",
-    "Recorder", "Sampler", "Sampling", "Slots", "Tensor", "Unary", "Untyped", "WeightSource", "WindowReduce",
-    "assembled", "axis_mismatch", "branched", "capacity_of", "erased_fields", "expect_holds", "expect_len",
-    "extent_mismatch", "extents_mismatch", "fitted", "fitted_fields", "from_end", "from_end_indices", "full",
-    "input_mismatch", "joined_at", "lifted", "masked", "mixture_of_experts", "opened", "payload_at", "quotient",
-    "range_i64", "read_headers", "recorded_fields", "reduce_mean", "refuse", "resized", "restored_fields",
-    "retain_fields", "row_binary", "row_from_end", "row_quotient", "row_range", "scalar", "shared", "softmax",
-    "softmax_flattened", "stepped", "strided_gather", "to_extent", "typed", "unmet", "written_at", "written_fields",
-    "zeroed_fields",
+    "Any", "Attention", "Backend", "Binary", "Convolution", "Cpu", "Decoding", "DotDims", "ElementKind", "Expected",
+    "ExpertLayout", "Experts", "GatherDims", "Graph", "HeldExperts", "HeldFiles", "Holds", "HostWeight", "LoadError",
+    "Merged", "One", "Picks", "Programs", "Quantized", "Recorded", "Recorder", "Sampler", "Sampling", "Slots",
+    "StoredExperts", "Tensor", "Unary", "Unread", "Untyped", "WeightSource", "WindowReduce", "assembled",
+    "axis_mismatch", "branched", "capacity_of", "erased_fields", "expect_holds", "expect_len", "extent_mismatch",
+    "extents_mismatch", "fitted", "fitted_fields", "from_end", "from_end_indices", "full", "input_mismatch", "joined_at",
+    "lifted", "masked", "mixture_of_experts", "opened", "payload_at", "quotient", "range_i64", "read_headers",
+    "recorded_fields", "reduce_mean", "refuse", "resized", "restored_fields", "retain_fields", "row_binary",
+    "row_from_end", "row_quotient", "row_range", "scalar", "shared", "softmax", "softmax_flattened", "stepped",
+    "strided_gather", "to_extent", "typed", "unmet", "written_at", "written_fields", "zeroed_fields",
 ];
 
 /// Whether `name` already means something in the generated module.
@@ -109,8 +109,8 @@ pub fn module_idents() -> HashSet<String> {
     // The parameters and locals the entries and what they record bind.
     for let name of [
         "all", "at", "capacity", "decoding", "ended", "extents", "finished", "ids", "last", "mask", "moved", "next",
-        "open", "passed", "past", "pasts", "recorder", "results", "returned", "room", "rows", "sampler", "sampling",
-        "slot", "slots", "start", "state", "step", "steps", "token", "tokens",
+        "open", "passed", "past", "pasts", "presents", "recorder", "results", "returned", "room", "rows", "sampler",
+        "sampling", "slot", "slots", "start", "state", "step", "steps", "token", "tokens",
     ] as List<String> {
         reserved.insert(name);
     }
@@ -121,6 +121,13 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert("embedded");
     reserved.insert("held");
     reserved.insert("embedded_data");
+    // What a graph whose experts are pooled declares and binds besides.
+    for let name of [
+        "budget", "embedded_experts", "embedded_within", "expert_layouts", "experts", "files", "loaded", "pools",
+        "source",
+    ] as List<String> {
+        reserved.insert(name);
+    }
     reserved.insert("backend");
     reserved.insert(BACKEND_PARAM);
     reserved.insert(SOURCE_PARAM);

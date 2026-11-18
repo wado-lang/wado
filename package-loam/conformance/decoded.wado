@@ -1,7 +1,7 @@
 //! A small decoder driven through `decode` and `Requests` and, for what that
 //! must equal, a pass at a time through `compute`, on any backend.
 
-use { Cpu, Graph, Sampling, Tensor } from "lib:loam";
+use { Backend, Cpu, Sampling, Tensor } from "lib:loam";
 use { B, Cache, Model, Params, Requests, S, T, compute, decode } from "./decoder.onnxtext"
     with {
         type: "onnxtext",
@@ -35,7 +35,7 @@ fn returned(sampling: &Sampling, tokens: &List<i64>, picked: i64) -> i64 {
 }
 
 /// `count` tokens after `prompt`, one pass and one host pick each.
-pub fn stepped_tokens<affine Bk: Graph>(
+pub fn stepped_tokens<affine Bk: Backend>(
     g: &mut Bk,
     prompt: List<i64>,
     count: i32,
@@ -57,7 +57,7 @@ pub fn stepped_tokens<affine Bk: Graph>(
 
 /// The tokens after `prompt`, the first picked on the host and the rest by a
 /// program for each of `calls`, how many steps it takes.
-pub fn decoded_tokens<affine Bk: Graph>(
+pub fn decoded_tokens<affine Bk: Backend>(
     g: &mut Bk,
     prompt: List<i64>,
     calls: List<i32>,
@@ -83,7 +83,7 @@ pub fn decoded_tokens<affine Bk: Graph>(
 /// `slots` slots of 16 positions, `steps` at a call. A request waits for a slot
 /// to come free, so each is placed at a time of its own, beside requests at
 /// pasts of their own.
-pub fn requested_tokens<affine Bk: Graph>(
+pub fn requested_tokens<affine Bk: Backend>(
     g: &mut Bk,
     prompts: List<List<i64>>,
     slots: i32,
@@ -139,7 +139,7 @@ pub fn queued_prompts() -> List<List<i64>> {
 
 /// How many of the tokens of `queued_prompts` in `slots` slots differ from each
 /// prompt's run alone on `Cpu`.
-pub fn requests_apart<affine Bk: Graph>(g: &mut Bk, slots: i32, sampling: &Sampling) -> f32 with _ {
+pub fn requests_apart<affine Bk: Backend>(g: &mut Bk, slots: i32, sampling: &Sampling) -> f32 with _ {
     let requested = requested_tokens(g, queued_prompts(), slots, 7, 2, sampling);
     let mut apart = 0 as f32;
     for let [i, prompt] of queued_prompts().into_iter().enumerate() {
@@ -150,7 +150,7 @@ pub fn requests_apart<affine Bk: Graph>(g: &mut Bk, slots: i32, sampling: &Sampl
 
 /// How many steps `decode` took from a three token past, where the prompt left
 /// its cache no room.
-pub fn steps_taken<affine Bk: Graph>(g: &mut Bk, steps: i32) -> i32 with _ {
+pub fn steps_taken<affine Bk: Backend>(g: &mut Bk, steps: i32) -> i32 with _ {
     let mut model = Model::new(Params::embedded(g));
     let first = compute(g, &ids([1, 2]), &mask(2), &Cache::empty(g, 1), 0, &mut model);
     return decode(g, &ids([3]), &mask(3), &first.cache, steps, &Sampling {}, &mut model).tokens.extents[1];
