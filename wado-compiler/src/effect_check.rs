@@ -478,25 +478,22 @@ fn run_effect_checks(
                         .filter(|&def| index.resolutions.defs().kind(def) == DefKind::Resource)
                         .map(|def| resource_effect(index.resolutions, def))
                         .into_iter()
-                        .chain(
-                            trait_key
-                                .and_then(|key| index.interfaces.get(&key))
-                                .and_then(|(effect, _)| index.closure.get(effect))
-                                .into_iter()
-                                .flatten()
-                                .cloned(),
-                        )
                         .collect();
+                    let mentioned: Option<Vec<EffectRef>> = trait_key
+                        .and_then(|key| index.interfaces.get(&key))
+                        .map(|(effect, _)| {
+                            index.mentions.get(effect).into_iter().flatten().cloned().collect()
+                        });
                     for method in &impl_block.methods {
                         let inherits_ambient = trait_key.is_some_and(|key| {
                             index
                                 .ambient_trait_methods
                                 .contains(&(key, method.name.clone()))
                         });
-                        let held = if inherits_ambient {
-                            Held::Every
-                        } else {
-                            Held::Only(&own_resource)
+                        let held = match &mentioned {
+                            _ if inherits_ambient => Held::Every,
+                            Some(mentioned) => Held::Mentioned(mentioned),
+                            None => Held::Only(&own_resource),
                         };
                         check_function_effects_sem(sem, src, method, index, held, out, solved);
                     }
@@ -782,6 +779,7 @@ struct OwnedEffectData {
     resources: IndexSet<EffectRef>,
     drop_is_an_operation: IndexSet<DefId>,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
+    mentions: IndexMap<EffectRef, IndexSet<EffectRef>>,
     waiting: IndexSet<EffectRef>,
     /// Each interface and resource declaration's effect and `#[cm]` FQ.
     interfaces: IndexMap<DefId, (EffectRef, Option<String>)>,
@@ -868,7 +866,9 @@ impl OwnedEffectData {
 
         // Effect / resource propagation closure: holding effect `E` admits the
         // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
-        let closure = build_propagation_closure_sem(sem, state, &MemberTables::collect(sem, state));
+        let members = MemberTables::collect(sem, state);
+        let closure = build_propagation_closure_sem(sem, state, &members, Families::Joined);
+        let mentions = build_propagation_closure_sem(sem, state, &members, Families::Apart);
 
         // An empty entry is meaningful: the method exists and grants nothing.
         // A declaration has no body, so `fn_effects` holds nothing for it.
@@ -1086,6 +1086,7 @@ impl OwnedEffectData {
             resources,
             drop_is_an_operation,
             closure,
+            mentions,
             waiting,
             interfaces,
             effect_by_cm_fq,
@@ -1117,6 +1118,7 @@ impl OwnedEffectData {
             resources: &self.resources,
             drop_is_an_operation: &self.drop_is_an_operation,
             closure: &self.closure,
+            mentions: &self.mentions,
             waiting: &self.waiting,
             interfaces: &self.interfaces,
             effect_by_cm_fq: &self.effect_by_cm_fq,
@@ -1171,6 +1173,9 @@ struct EffectIndex<'a> {
     drop_is_an_operation: &'a IndexSet<DefId>,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
+    /// The same closure through what operations mention alone, leaving out
+    /// the `extends` families: what a handler holds.
+    mentions: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// What waiting on an `AsyncCall` demands, held where the call starts.
     waiting: &'a IndexSet<EffectRef>,
     /// Interface or resource declaration → its effect and `#[cm]` FQ.
@@ -1381,9 +1386,13 @@ fn check_impl_effect_conformance(
 
 /// What a body holds beyond its own declaration: the effects listed, or every
 /// effect, for one an `#[ambient(_)]` on it or on its trait method waives.
+/// `Mentioned` is a handler's: what the handled effect's operations mention,
+/// held as listed rather than through their `extends` families, so a handler
+/// reaches no sibling of what it handles.
 #[derive(Clone, Copy)]
 enum Held<'a> {
     Only(&'a [EffectRef]),
+    Mentioned(&'a [EffectRef]),
     Every,
 }
 
@@ -1407,11 +1416,12 @@ fn check_function_effects_sem(
     };
     let caller_key = func.id;
     let annotations = module_annotations(sem, module);
-    let listed = match held {
-        Held::Only(listed) => listed,
-        Held::Every => &[],
+    let (listed, mentioned) = match held {
+        Held::Only(listed) => (listed, &[][..]),
+        Held::Mentioned(mentioned) => (&[][..], mentioned),
+        Held::Every => (&[][..], &[][..]),
     };
-    let current = held_by(
+    let mut current = held_by(
         sem,
         annotations,
         index,
@@ -1419,6 +1429,7 @@ fn check_function_effects_sem(
         body,
         admitted.into_iter().chain(listed.iter().cloned()),
     );
+    current.extend(mentioned.iter().cloned());
 
     // Parameter name → type id (aligned with the recorded signature types),
     // for resolving indirect calls through function-typed parameters.
@@ -1586,16 +1597,24 @@ fn walk_body_effects(
     }
 }
 
+/// Whether a propagation closure treats each `extends` family as one effect.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Families {
+    Joined,
+    Apart,
+}
+
 /// Build the effect / resource propagation closure from `Semantics`: for each
 /// effect or resource declaration, the resources its operations' parameter and
-/// return types reference, and for a resource those that extend it, transitively
-/// closed. Reads the resolved operation
-/// signatures from the `effect_ops` facts; `members` lets resource detection
-/// descend into an operation type's own members.
+/// return types reference, and for a resource its family under `extends`
+/// where `families` joins them, transitively closed. Reads the resolved
+/// operation signatures from the `effect_ops` facts; `members` lets resource
+/// detection descend into an operation type's own members.
 fn build_propagation_closure_sem(
     sem: &Semantics,
     state: &AnnotateState,
     members: &MemberTables,
+    families: Families,
 ) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
     let resolutions = &*state.tysys.resolutions;
     let scan = ResourceScan {
@@ -1619,6 +1638,16 @@ fn build_propagation_closure_sem(
             let key = resolutions
                 .effect_decl(def)
                 .expect("an interface or resource is an effect");
+            if is_resource && families == Families::Joined {
+                // A family under `extends` is one effect: each member implies
+                // its parent and its parent implies it, so the closure reaches
+                // every member.
+                if let Some(parent) = scan.tt.resource_chain(def).nth(1) {
+                    let parent = resource_effect(resolutions, parent);
+                    direct.entry(parent.clone()).or_default().insert(key.clone());
+                    direct.entry(key.clone()).or_default().insert(parent);
+                }
+            }
             let Some(ops) = annotations.effect_ops.get(&decl_id) else {
                 continue;
             };
@@ -1665,6 +1694,11 @@ fn build_propagation_closure_sem(
         if !changed {
             break;
         }
+    }
+    // A family's cycle leads each member back to itself, and what an effect
+    // implies is what it is not.
+    for (key, implied) in &mut direct {
+        implied.shift_remove(key);
     }
     direct
 }

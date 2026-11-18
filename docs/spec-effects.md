@@ -350,7 +350,9 @@ with Stdout
 
 So `println` needs only `with Stdout`, though its body creates a stream and drops a future. An effect whose signatures mention no resource implies nothing: `with Environment` holds `Environment` alone.
 
-[`extends`](./spec-components.md#resource-inheritance) implies nothing, in either direction. An operation belongs to the resource declaring it, and so does its demand, whatever resource the handle is and however the call is spelled: `n.tag()`, `Node::tag(&n)` and `EventTarget::tag(&n)` on a `Node` all demand `EventTarget`. That resource's handler is the one the call reaches, so a handler of `Node` answers only what `Node` declares. [Narrowing](./spec-patterns.md#type-patterns) a handle grants nothing either.
+A family of resources under [`extends`](./spec-components.md#resource-inheritance) is one effect: a resource implies every other member, ancestors, descendants and siblings alike. So `with Node` covers what a `Node` inherits and what a handle [narrowed](./spec-patterns.md#type-patterns) from it offers.
+
+An operation still belongs to the resource declaring it, and so does its demand, whatever resource the handle is and however the call is spelled: `n.tag()`, `Node::tag(&n)` and `EventTarget::tag(&n)` on a `Node` all demand `EventTarget`. That resource's handler is the one the call reaches, so a handler of `Node` answers only what `Node` declares, and a `with Node => … do` block grants `Node` alone.
 
 <!-- {"fixture":"spec_effects_operation_owner.wado"} -->
 
@@ -424,7 +426,7 @@ impl Wrap {
 Three bodies hold an effect they do not name:
 
 - A method of a resource's own `impl R` is one of `R`'s operations. Its body holds `R`, and a call of it demands `R`.
-- A [handler](#handlers) method of `E`. It builds what `E`'s operations hand back, so it holds what `E` implies. `E` itself it declares where it delegates ([Where a Handler Method Runs](#where-a-handler-method-runs)).
+- A [handler](#handlers) method of `E`. It builds what `E`'s operations hand back, so it holds the resources they mention, transitively, but not their `extends` families. `E` itself, and any other member of its family, it declares where it calls one ([Where a Handler Method Runs](#where-a-handler-method-runs)).
 - A drop. A resource's drop is ambient ([Resources as Effects](#resources-as-effects)), and `Drop::drop` is declared `#[ambient(_)]` ([Ambient Functions](#ambient-functions)), so an impl's body performs what its release needs.
 
 A closure holds nothing it was handed, as a function does not. A handle it captures is no grant, so its type's row lists each operation it calls on one, narrowed or not:

@@ -64,19 +64,28 @@ must therefore agree on whose operation a call is, and the dispatch has one
 answer: the resource declaring the operation, whose handler the call reaches.
 
 So an operation demands the resource declaring it, whatever resource the
-receiver is, and `extends` implies nothing in either direction. Two looser
-rules were tried and each let a call escape its check:
+receiver is. An inherited method demanding its receiver's resource let a
+handler of `Node` discharge `n.tag()`, which `EventTarget` declares. The call
+went past that handler to `EventTarget`'s handler or the host, from a function
+that declared nothing.
 
-- An ancestor implying its descendants made `with EventTarget` grant every
-  element's own operations, and one child implying its ancestors then granted
-  its siblings.
-- An inherited method demanding its receiver's resource let a handler of
-  `Node` discharge `n.tag()`, which `EventTarget` declares. The call went past
-  that handler to `EventTarget`'s handler or the host, from a function that
-  declared nothing.
+How much one `with` grants is a separate choice, of granularity rather than
+safety. A family under `extends` is one effect: `with Node` holds `EventTarget`,
+every element and every sibling. A DOM is one capability in practice. A
+listener typed `fn mut(Event) with Dom` calls `value()` on an input it narrowed
+from a captured element, and a framework typing its callbacks `with Dom` cannot
+list every element its users narrow to. The cost is that `with Element` no
+longer says which kinds of node a function touches, and a family cannot split
+authority between, say, a read-only handle and a writable one that extends it.
 
-A body holding a narrowed resource after a type pattern narrowed a held handle
-to it is gone with them. A narrowing grants nothing, and a function calling an
-operation on the narrowed handle declares its resource. In exchange, a function
-using inherited operations lists each declaring resource: `with (EventTarget,
-Node)` where it calls both `tag` and `text`.
+Two rules keep the coarser grant from reaching past a handler:
+
+- A `with R => … do` block grants `R` alone, not what `R` implies.
+- A handler holds the resources its effect's operations mention, transitively,
+  but not their families. A handler of `Node` calling `this.tag()` declares
+  `EventTarget`, or a function holding nothing could install it and reach the
+  host through it.
+
+What a function's signature no longer says, which handlers a test double needs,
+the compiler reports where the double is installed
+([Handlers a Scope Leaves Out](./spec-effects.md#handlers-a-scope-leaves-out)).
