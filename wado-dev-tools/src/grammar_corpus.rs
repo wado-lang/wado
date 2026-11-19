@@ -178,8 +178,11 @@ fn verdicts_for(paths: &[String]) -> Vec<CompilerVerdict> {
             let source =
                 fs::read_to_string(path).unwrap_or_else(|e| panic!("reading '{path}': {e}"));
             let mut lexed = wado_compiler::lex(&source);
-            // A lexer error is a token no context-free grammar's lexer forms.
-            let lex_errors: Vec<(ParseErrorKind, Span, String)> = std::mem::take(&mut lexed.errors)
+            // A lexer error is a token no context-free grammar's lexer forms, an
+            // invalid literal's text included.
+            let mut lexer_errors = std::mem::take(&mut lexed.errors);
+            lexer_errors.append(&mut lexed.invalid_literals);
+            let lex_errors: Vec<(ParseErrorKind, Span, String)> = lexer_errors
                 .into_iter()
                 .map(|e| (ParseErrorKind::Syntax, e.span, format!("lexer error: {e}")))
                 .collect();

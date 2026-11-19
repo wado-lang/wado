@@ -1,0 +1,16 @@
+// A bad escape is a lexer error that leaves its literal one token, so the
+// compile goes on: it reports every bad escape, then the type error after them.
+export fn run() {
+    let a = "\q";
+    let b = b"\u{41}";
+    let c: i32 = "x";
+}
+
+__DATA__
+{
+    "compile_error": ":4:13: lexer error: invalid escape sequence: \\q",
+    "compile_errors_contains": [
+        "lexer error: unicode escape `\\u` is not allowed in a byte literal",
+        "type mismatch: expected 'i32', found 'String'"
+    ]
+}

@@ -2812,113 +2812,113 @@ fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/Strin
     let j: i32;
     let self_40: ref "core:prelude/string.wado//String";
     let other: ref "core:prelude/string.wado//String";
-    let $licm_keys_163: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
-    let $licm_values_164: ref "core:prelude/list.wado//List<i32>";
-    let $licm_deleted_165: ref "core:prelude/list.wado//List<bool>";
     let $licm_arith_169: bool;
     let $licm_arith_171: bool;
+    let $licm_keys_173: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
+    let $licm_values_174: ref "core:prelude/list.wado//List<i32>";
+    let $licm_deleted_175: ref "core:prelude/list.wado//List<bool>";
     let a_end: i32;
     let b_end: i32;
     let min_len: i32;
-    let i_182: i32;
+    let i_185: i32;
     let x: u8;
     let y: u8;
-    let $licm_used_187: i32;
-    let $licm_repr_188: ref "Array<core:prelude/string.wado/String>";
-    let $licm_used_189: i32;
-    let $licm_repr_190: ref Array<i32>;
-    let $licm_used_191: i32;
-    let $licm_repr_192: ref Array<bool>;
-    let $licm_repr_193: ref Array<u8>;
-    let $licm_repr_194: ref Array<u8>;
+    let $licm_repr_190: ref Array<u8>;
+    let $licm_repr_191: ref Array<u8>;
+    let $licm_used_198: i32;
+    let $licm_repr_202: ref "Array<core:prelude/string.wado/String>";
+    let $licm_used_203: i32;
+    let $licm_repr_204: ref Array<i32>;
+    let $licm_used_205: i32;
+    let $licm_repr_206: ref Array<bool>;
     i_1 = 0;
-    $licm_keys_163 = node.keys;
-    $licm_values_164 = node.values;
-    $licm_deleted_165 = node.deleted;
-    $licm_used_187 = $licm_keys_163.used;
-    $licm_repr_188 = $licm_keys_163.repr;
-    $licm_used_189 = $licm_values_164.used;
-    $licm_repr_190 = $licm_values_164.repr;
-    $licm_used_191 = $licm_deleted_165.used;
-    $licm_repr_192 = $licm_deleted_165.repr;
+    $licm_keys_173 = node.keys;
+    $licm_values_174 = node.values;
+    $licm_deleted_175 = node.deleted;
+    $licm_used_198 = $licm_keys_173.used;
+    $licm_repr_202 = $licm_keys_173.repr;
+    $licm_used_203 = $licm_values_174.used;
+    $licm_repr_204 = $licm_values_174.repr;
+    $licm_used_205 = $licm_deleted_175.used;
+    $licm_repr_206 = $licm_deleted_175.repr;
     b405: block {
         l406: loop {
-            break_if b405 i_1 >= $licm_used_187;
+            break_if b405 i_1 >= $licm_used_198;
             j = i_1 + 1;
             $licm_arith_169 = 0 <= i_1;
             $licm_arith_171 = 0 <= i_1;
-            $licm_arith_169 = $licm_arith_169 & (i_1 < $licm_used_189);
-            $licm_arith_171 = $licm_arith_171 & (i_1 < $licm_used_191);
+            $licm_arith_169 = $licm_arith_169 & (i_1 < $licm_used_203);
+            $licm_arith_171 = $licm_arith_171 & (i_1 < $licm_used_205);
             $licm_arith_169 = $licm_arith_169 == 0;
             $licm_arith_171 = $licm_arith_171 == 0;
             b407: block {
                 l408: loop {
-                    break_if b407 (j < $licm_used_187) == 0;
-                    if self_40 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_188, i_1); if @unlikely(0 > j) {
+                    break_if b407 (j < $licm_used_198) == 0;
+                    if self_40 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_202, i_1); if @unlikely(0 > j) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(j, $licm_used_187, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree.wado:238"), used: 22 });
+                        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(j, $licm_used_198, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree.wado:238"), used: 22 });
                         unreachable;
-                    }; other = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_188, j); $inline_core_prelude_array_wado_seq_cmp_u8__0: block -> "core:prelude/traits.wado//enum:Ordering" {
+                    }; other = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_202, j); $inline_core_prelude_array_wado_seq_cmp_u8__0: block -> "core:prelude/traits.wado//enum:Ordering" {
                         a_end = self_40.used;
                         b_end = other.used;
                         min_len = select i32(a_end < b_end, a_end, b_end);
-                        i_182 = 0;
-                        $licm_repr_193 = self_40.repr;
-                        $licm_repr_194 = other.repr;
+                        i_185 = 0;
+                        $licm_repr_190 = self_40.repr;
+                        $licm_repr_191 = other.repr;
                         b411: block {
                             l412: loop {
-                                break_if b411 (builtin::i64_extend_i32_s(i_182) + 3_i64) >= builtin::i64_extend_i32_s(min_len);
-                                x = builtin::array_get_value<u8>($licm_repr_193, i_182);
-                                y = builtin::array_get_value<u8>($licm_repr_194, i_182);
+                                break_if b411 (builtin::i64_extend_i32_s(i_185) + 3_i64) >= builtin::i64_extend_i32_s(min_len);
+                                x = builtin::array_get_value<u8>($licm_repr_190, i_185);
+                                y = builtin::array_get_value<u8>($licm_repr_191, i_185);
                                 if x <u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                 }
                                 if x >u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                 }
-                                i_182 = i_182 + 1;
-                                x = builtin::array_get_value<u8>($licm_repr_193, i_182);
-                                y = builtin::array_get_value<u8>($licm_repr_194, i_182);
+                                i_185 = i_185 + 1;
+                                x = builtin::array_get_value<u8>($licm_repr_190, i_185);
+                                y = builtin::array_get_value<u8>($licm_repr_191, i_185);
                                 if x <u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                 }
                                 if x >u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                 }
-                                i_182 = i_182 + 1;
-                                x = builtin::array_get_value<u8>($licm_repr_193, i_182);
-                                y = builtin::array_get_value<u8>($licm_repr_194, i_182);
+                                i_185 = i_185 + 1;
+                                x = builtin::array_get_value<u8>($licm_repr_190, i_185);
+                                y = builtin::array_get_value<u8>($licm_repr_191, i_185);
                                 if x <u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                 }
                                 if x >u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                 }
-                                i_182 = i_182 + 1;
-                                x = builtin::array_get_value<u8>($licm_repr_193, i_182);
-                                y = builtin::array_get_value<u8>($licm_repr_194, i_182);
+                                i_185 = i_185 + 1;
+                                x = builtin::array_get_value<u8>($licm_repr_190, i_185);
+                                y = builtin::array_get_value<u8>($licm_repr_191, i_185);
                                 if x <u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                 }
                                 if x >u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                 }
-                                i_182 = i_182 + 1;
+                                i_185 = i_185 + 1;
                                 continue l412;
                             };
                         };
                         b421: block {
                             l422: loop {
-                                break_if b421 i_182 >= min_len;
-                                x = builtin::array_get_value<u8>($licm_repr_193, i_182);
-                                y = builtin::array_get_value<u8>($licm_repr_194, i_182);
+                                break_if b421 i_185 >= min_len;
+                                x = builtin::array_get_value<u8>($licm_repr_190, i_185);
+                                y = builtin::array_get_value<u8>($licm_repr_191, i_185);
                                 if x <u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                 }
                                 if x >u y {
                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                 }
-                                i_182 = i_182 + 1;
+                                i_185 = i_185 + 1;
                                 continue l422;
                             };
                         };
@@ -2930,41 +2930,41 @@ fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/Strin
                         }
                         break $inline_core_prelude_array_wado_seq_cmp_u8__0: 1;
                     } == 2 {
-                        $licm_repr_193 = local.tee self_40(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_188, i_1)).repr;
-                        builtin::array_copy<u8>(local.tee $licm_repr_194(builtin::array_new<u8>(local.tee a_end(self_40.used))), 0, $licm_repr_193, 0, a_end);
-                        b_end = local.tee self_40(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_188, j)).used;
-                        self_40 = struct.new "core:prelude/string.wado//String" { repr: $licm_repr_193 = self_40.repr; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>(b_end)), 0, $licm_repr_193, 0, b_end); $array_clone_dst_5, used: b_end };
-                        builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_188, i_1, self_40);
-                        self_40 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $licm_repr_193(builtin::array_new<u8>(a_end)), 0, $licm_repr_194, 0, a_end); $licm_repr_193, used: a_end };
-                        builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_188, j, self_40);
+                        $licm_repr_190 = local.tee self_40(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_202, i_1)).repr;
+                        builtin::array_copy<u8>(local.tee $licm_repr_191(builtin::array_new<u8>(local.tee a_end(self_40.used))), 0, $licm_repr_190, 0, a_end);
+                        b_end = local.tee self_40(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_202, j)).used;
+                        self_40 = struct.new "core:prelude/string.wado//String" { repr: $licm_repr_190 = self_40.repr; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>(b_end)), 0, $licm_repr_190, 0, b_end); $array_clone_dst_5, used: b_end };
+                        builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_202, i_1, self_40);
+                        self_40 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $licm_repr_190(builtin::array_new<u8>(a_end)), 0, $licm_repr_191, 0, a_end); $licm_repr_190, used: a_end };
+                        builtin::array_set<ref "core:prelude/string.wado//String">($licm_repr_202, j, self_40);
                         if @unlikely($licm_arith_169) {
                             cold_path;
-                            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i_1, $licm_used_189, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree.wado:243"), used: 22 });
+                            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i_1, $licm_used_203, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree.wado:243"), used: 22 });
                             unreachable;
                         }
-                        a_end = builtin::array_get_value<i32>($licm_repr_190, i_1);
-                        if @unlikely(j >= $licm_used_189) {
+                        a_end = builtin::array_get_value<i32>($licm_repr_204, i_1);
+                        if @unlikely(j >= $licm_used_203) {
                             cold_path;
-                            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(j, $licm_used_189, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree.wado:244"), used: 22 });
+                            "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(j, $licm_used_203, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree.wado:244"), used: 22 });
                             unreachable;
                         }
-                        b_end = builtin::array_get_value<i32>($licm_repr_190, j);
-                        builtin::array_set<i32>($licm_repr_190, i_1, b_end);
-                        builtin::array_set<i32>($licm_repr_190, j, a_end);
+                        b_end = builtin::array_get_value<i32>($licm_repr_204, j);
+                        builtin::array_set<i32>($licm_repr_204, i_1, b_end);
+                        builtin::array_set<i32>($licm_repr_204, j, a_end);
                         if @unlikely($licm_arith_171) {
                             cold_path;
-                            "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i_1, $licm_used_191, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree.wado:247"), used: 22 });
+                            "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i_1, $licm_used_205, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree.wado:247"), used: 22 });
                             unreachable;
                         }
-                        a_end = builtin::array_get_value<bool>($licm_repr_192, i_1);
-                        if @unlikely(j >= $licm_used_191) {
+                        a_end = builtin::array_get_value<bool>($licm_repr_206, i_1);
+                        if @unlikely(j >= $licm_used_205) {
                             cold_path;
-                            "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(j, $licm_used_191, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree.wado:248"), used: 22 });
+                            "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(j, $licm_used_205, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree.wado:248"), used: 22 });
                             unreachable;
                         }
-                        b_end = builtin::array_get_value<bool>($licm_repr_192, j);
-                        builtin::array_set<bool>($licm_repr_192, i_1, b_end);
-                        builtin::array_set<bool>($licm_repr_192, j, a_end);
+                        b_end = builtin::array_get_value<bool>($licm_repr_206, j);
+                        builtin::array_set<bool>($licm_repr_206, i_1, b_end);
+                        builtin::array_set<bool>($licm_repr_206, j, a_end);
                     }
                     j = j + 1;
                     continue l408;

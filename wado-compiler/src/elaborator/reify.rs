@@ -76,7 +76,7 @@ use crate::elaborator::util::{
     settles_literal_patterns,
 };
 use crate::escape::{
-    bytes_value, checked_template_segment, string_value, unescape_byte, unescape_char,
+    bytes_value, lowered_template_segment, string_value, unescape_byte, unescape_char,
 };
 use crate::format_spec::FormatKind;
 use crate::hashmap;
@@ -4606,9 +4606,8 @@ impl<'a> Reify<'a> {
         };
         for part in &template.parts {
             match part {
-                // Annotate validated every segment's escapes.
                 ast::TemplatePart::String(raw) => {
-                    pieces.text(&checked_template_segment(raw, template.quote), raw);
+                    pieces.text(&lowered_template_segment(raw, template.quote), raw);
                 }
                 ast::TemplatePart::Interpolation { expr, format, .. } => {
                     let value = self.reify_expr(expr, ctx, None);
@@ -4737,12 +4736,11 @@ impl<'a> Reify<'a> {
             .interpolations()
             .map(|expr| self.reify_expr(expr, ctx, None))
             .collect();
-        // Annotate validated every segment's escapes.
         let segments: Vec<[String; 2]> = tagged
             .template
             .raw_segments()
             .into_iter()
-            .map(|raw| [checked_template_segment(&raw, tagged.template.quote), raw])
+            .map(|raw| [lowered_template_segment(&raw, tagged.template.quote), raw])
             .collect();
         let (literal, holes) =
             self.reify_template_literal(template_ty, values, &segments, span, ctx);

@@ -1,0 +1,10 @@
+// A range bound whose literal denotes no value is reported where it is written,
+// and the module it sits in is never lowered.
+export fn run() {
+    let n = match 'z' { '\q'..='z' => 1, _ => 0 };
+}
+
+__DATA__
+{
+    "compile_error": ":4:25: lexer error: invalid escape sequence: \\q"
+}

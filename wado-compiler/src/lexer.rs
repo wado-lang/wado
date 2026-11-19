@@ -14,6 +14,7 @@ use crate::ast::AstIdSpace;
 use crate::comment::{Comment, CommentKind};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::float_literal::FloatFormat;
+use crate::escape;
 use crate::primitive::PrimitiveType;
 use crate::token;
 use crate::token::{Delimiter, Position, Quote, Span, TemplateTokenPart, Token, TokenKind};
@@ -104,7 +105,7 @@ pub fn lex_interpolation(source: &str, origin: Position, space: AstIdSpace) -> L
             }
         }
     }
-    for error in &mut result.errors {
+    for error in result.errors.iter_mut().chain(&mut result.invalid_literals) {
         error.span = rebase_span(error.span, origin);
     }
     for comment in &mut result.comments {
@@ -188,7 +189,12 @@ pub struct LexResult {
     /// [`lex_interpolation`] rebased them onto the enclosing file.
     pub source: Arc<str>,
     pub tokens: Vec<Token>,
+    /// The errors that leave the token stream other than what the source means.
     pub errors: Vec<LexError>,
+    /// The literals whose text denotes no value (a bad escape), each still one
+    /// sound token, so a compile parses on past them and reports what follows.
+    /// Those inside a template's holes are here too, where the outer lex saw them.
+    pub invalid_literals: Vec<LexError>,
     pub comments: Vec<Comment>,
     pub shebang: Option<String>,
     pub data_section: Option<String>,
@@ -209,7 +215,7 @@ impl LexResult {
         for token in &mut self.tokens {
             token.span = token.span.in_space(space);
         }
-        for error in &mut self.errors {
+        for error in self.errors.iter_mut().chain(&mut self.invalid_literals) {
             error.span = error.span.in_space(space);
         }
         for comment in &mut self.comments {
@@ -249,12 +255,14 @@ pub(crate) struct Lexer<'a> {
     shebang: Option<String>,
     /// Recovered errors, in source order. Drained into [`LexResult::errors`].
     errors: Vec<LexError>,
+    /// Drained into [`LexResult::invalid_literals`].
+    invalid_literals: Vec<LexError>,
     /// How many templates enclose the hole being scanned.
     template_depth: u32,
 }
 
 /// Structured lexer error. Pair with [`LexError::span`] for source location.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LexError {
     pub kind: LexErrorKind,
     pub span: Span,
@@ -299,6 +307,9 @@ pub enum LexErrorKind {
     InvalidRadixDigit { digit: char, literal: &'static str },
     /// A CR inside a literal that no LF follows.
     BareCarriageReturn,
+    /// A well-delimited literal whose text denotes no value (a bad escape, a
+    /// char literal of two characters), with why. The token stays sound.
+    InvalidLiteral(String),
 }
 
 impl std::fmt::Display for LexError {
@@ -338,7 +349,28 @@ impl std::fmt::Display for LexError {
             LexErrorKind::BareCarriageReturn => {
                 write!(f, "a bare CR in a literal is not a line break; write `\\r`")
             }
+            LexErrorKind::InvalidLiteral(why) => f.write_str(why),
         }
+    }
+}
+
+/// Whether a literal token's text denotes a value, and why not. A template's
+/// holes are lexed again where they are parsed, so only its segments are here.
+fn literal_value_check(kind: &TokenKind) -> Result<(), String> {
+    match kind {
+        TokenKind::StringLit { raw, quote } => escape::string_value(raw, *quote).map(drop),
+        TokenKind::ByteStringLit { raw, quote } => escape::bytes_value(raw, *quote).map(drop),
+        TokenKind::CharLit(raw) => escape::unescape_char(raw).map(drop),
+        TokenKind::ByteCharLit(raw) => escape::unescape_byte(raw).map(drop),
+        TokenKind::TemplateStringLit { parts, quote } => {
+            parts.iter().try_for_each(|part| match part {
+                TemplateTokenPart::Literal(text) => {
+                    escape::template_segment_value(text, *quote).map(drop)
+                }
+                TemplateTokenPart::Interpolation { .. } => Ok(()),
+            })
+        }
+        _ => Ok(()),
     }
 }
 
@@ -480,7 +512,22 @@ impl<'a> Lexer<'a> {
             comments: Vec::new(),
             shebang: None,
             errors: Vec::new(),
+            invalid_literals: Vec::new(),
             template_depth: 0,
+        }
+    }
+
+    /// Record `kind`'s text as an invalid literal at `span`, unless an error
+    /// was recovered since `errors` counted them: a literal already in error
+    /// reports that one, not what its text lacks.
+    fn check_literal(&mut self, errors: usize, kind: &TokenKind, span: Span) {
+        if self.errors.len() == errors
+            && let Err(why) = literal_value_check(kind)
+        {
+            self.invalid_literals.push(LexError {
+                kind: LexErrorKind::InvalidLiteral(why),
+                span,
+            });
         }
     }
 
@@ -490,7 +537,9 @@ impl<'a> Lexer<'a> {
 
         let mut tokens = Vec::new();
         loop {
+            let errors = self.errors.len();
             let token = self.next_token();
+            self.check_literal(errors, &token.kind, token.span);
             let is_eof = token.kind == TokenKind::Eof;
             tokens.push(token);
             if is_eof {
@@ -502,6 +551,7 @@ impl<'a> Lexer<'a> {
             source: Arc::from(self.input),
             tokens,
             errors: self.errors,
+            invalid_literals: self.invalid_literals,
             comments: self.comments,
             shebang: self.shebang,
             data_section: self.data_section,
@@ -549,28 +599,16 @@ impl<'a> Lexer<'a> {
             );
         };
 
+        if let Some(kind) = self.lex_literal(|lexer, quote| Some(lexer.lex_template_string(quote)))
+        {
+            return Token::new(kind, self.span_from(start, start_line, start_column));
+        }
         let kind = match ch {
-            // `b"..."` / `b'x'` — before the identifier rule so `b` is not an ident.
-            'b' if self.peek_second() == Some('"') => self.lex_byte_string(Quote::Cooked),
-            'b' if let Some((hashes, Delimiter::Quote)) = self.hash_run_then_delimiter(1) => {
-                self.lex_byte_string(Quote::Raw { hashes })
-            }
-            'b' if self.peek_second() == Some('\'') => self.lex_byte_char(),
-
             // Identifiers and keywords
             c if is_ident_start(c) => self.lex_ident_or_keyword(),
 
             // Numbers
             '0'..='9' => self.lex_number(),
-
-            // Strings
-            '"' => self.lex_string(Quote::Cooked),
-
-            // Character literals
-            '\'' => self.lex_char(),
-
-            // Template strings
-            '`' => self.lex_template_string(Quote::Cooked),
 
             // Punctuation and operators
             '(' => {
@@ -793,16 +831,10 @@ impl<'a> Lexer<'a> {
                     _ => TokenKind::Ampersand,
                 }
             }
-            '#' => match self.hash_run_then_delimiter(0) {
-                Some((hashes, Delimiter::Backtick)) => {
-                    self.lex_template_string(Quote::Raw { hashes })
-                }
-                Some((hashes, Delimiter::Quote)) => self.lex_string(Quote::Raw { hashes }),
-                None => {
-                    self.advance();
-                    TokenKind::Hash
-                }
-            },
+            '#' => {
+                self.advance();
+                TokenKind::Hash
+            }
 
             _ => {
                 // Unrecognised character: consume it, record an error, and
@@ -1568,6 +1600,15 @@ impl<'a> Lexer<'a> {
                 }
                 continue;
             }
+            // A word is read whole, so a `b` inside it opens no byte literal.
+            if scan == Scan::Code && self.peek_char().is_some_and(is_ident_continue) {
+                let word_start = self.pos;
+                self.advance_while(is_ident_continue);
+                for ch in self.input[word_start..self.pos].chars() {
+                    push(&mut expr, &mut format, ch);
+                }
+                continue;
+            }
             let ch = self.advance().expect("the cursor is on a character");
             push(&mut expr, &mut format, ch);
 
@@ -1639,6 +1680,7 @@ impl<'a> Lexer<'a> {
     /// Consume the literal starting at the cursor, if one does, returning its
     /// source. Wado has no lifetimes, so `'` always opens a char literal.
     fn skip_nested_literal(&mut self) -> Option<&'a str> {
+        let open = self.position();
         let before = self.pos;
         let errors = self.errors.len();
         let template = |lexer: &mut Self, quote| {
@@ -1652,19 +1694,37 @@ impl<'a> Lexer<'a> {
             lexer.template_depth -= 1;
             Some(kind)
         };
-        match self.peek_char()? {
-            '"' => self.lex_string(Quote::Cooked),
-            '\'' => self.lex_char(),
-            '`' => template(self, Quote::Cooked)?,
-            '#' => match self.hash_run_then_delimiter(0)? {
-                (hashes, Delimiter::Backtick) => template(self, Quote::Raw { hashes })?,
-                (hashes, Delimiter::Quote) => self.lex_string(Quote::Raw { hashes }),
-            },
-            _ => return None,
-        };
-        // The parser lexes the hole's source again, and reports its errors then.
+        let kind = self.lex_literal(template)?;
+        let span = self.span_from(open.offset, open.line, open.column);
+        self.check_literal(errors, &kind, span);
+        // The parser lexes the hole's source again, and reports its errors
+        // then. An invalid literal stays, since that lex does not report it.
         self.errors.truncate(errors);
         Some(&self.input[before..self.pos])
+    }
+
+    /// Lex the literal starting at the cursor, if one does. `template` lexes a
+    /// template string, or declines to, leaving the cursor where it was.
+    fn lex_literal(
+        &mut self,
+        template: impl FnOnce(&mut Self, Quote) -> Option<TokenKind>,
+    ) -> Option<TokenKind> {
+        match self.peek_char()? {
+            // Before any identifier rule, so the `b` is no identifier.
+            'b' if self.peek_second() == Some('"') => Some(self.lex_byte_string(Quote::Cooked)),
+            'b' if let Some((hashes, Delimiter::Quote)) = self.hash_run_then_delimiter(1) => {
+                Some(self.lex_byte_string(Quote::Raw { hashes }))
+            }
+            'b' if self.peek_second() == Some('\'') => Some(self.lex_byte_char()),
+            '"' => Some(self.lex_string(Quote::Cooked)),
+            '\'' => Some(self.lex_char()),
+            '`' => template(self, Quote::Cooked),
+            '#' => match self.hash_run_then_delimiter(0)? {
+                (hashes, Delimiter::Backtick) => template(self, Quote::Raw { hashes }),
+                (hashes, Delimiter::Quote) => Some(self.lex_string(Quote::Raw { hashes })),
+            },
+            _ => None,
+        }
     }
 
     fn lex_char(&mut self) -> TokenKind {
@@ -2140,12 +2200,25 @@ test data";
         assert_matches!(tokens[0].kind, TokenKind::Hash);
     }
 
+    /// The tokens of `source`, whose one error is a literal's text, at `column`.
+    fn tokens_past_invalid_literal(source: &str, column: usize) -> Vec<Token> {
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "{:?}", r.errors);
+        assert_matches!(
+            r.invalid_literals.as_slice(),
+            [e] if e.span.column == column,
+            "{:?}",
+            r.invalid_literals
+        );
+        r.tokens
+    }
+
     /// A malformed escape must not consume the delimiter that follows it: the
-    /// literal still terminates and the bad escape is reported where a plain
-    /// string's is — by the unescaper, not as "unterminated".
+    /// literal still terminates, and the bad escape is reported on its own
+    /// literal, not as "unterminated".
     #[test]
     fn test_template_malformed_unicode_escape_keeps_delimiter() {
-        let short = tokens(r"`\u12`");
+        let short = tokens_past_invalid_literal(r"`\u12`", 1);
         assert_matches!(
             &short[0].kind,
             TokenKind::TemplateStringLit { parts, .. }
@@ -2154,7 +2227,7 @@ test data";
 
         // `\u{…}` scans hex digits only, so an unclosed brace stops at the
         // backtick instead of running to EOF.
-        let unclosed = tokens(r"`\u{12` + 1");
+        let unclosed = tokens_past_invalid_literal(r"`\u{12` + 1", 1);
         assert_matches!(
             &unclosed[0].kind,
             TokenKind::TemplateStringLit { parts, .. }
@@ -2163,9 +2236,39 @@ test data";
         assert_matches!(unclosed[1].kind, TokenKind::Plus);
 
         // A plain string behaves the same way.
-        let plain = tokens(r#""\u{12" + 1"#);
+        let plain = tokens_past_invalid_literal(r#""\u{12" + 1"#, 1);
         assert_matches!(&plain[0].kind, TokenKind::StringLit { raw, .. } if raw == r"\u{12");
         assert_matches!(plain[1].kind, TokenKind::Plus);
+    }
+
+    /// Each literal whose text denotes no value is reported where it opens, one
+    /// in a template's hole included, and a literal already in error reports
+    /// only that.
+    #[test]
+    fn test_invalid_literal_text_is_reported_per_literal() {
+        let r = lex(r#"'ab' b'\u{41}' "ok" b"é" `\q${x}` "\u{110000}" `${"\q"}`"#);
+        assert!(r.errors.is_empty(), "{:?}", r.errors);
+        let columns: Vec<usize> = r.invalid_literals.iter().map(|e| e.span.column).collect();
+        assert_eq!(columns, [1, 6, 21, 26, 35, 51], "{:?}", r.invalid_literals);
+
+        let hole = lex(r##"`${b"é" + b'\u{41}' + ab"ok" + b#"é"#}`"##);
+        assert!(hole.errors.is_empty(), "{:?}", hole.errors);
+        let columns: Vec<usize> = hole
+            .invalid_literals
+            .iter()
+            .map(|e| e.span.column)
+            .collect();
+        assert_eq!(columns, [4, 11, 32], "{:?}", hole.invalid_literals);
+
+        let unterminated = lex(r#""\q"#);
+        assert!(unterminated.invalid_literals.is_empty());
+        assert_matches!(
+            unterminated.errors.as_slice(),
+            [LexError {
+                kind: LexErrorKind::UnterminatedString,
+                ..
+            }]
+        );
     }
 
     /// The expression source and format specifier the interpolation scanner

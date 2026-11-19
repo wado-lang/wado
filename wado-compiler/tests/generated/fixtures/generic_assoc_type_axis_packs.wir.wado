@@ -3127,9 +3127,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     let fill_len: i32;
     let encoded: ref "core:prelude/string.wado//String";
     let k: i32;
-    let $licm_used_24: i32;
-    let $licm_repr_25: ref Array<u8>;
     let $licm_arith_26: i32;
+    let $licm_used_27: i32;
+    let $licm_repr_28: ref Array<u8>;
     if local.tee fill_len("core:prelude/primitive.wado/char::len_utf8$sroa[self.value]"(c)) == 1 {
         c = c & 255;
         fill_len = 0;
@@ -3145,18 +3145,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     }
     "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee encoded(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(4), used: 0 }), c);
     c = 0;
-    $licm_used_24 = encoded.used;
-    $licm_repr_25 = encoded.repr;
+    $licm_used_27 = encoded.used;
+    $licm_repr_28 = encoded.repr;
     b380: block {
         l381: loop {
             break_if b380 c >= n;
             k = 0;
             $licm_arith_26 = at + (c * fill_len);
-            if fill_len <= $licm_used_24 {
+            if fill_len <= $licm_used_27 {
                 b383: block {
                     l384: loop {
                         break_if b383 k >= fill_len;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + k, builtin::array_get_value<u8>($licm_repr_25, k));
+                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + k, builtin::array_get_value<u8>($licm_repr_28, k));
                         k = k + 1;
                         continue l384;
                     };
@@ -3165,11 +3165,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
                 b385: block {
                     l386: loop {
                         break_if b385 k >= fill_len;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + k, if @unlikely(k >= $licm_used_24) {
+                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + k, if @unlikely(k >= $licm_used_27) {
                             cold_path;
-                            "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(k, $licm_used_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:278"), used: 28 });
+                            "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(k, $licm_used_27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:278"), used: 28 });
                             unreachable;
-                        }; builtin::array_get_value<u8>($licm_repr_25, k));
+                        }; builtin::array_get_value<u8>($licm_repr_28, k));
                         k = k + 1;
                         continue l386;
                     };
@@ -3370,11 +3370,11 @@ fn "generic_assoc_type_axis_packs.wado/generic_assoc_type_axis_packs.wado/Cpu^ge
     let $sroa_$iter_0_start_120: i32;
     let $sroa_$iter_1_start_124: i32;
     let $sroa_$iter_2_start_128: i32;
-    let $licm_repr_138: ref Array<f32>;
+    let $licm_repr_149: ref Array<f32>;
     self.calls = self.calls + 1;
     data = struct.new "core:prelude/list.wado//List<f32>" { repr: array.new_fixed<f32>(), used: 0 };
     $sroa_$iter_0_start_120 = 0;
-    $licm_repr_138 = data.repr;
+    $licm_repr_149 = data.repr;
     b408: block {
         l409: loop {
             break_if b408 $sroa_$iter_0_start_120 >= 1;
@@ -3403,12 +3403,12 @@ fn "generic_assoc_type_axis_packs.wado/generic_assoc_type_axis_packs.wado/Cpu^ge
                             continue l413;
                         };
                     };
-                    if @unlikely(local.tee current_73(data.used) >= builtin::array_len($licm_repr_138)) {
+                    if @unlikely(local.tee current_73(data.used) >= builtin::array_len($licm_repr_149)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<f32>::grow"(data);
-                        $licm_repr_138 = data.repr;
+                        $licm_repr_149 = data.repr;
                     }
-                    builtin::array_set<f32>($licm_repr_138, current_73, sum);
+                    builtin::array_set<f32>($licm_repr_149, current_73, sum);
                     data.used = current_73 + 1;
                     continue l411;
                 };

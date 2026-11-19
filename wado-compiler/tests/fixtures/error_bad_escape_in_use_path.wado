@@ -1,0 +1,12 @@
+// A `use` path whose escape denotes no text names no module either: the
+// lexer's error is reported ahead of the load that cannot find it.
+use { f } from "./m\q.wado";
+
+export fn run() {
+    f();
+}
+
+__DATA__
+{
+    "compile_error": ":3:16: lexer error: invalid escape sequence: \\q"
+}

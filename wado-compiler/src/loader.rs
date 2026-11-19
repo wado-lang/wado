@@ -1142,7 +1142,12 @@ fn format_stdlib_error(
 
 fn parse_bind_stdlib(label: &str, source: &str) -> Module {
     let lex_result = lex(source);
-    if let Some(e) = lex_result.errors.first() {
+    if let Some(e) = lex_result
+        .errors
+        .iter()
+        .chain(&lex_result.invalid_literals)
+        .next()
+    {
         // Bundled stdlib must always lex cleanly; a recovered lex error here
         // is a compiler bug, so fail loudly rather than degrade.
         panic!(
@@ -1569,7 +1574,19 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             let _span = self.logger.span(&format!("parse {tentative_entry_source}"));
             self.parse_source(entry_source, &tentative_entry_source)?
         };
+        self.report_invalid_literals(entry_ast.invalid_literals(), &tentative_entry_source);
         self.load_all_inner(entry_ast, tentative_entry_source).await
+    }
+
+    /// Report a module's invalid literals as it joins the load, or as its parse
+    /// fails, ahead of whatever a later step fails on. They reach the host
+    /// uncounted, since the analysis runs on past them and bails at its
+    /// logger's first error; the module is never complete.
+    fn report_invalid_literals(&self, invalid_literals: &[LexError], module_source: &ModuleSource) {
+        let file = module_source.source_path();
+        for e in invalid_literals {
+            self.host.emit_diagnostic(e.diagnostic(Some(&file)));
+        }
     }
 
     /// Variant of [`Self::load_all`] that takes a pre-parsed entry module
@@ -1692,6 +1709,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     self.parse_source_with(&source, &module_source, skip_generated_bodies)?
                 }
             };
+            self.report_invalid_literals(ast.invalid_literals(), &module_source);
 
             // Collect its imports (before bind)
             self.collect_imports(&ast, &module_source, &mut pending, &mut wasm_imports)?;
@@ -2470,10 +2488,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         module_source: &ModuleSource,
         skip_generated_bodies: bool,
     ) -> Result<(Module, Option<Parser>), LoadError> {
-        let lex_result = lex(source);
+        let mut lex_result = lex(source);
         if let Some(e) = lex_result.errors.first() {
             return Err(LoadError::from_lex_error(e, module_source.clone()));
         }
+        let invalid_literals = std::mem::take(&mut lex_result.invalid_literals);
 
         let mut parser = Parser::from_lex_no_trivia(lex_result);
         if skip_generated_bodies {
@@ -2481,10 +2500,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
         // Batch loading is fail-fast: report the first recovered syntax error
         // as a load error so compilation never proceeds on a partial AST.
-        let ast = parser.parse();
+        let mut ast = parser.parse();
         if let Some(e) = parser.take_errors().first() {
+            self.report_invalid_literals(&invalid_literals, module_source);
             return Err(LoadError::from_parse_error(e, module_source.clone()));
         }
+        ast.set_invalid_literals(invalid_literals);
         Ok((ast, parser.skipped_bodies().then_some(parser)))
     }
 

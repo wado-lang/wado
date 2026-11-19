@@ -76,7 +76,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         template: &ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
     ) -> Option<TemplateShape> {
-        let parts = self.resolve_template_parts(template, ctx)?;
+        let parts = self.resolve_template_parts(template, ctx);
         let mut sound = true;
         let holes: Vec<TemplateHole> = parts
             .holes

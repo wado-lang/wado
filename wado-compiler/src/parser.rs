@@ -1778,10 +1778,9 @@ impl Parser {
         let TokenKind::StringLit { raw, quote } = token.kind else {
             unreachable!("the caller matched a string literal")
         };
-        // An expression's string is decoded later, so only where a string is
-        // decoded here does a bad escape stop the parse.
-        let value = string_value(&raw, quote)
-            .map_err(|message| self.restriction_at_span(token.span, &message))?;
+        // The lexer reported a text that denotes no string, which fails the
+        // compile; the raw text stands in for it meanwhile.
+        let value = string_value(&raw, quote).unwrap_or_else(|_| raw.clone());
         Ok(StrLit { value, raw, quote })
     }
 
