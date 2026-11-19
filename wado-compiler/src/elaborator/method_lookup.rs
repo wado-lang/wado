@@ -2553,12 +2553,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // owed once the receiver's variables settle.
                 None => {
                     if let Some(recv_id) = receiver_type_id {
-                        let derived = self.try_auto_derived_method_match(
-                            method_name,
-                            recv_id,
-                            DerivedAt::Declaration,
-                        );
-                        if derived.is_some() && self.names_pending_var(recv_id) {
+                        let open = self.type_has_infer_hole(recv_id);
+                        let at = if open {
+                            DerivedAt::Declaration
+                        } else {
+                            DerivedAt::Instance
+                        };
+                        let derived = self.try_auto_derived_method_match(method_name, recv_id, at);
+                        if derived.is_some() && open {
                             self.defer_derived_bound(method_name, recv_id, span);
                         }
                         found.extend(derived);
