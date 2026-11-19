@@ -4,6 +4,7 @@
 
 struct core:prelude//$Resource {  // TypeId(0)
     mut value: i32,
+    mut backing: ref null eq,
 }
 
 variant cm_variant_with_own_payload_param.wado//Target {  // TypeId(1)
@@ -40,16 +41,20 @@ global global:core:builtin::$unit_case$cm_variant_with_own_payload_param.wado//T
 
 fn "cm_variant_with_own_payload_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(target) with Gfx {
     let $target_p_0: i32;
+    let $local_3: ref null "core:prelude//$Resource";
     $target_p_0 = 0;
     if ref.test "cm_variant_with_own_payload_param.wado//Target::Dev"(target) {
-        $target_p_0 = ref.cast "cm_variant_with_own_payload_param.wado//Target::Dev"(target).payload_0.value;
+        if @unlikely(ref.is_null(local.tee $local_3(ref.cast "cm_variant_with_own_payload_param.wado//Target::Dev"(target).payload_0).backing) == 0) {
+            unreachable;
+        }
+        $target_p_0 = $local_3.value;
     } else {
     }
     return "wasi/$wasi:demo/gfx@0.1.0#pick"(target.discriminant, $target_p_0);
 }
 
 fn "cm_variant_with_own_payload_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"() with Gfx {
-    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:demo/gfx@0.1.0#get-device"() };
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:demo/gfx@0.1.0#get-device"(), backing: ref.null eq };
 }
 
 fn "cm_variant_with_own_payload_param.wado/$cm_export__run"() {

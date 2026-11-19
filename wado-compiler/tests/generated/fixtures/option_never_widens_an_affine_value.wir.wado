@@ -40,8 +40,12 @@ fn "option_never_widens_an_affine_value.wado/$cm_export__run"() {
     let $sroa_$pattern_temp_0_1_20: i32;
     $sroa_$pattern_temp_0_0_19 = builtin::i32_wrap_i64(local.tee $cm_pair_9("wasi/future-new:s32"()));
     $sroa_$pattern_temp_0_1_20 = builtin::i32_wrap_i64($cm_pair_9 >> 32_i64);
-    "wasi/future-drop-readable:s32"($sroa_$pattern_temp_0_0_19);
-    drop("option_never_widens_an_affine_value.wado/$cm_future_write_i32"($sroa_$pattern_temp_0_1_20, 1));
+    "wasi/future-drop-readable:s32"(if @unlikely(ref.is_null(ref.null eq) == 0) {
+        unreachable;
+    }; $sroa_$pattern_temp_0_0_19);
+    drop("option_never_widens_an_affine_value.wado/$cm_future_write_i32"(if @unlikely(ref.is_null(ref.null eq) == 0) {
+        unreachable;
+    }; $sroa_$pattern_temp_0_1_20, 1));
     "wasi/task-return"(0);
 }
 

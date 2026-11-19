@@ -4,6 +4,7 @@
 
 struct core:prelude//$Resource {  // TypeId(0)
     mut value: i32,
+    mut backing: ref null eq,
 }
 
 struct cm_resource_only_in_record_param.wado//Slot {  // TypeId(1)
@@ -31,11 +32,13 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_resource_only_in_record_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#fill"(s) with Gfx {
-    return "wasi/$wasi:demo/gfx@0.1.0#fill"(s.device.value);
+    return "wasi/$wasi:demo/gfx@0.1.0#fill"(let $host_resource_1: ref null "core:prelude//$Resource"; if @unlikely(ref.is_null(local.tee $host_resource_1(s.device).backing) == 0) {
+        unreachable;
+    }; $host_resource_1.value);
 }
 
 fn "cm_resource_only_in_record_param.wado/$cm_binding__wasi:demo/maker@0.1.0#get-device"() with Maker {
-    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:demo/maker@0.1.0#get-device"() };
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:demo/maker@0.1.0#get-device"(), backing: ref.null eq };
 }
 
 fn "cm_resource_only_in_record_param.wado/$cm_export__run"() {
