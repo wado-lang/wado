@@ -216,6 +216,10 @@ some trait declared with a receiver went there, so an unrelated trait decided
 the call, and a name some trait declared without one kept a blanket's instance
 method out of reach. Asking the type itself removes both classes.
 
+[WEP: Omitted Type Arguments Are Inference Variables](./wep-2026-11-19-omitted-type-arguments.md)
+replaces the listed instances in this passage and the next with inference
+variables.
+
 A generic type spelled without its arguments (`Pair::span(&p)`) names no one
 instance, so the question is what its instances answer the name with. The
 impls written for the type's head are candidates whatever instance each names.
