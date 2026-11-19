@@ -1235,23 +1235,7 @@ fn match_target(
     let mut each = |a: &SolverType, b: &SolverType| match_target(a, b, bindings, deferred);
     match (target, ty) {
         (SolverType::Param(index), _) => {
-            let slot = &mut bindings[*index as usize];
-            match slot {
-                // Each place the parameter meets says what it may be; the
-                // binding keeps what all of them say.
-                Some(Binding::One(bound)) => match bound.meet(ty) {
-                    Some(met) => {
-                        *slot = Some(Binding::One(met));
-                        true
-                    }
-                    None => false,
-                },
-                Some(Binding::Pack(_)) => false,
-                None => {
-                    *slot = Some(Binding::One(ty.clone()));
-                    true
-                }
-            }
+            bind(&mut bindings[*index as usize], Binding::One(ty.clone()))
         }
         // An unsettled type may be any instance of the target, so whatever the
         // target leaves to its parameters stays unsettled too.
@@ -1282,15 +1266,19 @@ fn match_target(
             Some((SolverType::Pack(index), prefix)) => {
                 ty_elems.len() >= prefix.len()
                     && prefix.iter().zip(ty_elems).all(|(a, b)| each(a, b))
-                    && bind_pack(&mut bindings[*index as usize], &ty_elems[prefix.len()..])
+                    && bind(
+                        &mut bindings[*index as usize],
+                        Binding::Pack(ty_elems[prefix.len()..].to_vec()),
+                    )
             }
             _ => {
                 elems.len() == ty_elems.len() && elems.iter().zip(ty_elems).all(|(a, b)| each(a, b))
             }
         },
-        (SolverType::Pack(index), SolverType::Tuple(ty_elems)) => {
-            bind_pack(&mut bindings[*index as usize], ty_elems)
-        }
+        (SolverType::Pack(index), SolverType::Tuple(ty_elems)) => bind(
+            &mut bindings[*index as usize],
+            Binding::Pack(ty_elems.clone()),
+        ),
         (SolverType::Projection { .. }, _) => {
             deferred.push((target.clone(), ty.clone()));
             true
@@ -1312,21 +1300,22 @@ fn match_target(
     }
 }
 
-/// Bind a pack to `elems`, or, where it is bound already, keep what both say
-/// at each element, as a parameter's binding does.
-fn bind_pack(slot: &mut Option<Binding>, elems: &[SolverType]) -> bool {
-    let met = match slot {
-        None => Some(elems.to_vec()),
-        Some(Binding::Pack(bound)) if bound.len() == elems.len() => {
-            bound.iter().zip(elems).map(|(a, b)| a.meet(b)).collect()
-        }
-        Some(Binding::Pack(_) | Binding::One(_)) => None,
+/// Bind `slot` to `binding`. Each place a parameter or pack meets says what it
+/// may be, so a bound slot keeps the meet of both, and fails where none is.
+fn bind(slot: &mut Option<Binding>, binding: Binding) -> bool {
+    let met = match (slot.take(), binding) {
+        (None, binding) => Some(binding),
+        (Some(Binding::One(bound)), Binding::One(ty)) => bound.meet(&ty).map(Binding::One),
+        (Some(Binding::Pack(bound)), Binding::Pack(elems)) if bound.len() == elems.len() => bound
+            .iter()
+            .zip(&elems)
+            .map(|(a, b)| a.meet(b))
+            .collect::<Option<_>>()
+            .map(Binding::Pack),
+        (Some(Binding::One(_) | Binding::Pack(_)), _) => None,
     };
-    let Some(met) = met else {
-        return false;
-    };
-    *slot = Some(Binding::Pack(met));
-    true
+    *slot = met;
+    slot.is_some()
 }
 
 /// Whether `def`'s target meets `ty` without a projection left to decide. A
