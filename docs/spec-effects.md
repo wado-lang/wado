@@ -110,8 +110,6 @@ A parameter may declare a default, which the call fills in ([Restrictions](./spe
 Beyond a name, parameters and a return type, an operation declares nothing else. Each of these is a compile error, for the reason given:
 
 - A body on an operation a Component Model import backs (one carrying `#[cm(...)]`, and every operation of a resource the host implements). With no handler installed, the host answers it, so the body could never run.
-- A body on a resource's `drop`. The body would take the resource, and its own drop would dispatch to the body again. With no handler installed, a drop of a resource no host implements already ends with the value backing it ([Resources as Effects](#resources-as-effects)).
-- A body on an operation of a generic resource. A default is one function, which the resource's instances cannot share.
 - A body on an `async` operation. A call to it evaluates to an `AsyncCall`, which a plain body does not produce.
 - A `self` receiver on an `interface` operation. It is called as `Effect::op(args)`, with no receiver to bind it to.
 - A `with` clause. A call demands only the operation's interface, so one would let a default perform a capability its caller never declared. A default has to be performable wherever it is dispatched, which means code that performs no effects, or `#[ambient]` code.
@@ -316,7 +314,11 @@ host implementation, and a guest value backs every handle of it
 answers its operations. With none installed, an operation runs its default, and
 one without a default traps, as an interface operation does
 ([Default Implementations](#default-implementations)). Its `self` is the
-resource.
+resource. A default of `drop` releases the resource it takes, so its body does
+not drop that resource again.
+
+> Not yet implemented: a default on `drop`, and a default on an operation of a
+> generic resource.
 
 <!-- {"fixture":"spec_effects_resource.wado"} -->
 

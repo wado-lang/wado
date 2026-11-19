@@ -62,12 +62,9 @@ without a host implementation. A default is what answers when no handler is
 installed. Where there is a host, the host already answers then, so a body
 there would be a second answer.
 
-Two operations of such a resource still take none, as consequences of this one:
-
-- `drop`, since the default would take the resource and its own drop would
-  dispatch to the default again. Unhandled, a drop already ends with the value.
-- An operation of a generic resource, since a default is one function, as an
-  interface operation's is, and the resource's instances cannot share it.
+A default of `drop` takes the resource it releases, so its body does not drop
+that resource again. Were it dropped there, the drop would dispatch to the
+default once more and never end.
 
 ### A resource with no host is affine
 
@@ -115,6 +112,12 @@ optimizer unboxes a handle to its `i32` only where no backed box reaches it.
 - [x] Reject an export signature mentioning a resource with no host
   implementation.
 - [x] State the rules in `spec-components.md` and `spec-effects.md`.
+- [ ] Admit a default on `drop`. Its body ends without dropping the resource it
+  takes, and with no handler installed the default runs on every drop, a
+  scope exit's included. The rejection it meets today goes.
+- [ ] Admit a default on an operation of a generic resource, made once per
+  instance of the resource as the resource's operations are. The rejection it
+  meets today goes.
 
 ## Related WEPs
 

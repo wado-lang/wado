@@ -1,6 +1,4 @@
-// A `drop` operation takes no default: the drop of the resource it takes would
-// dispatch to it again, and unhandled, a drop already ends with the guest
-// value the handle holds.
+// A default on `drop` is adopted but not yet built, so it is rejected for now.
 
 resource Counter {
     fn drop(self) {
@@ -10,4 +8,4 @@ resource Counter {
 export fn run() {}
 
 __DATA__
-{"compile_error": "`Counter::drop` cannot carry a default implementation: the drop of the resource it takes would dispatch to it again"}
+{"compile_error": "`Counter::drop` cannot carry a default implementation: one on `drop` is not supported yet"}

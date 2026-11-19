@@ -2420,8 +2420,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .as_ref()
                         .filter(|_| generic_resource)
                         .map(|b| b.span),
-                    "cannot carry a default implementation: a default is one function, which \
-                     a generic resource's instances cannot share",
+                    "cannot carry a default implementation: one on an operation of a generic \
+                     resource is not supported yet",
                 ),
                 (
                     method
@@ -2429,9 +2429,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .as_ref()
                         .filter(|_| is_resource && method.name == "drop")
                         .map(|b| b.span),
-                    "cannot carry a default implementation: the drop of the resource it takes \
-                     would dispatch to it again; unhandled, a drop already ends with the guest \
-                     value the handle holds",
+                    "cannot carry a default implementation: one on `drop` is not supported yet",
                 ),
                 (
                     (method.is_async && method.body.is_some()).then_some(method.span),
