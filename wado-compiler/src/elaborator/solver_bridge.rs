@@ -166,9 +166,12 @@ enum Binder {
 /// Only a question whose answer is checked again once inference settles may
 /// ask with them.
 #[derive(Clone, Copy)]
-enum Variables {
+enum Variables<'a> {
     Refused,
-    Asked,
+    /// `literal` says which variables stand for a numeric literal's type.
+    Asked {
+        literal: &'a dyn Fn(TypeId) -> bool,
+    },
 }
 
 /// The interning both directions share, so an impl lowered from its header
@@ -796,7 +799,10 @@ impl Lowering {
                 .ok_or(Unsaid::Open),
             ResolvedType::InferVar(var) => match variables {
                 Variables::Refused => Err(Unsaid::Open),
-                Variables::Asked => Ok(SolverType::Var(Var::Infer(var.0))),
+                Variables::Asked { literal } => Ok(SolverType::Var(Var::Infer {
+                    id: var.0,
+                    literal: literal(id),
+                })),
             },
             ResolvedType::Unknown | ResolvedType::Error => Err(Unsaid::Failed),
         }
@@ -2562,7 +2568,10 @@ impl SolverBridge {
             Some(def) => Some(self.lowering.known_trait(def)?),
             None => None,
         };
-        let (env, ty) = self.env_for(tysys, ctx, type_id, Variables::Asked).ok()?;
+        let literal = |var: TypeId| ctx.awaits_literal(var);
+        let (env, ty) = self
+            .env_for(tysys, ctx, type_id, Variables::Asked { literal: &literal })
+            .ok()?;
         let ty = match through_ref {
             Some(is_mut) => SolverType::Ref {
                 is_mut,

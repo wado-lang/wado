@@ -62,14 +62,14 @@ pub enum SolverType {
 /// impl parameter while it unifies the impl's target with the type asked.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Var {
-    Infer(u32),
+    /// The elaborator's variable `id`. `literal` marks one standing for a
+    /// numeric literal's type: a default left to settle last, which the one
+    /// impl that could answer may choose earlier.
+    Infer { id: u32, literal: bool },
     /// The parameter `param` of the impl matched at the question `depth`
     /// deep. Nothing minted there outlives that match, so no other variable
     /// alive shares the name.
-    Local {
-        depth: u32,
-        param: u32,
-    },
+    Local { depth: u32, param: u32 },
 }
 
 /// An associated type of a trait: `Mul::Output`.

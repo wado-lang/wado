@@ -41,6 +41,10 @@ pub struct Candidate {
     /// Whether it applies at every instance of the receiver's inference
     /// variables, rather than at some.
     pub known: bool,
+    /// Whether its target meets the receiver at every instance of those
+    /// variables, so that committing to it settles none of them. One not
+    /// [`Self::known`] for a bound alone does.
+    pub settles_nothing: bool,
 }
 
 /// What the order says about a candidate set. Every variant but [`Self::One`]
@@ -88,10 +92,17 @@ pub fn rank_open(candidates: &[Candidate]) -> Selection {
     if unknown.is_empty() {
         return rank(candidates);
     }
-    if candidates.len() == 1 {
-        return Selection::One(0);
-    }
     let undecided = Selection::Undecided((0..candidates.len()).collect());
+    // The one impl that may answer is committed to only where that settles no
+    // variable: choosing one from it would let an impl written elsewhere turn
+    // the call into an error.
+    if let [only] = candidates {
+        return if only.settles_nothing {
+            Selection::One(0)
+        } else {
+            undecided
+        };
+    }
     // An argument list an impl answers at only once the variables settle, one
     // naming the impl's own parameters, names no overload set yet.
     let open = |arg: &SolverType| arg.is_open() || arg.mentions(&|_| true);
@@ -255,6 +266,7 @@ mod tests {
                 opens_trait_args: false,
                 is_variadic,
                 known: true,
+                settles_nothing: true,
             });
             self
         }
@@ -293,6 +305,15 @@ mod tests {
             self
         }
 
+        /// Not yet known because its target meets the receiver only where a
+        /// variable becomes a particular type.
+        fn settling(mut self) -> Self {
+            let last = self.0.last_mut().expect("a candidate to arm");
+            last.known = false;
+            last.settles_nothing = false;
+            self
+        }
+
         fn done(self) -> Vec<Candidate> {
             self.0
         }
@@ -305,9 +326,15 @@ mod tests {
     }
 
     #[test]
-    fn the_only_candidate_answers_though_not_yet_known() {
+    fn the_only_candidate_answers_though_its_bound_is_not_yet_known() {
         let found = Build::new().concrete(TR, 0).unknown().done();
         assert_eq!(rank_open(&found), Selection::One(0));
+    }
+
+    #[test]
+    fn the_only_candidate_settling_a_variable_leaves_the_call_undecided() {
+        let found = Build::new().concrete(TR, 0).settling().done();
+        assert_eq!(rank_open(&found), Selection::Undecided(vec![0]));
     }
 
     #[test]

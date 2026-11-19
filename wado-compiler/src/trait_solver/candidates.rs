@@ -4,7 +4,7 @@
 
 use super::holds::{
     Verdict, answers_args, answers_named_args, comparison_row, impl_applies, newtype_base,
-    peels_to_never, withheld_at, written_only_at,
+    peels_to_never, settles_nothing, withheld_at, written_only_at,
 };
 use super::program::{
     Env, ImplId, ImplOrigin, MethodId, ModuleId, Program, SolverType, TraitDeclId,
@@ -229,6 +229,7 @@ fn collect(
                     .any(|arg| arg.mentions(&|p| !def.target.binds(&|q| q == p))),
                 is_variadic: is_variadic(&def.target),
                 known: applies_everywhere && !maybe_withheld.contains(&trait_),
+                settles_nothing: applies_everywhere || settles_nothing(def, ty),
             };
             if in_scope.contains(&trait_) {
                 found.in_scope.push(candidate);

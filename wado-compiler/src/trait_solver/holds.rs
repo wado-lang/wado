@@ -1152,6 +1152,27 @@ pub(super) fn impl_applies(
     .map(|answer| answer.trait_args)
 }
 
+/// Whether `def`'s target meets `ty` at every instance of `ty`'s variables, so
+/// that committing to `def` settles none of them. A literal's variable may be
+/// settled: its type is a default the one impl that could answer chooses.
+#[must_use]
+pub(super) fn settles_nothing(def: &ImplDef, ty: &SolverType) -> bool {
+    // A variable may yet be a reference, which a value blanket answers not.
+    if matches!(def.target, SolverType::Param(_)) && matches!(ty, SolverType::Var(_)) {
+        return false;
+    }
+    let mut unifier = Unifier::new(0);
+    let mut bindings: Vec<Option<Binding>> = vec![None; def.params.len()];
+    let mut deferred = Vec::new();
+    match_target(&def.target, ty, &mut bindings, &mut deferred, &mut unifier)
+        && !unifier.undecided
+        && (deferred.is_empty() || !ty.is_open())
+        && unifier
+            .subst
+            .iter()
+            .all(|&(var, _)| unifier.is_own(var) || matches!(var, Var::Infer { literal: true, .. }))
+}
+
 /// Whether `source`'s bounds hold of `ty`, its pins met by one binding
 /// of the source's parameters.
 #[must_use]
@@ -1843,7 +1864,7 @@ mod tests {
     }
 
     fn var(id: u32) -> SolverType {
-        SolverType::Var(Var::Infer(id))
+        SolverType::Var(Var::Infer { id, literal: false })
     }
 
     fn verdict(p: &Program, ty: &SolverType, trait_: TraitDeclId) -> Verdict<()> {
@@ -1916,6 +1937,39 @@ mod tests {
             .impl_(generic(1, concrete(ALPHA, target)))
             .build();
         assert_eq!(verdict(&p, &pair(var(0), var(0)), ALPHA), Verdict::Fails);
+    }
+
+    fn only_impl(p: &Program) -> &ImplDef {
+        let [def] = p.impls().values().collect::<Vec<_>>()[..] else {
+            panic!("the program writes one impl");
+        };
+        def
+    }
+
+    /// Committing to an impl settles a variable where its target meets the
+    /// receiver only at some instances of it; a literal's may be settled.
+    #[test]
+    fn an_impl_settles_a_variable_its_target_writes_a_type_at() {
+        let written = Builder::default()
+            .concrete(ALPHA, list_of(decl(I32)))
+            .build();
+        let literal = SolverType::Var(Var::Infer {
+            id: 0,
+            literal: true,
+        });
+        assert!(!settles_nothing(only_impl(&written), &list_of(var(0))));
+        assert!(settles_nothing(only_impl(&written), &list_of(literal)));
+        let over_any = Builder::default()
+            .impl_(generic(1, concrete(ALPHA, list_of(SolverType::Param(0)))))
+            .build();
+        assert!(settles_nothing(only_impl(&over_any), &list_of(var(0))));
+        let twin = Builder::default()
+            .impl_(generic(
+                1,
+                concrete(ALPHA, pair(SolverType::Param(0), SolverType::Param(0))),
+            ))
+            .build();
+        assert!(!settles_nothing(only_impl(&twin), &pair(var(0), var(1))));
     }
 
     /// `impl<T: Alpha> Alpha for List<T>` asks of `?0` what it asks of `T`,

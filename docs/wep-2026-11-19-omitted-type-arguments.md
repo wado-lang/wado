@@ -91,17 +91,23 @@ Selection runs the order of
 [WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md) over the
 candidates that hold or are not yet known, and drops those that do not hold.
 
-- One candidate is left: the call commits to it. A bound that was not yet known
-  is recorded against the variables it reads, the same way the elaborator
-  already records a bound on a variable, and checked when the module's
-  inference finishes.
+- One candidate is left, and its target meets the receiver at every instance
+  of the variables: the call commits to it. A bound that was not yet known is
+  recorded against the variables it reads, the same way the elaborator already
+  records a bound on a variable, and checked when the module's inference
+  finishes.
+- One candidate is left, and its target meets the receiver only where a
+  variable becomes a particular type: the call asks for a turbofish or an
+  annotation.
 - Several are left: the call asks for a turbofish or an annotation.
 
-The impl committed to settles nothing of the variables. Where only one impl may
-apply, a variable the call does not otherwise settle is still reported as one
-that cannot be inferred. Inferring it from the one impl would let an impl
+So the impl committed to settles nothing of the variables. Under `impl Me for
+Bx<u64>` alone, `mk().me()` with `mk<T>() -> Bx<T>` asks for an annotation, and
+`mk::<u64>().me()` resolves. Inferring `T` from the one impl would let an impl
 written anywhere else later turn the call into an error, the action at a
-distance this WEP removes from statics.
+distance this WEP removes from statics. Asking at the call, rather than waiting
+for something later to settle `T`, keeps every commitment true at every
+instance, so only its bounds are left to check.
 
 A numeric literal's variable is the exception, as it is in Rust: where one impl
 alone could answer a method on a receiver holding it, that impl settles it
