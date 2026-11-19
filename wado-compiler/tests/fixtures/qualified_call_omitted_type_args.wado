@@ -128,3 +128,62 @@ test "a projection in the target" {
     assert p.b.t matches { None };
     assert Pair::same(&p).a.t matches { None };
 }
+
+// Two pins on one parameter must agree, so an impl whose pins name two types
+// for it may not apply, and the other impl is the one answer.
+trait Left with () {
+    type Item;
+}
+
+trait Right with () {
+    type Item;
+}
+
+struct Lr {
+    x: i32,
+}
+
+impl Left for Lr {
+    type Item = i32;
+}
+
+impl Right for Lr {
+    type Item = bool;
+}
+
+trait Agree with () {
+    fn agreed(&self) -> Self;
+    fn which(&self) -> i32;
+}
+
+struct Maybe<A, B> {
+    a: A,
+    b: Option<B>,
+}
+
+impl<A: Left<Item = U> + Right<Item = U>, U> Agree for Maybe<A, U> {
+    fn agreed(&self) -> Self {
+        return *self;
+    }
+    fn which(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl<B: AtBase> Agree for Maybe<Lr, B> {
+    fn agreed(&self) -> Self {
+        return *self;
+    }
+    fn which(&self) -> i32 {
+        return 2;
+    }
+}
+
+fn lr_maybe<V>() -> Maybe<Lr, V> {
+    return { a: { x: 0 }, b: null };
+}
+
+test "two pins on one parameter" {
+    let p: Maybe<Lr, Box<i32>> = lr_maybe().agreed();
+    assert p.which() == 2;
+}

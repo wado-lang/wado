@@ -559,8 +559,8 @@ impl Query<'_> {
 
     /// Whether `answer`, to a bound on `trait_`, meets each of `pins` on it. An
     /// answer binding the pinned assoc otherwise is refuted; one binding
-    /// nothing is not. A pin naming a parameter still unbound binds it from
-    /// what the answer binds.
+    /// nothing is not. A pin binds what it names from what the answer binds,
+    /// so two pins on one parameter must agree.
     fn meets_pins(
         &mut self,
         pins: &[Pin],
@@ -574,17 +574,11 @@ impl Query<'_> {
                 continue;
             };
             let actual = self.normalized(&actual);
-            match self.at_bindings(&pin.ty, bindings) {
-                Some(expected) if !expected.may_equal(&actual) => return false,
-                Some(_) => {}
-                None => {
-                    let from = deferred.len();
-                    if !match_target(&pin.ty, &actual, bindings, deferred)
-                        || self.projections_refuted(&deferred[from..], bindings)
-                    {
-                        return false;
-                    }
-                }
+            let from = deferred.len();
+            if !match_target(&pin.ty, &actual, bindings, deferred)
+                || self.projections_refuted(&deferred[from..], bindings)
+            {
+                return false;
             }
         }
         true
