@@ -1208,6 +1208,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     inner_type_id
                 }
             };
+            // A variable the body answered since the binding was typed reads
+            // as its answer, as every later use of the binding means it.
+            let ty = self.apply_infer_holes(ty);
             return self.value_without_turbofish(ident, ty);
         }
 

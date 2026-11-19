@@ -3920,6 +3920,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         expected_index_type: Option<TypeId>,
     ) -> Option<IndexingTraitInfo> {
+        let base_type_id =
+            self.answer_open_key(base_type_id, item, method_name, expected_index_type);
         let mut impls =
             self.indexing_trait_impls(base_type_id, item, method_name, expected_index_type);
         // An impl writing the key defines the function the subscript names;
@@ -3934,6 +3936,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut pick = impls.next()?;
         pick.tied_with = impls.map(|i| i.impl_def).collect();
         Some(pick)
+    }
+
+    /// The container a subscript at `key` reaches once the one impl of `item`
+    /// it may dispatch to answers the receiver's open key argument, as a
+    /// method call commits to the one impl its open receiver may reach.
+    /// Where several may serve, the receiver stays open.
+    fn answer_open_key(
+        &mut self,
+        container: TypeId,
+        item: CompilerItem,
+        method_name: &str,
+        key: Option<TypeId>,
+    ) -> TypeId {
+        let (Some(key), Some(trait_)) = (key, self.tysys.compiler_trait_def(item)) else {
+            return container;
+        };
+        if !self.type_has_infer_hole(container) {
+            return container;
+        }
+        let required = RequiredTrait {
+            decl: Resolution::Def(trait_),
+            args: Some(vec![key]),
+            display: self
+                .tysys
+                .type_table
+                .borrow()
+                .compiler_trait_name(item)
+                .to_string(),
+        };
+        let target = self.impl_target_of(container);
+        let Some(Ordered::One(Some(def))) =
+            self.order_for_call(&target, Some(container), method_name, Some(&required))
+        else {
+            return container;
+        };
+        let index_type = {
+            let mut table = self.tysys.type_table.borrow_mut();
+            let slots = table.impl_receiver_slots(def, container);
+            let written = table.impl_trait_args(def).to_vec();
+            let [index_type] = written[..] else {
+                unreachable!("an indexing trait takes its key as its one argument");
+            };
+            table.substitute_type_params(index_type, &slots)
+        };
+        self.solve_infer_holes_against(index_type, key);
+        self.apply_infer_holes(container)
     }
 
     /// Every indexing trait impl [`Self::find_indexing_trait_impl`] may pick
