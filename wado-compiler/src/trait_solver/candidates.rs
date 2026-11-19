@@ -194,7 +194,8 @@ fn collect(
             if withheld.contains(&trait_) || !declares(trait_, own) {
                 continue;
             }
-            let Some(trait_args) = impl_applies(program, env, impl_, def, ty, asked).settled() else {
+            let Some(trait_args) = impl_applies(program, env, impl_, def, ty, asked).settled()
+            else {
                 continue;
             };
             let candidate = Candidate {

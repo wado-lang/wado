@@ -143,7 +143,7 @@ inference broke as soon as a second impl was written elsewhere.
   in place of the listed instances.
 - [x] Fixtures for each row of the table in Context, and for a static whose
   instance nothing settles.
-- [ ] The solver's answer is the three-valued type, and every rule returns it.
+- [x] The solver's answer is the three-valued type, and every rule returns it.
   No program changes behavior: nothing yet asks with a variable.
 - [ ] The solver's inference variable, its unification under a local
   substitution, and the bindings an answer implies. The lowering hands it the

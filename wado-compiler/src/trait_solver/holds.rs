@@ -218,12 +218,7 @@ struct Query<'a> {
 }
 
 impl Query<'_> {
-    fn holds(
-        &mut self,
-        ty: &SolverType,
-        trait_: TraitDeclId,
-        args: &[SolverType],
-    ) -> Verdict {
+    fn holds(&mut self, ty: &SolverType, trait_: TraitDeclId, args: &[SolverType]) -> Verdict {
         self.holds_at(ty, trait_, args, None)
     }
 
@@ -811,7 +806,6 @@ impl Query<'_> {
                 let args: Vec<SolverType> = args.iter().map(|a| self.normalized(a)).collect();
                 let member = match self.holds(&base, *trait_, &[]) {
                     Verdict::Holds(held) => held.assoc_at(*assoc, &args),
-                    // Which impl binds it is not known yet.
                     Verdict::Fails | Verdict::Unknown => None,
                 };
                 match member {
@@ -1364,9 +1358,7 @@ fn reaches_target(def: &ImplDef, ty: &SolverType) -> bool {
 #[cfg(test)]
 mod tests {
     use super::super::program::{ArgDefault, Fact, ParamDef, Pin, TraitDef, TypeDef};
-    use super::super::testing::{
-        Builder, concrete, decl, generic, holds, holds_with_args, ref_to,
-    };
+    use super::super::testing::{Builder, concrete, decl, generic, holds, holds_with_args, ref_to};
     use super::*;
 
     const ALPHA: TraitDeclId = TraitDeclId(0);
